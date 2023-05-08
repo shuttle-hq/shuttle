@@ -104,7 +104,7 @@ Login to shuttle service in a new terminal window from the root of the shuttle d
 cargo run --bin cargo-shuttle -- login --api-key "dh9z58jttoes3qvt"
 ```
 
-The [shuttle examples](https://github.com/shuttle-hq/examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:
+The [shuttle examples](https://github.com/shuttle-hq/shuttle-examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:
 
 ```bash
 git submodule init
@@ -135,7 +135,7 @@ Test if the deployment is working:
 
 ```bash
 # the Host header should match the Host from the deploy output
-curl --header "Host: {app}.unstable.shuttleapp.rs" localhost:8000/hello
+curl --header "Host: {app}.unstable.shuttleapp.rs" localhost:8000
 ```
 
 View logs from the current deployment:
@@ -256,7 +256,7 @@ cargo test --package <crate-name> --all-features --test '*' -- --nocapture
 To run the end-to-end tests, from the root of the repository run:
 
 ```bash
-make test
+USE_PANAMAX=disable make test
 ```
 
 > Note: Running all the end-to-end tests may take a long time, so it is recommended to run individual tests shipped as part of each crate in the workspace first.

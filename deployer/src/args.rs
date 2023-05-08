@@ -16,7 +16,7 @@ pub struct Args {
     pub state: String,
 
     /// Address to connect to the provisioning service
-    #[clap(long, default_value = "http://provisioner:5000")]
+    #[clap(long, default_value = "http://provisioner:3000")]
     pub provisioner_address: Endpoint,
 
     /// FQDN where the proxy can be reached at
@@ -50,4 +50,8 @@ pub struct Args {
     /// Uri to folder to store all artifacts
     #[clap(long, default_value = "/tmp")]
     pub artifacts_path: PathBuf,
+
+    /// Add an auth layer to deployer for local development
+    #[arg(long)]
+    pub local: bool,
 }

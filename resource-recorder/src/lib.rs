@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use dal::{Dal, Resource};
 use shuttle_proto::resource_recorder::{
-    resource_recorder_server::ResourceRecorder, RecordRequest, RecordResult,
+    resource_recorder_server::ResourceRecorder, resources_response, ProjectResourcesRequest,
+    RecordRequest, RecordResponse, ResourcesResponse, ServiceResourcesRequest,
 };
 use tonic::{Request, Response, Status};
 
@@ -64,6 +65,34 @@ where
 
         Ok(())
     }
+
+    /// Get the resources that below to a project
+    async fn project_resources(
+        &self,
+        project_id: String,
+    ) -> Result<Vec<resources_response::Resource>, Error<D::Error>> {
+        let resources = self
+            .dal
+            .get_project_resources(project_id.parse().map_err(Error::UlidDecode)?)
+            .await
+            .map_err(Error::Dal)?;
+
+        Ok(resources.into_iter().map(Into::into).collect())
+    }
+
+    /// Get the resources that below to a service
+    async fn service_resources(
+        &self,
+        service_id: String,
+    ) -> Result<Vec<resources_response::Resource>, Error<D::Error>> {
+        let resources = self
+            .dal
+            .get_service_resources(service_id.parse().map_err(Error::UlidDecode)?)
+            .await
+            .map_err(Error::Dal)?;
+
+        Ok(resources.into_iter().map(Into::into).collect())
+    }
 }
 
 #[async_trait]
@@ -74,16 +103,58 @@ where
     async fn record_resources(
         &self,
         request: Request<RecordRequest>,
-    ) -> Result<Response<RecordResult>, Status> {
+    ) -> Result<Response<RecordResponse>, Status> {
         let request = request.into_inner();
         let result = match self.add(request).await {
-            Ok(()) => RecordResult {
+            Ok(()) => RecordResponse {
                 success: true,
                 message: Default::default(),
             },
-            Err(e) => RecordResult {
+            Err(e) => RecordResponse {
                 success: false,
                 message: e.to_string(),
+            },
+        };
+
+        Ok(Response::new(result))
+    }
+
+    async fn get_project_resources(
+        &self,
+        request: Request<ProjectResourcesRequest>,
+    ) -> Result<Response<ResourcesResponse>, Status> {
+        let request = request.into_inner();
+        let result = match self.project_resources(request.project_id).await {
+            Ok(resources) => ResourcesResponse {
+                success: true,
+                message: Default::default(),
+                resources,
+            },
+            Err(e) => ResourcesResponse {
+                success: false,
+                message: e.to_string(),
+                resources: Vec::new(),
+            },
+        };
+
+        Ok(Response::new(result))
+    }
+
+    async fn get_service_resources(
+        &self,
+        request: Request<ServiceResourcesRequest>,
+    ) -> Result<Response<ResourcesResponse>, Status> {
+        let request = request.into_inner();
+        let result = match self.service_resources(request.service_id).await {
+            Ok(resources) => ResourcesResponse {
+                success: true,
+                message: Default::default(),
+                resources,
+            },
+            Err(e) => ResourcesResponse {
+                success: false,
+                message: e.to_string(),
+                resources: Vec::new(),
             },
         };
 

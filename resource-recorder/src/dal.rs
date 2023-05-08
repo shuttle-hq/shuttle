@@ -1,9 +1,10 @@
-use std::{path::Path, str::FromStr};
+use std::{path::Path, str::FromStr, time::SystemTime};
 
 use crate::r#type::Type;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use shuttle_proto::resource_recorder::record_request;
+use prost_types::Timestamp;
+use shuttle_proto::resource_recorder::{record_request, resources_response};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow},
@@ -188,6 +189,26 @@ impl TryFrom<record_request::Resource> for Resource {
 
     fn try_from(value: record_request::Resource) -> Result<Self, Self::Error> {
         Ok(Self::new(value.r#type.parse()?, value.data, value.config))
+    }
+}
+
+impl From<Resource> for resources_response::Resource {
+    fn from(value: Resource) -> Self {
+        Self {
+            project_id: value
+                .project_id
+                .expect("row to have a project id")
+                .to_string(),
+            service_id: value
+                .service_id
+                .expect("row to have a service id")
+                .to_string(),
+            r#type: value.r#type.to_string(),
+            config: value.config,
+            data: value.data,
+            is_active: value.is_active,
+            created_at: Some(Timestamp::from(SystemTime::from(value.created_at))),
+        }
     }
 }
 

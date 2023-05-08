@@ -9,6 +9,7 @@ repository.workspace = true
 async-trait = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
+prost-types = { workspace = true }
 sqlx = { workspace = true, features = [
     "chrono",
     "migrate",

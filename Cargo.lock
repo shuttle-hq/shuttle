@@ -5544,6 +5544,7 @@ dependencies = [
  "chrono",
  "clap",
  "pretty_assertions",
+ "prost-types",
  "serde_json",
  "shuttle-common",
  "shuttle-proto",

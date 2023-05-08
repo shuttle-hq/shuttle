@@ -8,3 +8,6 @@ CREATE TABLE IF NOT EXISTS resources (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Time this resource was created.
     PRIMARY KEY (project_id, service_id, type)
 );
+
+CREATE INDEX IF NOT EXISTS project_id_idx ON resources(project_id);
+CREATE INDEX IF NOT EXISTS service_id_idx ON resources(service_id);

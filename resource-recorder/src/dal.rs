@@ -280,7 +280,7 @@ mod tests {
         assert_eq!(expected, actual);
 
         let actual = dal.get_project_resources(project_id).await.unwrap();
-        let expected = vec![database, secrets, static_folder, secrets2];
+        let expected = vec![static_folder, secrets, database, secrets2];
 
         assert_eq!(expected, actual);
 

@@ -1,9 +1,9 @@
 use crate::r#type::Type;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::{migrate::Migrator, SqlitePool};
+use sqlx::{migrate::Migrator, sqlite::SqliteRow, FromRow, Row, SqlitePool};
 use tracing::warn;
-use uuid::Uuid;
+use ulid::Ulid;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -14,16 +14,16 @@ pub trait Dal {
     /// Add a set of resources for a service
     async fn add_resources(
         &self,
-        project_id: Uuid,
-        service_id: Uuid,
+        project_id: Ulid,
+        service_id: Ulid,
         resources: Vec<Resource>,
     ) -> Result<(), Self::Error>;
 
     /// Get the resources that belong to a project
-    async fn get_project_resources(&self, project_id: Uuid) -> Result<Vec<Resource>, Self::Error>;
+    async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, Self::Error>;
 
     /// Get the resources that belong to a service
-    async fn get_service_resources(&self, service_id: Uuid) -> Result<Vec<Resource>, Self::Error>;
+    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, Self::Error>;
 
     /// Delete a resource
     async fn delete_resource(&self, resource: &Resource) -> Result<(), Self::Error>;
@@ -53,14 +53,14 @@ impl Dal for Sqlite {
 
     async fn add_resources(
         &self,
-        project_id: Uuid,
-        service_id: Uuid,
+        project_id: Ulid,
+        service_id: Ulid,
         resources: Vec<Resource>,
     ) -> Result<(), Self::Error> {
         let mut transaction = self.pool.begin().await?;
 
         sqlx::query("UPDATE resources SET is_active = false WHERE service_id = ?")
-            .bind(service_id)
+            .bind(service_id.to_string())
             .execute(&mut transaction)
             .await?;
 
@@ -79,8 +79,8 @@ impl Dal for Sqlite {
             }
 
             sqlx::query("INSERT OR REPLACE INTO resources (project_id, service_id, type, config, data, is_active) VALUES(?, ?, ?, ?, ?, ?)")
-            .bind(project_id)
-            .bind(service_id)
+            .bind(project_id.to_string())
+            .bind(service_id.to_string())
             .bind(resource.r#type)
             .bind(resource.config)
             .bind(resource.data)
@@ -92,24 +92,24 @@ impl Dal for Sqlite {
         transaction.commit().await
     }
 
-    async fn get_project_resources(&self, project_id: Uuid) -> Result<Vec<Resource>, Self::Error> {
+    async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, Self::Error> {
         sqlx::query_as(r#"SELECT * FROM resources WHERE project_id = ?"#)
-            .bind(project_id)
+            .bind(project_id.to_string())
             .fetch_all(&self.pool)
             .await
     }
 
-    async fn get_service_resources(&self, service_id: Uuid) -> Result<Vec<Resource>, Self::Error> {
+    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, Self::Error> {
         sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
-            .bind(service_id)
+            .bind(service_id.to_string())
             .fetch_all(&self.pool)
             .await
     }
 
     async fn delete_resource(&self, resource: &Resource) -> Result<(), Self::Error> {
         sqlx::query("DELETE FROM resources WHERE project_id = ? AND service_id = ? AND type = ?")
-            .bind(resource.project_id)
-            .bind(resource.service_id)
+            .bind(resource.project_id.map(|u| u.to_string()))
+            .bind(resource.service_id.map(|u| u.to_string()))
             .bind(resource.r#type)
             .execute(&self.pool)
             .await
@@ -117,15 +117,35 @@ impl Dal for Sqlite {
     }
 }
 
-#[derive(sqlx::FromRow, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Resource {
-    pub project_id: Option<Uuid>,
-    pub service_id: Option<Uuid>,
+    pub project_id: Option<Ulid>,
+    pub service_id: Option<Ulid>,
     pub r#type: Type,
     pub data: serde_json::Value,
     pub config: serde_json::Value,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
+}
+
+impl FromRow<'_, SqliteRow> for Resource {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            project_id: Some(
+                Ulid::from_string(row.try_get("project_id")?)
+                    .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            ),
+            service_id: Some(
+                Ulid::from_string(row.try_get("service_id")?)
+                    .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            ),
+            r#type: row.try_get("type")?,
+            data: row.try_get("data")?,
+            config: row.try_get("config")?,
+            is_active: row.try_get("is_active")?,
+            created_at: row.try_get("created_at")?,
+        })
+    }
 }
 
 impl Resource {
@@ -147,7 +167,7 @@ impl Resource {
 mod tests {
     use pretty_assertions::assert_eq;
     use serde_json::json;
-    use uuid::Uuid;
+    use ulid::Ulid;
 
     use crate::{
         dal::{Dal, Resource},
@@ -159,8 +179,8 @@ mod tests {
     #[tokio::test]
     async fn manage_resources() {
         let dal = Sqlite::new_in_memory().await;
-        let project_id = Uuid::new_v4();
-        let service_id = Uuid::new_v4();
+        let project_id = Ulid::new();
+        let service_id = Ulid::new();
 
         // Test with a small set of initial resources
         let mut database = Resource::new(
@@ -241,7 +261,7 @@ mod tests {
         assert_eq!(expected, actual);
 
         // Add resources to another service in the same project
-        let service_id2 = Uuid::new_v4();
+        let service_id2 = Ulid::new();
         let mut secrets2 = Resource::new(Type::Secrets, json!({}), json!({"token": "12345"}));
 
         dal.add_resources(project_id, service_id2, vec![secrets2.clone()])
@@ -265,8 +285,8 @@ mod tests {
         assert_eq!(expected, actual);
 
         // Add resources to another project
-        let project_id2 = Uuid::new_v4();
-        let service_id3 = Uuid::new_v4();
+        let project_id2 = Ulid::new();
+        let service_id3 = Ulid::new();
         let mut static_folder2 = Resource::new(
             Type::StaticFolder,
             json!({"path": "public"}),

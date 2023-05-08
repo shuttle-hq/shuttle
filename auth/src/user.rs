@@ -69,7 +69,7 @@ impl UserManagement for UserManager {
     }
 }
 
-#[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct User {
     pub name: AccountName,
     pub key: Key,
@@ -126,7 +126,7 @@ impl From<User> for shuttle_common::models::user::Response {
     }
 }
 
-#[derive(Clone, sqlx::Type, PartialEq, Hash, Eq, Serialize, Deserialize)]
+#[derive(Clone, sqlx::Type, PartialEq, Hash, Eq, Serialize, Deserialize, Debug)]
 #[serde(transparent)]
 #[sqlx(transparent)]
 pub struct Key(String);
@@ -150,18 +150,12 @@ where
     }
 }
 
-// Ensure we can't accidentaly log an ApiKey
-impl std::fmt::Debug for Key {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ApiKey: REDACTED")
+impl std::fmt::Display for Key {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
-impl std::fmt::Display for Key {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
 impl FromStr for Key {
     type Err = Error;
 

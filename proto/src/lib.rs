@@ -272,3 +272,7 @@ pub mod runtime {
         Ok((runtime, runtime_client))
     }
 }
+
+pub mod resource_recorder {
+    include!("generated/resource_recorder.rs");
+}

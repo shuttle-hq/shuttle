@@ -1,0 +1,27 @@
+syntax = "proto3";
+package resource_recorder;
+
+import "google/protobuf/timestamp.proto";
+
+service ResourceRecorder {
+  // Record a new set of resources
+  rpc RecordResources(RecordRequest) returns (RecordResult);
+}
+
+message RecordResult {
+  bool success = 1;
+  string message = 2;
+}
+
+message RecordRequest {
+  string project_id = 1;
+  string service_id = 2;
+
+  message Resource {
+    string type = 1;
+    bytes config = 2;
+    bytes data = 3;
+  }
+
+  repeated Resource resources = 3;
+}

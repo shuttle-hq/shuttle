@@ -1,15 +1,22 @@
+use std::{path::Path, str::FromStr};
+
 use crate::r#type::Type;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::{migrate::Migrator, sqlite::SqliteRow, FromRow, Row, SqlitePool};
-use tracing::warn;
+use shuttle_proto::resource_recorder::record_request;
+use sqlx::{
+    migrate::{MigrateDatabase, Migrator},
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow},
+    FromRow, Row, SqlitePool,
+};
+use tracing::{info, warn};
 use ulid::Ulid;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[async_trait]
 pub trait Dal {
-    type Error: std::error::Error;
+    type Error: std::error::Error + Send;
 
     /// Add a set of resources for a service
     async fn add_resources(
@@ -34,6 +41,34 @@ pub struct Sqlite {
 }
 
 impl Sqlite {
+    /// This function creates all necessary tables and sets up a database connection pool.
+    pub async fn new(path: &str) -> Self {
+        if !Path::new(path).exists() {
+            sqlx::Sqlite::create_database(path).await.unwrap();
+        }
+
+        info!(
+            "state db: {}",
+            std::fs::canonicalize(path).unwrap().to_string_lossy()
+        );
+
+        // We have found in the past that setting synchronous to anything other than the default (full) breaks the
+        // broadcast channel in deployer. The broken symptoms are that the ws socket connections won't get any logs
+        // from the broadcast channel and would then close. When users did deploys, this would make it seem like the
+        // deploy is done (while it is still building for most of the time) and the status of the previous deployment
+        // would be returned to the user.
+        //
+        // If you want to activate a faster synchronous mode, then also do proper testing to confirm this bug is no
+        // longer present.
+        let sqlite_options = SqliteConnectOptions::from_str(path)
+            .unwrap()
+            .journal_mode(SqliteJournalMode::Wal);
+
+        let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
+
+        Self::from_pool(pool).await
+    }
+
     #[allow(dead_code)]
     async fn new_in_memory() -> Self {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -122,8 +157,8 @@ pub struct Resource {
     pub project_id: Option<Ulid>,
     pub service_id: Option<Ulid>,
     pub r#type: Type,
-    pub data: serde_json::Value,
-    pub config: serde_json::Value,
+    pub data: Vec<u8>,
+    pub config: Vec<u8>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
 }
@@ -148,9 +183,17 @@ impl FromRow<'_, SqliteRow> for Resource {
     }
 }
 
+impl TryFrom<record_request::Resource> for Resource {
+    type Error = String;
+
+    fn try_from(value: record_request::Resource) -> Result<Self, Self::Error> {
+        Ok(Self::new(value.r#type.parse()?, value.data, value.config))
+    }
+}
+
 impl Resource {
     /// Create a new type of resource
-    fn new(r#type: Type, data: serde_json::Value, config: serde_json::Value) -> Self {
+    fn new(r#type: Type, data: Vec<u8>, config: Vec<u8>) -> Self {
         Self {
             project_id: None,
             service_id: None,
@@ -187,13 +230,13 @@ mod tests {
             Type::Database(crate::r#type::database::Type::Shared(
                 crate::r#type::database::SharedType::Postgres,
             )),
-            json!({"private": false}),
-            json!({"username": "test"}),
+            serde_json::to_vec(&json!({"private": false})).unwrap(),
+            serde_json::to_vec(&json!({"username": "test"})).unwrap(),
         );
         let mut static_folder = Resource::new(
             Type::StaticFolder,
-            json!({"path": "static"}),
-            json!({"path": "/tmp/static"}),
+            serde_json::to_vec(&json!({"path": "static"})).unwrap(),
+            serde_json::to_vec(&json!({"path": "/tmp/static"})).unwrap(),
         );
 
         dal.add_resources(
@@ -219,7 +262,11 @@ mod tests {
         assert_eq!(expected, actual);
 
         // This time the user is adding secrets but dropping the static folders
-        let mut secrets = Resource::new(Type::Secrets, json!({}), json!({"password": "p@ssw0rd"}));
+        let mut secrets = Resource::new(
+            Type::Secrets,
+            serde_json::to_vec(&json!({})).unwrap(),
+            serde_json::to_vec(&json!({"password": "p@ssw0rd"})).unwrap(),
+        );
 
         let mut database = actual[0].clone();
         let mut static_folder = actual[1].clone();
@@ -245,7 +292,7 @@ mod tests {
         assert_eq!(expected, actual);
 
         // This time the user is using only the database with updates
-        database.data = json!({"private": true});
+        database.data = serde_json::to_vec(&json!({"private": true})).unwrap();
 
         dal.add_resources(project_id, service_id, vec![database.clone()])
             .await
@@ -262,7 +309,11 @@ mod tests {
 
         // Add resources to another service in the same project
         let service_id2 = Ulid::new();
-        let mut secrets2 = Resource::new(Type::Secrets, json!({}), json!({"token": "12345"}));
+        let mut secrets2 = Resource::new(
+            Type::Secrets,
+            serde_json::to_vec(&json!({})).unwrap(),
+            serde_json::to_vec(&json!({"token": "12345"})).unwrap(),
+        );
 
         dal.add_resources(project_id, service_id2, vec![secrets2.clone()])
             .await
@@ -289,8 +340,8 @@ mod tests {
         let service_id3 = Ulid::new();
         let mut static_folder2 = Resource::new(
             Type::StaticFolder,
-            json!({"path": "public"}),
-            json!({"path": "/tmp/public"}),
+            serde_json::to_vec(&json!({"path": "public"})).unwrap(),
+            serde_json::to_vec(&json!({"path": "/tmp/public"})).unwrap(),
         );
 
         dal.add_resources(project_id2, service_id3, vec![static_folder2.clone()])

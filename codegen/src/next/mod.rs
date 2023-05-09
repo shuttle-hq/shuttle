@@ -95,7 +95,7 @@ impl Endpoint {
         let endpoint_delim_span = &endpoint
             .meta
             .require_list()
-            .expect("Params Delimiter")
+            .expect("Endpoint meta should be a list")
             .delimiter
             .span()
             .join();

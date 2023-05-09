@@ -45,5 +45,14 @@ where
     }
 }
 
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+/// Return type from the `[shuttle_runtime::main]` macro for a Poem-based service.
+/// 
+/// # Example
+/// 
+/// ```rust,no_run
+/// #[shuttle_runtime::main]
+/// async example_service() ->
+///    ShuttlePoem<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
+///    todo!()
+/// }
 pub type ShuttlePoem<T> = Result<PoemService<T>, shuttle_runtime::Error>;

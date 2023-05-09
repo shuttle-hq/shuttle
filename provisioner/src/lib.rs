@@ -28,6 +28,7 @@ pub struct MyProvisioner {
     pool: PgPool,
     rds_client: aws_sdk_rds::Client,
     mongodb_client: mongodb::Client,
+    dynamodb_client: aws_sdk_dynamodb::Client,
     fqdn: String,
     internal_pg_address: String,
     internal_mongodb_address: String,
@@ -63,10 +64,19 @@ impl MyProvisioner {
 
         let rds_client = aws_sdk_rds::Client::new(&aws_config);
 
+        // let aws_dyanmodb_config: aws_sdk_dynamodb::Config = aws_sdk_dynamodb::aws_config::from_env().load().await;
+
+        // use aws_types::SdkConfig;
+        // use aws_types::region::Region;
+        // let config = SdkConfig::builder().region(Region::new("us-east-1")).build();
+
+        let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
+
         Ok(Self {
             pool,
             rds_client,
             mongodb_client,
+            dynamodb_client,
             fqdn,
             internal_pg_address,
             internal_mongodb_address,
@@ -232,6 +242,89 @@ impl MyProvisioner {
             }
         }
     }
+
+    // async fn request_dynamodb(
+    //     &self,
+    //     project_name: &str,
+    // ) -> Result<DatabaseResponse, Error> {
+    //     let client = &self.rds_client;
+
+    //     let password = generate_password();
+    //     let instance_name = format!("{}-{}", project_name, engine);
+
+    //     debug!("trying to get AWS RDS instance: {instance_name}");
+    //     let instance = client
+    //         .modify_db_instance()
+    //         .db_instance_identifier(&instance_name)
+    //         .master_user_password(&password)
+    //         .send()
+    //         .await;
+
+    //     match instance {
+    //         Ok(_) => {
+    //             wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
+    //         }
+    //         Err(SdkError::ServiceError { err, .. }) => {
+    //             if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
+    //                 debug!("creating new AWS RDS {instance_name}");
+
+    //                 client
+    //                     .create_db_instance()
+    //                     .db_instance_identifier(&instance_name)
+    //                     .master_username(MASTER_USERNAME)
+    //                     .master_user_password(&password)
+    //                     .engine(engine.to_string())
+    //                     .db_instance_class(AWS_RDS_CLASS)
+    //                     .allocated_storage(20)
+    //                     .backup_retention_period(0) // Disable backups
+    //                     .publicly_accessible(true)
+    //                     .db_name(engine.to_string())
+    //                     .set_db_subnet_group_name(Some(RDS_SUBNET_GROUP.to_string()))
+    //                     .send()
+    //                     .await?
+    //                     .db_instance
+    //                     .expect("to be able to create instance");
+
+    //                 wait_for_instance(client, &instance_name, "creating").await?;
+    //             } else {
+    //                 return Err(Error::Plain(format!(
+    //                     "got unexpected error from AWS RDS service: {}",
+    //                     err
+    //                 )));
+    //             }
+    //         }
+    //         Err(unexpected) => {
+    //             return Err(Error::Plain(format!(
+    //                 "got unexpected error from AWS during API call: {}",
+    //                 unexpected
+    //             )))
+    //         }
+    //     };
+
+    //     // Wait for up
+    //     let instance = wait_for_instance(client, &instance_name, "available").await?;
+
+    //     // TODO: find private IP somehow
+    //     let address = instance
+    //         .endpoint
+    //         .expect("instance to have an endpoint")
+    //         .address
+    //         .expect("endpoint to have an address");
+
+    //     Ok(DatabaseResponse {
+    //         engine: engine.to_string(),
+    //         username: instance
+    //             .master_username
+    //             .expect("instance to have a username"),
+    //         password,
+    //         database_name: instance
+    //             .db_name
+    //             .expect("instance to have a default database"),
+    //         address_private: address.clone(),
+    //         address_public: address,
+    //         port: engine_to_port(engine),
+    //     })
+    // }
 
     async fn request_aws_rds(
         &self,

@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 aws-config = "0.51.0"
+aws-sdk-dynamodb = "0.21.0"
 aws-sdk-rds = "0.21.0"
 clap = { workspace = true, features = ["env"] }
 fqdn = { workspace = true }

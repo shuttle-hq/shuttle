@@ -46,9 +46,9 @@ where
 }
 
 /// Return type from the `[shuttle_runtime::main]` macro for a Poem-based service.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,no_run
 /// #[shuttle_runtime::main]
 /// async example_service() ->

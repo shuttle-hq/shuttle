@@ -73,9 +73,9 @@ impl<T, E> From<Arc<poise::Framework<T, E>>> for PoiseService<T, E> {
 }
 
 /// Return type from the `[shuttle_runtime::main]` macro for a Poise-based service.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,no_run
 /// #[shuttle_runtime::main]
 /// async example_service() ->

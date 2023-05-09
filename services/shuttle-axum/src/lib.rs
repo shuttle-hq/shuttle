@@ -17,7 +17,6 @@
 use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
-
 /// Service Type to wrap Axum::Router
 /// This is a wrapper type for [axum::Router] so we can implement [shuttle_runtime::Service] for it.
 pub struct AxumService(pub axum::Router);
@@ -43,12 +42,12 @@ impl From<axum::Router> for AxumService {
 }
 
 /// Return type from the `[shuttle_runtime::main]` macro for a Axum-based service.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,no_run
 /// #[shuttle_runtime::main]
-/// async example_service() -> 
+/// async example_service() ->
 ///     ShuttleAxum<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
 ///     todo!()
 /// }

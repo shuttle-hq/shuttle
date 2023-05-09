@@ -51,7 +51,7 @@ where
 }
 
 /// The return type of the [shuttle_runtime::main] function for the Thruster service.
-/// 
+///
 /// # Example
 /// ```rust,no_run
 /// #[shuttle_runtime::main]

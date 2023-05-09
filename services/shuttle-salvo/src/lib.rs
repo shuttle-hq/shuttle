@@ -42,9 +42,9 @@ impl From<salvo::Router> for SalvoService {
 }
 
 /// Return type from the `[shuttle_runtime::main]` macro for a Salvo-based service.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,no_run
 /// #[shuttle_runtime::main]
 /// async example_service() ->

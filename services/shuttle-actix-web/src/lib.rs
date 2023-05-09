@@ -59,12 +59,15 @@ where
 /// Return type from the `[shuttle_runtime::main]` macro for an Actix-based service.
 ///
 /// # Example
-///
-/// ```
+/// ```rust,no_run
+/// # use shuttle_actix_web::ShuttleActixWeb;
+/// # use actix_web::web::ServiceConfig;
+/// #
 /// #[shuttle_runtime::main]
 /// async fn example_service()
 ///  -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
-///     todo!();    
+///     let config = move |_cfg: &mut ServiceConfig| {};
+///     Ok(config.into())
 /// }
 /// ```
 pub type ShuttleActixWeb<F> = Result<ActixWebService<F>, shuttle_runtime::Error>;

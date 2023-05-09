@@ -3,7 +3,7 @@
 //!
 //! # Example
 //!
-//! ```
+//! ```rust,ignore
 //! #[shuttle_runtime::main]
 //! async fn rocket(
 //!     #[shuttle_secrets::Secrets] secret_store: SecretStore,
@@ -20,6 +20,7 @@
 //!
 //!     Ok(rocket.into())
 //! }
+//!
 //! ```
 
 use async_trait::async_trait;

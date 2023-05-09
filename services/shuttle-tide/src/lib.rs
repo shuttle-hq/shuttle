@@ -40,12 +40,15 @@ impl<T> From<tide::Server<T>> for TideService<T> {
 /// Return type from the `[shuttle_runtime::main]` macro for a Tide-based service.
 ///
 /// # Example
-///
-/// ```
+/// ```rust,no_run
+/// use shuttle_tide::ShuttleTide;
 /// #[shuttle_runtime::main]
 /// async fn example_service()
-///  -> ShuttleTide<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
-///     todo!();    
+///  -> ShuttleTide<()> {
+///     let mut app = tide::new();
+///     app.with(tide::log::LogMiddleware::new());
+///     app.at("/").get(|_| async { Ok("Hello, world!") });
+///     Ok(app.into())
 /// }
 /// ```
 pub type ShuttleTide<T> = Result<TideService<T>, Error>;

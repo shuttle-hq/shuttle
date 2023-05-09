@@ -49,5 +49,15 @@ where
         Self(router)
     }
 }
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+
+/// The return type of the [shuttle_runtime::main] function for the Thruster service.
+/// 
+/// # Example
+/// ```rust,no_run
+/// #[shuttle_runtime::main]
+/// async fn example_service() ->
+///     ShuttleThruster<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
+///     todo!()
+/// }
+/// ```
 pub type ShuttleThruster<T> = Result<ThrusterService<T>, Error>;

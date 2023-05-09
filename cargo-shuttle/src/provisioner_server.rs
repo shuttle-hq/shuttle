@@ -410,5 +410,6 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
                 "show databases;".to_string(),
             ],
         },
+        Type::DynamoDB => todo!()
     }
 }

@@ -49,6 +49,7 @@ pub mod provisioner {
                         engine: Some(engine),
                     })
                 }
+                database::Type::DynamoDB => database_request::DbType::DynamoDb(DynamoDb {})
             }
         }
     }
@@ -79,6 +80,7 @@ pub mod provisioner {
                 },
                 database_request::DbType::Shared(Shared { engine: None })
                 | database_request::DbType::AwsRds(AwsRds { engine: None }) => None,
+                database_request::DbType::DynamoDb(DynamoDb {}) => Some(database::Type::DynamoDB)
             }
         }
     }

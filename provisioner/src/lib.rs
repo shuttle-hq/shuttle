@@ -425,6 +425,9 @@ impl Provisioner for MyProvisioner {
                 self.request_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
             }
+            DbType::DynamoDb(_) => {
+                todo!()
+            }
         };
 
         Ok(Response::new(reply))
@@ -448,6 +451,9 @@ impl Provisioner for MyProvisioner {
             DbType::AwsRds(AwsRds { engine }) => {
                 self.delete_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
+            }
+            DbType::DynamoDb(_) => {
+                todo!()
             }
         };
 

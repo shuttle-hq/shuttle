@@ -50,7 +50,7 @@ impl<T> Deref for WarpService<T> {
 }
 
 /// The return type of the [shuttle_runtime::main] function for the Warp service.
-/// 
+///
 ///  # Example
 /// ```rust,no_run
 ///  [shuttle_runtime::main]

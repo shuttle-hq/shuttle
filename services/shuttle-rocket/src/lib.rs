@@ -60,9 +60,9 @@ impl From<rocket::Rocket<rocket::Build>> for RocketService {
 }
 
 /// Return type from the `[shuttle_runtime::main]` macro for a Rocket-based service.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,no_run
 /// #[shuttle_runtime::main]
 /// async example_service() ->

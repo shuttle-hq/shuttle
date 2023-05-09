@@ -38,9 +38,9 @@ impl<T> From<tide::Server<T>> for TideService<T> {
 }
 
 /// The return type of the [shuttle_runtime::main] function for the Tide service.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,no_run
 /// #[shuttle_runtime::main]
 /// async fn example_service() -> ShuttleTide<()> {

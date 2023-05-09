@@ -1083,7 +1083,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1128,7 +1128,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokiotest-httpserver",
  "toml 0.5.11",
- "toml_edit 0.15.0",
+ "toml_edit 0.16.2",
  "tonic",
  "tracing",
  "tracing-subscriber",
@@ -3572,6 +3572,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nom8"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae01545c9c7fc4486ab7debaf2aad7003ac19431791868fb2e8066df97fad2f8"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5131,7 +5140,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-admin"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -5148,7 +5157,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-auth"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5177,7 +5186,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -5189,7 +5198,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5238,7 +5247,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5288,7 +5297,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5341,7 +5350,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5358,7 +5367,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -5384,7 +5393,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-runtime"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5417,7 +5426,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6179,6 +6188,18 @@ dependencies = [
  "itertools",
  "kstring",
  "serde",
+ "toml_datetime 0.5.1",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd30deba9a1cd7153c22aecf93e86df639e7b81c622b0af8d9255e989991a7b7"
+dependencies = [
+ "indexmap",
+ "itertools",
+ "nom8",
  "toml_datetime 0.5.1",
 ]
 

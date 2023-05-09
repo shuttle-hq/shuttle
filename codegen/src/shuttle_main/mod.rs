@@ -136,7 +136,7 @@ fn check_return_type(signature: Signature) -> Option<TypePath> {
                 signature,
                 "shuttle_runtime::main functions need to return a service";
                 hint = "See the docs for services with first class support";
-                doc = "https://docs.rs/shuttle-service/latest/shuttle_runtime/attr.main.html#shuttle-supported-services"
+                doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
             );
             None
         }
@@ -147,7 +147,7 @@ fn check_return_type(signature: Signature) -> Option<TypePath> {
                     r#type,
                     "shuttle_runtime::main functions need to return a first class service or 'Result<impl Service, shuttle_runtime::Error>";
                     hint = "See the docs for services with first class support";
-                    doc = "https://docs.rs/shuttle-service/latest/shuttle_runtime/attr.main.html#shuttle-supported-services"
+                    doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
                 );
                 None
             }

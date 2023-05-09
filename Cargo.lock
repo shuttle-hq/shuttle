@@ -5364,7 +5364,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.16.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",

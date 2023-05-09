@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-deployer"
-version = "0.16.0"
+version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 description = "Service to execute the deployment of projects on shuttle"
@@ -20,7 +20,7 @@ once_cell = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 utoipa = { workspace = true }

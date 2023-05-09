@@ -1,0 +1,16 @@
+### Docker image archive creation
+
+1) Go to an example shuttle project and build it. Copy the built binary to `deployer/src/builder`.
+
+2) Change directory to `deployer/src/builder` and run: 
+```bash
+mv <project_binary> shuttle-service
+```
+
+3) Run:
+```bash
+docker build . -f Containerfile --output type=tar,dest=shuttle-service.tar
+```
+
+4) Start the deployer using the `shuttle-service` archive as a parameter for the
+`--image-archive-path` flag.

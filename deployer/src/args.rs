@@ -18,4 +18,8 @@ pub struct Args {
     /// Flag used to prepare the deployer for a local run
     #[clap(long)]
     pub local: bool,
+
+    /// Path used by the mocked builder to return an image archive.
+    #[clap(long)]
+    pub image_archive_path: String,
 }

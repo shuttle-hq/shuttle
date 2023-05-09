@@ -32,7 +32,7 @@ impl Client {
     }
 
     pub async fn deploy(&self, data: Vec<u8>, project: &ProjectName) -> Result<String> {
-        let path = format!("/deploy/{}", project.as_str(),);
+        let path = format!("/project/{}", project.as_str(),);
         let url = format!("{}{}", self.api_url, path);
         let mut builder = Self::get_retry_client().post(url);
         builder = self.set_builder_auth(builder);

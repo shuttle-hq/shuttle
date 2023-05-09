@@ -49,5 +49,14 @@ impl<T> Deref for WarpService<T> {
     }
 }
 
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+/// The return type of the [shuttle_runtime::main] function for the Warp service.
+/// 
+///  # Example
+/// ```rust,no_run
+///  [shuttle_runtime::main]
+/// async fn example_service() ->
+///    ShuttleWarp<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
+///   todo!()
+/// }
+/// ```
 pub type ShuttleWarp<T> = Result<WarpService<warp::filters::BoxedFilter<T>>, Error>;

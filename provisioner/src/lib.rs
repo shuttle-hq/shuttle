@@ -2,7 +2,6 @@ use std::time::Duration;
 
 pub use args::Args;
 use aws_config::timeout;
-// crate::
 use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
     Client,

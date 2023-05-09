@@ -82,4 +82,5 @@ impl<T, E> From<Arc<poise::Framework<T, E>>> for PoiseService<T, E> {
 ///   ShuttlePoise<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
 ///   todo!()
 /// }
+/// ```
 pub type ShuttlePoise<T, E> = Result<PoiseService<T, E>, shuttle_runtime::Error>;

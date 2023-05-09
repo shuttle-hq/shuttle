@@ -52,4 +52,5 @@ impl From<salvo::Router> for SalvoService {
 ///    ShuttleSalvo<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
 ///    todo!()
 /// }
+/// ```
 pub type ShuttleSalvo = Result<SalvoService, Error>;

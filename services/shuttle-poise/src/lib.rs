@@ -72,5 +72,14 @@ impl<T, E> From<Arc<poise::Framework<T, E>>> for PoiseService<T, E> {
     }
 }
 
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+/// Return type from the `[shuttle_runtime::main]` macro for a Poise-based service.
+/// 
+/// # Example
+/// 
+/// ```rust,no_run
+/// #[shuttle_runtime::main]
+/// async example_service() ->
+///   ShuttlePoise<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
+///   todo!()
+/// }
 pub type ShuttlePoise<T, E> = Result<PoiseService<T, E>, shuttle_runtime::Error>;

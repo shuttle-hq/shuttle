@@ -59,5 +59,14 @@ impl From<rocket::Rocket<rocket::Build>> for RocketService {
     }
 }
 
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+/// Return type from the `[shuttle_runtime::main]` macro for a Rocket-based service.
+/// 
+/// # Example
+/// 
+/// ```rust,no_run
+/// #[shuttle_runtime::main]
+/// async example_service() ->
+///   ShuttleRocket<impl FnOnce(&mut rocket::config::Config) + Send + Clone + 'static> {
+///   todo!()
+/// }
 pub type ShuttleRocket = Result<RocketService, shuttle_runtime::Error>;

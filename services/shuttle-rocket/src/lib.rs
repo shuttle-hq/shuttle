@@ -69,4 +69,5 @@ impl From<rocket::Rocket<rocket::Build>> for RocketService {
 ///   ShuttleRocket<impl FnOnce(&mut rocket::config::Config) + Send + Clone + 'static> {
 ///   todo!()
 /// }
+/// ```
 pub type ShuttleRocket = Result<RocketService, shuttle_runtime::Error>;

@@ -55,4 +55,5 @@ where
 ///    ShuttlePoem<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
 ///    todo!()
 /// }
+/// ```
 pub type ShuttlePoem<T> = Result<PoemService<T>, shuttle_runtime::Error>;

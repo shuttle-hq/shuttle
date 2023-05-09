@@ -13,7 +13,7 @@ use shuttle_common::{
     ApiKey,
 };
 use sqlx::{query, Row, SqlitePool};
-use tracing::{trace, Span};
+use tracing::{debug, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
 
@@ -151,7 +151,10 @@ where
             .map_err(|_| Error::KeyMissing)
             .and_then(|TypedHeader(Authorization(bearer))| {
                 let bearer = bearer.token().trim();
-                ApiKey::parse(bearer).map_err(|_| Self::Rejection::Unauthorized)
+                ApiKey::parse(bearer).map_err(|error| {
+                    debug!(error = ?error, "received a malformed api-key");
+                    Self::Rejection::Unauthorized
+                })
             })?;
 
         trace!("got bearer key");

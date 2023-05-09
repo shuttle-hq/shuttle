@@ -40,5 +40,15 @@ impl From<salvo::Router> for SalvoService {
         Self(router)
     }
 }
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+
+/// Return type from the `[shuttle_runtime::main]` macro for a Salvo-based service.
+/// 
+/// # Example
+/// 
+/// ```rust,no_run
+/// #[shuttle_runtime::main]
+/// async example_service() ->
+///    ShuttleSalvo<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
+///    todo!()
+/// }
 pub type ShuttleSalvo = Result<SalvoService, Error>;

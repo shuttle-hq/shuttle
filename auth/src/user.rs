@@ -7,11 +7,13 @@ use axum::{
     http::request::Parts,
     TypedHeader,
 };
-use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::claims::{Scope, ScopeBuilder};
+use shuttle_common::{
+    claims::{Scope, ScopeBuilder},
+    ApiKey,
+};
 use sqlx::{query, Row, SqlitePool};
-use tracing::{trace, Span};
+use tracing::{debug, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
 
@@ -19,7 +21,7 @@ use crate::{api::UserManagerState, error::Error};
 pub trait UserManagement: Send + Sync {
     async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error>;
     async fn get_user(&self, name: AccountName) -> Result<User, Error>;
-    async fn get_user_by_key(&self, key: Key) -> Result<User, Error>;
+    async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
 }
 
 #[derive(Clone)]
@@ -30,7 +32,7 @@ pub struct UserManager {
 #[async_trait]
 impl UserManagement for UserManager {
     async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error> {
-        let key = Key::new_random();
+        let key = ApiKey::generate();
 
         query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
             .bind(&name)
@@ -55,7 +57,7 @@ impl UserManagement for UserManager {
             .ok_or(Error::UserNotFound)
     }
 
-    async fn get_user_by_key(&self, key: Key) -> Result<User, Error> {
+    async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error> {
         query("SELECT account_name, key, account_tier FROM users WHERE key = ?1")
             .bind(&key)
             .fetch_optional(&self.pool)
@@ -69,10 +71,10 @@ impl UserManagement for UserManager {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
 pub struct User {
     pub name: AccountName,
-    pub key: Key,
+    pub key: ApiKey,
     pub account_tier: AccountTier,
 }
 
@@ -81,7 +83,7 @@ impl User {
         self.account_tier == AccountTier::Admin
     }
 
-    pub fn new(name: AccountName, key: Key, account_tier: AccountTier) -> Self {
+    pub fn new(name: AccountName, key: ApiKey, account_tier: AccountTier) -> Self {
         Self {
             name,
             key,
@@ -104,7 +106,7 @@ where
         let user_manager: UserManagerState = UserManagerState::from_ref(state);
 
         let user = user_manager
-            .get_user_by_key(key)
+            .get_user_by_key(key.as_ref().clone())
             .await
             // Absorb any error into `Unauthorized`
             .map_err(|_| Error::Unauthorized)?;
@@ -120,16 +122,21 @@ impl From<User> for shuttle_common::models::user::Response {
     fn from(user: User) -> Self {
         Self {
             name: user.name.to_string(),
-            key: user.key.to_string(),
+            key: user.key.as_ref().to_string(),
             account_tier: user.account_tier.to_string(),
         }
     }
 }
 
-#[derive(Clone, sqlx::Type, PartialEq, Hash, Eq, Serialize, Deserialize, Debug)]
-#[serde(transparent)]
-#[sqlx(transparent)]
-pub struct Key(String);
+/// A wrapper around [ApiKey] so we can implement [FromRequestParts]
+/// for it.
+pub struct Key(ApiKey);
+
+impl AsRef<ApiKey> for Key {
+    fn as_ref(&self) -> &ApiKey {
+        &self.0
+    }
+}
 
 #[async_trait]
 impl<S> FromRequestParts<S> for Key
@@ -142,31 +149,17 @@ where
         let key = TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
             .await
             .map_err(|_| Error::KeyMissing)
-            .and_then(|TypedHeader(Authorization(bearer))| bearer.token().trim().parse())?;
+            .and_then(|TypedHeader(Authorization(bearer))| {
+                let bearer = bearer.token().trim();
+                ApiKey::parse(bearer).map_err(|error| {
+                    debug!(error = ?error, "received a malformed api-key");
+                    Self::Rejection::Unauthorized
+                })
+            })?;
 
         trace!("got bearer key");
 
-        Ok(key)
-    }
-}
-
-impl std::fmt::Display for Key {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl FromStr for Key {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_string()))
-    }
-}
-
-impl Key {
-    pub fn new_random() -> Self {
-        Self(Alphanumeric.sample_string(&mut rand::thread_rng(), 16))
+        Ok(Key(key))
     }
 }
 

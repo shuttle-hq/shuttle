@@ -2,9 +2,9 @@ use proc_macro::TokenStream;
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
 use syn::{
-    parenthesized, parse::Parse, parse2, parse_macro_input, parse_quote, punctuated::Punctuated,
-    spanned::Spanned, token::Paren, Attribute, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat,
-    PatIdent, Path, ReturnType, Signature, Stmt, Token, Type, TypePath,
+    parse::Parse, parse_macro_input, parse_quote, punctuated::Punctuated, spanned::Spanned,
+    Attribute, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat, PatIdent, Path, ReturnType,
+    Signature, Stmt, Token, Type, TypePath,
 };
 
 pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -52,9 +52,6 @@ struct Builder {
 
 #[derive(Debug, Default, PartialEq)]
 struct BuilderOptions {
-    /// Parenthesize around options
-    paren_token: Paren,
-
     /// The actual options
     options: Punctuated<BuilderOption, Token![,]>,
 }
@@ -70,11 +67,8 @@ struct BuilderOption {
 
 impl Parse for BuilderOptions {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let content;
-
         Ok(Self {
-            paren_token: parenthesized!(content in input),
-            options: content.parse_terminated(BuilderOption::parse)?,
+            options: input.parse_terminated(BuilderOption::parse, Token![,])?,
         })
     }
 }
@@ -169,14 +163,14 @@ fn attribute_to_builder(pat_ident: &PatIdent, attrs: Vec<Attribute>) -> syn::Res
         ));
     }
 
-    let options = if attrs[0].tokens.is_empty() {
+    let options = if attrs[0].meta.require_list().is_err() {
         Default::default()
     } else {
-        parse2(attrs[0].tokens.clone())?
+        attrs[0].parse_args()?
     };
 
     let builder = Builder {
-        path: attrs[0].path.clone(),
+        path: attrs[0].path().clone(),
         options,
     };
 
@@ -437,14 +431,14 @@ mod tests {
 
     #[test]
     fn parse_builder_options() {
-        let input: BuilderOptions = parse_quote!((
+        let input: BuilderOptions = parse_quote!(
             string = "string_val",
             boolean = true,
             integer = 5,
             float = 2.65,
             enum_variant = SomeEnum::Variant1,
             sensitive = "user:{secrets.password}"
-        ));
+        );
 
         let mut expected: BuilderOptions = Default::default();
         expected.options.push(parse_quote!(string = "string_val"));

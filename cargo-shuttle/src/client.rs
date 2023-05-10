@@ -201,6 +201,11 @@ impl Client {
         self.get(path).await
     }
 
+    pub async fn invalidate_api_key(&self) -> Result<Response> {
+        self.put("/users/reset-api-key".into(), Option::<()>::None)
+            .await
+    }
+
     async fn ws_get(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let ws_scheme = self.api_url.clone().replace("http", "ws");
         let url = format!("{ws_scheme}{path}");
@@ -241,6 +246,22 @@ impl Client {
         let url = format!("{}{}", self.api_url, path);
 
         let mut builder = Self::get_retry_client().post(url);
+
+        builder = self.set_builder_auth(builder);
+
+        if let Some(body) = body {
+            let body = serde_json::to_string(&body)?;
+            builder = builder.body(body);
+            builder = builder.header("Content-Type", "application/json");
+        }
+
+        Ok(builder.send().await?)
+    }
+
+    async fn put<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = Self::get_retry_client().put(url);
 
         builder = self.set_builder_auth(builder);
 

@@ -115,8 +115,8 @@ where
             other => other.starts_with("/users"),
         };
 
-        // If /users/reset-key is called, invalidate the cached JWT.
-        if req.uri().path() == "/users/reset-key" {
+        // If /users/reset-api-key is called, invalidate the cached JWT.
+        if req.uri().path() == "/users/reset-api-key" {
             if let Some((cache_key, _)) = cache_key_and_token_req(&req) {
                 self.cache_manager.invalidate(&cache_key);
             };

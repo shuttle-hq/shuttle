@@ -5,13 +5,16 @@ import "google/protobuf/timestamp.proto";
 
 service ResourceRecorder {
   // Record a new set of resources
-  rpc RecordResources(RecordRequest) returns (RecordResponse);
+  rpc RecordResources(RecordRequest) returns (ResultResponse);
 
   // Get the resource belonging to a project
   rpc GetProjectResources(ProjectResourcesRequest) returns (ResourcesResponse);
 
   // Get the resource belonging to a service
   rpc GetServiceResources(ServiceResourcesRequest) returns (ResourcesResponse);
+
+  // Delete a resource
+  rpc DeleteResource(Resource) returns (ResultResponse);
 }
 
 message RecordRequest {
@@ -27,7 +30,7 @@ message RecordRequest {
   repeated Resource resources = 3;
 }
 
-message RecordResponse {
+message ResultResponse {
   bool success = 1;
   string message = 2;
 }
@@ -40,19 +43,20 @@ message ResourcesResponse {
   bool success = 1;
   string message = 2;
 
-  message Resource {
-    string project_id = 1;
-    string service_id = 2;
-    string type = 3;
-    bytes config = 4;
-    bytes data = 5;
-    bool is_active = 6;
-    google.protobuf.Timestamp created_at = 7;
-  }
-
   repeated Resource resources = 3;
 }
 
 message ServiceResourcesRequest {
   string service_id = 1;
+}
+
+
+message Resource {
+  string project_id = 1;
+  string service_id = 2;
+  string type = 3;
+  bytes config = 4;
+  bytes data = 5;
+  bool is_active = 6;
+  google.protobuf.Timestamp created_at = 7;
 }

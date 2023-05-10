@@ -5550,6 +5550,7 @@ dependencies = [
  "shuttle-proto",
  "sqlx",
  "strum",
+ "thiserror",
  "tokio",
  "tonic",
  "tracing",

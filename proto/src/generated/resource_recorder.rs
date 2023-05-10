@@ -23,7 +23,7 @@ pub mod record_request {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RecordResponse {
+pub struct ResultResponse {
     #[prost(bool, tag = "1")]
     pub success: bool,
     #[prost(string, tag = "2")]
@@ -43,34 +43,31 @@ pub struct ResourcesResponse {
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "3")]
-    pub resources: ::prost::alloc::vec::Vec<resources_response::Resource>,
-}
-/// Nested message and enum types in `ResourcesResponse`.
-pub mod resources_response {
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct Resource {
-        #[prost(string, tag = "1")]
-        pub project_id: ::prost::alloc::string::String,
-        #[prost(string, tag = "2")]
-        pub service_id: ::prost::alloc::string::String,
-        #[prost(string, tag = "3")]
-        pub r#type: ::prost::alloc::string::String,
-        #[prost(bytes = "vec", tag = "4")]
-        pub config: ::prost::alloc::vec::Vec<u8>,
-        #[prost(bytes = "vec", tag = "5")]
-        pub data: ::prost::alloc::vec::Vec<u8>,
-        #[prost(bool, tag = "6")]
-        pub is_active: bool,
-        #[prost(message, optional, tag = "7")]
-        pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    }
+    pub resources: ::prost::alloc::vec::Vec<Resource>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServiceResourcesRequest {
     #[prost(string, tag = "1")]
     pub service_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Resource {
+    #[prost(string, tag = "1")]
+    pub project_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub service_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "4")]
+    pub config: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "5")]
+    pub data: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bool, tag = "6")]
+    pub is_active: bool,
+    #[prost(message, optional, tag = "7")]
+    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 /// Generated client implementations.
 pub mod resource_recorder_client {
@@ -145,7 +142,7 @@ pub mod resource_recorder_client {
         pub async fn record_resources(
             &mut self,
             request: impl tonic::IntoRequest<super::RecordRequest>,
-        ) -> Result<tonic::Response<super::RecordResponse>, tonic::Status> {
+        ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status> {
             self.inner
                 .ready()
                 .await
@@ -201,6 +198,26 @@ pub mod resource_recorder_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
+        /// Delete a resource
+        pub async fn delete_resource(
+            &mut self,
+            request: impl tonic::IntoRequest<super::Resource>,
+        ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/resource_recorder.ResourceRecorder/DeleteResource",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -214,7 +231,7 @@ pub mod resource_recorder_server {
         async fn record_resources(
             &self,
             request: tonic::Request<super::RecordRequest>,
-        ) -> Result<tonic::Response<super::RecordResponse>, tonic::Status>;
+        ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status>;
         /// Get the resource belonging to a project
         async fn get_project_resources(
             &self,
@@ -225,6 +242,11 @@ pub mod resource_recorder_server {
             &self,
             request: tonic::Request<super::ServiceResourcesRequest>,
         ) -> Result<tonic::Response<super::ResourcesResponse>, tonic::Status>;
+        /// Delete a resource
+        async fn delete_resource(
+            &self,
+            request: tonic::Request<super::Resource>,
+        ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct ResourceRecorderServer<T: ResourceRecorder> {
@@ -292,7 +314,7 @@ pub mod resource_recorder_server {
                         T: ResourceRecorder,
                     > tonic::server::UnaryService<super::RecordRequest>
                     for RecordResourcesSvc<T> {
-                        type Response = super::RecordResponse;
+                        type Response = super::ResultResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -394,6 +416,46 @@ pub mod resource_recorder_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = GetServiceResourcesSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/resource_recorder.ResourceRecorder/DeleteResource" => {
+                    #[allow(non_camel_case_types)]
+                    struct DeleteResourceSvc<T: ResourceRecorder>(pub Arc<T>);
+                    impl<
+                        T: ResourceRecorder,
+                    > tonic::server::UnaryService<super::Resource>
+                    for DeleteResourceSvc<T> {
+                        type Response = super::ResultResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::Resource>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).delete_resource(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = DeleteResourceSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

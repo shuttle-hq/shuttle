@@ -17,6 +17,7 @@ sqlx = { workspace = true, features = [
     "sqlite",
 ] }
 strum = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tonic = { workspace = true }
 tracing = { workspace = true }

@@ -1,10 +1,10 @@
 use std::{path::Path, str::FromStr, time::SystemTime};
 
-use crate::r#type::Type;
+use crate::{r#type::Type, Error};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use prost_types::Timestamp;
-use shuttle_proto::resource_recorder::{record_request, resources_response};
+use shuttle_proto::resource_recorder::{self, record_request};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow},
@@ -17,24 +17,22 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[async_trait]
 pub trait Dal {
-    type Error: std::error::Error + Send;
-
     /// Add a set of resources for a service
     async fn add_resources(
         &self,
         project_id: Ulid,
         service_id: Ulid,
         resources: Vec<Resource>,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), sqlx::Error>;
 
     /// Get the resources that belong to a project
-    async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, Self::Error>;
+    async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, sqlx::Error>;
 
     /// Get the resources that belong to a service
-    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, Self::Error>;
+    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, sqlx::Error>;
 
     /// Delete a resource
-    async fn delete_resource(&self, resource: &Resource) -> Result<(), Self::Error>;
+    async fn delete_resource(&self, resource: &Resource) -> Result<(), sqlx::Error>;
 }
 
 pub struct Sqlite {
@@ -85,14 +83,12 @@ impl Sqlite {
 
 #[async_trait]
 impl Dal for Sqlite {
-    type Error = sqlx::Error;
-
     async fn add_resources(
         &self,
         project_id: Ulid,
         service_id: Ulid,
         resources: Vec<Resource>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), sqlx::Error> {
         let mut transaction = self.pool.begin().await?;
 
         sqlx::query("UPDATE resources SET is_active = false WHERE service_id = ?")
@@ -128,21 +124,21 @@ impl Dal for Sqlite {
         transaction.commit().await
     }
 
-    async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, Self::Error> {
+    async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, sqlx::Error> {
         sqlx::query_as(r#"SELECT * FROM resources WHERE project_id = ?"#)
             .bind(project_id.to_string())
             .fetch_all(&self.pool)
             .await
     }
 
-    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, Self::Error> {
+    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, sqlx::Error> {
         sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
             .bind(service_id.to_string())
             .fetch_all(&self.pool)
             .await
     }
 
-    async fn delete_resource(&self, resource: &Resource) -> Result<(), Self::Error> {
+    async fn delete_resource(&self, resource: &Resource) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM resources WHERE project_id = ? AND service_id = ? AND type = ?")
             .bind(resource.project_id.map(|u| u.to_string()))
             .bind(resource.service_id.map(|u| u.to_string()))
@@ -192,7 +188,7 @@ impl TryFrom<record_request::Resource> for Resource {
     }
 }
 
-impl From<Resource> for resources_response::Resource {
+impl From<Resource> for resource_recorder::Resource {
     fn from(value: Resource) -> Self {
         Self {
             project_id: value
@@ -209,6 +205,22 @@ impl From<Resource> for resources_response::Resource {
             is_active: value.is_active,
             created_at: Some(Timestamp::from(SystemTime::from(value.created_at))),
         }
+    }
+}
+
+impl TryFrom<resource_recorder::Resource> for Resource {
+    type Error = Error;
+
+    fn try_from(value: resource_recorder::Resource) -> Result<Self, Self::Error> {
+        Ok(Self {
+            project_id: Some(value.project_id.parse()?),
+            service_id: Some(value.service_id.parse()?),
+            r#type: value.r#type.parse()?,
+            data: value.data,
+            config: value.config,
+            is_active: value.is_active,
+            created_at: DateTime::from(SystemTime::try_from(value.created_at.unwrap_or_default())?),
+        })
     }
 }
 

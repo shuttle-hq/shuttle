@@ -111,7 +111,7 @@ async fn test_reset_key() {
 
     // Reset API key without cookie or API key.
     let request = Request::builder()
-        .uri("/users/reset-key")
+        .uri("/users/reset-api-key")
         .method("PUT")
         .body(Body::empty())
         .unwrap();
@@ -140,7 +140,7 @@ async fn test_reset_key() {
     let cookie = Cookie::parse(cookie).unwrap();
 
     let request = Request::builder()
-        .uri("/users/reset-key")
+        .uri("/users/reset-api-key")
         .method("PUT")
         .header("Cookie", cookie.stripped().to_string())
         .body(Body::empty())
@@ -150,7 +150,7 @@ async fn test_reset_key() {
 
     // Reset API key with API key.
     let request = Request::builder()
-        .uri("/users/reset-key")
+        .uri("/users/reset-api-key")
         .method("PUT")
         .header(AUTHORIZATION, format!("Bearer {}", helpers::ADMIN_KEY))
         .body(Body::empty())

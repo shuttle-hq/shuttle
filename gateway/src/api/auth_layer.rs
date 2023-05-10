@@ -116,9 +116,11 @@ where
         };
 
         // If /users/reset-key is called, invalidate the cached JWT.
-        if let Some((cache_key, _)) = cache_key_and_token_req(&req) {
-            self.cache_manager.invalidate(&cache_key);
-        };
+        if req.uri().path() == "/users/reset-key" {
+            if let Some((cache_key, _)) = cache_key_and_token_req(&req) {
+                self.cache_manager.invalidate(&cache_key);
+            };
+        }
 
         // If logout is called, invalidate the cached JWT for the callers cookie.
         if req.uri().path() == "/logout" {

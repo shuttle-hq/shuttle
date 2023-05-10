@@ -43,7 +43,7 @@ impl CronJob {
     }
 
     async fn run(&self) {
-        info!("Running job for: {:?}", self.url);
+        info!("Running job for: {}", self.url);
         while let Some(next_run) = self.schedule.upcoming(Utc).next() {
             let next_run_in = next_run
                 .signed_duration_since(chrono::offset::Utc::now())
@@ -52,7 +52,9 @@ impl CronJob {
             sleep(next_run_in).await;
 
             info!("Calling {}", self.url);
-            // TODO: Use reqwest to call url.
+
+            let req = reqwest::get(self.url.clone()).await.unwrap();
+            info!("Called with status code {}", req.status());
         }
     }
 }

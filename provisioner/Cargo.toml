@@ -23,7 +23,7 @@ tracing-subscriber = { workspace = true, features = ["default", "fmt"] }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["backend"]
+features = ["backend", "tonic"]
 
 [dependencies.shuttle-proto]
 workspace = true

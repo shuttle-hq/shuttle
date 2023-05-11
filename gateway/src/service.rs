@@ -828,6 +828,14 @@ pub mod tests {
                 .collect::<Vec<_>>(),
             all_projects[20..40]
         );
+        assert_eq!(
+            svc.iter_user_projects_detailed(&neo, 200, 20)
+                .await
+                .unwrap()
+                .map(|item| item.0)
+                .collect::<Vec<_>>(),
+            vec![]
+        );
 
         // assert_eq!(
         //     svc.iter_user_projects_detailed_filtered(neo.clone(), "ready".to_string())

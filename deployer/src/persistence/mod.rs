@@ -594,6 +594,10 @@ mod tests {
             p.get_deployments(&service_id, 5, 5).await.unwrap(),
             deployments[5..10]
         );
+        assert_eq!(
+            p.get_deployments(&service_id, 20, 5).await.unwrap(),
+            vec![]
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

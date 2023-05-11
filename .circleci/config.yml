@@ -324,7 +324,7 @@ jobs:
     - run:
         name: Test ssh access
         command: |
-          ssh -J ec2-user@3.11.51.209 ec2-user@controller.shuttle.internal "ls | wc -l"
+          ssh -J ec2-user@3.11.51.209 ec2-user@master.shuttle.internal "ls | wc -l"
   build-binaries-linux:
     machine:
       image: << parameters.image >>

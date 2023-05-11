@@ -4,6 +4,7 @@ use std::sync::Arc;
 use axum::Router;
 use chrono::Utc;
 use cron::Schedule;
+use router::make_router;
 use serde::{Deserialize, Serialize};
 use shuttle_persist::PersistInstance;
 use shuttle_runtime::tracing::{debug, info};
@@ -87,6 +88,8 @@ impl CronRunner {
                     job.run().await;
                 });
             }
+        } else {
+            info!("Didn't find any jobs. POST to /crontab/set to create one.");
         }
 
         while let Some(msg) = self.receiver.recv().await {
@@ -120,19 +123,28 @@ pub struct CrontabService {
     runner: CronRunner,
 }
 
-impl CrontabService {
-    pub fn new(persist: PersistInstance) -> Result<CrontabService, shuttle_runtime::Error> {
-        let (sender, receiver) = mpsc::channel(32);
-        let runner = CronRunner { persist, receiver };
-        let state = Arc::new(AppState { sender });
-        let router = router::build_router(state);
-
-        Ok(Self { router, runner })
-    }
+pub struct CrontabServiceState {
+    sender: Sender<Msg>,
 }
 
-pub struct AppState {
-    sender: Sender<Msg>,
+impl CrontabService {
+    pub fn new(
+        persist: PersistInstance,
+        user_router: Router,
+    ) -> Result<CrontabService, shuttle_runtime::Error> {
+        let (sender, receiver) = mpsc::channel(32);
+
+        let cron_runner = CronRunner { persist, receiver };
+        let cron_state = Arc::new(CrontabServiceState { sender });
+        let cron_router = make_router(cron_state);
+
+        let router = user_router.nest("/crontab", cron_router);
+
+        Ok(Self {
+            router,
+            runner: cron_runner,
+        })
+    }
 }
 
 #[shuttle_runtime::async_trait]

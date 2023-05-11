@@ -1,29 +1,23 @@
 use std::sync::Arc;
 
 use axum::extract::State;
-use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{get, post};
+use axum::routing::post;
 use axum::{extract::Form, Router};
 use shuttle_runtime::tracing::debug;
 use tokio::sync::oneshot;
 
 use crate::error::CrontabServiceError;
-use crate::{AppState, Msg, RawJob};
+use crate::{CrontabServiceState, Msg, RawJob};
 
-pub fn build_router(app_state: Arc<AppState>) -> Router {
+pub fn make_router(cron_state: Arc<CrontabServiceState>) -> Router {
     Router::new()
-        .route("/", get(hello_world))
-        .route("/set-schedule", post(set_schedule))
-        .with_state(app_state)
-}
-
-pub async fn hello_world() -> impl IntoResponse {
-    (StatusCode::OK, "Hello world!").into_response()
+        .route("/set", post(set_schedule))
+        .with_state(cron_state)
 }
 
 pub async fn set_schedule(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<CrontabServiceState>>,
     Form(job): Form<RawJob>,
 ) -> Result<impl IntoResponse, CrontabServiceError> {
     debug!("Accepted new job: {:?}", job);

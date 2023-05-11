@@ -2,12 +2,35 @@
 
 A service that calls URLs at specified cron intervals.
 
-The service exposes a `/set-schedule` endpoint that accepts a schedule and a URL as form data and persists the cron job with `shuttle_persist` between runs.
+# Usage
+
+Create a new `CrontabService` by providing a `shuttle_persist::PersistInstance`
+and an `axum::Router`:
 
 ```
-curl -v http://localhost:8000/set-schedule\
+// main.rs
+
+#[shuttle_runtime::main]
+async fn crontab(#[Persist] persist: PersistInstance) -> ShuttleCrontab {
+    let router = Router::new().route("/", get(my_own_route));
+    CrontabService::new(persist, router)
+}
+```
+
+This will create an `axum::Service` with a cron runner mounted at `/crontab`.
+The `/crontab/set` endpoint accepts a schedule and a URL as form data and
+persists the cron job with `shuttle_persist` between runs.
+
+```
+curl -v http://localhost:8000/crontab/set\
   -H "Content-Type: application/x-www-form-urlencoded"\
   -d "schedule='*/2 * * * * *'&url='example.com'"
 ```
 
-The example demonstrates implementation of a custom service with [`shuttle_runtime::Service`](https://docs.shuttle.rs/examples/custom-service), usage of [`shuttle_persist`](https://docs.shuttle.rs/resources/shuttle-persist), and how to run an `axum::Server` and a number of cron job processes in parallel.
+This crate demonstrates implementation of a custom service with
+[`shuttle_runtime::Service`](https://docs.shuttle.rs/examples/custom-service),
+usage of [`shuttle_persist`](https://docs.shuttle.rs/resources/shuttle-persist),
+and how to run an [`axum::Server`](https://github.com/tokio-rs/axum) and a
+number of cron job processes in parallel. and how to set up an `axum::Server`
+that communicates with the main `CronRunner` via
+[tokio channels](https://tokio.rs/tokio/tutorial/channels).

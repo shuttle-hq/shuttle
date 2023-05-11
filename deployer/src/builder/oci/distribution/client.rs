@@ -20,7 +20,6 @@ pub struct Client {
 impl Client {
     pub fn new(url: Url, name: Name) -> Result<Self> {
         let auth = StoredAuth::load_all()?;
-        info!("{:?}", auth);
         Ok(Client {
             agent: ureq::Agent::new(),
             url,
@@ -31,13 +30,19 @@ impl Client {
     }
 
     fn call(&mut self, req: ureq::Request) -> Result<ureq::Response> {
+        if req.url().contains("localhost") {
+            return req
+                .call()
+                .map_err(|err| super::super::error::Error::Registry(err.to_string()));
+        }
+
+        // Try get token
         if let Some(token) = &self.token {
             return Ok(req
                 .set("Authorization", &format!("Bearer {}", token))
                 .call()?);
         }
 
-        // Try get token
         let try_req = req.clone();
         let www_auth = match try_req.call() {
             Ok(res) => return Ok(res),

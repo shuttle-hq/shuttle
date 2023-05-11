@@ -1,4 +1,4 @@
-### Docker image archive creation and push to public.ecr.aws
+### Docker image archive creation and push to a container registry
 
 1) Create a new (docker buildx driver)[https://docs.docker.com/build/drivers/docker-container/] to be used
    for generating complete OCI images:
@@ -7,13 +7,18 @@ docker buildx create --name container --driver=docker-container
 ```
 2) Run:
 ```bash
-docker buildx build . -f Containerfile -t <IMAGE_REGISTRY>:latest --output type=oci,dest=shuttle-service.tar --builder=container
+docker buildx build . -f Containerfile -t localhost:5000/shuttle-service:latest --output type=oci,dest=shuttle-service.tar --builder=container
 ```
-3) Start the deployer using the `shuttle-service` archive as a parameter for the
+3) Start a docker local container registry:
+```bash
+docker run -d -p 5000:5000 --name registry registry:2
+```
+4) Start the deployer using the `shuttle-service` archive as a parameter for the
 `--image-archive-path` flag.
-4) Run  `mkdir ~/.ocipkg/`.
-5) [Configure](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) your aws-cli with credentials associated to your unstable IAM user.
-6) Run `AWS_ECR_TOKEN=$(aws ecr-public get-login-password --region us-east-1)`.
-7) Run `OCIPKG_BASIC_AUTH_CREDS=$(echo AWS:$AWS_ECR_TOKEN | base64)`
-8) Run `echo "{\"auths\":{\"public.ecr.aws\":{\"auth\": \"${OCIPKG_BASIC_AUTH_CREDS}\"}}}" | jq > ~/.ocipkg/config.json`
-9) Now the deployer can be used to deploy per (README)[../README], doing an OCI tar image push to *public.ecr.aws*.
+
+Required steps in case of pushing against `public.ecr.aws`:
+1) Run  `mkdir ~/.ocipkg/`.
+2) [Configure](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) your aws-cli with credentials associated to your unstable IAM user.
+3) Run `AWS_ECR_TOKEN=$(aws ecr-public get-login-password --region us-east-1)`.
+4) Run `OCIPKG_BASIC_AUTH_CREDS=$(echo AWS:$AWS_ECR_TOKEN | base64)`
+5) Run `echo "{\"auths\":{\"public.ecr.aws\":{\"auth\": \"${OCIPKG_BASIC_AUTH_CREDS}\"}}}" | jq > ~/.ocipkg/config.json`

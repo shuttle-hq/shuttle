@@ -26,12 +26,14 @@ ulid = { workspace = true }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["backend"]
+features = ["backend", "tonic"]
 
 [dependencies.shuttle-proto]
 workspace = true
 
 [dev-dependencies]
+hyper = { workspace = true }
 portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
+tower = { workspace = true }

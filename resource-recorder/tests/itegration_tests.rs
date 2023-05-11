@@ -3,6 +3,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
 use serde_json::json;
+use shuttle_common::claims::{Claim, Scope};
 use shuttle_proto::resource_recorder::{
     record_request, resource_recorder_client::ResourceRecorderClient,
     resource_recorder_server::ResourceRecorderServer, ProjectResourcesRequest, RecordRequest,
@@ -20,6 +21,10 @@ async fn manage_resources() {
 
     let server_future = async {
         Server::builder()
+            .layer(JwtScopesLayer::new(vec![
+                Scope::Resources,
+                Scope::ResourcesWrite,
+            ]))
             .add_service(ResourceRecorderServer::new(Service::new(
                 Sqlite::new_in_memory().await,
             )))
@@ -271,5 +276,60 @@ async fn manage_resources() {
     select! {
         _ = server_future => panic!("server finished first"),
         _ = test_future => {},
+    }
+}
+
+/// Layer to set JwtScopes on a request
+#[derive(Clone)]
+pub struct JwtScopesLayer {
+    /// Thes scopes to set
+    scopes: Vec<Scope>,
+}
+
+impl JwtScopesLayer {
+    /// Create a new layer to set scopes on requests
+    pub fn new(scopes: Vec<Scope>) -> Self {
+        Self { scopes }
+    }
+}
+
+impl<S> tower::Layer<S> for JwtScopesLayer {
+    type Service = JwtScopes<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        JwtScopes {
+            inner,
+            scopes: self.scopes.clone(),
+        }
+    }
+}
+
+/// Middleware to set scopes on a request
+#[derive(Clone)]
+pub struct JwtScopes<S> {
+    inner: S,
+    scopes: Vec<Scope>,
+}
+
+impl<S> tower::Service<hyper::Request<hyper::Body>> for JwtScopes<S>
+where
+    S: tower::Service<hyper::Request<hyper::Body>> + Send + Clone + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = S::Future;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: hyper::Request<hyper::Body>) -> Self::Future {
+        req.extensions_mut()
+            .insert(Claim::new("test".to_string(), self.scopes.clone()));
+        self.inner.call(req)
     }
 }

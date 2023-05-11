@@ -3,6 +3,7 @@ use std::fmt;
 use async_trait::async_trait;
 use dal::{Dal, Resource};
 use prost_types::TimestampError;
+use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
 use shuttle_proto::resource_recorder::{
     self, resource_recorder_server::ResourceRecorder, ProjectResourcesRequest, RecordRequest,
     ResourcesResponse, ResultResponse, ServiceResourcesRequest,
@@ -117,6 +118,8 @@ where
         &self,
         request: Request<RecordRequest>,
     ) -> Result<Response<ResultResponse>, Status> {
+        request.verify(Scope::ResourcesWrite)?;
+
         let request = request.into_inner();
         let result = match self.add(request).await {
             Ok(()) => ResultResponse {
@@ -136,6 +139,8 @@ where
         &self,
         request: Request<ProjectResourcesRequest>,
     ) -> Result<Response<ResourcesResponse>, Status> {
+        request.verify(Scope::Resources)?;
+
         let request = request.into_inner();
         let result = match self.project_resources(request.project_id).await {
             Ok(resources) => ResourcesResponse {
@@ -157,6 +162,8 @@ where
         &self,
         request: Request<ServiceResourcesRequest>,
     ) -> Result<Response<ResourcesResponse>, Status> {
+        request.verify(Scope::Resources)?;
+
         let request = request.into_inner();
         let result = match self.service_resources(request.service_id).await {
             Ok(resources) => ResourcesResponse {
@@ -178,6 +185,8 @@ where
         &self,
         request: Request<resource_recorder::Resource>,
     ) -> Result<Response<ResultResponse>, Status> {
+        request.verify(Scope::ResourcesWrite)?;
+
         let request = request.into_inner();
         let result = match self.delete_resource(request).await {
             Ok(()) => ResultResponse {

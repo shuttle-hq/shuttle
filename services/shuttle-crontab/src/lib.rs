@@ -30,17 +30,17 @@ pub struct RawJob {
 }
 
 #[derive(Debug)]
-pub enum Msg {
+enum Msg {
     NewJob(RawJob, Responder<()>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Crontab {
+struct Crontab {
     jobs: Vec<RawJob>,
 }
 
 #[derive(Debug)]
-pub struct CronJob {
+struct CronJob {
     schedule: Schedule,
     url: String,
 }
@@ -71,7 +71,7 @@ impl CronJob {
     }
 }
 
-pub struct CronRunner {
+struct CronRunner {
     persist: PersistInstance,
     receiver: Receiver<Msg>,
 }
@@ -123,7 +123,7 @@ pub struct CrontabService {
     runner: CronRunner,
 }
 
-pub struct CrontabServiceState {
+struct CrontabServiceState {
     sender: Sender<Msg>,
 }
 

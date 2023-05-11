@@ -5,7 +5,7 @@ use axum::{
 use shuttle_persist::PersistError;
 
 #[derive(Debug)]
-pub struct CrontabServiceError(PersistError);
+pub(crate) struct CrontabServiceError(PersistError);
 
 impl From<PersistError> for CrontabServiceError {
     fn from(err: PersistError) -> Self {

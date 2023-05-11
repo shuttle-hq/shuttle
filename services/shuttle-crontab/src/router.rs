@@ -10,13 +10,13 @@ use tokio::sync::oneshot;
 use crate::error::CrontabServiceError;
 use crate::{CrontabServiceState, Msg, RawJob};
 
-pub fn make_router(cron_state: Arc<CrontabServiceState>) -> Router {
+pub(crate) fn make_router(cron_state: Arc<CrontabServiceState>) -> Router {
     Router::new()
         .route("/set", post(set_schedule))
         .with_state(cron_state)
 }
 
-pub async fn set_schedule(
+async fn set_schedule(
     State(state): State<Arc<CrontabServiceState>>,
     Form(job): Form<RawJob>,
 ) -> Result<impl IntoResponse, CrontabServiceError> {

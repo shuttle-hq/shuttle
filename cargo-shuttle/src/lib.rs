@@ -983,7 +983,7 @@ impl Shuttle {
                     println!("State: Completed - Deployment was running, but stopped running all by itself.")
                 }
                 Some(shuttle_common::deployment::State::Unknown) => {
-                    println!("State: Unknown - This may be because deployment was in an unknown stateWe never expect this state and entering this state should be considered a bug.")
+                    println!("State: Unknown - This may be because deployment was in an unknown state. We never expect this state and entering this state should be considered a bug.")
                 }
                 Some(shuttle_common::deployment::State::Running) => {
                     println!("State: Running - Deployment is running ie. its thread is active.")

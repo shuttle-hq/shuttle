@@ -22,13 +22,13 @@ use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Scope, EXP_MINUTES};
 use shuttle_common::models::error::ErrorKind;
-use shuttle_common::models::project::PaginationDetails;
 use shuttle_common::models::{project, stats};
 use shuttle_common::request_span;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
+use utoipa::IntoParams;
 
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -63,6 +63,14 @@ pub enum GatewayStatus {
 #[derive(Serialize, Deserialize)]
 pub struct StatusResponse {
     status: GatewayStatus,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
+pub struct PaginationDetails {
+    /// Page to fetch, starting from 0.
+    pub page: Option<u32>,
+    /// Number of results per page.
+    pub limit: Option<u32>,
 }
 
 impl StatusResponse {

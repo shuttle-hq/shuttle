@@ -6,7 +6,7 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use strum::EnumString;
-use utoipa::IntoParams;
+
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
@@ -16,14 +16,6 @@ pub const IDLE_MINUTES: u64 = 30;
 /// Function to set [IDLE_MINUTES] as a serde default
 pub const fn idle_minutes() -> u64 {
     IDLE_MINUTES
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
-pub struct PaginationDetails {
-    /// Page to fetch, starting from 0.
-    pub page: Option<u32>,
-    /// Number of results per page.
-    pub limit: Option<u32>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]

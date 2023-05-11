@@ -7,20 +7,12 @@ use comfy_table::{
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
-use utoipa::IntoParams;
+
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::deployment::State;
-
-#[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
-pub struct PaginationDetails {
-    /// Page to fetch, starting from 0.
-    pub page: Option<u32>,
-    /// Number of results per page.
-    pub limit: Option<u32>,
-}
 
 #[derive(Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]

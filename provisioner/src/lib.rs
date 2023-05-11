@@ -2,14 +2,15 @@ use std::time::Duration;
 
 pub use args::Args;
 use aws_config::timeout;
+use aws_sdk_iam;
 use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
     Client,
 };
-use aws_sdk_iam;
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
+use serde_json::json;
 use shuttle_common::claims::{Claim, Scope};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
@@ -245,25 +246,65 @@ impl MyProvisioner {
         }
     }
 
-    async fn get_prefix(
-        &self,
-        project_name: &str,
-    ) -> String {
+    async fn get_prefix(&self, project_name: &str) -> String {
         //TODO: add userid or something else unique here
-        format!("{}-",project_name)
+        format!("{}-", project_name)
     }
 
-    async fn request_dynamodb(
-        &self,
-        project_name: &str,
-    ) -> Result<DatabaseResponse, Error> {
+    async fn request_dynamodb(&self, project_name: &str) -> Result<(), Error> {
         //prefix username-projectname <- make this a function
         let prefix = self.get_prefix(&project_name).await;
 
-
         //create policy
-            //if the project already has the policy, don't create (based on prefix)
-        
+        //if the project already has the policy, don't create (based on prefix)
+        let table_name = format!("arn:aws:dynamodb:*:*:table/{}*", prefix);
+        let policy_document = json!({
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "ListAndDescribe",
+                    "Effect": "Allow",
+                    "Action": [
+                        "dynamodb:List*",
+                        "dynamodb:DescribeReservedCapacity*",
+                        "dynamodb:DescribeLimits",
+                        "dynamodb:DescribeTimeToLive"
+                    ],
+                    "Resource": "*"
+                },
+                {
+                    "Sid": "SpecificTable",
+                    "Effect": "Allow",
+                    "Action": [
+                        "dynamodb:BatchGet*",
+                        "dynamodb:DescribeStream",
+                        "dynamodb:DescribeTable",
+                        "dynamodb:Get*",
+                        "dynamodb:Query",
+                        "dynamodb:Scan",
+                        "dynamodb:BatchWrite*",
+                        "dynamodb:CreateTable",
+                        "dynamodb:Delete*",
+                        "dynamodb:Update*",
+                        "dynamodb:PutItem"
+                    ],
+                    "Resource": table_name
+                }
+            ]
+        })
+        .to_string();
+
+        let policy = self
+            .iam_client
+            .create_policy()
+            .policy_name(format!("{}policy", prefix))
+            .policy_document(policy_document)
+            .send()
+            .await
+            .unwrap()
+            .policy()
+            .unwrap();
+
         //create identity (should also be project based)
         //attach policy to identity
         //store aws credentials in secrets
@@ -275,7 +316,6 @@ impl MyProvisioner {
         //as part of our delete, wipe out any tables with the matching prefix, we delete the policy, we delete the identity
 
         //NOTE: for future, maybe allow multiple projects to access same database (for creating, just use username as prefix, for deleting will need to query whether projects exist)
-
 
         let client = &self.dynamodb_client;
 
@@ -290,73 +330,74 @@ impl MyProvisioner {
         //     .send()
         //     .await;
 
-        client.create_table()
+        // client.create_table()
 
-        match instance {
-            Ok(_) => {
-                wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
-            }
-            Err(SdkError::ServiceError { err, .. }) => {
-                if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
-                    debug!("creating new AWS RDS {instance_name}");
+        // match instance {
+        //     Ok(_) => {
+        //         wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
+        //     }
+        //     Err(SdkError::ServiceError { err, .. }) => {
+        //         if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
+        //             debug!("creating new AWS RDS {instance_name}");
 
-                    client
-                    .create
-                        // .create_db_instance()
-                        // .db_instance_identifier(&instance_name)
-                        // .master_username(MASTER_USERNAME)
-                        // .master_user_password(&password)
-                        // .engine(engine.to_string())
-                        // .db_instance_class(AWS_RDS_CLASS)
-                        // .allocated_storage(20)
-                        // .backup_retention_period(0) // Disable backups
-                        // .publicly_accessible(true)
-                        // .db_name(engine.to_string())
-                        // .set_db_subnet_group_name(Some(RDS_SUBNET_GROUP.to_string()))
-                        // .send()
-                        // .await?
-                        // .db_instance
-                        // .expect("to be able to create instance");
+        //             client
+        //             .create
+        //                 // .create_db_instance()
+        //                 // .db_instance_identifier(&instance_name)
+        //                 // .master_username(MASTER_USERNAME)
+        //                 // .master_user_password(&password)
+        //                 // .engine(engine.to_string())
+        //                 // .db_instance_class(AWS_RDS_CLASS)
+        //                 // .allocated_storage(20)
+        //                 // .backup_retention_period(0) // Disable backups
+        //                 // .publicly_accessible(true)
+        //                 // .db_name(engine.to_string())
+        //                 // .set_db_subnet_group_name(Some(RDS_SUBNET_GROUP.to_string()))
+        //                 // .send()
+        //                 // .await?
+        //                 // .db_instance
+        //                 // .expect("to be able to create instance");
 
-                    wait_for_instance(client, &instance_name, "creating").await?;
-                } else {
-                    return Err(Error::Plain(format!(
-                        "got unexpected error from AWS RDS service: {}",
-                        err
-                    )));
-                }
-            }
-            Err(unexpected) => {
-                return Err(Error::Plain(format!(
-                    "got unexpected error from AWS during API call: {}",
-                    unexpected
-                )))
-            }
-        };
+        //             wait_for_instance(client, &instance_name, "creating").await?;
+        //         } else {
+        //             return Err(Error::Plain(format!(
+        //                 "got unexpected error from AWS RDS service: {}",
+        //                 err
+        //             )));
+        //         }
+        //     }
+        //     Err(unexpected) => {
+        //         return Err(Error::Plain(format!(
+        //             "got unexpected error from AWS during API call: {}",
+        //             unexpected
+        //         )))
+        //     }
+        // };
 
         // Wait for up
-        let instance = wait_for_instance(client, &instance_name, "available").await?;
+        // let instance = wait_for_instance(client, &instance_name, "available").await?;
 
-        // TODO: find private IP somehow
-        let address = instance
-            .endpoint
-            .expect("instance to have an endpoint")
-            .address
-            .expect("endpoint to have an address");
+        // // TODO: find private IP somehow
+        // let address = instance
+        //     .endpoint
+        //     .expect("instance to have an endpoint")
+        //     .address
+        //     .expect("endpoint to have an address");
 
-        Ok(DatabaseResponse {
-            engine: engine.to_string(),
-            username: instance
-                .master_username
-                .expect("instance to have a username"),
-            password,
-            database_name: instance
-                .db_name
-                .expect("instance to have a default database"),
-            address_private: address.clone(),
-            address_public: address,
-            port: engine_to_port(engine),
-        })
+        // Ok(DatabaseResponse {
+        //     engine: engine.to_string(),
+        //     username: instance
+        //         .master_username
+        //         .expect("instance to have a username"),
+        //     password,
+        //     database_name: instance
+        //         .db_name
+        //         .expect("instance to have a default database"),
+        //     address_private: address.clone(),
+        //     address_public: address,
+        //     port: engine_to_port(engine),
+        // })
+        Ok(())
     }
 
     async fn request_aws_rds(

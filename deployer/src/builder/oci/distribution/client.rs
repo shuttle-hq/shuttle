@@ -2,7 +2,7 @@ use oci_spec::{distribution::*, image::*};
 use tracing::info;
 use url::Url;
 
-use super::{super::digest::Digest, super::error::*, Name, Reference, StoredAuth};
+use super::{super::error::*, super::image::digest::Digest, Name, Reference, StoredAuth};
 
 /// A client for `/v2/<name>/` API endpoint
 pub struct Client {
@@ -92,7 +92,6 @@ impl Client {
             req = req.set("Authorization", &format!("Bearer {}", token));
         }
         let res = req.send_bytes(&buf)?;
-        info!("res {}", res.into_string().unwrap());
         Ok(())
     }
 
@@ -142,6 +141,7 @@ mod tests {
     // These tests are ignored by default.
     //
 
+    // TODO: add the necessary .circleci setup to test this.
     fn test_url() -> Url {
         Url::parse("http://localhost:5000").unwrap()
     }

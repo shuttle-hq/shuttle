@@ -125,33 +125,33 @@ impl Annotations {
     }
 }
 
-impl std::iter::FromIterator<(String, String)> for Annotations {
-    fn from_iter<T>(iter: T) -> Self
-    where
-        T: IntoIterator<Item = (String, String)>,
-    {
-        let map =
-            serde_json::Map::from_iter(iter.into_iter().map(|(key, value)| (key, value.into())));
-        serde_json::from_value(map.into()).unwrap()
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
-    fn to_map() {
-        let _a = Annotations {
-            url: Some("https://github.com/termoshtt/ocipkg".to_string()),
-            ..Default::default()
-        };
-        // assert_eq!(
-        //     a.into(),
-        //     maplit::hashmap!(
-        //         "org.opencontainers.image.url".to_string()
-        //         => "https://github.com/termoshtt/ocipkg".to_string(),
-        //     )
-        // );
+    fn annotations_from_map() {
+        let mut annots = HashMap::new();
+        annots.insert(
+            "Adventures of Huckleberry Finn".to_string(),
+            "My favorite book.".to_string(),
+        );
+        annots.insert(
+            "org.opencontainers.image.created".to_string(),
+            "2023-05-11T07:19:00Z".to_string(),
+        );
+
+        annots.insert(
+            "org.opencontainers.image.authors".to_string(),
+            "shuttle@team".to_string(),
+        );
+
+        let res = Annotations::from_map(annots);
+        assert!(res.is_ok());
+        let annot = res.unwrap();
+        assert!(annot.created.is_some());
+        assert!(annot.authors.is_some());
+        assert_eq!(annot.created.unwrap(), "2023-05-11T07:19:00Z".to_string());
+        assert_eq!(annot.authors.unwrap(), "shuttle@team".to_string())
     }
 }

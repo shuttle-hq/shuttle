@@ -17,8 +17,8 @@ docker run -d -p 5000:5000 --name registry registry:2
 `--image-archive-path` flag.
 
 Required steps in case of pushing against `public.ecr.aws`:
-1) Run  `mkdir ~/.ocipkg/`.
+1) Run  `mkdir ~/.shuttle-builder/`.
 2) [Configure](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) your aws-cli with credentials associated to your unstable IAM user.
 3) Run `AWS_ECR_TOKEN=$(aws ecr-public get-login-password --region us-east-1)`.
-4) Run `OCIPKG_BASIC_AUTH_CREDS=$(echo AWS:$AWS_ECR_TOKEN | base64)`
-5) Run `echo "{\"auths\":{\"public.ecr.aws\":{\"auth\": \"${OCIPKG_BASIC_AUTH_CREDS}\"}}}" | jq > ~/.ocipkg/config.json`
+4) Run `SHUTTLE_BUILDER_CR_BASIC_AUTH_CREDS=$(echo AWS:$AWS_ECR_TOKEN | base64)`
+5) Run `echo "{\"auths\":{\"public.ecr.aws\":{\"auth\": \"${SHUTTLE_BUILDER_CR_BASIC_AUTH_CREDS}\"}}}" | jq > ~/.shuttle-builder/config.json`

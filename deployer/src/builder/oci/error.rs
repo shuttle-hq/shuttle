@@ -1,4 +1,4 @@
-use super::digest::Digest;
+use super::image::digest::Digest;
 use oci_spec::{distribution::ErrorResponse, OciSpecError};
 use std::path::PathBuf;
 

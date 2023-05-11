@@ -77,25 +77,6 @@ struct Auth {
     auth: String,
 }
 
-fn auth_path() -> Option<PathBuf> {
-    dirs::runtime_dir().map_or_else(
-        || {
-            // Most of container does not set XDG_RUNTIME_DIR,
-            // and then this fallback to `~/.ocipkg/config.json` like docker.
-            Some(dirs::home_dir()?.join(".ocipkg/config.json"))
-        },
-        |dir| Some(dir.join("ocipkg/auth.json")),
-    )
-}
-
-fn docker_auth_path() -> Option<PathBuf> {
-    Some(dirs::home_dir()?.join(".docker/config.json"))
-}
-
-fn podman_auth_path() -> Option<PathBuf> {
-    Some(dirs::runtime_dir()?.join("ocipkg/auth.json"))
-}
-
 /// WWW-Authentication challenge
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthChallenge {
@@ -137,3 +118,24 @@ impl AuthChallenge {
 struct Token {
     token: String,
 }
+
+fn auth_path() -> Option<PathBuf> {
+    dirs::runtime_dir().map_or_else(
+        || {
+            // Most of the containers does not set XDG_RUNTIME_DIR,
+            // and then this fallback to `~/.shuttle-builder/config.json` like docker.
+            Some(dirs::home_dir()?.join(".shuttle-builder/config.json"))
+        },
+        |dir| Some(dir.join("containers/auth.json")),
+    )
+}
+
+fn docker_auth_path() -> Option<PathBuf> {
+    Some(dirs::home_dir()?.join(".docker/config.json"))
+}
+
+fn podman_auth_path() -> Option<PathBuf> {
+    Some(dirs::runtime_dir()?.join("containers/auth.json"))
+}
+
+mod tests {}

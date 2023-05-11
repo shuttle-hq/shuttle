@@ -1,6 +1,6 @@
-use super::digest::Digest;
 use super::error::Error;
 use super::{distribution::Name, distribution::Reference, error::Result};
+use digest::Digest;
 use oci_spec::image::{ImageIndex, ImageManifest};
 use std::fmt;
 use std::io::{Read, Seek};
@@ -8,6 +8,7 @@ use std::io::{Read, Seek};
 use url::Url;
 
 mod annotations;
+pub mod digest;
 
 /// Image name
 ///
@@ -55,13 +56,6 @@ impl fmt::Display for ImageName {
         } else {
             write!(f, "{}/{}:{}", self.hostname, self.name, self.reference)
         }
-    }
-}
-
-impl Default for ImageName {
-    fn default() -> Self {
-        Self::parse(&format!("{}", uuid::Uuid::new_v4().as_hyphenated()))
-            .expect("UUID hyphenated must be valid name")
     }
 }
 
@@ -177,5 +171,64 @@ impl<'buf, W: Read + Seek> Archive<'buf, W> {
     pub fn get_manifest(&mut self, digest: &Digest) -> Result<ImageManifest> {
         let entry = self.get_blob(digest)?;
         Ok(ImageManifest::from_reader(entry)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::builder::oci::distribution::{Name, Reference};
+
+    use super::ImageName;
+
+    const NAME: &str = "shuttle-service";
+    const REFERENCE: &str = "latest";
+
+    #[test]
+    fn image_to_string() {
+        let mut image_name = ImageName {
+            hostname: "localhost".to_string(),
+            port: None,
+            name: Name(NAME.to_string()),
+            reference: Reference(REFERENCE.to_string()),
+        };
+        assert_eq!(
+            image_name.to_string(),
+            format!("localhost/{}:{}", NAME, REFERENCE)
+        );
+
+        image_name.port = Some(5000);
+        assert_eq!(
+            image_name.to_string(),
+            format!(
+                "localhost:{}/shuttle-service:latest",
+                image_name.port.unwrap()
+            )
+        );
+    }
+
+    #[test]
+    fn image_name_parse() {
+        assert!(ImageName::parse("localhost").is_err());
+        assert!(ImageName::parse("localhost/").is_err());
+        assert!(ImageName::parse("localhost:5000/$:0.0.1").is_err());
+        assert!(ImageName::parse("localhost:5000/name:$").is_err());
+
+        let image_name = ImageName::parse("localhost/shuttle-service").unwrap();
+        assert_eq!(image_name.hostname, "localhost");
+        assert_eq!(image_name.port, None);
+        assert_eq!(image_name.name.to_string(), "shuttle-service");
+        assert_eq!(image_name.reference.to_string(), "latest");
+
+        let image_name = ImageName::parse("localhost/shuttle-service:0.0.1").unwrap();
+        assert_eq!(image_name.hostname, "localhost");
+        assert_eq!(image_name.port, None);
+        assert_eq!(image_name.name.to_string(), "shuttle-service");
+        assert_eq!(image_name.reference.to_string(), "0.0.1");
+
+        let image_name = ImageName::parse("localhost:5000/shuttle-service:0.0.1").unwrap();
+        assert_eq!(image_name.hostname, "localhost");
+        assert_eq!(image_name.port, Some(5000));
+        assert_eq!(image_name.name.to_string(), "shuttle-service");
+        assert_eq!(image_name.reference.to_string(), "0.0.1");
     }
 }

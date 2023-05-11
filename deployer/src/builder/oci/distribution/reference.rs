@@ -13,7 +13,7 @@ use std::fmt;
 /// > ```
 /// This struct checks this restriction at creation.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Reference(String);
+pub struct Reference(pub String);
 
 static REF_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}$").expect("to create a regex from pattern")

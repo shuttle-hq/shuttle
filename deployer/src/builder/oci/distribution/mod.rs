@@ -11,7 +11,7 @@ pub use name::Name;
 pub use reference::Reference;
 use tracing::info;
 
-use super::{digest::Digest, error::*};
+use super::{error::*, image::digest::Digest};
 use std::{fs, io::Read, path::Path};
 
 /// Push image to registry

@@ -1,8 +1,8 @@
-use super::error::*;
+use super::super::error::*;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use sha2::{Digest as _, Sha256};
-use std::{fmt, io, path::PathBuf};
+use std::{fmt, path::PathBuf};
 
 /// Digest of contents
 ///
@@ -66,19 +66,25 @@ impl Digest {
     }
 }
 
-/// Wrapper for calculating hash
-pub struct DigestBuf<W: io::Write> {
-    inner: W,
-    hasher: Sha256,
-}
+#[cfg(test)]
+mod tests {
+    
 
-impl<W: io::Write> io::Write for DigestBuf<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.hasher.update(buf);
-        self.inner.write(buf)
+    use super::Digest;
+
+    #[test]
+    fn digest_new() {
+        assert!(Digest::new("sha256:%").is_err());
+        assert!(Digest::new("sha256:xyz:w").is_err());
+        assert!(Digest::new("sha256:xyz").is_ok());
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
+    #[test]
+    fn digest_as_path() {
+        let digest = Digest::new("sha256:xyz").unwrap();
+        assert_eq!(
+            digest.as_path().to_string_lossy().to_string(),
+            format!("blobs/{}/{}", digest.algorithm, digest.encoded)
+        );
     }
 }

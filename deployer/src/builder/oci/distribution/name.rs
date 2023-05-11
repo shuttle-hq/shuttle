@@ -12,7 +12,7 @@ use std::fmt;
 /// > ```
 /// This struct checks this restriction at creation.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Name(String);
+pub struct Name(pub String);
 
 impl std::ops::Deref for Name {
     type Target = str;

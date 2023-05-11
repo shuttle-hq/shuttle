@@ -69,7 +69,7 @@ impl Sqlite {
     }
 
     #[allow(dead_code)]
-    async fn new_in_memory() -> Self {
+    pub async fn new_in_memory() -> Self {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         Self::from_pool(pool).await
     }

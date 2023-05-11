@@ -5543,6 +5543,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "clap",
+ "portpicker",
  "pretty_assertions",
  "prost-types",
  "serde_json",

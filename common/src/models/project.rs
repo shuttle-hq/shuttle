@@ -223,7 +223,12 @@ pub fn get_table(projects: &Vec<Response>, page: u32) -> String {
             r#"
 These projects are linked to this account
 {table}
+
+{}
 "#,
+            "More projects might be available on the next page (--page argument)"
+                .yellow()
+                .bold()
         )
     }
 }

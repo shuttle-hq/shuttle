@@ -179,7 +179,7 @@ pub enum ProjectCommand {
     Restart(ProjectStartArgs),
     /// List all projects belonging to the calling account
     List {
-        #[arg(default_value = "1")]
+        #[arg(long, default_value = "1")]
         /// Which page to display
         page: u32,
 

@@ -1,6 +1,6 @@
 //! Annotations with flat serialization/deserialization
 
-use super::super::super::error::*;
+use super::super::error::*;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, iter::*};
 

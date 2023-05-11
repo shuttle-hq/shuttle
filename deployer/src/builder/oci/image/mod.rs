@@ -214,7 +214,7 @@ impl<'buf, W: Read + Seek> Archive<'buf, W> {
             .manifests()
             .iter()
             .map(|manifest| {
-                let annotations = annotations::flat::Annotations::from_map(
+                let annotations = annotations::Annotations::from_map(
                     manifest.annotations().clone().unwrap_or_default(),
                 )?;
                 let name = annotations

@@ -1,10 +1,8 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use tokio::{
-    fs::File,
-    io::{AsyncReadExt, BufReader},
-};
 use tracing::debug;
+
+mod oci;
 
 #[derive(Clone)]
 pub struct MockedBuilder {
@@ -19,22 +17,20 @@ impl MockedBuilder {
         }
     }
 
-    /// This method consumes a source_code_archive and returns a deployable Docker image archive.
-    pub async fn default_image_archive(&self, source_code_archive: &Vec<u8>) -> Vec<u8> {
+    /// Consume a `source_code_archive` and return a deployment_id.
+    pub async fn build_and_push_image(&self, source_code_archive: &Vec<u8>) -> uuid::Uuid {
         debug!(
-            "MockedBuilder received a source code archive of length: {}",
+            "MockedBuilder received a source code archive of length: {}. Now building it...",
             source_code_archive.len()
         );
-        let mut archive =
-            BufReader::new(File::open(&self.default_image_archive_path).await.unwrap());
-        let mut buf = Vec::new();
-        archive.read_to_end(&mut buf).await.unwrap();
-        debug!("MockedBuilder returing an image of length: {}", buf.len());
-        buf
+        self.push_image(&self.default_image_archive_path).await;
+        debug!("Successfuly built and pushed the image to the container registry.");
+
+        uuid::Uuid::new_v4()
     }
 
-    /// This method pushes a built image to an archive registry.
-    pub async fn push_archive(&self) {
-        // TODO
+    /// Push a built image to an container registry.
+    pub async fn push_image(&self, image_path: &Path) {
+        self::oci::distribution::push_image(image_path).expect("to not fail");
     }
 }

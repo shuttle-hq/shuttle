@@ -98,6 +98,7 @@ tracing-subscriber = { version = "0.3.16", default-features = false, features = 
   "std",
 ] }
 ttl_cache = "0.5.1"
+url = "2.3.1"
 utoipa = { version = "3.2.1", features = [ "uuid", "chrono" ] }
 utoipa-swagger-ui = { version = "3.1.3", features = ["axum"] }
 ulid = "1.0.0"

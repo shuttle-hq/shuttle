@@ -45,11 +45,10 @@ pub async fn deploy_project(
     debug!("Received a total of {} bytes", data.len());
 
     debug!("Sending project source code to the builder.");
-    let image_archive = mocked_builder.get_default_image_archive(&data).await;
-    debug!(
-        "Received an image archive of length: {}. I will deploy it next, but hang in a bit...",
-        image_archive.len()
-    );
+    let deployment_id = mocked_builder.build_and_push_image(&data).await;
 
-    Ok(Json(format!("Received a total of {} bytes", data.len())))
+    // TODO: fetch image from the container registry and deploy it on k8s.
+    // The deployment must be async and we should return a `deployment_id`,
+    // which can be used by `cargo-shuttle` to connect to the a ws logs endpoint.
+    Ok(Json(deployment_id.to_string()))
 }

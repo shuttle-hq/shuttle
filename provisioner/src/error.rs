@@ -1,3 +1,4 @@
+use aws_sdk_iam::operation::create_policy::CreatePolicyError;
 use aws_sdk_rds::{
     error::SdkError,
     operation::{
@@ -36,6 +37,9 @@ pub enum Error {
 
     #[error("failed to get description of RDS instance: {0}")]
     DescribeRDSInstance(#[from] SdkError<DescribeDBInstancesError>),
+
+    #[error("failed to create IAM policy for AWS: {0}")]
+    CreateIAMPolicy(#[from] CreatePolicyError),
 
     #[error["plain error: {0}"]]
     Plain(String),

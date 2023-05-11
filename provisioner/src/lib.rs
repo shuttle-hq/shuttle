@@ -3,6 +3,7 @@ use std::time::Duration;
 pub use args::Args;
 use aws_config::timeout;
 use aws_sdk_iam;
+use aws_sdk_iam::operation::create_policy::CreatePolicyError;
 use aws_sdk_iam::types::Policy;
 use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
@@ -263,7 +264,7 @@ impl MyProvisioner {
         format!("{}policy", prefix)
     }
 
-    async fn create_dynamodb_policy(&self, prefix: &str) -> Result<Policy, Error> {
+    async fn create_dynamodb_policy(&self, prefix: &str) -> Result<(), Error> {
         let table_name = format!("arn:aws:dynamodb:*:*:table/{}*", prefix);
         let policy_document = json!({
             "Version": "2012-10-17",
@@ -303,17 +304,25 @@ impl MyProvisioner {
 
         let policy_name = self.get_dynamodb_policy_name(prefix).await;
 
-        Ok(self
+        match self
             .iam_client
             .create_policy()
             .policy_name(policy_name)
             .policy_document(policy_document)
             .send()
-            .await
-            .unwrap()
-            .policy()
-            .unwrap()
-            .clone())
+            .await {
+                Ok(_) => {},
+                Err(e) => {
+                    match e.into_service_error() {
+                        CreatePolicyError::EntityAlreadyExistsException(_) => {}, // for idempotency
+                        e => {
+                            return Err(Error::CreateIAMPolicy(e));
+                        }
+                    }
+                }
+            };
+
+        Ok(())
     }
 
     async fn delete_dynamodb_policy(&self, prefix: &str) -> Result<(), Error> {
@@ -437,6 +446,16 @@ impl MyProvisioner {
         Ok(())
     }
 
+    async fn delete_dynamodb(&self, project_name: &str) -> Result<DatabaseDeletionResponse, Error> {
+        //delete policy
+        let prefix = self.get_prefix(project_name).await;
+        self.delete_dynamodb_policy(&prefix).await?;
+
+        //delete iam identity
+        //delete tables that match the prefix
+        Ok(DatabaseDeletionResponse {})
+    }
+
     async fn request_aws_rds(
         &self,
         project_name: &str,
@@ -520,6 +539,7 @@ impl MyProvisioner {
             port: engine_to_port(engine),
         })
     }
+
 
     async fn delete_shared_db(
         &self,
@@ -658,7 +678,8 @@ impl Provisioner for MyProvisioner {
                     .await?
             }
             DbType::DynamoDb(_) => {
-                todo!()
+                self.delete_dynamodb(&request.project_name)
+                    .await?
             }
         };
 

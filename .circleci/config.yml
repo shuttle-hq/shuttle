@@ -322,9 +322,12 @@ jobs:
         fingerprints:
           - "6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78"
     - run:
+        name: Generate ssh config
+        command: ./.circleci/unstable-ssh-config.sh
+    - run:
         name: Test ssh access
         command: |
-          ssh -J ec2-user@3.11.51.209 ec2-user@master.shuttle.internal "ls | wc -l"
+          ssh ec2-user@master.shuttle.internal "ls | wc -l"
   build-binaries-linux:
     machine:
       image: << parameters.image >>

@@ -56,7 +56,7 @@ Shuttle is built for productivity, reliability and performance:
 
 ## Getting Started
 
-To run a shuttle project, you need to install protoc, check out the [protoc installation guide](https://docs.shuttle.rs/support/installing-protoc) in our docs.
+To run a Shuttle project, you need to install protoc, check out the [protoc installation guide](https://docs.shuttle.rs/support/installing-protoc) in our docs.
 
 The `cargo-shuttle` CLI can be installed with a pre-built binary or from source with cargo.
 
@@ -120,7 +120,7 @@ For the full documentation, visit [our docs](https://docs.shuttle.rs).
 
 ## Contributing to shuttle
 
-Contributing to shuttle is highly encouraged!
+Contributing to Shuttle is highly encouraged!
 
 If you want to setup a local environment to test code changes to core `shuttle` packages, or want to contribute to the project check out [our docs](https://docs.shuttle.rs/community/contribute).
 

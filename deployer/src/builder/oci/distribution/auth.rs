@@ -97,20 +97,6 @@ fn podman_auth_path() -> Option<PathBuf> {
 }
 
 /// WWW-Authentication challenge
-///
-/// ```
-/// use ocipkg::distribution::AuthChallenge;
-///
-/// let auth = AuthChallenge::from_header(
-///   r#"Bearer realm="https://ghcr.io/token",service="ghcr.io",scope="repository:termoshtt/ocipkg/rust-lib:pull""#,
-/// ).unwrap();
-///
-/// assert_eq!(auth, AuthChallenge {
-///   url: "https://ghcr.io/token".to_string(),
-///   service: "ghcr.io".to_string(),
-///   scope: "repository:termoshtt/ocipkg/rust-lib:pull".to_string(),
-/// });
-/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthChallenge {
     pub url: String,

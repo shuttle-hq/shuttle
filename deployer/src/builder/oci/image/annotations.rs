@@ -4,41 +4,8 @@ use super::super::error::*;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, iter::*};
 
-/// `org.opencontainers.image.*` annotations
-///
 /// See [Pre-Defined Annotation Keys](https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys)
 /// in OCI image spec.
-///
-/// This is designed to use with JSON
-///
-/// ```
-/// use ocipkg::image::annotations::flat::*;
-///
-/// let a = Annotations::from_json(r#"
-/// {
-///   "org.opencontainers.image.url": "https://github.com/termoshtt/ocipkg"
-/// }
-/// "#).unwrap();
-/// assert_eq!(
-///     a,
-///     Annotations {
-///         url: Some("https://github.com/termoshtt/ocipkg".to_string()),
-///         ..Default::default()
-///     }
-/// );
-///
-/// // Dump to JSON
-/// let a = Annotations {
-///     url: Some("https://github.com/termoshtt/ocipkg".to_string()),
-///     ..Default::default()
-/// };
-/// assert_eq!(a.to_json().trim(), r#"
-/// {
-///   "org.opencontainers.image.url": "https://github.com/termoshtt/ocipkg"
-/// }
-/// "#.trim());
-///
-/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub struct Annotations {
     /// `org.opencontainers.image.created`

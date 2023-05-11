@@ -1,5 +1,5 @@
 use oci_spec::{distribution::*, image::*};
-use tracing::info;
+
 use url::Url;
 
 use super::{super::error::*, super::image::digest::Digest, Name, Reference, StoredAuth};
@@ -78,7 +78,11 @@ impl Client {
     /// Manifest must be pushed after blobs are updated.
     ///
     /// See [corresponding OCI distribution spec document](https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pushing-manifests) for detail.
-    pub fn push_manifest(&self, reference: &Reference, manifest: &ImageManifest) -> Result<()> {
+    pub fn push_manifest(
+        &self,
+        reference: &Reference,
+        manifest: &ImageManifest,
+    ) -> Result<ureq::Response> {
         let mut buf = Vec::new();
         manifest.to_writer(&mut buf)?;
         let url = self
@@ -91,8 +95,9 @@ impl Client {
             // Authorization must be done while blobs push
             req = req.set("Authorization", &format!("Bearer {}", token));
         }
-        let res = req.send_bytes(&buf)?;
-        Ok(())
+
+        req.send_bytes(&buf)
+            .map_err(|err| Error::Network(err.to_string()))
     }
 
     /// Push blob to registry

@@ -5823,8 +5823,6 @@ dependencies = [
  "paste",
  "percent-encoding",
  "rand",
- "rustls 0.20.8",
- "rustls-pemfile",
  "serde",
  "serde_json",
  "sha1",
@@ -5837,7 +5835,6 @@ dependencies = [
  "tokio-stream",
  "url",
  "uuid",
- "webpki-roots",
  "whoami",
 ]
 
@@ -5871,7 +5868,6 @@ dependencies = [
  "once_cell",
  "tokio",
  "tokio-native-tls",
- "tokio-rustls 0.23.4",
 ]
 
 [[package]]

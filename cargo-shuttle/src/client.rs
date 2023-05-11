@@ -16,6 +16,7 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use tracing::error;
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub struct Client {
     api_url: ApiUrl,
     api_key: Option<ApiKey>,
@@ -201,7 +202,7 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn invalidate_api_key(&self) -> Result<Response> {
+    pub async fn reset_api_key(&self) -> Result<Response> {
         self.put("/users/reset-api-key".into(), Option::<()>::None)
             .await
     }

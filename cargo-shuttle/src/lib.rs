@@ -58,6 +58,8 @@ use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+const SHUTTLE_LOGIN_URL: &str = "https://shuttle.rs/login";
+const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -252,10 +254,9 @@ impl Shuttle {
 
     /// Provide feedback on GitHub.
     async fn feedback(&self) -> Result<()> {
-        let url = "https://github.com/shuttle-hq/shuttle/issues/new";
-        let _ = webbrowser::open(url);
+        let _ = webbrowser::open(SHUTTLE_GH_ISSUE_URL);
+        println!("If your browser did not open automatically, go to {SHUTTLE_GH_ISSUE_URL}");
 
-        println!("If your browser did not open automatically, go to {url}");
         Ok(())
     }
 
@@ -264,10 +265,8 @@ impl Shuttle {
         let api_key_str = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
-                let url = "https://shuttle.rs/login";
-                let _ = webbrowser::open(url);
-
-                println!("If your browser did not automatically open, go to {url}");
+                let _ = webbrowser::open(SHUTTLE_LOGIN_URL);
+                println!("If your browser did not automatically open, go to {SHUTTLE_LOGIN_URL}");
 
                 Password::with_theme(&ColorfulTheme::default())
                     .with_prompt("API key")
@@ -284,27 +283,28 @@ impl Shuttle {
     }
 
     async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {
-        if logout_args.invalidate_api_key {
-            self.invalidate_api_key(&self.client()?).await?;
+        if logout_args.reset_api_key {
+            self.reset_api_key(&self.client()?).await?;
+            println!("Successfully reset the API key.");
+            println!(" -> Go to {SHUTTLE_LOGIN_URL} to get a new one.\n");
         }
         self.ctx.clear_api_key()?;
-
         println!("Successfully logged out of shuttle.");
+
         Ok(())
     }
 
-    async fn invalidate_api_key(&self, client: &Client) -> Result<()> {
+    async fn reset_api_key(&self, client: &Client) -> Result<()> {
         client
-            .invalidate_api_key()
+            .reset_api_key()
             .await
             .and_then(|res| {
                 if res.status().is_success() {
                     Ok(())
                 } else {
-                    Err(anyhow!("Invalidation of API key failed."))
+                    Err(anyhow!("Resetting API key failed."))
                 }
             })
-            .context("Failed to invalidate API key!")
     }
 
     async fn stop(&self, client: &Client) -> Result<()> {

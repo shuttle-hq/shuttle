@@ -190,9 +190,9 @@ pub struct LoginArgs {
 
 #[derive(Parser, Clone, Debug)]
 pub struct LogoutArgs {
-    /// Invalidate the API key before logging out
+    /// Reset the API key before logging out
     #[arg(long)]
-    pub invalidate_api_key: bool,
+    pub reset_api_key: bool,
 }
 #[derive(Parser)]
 pub struct DeployArgs {

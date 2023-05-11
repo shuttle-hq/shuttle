@@ -383,7 +383,7 @@ async fn run_pre_deploy_tests(
         .lines()
         .filter_map(|line| line.ok())
         .for_each(|line| {
-            if let Err(error) = write.send(format!("{}\n", line.trim_end_matches("\n"))) {
+            if let Err(error) = write.send(format!("{}\n", line.trim_end_matches('\n'))) {
                 error!("failed to send line to pipe: {error}");
             }
         });

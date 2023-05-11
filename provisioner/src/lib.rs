@@ -6,6 +6,7 @@ use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
     Client,
 };
+use aws_sdk_iam;
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
@@ -32,6 +33,7 @@ pub struct MyProvisioner {
     rds_client: aws_sdk_rds::Client,
     mongodb_client: mongodb::Client,
     dynamodb_client: aws_sdk_dynamodb::Client,
+    iam_client: aws_sdk_iam::Client,
     fqdn: String,
     internal_pg_address: String,
     internal_mongodb_address: String,
@@ -67,19 +69,16 @@ impl MyProvisioner {
 
         let rds_client = aws_sdk_rds::Client::new(&aws_config);
 
-        // let aws_dyanmodb_config: aws_sdk_dynamodb::Config = aws_sdk_dynamodb::aws_config::from_env().load().await;
-
-        // use aws_types::SdkConfig;
-        // use aws_types::region::Region;
-        // let config = SdkConfig::builder().region(Region::new("us-east-1")).build();
-
         let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
+
+        let iam_client = aws_sdk_iam::Client::new(&aws_config);
 
         Ok(Self {
             pool,
             rds_client,
             mongodb_client,
             dynamodb_client,
+            iam_client,
             fqdn,
             internal_pg_address,
             internal_mongodb_address,
@@ -246,88 +245,119 @@ impl MyProvisioner {
         }
     }
 
-    // async fn request_dynamodb(
-    //     &self,
-    //     project_name: &str,
-    // ) -> Result<DatabaseResponse, Error> {
-    //     let client = &self.rds_client;
+    async fn get_prefix(
+        &self,
+        project_name: &str,
+    ) -> String {
+        //TODO: add userid or something else unique here
+        format!("{}-",project_name)
+    }
 
-    //     let password = generate_password();
-    //     let instance_name = format!("{}-{}", project_name, engine);
+    async fn request_dynamodb(
+        &self,
+        project_name: &str,
+    ) -> Result<DatabaseResponse, Error> {
+        //prefix username-projectname <- make this a function
+        let prefix = self.get_prefix(&project_name).await;
 
-    //     debug!("trying to get AWS RDS instance: {instance_name}");
-    //     let instance = client
-    //         .modify_db_instance()
-    //         .db_instance_identifier(&instance_name)
-    //         .master_user_password(&password)
-    //         .send()
-    //         .await;
 
-    //     match instance {
-    //         Ok(_) => {
-    //             wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
-    //         }
-    //         Err(SdkError::ServiceError { err, .. }) => {
-    //             if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
-    //                 debug!("creating new AWS RDS {instance_name}");
+        //create policy
+            //if the project already has the policy, don't create (based on prefix)
+        
+        //create identity (should also be project based)
+        //attach policy to identity
+        //store aws credentials in secrets
+        //make them available in the project container
+        //setup dynamodb client
 
-    //                 client
-    //                     .create_db_instance()
-    //                     .db_instance_identifier(&instance_name)
-    //                     .master_username(MASTER_USERNAME)
-    //                     .master_user_password(&password)
-    //                     .engine(engine.to_string())
-    //                     .db_instance_class(AWS_RDS_CLASS)
-    //                     .allocated_storage(20)
-    //                     .backup_retention_period(0) // Disable backups
-    //                     .publicly_accessible(true)
-    //                     .db_name(engine.to_string())
-    //                     .set_db_subnet_group_name(Some(RDS_SUBNET_GROUP.to_string()))
-    //                     .send()
-    //                     .await?
-    //                     .db_instance
-    //                     .expect("to be able to create instance");
+        //create new example app with annotation, creating a table and then inserting a row
 
-    //                 wait_for_instance(client, &instance_name, "creating").await?;
-    //             } else {
-    //                 return Err(Error::Plain(format!(
-    //                     "got unexpected error from AWS RDS service: {}",
-    //                     err
-    //                 )));
-    //             }
-    //         }
-    //         Err(unexpected) => {
-    //             return Err(Error::Plain(format!(
-    //                 "got unexpected error from AWS during API call: {}",
-    //                 unexpected
-    //             )))
-    //         }
-    //     };
+        //as part of our delete, wipe out any tables with the matching prefix, we delete the policy, we delete the identity
 
-    //     // Wait for up
-    //     let instance = wait_for_instance(client, &instance_name, "available").await?;
+        //NOTE: for future, maybe allow multiple projects to access same database (for creating, just use username as prefix, for deleting will need to query whether projects exist)
 
-    //     // TODO: find private IP somehow
-    //     let address = instance
-    //         .endpoint
-    //         .expect("instance to have an endpoint")
-    //         .address
-    //         .expect("endpoint to have an address");
 
-    //     Ok(DatabaseResponse {
-    //         engine: engine.to_string(),
-    //         username: instance
-    //             .master_username
-    //             .expect("instance to have a username"),
-    //         password,
-    //         database_name: instance
-    //             .db_name
-    //             .expect("instance to have a default database"),
-    //         address_private: address.clone(),
-    //         address_public: address,
-    //         port: engine_to_port(engine),
-    //     })
-    // }
+        let client = &self.dynamodb_client;
+
+        // let password = generate_password();
+        // let instance_name = format!("{}-{}", project_name, engine);
+
+        // debug!("trying to get AWS RDS instance: {instance_name}");
+        // let instance = client
+        //     .modify_db_instance()
+        //     .db_instance_identifier(&instance_name)
+        //     .master_user_password(&password)
+        //     .send()
+        //     .await;
+
+        client.create_table()
+
+        match instance {
+            Ok(_) => {
+                wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
+            }
+            Err(SdkError::ServiceError { err, .. }) => {
+                if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
+                    debug!("creating new AWS RDS {instance_name}");
+
+                    client
+                    .create
+                        // .create_db_instance()
+                        // .db_instance_identifier(&instance_name)
+                        // .master_username(MASTER_USERNAME)
+                        // .master_user_password(&password)
+                        // .engine(engine.to_string())
+                        // .db_instance_class(AWS_RDS_CLASS)
+                        // .allocated_storage(20)
+                        // .backup_retention_period(0) // Disable backups
+                        // .publicly_accessible(true)
+                        // .db_name(engine.to_string())
+                        // .set_db_subnet_group_name(Some(RDS_SUBNET_GROUP.to_string()))
+                        // .send()
+                        // .await?
+                        // .db_instance
+                        // .expect("to be able to create instance");
+
+                    wait_for_instance(client, &instance_name, "creating").await?;
+                } else {
+                    return Err(Error::Plain(format!(
+                        "got unexpected error from AWS RDS service: {}",
+                        err
+                    )));
+                }
+            }
+            Err(unexpected) => {
+                return Err(Error::Plain(format!(
+                    "got unexpected error from AWS during API call: {}",
+                    unexpected
+                )))
+            }
+        };
+
+        // Wait for up
+        let instance = wait_for_instance(client, &instance_name, "available").await?;
+
+        // TODO: find private IP somehow
+        let address = instance
+            .endpoint
+            .expect("instance to have an endpoint")
+            .address
+            .expect("endpoint to have an address");
+
+        Ok(DatabaseResponse {
+            engine: engine.to_string(),
+            username: instance
+                .master_username
+                .expect("instance to have a username"),
+            password,
+            database_name: instance
+                .db_name
+                .expect("instance to have a default database"),
+            address_private: address.clone(),
+            address_public: address,
+            port: engine_to_port(engine),
+        })
+    }
 
     async fn request_aws_rds(
         &self,

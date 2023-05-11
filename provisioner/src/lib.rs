@@ -4,6 +4,7 @@ pub use args::Args;
 use aws_config::timeout;
 use aws_sdk_iam;
 use aws_sdk_iam::operation::create_policy::CreatePolicyError;
+use aws_sdk_iam::operation::create_user::CreateUserOutput;
 use aws_sdk_iam::types::Policy;
 use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
@@ -257,7 +258,7 @@ impl MyProvisioner {
 
     async fn get_prefix(&self, project_name: &str) -> String {
         //TODO: add userid or something else unique here
-        format!("{}-", project_name)
+        format!("shuttle-dynamodb-{}-", project_name)
     }
 
     async fn get_dynamodb_policy_name(&self, prefix: &str) -> String{
@@ -343,6 +344,15 @@ impl MyProvisioner {
         Ok(())
     }
 
+    async fn get_iam_identity_user_name(&self, prefix: &str) -> String {
+        format!("{}user", prefix)
+    }
+
+    async fn create_iam_identity(&self, prefix: &str) -> Result<CreateUserOutput, Error> {
+        let user = self.iam_client.create_user().user_name(self.get_iam_identity_user_name(prefix).await).send().await.unwrap();
+        Ok(user)
+    }
+    
     pub async fn request_dynamodb(&self, project_name: &str) -> Result<(), Error> {
         //prefix username-projectname <- make this a function
         let prefix = self.get_prefix(&project_name).await;

@@ -1035,7 +1035,7 @@ impl Shuttle {
         }
 
         let projects = client.get_projects_list(page, limit).await?;
-        let projects_table = project::get_table(&projects);
+        let projects_table = project::get_table(&projects, page);
 
         println!("{projects_table}");
 

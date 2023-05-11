@@ -29,7 +29,7 @@
 
 ---
 
-# shuttle
+# Shuttle
 
 [Shuttle](https://www.shuttle.rs/) is a Rust-native cloud development platform that lets you deploy your Rust apps for free.
 
@@ -44,13 +44,19 @@ Shuttle is built for productivity, reliability and performance:
 
 📖 Check out our documentation to get started quickly: [docs.shuttle.rs](https://docs.shuttle.rs)
 
-⭐ If you find shuttle interesting, consider starring this repo to help spread the word.
-
 🙋‍♂️ If you have any questions, join our [Discord](https://discord.gg/shuttle) server.
+
+⭐ If you find Shuttle interesting, and would like to stay up-to-date, consider starring this repo to help spread the word.
+
+![star](https://i.imgur.com/kLWmThm.gif)
+
+## Console Sneak Peek (gif)
+![console-sneak-peek](https://i.imgur.com/1qdWipP.gif)
+*The gif above demonstrates the ease of adding/managing resources to your project(s) in our upcoming console. Bear in mind that the ease of adding resources is already there, albeit without the visualization coming from the console.*
 
 ## Getting Started
 
-To run a shuttle project, you need to install protoc, check out the [protoc installation guide](https://docs.shuttle.rs/support/installing-protoc) in our docs.
+To run a Shuttle project, you need to install protoc, check out the [protoc installation guide](https://docs.shuttle.rs/support/installing-protoc) in our docs.
 
 The `cargo-shuttle` CLI can be installed with a pre-built binary or from source with cargo.
 
@@ -112,17 +118,17 @@ Feel free to build on-top of the generated `hello-world` boilerplate or take a s
 
 For the full documentation, visit [our docs](https://docs.shuttle.rs).
 
-## Contributing to shuttle
+## Contributing to Shuttle
 
-Contributing to shuttle is highly encouraged!
+Contributing to Shuttle is highly encouraged!
 
-If you want to setup a local environment to test code changes to core `shuttle` packages, or want to contribute to the project check out [our docs](https://docs.shuttle.rs/community/contribute).
+If you want to setup a local environment to test code changes to core `Shuttle` packages, or want to contribute to the project check out [our docs](https://docs.shuttle.rs/community/contribute).
 
 Even if you are not planning to submit any code; joining our [Discord server](https://discord.gg/shuttle) and providing feedback helps us a lot!
 
 ## Roadmap
 
-For a comprehensive view of the shuttle roadmap check out this [project board](https://github.com/orgs/shuttle-hq/projects/4).
+For a comprehensive view of the Shuttle roadmap check out this [project board](https://github.com/orgs/shuttle-hq/projects/4).
 
 If you have any requests or suggestions feel free to open an issue.
 

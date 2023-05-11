@@ -32,7 +32,7 @@ tracing-subscriber = { workspace = true }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["backend", "models"]
+features = ["backend", "models", "persist"]
 
 [dev-dependencies]
 axum-extra = { version = "0.7.1", features = ["cookie"] }

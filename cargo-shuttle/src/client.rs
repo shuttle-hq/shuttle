@@ -134,15 +134,6 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_projects_list_filtered(
-        &self,
-        filter: String,
-    ) -> Result<Vec<project::Response>> {
-        let path = format!("/projects/{filter}");
-
-        self.get(path).await
-    }
-
     pub async fn delete_project(&self, project: &ProjectName) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
 
@@ -216,7 +207,7 @@ impl Client {
         let mut request = url.into_client_request()?;
 
         if let Some(ref api_key) = self.api_key {
-            let auth_header = Authorization::bearer(api_key)?;
+            let auth_header = Authorization::bearer(api_key.as_ref())?;
             request.headers_mut().typed_insert(auth_header);
         }
 
@@ -282,7 +273,7 @@ impl Client {
 
     fn set_builder_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         if let Some(ref api_key) = self.api_key {
-            builder.bearer_auth(api_key)
+            builder.bearer_auth(api_key.as_ref())
         } else {
             builder
         }

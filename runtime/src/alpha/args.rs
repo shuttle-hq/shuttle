@@ -11,7 +11,7 @@ pub struct Args {
     pub port: u16,
 
     /// Address to reach provisioner at
-    #[arg(long, default_value = "http://localhost:5000")]
+    #[arg(long, default_value = "http://localhost:3000")]
     pub provisioner_address: Endpoint,
 
     /// Type of storage manager to start

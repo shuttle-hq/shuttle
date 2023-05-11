@@ -247,10 +247,13 @@ where
 
                 if error.is_panic() {
                     let panic = error.into_panic();
-                    let msg = panic
-                        .downcast_ref::<&str>()
-                        .map(|x| x.to_string())
-                        .unwrap_or_else(|| "<no panic message>".to_string());
+                    let msg = match panic.downcast_ref::<String>() {
+                        Some(msg) => msg.to_string(),
+                        None => match panic.downcast_ref::<&str>() {
+                            Some(msg) => msg.to_string(),
+                            None => "<no panic message>".to_string(),
+                        },
+                    };
 
                     error!(error = msg, "loading service panicked");
 
@@ -325,9 +328,13 @@ where
                         Err(error) => {
                             if error.is_panic() {
                                 let panic = error.into_panic();
-                                let msg = panic.downcast_ref::<&str>()
-                                    .map(|x| x.to_string())
-                                    .unwrap_or_else(|| "<no panic message>".to_string());
+                                let msg = match panic.downcast_ref::<String>() {
+                                    Some(msg) => msg.to_string(),
+                                    None => match panic.downcast_ref::<&str>() {
+                                        Some(msg) => msg.to_string(),
+                                        None => "<no panic message>".to_string(),
+                                    },
+                                };
 
                                 error!(error = msg, "service panicked");
 

@@ -20,15 +20,17 @@ pub mod tracing;
 pub mod wasm;
 
 use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::fmt::Display;
 
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "service")]
-use uuid::Uuid;
-
+use anyhow::bail;
 #[cfg(feature = "service")]
 pub use log::Item as LogItem;
 #[cfg(feature = "service")]
 pub use log::STATE_MESSAGE;
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "service")]
+use uuid::Uuid;
 
 #[cfg(debug_assertions)]
 pub const API_URL_DEFAULT: &str = "http://localhost:8001";
@@ -36,11 +38,65 @@ pub const API_URL_DEFAULT: &str = "http://localhost:8001";
 #[cfg(not(debug_assertions))]
 pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
 
-pub type ApiKey = String;
 pub type ApiUrl = String;
 pub type Host = String;
 #[cfg(feature = "service")]
 pub type DeploymentId = Uuid;
+
+#[derive(Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "persist", derive(sqlx::Type, PartialEq, Hash, Eq))]
+#[cfg_attr(feature = "persist", serde(transparent))]
+#[cfg_attr(feature = "persist", sqlx(transparent))]
+pub struct ApiKey(String);
+
+impl ApiKey {
+    pub fn parse(key: &str) -> anyhow::Result<Self> {
+        let key = key.trim();
+
+        let mut errors = vec![];
+        if !key.chars().all(char::is_alphanumeric) {
+            errors.push("The API key should consist of only alphanumeric characters.");
+        };
+
+        if key.len() != 16 {
+            errors.push("The API key should be exactly 16 characters in length.");
+        };
+
+        if !errors.is_empty() {
+            let message = errors.join("\n");
+            bail!("Invalid API key:\n{message}")
+        }
+
+        Ok(Self(key.to_string()))
+    }
+
+    #[cfg(feature = "persist")]
+    pub fn generate() -> Self {
+        use rand::distributions::{Alphanumeric, DistString};
+
+        Self(Alphanumeric.sample_string(&mut rand::thread_rng(), 16))
+    }
+}
+
+impl AsRef<str> for ApiKey {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+// Ensure we can't accidentaly log an ApiKey
+impl Debug for ApiKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ApiKey: REDACTED")
+    }
+}
+
+// Ensure we can't accidentaly log an ApiKey
+impl Display for ApiKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
 #[cfg(feature = "error")]
 /// Errors that can occur when changing types. Especially from prost
@@ -136,5 +192,39 @@ impl SecretStore {
 
     pub fn get(&self, key: &str) -> Option<String> {
         self.secrets.get(key).map(ToOwned::to_owned)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use crate::ApiKey;
+
+    proptest! {
+        #[test]
+        // The API key should be a 16 character alphanumeric string.
+        fn parses_valid_api_keys(s in "[a-zA-Z0-9]{16}") {
+            ApiKey::parse(&s).unwrap();
+        }
+    }
+
+    #[test]
+    fn generated_api_key_is_valid() {
+        let key = ApiKey::generate();
+
+        assert!(ApiKey::parse(key.as_ref()).is_ok());
+    }
+
+    #[test]
+    #[should_panic(expected = "The API key should be exactly 16 characters in length.")]
+    fn invalid_api_key_length() {
+        ApiKey::parse("tooshort").unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "The API key should consist of only alphanumeric characters.")]
+    fn non_alphanumeric_api_key() {
+        ApiKey::parse("dh9z58jttoes3qv@").unwrap();
     }
 }

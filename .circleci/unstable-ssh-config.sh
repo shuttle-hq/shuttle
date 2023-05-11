@@ -7,5 +7,6 @@ cat >> $HOME/.ssh/config <<- EOF
 Host *.shuttle.internal
     ProxyJump 3.11.51.209
     User ec2-user
+    StrictHostKeyChecking no
     ProxyJump ec2-user@3.11.51.209
 EOF

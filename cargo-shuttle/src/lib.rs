@@ -295,16 +295,13 @@ impl Shuttle {
     }
 
     async fn reset_api_key(&self, client: &Client) -> Result<()> {
-        client
-            .reset_api_key()
-            .await
-            .and_then(|res| {
-                if res.status().is_success() {
-                    Ok(())
-                } else {
-                    Err(anyhow!("Resetting API key failed."))
-                }
-            })
+        client.reset_api_key().await.and_then(|res| {
+            if res.status().is_success() {
+                Ok(())
+            } else {
+                Err(anyhow!("Resetting API key failed."))
+            }
+        })
     }
 
     async fn stop(&self, client: &Client) -> Result<()> {

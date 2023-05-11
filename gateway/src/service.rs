@@ -281,7 +281,7 @@ impl GatewayService {
 
         query
             .push_bind(account_name)
-            .push(" LIMIT ")
+            .push(" ORDER BY project_name LIMIT ")
             .push_bind(limit);
 
         if offset > 0 {

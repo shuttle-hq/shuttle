@@ -251,7 +251,7 @@ impl MyProvisioner {
         format!("{}-", project_name)
     }
 
-    async fn request_dynamodb(&self, project_name: &str) -> Result<(), Error> {
+    pub async fn request_dynamodb(&self, project_name: &str) -> Result<(), Error> {
         //prefix username-projectname <- make this a function
         let prefix = self.get_prefix(&project_name).await;
 

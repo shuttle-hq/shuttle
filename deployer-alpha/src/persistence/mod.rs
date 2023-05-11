@@ -1,7 +1,6 @@
 pub mod deployment;
 mod error;
 pub mod log;
-mod resource;
 mod secret;
 pub mod service;
 mod state;
@@ -30,7 +29,6 @@ use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentState, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
-pub use self::resource::{Resource, ResourceManager, Type as ResourceType};
 pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
 pub use self::state::State;
@@ -345,33 +343,6 @@ impl LogRecorder for Persistence {
         self.log_send
             .send(log)
             .expect("failed to move log to async thread");
-    }
-}
-
-#[async_trait::async_trait]
-impl ResourceManager for Persistence {
-    type Err = Error;
-
-    async fn insert_resource(&self, resource: &Resource) -> Result<()> {
-        sqlx::query(
-            "INSERT OR REPLACE INTO resources (service_id, type, config, data) VALUES (?, ?, ?, ?)",
-        )
-        .bind(resource.service_id)
-        .bind(resource.r#type)
-        .bind(&resource.config)
-        .bind(&resource.data)
-        .execute(&self.pool)
-        .await
-        .map(|_| ())
-        .map_err(Error::from)
-    }
-
-    async fn get_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>> {
-        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
-            .bind(service_id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Error::from)
     }
 }
 

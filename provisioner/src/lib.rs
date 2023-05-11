@@ -24,6 +24,8 @@ use tokio::time::sleep;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info};
 
+
+
 mod args;
 mod error;
 
@@ -257,6 +259,10 @@ impl MyProvisioner {
         format!("{}-", project_name)
     }
 
+    async fn get_dynamodb_policy_name(&self, prefix: &str) -> String{
+        format!("{}policy", prefix)
+    }
+
     async fn create_dynamodb_policy(&self, prefix: &str) -> Result<Policy, Error> {
         let table_name = format!("arn:aws:dynamodb:*:*:table/{}*", prefix);
         let policy_document = json!({
@@ -295,10 +301,12 @@ impl MyProvisioner {
         })
         .to_string();
 
+        let policy_name = self.get_dynamodb_policy_name(prefix).await;
+
         Ok(self
             .iam_client
             .create_policy()
-            .policy_name(format!("{}policy", prefix))
+            .policy_name(policy_name)
             .policy_document(policy_document)
             .send()
             .await
@@ -306,6 +314,24 @@ impl MyProvisioner {
             .policy()
             .unwrap()
             .clone())
+    }
+
+    async fn delete_dynamodb_policy(&self, prefix: &str) -> Result<(), Error> {
+
+        let identity = self.sts_client.get_caller_identity().send().await.unwrap();
+        let account = identity.account().unwrap();
+
+        let policy_name = self.get_dynamodb_policy_name(prefix).await;
+        let policy_arn = format!("arn:aws:iam::{account}:policy/{policy_name}");
+
+        self.iam_client
+            .delete_policy()
+            .policy_arn(policy_arn)
+            .send()
+            .await
+            .unwrap();
+
+        Ok(())
     }
 
     pub async fn request_dynamodb(&self, project_name: &str) -> Result<(), Error> {
@@ -706,53 +732,37 @@ fn engine_to_port(engine: aws_rds::Engine) -> String {
 
 
 
-async fn delete_dynamodb_policy(sts_client: &aws_sdk_sts::Client, iam_client: &aws_sdk_iam::Client, prefix: &str) -> Result<(), Error> {
-
-    let identity = sts_client.get_caller_identity().send().await.unwrap();
-    let account = identity.account().unwrap();
-    
-
-    // panic!("{user_id}");
-
-    let policy_arn = format!("arn:aws:iam::{account}:policy/{prefix}-policy");
-
-    iam_client
-        .delete_policy()
-        .policy_arn(policy_arn)
-        .send()
-        .await
-        .unwrap();
-
-    Ok(())
-}
-
-
 #[cfg(test)]
 mod tests {
-    use crate::delete_dynamodb_policy;
+    use crate::MyProvisioner;
+
+    async fn make_test_provisioner() -> MyProvisioner {
+        let pg_uri = format!("postgres://postgres:password@localhost:5432");
+        let mongo_uri = format!("mongodb://mongodb:password@localhost:8080");
+
+        let provisioner = MyProvisioner::new(
+            &pg_uri,
+            &mongo_uri,
+            "fqdn".to_string(),
+            "pg".to_string(),
+            "mongodb".to_string(),
+
+        ).await.unwrap();
+
+        provisioner
+
+    }
 
     #[tokio::test]
-    async fn test_delete_dynamodb_policy() {
-        let timeout_config = crate::timeout::TimeoutConfig::builder()
-            .operation_timeout(crate::Duration::from_secs(120))
-            .operation_attempt_timeout(crate::Duration::from_secs(120))
-            .build();
-
-        let aws_config: aws_config::SdkConfig = aws_config::from_env()
-            .timeout_config(timeout_config)
-            .load()
-            .await;
-
-        // println!("{aws_config:?}");
-
-        let sts_client = aws_sdk_sts::Client::new(&aws_config);
-
-        let iam_client = aws_sdk_iam::Client::new(&aws_config);
-
-        println!("{:?}", sts_client.conf().region());
+    async fn test_create_and_delete_dynamodb_policy() {
+        let provisioner = make_test_provisioner().await;
 
         let prefix = "my_cool_project";
 
-        delete_dynamodb_policy(&sts_client, &iam_client, prefix).await.unwrap();
+        let result = provisioner.create_dynamodb_policy(prefix).await.unwrap();
+
+        println!("{result:?}");
+
+        provisioner.delete_dynamodb_policy(prefix).await.unwrap();
     }
 }

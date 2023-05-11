@@ -5,9 +5,11 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{extract::Form, Router};
-use shuttle_runtime::tracing::info;
+use shuttle_runtime::tracing::debug;
+use tokio::sync::oneshot;
 
-use crate::{AppState, RawJob};
+use crate::error::CrontabServiceError;
+use crate::{AppState, Msg, RawJob};
 
 pub fn build_router(app_state: Arc<AppState>) -> Router {
     Router::new()
@@ -23,10 +25,11 @@ pub async fn hello_world() -> impl IntoResponse {
 pub async fn set_schedule(
     State(state): State<Arc<AppState>>,
     Form(job): Form<RawJob>,
-) -> impl IntoResponse {
-    info!("Accepted new job: {:?}", job);
+) -> Result<impl IntoResponse, CrontabServiceError> {
+    debug!("Accepted new job: {:?}", job);
+    let (tx, rx) = oneshot::channel();
 
-    state.sender.send(job).await.unwrap();
+    state.sender.send(Msg::NewJob(job, tx)).await.unwrap();
 
-    StatusCode::OK
+    rx.await.expect("Channel transmission failed")
 }

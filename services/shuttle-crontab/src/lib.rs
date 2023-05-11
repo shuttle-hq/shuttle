@@ -6,20 +6,31 @@ use chrono::Utc;
 use cron::Schedule;
 use serde::{Deserialize, Serialize};
 use shuttle_persist::PersistInstance;
-use shuttle_runtime::tracing::info;
+use shuttle_runtime::tracing::{debug, info};
 use tokio::{
     sync::mpsc::{self, Receiver, Sender},
+    sync::oneshot,
     time::sleep,
 };
+
+mod error;
+use error::CrontabServiceError;
 
 mod router;
 
 pub type ShuttleCrontab = Result<CrontabService, shuttle_runtime::Error>;
 
+type Responder<T> = oneshot::Sender<Result<T, CrontabServiceError>>;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RawJob {
     schedule: String,
     url: String,
+}
+
+#[derive(Debug)]
+pub enum Msg {
+    NewJob(RawJob, Responder<()>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,7 +54,7 @@ impl CronJob {
     }
 
     async fn run(&self) {
-        info!("Running job for: {}", self.url);
+        debug!("Running job for: {}", self.url);
         while let Some(next_run) = self.schedule.upcoming(Utc).next() {
             let next_run_in = next_run
                 .signed_duration_since(chrono::offset::Utc::now())
@@ -61,15 +72,15 @@ impl CronJob {
 
 pub struct CronRunner {
     persist: PersistInstance,
-    receiver: Receiver<RawJob>,
+    receiver: Receiver<Msg>,
 }
 
 impl CronRunner {
     async fn run_jobs(&mut self) {
         if let Ok(tab) = self.persist.load::<Crontab>("crontab") {
-            info!("Found {} jobs", tab.jobs.len());
+            debug!("Found {} jobs", tab.jobs.len());
             for raw in tab.jobs {
-                info!("Starting job: {:?}", raw);
+                debug!("Starting job: {:?}", raw);
                 let job = CronJob::from_raw(&raw);
 
                 tokio::spawn(async move {
@@ -78,8 +89,12 @@ impl CronRunner {
             }
         }
 
-        while let Some(raw) = self.receiver.recv().await {
-            info!("Channel received: {:?}", raw);
+        while let Some(msg) = self.receiver.recv().await {
+            let (raw, resp) = match msg {
+                Msg::NewJob(raw, resp) => (raw, resp),
+            };
+            debug!("Channel received: {:?}", raw);
+
             let mut crontab = match self.persist.load::<Crontab>("crontab") {
                 Ok(tab) => tab,
                 Err(_) => Crontab { jobs: vec![] },
@@ -89,10 +104,10 @@ impl CronRunner {
 
             crontab.jobs.push(raw);
 
-            info!("Persisting: {:?}", crontab);
-            self.persist.save("crontab", crontab).unwrap();
+            debug!("Persisting {:?} jobs", crontab.jobs.len());
+            let res = self.persist.save("crontab", crontab).map_err(From::from);
+            let _ = resp.send(res);
 
-            // Spawn new job
             tokio::spawn(async move {
                 job.run().await;
             });
@@ -117,7 +132,7 @@ impl CrontabService {
 }
 
 pub struct AppState {
-    sender: Sender<RawJob>,
+    sender: Sender<Msg>,
 }
 
 #[shuttle_runtime::async_trait]

@@ -1,4 +1,4 @@
-# crontab-api
+# shuttle-crontab
 
 A service that calls URLs at specified cron intervals.
 

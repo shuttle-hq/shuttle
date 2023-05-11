@@ -5475,6 +5475,7 @@ dependencies = [
  "aws-sdk-dynamodb",
  "aws-sdk-iam",
  "aws-sdk-rds",
+ "aws-sdk-sts",
  "clap",
  "ctor",
  "fqdn",

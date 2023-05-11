@@ -3,10 +3,12 @@ use std::time::Duration;
 pub use args::Args;
 use aws_config::timeout;
 use aws_sdk_iam;
+use aws_sdk_iam::types::Policy;
 use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
     Client,
 };
+use aws_sdk_sts;
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
@@ -35,6 +37,7 @@ pub struct MyProvisioner {
     mongodb_client: mongodb::Client,
     dynamodb_client: aws_sdk_dynamodb::Client,
     iam_client: aws_sdk_iam::Client,
+    sts_client: aws_sdk_sts::Client,
     fqdn: String,
     internal_pg_address: String,
     internal_mongodb_address: String,
@@ -74,12 +77,15 @@ impl MyProvisioner {
 
         let iam_client = aws_sdk_iam::Client::new(&aws_config);
 
+        let sts_client = aws_sdk_sts::Client::new(&aws_config);
+
         Ok(Self {
             pool,
             rds_client,
             mongodb_client,
             dynamodb_client,
             iam_client,
+            sts_client,
             fqdn,
             internal_pg_address,
             internal_mongodb_address,
@@ -251,12 +257,7 @@ impl MyProvisioner {
         format!("{}-", project_name)
     }
 
-    pub async fn request_dynamodb(&self, project_name: &str) -> Result<(), Error> {
-        //prefix username-projectname <- make this a function
-        let prefix = self.get_prefix(&project_name).await;
-
-        //create policy
-        //if the project already has the policy, don't create (based on prefix)
+    async fn create_dynamodb_policy(&self, prefix: &str) -> Result<Policy, Error> {
         let table_name = format!("arn:aws:dynamodb:*:*:table/{}*", prefix);
         let policy_document = json!({
             "Version": "2012-10-17",
@@ -294,7 +295,7 @@ impl MyProvisioner {
         })
         .to_string();
 
-        let policy = self
+        Ok(self
             .iam_client
             .create_policy()
             .policy_name(format!("{}policy", prefix))
@@ -303,7 +304,17 @@ impl MyProvisioner {
             .await
             .unwrap()
             .policy()
-            .unwrap();
+            .unwrap()
+            .clone())
+    }
+
+    pub async fn request_dynamodb(&self, project_name: &str) -> Result<(), Error> {
+        //prefix username-projectname <- make this a function
+        let prefix = self.get_prefix(&project_name).await;
+
+        //create policy
+        //if the project already has the policy, don't create (based on prefix)
+        let policy = self.create_dynamodb_policy(&prefix).await;
 
         //create identity (should also be project based)
         //attach policy to identity
@@ -690,5 +701,58 @@ fn engine_to_port(engine: aws_rds::Engine) -> String {
         aws_rds::Engine::Postgres(_) => "5432".to_string(),
         aws_rds::Engine::Mariadb(_) => "3306".to_string(),
         aws_rds::Engine::Mysql(_) => "3306".to_string(),
+    }
+}
+
+
+
+async fn delete_dynamodb_policy(sts_client: &aws_sdk_sts::Client, iam_client: &aws_sdk_iam::Client, prefix: &str) -> Result<(), Error> {
+
+    let identity = sts_client.get_caller_identity().send().await.unwrap();
+    let account = identity.account().unwrap();
+    
+
+    // panic!("{user_id}");
+
+    let policy_arn = format!("arn:aws:iam::{account}:policy/{prefix}-policy");
+
+    iam_client
+        .delete_policy()
+        .policy_arn(policy_arn)
+        .send()
+        .await
+        .unwrap();
+
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::delete_dynamodb_policy;
+
+    #[tokio::test]
+    async fn test_delete_dynamodb_policy() {
+        let timeout_config = crate::timeout::TimeoutConfig::builder()
+            .operation_timeout(crate::Duration::from_secs(120))
+            .operation_attempt_timeout(crate::Duration::from_secs(120))
+            .build();
+
+        let aws_config: aws_config::SdkConfig = aws_config::from_env()
+            .timeout_config(timeout_config)
+            .load()
+            .await;
+
+        // println!("{aws_config:?}");
+
+        let sts_client = aws_sdk_sts::Client::new(&aws_config);
+
+        let iam_client = aws_sdk_iam::Client::new(&aws_config);
+
+        println!("{:?}", sts_client.conf().region());
+
+        let prefix = "my_cool_project";
+
+        delete_dynamodb_policy(&sts_client, &iam_client, prefix).await.unwrap();
     }
 }

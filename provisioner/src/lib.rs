@@ -4,11 +4,8 @@ pub use args::Args;
 use aws_config::timeout;
 use aws_sdk_iam;
 use aws_sdk_iam::operation::create_policy::CreatePolicyError;
-use aws_sdk_iam::operation::create_user::CreateUserOutput;
-use aws_sdk_iam::operation::delete_policy::DeletePolicyError;
+use aws_sdk_iam::operation::create_user::CreateUserError;
 use aws_sdk_iam::operation::delete_user::DeleteUserOutput;
-use aws_sdk_iam::operation::get_user::GetUserOutput;
-use aws_sdk_iam::types::Policy;
 use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
     Client,
@@ -355,15 +352,24 @@ impl MyProvisioner {
         format!("{}user", prefix)
     }
 
-    async fn create_iam_identity(&self, prefix: &str) -> Result<CreateUserOutput, Error> {
-        let user = self
+    async fn create_iam_identity(&self, prefix: &str) -> Result<(), Error> {
+        match self
             .iam_client
             .create_user()
             .user_name(self.get_iam_identity_user_name(prefix).await)
             .send()
-            .await
-            .unwrap();
-        Ok(user)
+            .await {
+                Ok(_) => {},
+                Err(e) => {
+                    match e.into_service_error() {
+                        CreateUserError::EntityAlreadyExistsException(_) => {}
+                        e => {
+                            return Err(Error::CreateIAMUser(e));
+                        }
+                    }
+                }
+            };
+        Ok(())
     }
 
     async fn delete_iam_identity(&self, prefix: &str) -> Result<DeleteUserOutput, Error> {
@@ -377,11 +383,11 @@ impl MyProvisioner {
         Ok(user)
     }
 
-    async fn attach_user_policy(&self, prefix: &str, user: CreateUserOutput) -> Result<(), Error> {
-        let result = self
+    async fn attach_user_policy(&self, prefix: &str) -> Result<(), Error> {
+        self
             .iam_client
             .attach_user_policy()
-            .user_name(user.user.unwrap().user_name().unwrap())
+            .user_name(self.get_iam_identity_user_name(&prefix).await)
             .policy_arn(self.get_policy_arn(&prefix).await.unwrap())
             .send()
             .await
@@ -390,7 +396,7 @@ impl MyProvisioner {
     }
 
     async fn detach_user_policy(&self, prefix: &str) -> Result<(), Error> {
-        let result = self
+        self
             .iam_client
             .detach_user_policy()
             .user_name(self.get_iam_identity_user_name(&prefix).await)
@@ -402,20 +408,15 @@ impl MyProvisioner {
     }
 
     pub async fn request_dynamodb(&self, project_name: &str) -> Result<(), Error> {
-        //prefix username-projectname <- make this a function
         let prefix = self.get_prefix(&project_name).await;
 
-        //create policy
-        //if the project already has the policy, don't create (based on prefix)
-        let policy = self.create_dynamodb_policy(&prefix).await.unwrap();
+        self.create_dynamodb_policy(&prefix).await.unwrap();
 
-        let user = self.create_iam_identity(&prefix).await.unwrap();
+        self.create_iam_identity(&prefix).await.unwrap();
 
+        self.attach_user_policy(&prefix).await.unwrap();
 
-        self.attach_user_policy(&prefix, user).await.unwrap();
-
-        //create identity (should also be project based)
-        //attach policy to identity
+        //TODO:
         //store aws credentials in secrets
         //make them available in the project container
         //setup dynamodb client
@@ -426,86 +427,7 @@ impl MyProvisioner {
 
         //NOTE: for future, maybe allow multiple projects to access same database (for creating, just use username as prefix, for deleting will need to query whether projects exist)
 
-        let client = &self.dynamodb_client;
-
-        // let password = generate_password();
-        // let instance_name = format!("{}-{}", project_name, engine);
-
-        // debug!("trying to get AWS RDS instance: {instance_name}");
-        // let instance = client
-        //     .modify_db_instance()
-        //     .db_instance_identifier(&instance_name)
-        //     .master_user_password(&password)
-        //     .send()
-        //     .await;
-
-        // client.create_table()
-
-        // match instance {
-        //     Ok(_) => {
-        //         wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
-        //     }
-        //     Err(SdkError::ServiceError { err, .. }) => {
-        //         if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
-        //             debug!("creating new AWS RDS {instance_name}");
-
-        //             client
-        //             .create
-        //                 // .create_db_instance()
-        //                 // .db_instance_identifier(&instance_name)
-        //                 // .master_username(MASTER_USERNAME)
-        //                 // .master_user_password(&password)
-        //                 // .engine(engine.to_string())
-        //                 // .db_instance_class(AWS_RDS_CLASS)
-        //                 // .allocated_storage(20)
-        //                 // .backup_retention_period(0) // Disable backups
-        //                 // .publicly_accessible(true)
-        //                 // .db_name(engine.to_string())
-        //                 // .set_db_subnet_group_name(Some(RDS_SUBNET_GROUP.to_string()))
-        //                 // .send()
-        //                 // .await?
-        //                 // .db_instance
-        //                 // .expect("to be able to create instance");
-
-        //             wait_for_instance(client, &instance_name, "creating").await?;
-        //         } else {
-        //             return Err(Error::Plain(format!(
-        //                 "got unexpected error from AWS RDS service: {}",
-        //                 err
-        //             )));
-        //         }
-        //     }
-        //     Err(unexpected) => {
-        //         return Err(Error::Plain(format!(
-        //             "got unexpected error from AWS during API call: {}",
-        //             unexpected
-        //         )))
-        //     }
-        // };
-
-        // Wait for up
-        // let instance = wait_for_instance(client, &instance_name, "available").await?;
-
-        // // TODO: find private IP somehow
-        // let address = instance
-        //     .endpoint
-        //     .expect("instance to have an endpoint")
-        //     .address
-        //     .expect("endpoint to have an address");
-
-        // Ok(DatabaseResponse {
-        //     engine: engine.to_string(),
-        //     username: instance
-        //         .master_username
-        //         .expect("instance to have a username"),
-        //     password,
-        //     database_name: instance
-        //         .db_name
-        //         .expect("instance to have a default database"),
-        //     address_private: address.clone(),
-        //     address_public: address,
-        //     port: engine_to_port(engine),
-        // })
+        // let client = &self.dynamodb_client;
         Ok(())
     }
 
@@ -850,7 +772,7 @@ mod tests {
 
         let prefix = provisioner.get_prefix("my_cool_project").await;
 
-        let result = provisioner.create_iam_identity(&prefix).await.unwrap();
+        provisioner.create_iam_identity(&prefix).await.unwrap();
 
         provisioner.delete_iam_identity(&prefix).await.unwrap();
     }
@@ -860,7 +782,7 @@ mod tests {
         let provisioner = make_test_provisioner().await;
 
         provisioner
-        .request_dynamodb("test_request_dynamodb") //NOTE: should be less that 64 characters
+        .request_dynamodb("test_request_dynamodb") //NOTE: User names should be less that 64 characters
         .await
         .unwrap();
 

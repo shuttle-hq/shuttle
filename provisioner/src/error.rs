@@ -1,4 +1,4 @@
-use aws_sdk_iam::operation::create_policy::CreatePolicyError;
+use aws_sdk_iam::operation::{create_policy::CreatePolicyError, create_user::CreateUserError};
 use aws_sdk_rds::{
     error::SdkError,
     operation::{
@@ -40,6 +40,9 @@ pub enum Error {
 
     #[error("failed to create IAM policy for AWS: {0}")]
     CreateIAMPolicy(#[from] CreatePolicyError),
+
+    #[error("failed to create IAM user for AWS: {0}")]
+    CreateIAMUser(#[from] CreateUserError),
 
     #[error["plain error: {0}"]]
     Plain(String),

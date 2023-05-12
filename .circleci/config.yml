@@ -322,9 +322,6 @@ jobs:
         name: Setup SSH
         command: |
           ./.circleci/unstable-ssh-config.sh
-          echo $CIRCLECI_DEPLOY_TO_AWS_KEY | base64 -d > ~/.ssh/circleci-deploy-to-aws-key
-          chmod 600 ~/.ssh/circleci-deploy-to-aws-key
-          ssh-add ~/.ssh/circleci-deploy-to-aws-key
     - run:
         name: Test ssh access
         command: |

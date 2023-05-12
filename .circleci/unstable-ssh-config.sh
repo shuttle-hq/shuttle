@@ -13,3 +13,7 @@ Host *.shuttle.internal
     StrictHostKeyChecking no
     ProxyJump ec2-user@admin.unstable
 EOF
+
+echo $CIRCLECI_DEPLOY_TO_AWS_KEY | base64 -d > ~/.ssh/circleci-deploy-to-aws-key
+chmod 600 ~/.ssh/circleci-deploy-to-aws-key
+ssh-add ~/.ssh/circleci-deploy-to-aws-key

@@ -68,7 +68,6 @@ impl Digest {
 
 #[cfg(test)]
 mod tests {
-    
 
     use super::Digest;
 

@@ -10,5 +10,6 @@ Host admin.unstable
 
 Host *.shuttle.internal
     User ec2-user
+    StrictHostKeyChecking no
     ProxyJump ec2-user@admin.unstable
 EOF

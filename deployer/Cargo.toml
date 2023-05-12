@@ -10,7 +10,6 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["headers", "json", "query", "ws"] }
 bytes = { workspace = true }
-cargo = { workspace = true }
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }

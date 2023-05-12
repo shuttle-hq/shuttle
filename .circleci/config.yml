@@ -320,14 +320,14 @@ jobs:
           echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
     - add_ssh_keys:
         fingerprints:
-          - "6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78"
+          - "1d:bb:98:a8:83:30:18:b4:3d:69:83:85:34:28:13:26"
     - run:
         name: Generate ssh config
         command: ./.circleci/unstable-ssh-config.sh
     - run:
         name: Test ssh access
         command: |
-          ssh ec2-user@master.shuttle.internal "ls | wc -l"
+          ssh ec2-user@master.shuttle.internal "ls / | wc -l"
   build-binaries-linux:
     machine:
       image: << parameters.image >>

@@ -6,6 +6,6 @@ set -ue
 cat >> $HOME/.ssh/config <<- EOF
 Host *.shuttle.internal
     ProxyJump 3.11.51.209
-    User circleci
+    User ec2-user
     ProxyJump ec2-user@3.11.51.209
 EOF

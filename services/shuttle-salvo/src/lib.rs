@@ -10,7 +10,7 @@
 //!
 //! #[shuttle_runtime::main]
 //! async fn salvo() -> shuttle_salvo::ShuttleSalvo {
-//!     let router = Router::with_path("hello").get(hello_world);
+//!     let router = Router::new().get(hello_world);
 //!
 //!     Ok(router.into())
 //! }

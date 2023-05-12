@@ -3,7 +3,7 @@ use strum::Display;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Display, Serialize)]
+#[derive(Clone, Debug, Deserialize, Display, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]

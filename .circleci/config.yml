@@ -294,6 +294,10 @@ jobs:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
+      - run: 
+          name: Set git tag in bash_env
+          command: |
+            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
       - restore-buildx-cache
       - aws-ecr/ecr-login:
           aws-access-key-id: AWS_ACCESS_KEY_ID
@@ -302,8 +306,34 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            PUSH=true PLATFORMS=linux/amd64 make images
+            PUSH=true PROD=false PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
+  deploy-images:
+    executor: image-ubuntu
+    steps:
+    - checkout
+    - run: 
+        name: Set git tag in bash_env
+        command: |
+          echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+    - add_ssh_keys:
+        fingerprints:
+          - "6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78"
+    - run:
+        name: Generate ssh config
+        command: ./.circleci/unstable-ssh-config.sh
+    - run:
+        name: Deploy to unstable
+        command: |
+          DOCKER_HOST=ssh://ec2-user@master.shuttle.internal USE_TLS=enable PROD=false DD_API_KEY=$DD_API_KEY \
+          POSTGRES_PASSWORD=$DEV_POSTGRES_PASSWORD \
+          MONGO_INITDB_ROOT_PASSWORD=$DEV_MONGO_INITDB_ROOT_PASSWORD \
+          TAG=$TAG \
+          make deploy
+    - run:
+        name: Pull new deployer image
+        command: |
+          ssh ec2-user@controller.shuttle.internal "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
       image: << parameters.image >>
@@ -546,12 +576,20 @@ workflows:
           filters:
             branches:
               only: production
-      - build-and-push:
-          requires:
-            - e2e-test
+      - approve-push-unstable:
+          type: approval
           filters:
             branches:
-              only: production
+              only: main
+      - build-and-push:
+          requires: 
+            - approve-push-unstable
+          filters:
+            branches:
+              only: main
+      - deploy-images:
+          requires:
+            - build-and-push
   release:
     jobs:
       - linux-qa:

@@ -321,7 +321,7 @@ jobs:
           eval $(ssh-agent)
     - add_ssh_keys:
         fingerprints:
-          - "ba:94:b0:7d:0d:e3:a7:00:29:cd:4c:e0:fc:92:35:7d"
+          - "6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78"
     - run:
         name: Generate ssh config
         command: ./.circleci/unstable-ssh-config.sh

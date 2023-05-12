@@ -310,8 +310,6 @@ jobs:
       - save-buildx-cache
   deploy-images:
     executor: image-ubuntu
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
     - checkout
     - run: 

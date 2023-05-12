@@ -593,7 +593,9 @@ workflows:
           # filters:
           #   branches:
           #     only: main
-      - deploy-images
+      - deploy-images:
+          requires:
+            - build-and-push
   # release:
   #   jobs:
   #     - linux-qa:

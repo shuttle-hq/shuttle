@@ -320,7 +320,7 @@ jobs:
           echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
     - add_ssh_keys:
         fingerprints:
-          - "1d:bb:98:a8:83:30:18:b4:3d:69:83:85:34:28:13:26"
+          - "00:cf:f3:92:a9:60:71:55:72:12:ae:08:ff:02:11:4c"
     - run:
         name: Generate ssh config
         command: ./.circleci/unstable-ssh-config.sh

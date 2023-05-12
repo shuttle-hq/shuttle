@@ -328,6 +328,18 @@ jobs:
         name: Test ssh access
         command: |
           ssh ec2-user@master.shuttle.internal "ls | wc -l"
+    - run:
+        name: Deploy to unstable
+        command: |
+          DOCKER_HOST=ssh://ec2-user@master.shuttle.internal USE_TLS=enable PROD=false DD_API_KEY=$DD_API_KEY \
+          POSTGRES_PASSWORD=$DEV_POSTGRES_PASSWORD \
+          MONGO_INITDB_ROOT_PASSWORD=$DEV_MONGO_INITDB_ROOT_PASSWORD \
+          TAG=$TAG \
+          make deploy
+    - run:
+        name: Pull new deployer image
+        command: |
+          ssh ec2-user@controller.shuttle.internal "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
       image: << parameters.image >>

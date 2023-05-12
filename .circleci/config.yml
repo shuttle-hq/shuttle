@@ -318,6 +318,7 @@ jobs:
         name: Set git tag in bash_env
         command: |
           echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+          eval $(ssh-agent)
     - add_ssh_keys:
         fingerprints:
           - "ba:94:b0:7d:0d:e3:a7:00:29:cd:4c:e0:fc:92:35:7d"

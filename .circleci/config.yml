@@ -318,13 +318,13 @@ jobs:
         name: Set git tag in bash_env
         command: |
           echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
-          eval $(ssh-agent)
-    - add_ssh_keys:
-        fingerprints:
-          - "6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78"
     - run:
-        name: Generate ssh config
-        command: ./.circleci/unstable-ssh-config.sh
+        name: Setup SSH
+        command: |
+          ./.circleci/unstable-ssh-config.sh
+          echo $CIRCLE_CI_DEPLOY_TO_AWS_KEY > ~/.ssh/circleci-deploy-to-aws-key
+          chmod 600 ~/.ssh/circleci-deploy-to-aws-key
+          ssh-add ~/.ssh/circleci-deploy-to-aws-key
     - run:
         name: Test ssh access
         command: |

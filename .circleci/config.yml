@@ -323,10 +323,6 @@ jobs:
         name: Generate ssh config
         command: ./.circleci/unstable-ssh-config.sh
     - run:
-        name: Test ssh access
-        command: |
-          ssh ec2-user@master.shuttle.internal "ls | wc -l"
-    - run:
         name: Deploy to unstable
         command: |
           DOCKER_HOST=ssh://ec2-user@master.shuttle.internal USE_TLS=enable PROD=false DD_API_KEY=$DD_API_KEY \

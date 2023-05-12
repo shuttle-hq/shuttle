@@ -328,6 +328,7 @@ jobs:
     - run:
         name: Test ssh access
         command: |
+          ssh-add -l
           ls ~/.ssh
           ssh -vvv ec2-user@master.shuttle.internal "ls / | wc -l"
   build-binaries-linux:

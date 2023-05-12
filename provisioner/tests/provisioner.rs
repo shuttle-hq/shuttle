@@ -234,21 +234,3 @@ async fn shared_mongodb_role_does_exist() {
     let user_cycled_key = &user["credentials"]["SCRAM-SHA-256"]["storedKey"];
     assert_ne!(user_stored_key, user_cycled_key);
 }
- 
-#[tokio::test]
-async fn test_request_dynamodb() {
-    let provisioner = MyProvisioner::new(
-        &PG.uri,
-        &MONGODB.uri,
-        "fqdn".to_string(),
-        "pg".to_string(),
-        "mongodb".to_string(),
-    )
-    .await
-    .unwrap();
-
-    provisioner
-    .request_dynamodb("my_cool_project")
-    .await
-    .unwrap();
-}

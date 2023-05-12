@@ -5,6 +5,9 @@ use aws_config::timeout;
 use aws_sdk_iam;
 use aws_sdk_iam::operation::create_policy::CreatePolicyError;
 use aws_sdk_iam::operation::create_user::CreateUserOutput;
+use aws_sdk_iam::operation::delete_policy::DeletePolicyError;
+use aws_sdk_iam::operation::delete_user::DeleteUserOutput;
+use aws_sdk_iam::operation::get_user::GetUserOutput;
 use aws_sdk_iam::types::Policy;
 use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
@@ -25,8 +28,6 @@ use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info};
-
-
 
 mod args;
 mod error;
@@ -261,7 +262,7 @@ impl MyProvisioner {
         format!("shuttle-dynamodb-{}-", project_name)
     }
 
-    async fn get_dynamodb_policy_name(&self, prefix: &str) -> String{
+    async fn get_dynamodb_policy_name(&self, prefix: &str) -> String {
         format!("{}policy", prefix)
     }
 
@@ -311,28 +312,34 @@ impl MyProvisioner {
             .policy_name(policy_name)
             .policy_document(policy_document)
             .send()
-            .await {
-                Ok(_) => {},
-                Err(e) => {
-                    match e.into_service_error() {
-                        CreatePolicyError::EntityAlreadyExistsException(_) => {}, // for idempotency
-                        e => {
-                            return Err(Error::CreateIAMPolicy(e));
-                        }
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => {
+                match e.into_service_error() {
+                    CreatePolicyError::EntityAlreadyExistsException(_) => {} // for idempotency
+                    e => {
+                        return Err(Error::CreateIAMPolicy(e));
                     }
                 }
-            };
+            }
+        };
 
         Ok(())
     }
 
-    async fn delete_dynamodb_policy(&self, prefix: &str) -> Result<(), Error> {
-
+    async fn get_policy_arn(&self, prefix: &str) -> Result<String, Error> {
         let identity = self.sts_client.get_caller_identity().send().await.unwrap();
         let account = identity.account().unwrap();
 
         let policy_name = self.get_dynamodb_policy_name(prefix).await;
         let policy_arn = format!("arn:aws:iam::{account}:policy/{policy_name}");
+
+        Ok(policy_arn)
+    }
+
+    async fn delete_dynamodb_policy(&self, prefix: &str) -> Result<(), Error> {
+        let policy_arn = self.get_policy_arn(&prefix).await.unwrap();
 
         self.iam_client
             .delete_policy()
@@ -349,17 +356,63 @@ impl MyProvisioner {
     }
 
     async fn create_iam_identity(&self, prefix: &str) -> Result<CreateUserOutput, Error> {
-        let user = self.iam_client.create_user().user_name(self.get_iam_identity_user_name(prefix).await).send().await.unwrap();
+        let user = self
+            .iam_client
+            .create_user()
+            .user_name(self.get_iam_identity_user_name(prefix).await)
+            .send()
+            .await
+            .unwrap();
         Ok(user)
     }
-    
+
+    async fn delete_iam_identity(&self, prefix: &str) -> Result<DeleteUserOutput, Error> {
+        let user = self
+            .iam_client
+            .delete_user()
+            .user_name(self.get_iam_identity_user_name(prefix).await)
+            .send()
+            .await
+            .unwrap();
+        Ok(user)
+    }
+
+    async fn attach_user_policy(&self, prefix: &str, user: CreateUserOutput) -> Result<(), Error> {
+        let result = self
+            .iam_client
+            .attach_user_policy()
+            .user_name(user.user.unwrap().user_name().unwrap())
+            .policy_arn(self.get_policy_arn(&prefix).await.unwrap())
+            .send()
+            .await
+            .unwrap();
+        Ok(())
+    }
+
+    async fn detach_user_policy(&self, prefix: &str) -> Result<(), Error> {
+        let result = self
+            .iam_client
+            .detach_user_policy()
+            .user_name(self.get_iam_identity_user_name(&prefix).await)
+            .policy_arn(self.get_policy_arn(&prefix).await.unwrap())
+            .send()
+            .await
+            .unwrap();
+        Ok(())
+    }
+
     pub async fn request_dynamodb(&self, project_name: &str) -> Result<(), Error> {
         //prefix username-projectname <- make this a function
         let prefix = self.get_prefix(&project_name).await;
 
         //create policy
         //if the project already has the policy, don't create (based on prefix)
-        let policy = self.create_dynamodb_policy(&prefix).await;
+        let policy = self.create_dynamodb_policy(&prefix).await.unwrap();
+
+        let user = self.create_iam_identity(&prefix).await.unwrap();
+
+
+        self.attach_user_policy(&prefix, user).await.unwrap();
 
         //create identity (should also be project based)
         //attach policy to identity
@@ -457,12 +510,12 @@ impl MyProvisioner {
     }
 
     async fn delete_dynamodb(&self, project_name: &str) -> Result<DatabaseDeletionResponse, Error> {
-        //delete policy
         let prefix = self.get_prefix(project_name).await;
+        self.detach_user_policy(&prefix).await?;
+        self.delete_iam_identity(&prefix).await?;
         self.delete_dynamodb_policy(&prefix).await?;
 
-        //delete iam identity
-        //delete tables that match the prefix
+        //TODO: delete tables that match the prefix
         Ok(DatabaseDeletionResponse {})
     }
 
@@ -549,7 +602,6 @@ impl MyProvisioner {
             port: engine_to_port(engine),
         })
     }
-
 
     async fn delete_shared_db(
         &self,
@@ -687,10 +739,7 @@ impl Provisioner for MyProvisioner {
                 self.delete_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
             }
-            DbType::DynamoDb(_) => {
-                self.delete_dynamodb(&request.project_name)
-                    .await?
-            }
+            DbType::DynamoDb(_) => self.delete_dynamodb(&request.project_name).await?,
         };
 
         Ok(Response::new(reply))
@@ -761,8 +810,6 @@ fn engine_to_port(engine: aws_rds::Engine) -> String {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use crate::MyProvisioner;
@@ -777,23 +824,65 @@ mod tests {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
-
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         provisioner
-
     }
 
     #[tokio::test]
     async fn test_create_and_delete_dynamodb_policy() {
         let provisioner = make_test_provisioner().await;
 
-        let prefix = "my_cool_project";
+        let prefix = provisioner.get_prefix("my_cool_project").await;
 
-        let result = provisioner.create_dynamodb_policy(prefix).await.unwrap();
+        let result = provisioner.create_dynamodb_policy(&prefix).await.unwrap();
 
         println!("{result:?}");
 
-        provisioner.delete_dynamodb_policy(prefix).await.unwrap();
+        provisioner.delete_dynamodb_policy(&prefix).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_create_and_delete_aws_user() {
+        let provisioner = make_test_provisioner().await;
+
+        let prefix = provisioner.get_prefix("my_cool_project").await;
+
+        let result = provisioner.create_iam_identity(&prefix).await.unwrap();
+
+        provisioner.delete_iam_identity(&prefix).await.unwrap();
+    }
+     
+    #[tokio::test]
+    async fn test_request_dynamodb_multiple_times() {
+        let provisioner = make_test_provisioner().await;
+
+        provisioner
+        .request_dynamodb("test_request_dynamodb") //NOTE: should be less that 64 characters
+        .await
+        .unwrap();
+
+        // you should be able to request the same resource multiple times without error
+        provisioner
+        .request_dynamodb("test_request_dynamodb")
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_delete_dynamodb() {
+        let provisioner = make_test_provisioner().await;
+
+        provisioner
+        .request_dynamodb("test_delete_dynamodb")
+        .await
+        .unwrap();
+
+        provisioner
+        .delete_dynamodb("test_delete_dynamodb")
+        .await
+        .unwrap();
     }
 }

@@ -327,7 +327,8 @@ jobs:
     - run:
         name: Test ssh access
         command: |
-          ssh ec2-user@master.shuttle.internal "ls / | wc -l"
+          ls ~/.ssh
+          ssh -vvv ec2-user@master.shuttle.internal "ls / | wc -l"
   build-binaries-linux:
     machine:
       image: << parameters.image >>
@@ -582,6 +583,7 @@ workflows:
           #   branches:
           #     only: main
       - deploy-images
+
   # release:
   #   jobs:
   #     - linux-qa:

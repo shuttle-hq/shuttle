@@ -1,5 +1,5 @@
 use super::image::digest::Digest;
-use oci_spec::{distribution::ErrorResponse, OciSpecError};
+use oci_spec::OciSpecError;
 use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
@@ -25,22 +25,22 @@ pub enum Error {
     //
     #[error("Unknown digest in oci-archive: {0}")]
     UnknownDigest(Digest),
-    #[error("No index.json is included in oci-archive")]
-    MissingIndex,
+    #[error("No index.json is included in oci-archive: {0}")]
+    MissingIndex(String),
     #[error("index.json does not have image name in manifest annotation")]
     MissingManifestName,
     #[error(transparent)]
     InvalidJson(#[from] serde_json::error::Error),
+    #[error("can not get the inner type")]
+    ArchiveInner,
 
     //
     // Error from OCI registry
     //
-    #[error("Network error: {0}")]
-    Network(String),
-    #[error("Registry error: {0}")]
-    Registry(String),
+    #[error("Reqwest error: {0}")]
+    Reqwest(String),
     #[error("Authorization failed: {0}")]
-    AuthorizationFailed(String),
+    ChallengeFailed(String),
     #[error("Unsupported WWW-Authentication header: {0}")]
     UnSupportedAuthHeader(String),
 
@@ -58,22 +58,12 @@ impl From<OciSpecError> for Error {
         match e {
             OciSpecError::SerDe(e) => Error::InvalidJson(e),
             OciSpecError::Io(e) => Error::UnknownIo(e),
-            OciSpecError::Builder(_) => unreachable!(),
-            OciSpecError::Other(e) => panic!("Unknown error within oci_spec: {}", e),
-        }
-    }
-}
-
-impl From<ureq::Error> for Error {
-    fn from(e: ureq::Error) -> Self {
-        match e {
-            ureq::Error::Status(_status, res) => match res.into_json::<ErrorResponse>() {
-                Ok(err) => Error::Registry(err.to_string()),
-                Err(e) => Error::UnknownIo(e),
-            },
-            ureq::Error::Transport(e) => {
-                Error::Network(e.message().expect("to have an error message").to_string())
+            // Runtime error when a `build()` (related to the oci-spec crate depdency on the `derive_builder` crate)
+            // method is called and one or more required fields do not have a value.
+            OciSpecError::Builder(e) => {
+                panic!("Unknown oci-spec crate #[derive_builder] error: {}", e)
             }
+            OciSpecError::Other(e) => panic!("Unknown error within oci_spec: {}", e),
         }
     }
 }

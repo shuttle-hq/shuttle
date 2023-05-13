@@ -1,4 +1,5 @@
-use oci_spec::{distribution::*, image::*};
+use http::Method;
+use oci_spec::image::*;
 
 use url::Url;
 
@@ -6,7 +7,7 @@ use super::{super::error::*, super::image::digest::Digest, Name, Reference, Stor
 
 /// A client for `/v2/<name>/` API endpoint
 pub struct Client {
-    agent: ureq::Agent,
+    agent: reqwest::Client,
     /// URL to registry server
     url: Url,
     /// Name of repository
@@ -21,7 +22,7 @@ impl Client {
     pub fn new(url: Url, name: Name) -> Result<Self> {
         let auth = StoredAuth::load_all()?;
         Ok(Client {
-            agent: ureq::Agent::new(),
+            agent: reqwest::Client::new(),
             url,
             name,
             auth,
@@ -29,44 +30,74 @@ impl Client {
         })
     }
 
-    fn call(&mut self, req: ureq::Request) -> Result<ureq::Response> {
-        if req.url().contains("localhost") {
-            return req
-                .call()
-                .map_err(|err| super::super::error::Error::Registry(err.to_string()));
+    #[async_recursion::async_recursion]
+    async fn post(&mut self, url: Url) -> Result<reqwest::Response> {
+        // This is a guard that skips authorization for a localhost container registry.
+        if url.as_str().contains("localhost") {
+            let req_builder = self.agent.request(Method::POST, url);
+            return req_builder
+                .send()
+                .await
+                .map_err(|err| super::super::error::Error::Reqwest(err.to_string()));
         }
 
-        // Try get token
+        // If we already have the token just continue with the request.
         if let Some(token) = &self.token {
-            return Ok(req
-                .set("Authorization", &format!("Bearer {}", token))
-                .call()?);
+            let req_builder = self.agent.request(Method::POST, url);
+            return req_builder
+                .header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+                .send()
+                .await
+                .map_err(|err| Error::Reqwest(err.to_string()));
         }
 
-        let try_req = req.clone();
-        let www_auth = match try_req.call() {
-            Ok(res) => return Ok(res),
-            Err(ureq::Error::Status(status, res)) => {
-                if status == 401 && res.has("www-authenticate") {
-                    res.header("www-authenticate").unwrap().to_string()
+        // Try getting the token. A response can look like the one below:
+        //
+        // ```text
+        // 401 Unauthorized
+        // WWW-Authenticate: <scheme> realm="<realm>", ..."
+        // Content-Length: <length>
+        // Content-Type: application/json
+
+        // {
+        // 	"errors": [
+        // 	    {
+        //             "code": <error code>,
+        //             "message": "<error message>",
+        //             "detail": ...
+        //         },
+        //         ...
+        //     ]
+        // }
+        // ```
+        let req_builder = self.agent.request(Method::POST, url.clone());
+        let www_auth = match req_builder.send().await {
+            Ok(res) => {
+                if res.status().as_u16() == 401 {
+                    if res.headers().contains_key(http::header::WWW_AUTHENTICATE) {
+                        Ok(res
+                            .headers()
+                            .get(http::header::WWW_AUTHENTICATE)
+                            .expect("to get a value for the WWW-AUTHENTICATE header")
+                            .to_str()
+                            .expect("to have a valid response from server")
+                            .to_string())
+                    } else {
+                        Err(Error::Reqwest(
+                            res.text().await.expect("to get a body response"),
+                        ))
+                    }
                 } else {
-                    let err = res.into_json::<ErrorResponse>()?;
-                    return Err(Error::Registry(err.to_string()));
+                    Err(Error::Reqwest(
+                        res.text().await.expect("to get a body response"),
+                    ))
                 }
             }
-            Err(ureq::Error::Transport(e)) => return Err(Error::Network(e.to_string())),
-        };
+            Err(err) => Err(Error::Reqwest(err.to_string())),
+        }?;
         let challenge = super::AuthChallenge::from_header(&www_auth)?;
-        self.token = Some(self.auth.challenge(&challenge)?);
-        self.call(req)
-    }
-
-    fn put(&self, url: &Url) -> ureq::Request {
-        self.agent.put(url.as_str())
-    }
-
-    fn post(&self, url: &Url) -> ureq::Request {
-        self.agent.post(url.as_str())
+        self.token = Some(self.auth.challenge(&challenge).await?);
+        self.post(url).await
     }
 
     /// Push manifest to registry
@@ -78,26 +109,32 @@ impl Client {
     /// Manifest must be pushed after blobs are updated.
     ///
     /// See [corresponding OCI distribution spec document](https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pushing-manifests) for detail.
-    pub fn push_manifest(
+    pub async fn push_manifest(
         &self,
         reference: &Reference,
         manifest: &ImageManifest,
-    ) -> Result<ureq::Response> {
+    ) -> Result<reqwest::Response> {
         let mut buf = Vec::new();
         manifest.to_writer(&mut buf)?;
         let url = self
             .url
             .join(&format!("/v2/{}/manifests/{}", self.name, reference))?;
-        let mut req = self
-            .put(&url)
-            .set("Content-Type", &MediaType::ImageManifest.to_string());
+        let mut req_builder = self.agent.put(url).header(
+            http::header::CONTENT_TYPE,
+            MediaType::ImageManifest.to_string(),
+        );
+
         if let Some(token) = self.token.as_ref() {
             // Authorization must be done while blobs push
-            req = req.set("Authorization", &format!("Bearer {}", token));
+            req_builder =
+                req_builder.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
         }
 
-        req.send_bytes(&buf)
-            .map_err(|err| Error::Network(err.to_string()))
+        req_builder
+            .body(buf)
+            .send()
+            .await
+            .map_err(|err| Error::Reqwest(err.to_string()))
     }
 
     /// Push blob to registry
@@ -109,31 +146,45 @@ impl Client {
     /// and following `PUT` to URL obtained by `POST`.
     ///
     /// See [corresponding OCI distribution spec document](https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pushing-manifests) for detail.
-    pub fn push_blob(&mut self, blob: &[u8]) -> Result<Url> {
+    pub async fn push_blob(&mut self, blob: Vec<u8>) -> Result<Url> {
         let url = self
             .url
             .join(&format!("/v2/{}/blobs/uploads/", self.name))?;
-        let res = self.call(self.post(&url))?;
+        let res = self.post(url.clone()).await?;
         let loc = res
-            .header("Location")
-            .expect("Location header is lacked in OCI registry response");
+            .headers()
+            .get(http::header::LOCATION)
+            .expect("Location header missing from the OCI registry response")
+            .to_str()
+            .expect("to get a location str");
         let url = Url::parse(loc).or_else(|_| self.url.join(loc))?;
 
-        let digest = Digest::from_buf_sha256(blob);
-        let mut req = self
-            .put(&url)
-            .query("digest", &digest.to_string())
-            .set("Content-Length", &blob.len().to_string())
-            .set("Content-Type", "application/octet-stream");
+        let digest = Digest::from_buf_sha256(&blob);
+        let mut req_builder = self
+            .agent
+            .put(url)
+            .query(&[("digest", &digest.to_string())])
+            .header(http::header::CONTENT_LENGTH, &blob.len().to_string())
+            .header(http::header::CONTENT_TYPE, "application/octet-stream");
+
         if let Some(token) = self.token.as_ref() {
             // Authorization must be done while the first POST
-            req = req.set("Authorization", &format!("Bearer {}", token))
+            req_builder =
+                req_builder.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
         }
-        let res = req.send_bytes(blob)?;
+
+        let res = req_builder
+            .body(blob)
+            .send()
+            .await
+            .map_err(|err| Error::Reqwest(err.to_string()))?;
+
         let loc = res
-            .header("Location")
-            .expect("Location header is lacked in OCI registry response");
-        Ok(Url::parse(loc).or_else(|_| self.url.join(loc))?)
+            .headers()
+            .get(http::header::LOCATION)
+            .expect("Location header missing from the OCI registry response");
+        Ok(Url::parse(loc.to_str().expect("to parse an url"))
+            .or_else(|_| self.url.join(loc.to_str().expect("to join with an url")))?)
     }
 }
 
@@ -154,11 +205,11 @@ mod tests {
         Name::new("test_repo").unwrap()
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore]
-    fn push_blob() -> Result<()> {
+    async fn push_blob() -> Result<()> {
         let mut client = Client::new(test_url(), test_name())?;
-        let url = client.push_blob("test string".as_bytes())?;
+        let url = client.push_blob(vec![1, 2, 3, 4]).await?;
         dbg!(url);
         Ok(())
     }

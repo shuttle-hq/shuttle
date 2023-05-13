@@ -15,6 +15,8 @@ pub enum Error {
     Streaming(#[from] axum::Error),
     #[error("Custom error: {0}")]
     Custom(#[from] anyhow::Error),
+    #[error("Builder error: {0}")]
+    Builder(#[from] crate::builder::error::Error),
 }
 
 impl Serialize for Error {

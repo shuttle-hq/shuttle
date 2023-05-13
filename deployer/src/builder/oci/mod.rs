@@ -1,3 +1,3 @@
 pub mod distribution;
-mod error;
+pub mod error;
 mod image;

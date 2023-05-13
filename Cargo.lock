@@ -177,6 +177,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-recursion"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e97ce7de6cf12de5d7226c73f5ba9811622f4db3a5b91b55c53e987e5f91cba"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.5",
+]
+
+[[package]]
 name = "async-session"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5464,6 +5475,7 @@ name = "shuttle-deployer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-recursion",
  "axum",
  "base16ct 0.1.1",
  "bytes",
@@ -5477,13 +5489,15 @@ dependencies = [
  "oci-spec",
  "once_cell",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "sha2 0.10.6",
  "shuttle-common",
- "tar",
  "thiserror",
  "tokio",
+ "tokio-stream",
+ "tokio-tar",
  "tracing",
  "tracing-subscriber",
  "ureq",
@@ -6368,13 +6382,28 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.12"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fb52b74f05dbf495a8fba459fdc331812b96aa086d9eb78101fa0d4569c3313"
+checksum = "397c988d37662c7dda6d2208364a706264bf3d6138b11d436cbac0ad38832842"
 dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+]
+
+[[package]]
+name = "tokio-tar"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a50188549787c32c1c3d9c8c71ad7e003ccf2f102489c5a96e385c84760477f4"
+dependencies = [
+ "filetime",
+ "futures-core",
+ "libc",
+ "redox_syscall",
+ "tokio",
+ "tokio-stream",
+ "xattr",
 ]
 
 [[package]]

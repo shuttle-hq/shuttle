@@ -3,7 +3,8 @@ use super::{distribution::Name, distribution::Reference, error::Result};
 use digest::Digest;
 use oci_spec::image::{ImageIndex, ImageManifest};
 use std::fmt;
-use std::io::{Read, Seek};
+use tokio::io::AsyncReadExt;
+use tokio_stream::*;
 
 use url::Url;
 
@@ -99,78 +100,111 @@ impl ImageName {
 /// Handler for oci-archive format
 ///
 /// oci-archive consists of several manifests i.e. several container.
-pub struct Archive<'buf, W: Read + Seek> {
-    archive: Option<tar::Archive<&'buf mut W>>,
+pub struct Archive<'a> {
+    inner: &'a [u8],
+    archive: Option<tokio_tar::Archive<&'a [u8]>>,
 }
 
-impl<'buf, W: Read + Seek> Archive<'buf, W> {
-    pub fn new(buf: &'buf mut W) -> Self {
+impl<'a> Archive<'a> {
+    pub fn new(buf: &'a [u8]) -> Self {
         Self {
-            archive: Some(tar::Archive::new(buf)),
+            inner: buf,
+            archive: None,
         }
     }
 
-    pub fn entries(&mut self) -> Result<tar::Entries<&'buf mut W>> {
-        let raw = self
-            .archive
-            .take()
-            .expect("This never becomes None except in this function");
-        let inner = raw.into_inner();
-        inner.rewind()?;
-        self.archive = Some(tar::Archive::new(inner));
-        Ok(self
-            .archive
-            .as_mut()
-            .expect("This never becomes None except in this function")
-            .entries_with_seek()?)
-    }
-
-    pub fn get_manifests(&mut self) -> Result<Vec<(ImageName, ImageManifest)>> {
-        let index = self.get_index()?;
-        index
-            .manifests()
-            .iter()
-            .map(|manifest| {
-                let annotations = annotations::Annotations::from_map(
-                    manifest.annotations().clone().unwrap_or_default(),
-                )?;
-                let name = annotations
-                    .containerd_image_name
-                    .ok_or(Error::MissingManifestName)?;
-
-                let image_name = ImageName::parse(name.as_str())?;
-                let digest = Digest::new(manifest.digest())?;
-                let manifest = self.get_manifest(&digest)?;
-                Ok((image_name, manifest))
-            })
-            .collect()
-    }
-
-    pub fn get_index(&mut self) -> Result<ImageIndex> {
-        for entry in self.entries()? {
-            let mut entry = entry?;
-            if entry.path()?.as_os_str() == "index.json" {
-                let mut out = Vec::new();
-                entry.read_to_end(&mut out)?;
-                return Ok(ImageIndex::from_reader(&*out)?);
-            }
+    pub fn entries(&mut self) -> Result<tokio_tar::Entries<&'a [u8]>> {
+        // Calling entries must be preceded by a reseted archive, which is denoted
+        // by a non empty Option. Consumers of the archive, meaning scopes where
+        // `.entries()` is called will take out the value from the Option leaving
+        // it empty for the next `.entries()` calls.
+        if self.archive.is_some() {
+            let mut inner = self.archive.take().expect("to get the inner archive");
+            return Ok(inner.entries()?);
         }
-        Err(Error::MissingIndex)
+        Err(Error::ArchiveInner)
     }
 
-    pub fn get_blob(&mut self, digest: &Digest) -> Result<tar::Entry<&'buf mut W>> {
-        for entry in self.entries()? {
-            let entry = entry?;
-            if entry.path()? == digest.as_path() {
-                return Ok(entry);
-            }
+    pub async fn get_manifests(&mut self) -> Result<Vec<(ImageName, ImageManifest)>> {
+        let index = self.get_index().await?;
+        let manifests = index.manifests();
+        let mut results = Vec::new();
+        for manifest in manifests {
+            let annotations = annotations::Annotations::from_map(
+                manifest.annotations().clone().unwrap_or_default(),
+            )?;
+            let name = annotations
+                .containerd_image_name
+                .ok_or(Error::MissingManifestName)?;
+
+            let image_name = ImageName::parse(name.as_str())?;
+            let digest = Digest::new(manifest.digest())?;
+
+            let manifest = self.get_manifest(&digest).await?;
+            results.push((image_name, manifest));
+        }
+
+        Ok(results)
+    }
+
+    pub async fn get_index(&mut self) -> Result<ImageIndex> {
+        // We reinitialize each time the archive upon calling `.entries`.
+        // This is needed because we're doing nested `.entries` calls
+        // which require the reader offset to be set to 0:
+        // https://github.com/vorot93/tokio-tar/blob/master/src/archive.rs#L166
+        self.archive = Some(tokio_tar::Archive::new(self.inner));
+        let mut entries = self.entries()?;
+
+        let err_msg = "Couldn't find the index.json. The tarball might be corrupt.".to_string();
+        while let Some(entry) = entries.next().await {
+            match entry {
+                Ok(mut entry) => {
+                    if entry
+                        .path()
+                        .map_err(|err| Error::MissingIndex(err.to_string()))?
+                        .as_os_str()
+                        == "index.json"
+                    {
+                        let mut out = Vec::new();
+                        entry.read_to_end(&mut out).await?;
+                        return Ok(ImageIndex::from_reader(&*out)?);
+                    }
+                    Ok(())
+                }
+                Err(e) => Err(Error::MissingIndex(e.to_string())),
+            }?;
+        }
+
+        Err(Error::MissingIndex(err_msg))
+    }
+
+    pub async fn get_blob(&mut self, digest: &Digest) -> Result<Vec<u8>> {
+        // We reinitialize each time the archive upon calling `.entries`.
+        // This is needed because we're doing nested `.entries` calls
+        // which require the reader offset to be set to 0:
+        // https://github.com/vorot93/tokio-tar/blob/master/src/archive.rs#L166
+        self.archive = Some(tokio_tar::Archive::new(self.inner));
+        let mut entries = self.entries()?;
+
+        while let Some(entry) = entries.next().await {
+            match entry {
+                Ok(mut entry) => {
+                    if entry.path()? == digest.as_path() {
+                        let mut out = Vec::new();
+                        entry.read_to_end(&mut out).await?;
+                        return Ok(out);
+                    }
+                    Ok(())
+                }
+                Err(_) => Err(Error::UnknownDigest(digest.clone())),
+            }?;
         }
         Err(Error::UnknownDigest(digest.clone()))
     }
 
-    pub fn get_manifest(&mut self, digest: &Digest) -> Result<ImageManifest> {
-        let entry = self.get_blob(digest)?;
-        Ok(ImageManifest::from_reader(entry)?)
+    pub async fn get_manifest(&mut self, digest: &Digest) -> Result<ImageManifest> {
+        let blob = self.get_blob(digest).await?;
+        Ok(ImageManifest::from_reader(&*blob)?)
     }
 }
 

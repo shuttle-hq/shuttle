@@ -9,6 +9,7 @@ description = "Service to execute the deployment of projects on shuttle"
 
 [dependencies]
 anyhow = { workspace = true }
+async-recursion = "1.0.4"
 axum = { workspace = true, features = ["headers", "json", "query", "ws"] }
 base16ct = { version = "0.1.1", features = ["alloc"] }
 bytes = { workspace = true }
@@ -25,7 +26,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10.2"
 regex = "1.5.6"
-tar = { workspace = true }
+reqwest = { workspace = true , features = ["json"]}
+tokio-stream = "0.1.14"
+tokio-tar = "0.3.0"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }
 tracing = { workspace = true }

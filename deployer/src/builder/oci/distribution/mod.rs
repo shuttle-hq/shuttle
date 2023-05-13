@@ -12,31 +12,24 @@ pub use reference::Reference;
 use tracing::info;
 
 use super::{error::*, image::digest::Digest};
-use std::{fs, io::Read, path::Path};
 
 /// Push image to registry
-pub fn push_image(path: &Path) -> Result<()> {
-    if !path.is_file() {
-        return Err(Error::NotAFile(path.to_owned()));
-    }
-    let mut f = fs::File::open(path)?;
-    let mut ar = super::image::Archive::new(&mut f);
-    for (image_name, manifest) in ar.get_manifests()? {
-        info!("Push image: {}", image_name);
+pub async fn push_image(image: Vec<u8>) -> Result<()> {
+    let mut ar = super::image::Archive::new(&image);
+    let manifests = ar.get_manifests().await?;
+
+    for (image_name, manifest) in manifests {
+        info!(%image_name, "pushing image");
         let mut client = Client::new(image_name.registry_url()?, image_name.name)?;
         for layer in manifest.layers() {
             let digest = Digest::new(layer.digest())?;
-            let mut entry = ar.get_blob(&digest)?;
-            let mut buf = Vec::new();
-            entry.read_to_end(&mut buf)?;
-            client.push_blob(&buf)?;
+            client.push_blob(ar.get_blob(&digest).await?).await?;
         }
         let digest = Digest::new(manifest.config().digest())?;
-        let mut entry = ar.get_blob(&digest)?;
-        let mut buf = Vec::new();
-        entry.read_to_end(&mut buf)?;
-        client.push_blob(&buf)?;
-        client.push_manifest(&image_name.reference, &manifest)?;
+        client.push_blob(ar.get_blob(&digest).await?).await?;
+        client
+            .push_manifest(&image_name.reference, &manifest)
+            .await?;
     }
     Ok(())
 }

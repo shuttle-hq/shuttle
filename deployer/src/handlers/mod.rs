@@ -1,11 +1,9 @@
-use axum::handler::Handler;
 use std::path::PathBuf;
 
-use axum::{
-    middleware,
-    routing::{post, Router},
-    Extension,
-};
+use axum::extract::Extension;
+use axum::handler::Handler;
+use axum::middleware;
+use axum::routing::{post, Router};
 use http::Uri;
 use shuttle_common::{
     backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},

@@ -8,6 +8,7 @@ use shuttle_common::claims::Claim;
 use std::collections::HashMap;
 use tracing::{debug, error, instrument};
 use utoipa::OpenApi;
+use uuid::Uuid;
 
 use crate::{builder::MockedBuilder, handlers::error::Result};
 
@@ -45,10 +46,10 @@ pub async fn deploy_project(
     debug!("Received a total of {} bytes", data.len());
 
     debug!("Sending project source code to the builder.");
-    let deployment_id = mocked_builder.build_and_push_image(&data).await;
+    let _build_id = mocked_builder.build_and_push_image(&data).await?;
 
     // TODO: fetch image from the container registry and deploy it on k8s.
     // The deployment must be async and we should return a `deployment_id`,
     // which can be used by `cargo-shuttle` to connect to the a ws logs endpoint.
-    Ok(Json(deployment_id.to_string()))
+    Ok(Json(Uuid::new_v4().to_string()))
 }

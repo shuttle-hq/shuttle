@@ -17,6 +17,12 @@ pub enum Error {
     #[error("failed to drop role: {0}")]
     DeleteRole(String),
 
+    #[error("failed to create user: {0}")]
+    CreateUser(String),
+
+    #[error("failed to create s3 bucket: {0}")]
+    CreateBucket(String),
+
     #[error("failed to create DB: {0}")]
     CreateDB(String),
 

@@ -10,12 +10,15 @@ use shuttle_common::claims::{Claim, Scope};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
+    StorageResponse,
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
+use shuttle_proto::provisioner::{StorageDeletionResponse, StorageRequest};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info};
+use uuid::Uuid;
 
 mod args;
 mod error;
@@ -31,6 +34,8 @@ pub struct MyProvisioner {
     fqdn: String,
     internal_pg_address: String,
     internal_mongodb_address: String,
+    s3_client: aws_sdk_s3::Client,
+    iam_client: aws_sdk_iam::Client,
 }
 
 impl MyProvisioner {
@@ -63,6 +68,12 @@ impl MyProvisioner {
 
         let rds_client = aws_sdk_rds::Client::new(&aws_config);
 
+        let aws_config_s3: aws_config_s3::SdkConfig = aws_config_s3::from_env().load().await;
+
+        let s3_client = aws_sdk_s3::Client::new(&aws_config_s3);
+
+        let iam_client = aws_sdk_iam::Client::new(&aws_config_s3);
+
         Ok(Self {
             pool,
             rds_client,
@@ -70,6 +81,8 @@ impl MyProvisioner {
             fqdn,
             internal_pg_address,
             internal_mongodb_address,
+            s3_client,
+            iam_client,
         })
     }
 
@@ -402,6 +415,75 @@ impl MyProvisioner {
 
         Ok(DatabaseDeletionResponse {})
     }
+
+    async fn request_s3_bucket(&self, project_name: &str) -> Result<StorageResponse, Error> {
+        // create new bucket
+        let s3_client = &self.s3_client;
+        let unique_id = Uuid::new_v4();
+        let bucket_name = format!("{}-{}", project_name.to_lowercase(), unique_id);
+        info!("creating s3 bucket - {}", bucket_name);
+        s3_client
+            .create_bucket()
+            .bucket(bucket_name.as_str())
+            .send()
+            .await
+            .map_err(|e| Error::CreateBucket(e.into_service_error().to_string()))?;
+
+        // create new user for the project
+        let iam_client = &self.iam_client;
+        let username = format!("{}-user", project_name);
+        if iam_client
+            .get_user()
+            .user_name(&username)
+            .send()
+            .await
+            .is_err()
+        {
+            info!("creating user - {}", username);
+            iam_client
+                .create_user()
+                .user_name(&username)
+                .send()
+                .await
+                .map_err(|e| Error::CreateRole(e.into_service_error().to_string()))?;
+        }
+
+        create_and_attach_s3_policy(
+            iam_client,
+            username.as_str(),
+            project_name,
+            bucket_name.as_str(),
+        )
+        .await?;
+
+        // Get Access key
+        let access_key = iam_client
+            .create_access_key()
+            .user_name(&username)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::Plain(format!(
+                    "error while creating access key: {}",
+                    e.into_service_error().to_string()
+                ))
+            })
+            .map(|access_key_output| {
+                access_key_output
+                    .access_key()
+                    .ok_or_else(|| {
+                        Error::Plain("Error to fetch access key from response".to_string())
+                    })
+                    .cloned()
+            })??;
+
+        Ok(StorageResponse {
+            bucket_name,
+            username,
+            access_key: access_key.access_key_id().unwrap_or_default().to_string(),
+            secret_key: access_key.secret_access_key().unwrap().to_string(),
+        })
+    }
 }
 
 #[tonic::async_trait]
@@ -452,6 +534,24 @@ impl Provisioner for MyProvisioner {
         };
 
         Ok(Response::new(reply))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn provision_storage(
+        &self,
+        request: Request<StorageRequest>,
+    ) -> Result<Response<StorageResponse>, Status> {
+        let request = request.into_inner();
+        let reply = self.request_s3_bucket(&request.project_name).await?;
+        Ok(Response::new(reply))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn delete_storage(
+        &self,
+        _request: Request<StorageRequest>,
+    ) -> Result<Response<StorageDeletionResponse>, Status> {
+        unimplemented!();
     }
 }
 
@@ -517,4 +617,65 @@ fn engine_to_port(engine: aws_rds::Engine) -> String {
         aws_rds::Engine::Mariadb(_) => "3306".to_string(),
         aws_rds::Engine::Mysql(_) => "3306".to_string(),
     }
+}
+
+async fn create_and_attach_s3_policy(
+    iam_client: &aws_sdk_iam::Client,
+    user_name: &str,
+    project_name: &str,
+    bucket_name: &str,
+) -> Result<(), Error> {
+    // Create a policy to access bucket
+    let policy_name = format!("{}-policy", project_name);
+    let policy_document = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "AllowListBucket",
+                "Effect": "Allow",
+                "Action": "s3:ListBucket",
+                "Resource": format!("arn:aws:s3:::{}", bucket_name)
+            },
+            {
+                "Sid": "AllowPutObject",
+                "Effect": "Allow",
+                "Action": "s3:PutObject",
+                "Resource": format!("arn:aws:s3:::{}/", bucket_name)
+            }
+        ]
+    });
+
+    let policy = iam_client
+        .create_policy()
+        .policy_name(policy_name)
+        .policy_document(policy_document.to_string())
+        .send()
+        .await
+        .map_err(|e| Error::Plain(e.into_service_error().to_string()))
+        .map(
+            |policy_response: aws_sdk_iam::operation::create_policy::CreatePolicyOutput| {
+                policy_response.policy
+            },
+        )?;
+
+    let policy_arn = policy
+        .ok_or_else(|| Error::Plain("Failed to retrieve policy object".to_string()))?
+        .arn
+        .ok_or_else(|| Error::Plain("Policy ARN not found".to_string()))?;
+
+    // Attach Policy
+    iam_client
+        .attach_user_policy()
+        .user_name(user_name)
+        .policy_arn(policy_arn)
+        .send()
+        .await
+        .map_err(|e| {
+            Error::Plain(format!(
+                "got unexpected error while attaching policy: {}",
+                e.into_service_error().to_string()
+            ))
+        })?;
+
+    Ok(())
 }

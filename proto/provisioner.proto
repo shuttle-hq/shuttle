@@ -4,6 +4,8 @@ package provisioner;
 service Provisioner {
   rpc ProvisionDatabase(DatabaseRequest) returns (DatabaseResponse);
   rpc DeleteDatabase(DatabaseRequest) returns (DatabaseDeletionResponse);
+  rpc ProvisionStorage(StorageRequest) returns (StorageResponse);
+  rpc DeleteStorage(StorageRequest) returns (StorageDeletionResponse);
 }
 
 message DatabaseRequest {
@@ -42,3 +44,27 @@ message DatabaseResponse {
 }
 
 message DatabaseDeletionResponse {}
+
+message StorageRequest {
+  string project_name = 1;
+
+  oneof type {
+    Bucket Bucket = 10;
+  };
+}
+
+message Bucket {
+  oneof type {
+    string s3 = 1;
+  }
+}
+
+message StorageResponse {
+  string bucket_name = 1;
+  string username = 2;
+  string access_key = 3;
+  string secret_key = 4;
+}
+
+
+message StorageDeletionResponse {}

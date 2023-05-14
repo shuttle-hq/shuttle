@@ -77,6 +77,53 @@ pub struct DatabaseResponse {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DatabaseDeletionResponse {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StorageRequest {
+    #[prost(string, tag = "1")]
+    pub project_name: ::prost::alloc::string::String,
+    #[prost(oneof = "storage_request::Type", tags = "10")]
+    pub r#type: ::core::option::Option<storage_request::Type>,
+}
+/// Nested message and enum types in `StorageRequest`.
+pub mod storage_request {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Type {
+        #[prost(message, tag = "10")]
+        Bucket(super::Bucket),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Bucket {
+    #[prost(oneof = "bucket::Type", tags = "1")]
+    pub r#type: ::core::option::Option<bucket::Type>,
+}
+/// Nested message and enum types in `Bucket`.
+pub mod bucket {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Type {
+        #[prost(string, tag = "1")]
+        S3(::prost::alloc::string::String),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StorageResponse {
+    #[prost(string, tag = "1")]
+    pub bucket_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub username: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub access_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub secret_key: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StorageDeletionResponse {}
 /// Generated client implementations.
 pub mod provisioner_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
@@ -184,6 +231,44 @@ pub mod provisioner_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
+        pub async fn provision_storage(
+            &mut self,
+            request: impl tonic::IntoRequest<super::StorageRequest>,
+        ) -> Result<tonic::Response<super::StorageResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/provisioner.Provisioner/ProvisionStorage",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn delete_storage(
+            &mut self,
+            request: impl tonic::IntoRequest<super::StorageRequest>,
+        ) -> Result<tonic::Response<super::StorageDeletionResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/provisioner.Provisioner/DeleteStorage",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -201,6 +286,14 @@ pub mod provisioner_server {
             &self,
             request: tonic::Request<super::DatabaseRequest>,
         ) -> Result<tonic::Response<super::DatabaseDeletionResponse>, tonic::Status>;
+        async fn provision_storage(
+            &self,
+            request: tonic::Request<super::StorageRequest>,
+        ) -> Result<tonic::Response<super::StorageResponse>, tonic::Status>;
+        async fn delete_storage(
+            &self,
+            request: tonic::Request<super::StorageRequest>,
+        ) -> Result<tonic::Response<super::StorageDeletionResponse>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct ProvisionerServer<T: Provisioner> {
@@ -330,6 +423,86 @@ pub mod provisioner_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = DeleteDatabaseSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/provisioner.Provisioner/ProvisionStorage" => {
+                    #[allow(non_camel_case_types)]
+                    struct ProvisionStorageSvc<T: Provisioner>(pub Arc<T>);
+                    impl<
+                        T: Provisioner,
+                    > tonic::server::UnaryService<super::StorageRequest>
+                    for ProvisionStorageSvc<T> {
+                        type Response = super::StorageResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::StorageRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).provision_storage(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = ProvisionStorageSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/provisioner.Provisioner/DeleteStorage" => {
+                    #[allow(non_camel_case_types)]
+                    struct DeleteStorageSvc<T: Provisioner>(pub Arc<T>);
+                    impl<
+                        T: Provisioner,
+                    > tonic::server::UnaryService<super::StorageRequest>
+                    for DeleteStorageSvc<T> {
+                        type Response = super::StorageDeletionResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::StorageRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).delete_storage(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = DeleteStorageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

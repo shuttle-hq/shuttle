@@ -608,6 +608,14 @@ impl Shuttle {
             addr
         );
 
+        println!("
+    To host the application on Shuttle run
+       `cargo shuttle project start`
+    if project environment is not created previously and then run
+       `cargo shuttle deploy`
+    Your application will be hosted at https://{}.shuttleapp.rs
+", service_name);
+
         let start_request = StartRequest {
             ip: addr.to_string(),
         };

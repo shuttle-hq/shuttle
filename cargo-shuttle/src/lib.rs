@@ -899,33 +899,54 @@ impl Shuttle {
             .get_logs_ws(self.ctx.project_name(), &deployment.id)
             .await?;
 
-        while let Some(Ok(msg)) = stream.next().await {
-            if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                let log_item: shuttle_common::LogItem =
-                    serde_json::from_str(&line).expect("to parse log line");
+        let mut last_state: Option<shuttle_common::deployment::State> = None;
 
-                match log_item.state {
-                    shuttle_common::deployment::State::Queued
-                    | shuttle_common::deployment::State::Building
-                    | shuttle_common::deployment::State::Built
-                    | shuttle_common::deployment::State::Loading => {
-                        println!("{log_item}");
-                    }
-                    shuttle_common::deployment::State::Crashed => {
-                        println!();
-                        println!("{}", "Deployment crashed".red());
-                        println!("Run the following for more details");
-                        println!();
-                        print!("cargo shuttle logs {}", deployment.id);
-                        println!();
+        loop {
+            let message = stream.next().await;
+            if let Some(Ok(msg)) = message {
+                if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
+                    let log_item: shuttle_common::LogItem =
+                        serde_json::from_str(&line).expect("to parse log line");
 
-                        return Ok(CommandOutcome::DeploymentFailure);
-                    }
-                    shuttle_common::deployment::State::Running
-                    | shuttle_common::deployment::State::Completed
-                    | shuttle_common::deployment::State::Stopped
-                    | shuttle_common::deployment::State::Unknown => break,
+                    match log_item.state.clone() {
+                        shuttle_common::deployment::State::Queued
+                        | shuttle_common::deployment::State::Building
+                        | shuttle_common::deployment::State::Built
+                        | shuttle_common::deployment::State::Loading => {
+                            last_state = Some(log_item.state.clone());
+                            println!("{log_item}");
+                        }
+                        shuttle_common::deployment::State::Crashed => {
+                            println!();
+                            println!("{}", "Deployment crashed".red());
+                            println!();
+                            println!("Run the following for more details");
+                            println!();
+                            print!("cargo shuttle logs {}", &deployment.id);
+                            println!();
+                            if last_state.is_none() {
+                                println!("Note: Deploy failed immediately");
+                            };
+
+                            return Ok(CommandOutcome::DeploymentFailure);
+                        }
+                        shuttle_common::deployment::State::Running
+                        | shuttle_common::deployment::State::Completed
+                        | shuttle_common::deployment::State::Stopped
+                        | shuttle_common::deployment::State::Unknown => {
+                            last_state = Some(log_item.state);
+                            break;
+                        }
+                    };
                 }
+            } else {
+                println!("Reconnecting websockets logging");
+                // A wait time short enough for not much state to have changed, long enough that
+                // the terminal isn't completely spammed
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                stream = client
+                    .get_logs_ws(self.ctx.project_name(), &deployment.id)
+                    .await?;
             }
         }
 
@@ -949,7 +970,26 @@ impl Shuttle {
                 _ => CommandOutcome::Ok,
             })
         } else {
-            println!("Deployment has not entered the running state");
+            println!("{}", "Deployment has not entered the running state".red());
+            println!();
+            match last_state {
+                Some(shuttle_common::deployment::State::Stopped) => {
+                    println!("State: Stopped - Deployment was running, but has been stopped by the user.")
+                }
+                Some(shuttle_common::deployment::State::Completed) => {
+                    println!("State: Completed - Deployment was running, but stopped running all by itself.")
+                }
+                Some(shuttle_common::deployment::State::Unknown) => {
+                    println!("State: Unknown - This may be because deployment was in an unknown state. We never expect this state and entering this state should be considered a bug.")
+                }
+                _ => unreachable!(),
+            }
+
+            println!();
+            println!("Run the following for more details");
+            println!();
+            println!("cargo shuttle logs {}", &deployment.id);
+            println!();
 
             Ok(CommandOutcome::DeploymentFailure)
         }

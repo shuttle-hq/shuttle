@@ -111,17 +111,13 @@ impl ScopeBuilder {
     /// Extend the current scopes with admin scopes.
     pub fn with_admin(mut self) -> Self {
         self.0.extend(vec![
-            Scope::Deployment,
-            Scope::DeploymentPush,
-            Scope::Logs,
-            Scope::Service,
-            Scope::ServiceCreate,
-            Scope::Project,
-            Scope::ProjectCreate,
-            Scope::Resources,
-            Scope::ResourcesWrite,
-            Scope::Secret,
-            Scope::SecretWrite,
+            Scope::User,
+            Scope::UserCreate,
+            Scope::AcmeCreate,
+            Scope::CustomDomainCreate,
+            Scope::CustomDomainCertificateRenew,
+            Scope::GatewayCertificateRenew,
+            Scope::Admin,
         ]);
         self
     }

@@ -236,6 +236,8 @@ impl Shuttle {
 
             self.load_project(&mut project_args)?;
             self.project_create(&self.client()?, IDLE_MINUTES).await?;
+        } else {
+            println!("Run `cargo shuttle project start` to create project environment on Shuttle");
         }
 
         Ok(())

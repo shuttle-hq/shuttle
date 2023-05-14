@@ -1036,6 +1036,7 @@ impl Shuttle {
         }
         progress_bar.finish_and_clear();
         println!("{project}");
+        println!("Run `cargo shuttle deploy` to deploy the project");
         Ok(())
     }
 

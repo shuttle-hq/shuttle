@@ -4,6 +4,7 @@ pub mod config;
 mod init;
 mod provisioner_server;
 
+use args::LogoutArgs;
 use indicatif::ProgressBar;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::deployment::get_deployments_table;
@@ -29,7 +30,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
 use cargo_metadata::Message;
 use clap::CommandFactory;
@@ -57,6 +58,8 @@ use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+const SHUTTLE_LOGIN_URL: &str = "https://shuttle.rs/login";
+const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -70,6 +73,8 @@ impl Shuttle {
 
     pub async fn run(mut self, mut args: Args) -> Result<CommandOutcome> {
         trace!("running local client");
+
+        // All commands that need to know which project is being handled
         if matches!(
             args.cmd,
             Command::Deploy(..)
@@ -98,11 +103,11 @@ impl Shuttle {
             Command::Init(init_args) => self.init(init_args, args.project_args).await,
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
-            Command::Logout => self.logout().await,
+            Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback().await,
             Command::Run(run_args) => self.local_run(run_args).await,
             Command::Deploy(deploy_args) => {
-                return self.deploy(deploy_args, &self.client()?).await;
+                return self.deploy(&self.client()?, deploy_args).await;
             }
             Command::Status => self.status(&self.client()?).await,
             Command::Logs { id, latest, follow } => {
@@ -249,10 +254,9 @@ impl Shuttle {
 
     /// Provide feedback on GitHub.
     async fn feedback(&self) -> Result<()> {
-        let url = "https://github.com/shuttle-hq/shuttle/issues/new";
-        let _ = webbrowser::open(url);
+        let _ = webbrowser::open(SHUTTLE_GH_ISSUE_URL);
+        println!("If your browser did not open automatically, go to {SHUTTLE_GH_ISSUE_URL}");
 
-        println!("\nIf your browser did not open automatically, go to {url}");
         Ok(())
     }
 
@@ -261,10 +265,8 @@ impl Shuttle {
         let api_key_str = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
-                let url = "https://shuttle.rs/login";
-                let _ = webbrowser::open(url);
-
-                println!("If your browser did not automatically open, go to {url}");
+                let _ = webbrowser::open(SHUTTLE_LOGIN_URL);
+                println!("If your browser did not automatically open, go to {SHUTTLE_LOGIN_URL}");
 
                 Password::with_theme(&ColorfulTheme::default())
                     .with_prompt("API key")
@@ -280,11 +282,26 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn logout(&mut self) -> Result<()> {
+    async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {
+        if logout_args.reset_api_key {
+            self.reset_api_key(&self.client()?).await?;
+            println!("Successfully reset the API key.");
+            println!(" -> Go to {SHUTTLE_LOGIN_URL} to get a new one.\n");
+        }
         self.ctx.clear_api_key()?;
-
         println!("Successfully logged out of shuttle.");
+
         Ok(())
+    }
+
+    async fn reset_api_key(&self, client: &Client) -> Result<()> {
+        client.reset_api_key().await.and_then(|res| {
+            if res.status().is_success() {
+                Ok(())
+            } else {
+                Err(anyhow!("Resetting API key failed."))
+            }
+        })
     }
 
     async fn stop(&self, client: &Client) -> Result<()> {
@@ -867,7 +884,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deploy(&self, args: DeployArgs, client: &Client) -> Result<CommandOutcome> {
+    async fn deploy(&self, client: &Client, args: DeployArgs) -> Result<CommandOutcome> {
         if !args.allow_dirty {
             self.is_dirty()?;
         }

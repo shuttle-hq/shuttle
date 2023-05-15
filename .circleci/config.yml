@@ -381,10 +381,10 @@ jobs:
         default: shuttle.internal
       postgres-password:
         description: "Shuttle shared postgres password"
-        type: env_var_name
+        type: string
       mongodb-password:
         description: "Shuttle shared mongodb password"
-        type: env_var_name
+        type: string
       production:
         description: "Push and deploy to production"
         type: boolean

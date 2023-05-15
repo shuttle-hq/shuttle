@@ -543,6 +543,8 @@ impl Provisioner for MyProvisioner {
         &self,
         request: Request<StorageRequest>,
     ) -> Result<Response<StorageResponse>, Status> {
+        verify_claim(&request)?;
+        
         let request = request.into_inner();
         let reply = self.request_s3_bucket(&request.project_name).await?;
         Ok(Response::new(reply))

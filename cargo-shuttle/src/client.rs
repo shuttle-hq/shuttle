@@ -10,6 +10,7 @@ use shuttle_common::models::deployment::DeploymentRequest;
 use shuttle_common::models::{deployment, project, secret, service, ToJson};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{resource, ApiKey, ApiUrl, LogItem, VersionInfo};
+use shuttle_common::secrets::Secret;
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
@@ -19,7 +20,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct Client {
     api_url: ApiUrl,
-    api_key: Option<ApiKey>,
+    api_key: Option<Secret<ApiKey>>,
     client: reqwest::Client,
     retry_client: ClientWithMiddleware,
 }
@@ -41,7 +42,7 @@ impl Client {
     }
 
     pub fn set_api_key(&mut self, api_key: ApiKey) {
-        self.api_key = Some(api_key);
+        self.api_key = Some(Secret::new(api_key));
     }
 
     pub async fn get_api_versions(&self) -> Result<VersionInfo> {
@@ -279,7 +280,7 @@ impl Client {
         let mut request = url.into_client_request()?;
 
         if let Some(ref api_key) = self.api_key {
-            let auth_header = Authorization::bearer(api_key.as_ref())?;
+            let auth_header = Authorization::bearer(api_key.expose().as_ref())?;
             request.headers_mut().typed_insert(auth_header);
         }
 
@@ -361,7 +362,7 @@ impl Client {
 
     fn set_builder_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         if let Some(ref api_key) = self.api_key {
-            builder.bearer_auth(api_key.as_ref())
+            builder.bearer_auth(api_key.expose().as_ref())
         } else {
             builder
         }

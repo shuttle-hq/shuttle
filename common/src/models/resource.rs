@@ -9,7 +9,7 @@ use crossterm::style::Stylize;
 
 use crate::{
     resource::{Response, Type},
-    DbOutput, SecretStore,
+    secrets::SecretStore,
 };
 
 pub fn get_resources_table(resources: &Vec<Response>, service_name: &str, raw: bool) -> String {
@@ -59,7 +59,7 @@ pub fn get_resources_table(resources: &Vec<Response>, service_name: &str, raw: b
             output.push(get_custom_resources_table(custom, service_name, raw));
         };
 
-        output.join("\n")
+       output.join("\n")
     }
 }
 
@@ -72,7 +72,6 @@ fn get_databases_table(databases: &Vec<&Response>, service_name: &str, raw: bool
             .set_content_arrangement(ContentArrangement::Disabled)
             .set_header(vec![
                 Cell::new("Type").set_alignment(CellAlignment::Left),
-                Cell::new("Connection string").set_alignment(CellAlignment::Left),
             ]);
     } else {
         table
@@ -83,20 +82,11 @@ fn get_databases_table(databases: &Vec<&Response>, service_name: &str, raw: bool
                 Cell::new("Type")
                     .set_alignment(CellAlignment::Center)
                     .add_attribute(Attribute::Bold),
-                Cell::new("Connection string")
-                    .set_alignment(CellAlignment::Center)
-                    .add_attribute(Attribute::Bold),
             ]);
     }
 
     for database in databases {
-        let info = serde_json::from_value::<DbOutput>(database.data.clone()).unwrap();
-        let connection_string = match info {
-            DbOutput::Local(local_uri) => local_uri.clone(),
-            DbOutput::Info(info) => info.connection_string_public(),
-        };
-
-        table.add_row(vec![database.r#type.to_string(), connection_string]);
+        table.add_row(vec![database.r#type.to_string()]);
     }
 
     format!("These databases are linked to {service_name}\n{table}\n")

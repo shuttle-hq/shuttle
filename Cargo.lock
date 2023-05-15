@@ -5813,6 +5813,7 @@ dependencies = [
  "ttl_cache",
  "utoipa",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]

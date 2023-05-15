@@ -10,7 +10,6 @@ use std::{
 
 use anyhow::Context;
 use async_trait::async_trait;
-use clap::Parser;
 use core::future::Future;
 use shuttle_common::{
     backends::{
@@ -51,7 +50,7 @@ use self::args::Args;
 mod args;
 
 pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
-    let args = Args::parse();
+    let args = Args::parse().expect("could not parse arguments");
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
     let provisioner_address = args.provisioner_address;

@@ -16,6 +16,7 @@ use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use serde_json::json;
 use shuttle_common::claims::{Claim, Scope};
+use shuttle_proto::provisioner::{DynamoDbResponse, DynamoDbRequest};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
@@ -269,17 +270,6 @@ impl MyProvisioner {
             "Version": "2012-10-17",
             "Statement": [
                 {
-                    "Sid": "ListAndDescribe",
-                    "Effect": "Allow",
-                    "Action": [
-                        "dynamodb:List*",
-                        "dynamodb:DescribeReservedCapacity*",
-                        "dynamodb:DescribeLimits",
-                        "dynamodb:DescribeTimeToLive"
-                    ],
-                    "Resource": "*"
-                },
-                {
                     "Sid": "SpecificTable",
                     "Effect": "Allow",
                     "Action": [
@@ -293,7 +283,11 @@ impl MyProvisioner {
                         "dynamodb:CreateTable",
                         "dynamodb:Delete*",
                         "dynamodb:Update*",
-                        "dynamodb:PutItem"
+                        "dynamodb:PutItem",
+                        "dynamodb:List*",
+                        "dynamodb:DescribeReservedCapacity*",
+                        "dynamodb:DescribeLimits",
+                        "dynamodb:DescribeTimeToLive"
                     ],
                     "Resource": table_name
                 }
@@ -372,6 +366,10 @@ impl MyProvisioner {
         Ok(())
     }
 
+    async fn get_iam_identity_keys(&self, prefix: &str) -> Result<(String, String), Error> {
+        Ok(("todo".to_string(), "todo".to_string()))
+    }
+
     async fn delete_iam_identity(&self, prefix: &str) -> Result<DeleteUserOutput, Error> {
         let user = self
             .iam_client
@@ -407,7 +405,7 @@ impl MyProvisioner {
         Ok(())
     }
 
-    pub async fn request_dynamodb(&self, project_name: &str) -> Result<(), Error> {
+    pub async fn request_dynamodb(&self, project_name: &str) -> Result<DynamoDbResponse, Error> {
         let prefix = self.get_prefix(&project_name).await;
 
         self.create_dynamodb_policy(&prefix).await.unwrap();
@@ -415,6 +413,10 @@ impl MyProvisioner {
         self.create_iam_identity(&prefix).await.unwrap();
 
         self.attach_user_policy(&prefix).await.unwrap();
+
+        let (aws_access_key_id, aws_secret_access_key)= self.get_iam_identity_keys(&prefix).await.unwrap();
+
+        let aws_default_region = self.dynamodb_client.conf().region().unwrap().to_string();
 
         //TODO:
         //store aws credentials in secrets
@@ -428,7 +430,12 @@ impl MyProvisioner {
         //NOTE: for future, maybe allow multiple projects to access same database (for creating, just use username as prefix, for deleting will need to query whether projects exist)
 
         // let client = &self.dynamodb_client;
-        Ok(())
+        Ok(DynamoDbResponse {
+            prefix,
+            aws_access_key_id,
+            aws_secret_access_key,
+            aws_default_region
+        })
     }
 
     async fn delete_dynamodb(&self, project_name: &str) -> Result<DatabaseDeletionResponse, Error> {
@@ -634,9 +641,6 @@ impl Provisioner for MyProvisioner {
                 self.request_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
             }
-            DbType::DynamoDb(_) => {
-                todo!()
-            }
         };
 
         Ok(Response::new(reply))
@@ -661,8 +665,21 @@ impl Provisioner for MyProvisioner {
                 self.delete_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
             }
-            DbType::DynamoDb(_) => self.delete_dynamodb(&request.project_name).await?,
         };
+
+        Ok(Response::new(reply))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn provision_dynamo_db(
+        &self,
+        request: Request<DynamoDbRequest>,
+    ) -> Result<Response<DynamoDbResponse>, Status> {
+        verify_claim(&request)?;
+
+        let request = request.into_inner();
+
+        let reply = self.request_dynamodb(&request.project_name).await?;
 
         Ok(Response::new(reply))
     }

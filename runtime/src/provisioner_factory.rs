@@ -6,8 +6,9 @@ use shuttle_common::{
     database,
     storage_manager::StorageManager,
     DatabaseReadyInfo,
+    DynamoDbReadyInfo
 };
-use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
+use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest, DynamoDbResponse, DynamoDbRequest};
 use shuttle_service::{Environment, Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::info;
@@ -44,6 +45,20 @@ impl ProvisionerFactory {
 
 #[async_trait]
 impl Factory for ProvisionerFactory {
+    async fn get_dynamodb_connection(&mut self) -> Result<DynamoDbReadyInfo, shuttle_service::Error> {
+        let mut request = Request::new(DynamoDbRequest { project_name: self.service_name.to_string() });
+
+        let response = self
+            .provisioner_client
+            .provision_dynamo_db(request)
+            .await
+            .map_err(shuttle_service::error::CustomError::new)?
+            .into_inner();
+
+        let info: DynamoDbReadyInfo = response.into();
+
+        Ok(info)
+    }
     async fn get_db_connection(
         &mut self,
         db_type: database::Type,

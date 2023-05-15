@@ -17,7 +17,7 @@ use portpicker::pick_unused_port;
 use shuttle_common::database::{AwsRdsEngine, SharedEngine};
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
-    DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+    DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbRequest, DynamoDbResponse,
 };
 use shuttle_service::database::Type;
 use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
@@ -273,6 +273,13 @@ impl Provisioner for LocalProvisioner {
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("local runner should not try to delete databases");
     }
+
+    async fn provision_dynamo_db(
+        &self,
+        request: Request<DynamoDbRequest>,
+    ) -> Result<Response<DynamoDbResponse>, Status> {
+        todo!() // possibly using AWS' local dynamodb docker image
+    }
 }
 
 fn print_layers(layers: &Vec<CreateImageInfo>) {
@@ -410,6 +417,5 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
                 "show databases;".to_string(),
             ],
         },
-        Type::DynamoDB => todo!()
     }
 }

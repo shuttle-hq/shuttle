@@ -179,6 +179,30 @@ impl DatabaseReadyInfo {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamoDbReadyInfo {
+    pub prefix: String,
+    pub aws_access_key_id: String,
+    pub aws_secret_access_key: String,
+    pub aws_default_region: String,
+}
+
+impl DynamoDbReadyInfo {
+    pub fn new(
+        prefix: String,
+        aws_access_key_id: String,
+        aws_secret_access_key: String,
+        aws_default_region: String
+    ) -> Self {
+        Self {
+            prefix,
+            aws_access_key_id,
+            aws_secret_access_key,
+            aws_default_region
+        }
+    }
+}
+
 /// Store that holds all the secrets available to a deployment
 #[derive(Deserialize, Serialize, Clone)]
 pub struct SecretStore {

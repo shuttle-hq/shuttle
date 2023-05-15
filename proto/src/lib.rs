@@ -7,7 +7,7 @@ pub mod provisioner {
 
     use shuttle_common::{
         database::{self, AwsRdsEngine, SharedEngine},
-        DatabaseReadyInfo,
+        DatabaseReadyInfo, DynamoDbReadyInfo,
     };
 
     include!("generated/provisioner.rs");
@@ -22,6 +22,17 @@ pub mod provisioner {
                 response.port,
                 response.address_private,
                 response.address_public,
+            )
+        }
+    }
+
+    impl From<DynamoDbResponse> for DynamoDbReadyInfo {
+        fn from(response: DynamoDbResponse) -> Self {
+            DynamoDbReadyInfo::new(
+                response.prefix,
+                response.aws_access_key_id,
+                response.aws_secret_access_key,
+                response.aws_default_region
             )
         }
     }
@@ -49,7 +60,6 @@ pub mod provisioner {
                         engine: Some(engine),
                     })
                 }
-                database::Type::DynamoDB => database_request::DbType::DynamoDb(DynamoDb {})
             }
         }
     }
@@ -80,7 +90,6 @@ pub mod provisioner {
                 },
                 database_request::DbType::Shared(Shared { engine: None })
                 | database_request::DbType::AwsRds(AwsRds { engine: None }) => None,
-                database_request::DbType::DynamoDb(DynamoDb {}) => Some(database::Type::DynamoDB)
             }
         }
     }

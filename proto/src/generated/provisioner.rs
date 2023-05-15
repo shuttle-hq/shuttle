@@ -3,7 +3,7 @@
 pub struct DatabaseRequest {
     #[prost(string, tag = "1")]
     pub project_name: ::prost::alloc::string::String,
-    #[prost(oneof = "database_request::DbType", tags = "10, 11, 12")]
+    #[prost(oneof = "database_request::DbType", tags = "10, 11")]
     pub db_type: ::core::option::Option<database_request::DbType>,
 }
 /// Nested message and enum types in `DatabaseRequest`.
@@ -15,8 +15,6 @@ pub mod database_request {
         Shared(super::Shared),
         #[prost(message, tag = "11")]
         AwsRds(super::AwsRds),
-        #[prost(message, tag = "12")]
-        DynamoDb(super::DynamoDb),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -63,6 +61,12 @@ pub struct RdsConfig {}
 pub struct DynamoDb {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DynamoDbRequest {
+    #[prost(string, tag = "1")]
+    pub project_name: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DatabaseResponse {
     #[prost(string, tag = "1")]
     pub username: ::prost::alloc::string::String,
@@ -82,6 +86,18 @@ pub struct DatabaseResponse {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DatabaseDeletionResponse {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DynamoDbResponse {
+    #[prost(string, tag = "1")]
+    pub prefix: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub aws_access_key_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub aws_secret_access_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub aws_default_region: ::prost::alloc::string::String,
+}
 /// Generated client implementations.
 pub mod provisioner_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
@@ -170,6 +186,25 @@ pub mod provisioner_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
+        pub async fn provision_dynamo_db(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DynamoDbRequest>,
+        ) -> Result<tonic::Response<super::DynamoDbResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/provisioner.Provisioner/ProvisionDynamoDB",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
         pub async fn delete_database(
             &mut self,
             request: impl tonic::IntoRequest<super::DatabaseRequest>,
@@ -202,6 +237,10 @@ pub mod provisioner_server {
             &self,
             request: tonic::Request<super::DatabaseRequest>,
         ) -> Result<tonic::Response<super::DatabaseResponse>, tonic::Status>;
+        async fn provision_dynamo_db(
+            &self,
+            request: tonic::Request<super::DynamoDbRequest>,
+        ) -> Result<tonic::Response<super::DynamoDbResponse>, tonic::Status>;
         async fn delete_database(
             &self,
             request: tonic::Request<super::DatabaseRequest>,
@@ -295,6 +334,46 @@ pub mod provisioner_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = ProvisionDatabaseSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/provisioner.Provisioner/ProvisionDynamoDB" => {
+                    #[allow(non_camel_case_types)]
+                    struct ProvisionDynamoDBSvc<T: Provisioner>(pub Arc<T>);
+                    impl<
+                        T: Provisioner,
+                    > tonic::server::UnaryService<super::DynamoDbRequest>
+                    for ProvisionDynamoDBSvc<T> {
+                        type Response = super::DynamoDbResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DynamoDbRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).provision_dynamo_db(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = ProvisionDynamoDBSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

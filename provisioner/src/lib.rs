@@ -6,14 +6,16 @@ use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
     Client,
 };
+use aws_sdk_s3::types::BucketAccelerateStatus;
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_common::claims::{Claim, Scope};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
+use shuttle_proto::provisioner::storage_request::StorageType;
 use shuttle_proto::provisioner::{
-    aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
-    StorageResponse,
+    aws_rds, database_request::DbType, shared, AwsRds, Bucket, DatabaseRequest, DatabaseResponse,
+    Shared, StorageResponse,
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
 use shuttle_proto::provisioner::{StorageDeletionResponse, StorageRequest};
@@ -544,9 +546,11 @@ impl Provisioner for MyProvisioner {
         request: Request<StorageRequest>,
     ) -> Result<Response<StorageResponse>, Status> {
         verify_claim(&request)?;
-        
+
         let request = request.into_inner();
-        let reply = self.request_s3_bucket(&request.project_name).await?;
+        let reply = match request.storage_type.unwrap() {
+            StorageType::Bucket(Bucket {}) => self.request_s3_bucket(&request.project_name).await?,
+        };
         Ok(Response::new(reply))
     }
 

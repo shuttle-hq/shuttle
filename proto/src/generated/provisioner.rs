@@ -82,33 +82,21 @@ pub struct DatabaseDeletionResponse {}
 pub struct StorageRequest {
     #[prost(string, tag = "1")]
     pub project_name: ::prost::alloc::string::String,
-    #[prost(oneof = "storage_request::Type", tags = "10")]
-    pub r#type: ::core::option::Option<storage_request::Type>,
+    #[prost(oneof = "storage_request::StorageType", tags = "10")]
+    pub storage_type: ::core::option::Option<storage_request::StorageType>,
 }
 /// Nested message and enum types in `StorageRequest`.
 pub mod storage_request {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Type {
+    pub enum StorageType {
         #[prost(message, tag = "10")]
         Bucket(super::Bucket),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Bucket {
-    #[prost(oneof = "bucket::Type", tags = "1")]
-    pub r#type: ::core::option::Option<bucket::Type>,
-}
-/// Nested message and enum types in `Bucket`.
-pub mod bucket {
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Type {
-        #[prost(string, tag = "1")]
-        S3(::prost::alloc::string::String),
-    }
-}
+pub struct Bucket {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StorageResponse {

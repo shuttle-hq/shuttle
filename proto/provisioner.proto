@@ -48,16 +48,12 @@ message DatabaseDeletionResponse {}
 message StorageRequest {
   string project_name = 1;
 
-  oneof type {
+  oneof storage_type {
     Bucket Bucket = 10;
   };
 }
 
-message Bucket {
-  oneof type {
-    string s3 = 1;
-  }
-}
+message Bucket {}
 
 message StorageResponse {
   string bucket_name = 1;

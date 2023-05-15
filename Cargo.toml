@@ -56,6 +56,8 @@ headers = "0.3.8"
 home = "0.5.4"
 http = "0.2.8"
 hyper = "0.14.23"
+# not great, but waiting for WebSocket changes to be merged
+hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "bug/host_header" }
 jsonwebtoken = { version = "8.2.0" }
 once_cell = "1.16.0"
 opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }

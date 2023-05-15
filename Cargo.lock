@@ -2863,17 +2863,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-reverse-proxy"
-version = "0.5.2-dev"
-source = "git+https://github.com/chesedo/hyper-reverse-proxy?branch=master#e73a76600ce9e51e962de5266b03be596e6c1d50"
-dependencies = [
- "hyper",
- "lazy_static",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "hyper-rustls"
 version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5298,7 +5287,7 @@ dependencies = [
  "hex 0.4.3",
  "home",
  "hyper",
- "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=master)",
+ "hyper-reverse-proxy",
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",
@@ -5345,7 +5334,7 @@ dependencies = [
  "futures",
  "http",
  "hyper",
- "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=bug/host_header)",
+ "hyper-reverse-proxy",
  "instant-acme",
  "jsonwebtoken",
  "lazy_static",

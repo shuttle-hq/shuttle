@@ -423,15 +423,15 @@ jobs:
       ssh-fingerprint:
         description: "SSH-key fingerprint"
         type: string
-        default: "6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78"
+        default: 6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78
       ssh-config-script:
         description: "SSH config script to use."
         type: string
-        default: "unstable-ssh-config.sh"
+        default: unstable-ssh-config.sh
       ssh-host:
         description: "Shuttle SSH host"
         type: string
-        default: "shuttle.internal"
+        default: shuttle.internal
       postgres-password:
         description: "Shuttle shared postgres password"
         type: string
@@ -757,7 +757,7 @@ workflows:
           #   branches:
           #     only: main
       - build-and-push:
-          name: build-and-push-unstable
+          name: Build and push to unstable
           aws-access-key-id: AWS_ACCESS_KEY_ID
           aws-secret-access-key: AWS_SECRET_ACCESS_KEY
           production: false
@@ -766,22 +766,19 @@ workflows:
           # filters:
           #   branches:
           #     only: main
-      # - deploy-unstable:
-      #     requires:
-      #       - build-and-push-unstable
       - deploy-images:
           name: Deploy images to unstable
           postgres-password: DEV_POSTGRES_PASSWORD
           mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
           # requires:
-          #   - build-and-push-unstable
+          #   - Build and push to unstable
       - approve-push-production:
           type: approval
           # filters:
           #   branches:
           #     only: production
       - build-and-push:
-          name: build-and-push-production
+          name: Build and push to production
           aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
           aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
           production: true

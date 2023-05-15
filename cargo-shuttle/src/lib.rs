@@ -967,10 +967,6 @@ impl Shuttle {
             println!("{}", "Deployment has not entered the running state".red());
             println!();
 
-            let deployment = client
-                .get_deployment_details(self.ctx.project_name(), &deployment.id)
-                .await?;
-
             match deployment.state {
                 shuttle_common::deployment::State::Stopped => {
                     println!("State: Stopped - Deployment was running, but has been stopped by the user.")

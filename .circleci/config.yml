@@ -715,8 +715,8 @@ workflows:
           #     only: main
       - deploy-images:
           name: Deploy images to unstable
-          postgres-password: DEV_POSTGRES_PASSWORD
-          mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
+          postgres-password: $DEV_POSTGRES_PASSWORD
+          mongodb-password: $DEV_MONGO_INITDB_ROOT_PASSWORD
           # requires:
           #   - build-and-push-unstable
       - approve-push-production:

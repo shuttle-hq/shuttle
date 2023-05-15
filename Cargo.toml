@@ -11,6 +11,7 @@ members = [
   "provisioner",
   "runtime",
   "service",
+  "resources/dynamodb",
 ]
 
 exclude = [

@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-dynamodb"
-version = "0.1.0"
+version = "0.16.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.56"
 serde = { version = "1.0.148", features = ["derive"] }
-shuttle-service = { git = "https://github.com/mikegin/shuttle.git", branch = "feature/dynamodb-resource", path = "../../service", version = "0.16.0", default-features = false }
+shuttle-service = { git = "https://github.com/mikegin/shuttle.git", branch = "feature/dynamodb-resource", version = "0.16.0", default-features = false }

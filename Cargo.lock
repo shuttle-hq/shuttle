@@ -1212,9 +1212,9 @@ dependencies = [
  "semver 1.0.17",
  "serde",
  "serde_json",
- "shuttle-common",
+ "shuttle-common 0.16.0",
  "shuttle-proto",
- "shuttle-service",
+ "shuttle-service 0.16.0",
  "sqlx",
  "strum",
  "tar",
@@ -5250,7 +5250,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "shuttle-common",
+ "shuttle-common 0.16.0",
  "tokio",
  "toml 0.5.11",
  "tracing",
@@ -5275,7 +5275,7 @@ dependencies = [
  "ring",
  "serde",
  "serde_json",
- "shuttle-common",
+ "shuttle-common 0.16.0",
  "sqlx",
  "strum",
  "thiserror",
@@ -5348,6 +5348,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-common"
+version = "0.16.0"
+source = "git+https://github.com/mikegin/shuttle.git?branch=feature/dynamodb-resource#0b947d7b08c298cdcfb353e54a53d1bb8a81a1a1"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "once_cell",
+ "rustrict",
+ "serde",
+ "serde_json",
+ "strum",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "shuttle-deployer"
 version = "0.16.0"
 dependencies = [
@@ -5376,9 +5392,9 @@ dependencies = [
  "rand",
  "serde",
  "serde_json",
- "shuttle-common",
+ "shuttle-common 0.16.0",
  "shuttle-proto",
- "shuttle-service",
+ "shuttle-service 0.16.0",
  "sqlx",
  "strum",
  "tar",
@@ -5395,6 +5411,15 @@ dependencies = [
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
+]
+
+[[package]]
+name = "shuttle-dynamodb"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "shuttle-service 0.16.0 (git+https://github.com/mikegin/shuttle.git?branch=feature/dynamodb-resource)",
 ]
 
 [[package]]
@@ -5432,7 +5457,7 @@ dependencies = [
  "rustls-pemfile",
  "serde",
  "serde_json",
- "shuttle-common",
+ "shuttle-common 0.16.0",
  "snailquote",
  "sqlx",
  "strum",
@@ -5459,7 +5484,7 @@ dependencies = [
  "home",
  "prost",
  "prost-types",
- "shuttle-common",
+ "shuttle-common 0.16.0",
  "tokio",
  "tonic",
  "tonic-build",
@@ -5485,7 +5510,7 @@ dependencies = [
  "prost",
  "rand",
  "serde_json",
- "shuttle-common",
+ "shuttle-common 0.16.0",
  "shuttle-proto",
  "sqlx",
  "thiserror",
@@ -5513,9 +5538,9 @@ dependencies = [
  "rmp-serde",
  "serde",
  "serde_json",
- "shuttle-common",
+ "shuttle-common 0.16.0",
  "shuttle-proto",
- "shuttle-service",
+ "shuttle-service 0.16.0",
  "strfmt",
  "thiserror",
  "tokio",
@@ -5541,12 +5566,25 @@ dependencies = [
  "pipe",
  "serde",
  "shuttle-codegen",
- "shuttle-common",
+ "shuttle-common 0.16.0",
  "strfmt",
  "thiserror",
  "tokio",
  "toml 0.5.11",
  "tracing",
+]
+
+[[package]]
+name = "shuttle-service"
+version = "0.16.0"
+source = "git+https://github.com/mikegin/shuttle.git?branch=feature/dynamodb-resource#0b947d7b08c298cdcfb353e54a53d1bb8a81a1a1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde",
+ "shuttle-common 0.16.0 (git+https://github.com/mikegin/shuttle.git?branch=feature/dynamodb-resource)",
+ "strfmt",
+ "thiserror",
 ]
 
 [[package]]

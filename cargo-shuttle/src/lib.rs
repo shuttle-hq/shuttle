@@ -899,8 +899,6 @@ impl Shuttle {
             .get_logs_ws(self.ctx.project_name(), &deployment.id)
             .await?;
 
-        let mut last_state: Option<shuttle_common::deployment::State> = None;
-
         loop {
             let message = stream.next().await;
             if let Some(Ok(msg)) = message {
@@ -913,7 +911,6 @@ impl Shuttle {
                         | shuttle_common::deployment::State::Building
                         | shuttle_common::deployment::State::Built
                         | shuttle_common::deployment::State::Loading => {
-                            last_state = Some(log_item.state.clone());
                             println!("{log_item}");
                         }
                         shuttle_common::deployment::State::Crashed => {
@@ -924,9 +921,6 @@ impl Shuttle {
                             println!();
                             print!("cargo shuttle logs {}", &deployment.id);
                             println!();
-                            if last_state.is_none() {
-                                println!("Note: Deploy failed immediately");
-                            };
 
                             return Ok(CommandOutcome::DeploymentFailure);
                         }
@@ -934,7 +928,6 @@ impl Shuttle {
                         | shuttle_common::deployment::State::Completed
                         | shuttle_common::deployment::State::Stopped
                         | shuttle_common::deployment::State::Unknown => {
-                            last_state = Some(log_item.state);
                             break;
                         }
                     };
@@ -954,10 +947,14 @@ impl Shuttle {
         // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-        let service = client.get_service(self.ctx.project_name()).await?;
+        let deployment = client
+            .get_deployment_details(self.ctx.project_name(), &deployment.id)
+            .await?;
 
         // A deployment will only exist if there is currently one in the running state
-        if let Some(ref new_deployment) = service.deployment {
+        if deployment.state == shuttle_common::deployment::State::Running {
+            let service = client.get_service(self.ctx.project_name()).await?;
+
             let resources = client
                 .get_service_resources(self.ctx.project_name())
                 .await?;
@@ -965,24 +962,34 @@ impl Shuttle {
 
             println!("{resources}{service}");
 
-            Ok(match new_deployment.state {
-                shuttle_common::deployment::State::Crashed => CommandOutcome::DeploymentFailure,
-                _ => CommandOutcome::Ok,
-            })
+            Ok(CommandOutcome::Ok)
         } else {
             println!("{}", "Deployment has not entered the running state".red());
             println!();
-            match last_state {
-                Some(shuttle_common::deployment::State::Stopped) => {
+
+            let deployment = client
+                .get_deployment_details(self.ctx.project_name(), &deployment.id)
+                .await?;
+
+            match deployment.state {
+                shuttle_common::deployment::State::Stopped => {
                     println!("State: Stopped - Deployment was running, but has been stopped by the user.")
                 }
-                Some(shuttle_common::deployment::State::Completed) => {
+                shuttle_common::deployment::State::Completed => {
                     println!("State: Completed - Deployment was running, but stopped running all by itself.")
                 }
-                Some(shuttle_common::deployment::State::Unknown) => {
-                    println!("State: Unknown - This may be because deployment was in an unknown state. We never expect this state and entering this state should be considered a bug.")
+                shuttle_common::deployment::State::Unknown => {
+                    println!("State: Unknown - Deployment was in an unknown state. We never expect this state and entering this state should be considered a bug.")
                 }
-                _ => unreachable!(),
+                shuttle_common::deployment::State::Crashed => {
+                    println!(
+                        "{}",
+                        "State: Crashed - Deployment crashed after startup.".red()
+                    );
+                }
+                _ => println!(
+                    "Deployment encountered an unexpected error - Please create a ticket to report this."
+                ),
             }
 
             println!();

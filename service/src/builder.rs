@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context};
 use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget, MessageFormat};
-use cargo::core::{Package, Shell, Verbosity, Workspace};
+use cargo::core::{Shell, Verbosity, Workspace};
+use cargo_metadata::Package;
 use cargo::ops::{self, clean, compile, CleanOptions, CompileOptions};
 use cargo::util::homedir;
 use cargo::util::interning::InternedString;
@@ -105,13 +106,14 @@ pub async fn build_workspace(
 
     let config = get_config(write)?;
     let manifest_path = project_path.join("Cargo.toml");
+    let metadata = cargo_metadata::MetadataCommand::new().manifest_path(&manifest_path).exec()?;
     let ws = Workspace::new(&manifest_path, &config)?;
     check_no_panic(&ws)?;
 
     let mut alpha_packages = Vec::new();
     let mut next_packages = Vec::new();
 
-    for member in ws.members() {
+    for member in metadata.workspace_packages() {
         if is_next(member) {
             ensure_cdylib(member)?;
             next_packages.push(member.name().to_string());
@@ -169,48 +171,34 @@ pub async fn build_workspace(
 }
 
 pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Vec<String>> {
-    let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
-
-    tokio::task::spawn_blocking(move || {
-        let config = get_config(write).unwrap();
-        let manifest_path = project_path.join("Cargo.toml");
-        let ws = Workspace::new(&manifest_path, &config).unwrap();
-
-        let requested_profile = if release_mode {
-            InternedString::new("release")
-        } else {
-            InternedString::new("dev")
-        };
-
-        let opts = CleanOptions {
-            config: &config,
-            spec: Vec::new(),
-            targets: Vec::new(),
-            requested_profile,
-            profile_specified: true,
-            doc: false,
-        };
-
-        clean(&ws, &opts).unwrap();
-    });
-
-    let mut lines = Vec::new();
-
-    for message in Message::parse_stream(read) {
-        trace!(?message, "parsed cargo message");
-        match message {
-            Ok(Message::TextLine(line)) => {
-                lines.push(line);
-            }
-            Ok(_) => {}
-            Err(error) => {
-                error!("failed to parse cargo message: {error}");
-            }
-        }
+    let manifest_path = project_path.join("Cargo.toml");
+    let mut profile = "dev";
+    if release_mode {
+        profile = "release";
     }
 
-    Ok(lines)
+    tokio::task::spawn_blocking(move || {
+        let output = std::process::Command::new("cargo")
+            .arg("clean")
+            .arg("--manifest-path")
+            .arg(manifest_path.to_string())
+            .arg("--profile")
+            .arg(profile)
+            .output()?;
+    });
+
+    if output.clone().status.success() {
+        let mut lines = Vec::new();
+
+        lines.push(String::from_utf8(output.clone().stdout).unwrap());
+
+        lines.push(String::from_utf8(output.clone().stderr).unwrap());
+
+        Ok(lines)
+    } else {
+        error!("cargo clean failed.");
+    }
 }
 
 /// Get the default compile config with output redirected to writer
@@ -268,21 +256,21 @@ fn get_compile_options(
 
 fn is_next(package: &Package) -> bool {
     package
-        .dependencies()
+        .dependencies
         .iter()
-        .any(|dependency| dependency.package_name() == NEXT_NAME)
+        .any(|dependency| dependency.name == NEXT_NAME)
 }
 
 fn is_alpha(package: &Package) -> bool {
     package
-        .dependencies()
+        .dependencies
         .iter()
-        .any(|dependency| dependency.package_name() == RUNTIME_NAME)
+        .any(|dependency| dependency.name == RUNTIME_NAME)
 }
 
 /// Make sure the project is a binary for alpha projects.
 fn ensure_binary(package: &Package) -> anyhow::Result<()> {
-    if package.targets().iter().any(|target| target.is_bin()) {
+    if package.targets.iter().any(|target| target.is_bin()) {
         Ok(())
     } else {
         bail!("Your Shuttle project must be a binary.")
@@ -291,7 +279,7 @@ fn ensure_binary(package: &Package) -> anyhow::Result<()> {
 
 /// Make sure "cdylib" is set for shuttle-next projects, else set it if possible.
 fn ensure_cdylib(package: &Package) -> anyhow::Result<()> {
-    if package.targets().iter().any(|target| target.is_lib()) {
+    if package.targets.iter().any(|target| target.is_lib()) {
         Ok(())
     } else {
         bail!("Your Shuttle next project must be a library. Please add `[lib]` to your Cargo.toml file.")

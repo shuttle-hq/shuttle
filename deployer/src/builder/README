@@ -1,3 +1,8 @@
+### Credits
+
+This module was inspired from the (ocipkg)[https://github.com/termoshtt/ocipkg] crate. We mention here our
+recognition to everyone involved in building it.
+
 ### Docker image archive creation and push to a container registry
 
 1) Create a new (docker buildx driver)[https://docs.docker.com/build/drivers/docker-container/] to be used

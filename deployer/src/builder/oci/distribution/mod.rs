@@ -27,9 +27,11 @@ pub async fn push_image(image: Vec<u8>) -> Result<()> {
         }
         let digest = Digest::new(manifest.config().digest())?;
         client.push_blob(ar.get_blob(&digest).await?).await?;
-        client
+        let res = client
             .push_manifest(&image_name.reference, &manifest)
             .await?;
+        let status = res.status().as_u16();
+        info!(%status, "pushing manifest response status");
     }
     Ok(())
 }

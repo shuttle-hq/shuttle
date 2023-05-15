@@ -58,6 +58,8 @@ USE_PANAMAX=disable make up
 
 > Note: `make up` does not start [panamax](https://github.com/panamax-rs/panamax) by default, if you do need to start panamax for local development, run this command with `make COMPOSE_PROFILES=panamax up`.
 
+> Note: `make up` can also be run with `SHUTTLE_DETACH=disable`, which means docker-compose will not be run with `--detach`. This is often desirable for local testing.
+
 > Note: Other useful commands can be found within the [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile).
 
 The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls.
@@ -93,16 +95,18 @@ Before we can login to our local instance of shuttle, we need to create a user.
 The following command inserts a user into the `auth` state with admin privileges:
 
 ```bash
-docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key test-key
+# the --key needs to be 16 alphanumeric characters
+docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key dh9z58jttoes3qvt
 ```
 
 Login to shuttle service in a new terminal window from the root of the shuttle directory:
 
 ```bash
-cargo run --bin cargo-shuttle -- login --api-key "test-key"
+# the --api-kei should be the same one you inserted in the auth state
+cargo run --bin cargo-shuttle -- login --api-key "dh9z58jttoes3qvt"
 ```
 
-The [shuttle examples](https://github.com/shuttle-hq/examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:
+The [shuttle examples](https://github.com/shuttle-hq/shuttle-examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:
 
 ```bash
 git submodule init
@@ -133,7 +137,7 @@ Test if the deployment is working:
 
 ```bash
 # the Host header should match the Host from the deploy output
-curl --header "Host: {app}.unstable.shuttleapp.rs" localhost:8000/hello
+curl --header "Host: {app}.unstable.shuttleapp.rs" localhost:8000
 ```
 
 View logs from the current deployment:
@@ -181,7 +185,7 @@ cargo shuttle login --api-key test-key
 We're now ready to start a local run of the deployer:
 
 ```bash
-cargo run -p shuttle-deployer -- --provisioner-address http://localhost:5000 --auth-uri http://localhost:8008 --proxy-fqdn local.rs --admin-secret test-key --local --project <project_name>
+cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --proxy-fqdn local.rs --admin-secret test-key --local --project <project_name>
 ```
 
 The `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.
@@ -254,7 +258,7 @@ cargo test --package <crate-name> --all-features --test '*' -- --nocapture
 To run the end-to-end tests, from the root of the repository run:
 
 ```bash
-make test
+USE_PANAMAX=disable make test
 ```
 
 > Note: Running all the end-to-end tests may take a long time, so it is recommended to run individual tests shipped as part of each crate in the workspace first.

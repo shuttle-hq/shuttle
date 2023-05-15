@@ -242,7 +242,10 @@ impl Shuttle {
             self.load_project(&mut project_args)?;
             self.project_create(&self.client()?, IDLE_MINUTES).await?;
         } else {
-            println!("Run `cargo shuttle project start` to create project environment on Shuttle");
+            println!(
+                "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
+                 Run `cargo shuttle deploy` to deploy your Shuttle service."
+            );
         }
 
         Ok(())
@@ -326,6 +329,7 @@ impl Shuttle {
         progress_bar.finish_and_clear();
 
         println!("{}\n{}", "Successfully stopped service".bold(), service);
+        println!("Run `cargo shuttle deploy` to re-deploy your service.");
 
         Ok(())
     }
@@ -427,6 +431,7 @@ impl Shuttle {
         let table = get_deployments_table(&deployments, proj_name.as_str());
 
         println!("{table}");
+        println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
 
         Ok(())
     }
@@ -625,13 +630,10 @@ impl Shuttle {
             addr
         );
 
-        println!("
-    To host the application on Shuttle run
-       `cargo shuttle project start`
-    if project environment is not created previously and then run
-       `cargo shuttle deploy`
-    Your application will be hosted at https://{}.shuttleapp.rs
-", service_name);
+        println!(
+            "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
+                  Run `cargo shuttle deploy` to deploy your Shuttle service."
+        );
 
         let start_request = StartRequest {
             ip: addr.to_string(),
@@ -1106,7 +1108,7 @@ impl Shuttle {
         }
         progress_bar.finish_and_clear();
         println!("{project}");
-        println!("Run `cargo shuttle deploy` to deploy the project");
+        println!("Run `cargo shuttle deploy` to deploy your Shuttle service.");
         Ok(())
     }
 

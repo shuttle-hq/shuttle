@@ -407,7 +407,7 @@ jobs:
     - run:
         name: Deploy to production
         command: |
-          # DOCKER_HOST=ssh://ec2-user@master.shuttle.internal USE_TLS=enable PROD=true DD_API_KEY=$DD_API_KEY \
+          # DOCKER_HOST=ssh://ec2-user@master.shuttle.prod.internal USE_TLS=enable PROD=true DD_API_KEY=$DD_API_KEY \
           # POSTGRES_PASSWORD=$PROD_POSTGRES_PASSWORD \
           # MONGO_INITDB_ROOT_PASSWORD=$PROD_MONGO_INITDB_ROOT_PASSWORD \
           # TAG=$TAG \

@@ -4,6 +4,7 @@ pub mod config;
 mod init;
 mod provisioner_server;
 
+use args::LogoutArgs;
 use indicatif::ProgressBar;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::deployment::get_deployments_table;
@@ -29,7 +30,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
 use cargo_metadata::Message;
 use clap::CommandFactory;
@@ -57,6 +58,8 @@ use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+const SHUTTLE_LOGIN_URL: &str = "https://shuttle.rs/login";
+const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -70,6 +73,8 @@ impl Shuttle {
 
     pub async fn run(mut self, mut args: Args) -> Result<CommandOutcome> {
         trace!("running local client");
+
+        // All commands that need to know which project is being handled
         if matches!(
             args.cmd,
             Command::Deploy(..)
@@ -98,11 +103,11 @@ impl Shuttle {
             Command::Init(init_args) => self.init(init_args, args.project_args).await,
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
-            Command::Logout => self.logout().await,
+            Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback().await,
             Command::Run(run_args) => self.local_run(run_args).await,
             Command::Deploy(deploy_args) => {
-                return self.deploy(deploy_args, &self.client()?).await;
+                return self.deploy(&self.client()?, deploy_args).await;
             }
             Command::Status => self.status(&self.client()?).await,
             Command::Logs { id, latest, follow } => {
@@ -249,10 +254,9 @@ impl Shuttle {
 
     /// Provide feedback on GitHub.
     async fn feedback(&self) -> Result<()> {
-        let url = "https://github.com/shuttle-hq/shuttle/issues/new";
-        let _ = webbrowser::open(url);
+        let _ = webbrowser::open(SHUTTLE_GH_ISSUE_URL);
+        println!("If your browser did not open automatically, go to {SHUTTLE_GH_ISSUE_URL}");
 
-        println!("\nIf your browser did not open automatically, go to {url}");
         Ok(())
     }
 
@@ -261,10 +265,8 @@ impl Shuttle {
         let api_key_str = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
-                let url = "https://shuttle.rs/login";
-                let _ = webbrowser::open(url);
-
-                println!("If your browser did not automatically open, go to {url}");
+                let _ = webbrowser::open(SHUTTLE_LOGIN_URL);
+                println!("If your browser did not automatically open, go to {SHUTTLE_LOGIN_URL}");
 
                 Password::with_theme(&ColorfulTheme::default())
                     .with_prompt("API key")
@@ -280,11 +282,26 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn logout(&mut self) -> Result<()> {
+    async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {
+        if logout_args.reset_api_key {
+            self.reset_api_key(&self.client()?).await?;
+            println!("Successfully reset the API key.");
+            println!(" -> Go to {SHUTTLE_LOGIN_URL} to get a new one.\n");
+        }
         self.ctx.clear_api_key()?;
-
         println!("Successfully logged out of shuttle.");
+
         Ok(())
+    }
+
+    async fn reset_api_key(&self, client: &Client) -> Result<()> {
+        client.reset_api_key().await.and_then(|res| {
+            if res.status().is_success() {
+                Ok(())
+            } else {
+                Err(anyhow!("Resetting API key failed."))
+            }
+        })
     }
 
     async fn stop(&self, client: &Client) -> Result<()> {
@@ -867,7 +884,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deploy(&self, args: DeployArgs, client: &Client) -> Result<CommandOutcome> {
+    async fn deploy(&self, client: &Client, args: DeployArgs) -> Result<CommandOutcome> {
         if !args.allow_dirty {
             self.is_dirty()?;
         }
@@ -882,33 +899,47 @@ impl Shuttle {
             .get_logs_ws(self.ctx.project_name(), &deployment.id)
             .await?;
 
-        while let Some(Ok(msg)) = stream.next().await {
-            if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                let log_item: shuttle_common::LogItem =
-                    serde_json::from_str(&line).expect("to parse log line");
+        loop {
+            let message = stream.next().await;
+            if let Some(Ok(msg)) = message {
+                if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
+                    let log_item: shuttle_common::LogItem =
+                        serde_json::from_str(&line).expect("to parse log line");
 
-                match log_item.state {
-                    shuttle_common::deployment::State::Queued
-                    | shuttle_common::deployment::State::Building
-                    | shuttle_common::deployment::State::Built
-                    | shuttle_common::deployment::State::Loading => {
-                        println!("{log_item}");
-                    }
-                    shuttle_common::deployment::State::Crashed => {
-                        println!();
-                        println!("{}", "Deployment crashed".red());
-                        println!("Run the following for more details");
-                        println!();
-                        print!("cargo shuttle logs {}", deployment.id);
-                        println!();
+                    match log_item.state.clone() {
+                        shuttle_common::deployment::State::Queued
+                        | shuttle_common::deployment::State::Building
+                        | shuttle_common::deployment::State::Built
+                        | shuttle_common::deployment::State::Loading => {
+                            println!("{log_item}");
+                        }
+                        shuttle_common::deployment::State::Crashed => {
+                            println!();
+                            println!("{}", "Deployment crashed".red());
+                            println!();
+                            println!("Run the following for more details");
+                            println!();
+                            print!("cargo shuttle logs {}", &deployment.id);
+                            println!();
 
-                        return Ok(CommandOutcome::DeploymentFailure);
-                    }
-                    shuttle_common::deployment::State::Running
-                    | shuttle_common::deployment::State::Completed
-                    | shuttle_common::deployment::State::Stopped
-                    | shuttle_common::deployment::State::Unknown => break,
+                            return Ok(CommandOutcome::DeploymentFailure);
+                        }
+                        shuttle_common::deployment::State::Running
+                        | shuttle_common::deployment::State::Completed
+                        | shuttle_common::deployment::State::Stopped
+                        | shuttle_common::deployment::State::Unknown => {
+                            break;
+                        }
+                    };
                 }
+            } else {
+                println!("Reconnecting websockets logging");
+                // A wait time short enough for not much state to have changed, long enough that
+                // the terminal isn't completely spammed
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                stream = client
+                    .get_logs_ws(self.ctx.project_name(), &deployment.id)
+                    .await?;
             }
         }
 
@@ -916,10 +947,14 @@ impl Shuttle {
         // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-        let service = client.get_service(self.ctx.project_name()).await?;
+        let deployment = client
+            .get_deployment_details(self.ctx.project_name(), &deployment.id)
+            .await?;
 
         // A deployment will only exist if there is currently one in the running state
-        if let Some(ref new_deployment) = service.deployment {
+        if deployment.state == shuttle_common::deployment::State::Running {
+            let service = client.get_service(self.ctx.project_name()).await?;
+
             let resources = client
                 .get_service_resources(self.ctx.project_name())
                 .await?;
@@ -927,12 +962,37 @@ impl Shuttle {
 
             println!("{resources}{service}");
 
-            Ok(match new_deployment.state {
-                shuttle_common::deployment::State::Crashed => CommandOutcome::DeploymentFailure,
-                _ => CommandOutcome::Ok,
-            })
+            Ok(CommandOutcome::Ok)
         } else {
-            println!("Deployment has not entered the running state");
+            println!("{}", "Deployment has not entered the running state".red());
+            println!();
+
+            match deployment.state {
+                shuttle_common::deployment::State::Stopped => {
+                    println!("State: Stopped - Deployment was running, but has been stopped by the user.")
+                }
+                shuttle_common::deployment::State::Completed => {
+                    println!("State: Completed - Deployment was running, but stopped running all by itself.")
+                }
+                shuttle_common::deployment::State::Unknown => {
+                    println!("State: Unknown - Deployment was in an unknown state. We never expect this state and entering this state should be considered a bug.")
+                }
+                shuttle_common::deployment::State::Crashed => {
+                    println!(
+                        "{}",
+                        "State: Crashed - Deployment crashed after startup.".red()
+                    );
+                }
+                _ => println!(
+                    "Deployment encountered an unexpected error - Please create a ticket to report this."
+                ),
+            }
+
+            println!();
+            println!("Run the following for more details");
+            println!();
+            println!("cargo shuttle logs {}", &deployment.id);
+            println!();
 
             Ok(CommandOutcome::DeploymentFailure)
         }

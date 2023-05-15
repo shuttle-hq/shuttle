@@ -364,59 +364,6 @@ jobs:
             # PUSH=true PROD=<< parameters.production >> PLATFORMS=linux/amd64 TAG=$TAG make images
             echo 'test'
       - save-buildx-cache
-  deploy-unstable:
-    executor: image-ubuntu
-    steps:
-    - checkout
-    - run: 
-        name: Set git tag in bash_env
-        command: |
-          echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
-    - add_ssh_keys:
-        fingerprints:
-          - "6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78"
-    - run:
-        name: Generate ssh config
-        command: ./.circleci/unstable-ssh-config.sh
-    - run:
-        name: Deploy to unstable
-        command: |
-          DOCKER_HOST=ssh://ec2-user@master.shuttle.internal USE_TLS=enable PROD=false DD_API_KEY=$DD_API_KEY \
-          POSTGRES_PASSWORD=$DEV_POSTGRES_PASSWORD \
-          MONGO_INITDB_ROOT_PASSWORD=$DEV_MONGO_INITDB_ROOT_PASSWORD \
-          TAG=$TAG \
-          make deploy
-    - run:
-        name: Pull new deployer image
-        command: |
-          ssh ec2-user@controller.shuttle.internal "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
-  deploy-production:
-    executor: image-ubuntu
-    steps:
-    - checkout
-    - run: 
-        name: Set git tag in bash_env
-        command: |
-          echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
-    - add_ssh_keys:
-        fingerprints:
-          - "6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e"
-    - run:
-        name: Generate ssh config
-        command: ./.circleci/production-ssh-config.sh
-    - run:
-        name: Deploy to production
-        command: |
-          # DOCKER_HOST=ssh://ec2-user@master.shuttle.prod.internal USE_TLS=enable PROD=true DD_API_KEY=$DD_API_KEY \
-          # POSTGRES_PASSWORD=$PROD_POSTGRES_PASSWORD \
-          # MONGO_INITDB_ROOT_PASSWORD=$PROD_MONGO_INITDB_ROOT_PASSWORD \
-          # TAG=$TAG \
-          # make deploy
-          ssh ec2-user@master.shuttle.prod.internal "ls | wc -l"
-    - run:
-        name: Pull new deployer image
-        command: |
-          ssh ec2-user@controller.shuttle.prod.internal "ls | wc -l"
   deploy-images:
     executor: image-ubuntu
     parameters:
@@ -434,10 +381,10 @@ jobs:
         default: shuttle.internal
       postgres-password:
         description: "Shuttle shared postgres password"
-        type: string
+        type: env_var_name
       mongodb-password:
         description: "Shuttle shared mongodb password"
-        type: string
+        type: env_var_name
       production:
         description: "Push and deploy to production"
         type: boolean
@@ -457,12 +404,12 @@ jobs:
     - run:
         name: Deploy images
         command: |
-          # DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> USE_TLS=enable PROD=<< parameters.production >> DD_API_KEY=$DD_API_KEY \
-          # POSTGRES_PASSWORD=<< parameters.postgres-password >> \
-          # MONGO_INITDB_ROOT_PASSWORD=<< parameters.mongodb-password >> \
-          # TAG=$TAG \
-          # make deploy
-          ssh ec2-user@master.<< parameters.ssh-host >> "ls | wc -l"
+          DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> USE_TLS=enable PROD=<< parameters.production >> DD_API_KEY=$DD_API_KEY \
+          POSTGRES_PASSWORD=<< parameters.postgres-password >> \
+          MONGO_INITDB_ROOT_PASSWORD=<< parameters.mongodb-password >> \
+          TAG=$TAG \
+          make deploy
+          # ssh ec2-user@master.<< parameters.ssh-host >> "ls | wc -l"
     - run:
         name: Pull new deployer image
         command: |
@@ -757,7 +704,7 @@ workflows:
           #   branches:
           #     only: main
       - build-and-push:
-          name: Build and push to unstable
+          name: build-and-push-unstable
           aws-access-key-id: AWS_ACCESS_KEY_ID
           aws-secret-access-key: AWS_SECRET_ACCESS_KEY
           production: false
@@ -771,14 +718,14 @@ workflows:
           postgres-password: DEV_POSTGRES_PASSWORD
           mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
           # requires:
-          #   - Build and push to unstable
+          #   - build-and-push-unstable
       - approve-push-production:
           type: approval
           # filters:
           #   branches:
           #     only: production
       - build-and-push:
-          name: Build and push to production
+          name: build-and-push-production
           aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
           aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
           production: true

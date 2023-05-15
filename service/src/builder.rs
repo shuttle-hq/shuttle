@@ -1,10 +1,11 @@
 use std::fs::read_to_string;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context};
 use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget, MessageFormat};
 use cargo::core::{Shell, Verbosity, Workspace};
-use cargo::ops::{self, compile, CleanOptions, CompileOptions};
+use cargo::ops::{self, compile, CompileOptions};
 use cargo::util::homedir;
 use cargo::util::interning::InternedString;
 use cargo::Config;
@@ -118,10 +119,10 @@ pub async fn build_workspace(
     for member in metadata.workspace_packages() {
         if is_next(member) {
             ensure_cdylib(member)?;
-            next_packages.push(member.name().to_string());
+            next_packages.push(member.name.to_string());
         } else if is_alpha(member) {
             ensure_binary(member)?;
-            alpha_packages.push(member.name().to_string());
+            alpha_packages.push(member.name.to_string());
         }
     }
 
@@ -180,26 +181,45 @@ pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Ve
         profile = "release";
     }
 
+    let (mut stderr_read, mut stderr_write) = pipe::pipe();
+    let (mut stdout_read, mut stdout_write) = pipe::pipe();
+    let (mut status_read, mut status_write) = pipe::pipe();
+
     tokio::task::spawn_blocking(move || {
         let output = std::process::Command::new("cargo")
             .arg("clean")
             .arg("--manifest-path")
-            .arg(manifest_path.to_string())
+            .arg(manifest_path.to_str().unwrap())
             .arg("--profile")
             .arg(profile)
-            .output()?;
+            .output()
+            .unwrap();
+        let mut status = "false";
+        if output.clone().status.success() {
+            status = "true";
+        }
+
+        stdout_write.write_all(&output.clone().stdout).unwrap();
+        stderr_write.write_all(&output.stderr).unwrap();
+        status_write.write_all(status.as_bytes()).unwrap();
     });
 
-    if output.clone().status.success() {
-        let mut lines = Vec::new();
+    let mut buffer = String::new();
+    status_read.read_to_string(&mut buffer).unwrap();
+    let mut status = false;
+    if buffer == "true" {
+        status = true;
+    }
+    let mut stderr = String::new();
+    let mut stdout = String::new();
+    stderr_read.read_to_string(&mut stderr)?;
+    stdout_read.read_to_string(&mut stdout)?;
 
-        lines.push(String::from_utf8(output.clone().stdout).unwrap());
-
-        lines.push(String::from_utf8(output.clone().stderr).unwrap());
-
+    if status {
+        let lines = vec![stderr, stdout];
         Ok(lines)
     } else {
-        error!("cargo clean failed.");
+        Err(anyhow!("cargo clean failed"))
     }
 }
 

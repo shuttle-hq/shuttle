@@ -8,7 +8,7 @@ Host admin
     HostName 18.132.154.166
     User ec2-user
 
-Host *.shuttle.internal
+Host *.shuttle.prod.internal
     User ec2-user
     ProxyJump ec2-user@admin
 EOF

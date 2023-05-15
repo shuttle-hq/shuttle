@@ -4,12 +4,12 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, bail, Context};
 use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget, MessageFormat};
 use cargo::core::{Shell, Verbosity, Workspace};
-use cargo_metadata::Package;
-use cargo::ops::{self, clean, compile, CleanOptions, CompileOptions};
+use cargo::ops::{self, compile, CleanOptions, CompileOptions};
 use cargo::util::homedir;
 use cargo::util::interning::InternedString;
 use cargo::Config;
 use cargo_metadata::Message;
+use cargo_metadata::Package;
 use crossbeam_channel::Sender;
 use pipe::PipeWriter;
 use shuttle_common::project::ProjectName;
@@ -106,7 +106,9 @@ pub async fn build_workspace(
 
     let config = get_config(write)?;
     let manifest_path = project_path.join("Cargo.toml");
-    let metadata = cargo_metadata::MetadataCommand::new().manifest_path(&manifest_path).exec()?;
+    let metadata = cargo_metadata::MetadataCommand::new()
+        .manifest_path(&manifest_path)
+        .exec()?;
     let ws = Workspace::new(&manifest_path, &config)?;
     check_no_panic(&ws)?;
 

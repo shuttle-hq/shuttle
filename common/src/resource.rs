@@ -32,6 +32,7 @@ pub struct Response {
 pub enum Type {
     #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::database::Type))]
     Database(database::Type),
+    DynamoDB,
     Secrets,
     StaticFolder,
     Persist,
@@ -58,6 +59,7 @@ impl Display for Type {
             Type::Secrets => write!(f, "secrets"),
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
+            Type::DynamoDB => write!(f, "dynamodb")
         }
     }
 }

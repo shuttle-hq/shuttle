@@ -123,6 +123,19 @@ pub enum DbOutput {
     Local(String),
 }
 
+/// Holds the input for a DB resource
+#[derive(Deserialize, Serialize, Default)]
+pub struct DynamoDBInput {
+    pub local_uri: Option<String>,
+}
+
+/// Holds the output for a DB resource
+#[derive(Deserialize, Serialize)]
+pub enum DynamoDBOutput {
+    Info(DynamoDbReadyInfo),
+    Local(String),
+}
+
 /// Holds the details for a database connection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {

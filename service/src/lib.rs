@@ -9,7 +9,7 @@ pub use error::{CustomError, Error};
 
 use serde::{de::DeserializeOwned, Serialize};
 pub use shuttle_common::{
-    database, resource::Type, DatabaseReadyInfo, DynamoDbReadyInfo, DbInput, DbOutput, SecretStore,
+    database, resource::Type, DatabaseReadyInfo, DynamoDbReadyInfo, DbInput, DbOutput, SecretStore, DynamoDBInput, DynamoDBOutput
 };
 
 #[cfg(feature = "codegen")]

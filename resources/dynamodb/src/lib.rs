@@ -1,23 +1,23 @@
 use async_trait::async_trait;
 use serde::Serialize;
 use shuttle_service::{
-    database, error::CustomError, DbInput, DbOutput, Error, Factory, ResourceBuilder, Type,
+    database, error::CustomError, DbInput, DbOutput, Error, Factory, ResourceBuilder, Type, DynamoDBInput, DynamoDBOutput
 };
 
 #[derive(Serialize)]
 #[doc = "A resource connected to an AWS DynamoDB  instance"]
 pub struct DynamoDB {
-    config: DbInput,
+    config: DynamoDBInput
 }
 
 #[doc = "Gets a connection to DynamoDB"]
 #[async_trait]
 impl<T> ResourceBuilder<T> for DynamoDB {
-    const TYPE: Type = Type::Database(shuttle_service::database::Type::DynamoDB);
+    const TYPE: Type = Type::DynamoDB;
     
     // These may change later
-    type Config = DbInput; 
-    type Output = DbOutput;
+    type Config = DynamoDBInput; 
+    type Output = DynamoDBOutput;
 
     fn new() -> Self {
         Self { config: Default::default() }
@@ -28,27 +28,27 @@ impl<T> ResourceBuilder<T> for DynamoDB {
     }
 
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, shuttle_service::Error> {
-        todo!()
-        // let info = match factory.get_environment() {
-        //     shuttle_service::Environment::Production => DbOutput::Info(
-        //         factory
-        //             .get_db_connection(database::Type::DynamoDB)
-        //             .await?
-        //     ),
-        //     shuttle_service::Environment::Local => {
-        //         if let Some(local_uri) = self.config.local_uri {
-        //             DbOutput::Local(local_uri)
-        //         } else {
-        //             DbOutput::Info(
-        //                 factory
-        //                     .get_db_connection(database::Type::DynamoDB)
-        //                     .await?
-        //             )
-        //         }
-        //     }
-        // };
+        
+        let info = match factory.get_environment() {
+            shuttle_service::Environment::Production => DynamoDBOutput::Info(
+                factory
+                    .get_dynamodb_connection()
+                    .await?
+            ),
+            shuttle_service::Environment::Local => {
+                if let Some(local_uri) = self.config.local_uri {
+                    DynamoDBOutput::Local(local_uri)
+                } else {
+                    DynamoDBOutput::Info(
+                        factory
+                            .get_dynamodb_connection()
+                            .await?
+                    )
+                }
+            }
+        };
 
-        // Ok(info)
+        Ok(info)
     }
 
     async fn build(build_data: &Self::Output) -> Result<T, shuttle_service::Error> {

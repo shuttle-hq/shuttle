@@ -133,7 +133,7 @@ pub struct DynamoDBInput {
 #[derive(Deserialize, Serialize)]
 pub enum DynamoDBOutput {
     Info(DynamoDbReadyInfo),
-    Local(String),
+    Local(String), //TODO: may remove this for local support, just need to add endpoint to DynamoDbReadyInfo
 }
 
 /// Holds the details for a database connection

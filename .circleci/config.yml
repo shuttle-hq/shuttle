@@ -29,7 +29,8 @@ commands:
       - run:
           name: Install sccache
           command: |
-            ls ~/.cargo/bin/sccache || cargo install sccache
+            export SCCACHE_VERSION='v0.4.2'
+            ls ~/.cargo/bin/sccache || curl -L https://github.com/mozilla/sccache/releases/download/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz | tar -xOz sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache > ~/.cargo/bin/sccache && chmod +x ~/.cargo/bin/sccache
             # This configures Rust to use sccache.
             echo 'export "RUSTC_WRAPPER"="sccache"' >> $BASH_ENV
             sccache --version
@@ -201,6 +202,10 @@ jobs:
       path:
         description: "Path to crate external from workspace"
         type: string
+      features:
+        description: "Features to enable"
+        type: string
+        default: --all-features
     executor: docker-rust
     environment:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
@@ -217,13 +222,13 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --all-features \
+                       << parameters.features >> \
                        --manifest-path << parameters.path >>/Cargo.toml \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
-      - run: cargo test --all-features --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
+      - run: cargo test << parameters.features >> --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
       - save-cargo-cache
   platform-test:
     parameters:
@@ -232,8 +237,6 @@ jobs:
         type: string
     # Using an image since tests will start a docker container
     executor: image-ubuntu
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - install-rust
       - install-protoc
@@ -291,6 +294,10 @@ jobs:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
+      - run: 
+          name: Set git tag in bash_env
+          command: |
+            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
       - restore-buildx-cache
       - aws-ecr/ecr-login:
           aws-access-key-id: AWS_ACCESS_KEY_ID
@@ -299,8 +306,34 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            PUSH=true PLATFORMS=linux/amd64 make images
+            PUSH=true PROD=false PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
+  deploy-images:
+    executor: image-ubuntu
+    steps:
+    - checkout
+    - run: 
+        name: Set git tag in bash_env
+        command: |
+          echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+    - add_ssh_keys:
+        fingerprints:
+          - "6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78"
+    - run:
+        name: Generate ssh config
+        command: ./.circleci/unstable-ssh-config.sh
+    - run:
+        name: Deploy to unstable
+        command: |
+          DOCKER_HOST=ssh://ec2-user@master.shuttle.internal USE_TLS=enable PROD=false DD_API_KEY=$DD_API_KEY \
+          POSTGRES_PASSWORD=$DEV_POSTGRES_PASSWORD \
+          MONGO_INITDB_ROOT_PASSWORD=$DEV_MONGO_INITDB_ROOT_PASSWORD \
+          TAG=$TAG \
+          make deploy
+    - run:
+        name: Pull new deployer image
+        command: |
+          ssh ec2-user@controller.shuttle.internal "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
       image: << parameters.image >>
@@ -410,7 +443,7 @@ jobs:
   linux-qa:
     machine:
       image: ubuntu-2004:current
-      resource_class: medium
+    resource_class: medium
     steps:
       - checkout
       - run:
@@ -435,9 +468,9 @@ jobs:
       - run:
           name: Test WASM
           command: ./.circleci/qa-wasm.sh
-      - run:
-          name: Test Docker
-          command: ./.circleci/qa-docker.sh
+      # - run:
+      #     name: Test Docker
+      #     command: ./.circleci/qa-docker.sh
   mac-qa:
     macos:
       xcode: 12.5.1
@@ -522,62 +555,82 @@ jobs:
           command: ./.circleci/qa-docker.ps1
 
 workflows:
-#   ci:
-#     jobs:
-#       - workspace
-#       - check-standalone:
-#           name: << matrix.path >>
-#           matrix:
-#             parameters:
-#               path:
-#                 - resources/aws-rds
-#                 - resources/persist
-#                 - resources/secrets
-#                 - resources/shared-db
-#                 - resources/static-folder
-#                 - services/shuttle-actix-web
-#                 - services/shuttle-axum
-#                 - services/shuttle-next
-#                 - services/shuttle-poem
-#                 - services/shuttle-poise
-#                 - services/shuttle-rocket
-#                 - services/shuttle-salvo
-#                 - services/shuttle-serenity
-#                 - services/shuttle-thruster
-#                 - services/shuttle-tide
-#                 - services/shuttle-tower
-#                 - services/shuttle-warp
-#       - platform-test:
-#           name: << matrix.crate >>
-#           requires:
-#             - workspace
-#           matrix:
-#             parameters:
-#               crate:
-#                 [
-#                   "shuttle-auth",
-#                   "cargo-shuttle",
-#                   "shuttle-codegen",
-#                   "shuttle-common",
-#                   "shuttle-deployer",
-#                   "shuttle-proto",
-#                   "shuttle-provisioner",
-#                   "shuttle-runtime",
-#                   "shuttle-service",
-#                 ]
-#       - e2e-test:
-#           requires:
-#             - platform-test
-#             - check-standalone
-#           filters:
-#             branches:
-#               only: production
-#       - build-and-push:
-#           requires:
-#             - e2e-test
-#           filters:
-#             branches:
-#               only: production
+  # ci:
+  #   jobs:
+  #     - workspace
+  #     - check-standalone:
+  #         name: << matrix.path >>
+  #         matrix:
+  #           parameters:
+  #             path:
+  #               - resources/aws-rds
+  #               - resources/persist
+  #               - resources/secrets
+  #               - resources/static-folder
+  #               - services/shuttle-actix-web
+  #               - services/shuttle-axum
+  #               - services/shuttle-next
+  #               - services/shuttle-poem
+  #               - services/shuttle-poise
+  #               - services/shuttle-rocket
+  #               - services/shuttle-salvo
+  #               - services/shuttle-serenity
+  #               - services/shuttle-thruster
+  #               - services/shuttle-tide
+  #               - services/shuttle-tower
+  #               - services/shuttle-warp
+  #     - check-standalone:
+  #       # shuttle-shared-db has mutually exclusive features
+  #       # so we run checks for each feature separately
+  #         name: "resources/shared-db: << matrix.features >>"
+  #         matrix:
+  #           alias: check-standalone-shared-db
+  #           parameters:
+  #             path: [resources/shared-db]
+  #             features:
+  #               - "-F mongodb"
+  #               - "-F postgres"
+  #               - "-F postgres-rustls"
+  #     - platform-test:
+  #         name: << matrix.crate >>
+  #         requires:
+  #           - workspace
+  #         matrix:
+  #           parameters:
+  #             crate:
+  #               [
+  #                 "shuttle-auth",
+  #                 "cargo-shuttle",
+  #                 "shuttle-codegen",
+  #                 "shuttle-common",
+  #                 "shuttle-deployer",
+  #                 "shuttle-proto",
+  #                 "shuttle-provisioner",
+  #                 "shuttle-runtime",
+  #                 "shuttle-service",
+  #               ]
+  #     - e2e-test:
+  #         requires:
+  #           - platform-test
+  #           - check-standalone
+  #           - check-standalone-shared-db
+  #         filters:
+  #           branches:
+  #             only: production
+  #     - approve-push-unstable:
+  #         type: approval
+  #         filters:
+  #           branches:
+  #             only: main
+  #     - build-and-push:
+  #         requires:
+  #           - approve-push-unstable
+  #         filters:
+  #           branches:
+  #             only: main
+  #     - deploy-images:
+  #         requires:
+  #           - build-and-push
   release:
     jobs:
       # - linux-qa:
@@ -599,8 +652,8 @@ workflows:
       #     target: x86_64-unknown-linux-gnu
       #     protoc_arch: linux-x86_64
       #     resource_class: xlarge
-      #     requires:
-      #       - linux-qa
+      #     # requires:
+      #     #   - linux-qa
       #     filters:
       #       branches:
       #         only: production
@@ -610,8 +663,8 @@ workflows:
       #     target: x86_64-unknown-linux-musl
       #     protoc_arch: linux-x86_64
       #     resource_class: xlarge
-      #     requires:
-      #       - linux-qa
+      #     # requires:
+      #     #   - linux-qa
       #     filters:
       #       branches:
       #         only: production
@@ -619,22 +672,20 @@ workflows:
       #     name: build-binaries-aarch64
       #     image: ubuntu-2004:202101-01
       #     target: aarch64-unknown-linux-musl
-      #     protoc_arch: linux-aarch_64
       #     resource_class: arm.xlarge
-      #     requires:
-      #       - linux-qa
+      #     protoc_arch: linux-aarch_64
+      #     # requires:
+      #     #   - linux-qa
       #     filters:
       #       branches:
       #         only: production
       # - build-binaries-windows:
-      #     requires:
-      #       - windows-qa
       #     filters:
       #       branches:
       #         only: production
       # - build-binaries-mac:
-      #     requires:
-      #       - mac-qa
+      #     # requires:
+      #     #   - mac-qa
       #     filters:
       #       branches:
       #         only: production

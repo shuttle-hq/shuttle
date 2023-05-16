@@ -16,6 +16,7 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use tracing::error;
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub struct Client {
     api_url: ApiUrl,
     api_key: Option<ApiKey>,
@@ -134,15 +135,6 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_projects_list_filtered(
-        &self,
-        filter: String,
-    ) -> Result<Vec<project::Response>> {
-        let path = format!("/projects/{filter}");
-
-        self.get(path).await
-    }
-
     pub async fn delete_project(&self, project: &ProjectName) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
 
@@ -210,13 +202,18 @@ impl Client {
         self.get(path).await
     }
 
+    pub async fn reset_api_key(&self) -> Result<Response> {
+        self.put("/users/reset-api-key".into(), Option::<()>::None)
+            .await
+    }
+
     async fn ws_get(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let ws_scheme = self.api_url.clone().replace("http", "ws");
         let url = format!("{ws_scheme}{path}");
         let mut request = url.into_client_request()?;
 
         if let Some(ref api_key) = self.api_key {
-            let auth_header = Authorization::bearer(api_key)?;
+            let auth_header = Authorization::bearer(api_key.as_ref())?;
             request.headers_mut().typed_insert(auth_header);
         }
 
@@ -262,6 +259,22 @@ impl Client {
         Ok(builder.send().await?)
     }
 
+    async fn put<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = Self::get_retry_client().put(url);
+
+        builder = self.set_builder_auth(builder);
+
+        if let Some(body) = body {
+            let body = serde_json::to_string(&body)?;
+            builder = builder.body(body);
+            builder = builder.header("Content-Type", "application/json");
+        }
+
+        Ok(builder.send().await?)
+    }
+
     async fn delete<M>(&self, path: String) -> Result<M>
     where
         M: for<'de> Deserialize<'de>,
@@ -282,7 +295,7 @@ impl Client {
 
     fn set_builder_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         if let Some(ref api_key) = self.api_key {
-            builder.bearer_auth(api_key)
+            builder.bearer_auth(api_key.as_ref())
         } else {
             builder
         }

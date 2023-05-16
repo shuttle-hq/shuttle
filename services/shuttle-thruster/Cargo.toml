@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-thruster"
-version = "0.14.0"
+version = "0.16.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service implementation to run a thruster webserver on shuttle"
@@ -10,7 +10,7 @@ keywords = ["shuttle-service", "thruster"]
 
 [dependencies]
 thruster = { version = "1.3.0" }
-shuttle-runtime = { path = "../../runtime", version = "0.14.0" }
+shuttle-runtime = { path = "../../runtime", version = "0.16.0" }
 
 [dev-dependencies]
 thruster = { version = "1.3.0", features = ["hyper_server"] }

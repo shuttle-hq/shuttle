@@ -8,5 +8,4 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.68"
 serde = "1.0.163"
-shuttle-service = "0.16.0"
-shuttle-common = { version = "0.16.0", path = "../../common" }
+shuttle-service = { version  = "0.16.0", path = "../../service" }

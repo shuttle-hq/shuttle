@@ -540,19 +540,21 @@ jobs:
           name: Login
           command: |
             ..\.cargo\bin\cargo.exe shuttle login --api-key $env:SHUTTLE_API_KEY
-      # - run:
-      #     name: QA
-      #     command: ./.circleci/qa.ps1
-      #     environment:
-      #       SHUTTLE_API: https://api.unstable.shuttle.rs
+      - run:
+          name: QA
+          command: ./.circleci/qa.ps1
+          environment:
+            SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule sync
       - run: git submodule update --init
-      # - run:
-      #     name: Test WASM
-      #     command: ./.circleci/qa-wasm.ps1
       - run:
-          name: Test Docker
-          command: ./.circleci/qa-docker.ps1
+          name: Test WASM
+          command: ./.circleci/qa-wasm.ps1
+      # We can't run linux containers on the Windows executor at this time
+      # https://circleci.com/docs/using-windows/#known-issues-and-limitations
+      # - run:
+      #     name: Test Docker
+      #     command: ./.circleci/qa-docker.ps1
 
 workflows:
   # ci:

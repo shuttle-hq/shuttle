@@ -361,8 +361,8 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            # PUSH=true PROD=<< parameters.production >> PLATFORMS=linux/amd64 TAG=$TAG make images
-            echo 'test'
+            echo "the tag is: $TAG"
+            PUSH=false PROD=<< parameters.production >> PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
   deploy-images:
     executor: image-ubuntu
@@ -400,20 +400,16 @@ jobs:
           - << parameters.ssh-fingerprint >> 
     - run:
         name: Generate ssh config
-        command: ./.circleci/<< parameters.ssh-config-script >>
+        command: ./.circleci/<<parameters.ssh-config-script>>
     - run:
         name: Deploy images
         command: |
-          DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> USE_TLS=enable PROD=<< parameters.production >> DD_API_KEY=$DD_API_KEY \
-          POSTGRES_PASSWORD=<< parameters.postgres-password >> \
-          MONGO_INITDB_ROOT_PASSWORD=<< parameters.mongodb-password >> \
-          TAG=$TAG \
-          make deploy
-          # ssh ec2-user@master.<< parameters.ssh-host >> "ls | wc -l"
+          ssh ec2-user@master.<< parameters.ssh-host >> "ls | wc -l"
+          DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> docker images
     - run:
         name: Pull new deployer image
         command: |
-          ssh ec2-user@controller.<< parameters.ssh-host >> "ls | wc -l"
+          # ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   
   build-binaries-linux:
     machine:
@@ -715,10 +711,11 @@ workflows:
           #     only: main
       - deploy-images:
           name: Deploy images to unstable
-          postgres-password: $DEV_POSTGRES_PASSWORD
-          mongodb-password: $DEV_MONGO_INITDB_ROOT_PASSWORD
-          # requires:
-          #   - build-and-push-unstable
+          postgres-password: DEV_POSTGRES_PASSWORD
+          mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
+          production: true
+          requires:
+            - build-and-push-unstable
       - approve-push-production:
           type: approval
           # filters:

@@ -243,8 +243,7 @@ impl Shuttle {
             self.project_create(&self.client()?, IDLE_MINUTES).await?;
         } else {
             println!(
-                "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
-                 Run `cargo shuttle deploy` to deploy your Shuttle service."
+                "Run `cargo shuttle project start` to create a project environment on Shuttle."
             );
         }
 
@@ -803,6 +802,10 @@ impl Shuttle {
                         trace!(status = ?err, "stopping the runtime errored out");
                     });
             }
+            println!(
+                "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
+                 Run `cargo shuttle deploy` to deploy your Shuttle service."
+            );
             return Ok(());
         }
 
@@ -852,6 +855,13 @@ impl Shuttle {
             };
         }
 
+        if signal_received {
+            println!(
+                "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
+                 Run `cargo shuttle deploy` to deploy your Shuttle service."
+            );
+        }
+
         Ok(())
     }
 
@@ -887,6 +897,11 @@ impl Shuttle {
                 rt.wait().await?.code()
             );
         }
+
+        println!(
+            "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
+             Run `cargo shuttle deploy` to deploy your Shuttle service."
+        );
 
         Ok(())
     }

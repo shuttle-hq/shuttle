@@ -1020,6 +1020,7 @@ impl Shuttle {
             client,
         )
         .await?;
+        println!("Run `cargo shuttle deploy` to deploy your Shuttle service.");
 
         Ok(())
     }
@@ -1076,6 +1077,7 @@ impl Shuttle {
             client,
         )
         .await?;
+        println!("Run `cargo shuttle project start` to recreate project environment on Shuttle.");
 
         Ok(())
     }
@@ -1103,7 +1105,6 @@ impl Shuttle {
         }
         progress_bar.finish_and_clear();
         println!("{project}");
-        println!("Run `cargo shuttle deploy` to deploy your Shuttle service.");
         Ok(())
     }
 

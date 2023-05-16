@@ -12,7 +12,7 @@ cd /tmp/qa-windows
 $env:Path += [IO.Path]::PathSeparator + "$env:USERPROFILE/.cargo/bin"
 
 # Init app
-cargo shuttle init --name qa-windows --axum
+cargo shuttle init --name qa-windows --template axum
 
 # # Start locally
 $job = Start-Job -Name "local-run" -ScriptBlock { cd /tmp/qa-windows; cargo shuttle run }

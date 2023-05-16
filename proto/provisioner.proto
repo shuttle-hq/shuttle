@@ -12,7 +12,7 @@ message DatabaseRequest {
   oneof db_type {
     Shared Shared = 10;
     AwsRds AwsRds = 11;
-    Local Local = 12;
+    Filesystem Filesystem = 12;
   };
 }
 
@@ -31,7 +31,7 @@ message AwsRds {
   }
 }
 
-message Local {}
+message Filesystem {}
 
 message RdsConfig {}
 

@@ -12,7 +12,7 @@ pub struct SQLiteInstance {}
 
 #[async_trait]
 impl ResourceBuilder<SQLiteInstance> for SQLite {
-    const TYPE: Type = Type::Database(database::Type::Local);
+    const TYPE: Type = Type::Database(database::Type::Filesystem);
 
     type Config = Self;
 
@@ -28,7 +28,7 @@ impl ResourceBuilder<SQLiteInstance> for SQLite {
 
     async fn output(
         self,
-        factory: &mut dyn Factory,
+        _factory: &mut dyn Factory,
     ) -> Result<Self::Output, shuttle_service::Error> {
         Ok(SQLiteInstance {})
     }

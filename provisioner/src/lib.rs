@@ -11,7 +11,7 @@ use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_common::claims::{Claim, Scope};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
-use shuttle_proto::provisioner::Local;
+use shuttle_proto::provisioner::Filesystem;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
@@ -330,6 +330,10 @@ impl MyProvisioner {
         })
     }
 
+    async fn request_filesystem_db(&self, project_name: &str) -> Result<DatabaseResponse, Error> {
+        todo!()
+    }
+
     async fn delete_shared_db(
         &self,
         project_name: &str,
@@ -416,6 +420,13 @@ impl MyProvisioner {
 
         Ok(DatabaseDeletionResponse {})
     }
+
+    async fn delete_filesystem_db(
+        &self,
+        project_name: &str,
+    ) -> Result<DatabaseDeletionResponse, Error> {
+        todo!()
+    }
 }
 
 #[tonic::async_trait]
@@ -439,7 +450,9 @@ impl Provisioner for MyProvisioner {
                 self.request_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
             }
-            DbType::Local(Local {}) => todo!(),
+            DbType::Filesystem(Filesystem {}) => {
+                self.request_filesystem_db(&request.project_name).await?
+            }
         };
 
         Ok(Response::new(reply))
@@ -464,7 +477,9 @@ impl Provisioner for MyProvisioner {
                 self.delete_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
             }
-            DbType::Local(Local {}) => todo!(),
+            DbType::Filesystem(Filesystem {}) => {
+                self.delete_filesystem_db(&request.project_name).await?
+            }
         };
 
         Ok(Response::new(reply))

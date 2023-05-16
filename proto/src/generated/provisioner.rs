@@ -16,7 +16,7 @@ pub mod database_request {
         #[prost(message, tag = "11")]
         AwsRds(super::AwsRds),
         #[prost(message, tag = "12")]
-        Local(super::Local),
+        Filesystem(super::Filesystem),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -57,7 +57,7 @@ pub mod aws_rds {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Local {}
+pub struct Filesystem {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RdsConfig {}

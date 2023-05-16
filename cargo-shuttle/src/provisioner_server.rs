@@ -414,7 +414,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
                 "show databases;".to_string(),
             ],
         },
-        Type::Local => EngineConfig {
+        Type::Filesystem => EngineConfig {
             // TODO: Update with real values
             r#type: "local_sqlite".to_string(),
             image: "docker.io/library/postgres:11".to_string(),

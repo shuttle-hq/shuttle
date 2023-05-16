@@ -167,6 +167,7 @@ shuttle-%: ${SRC} Cargo.lock
 		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
+		--tag $(CONTAINER_REGISTRY)/$(*):latest \
 		$(BUILDX_FLAGS) \
 		-f Containerfile \
 		.

@@ -288,46 +288,6 @@ jobs:
             - "/tmp/cache/buildx"
           key: docker-buildx-{{ .Branch }}
           when: always
-  # build-and-push:
-  #   executor: image-ubuntu
-  #   environment:
-  #     CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
-  #   steps:
-  #     - checkout
-  #     - run: 
-  #         name: Set git tag in bash_env
-  #         command: |
-  #           echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
-  #     - restore-buildx-cache
-  #     - aws-ecr/ecr-login:
-  #         aws-access-key-id: AWS_ACCESS_KEY_ID
-  #         aws-secret-access-key: AWS_SECRET_ACCESS_KEY
-  #         public-registry: true
-  #     - run:
-  #         name: Make and push images
-  #         command: |
-  #           PUSH=true PROD=false PLATFORMS=linux/amd64 TAG=$TAG make images
-  #     - save-buildx-cache
-  # build-and-push2:
-  #   executor: image-ubuntu
-  #   environment:
-  #     CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
-  #   steps:
-  #     - checkout
-  #     - run: 
-  #         name: Set git tag in bash_env
-  #         command: |
-  #           echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
-  #     - restore-buildx-cache
-  #     - aws-ecr/ecr-login:
-  #         aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
-  #         aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
-  #         public-registry: true
-  #     - run:
-  #         name: Make and push images
-  #         command: |
-  #           PUSH=true PROD=true PLATFORMS=linux/amd64 TAG=$TAG make images
-  #     - save-buildx-cache
   build-and-push:
     executor: image-ubuntu
     environment:
@@ -361,8 +321,7 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            echo "the tag is: $TAG"
-            PUSH=false PROD=<< parameters.production >> PLATFORMS=linux/amd64 TAG=$TAG make images
+            PUSH=true PROD=<< parameters.production >> PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
   deploy-images:
     executor: image-ubuntu
@@ -397,20 +356,23 @@ jobs:
           echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
     - add_ssh_keys:
         fingerprints:
-          - << parameters.ssh-fingerprint >> 
+          - << parameters.ssh-fingerprint >>
     - run:
         name: Generate ssh config
-        command: ./.circleci/<<parameters.ssh-config-script>>
+        command: ./.circleci/<< parameters.ssh-config-script >>
     - run:
         name: Deploy images
         command: |
-          ssh ec2-user@master.<< parameters.ssh-host >> "ls | wc -l"
-          DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> docker images
+          DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> USE_TLS=enable PROD=<< parameters.production >> DD_API_KEY=$DD_API_KEY \
+          POSTGRES_PASSWORD=<< parameters.postgres-password >> \
+          MONGO_INITDB_ROOT_PASSWORD=<< parameters.mongodb-password >> \
+          TAG=$TAG \
+          make deploy
     - run:
         name: Pull new deployer image
         command: |
-          # ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
-  
+          [[ "<< parameters.production >>" == true ]] && ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-prod/deployer:$TAG" || \
+          ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
       image: << parameters.image >>
@@ -696,42 +658,48 @@ workflows:
               only: production
       - approve-push-unstable:
           type: approval
-          # filters:
-          #   branches:
-          #     only: main
+          filters:
+            branches:
+              only: main
       - build-and-push:
           name: build-and-push-unstable
           aws-access-key-id: AWS_ACCESS_KEY_ID
           aws-secret-access-key: AWS_SECRET_ACCESS_KEY
           production: false
-          requires: 
+          requires:
             - approve-push-unstable
-          # filters:
-          #   branches:
-          #     only: main
+          filters:
+            branches:
+              only: main
       - deploy-images:
           name: Deploy images to unstable
           postgres-password: DEV_POSTGRES_PASSWORD
           mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
-          production: true
           requires:
             - build-and-push-unstable
       - approve-push-production:
           type: approval
-          # filters:
-          #   branches:
-          #     only: production
+          filters:
+            branches:
+              only: production
       - build-and-push:
           name: build-and-push-production
           aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
           aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
           production: true
-          requires: 
+          requires:
             - approve-push-production
-          # filters:
-          #   branches:
-          #     only: production
-      - deploy-production:
+          filters:
+            branches:
+              only: production
+      - deploy-images:
+          name: Deploy images to production
+          postgres-password: PROD_POSTGRES_PASSWORD
+          mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
+          ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
+          ssh-config-script: production-ssh-config.sh
+          ssh-host: shuttle.prod.internal
+          production: true
           requires:
             - build-and-push-production
   release:

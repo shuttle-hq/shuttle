@@ -12,6 +12,7 @@ use utoipa::ToSchema;
 pub enum Type {
     AwsRds(AwsRdsEngine),
     Shared(SharedEngine),
+    Local,
 }
 
 #[derive(Clone, Debug, Deserialize, Display, Serialize, Eq, PartialEq)]
@@ -38,6 +39,7 @@ impl Display for Type {
         match self {
             Type::AwsRds(rds_type) => write!(f, "aws_rds::{rds_type}"),
             Type::Shared(shared_type) => write!(f, "shared::{shared_type}"),
+            Type::Local => write!(f, "local"),
         }
     }
 }

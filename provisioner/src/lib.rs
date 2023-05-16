@@ -11,6 +11,7 @@ use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_common::claims::{Claim, Scope};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
+use shuttle_proto::provisioner::Local;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
@@ -438,6 +439,7 @@ impl Provisioner for MyProvisioner {
                 self.request_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
             }
+            DbType::Local(Local {}) => todo!(),
         };
 
         Ok(Response::new(reply))
@@ -462,6 +464,7 @@ impl Provisioner for MyProvisioner {
                 self.delete_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
             }
+            DbType::Local(Local {}) => todo!(),
         };
 
         Ok(Response::new(reply))

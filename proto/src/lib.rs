@@ -49,6 +49,7 @@ pub mod provisioner {
                         engine: Some(engine),
                     })
                 }
+                database::Type::Local => database_request::DbType::Local(Local {}),
             }
         }
     }
@@ -77,6 +78,7 @@ pub mod provisioner {
                         Some(database::Type::AwsRds(AwsRdsEngine::MariaDB))
                     }
                 },
+                database_request::DbType::Local(Local {}) => Some(database::Type::Local),
                 database_request::DbType::Shared(Shared { engine: None })
                 | database_request::DbType::AwsRds(AwsRds { engine: None }) => None,
             }

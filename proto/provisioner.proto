@@ -12,6 +12,7 @@ message DatabaseRequest {
   oneof db_type {
     Shared Shared = 10;
     AwsRds AwsRds = 11;
+    Local Local = 12;
   };
 }
 
@@ -29,6 +30,8 @@ message AwsRds {
     RdsConfig mariadb = 3;
   }
 }
+
+message Local {}
 
 message RdsConfig {}
 

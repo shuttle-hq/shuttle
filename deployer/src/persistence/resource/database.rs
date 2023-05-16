@@ -6,6 +6,7 @@ use strum::{Display, EnumString};
 pub enum Type {
     AwsRds(AwsRdsType),
     Shared(SharedType),
+    Local,
 }
 
 #[derive(Clone, Copy, Debug, Display, EnumString, Eq, PartialEq)]
@@ -28,6 +29,7 @@ impl From<Type> for shuttle_common::database::Type {
         match r#type {
             Type::AwsRds(rds_type) => Self::AwsRds(rds_type.into()),
             Type::Shared(shared_type) => Self::Shared(shared_type.into()),
+            Type::Local => Self::Local,
         }
     }
 }
@@ -56,6 +58,7 @@ impl From<shuttle_common::database::Type> for Type {
         match r#type {
             shuttle_common::database::Type::AwsRds(rds_type) => Self::AwsRds(rds_type.into()),
             shuttle_common::database::Type::Shared(shared_type) => Self::Shared(shared_type.into()),
+            shuttle_common::database::Type::Local => Self::Local,
         }
     }
 }
@@ -84,6 +87,7 @@ impl Display for Type {
         match self {
             Type::AwsRds(rds_type) => write!(f, "aws_rds::{rds_type}"),
             Type::Shared(shared_type) => write!(f, "shared::{shared_type}"),
+            Type::Local => write!(f, "local"),
         }
     }
 }

@@ -630,11 +630,6 @@ impl Shuttle {
             addr
         );
 
-        println!(
-            "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
-                  Run `cargo shuttle deploy` to deploy your Shuttle service."
-        );
-
         let start_request = StartRequest {
             ip: addr.to_string(),
         };

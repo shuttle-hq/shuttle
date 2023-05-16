@@ -429,7 +429,7 @@ impl Shuttle {
 
         let proj_name = self.ctx.project_name();
         let deployments = client.get_deployments(proj_name, page, limit).await?;
-        let table = get_deployments_table(&deployments, proj_name.as_str());
+        let table = get_deployments_table(&deployments, proj_name.as_str(), page);
 
         println!("{table}");
 

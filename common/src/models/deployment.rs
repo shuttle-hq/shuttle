@@ -55,12 +55,19 @@ impl State {
     }
 }
 
-pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str) -> String {
+pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, page: u32) -> String {
     if deployments.is_empty() {
-        format!(
-            "{}\n",
-            "No deployments are linked to this service".yellow().bold()
-        )
+        if page <= 1 {
+            format!(
+                "{}\n",
+                "No deployments are linked to this service".yellow().bold()
+            )
+        } else {
+            format!(
+                "{}\n",
+                "No more deployments linked to this service".yellow().bold()
+            )
+        }
     } else {
         let mut table = Table::new();
         table

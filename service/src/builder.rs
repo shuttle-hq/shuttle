@@ -10,7 +10,7 @@ use cargo::util::homedir;
 use cargo::util::interning::InternedString;
 use cargo::Config;
 use cargo_metadata::Message;
-use cargo_metadata::Package;
+use cargo_metadata::{Target, Package};
 use crossbeam_channel::Sender;
 use pipe::PipeWriter;
 use shuttle_common::project::ProjectName;
@@ -121,6 +121,7 @@ pub async fn build_workspace(
     let mut next_packages = Vec::new();
 
     for member in metadata.workspace_packages() {
+        println!("{}", member.name);
         if is_next(member) {
             ensure_cdylib(member)?;
             next_packages.push(member.name.to_string());
@@ -306,9 +307,13 @@ fn ensure_binary(package: &Package) -> anyhow::Result<()> {
 
 /// Make sure "cdylib" is set for shuttle-next projects, else set it if possible.
 fn ensure_cdylib(package: &Package) -> anyhow::Result<()> {
-    if package.targets.iter().any(|target| target.is_lib()) {
+    if package.targets.iter().any(is_cdylib) {
         Ok(())
     } else {
         bail!("Your Shuttle next project must be a library. Please add `[lib]` to your Cargo.toml file.")
     }
+}
+
+fn is_cdylib(target: &Target) -> bool {
+    target.kind.iter().any(|kind| kind == "cdylib")
 }

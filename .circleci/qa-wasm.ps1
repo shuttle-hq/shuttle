@@ -18,7 +18,7 @@ $job = Start-Job -Name "local-run" -ScriptBlock { cd examples/next/hello-world; 
 Start-Sleep -Seconds 70
 
 echo "Testing local wasm endpoint"
-$output=curl http://localhost:8000/hello | Select-Object -ExpandProperty Content
+$output=curl http://localhost:8000 | Select-Object -ExpandProperty Content
 if ( $output -ne "Hello, world!")
 {
     echo "Did not expect output: $output"

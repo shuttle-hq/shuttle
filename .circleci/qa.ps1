@@ -19,7 +19,7 @@ $job = Start-Job -Name "local-run" -ScriptBlock { cd /tmp/qa-windows; cargo shut
 Start-Sleep -Seconds 150
 
 echo "Testing local hello endpoint"
-$output=curl http://localhost:8000/hello | Select-Object -ExpandProperty Content
+$output=curl http://localhost:8000 | Select-Object -ExpandProperty Content
 if ( $output -ne "Hello, world!")
 {
     echo "Did not expect output: $output"
@@ -33,7 +33,7 @@ cargo shuttle project start
 cargo shuttle deploy --allow-dirty
 
 echo "Testing remote hello endpoint"
-$output=curl https://qa-windows.unstable.shuttleapp.rs/hello | Select-Object -ExpandProperty Content
+$output=curl https://qa-windows.unstable.shuttleapp.rs | Select-Object -ExpandProperty Content
 if ( $output -ne "Hello, world!")
 {
     echo "Did not expect output: $output"

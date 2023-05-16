@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use serde::Serialize;
 use shuttle_service::{
-    Factory, ResourceBuilder, Type, DynamoDBInput, DynamoDbReadyInfo
+    Factory, ResourceBuilder, Type, DynamoDBInput
 };
+pub use shuttle_service::DynamoDbReadyInfo;
 
 #[derive(Serialize)]
 #[doc = "A resource connected to an AWS DynamoDB  instance"]

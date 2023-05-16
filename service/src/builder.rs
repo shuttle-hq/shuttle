@@ -10,7 +10,7 @@ use cargo::util::homedir;
 use cargo::util::interning::InternedString;
 use cargo::Config;
 use cargo_metadata::Message;
-use cargo_metadata::{Target, Package};
+use cargo_metadata::{Package, Target};
 use crossbeam_channel::Sender;
 use pipe::PipeWriter;
 use shuttle_common::project::ProjectName;

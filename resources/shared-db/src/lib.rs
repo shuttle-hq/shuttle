@@ -2,7 +2,7 @@
 //! # [Shuttle Shared Databases](https://docs.shuttle.rs/resources/shuttle-shared-db)
 //!
 //! This plugin manages databases that are shared with other services on shuttle.
-//! Your database will share the server with other users, but it will not 
+//! Your database will share the server with other users, but it will not
 //! be accessible by other users.
 
 #[cfg(feature = "mongodb")]

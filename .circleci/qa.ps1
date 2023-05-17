@@ -15,7 +15,7 @@ $env:Path += [IO.Path]::PathSeparator + "$env:USERPROFILE/.cargo/bin"
 cargo shuttle init --name qa-windows --template axum
 
 # # Start locally
-$job = Start-Job -Name "local-run" -ScriptBlock { cd /tmp/qa-windows; cargo shuttle run }
+# $job = Start-Job -Name "local-run" -ScriptBlock { cd /tmp/qa-windows; cargo shuttle run }
 Start-Sleep -Seconds 150
 
 echo "Testing local hello endpoint"

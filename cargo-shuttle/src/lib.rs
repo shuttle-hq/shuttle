@@ -914,7 +914,7 @@ impl Shuttle {
 
         // Temporary fix.
         // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(60000)).await;
 
         let service = client.get_service(self.ctx.project_name()).await?;
 

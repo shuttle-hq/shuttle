@@ -12,6 +12,7 @@ shuttle-service = { path = "/usr/src/shuttle/service" }
 shuttle-runtime = { path = "/usr/src/shuttle/runtime" }
 
 shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" }
+shuttle-dynamodb = { path = "/usr/src/shuttle/resources/dynamodb" }
 shuttle-persist = { path = "/usr/src/shuttle/resources/persist" }
 shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
 shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }

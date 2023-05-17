@@ -16,7 +16,6 @@ doctest = false
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
-clap = { workspace = true }
 prost-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

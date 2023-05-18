@@ -1,4 +1,4 @@
-use std::{path::Path, str::FromStr, time::SystemTime};
+use std::{fmt, path::Path, str::FromStr, time::SystemTime};
 
 use crate::{r#type::Type, Error};
 use async_trait::async_trait;
@@ -10,10 +10,37 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow},
     FromRow, Row, SqlitePool,
 };
-use tracing::{info, warn};
+use tracing::{error, info};
 use ulid::Ulid;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
+
+#[derive(Error, Debug)]
+pub enum DalError {
+    Sqlx(#[from] sqlx::Error),
+    ProjectId,
+    ServiceId,
+    Inactive,
+}
+
+// We are not using the `thiserror`'s `#[error]` syntax to prevent sensitive details from bubbling up to the users.
+// Instead we are logging it as an error which we can inspect.
+impl fmt::Display for DalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let msg = match self {
+            DalError::Sqlx(error) => {
+                error!(error = error.to_string(), "database request failed");
+
+                "failed to interact with recorder"
+            }
+            DalError::ProjectId => "resource belongs to a different project",
+            DalError::ServiceId => "resource belongs to a different service",
+            DalError::Inactive => "cannot add a resource that is inactive",
+        };
+
+        write!(f, "{msg}")
+    }
+}
 
 #[async_trait]
 pub trait Dal {
@@ -23,16 +50,16 @@ pub trait Dal {
         project_id: Ulid,
         service_id: Ulid,
         resources: Vec<Resource>,
-    ) -> Result<(), sqlx::Error>;
+    ) -> Result<(), DalError>;
 
     /// Get the resources that belong to a project
-    async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, sqlx::Error>;
+    async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, DalError>;
 
     /// Get the resources that belong to a service
-    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, sqlx::Error>;
+    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, DalError>;
 
     /// Delete a resource
-    async fn delete_resource(&self, resource: &Resource) -> Result<(), sqlx::Error>;
+    async fn delete_resource(&self, resource: &Resource) -> Result<(), DalError>;
 }
 
 pub struct Sqlite {
@@ -88,7 +115,7 @@ impl Dal for Sqlite {
         project_id: Ulid,
         service_id: Ulid,
         resources: Vec<Resource>,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<(), DalError> {
         let mut transaction = self.pool.begin().await?;
         let now = Utc::now();
 
@@ -101,18 +128,18 @@ impl Dal for Sqlite {
         for resource in resources {
             if let Some(r_project_id) = resource.project_id {
                 if r_project_id != project_id {
-                    warn!("adding a resource that belongs to another project");
+                    return Err(DalError::ProjectId);
                 }
             }
 
             if let Some(r_service_id) = resource.service_id {
                 if r_service_id != service_id {
-                    warn!("adding a resource that belongs to another service");
+                    return Err(DalError::ServiceId);
                 }
             }
 
             if !resource.is_active {
-                warn!("cannot add an inactive resource");
+                return Err(DalError::Inactive);
             }
 
             sqlx::query("INSERT OR REPLACE INTO resources (project_id, service_id, type, config, data, is_active, last_updated) VALUES(?, ?, ?, ?, ?, ?, ?)")
@@ -127,31 +154,39 @@ impl Dal for Sqlite {
             .await?;
         }
 
-        transaction.commit().await
+        transaction.commit().await?;
+
+        Ok(())
     }
 
-    async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, sqlx::Error> {
-        sqlx::query_as(r#"SELECT * FROM resources WHERE project_id = ?"#)
+    async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, DalError> {
+        let result = sqlx::query_as(r#"SELECT * FROM resources WHERE project_id = ?"#)
             .bind(project_id.to_string())
             .fetch_all(&self.pool)
-            .await
+            .await?;
+
+        Ok(result)
     }
 
-    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, sqlx::Error> {
-        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
+    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, DalError> {
+        let result = sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
             .bind(service_id.to_string())
             .fetch_all(&self.pool)
-            .await
+            .await?;
+
+        Ok(result)
     }
 
-    async fn delete_resource(&self, resource: &Resource) -> Result<(), sqlx::Error> {
+    async fn delete_resource(&self, resource: &Resource) -> Result<(), DalError> {
         sqlx::query("DELETE FROM resources WHERE project_id = ? AND service_id = ? AND type = ?")
             .bind(resource.project_id.map(|u| u.to_string()))
             .bind(resource.service_id.map(|u| u.to_string()))
             .bind(resource.r#type)
             .execute(&self.pool)
             .await
-            .map(|_| ())
+            .map(|_| ())?;
+
+        Ok(())
     }
 }
 
@@ -247,7 +282,7 @@ impl Resource {
             config,
             is_active: true,
             created_at: Default::default(),
-            last_updated: Utc::now(),
+            last_updated: Default::default(),
         }
     }
 }

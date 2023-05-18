@@ -1,7 +1,5 @@
-use std::fmt;
-
 use async_trait::async_trait;
-use dal::{Dal, Resource};
+use dal::{Dal, DalError, Resource};
 use prost_types::TimestampError;
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
 use shuttle_proto::resource_recorder::{
@@ -22,27 +20,17 @@ use ulid::DecodeError;
 /// A wrapper to capture any error possible with this service
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("could not decode id: {0}")]
     UlidDecode(#[from] DecodeError),
-    Dal(#[from] sqlx::Error),
+
+    #[error("failed to interact with database: {0}")]
+    Dal(#[from] DalError),
+
+    #[error("could not parse resource type: {0}")]
     String(String),
+
+    #[error("could not parse timestamp: {0}")]
     Timestamp(#[from] TimestampError),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let msg = match self {
-            Error::UlidDecode(error) => format!("could not decode id: {error}"),
-            Error::Dal(error) => {
-                error!(error = error.to_string(), "database request failed");
-
-                format!("failed to interact with recorder")
-            }
-            Error::String(error) => format!("could not parse resource type: {error}"),
-            Error::Timestamp(error) => format!("could not parse timestamp: {error}"),
-        };
-
-        write!(f, "{msg}")
-    }
 }
 
 // thiserror is not happy to handle a `#[from] String`

@@ -10,7 +10,7 @@ service ResourceRecorder {
   // Get the resource belonging to a project
   rpc GetProjectResources(ProjectResourcesRequest) returns (ResourcesResponse);
 
-  // Get the resource belonging to a service
+  // Get the resources belonging to a service
   rpc GetServiceResources(ServiceResourcesRequest) returns (ResourcesResponse);
 
   // Delete a resource

@@ -39,6 +39,23 @@ pub(crate) async fn post_user(
     Ok(Json(user.into()))
 }
 
+pub(crate) async fn put_user_reset_key(
+    session: ReadableSession,
+    State(user_manager): State<UserManagerState>,
+    key: Option<Key>,
+) -> Result<(), Error> {
+    let account_name = match session.get::<String>("account_name") {
+        Some(account_name) => account_name.into(),
+
+        None => match key {
+            Some(key) => user_manager.get_user_by_key(key.into()).await?.name,
+            None => return Err(Error::Unauthorized),
+        },
+    };
+
+    user_manager.reset_key(account_name).await
+}
+
 pub(crate) async fn login(
     mut session: WritableSession,
     State(user_manager): State<UserManagerState>,
@@ -64,12 +81,12 @@ pub(crate) async fn convert_cookie(
     session: ReadableSession,
     State(key_manager): State<KeyManagerState>,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
-    let account_name: String = session
-        .get("account_name")
+    let account_name = session
+        .get::<String>("account_name")
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let account_tier: AccountTier = session
-        .get("account_tier")
+    let account_tier = session
+        .get::<AccountTier>("account_tier")
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
     let claim = Claim::new(account_name, account_tier.into());
@@ -92,7 +109,7 @@ pub(crate) async fn convert_key(
     let User {
         name, account_tier, ..
     } = user_manager
-        .get_user_by_key(key.as_ref().clone())
+        .get_user_by_key(key.into())
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 

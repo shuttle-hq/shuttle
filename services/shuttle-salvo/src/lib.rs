@@ -10,7 +10,7 @@
 //!
 //! #[shuttle_runtime::main]
 //! async fn salvo() -> shuttle_salvo::ShuttleSalvo {
-//!     let router = Router::with_path("hello").get(hello_world);
+//!     let router = Router::new().get(hello_world);
 //!
 //!     Ok(router.into())
 //! }
@@ -31,16 +31,14 @@ impl shuttle_runtime::Service for SalvoService {
 
         #[handler]
         async fn healthz_handler(res: &mut Response) {
-            res.set_status_code(StatusCode::OK);
+            res.status_code(StatusCode::OK);
         }
 
         let healthz_router = salvo::Router::with_path("healthz").get(healthz_handler);
-
         let app = salvo::Router::new().push(healthz_router).push(self.0);
 
-        salvo::Server::new(salvo::listener::TcpListener::bind(addr))
-            .serve(app)
-            .await;
+        let listener = salvo::conn::TcpListener::new(addr).bind().await;
+        salvo::Server::new(listener).serve(app).await;
 
         Ok(())
     }

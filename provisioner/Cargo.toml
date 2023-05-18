@@ -7,8 +7,8 @@ description = "Service responsible for provisioning and managing resources for s
 publish = false
 
 [dependencies]
-aws-config = "0.51.0"
-aws-sdk-rds = "0.21.0"
+aws-config = "0.55.2"
+aws-sdk-rds = "0.27.0"
 clap = { workspace = true, features = ["env"] }
 fqdn = { workspace = true }
 mongodb = "2.4.0"

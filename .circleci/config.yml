@@ -202,6 +202,10 @@ jobs:
       path:
         description: "Path to crate external from workspace"
         type: string
+      features:
+        description: "Features to enable"
+        type: string
+        default: --all-features
     executor: docker-rust
     environment:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
@@ -218,13 +222,13 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --all-features \
+                       << parameters.features >> \
                        --manifest-path << parameters.path >>/Cargo.toml \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
-      - run: cargo test --all-features --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
+      - run: cargo test << parameters.features >> --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
       - save-cargo-cache
   platform-test:
     parameters:
@@ -290,6 +294,10 @@ jobs:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
+      - run: 
+          name: Set git tag in bash_env
+          command: |
+            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
       - restore-buildx-cache
       - aws-ecr/ecr-login:
           aws-access-key-id: AWS_ACCESS_KEY_ID
@@ -298,8 +306,34 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            PUSH=true PLATFORMS=linux/amd64 make images
+            PUSH=true PROD=false PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
+  deploy-images:
+    executor: image-ubuntu
+    steps:
+    - checkout
+    - run: 
+        name: Set git tag in bash_env
+        command: |
+          echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+    - add_ssh_keys:
+        fingerprints:
+          - "6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78"
+    - run:
+        name: Generate ssh config
+        command: ./.circleci/unstable-ssh-config.sh
+    - run:
+        name: Deploy to unstable
+        command: |
+          DOCKER_HOST=ssh://ec2-user@master.shuttle.internal USE_TLS=enable PROD=false DD_API_KEY=$DD_API_KEY \
+          POSTGRES_PASSWORD=$DEV_POSTGRES_PASSWORD \
+          MONGO_INITDB_ROOT_PASSWORD=$DEV_MONGO_INITDB_ROOT_PASSWORD \
+          TAG=$TAG \
+          make deploy
+    - run:
+        name: Pull new deployer image
+        command: |
+          ssh ec2-user@controller.shuttle.internal "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
       image: << parameters.image >>
@@ -478,6 +512,47 @@ jobs:
       # - run:
       #     name: Test Docker
       #     command: ./.circleci/qa-docker.sh
+  windows-qa:
+    executor:
+      name: win/server-2022
+      size: medium
+      shell: powershell.exe
+    environment:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - checkout
+      - run:
+          name: "Install Protobuf"
+          command: |
+            choco install -y protoc
+      - run:
+          name: Install Rust
+          command: |
+            wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
+            C:\rustup-init.exe -y --default-toolchain 1.68.0 --target x86_64-pc-windows-msvc
+      - run:
+          name: "Install Shuttle"
+          command:  ..\.cargo\bin\cargo.exe install cargo-shuttle --path ./cargo-shuttle
+      - run: ..\.cargo\bin\cargo.exe shuttle --version
+      - run:
+          name: Login
+          command: |
+            ..\.cargo\bin\cargo.exe shuttle login --api-key $env:SHUTTLE_API_KEY
+      - run:
+          name: QA
+          command: ./.circleci/qa.ps1
+          environment:
+            SHUTTLE_API: https://api.unstable.shuttle.rs
+      - run: git submodule sync
+      - run: git submodule update --init
+      # - run:
+      #     name: Test WASM
+      #     command: ./.circleci/qa-wasm.ps1
+      # We can't run linux containers on the Windows executor at this time
+      # https://circleci.com/docs/using-windows/#known-issues-and-limitations
+      # - run:
+      #     name: Test Docker
+      #     command: ./.circleci/qa-docker.ps1
 
 workflows:
   ci:
@@ -491,7 +566,6 @@ workflows:
                 - resources/aws-rds
                 - resources/persist
                 - resources/secrets
-                - resources/shared-db
                 - resources/static-folder
                 - services/shuttle-actix-web
                 - services/shuttle-axum
@@ -505,6 +579,18 @@ workflows:
                 - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
+      - check-standalone:
+        # shuttle-shared-db has mutually exclusive features
+        # so we run checks for each feature separately
+          name: "resources/shared-db: << matrix.features >>"
+          matrix:
+            alias: check-standalone-shared-db
+            parameters:
+              path: [resources/shared-db]
+              features:
+                - "-F mongodb"
+                - "-F postgres"
+                - "-F postgres-rustls"
       - platform-test:
           name: << matrix.crate >>
           requires:
@@ -527,15 +613,24 @@ workflows:
           requires:
             - platform-test
             - check-standalone
+            - check-standalone-shared-db
           filters:
             branches:
               only: production
+      - approve-push-unstable:
+          type: approval
+          filters:
+            branches:
+              only: main
       - build-and-push:
           requires:
-            - e2e-test
+            - approve-push-unstable
           filters:
             branches:
-              only: production
+              only: main
+      - deploy-images:
+          requires:
+            - build-and-push
   release:
     jobs:
       - linux-qa:
@@ -546,14 +641,16 @@ workflows:
           filters:
             branches:
               only: production
+      - windows-qa:
+          filters:
+            branches:
+              only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-gnu
           protoc_arch: linux-x86_64
           resource_class: xlarge
-          # requires:
-          #   - linux-qa
           filters:
             branches:
               only: production
@@ -563,8 +660,6 @@ workflows:
           target: x86_64-unknown-linux-musl
           protoc_arch: linux-x86_64
           resource_class: xlarge
-          # requires:
-          #   - linux-qa
           filters:
             branches:
               only: production
@@ -574,8 +669,6 @@ workflows:
           target: aarch64-unknown-linux-musl
           resource_class: arm.xlarge
           protoc_arch: linux-aarch_64
-          # requires:
-          #   - linux-qa
           filters:
             branches:
               only: production
@@ -584,8 +677,6 @@ workflows:
             branches:
               only: production
       - build-binaries-mac:
-          # requires:
-          #   - mac-qa
           filters:
             branches:
               only: production

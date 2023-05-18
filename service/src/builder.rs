@@ -106,15 +106,23 @@ pub async fn build_workspace(
 
     let mut runtimes = Vec::new();
 
+    let cwd = std::env::current_dir()?;
+
     if !alpha_packages.is_empty() {
-        let mut compilation = compiler(alpha_packages, release_mode, false, project_path.clone())?;
+        let mut compilation = compiler(
+            alpha_packages,
+            release_mode,
+            false,
+            project_path.clone(),
+            cwd.clone(),
+        )?;
         trace!("alpha packages compiled");
 
         runtimes.append(&mut compilation);
     }
 
     if !next_packages.is_empty() {
-        let mut compilation = compiler(next_packages, release_mode, true, project_path)?;
+        let mut compilation = compiler(next_packages, release_mode, true, project_path, cwd)?;
         trace!("next packages compiled");
 
         runtimes.append(&mut compilation);
@@ -215,6 +223,7 @@ fn compiler(
     release_mode: bool,
     wasm: bool,
     project_path: PathBuf,
+    cwd: PathBuf,
 ) -> anyhow::Result<Vec<BuiltService>> {
     let jobs = std::thread::available_parallelism()?.get();
     let manifest_path = project_path.join("Cargo.toml");
@@ -266,7 +275,7 @@ fn compiler(
                 path.clone(),
                 true,
                 package.clone().name,
-                std::env::current_dir()?,
+                cwd.clone(),
                 package.clone().manifest_path.into_std_path_buf(),
             );
 
@@ -285,7 +294,7 @@ fn compiler(
                 path.clone(),
                 false,
                 package.clone().name,
-                std::env::current_dir()?,
+                cwd.clone(),
                 package.clone().manifest_path.into_std_path_buf(),
             );
 

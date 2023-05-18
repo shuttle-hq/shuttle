@@ -160,7 +160,7 @@ pub mod resource_recorder_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
-        /// Get the resource belonging to a project
+        /// Get the resources belonging to a project
         pub async fn get_project_resources(
             &mut self,
             request: impl tonic::IntoRequest<super::ProjectResourcesRequest>,
@@ -180,7 +180,7 @@ pub mod resource_recorder_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
-        /// Get the resource belonging to a service
+        /// Get the resources belonging to a service
         pub async fn get_service_resources(
             &mut self,
             request: impl tonic::IntoRequest<super::ServiceResourcesRequest>,
@@ -234,12 +234,12 @@ pub mod resource_recorder_server {
             &self,
             request: tonic::Request<super::RecordRequest>,
         ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status>;
-        /// Get the resource belonging to a project
+        /// Get the resources belonging to a project
         async fn get_project_resources(
             &self,
             request: tonic::Request<super::ProjectResourcesRequest>,
         ) -> Result<tonic::Response<super::ResourcesResponse>, tonic::Status>;
-        /// Get the resource belonging to a service
+        /// Get the resources belonging to a service
         async fn get_service_resources(
             &self,
             request: tonic::Request<super::ServiceResourcesRequest>,

@@ -7,7 +7,7 @@ service ResourceRecorder {
   // Record a new set of resources
   rpc RecordResources(RecordRequest) returns (ResultResponse);
 
-  // Get the resource belonging to a project
+  // Get the resources belonging to a project
   rpc GetProjectResources(ProjectResourcesRequest) returns (ResourcesResponse);
 
   // Get the resources belonging to a service

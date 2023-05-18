@@ -151,13 +151,13 @@ impl Dal for Sqlite {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Resource {
-    pub project_id: Option<Ulid>,
-    pub service_id: Option<Ulid>,
-    pub r#type: Type,
-    pub data: Vec<u8>,
-    pub config: Vec<u8>,
-    pub is_active: bool,
-    pub created_at: DateTime<Utc>,
+    project_id: Option<Ulid>,
+    service_id: Option<Ulid>,
+    r#type: Type,
+    data: Vec<u8>,
+    config: Vec<u8>,
+    is_active: bool,
+    created_at: DateTime<Utc>,
 }
 
 impl FromRow<'_, SqliteRow> for Resource {

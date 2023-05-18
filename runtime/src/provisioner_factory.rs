@@ -48,6 +48,10 @@ impl Factory for ProvisionerFactory {
     async fn get_dynamodb_connection(&mut self) -> Result<DynamoDbReadyInfo, shuttle_service::Error> {
         let mut request = Request::new(DynamoDbRequest { project_name: self.service_name.to_string() });
 
+        if let Some(claim) = &self.claim {
+            request.extensions_mut().insert(claim.clone());
+        }
+
         let response = self
             .provisioner_client
             .provision_dynamo_db(request)

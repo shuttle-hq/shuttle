@@ -282,7 +282,7 @@ async fn manage_resources() {
 /// Layer to set JwtScopes on a request
 #[derive(Clone)]
 pub struct JwtScopesLayer {
-    /// The scopes to set
+    /// Thes scopes to set
     scopes: Vec<Scope>,
 }
 

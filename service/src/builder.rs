@@ -245,7 +245,11 @@ fn compiler(
         cargo.arg("--target").arg("wasm32-wasi");
     }
 
-    cargo.output()?;
+    let command = cargo.output()?;
+
+    if !command.status.success() {
+        bail!("Build failed. Is the Shuttle runtime missing?");
+    }
 
     let mut outputs = Vec::new();
 

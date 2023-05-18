@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use shuttle_service::builder::{build_workspace, BuiltService};
 
 #[tokio::test]
-#[should_panic(expected = "1 job failed")]
+#[should_panic(expected = "Build failed. Is the Shuttle runtime missing?")]
 async fn not_shuttle() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-shuttle", env!("CARGO_MANIFEST_DIR"));

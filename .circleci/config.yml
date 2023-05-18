@@ -371,7 +371,7 @@ jobs:
     - run:
         name: Pull new deployer image
         command: |
-          [[ "<< parameters.production >>" == true ]] && ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-prod/deployer:$TAG" || \
+          [[ << parameters.production >> == true ]] && ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-prod/deployer:$TAG" || \
           ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
@@ -592,6 +592,24 @@ jobs:
       # - run:
       #     name: Test Docker
       #     command: ./.circleci/qa-docker.ps1
+  publish-crates:
+    parameters:
+      path:
+        description: Crate to publish
+        type: string
+    machine:
+      image: ubuntu-2204:2022.04.1
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: "Install Rust"
+          command: |
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - run:
+          name: Crate publishing in order
+          command: |
+            cargo publish --manifest-path << parameters.path >>/Cargo.toml
 
 workflows:
   ci:
@@ -677,31 +695,6 @@ workflows:
           mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
           requires:
             - build-and-push-unstable
-      - approve-push-production:
-          type: approval
-          filters:
-            branches:
-              only: production
-      - build-and-push:
-          name: build-and-push-production
-          aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
-          aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
-          production: true
-          requires:
-            - approve-push-production
-          filters:
-            branches:
-              only: production
-      - deploy-images:
-          name: Deploy images to production
-          postgres-password: PROD_POSTGRES_PASSWORD
-          mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
-          ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
-          ssh-config-script: production-ssh-config.sh
-          ssh-host: shuttle.prod.internal
-          production: true
-          requires:
-            - build-and-push-production
   release:
     jobs:
       - linux-qa:
@@ -758,6 +751,228 @@ workflows:
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac
+          filters:
+            branches:
+              only: production
+      - approve-push-production:
+          type: approval
+          filters:
+            branches:
+              only: production
+      - build-and-push:
+          name: build-and-push-production
+          aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
+          aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
+          production: true
+          requires:
+            - approve-push-production
+          filters:
+            branches:
+              only: production
+      - deploy-images:
+          name: deploy-images-to-production
+          postgres-password: PROD_POSTGRES_PASSWORD
+          mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
+          ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
+          ssh-config-script: production-ssh-config.sh
+          ssh-host: shuttle.prod.internal
+          production: true
+          requires:
+            - build-and-push-production
+          filters:
+            branches:
+              only: production
+      - approve-publish-crates:
+          type: approval
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-codegen
+          path: codegen
+          requires:
+            - approve-publish-crates
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-common
+          path: common
+          requires:
+            - shuttle-codegen
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-proto
+          path: proto
+          requires:
+            - shuttle-common
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-service
+          path: service
+          requires:
+            - shuttle-proto
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-runtime
+          path: runtime
+          requires:
+            - shuttle-service
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-aws-rds
+          path: resources/aws-rds
+          requires:
+            - shuttle-runtime
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-shared-db
+          path: resources/shared-db
+          requires:
+            - shuttle-aws-rds
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-secrets
+          path: resources/secrets
+          requires:
+            - shuttle-shared-db
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-persist
+          path: resources/persist
+          requires:
+            - shuttle-secrets
+      - publish-crates:
+          name: shuttle-static-folder
+          path: resources/static-folder
+          requires:
+            - shuttle-persist
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: cargo-shuttle
+          path: cargo-shuttle
+          requires:
+            - shuttle-static-folder
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-actix-web
+          path: services/shuttle-actix-web
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-axum
+          path: services/shuttle-axum
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-next
+          path: services/shuttle-next
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-poem
+          path: services/shuttle-poem
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-poise
+          path: services/shuttle-poise
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-rocket
+          path: services/shuttle-rocket
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-salvo
+          path: services/shuttle-salvo
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-salvo
+          path: services/shuttle-salvo
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-serenity
+          path: services/shuttle-serenity
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-thruster
+          path: services/shuttle-thruset
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-tide
+          path: services/shuttle-tide
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-tower
+          path: services/shuttle-tower
+          requires:
+            - cargo-shuttle
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: shuttle-warp
+          path: services/shuttle-warp
+          requires:
+            - cargo-shuttle
           filters:
             branches:
               only: production

@@ -78,6 +78,7 @@ pub async fn build_workspace(
     _tx: Sender<Message>,
 ) -> anyhow::Result<Vec<BuiltService>> {
     let project_path = project_path.to_owned();
+    let cwd = std::env::current_dir()?;
 
     let manifest_path = project_path.join("Cargo.toml");
 
@@ -105,8 +106,6 @@ pub async fn build_workspace(
     }
 
     let mut runtimes = Vec::new();
-
-    let cwd = std::env::current_dir()?;
 
     if !alpha_packages.is_empty() {
         let mut compilation = compiler(

@@ -262,11 +262,14 @@ fn compiler(
             .collect();
             path.set_extension("wasm");
 
+            let mut working_directory = package.clone().manifest_path.into_std_path_buf();
+            working_directory.pop();
+
             let output = BuiltService::new(
                 path.clone(),
                 true,
                 package.clone().name,
-                project_path.clone(),
+                working_directory,
                 package.clone().manifest_path.into_std_path_buf(),
             );
 
@@ -281,6 +284,10 @@ fn compiler(
             .iter()
             .collect();
             path.set_extension(std::env::consts::EXE_SUFFIX);
+
+            let mut working_directory = package.clone().manifest_path.into_std_path_buf();
+            working_directory.pop();
+
             let output = BuiltService::new(
                 path.clone(),
                 false,

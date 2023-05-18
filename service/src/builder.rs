@@ -292,7 +292,7 @@ fn compiler(
                 path.clone(),
                 false,
                 package.clone().name,
-                project_path.clone(),
+                working_directory,
                 package.clone().manifest_path.into_std_path_buf(),
             );
 

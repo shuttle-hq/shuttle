@@ -6,9 +6,8 @@ use anyhow::{anyhow, bail, Context};
 use cargo_metadata::Message;
 use cargo_metadata::{Package, Target};
 use crossbeam_channel::Sender;
-use pipe::PipeWriter;
 use shuttle_common::project::ProjectName;
-use tracing::{debug, error, trace};
+use tracing::{debug, trace};
 
 use crate::{NEXT_NAME, RUNTIME_NAME};
 
@@ -76,30 +75,11 @@ fn extract_shuttle_toml_name(path: PathBuf) -> anyhow::Result<String> {
 pub async fn build_workspace(
     project_path: &Path,
     release_mode: bool,
-    tx: Sender<Message>,
+    _tx: Sender<Message>,
 ) -> anyhow::Result<Vec<BuiltService>> {
-    let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
-    // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
-    tokio::task::spawn_blocking(move || {
-        trace!("started thread to to capture build output stream");
-        for message in Message::parse_stream(read) {
-            trace!(?message, "parsed cargo message");
-            match message {
-                Ok(message) => {
-                    if let Err(error) = tx.send(message) {
-                        error!("failed to send cargo message on channel: {error}");
-                    }
-                }
-                Err(error) => {
-                    error!("failed to parse cargo message: {error}");
-                }
-            }
-        }
-    });
-
-    let manifest_path = project_path.clone().join("Cargo.toml");
+    let manifest_path = project_path.join("Cargo.toml");
 
     // This satisfies a test
     if !manifest_path.exists() {
@@ -108,6 +88,7 @@ pub async fn build_workspace(
     let metadata = cargo_metadata::MetadataCommand::new()
         .manifest_path(&manifest_path)
         .exec()?;
+    trace!("Cargo metadata parsed");
 
     let mut alpha_packages = Vec::new();
     let mut next_packages = Vec::new();
@@ -126,13 +107,15 @@ pub async fn build_workspace(
     let mut runtimes = Vec::new();
 
     if !alpha_packages.is_empty() {
-        let mut compilation = compiler(alpha_packages, release_mode, false, project_path.clone());
+        let mut compilation = compiler(alpha_packages, release_mode, false, project_path.clone())?;
+        trace!("alpha packages compiled");
 
         runtimes.append(&mut compilation);
     }
 
     if !next_packages.is_empty() {
-        let mut compilation = compiler(next_packages, release_mode, true, project_path.clone());
+        let mut compilation = compiler(next_packages, release_mode, true, project_path)?;
+        trace!("next packages compiled");
 
         runtimes.append(&mut compilation);
     }
@@ -191,43 +174,6 @@ pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Ve
     }
 }
 
-/// Get options to compile in build mode
-fn get_compile_options(
-    config: &Config,
-    packages: Vec<String>,
-    release_mode: bool,
-    wasm: bool,
-) -> anyhow::Result<CompileOptions> {
-    let mut opts = CompileOptions::new(config, CompileMode::Build)?;
-    opts.build_config.message_format = MessageFormat::Json {
-        render_diagnostics: false,
-        short: false,
-        ansi: false,
-    };
-
-    opts.build_config.requested_profile = if release_mode {
-        InternedString::new("release")
-    } else {
-        InternedString::new("dev")
-    };
-
-    // This sets the max workers for cargo build to 4 for release mode (aka deployment),
-    // but leaves it as default (num cpus) for local runs
-    if release_mode {
-        opts.build_config.jobs = 4
-    };
-
-    opts.build_config.requested_kinds = vec![if wasm {
-        CompileKind::Target(CompileTarget::new("wasm32-wasi")?)
-    } else {
-        CompileKind::Host
-    }];
-
-    opts.spec = ops::Packages::Packages(packages);
-
-    Ok(opts)
-}
-
 fn is_next(package: &Package) -> bool {
     package
         .dependencies
@@ -268,11 +214,10 @@ fn compiler(
     packages: Vec<&Package>,
     release_mode: bool,
     wasm: bool,
-    project_path: &Path,
+    project_path: PathBuf,
 ) -> anyhow::Result<Vec<BuiltService>> {
     let jobs = std::thread::available_parallelism()?.get();
-    let project_path = project_path.to_owned();
-    let manifest_path = project_path.clone().join("Cargo.toml");
+    let manifest_path = project_path.join("Cargo.toml");
 
     let mut cargo = std::process::Command::new("cargo");
 
@@ -284,7 +229,7 @@ fn compiler(
         .arg(manifest_path);
 
     for package in packages.clone() {
-        cargo.arg("--package").arg(package);
+        cargo.arg("--package").arg(package.name.clone());
     }
 
     let mut profile = "debug";
@@ -306,12 +251,17 @@ fn compiler(
 
     for package in packages.clone() {
         if wasm {
-            let path = format!(
-                "{}/target/wasm32-wasi/{}/{}.wasm",
+            let mut path: PathBuf = [
                 project_path.clone(),
-                profile,
-                package.clone().name,
-            );
+                "target".into(),
+                "wasm32-wasi".into(),
+                profile.into(),
+                package.clone().name.into(),
+            ]
+            .iter()
+            .collect();
+            path.set_extension("wasm");
+
             let output = BuiltService::new(
                 path.clone(),
                 true,
@@ -320,15 +270,17 @@ fn compiler(
                 package.clone().manifest_path.into_std_path_buf(),
             );
 
-            output.push(output);
+            outputs.push(output);
         } else {
-            let path = format!(
-                "{}/target/{}/{}.{}",
+            let mut path: PathBuf = [
                 project_path.clone(),
-                profile,
-                package.clone(),
-                std::env::consts::EXE_SUFFIX
-            );
+                "target".into(),
+                profile.into(),
+                package.clone().name.into(),
+            ]
+            .iter()
+            .collect();
+            path.set_extension(std::env::consts::EXE_SUFFIX);
             let output = BuiltService::new(
                 path.clone(),
                 false,

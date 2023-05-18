@@ -1,7 +1,7 @@
 use std::net::{Ipv4Addr, SocketAddr};
 
 use portpicker::pick_unused_port;
-use pretty_assertions::assert_eq;
+use pretty_assertions::{assert_eq, assert_ne};
 use serde_json::json;
 use shuttle_common::claims::{Claim, Scope};
 use shuttle_proto::resource_recorder::{
@@ -121,29 +121,31 @@ async fn manage_resources() {
             .unwrap()
             .into_inner();
 
+        let mut service_db = Resource {
+            project_id: project_id.clone(),
+            service_id: service_id.clone(),
+            r#type: "database::shared::postgres".to_string(),
+            config: serde_json::to_vec(&json!({"public": true})).unwrap(),
+            data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
+            is_active: true,
+            created_at: response.resources[0].created_at.clone(),
+            last_updated: response.resources[0].last_updated.clone(),
+        };
+        let mut service_secrets = Resource {
+            project_id: project_id.clone(),
+            service_id: service_id.clone(),
+            r#type: "secrets".to_string(),
+            config: serde_json::to_vec(&json!({})).unwrap(),
+            data: serde_json::to_vec(&json!({"password": "brrrr"})).unwrap(),
+            is_active: true,
+            created_at: response.resources[1].created_at.clone(),
+            last_updated: response.resources[1].last_updated.clone(),
+        };
+
         let expected = ResourcesResponse {
             success: true,
             message: String::new(),
-            resources: vec![
-                Resource {
-                    project_id: project_id.clone(),
-                    service_id: service_id.clone(),
-                    r#type: "database::shared::postgres".to_string(),
-                    config: serde_json::to_vec(&json!({"public": true})).unwrap(),
-                    data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
-                    is_active: true,
-                    created_at: response.resources[0].created_at.clone(),
-                },
-                Resource {
-                    project_id: project_id.clone(),
-                    service_id: service_id.clone(),
-                    r#type: "secrets".to_string(),
-                    config: serde_json::to_vec(&json!({})).unwrap(),
-                    data: serde_json::to_vec(&json!({"password": "brrrr"})).unwrap(),
-                    is_active: true,
-                    created_at: response.resources[1].created_at.clone(),
-                },
-            ],
+            resources: vec![service_db.clone(), service_secrets.clone()],
         };
 
         assert_eq!(response, expected);
@@ -157,37 +159,24 @@ async fn manage_resources() {
             .unwrap()
             .into_inner();
 
+        let service2_static_folder = Resource {
+            project_id: project_id.clone(),
+            service_id: service_id2.clone(),
+            r#type: "static_folder".to_string(),
+            config: serde_json::to_vec(&json!({"folder": "static"})).unwrap(),
+            data: serde_json::to_vec(&json!({"path": "/tmp/static"})).unwrap(),
+            is_active: true,
+            created_at: response.resources[2].created_at.clone(),
+            last_updated: response.resources[2].last_updated.clone(),
+        };
+
         let expected = ResourcesResponse {
             success: true,
             message: String::new(),
             resources: vec![
-                Resource {
-                    project_id: project_id.clone(),
-                    service_id: service_id.clone(),
-                    r#type: "database::shared::postgres".to_string(),
-                    config: serde_json::to_vec(&json!({"public": true})).unwrap(),
-                    data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
-                    is_active: true,
-                    created_at: response.resources[0].created_at.clone(),
-                },
-                Resource {
-                    project_id: project_id.clone(),
-                    service_id: service_id.clone(),
-                    r#type: "secrets".to_string(),
-                    config: serde_json::to_vec(&json!({})).unwrap(),
-                    data: serde_json::to_vec(&json!({"password": "brrrr"})).unwrap(),
-                    is_active: true,
-                    created_at: response.resources[1].created_at.clone(),
-                },
-                Resource {
-                    project_id: project_id.clone(),
-                    service_id: service_id2.clone(),
-                    r#type: "static_folder".to_string(),
-                    config: serde_json::to_vec(&json!({"folder": "static"})).unwrap(),
-                    data: serde_json::to_vec(&json!({"path": "/tmp/static"})).unwrap(),
-                    is_active: true,
-                    created_at: response.resources[2].created_at.clone(),
-                },
+                service_db.clone(),
+                service_secrets.clone(),
+                service2_static_folder.clone(),
             ],
         };
 
@@ -195,15 +184,7 @@ async fn manage_resources() {
 
         // Deleting a resource
         let response = client
-            .delete_resource(Request::new(Resource {
-                project_id: project_id.clone(),
-                service_id: service_id2.clone(),
-                r#type: "static_folder".to_string(),
-                config: serde_json::to_vec(&json!({"folder": "static"})).unwrap(),
-                data: serde_json::to_vec(&json!({"path": "/tmp/static"})).unwrap(),
-                is_active: true,
-                created_at: response.resources[2].created_at.clone(),
-            }))
+            .delete_resource(Request::new(service2_static_folder))
             .await
             .unwrap()
             .into_inner();
@@ -216,6 +197,11 @@ async fn manage_resources() {
         assert_eq!(response, expected);
 
         // Updating resources on a service
+        service_db.config = serde_json::to_vec(&json!({"public": false})).unwrap();
+        service_db.data = serde_json::to_vec(&json!({"username": "inner"})).unwrap();
+
+        service_secrets.is_active = false;
+
         let response = client
             .record_resources(Request::new(RecordRequest {
                 project_id: project_id.clone(),
@@ -245,29 +231,17 @@ async fn manage_resources() {
             .unwrap()
             .into_inner();
 
+        assert_ne!(
+            response.resources[1].last_updated, service_db.last_updated,
+            "should update last_updated"
+        );
+
+        service_db.last_updated = response.resources[1].last_updated.clone();
+
         let expected = ResourcesResponse {
             success: true,
             message: String::new(),
-            resources: vec![
-                Resource {
-                    project_id: project_id.clone(),
-                    service_id: service_id.clone(),
-                    r#type: "secrets".to_string(),
-                    config: serde_json::to_vec(&json!({})).unwrap(),
-                    data: serde_json::to_vec(&json!({"password": "brrrr"})).unwrap(),
-                    is_active: false,
-                    created_at: response.resources[0].created_at.clone(),
-                },
-                Resource {
-                    project_id: project_id.clone(),
-                    service_id: service_id.clone(),
-                    r#type: "database::shared::postgres".to_string(),
-                    config: serde_json::to_vec(&json!({"public": false})).unwrap(),
-                    data: serde_json::to_vec(&json!({"username": "inner"})).unwrap(),
-                    is_active: true,
-                    created_at: response.resources[1].created_at.clone(),
-                },
-            ],
+            resources: vec![service_secrets, service_db],
         };
 
         assert_eq!(response, expected);

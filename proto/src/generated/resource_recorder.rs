@@ -68,6 +68,8 @@ pub struct Resource {
     pub is_active: bool,
     #[prost(message, optional, tag = "7")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "8")]
+    pub last_updated: ::core::option::Option<::prost_types::Timestamp>,
 }
 /// Generated client implementations.
 pub mod resource_recorder_client {

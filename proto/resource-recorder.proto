@@ -59,4 +59,5 @@ message Resource {
   bytes data = 5;
   bool is_active = 6;
   google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp last_updated = 8;
 }

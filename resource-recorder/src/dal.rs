@@ -90,6 +90,7 @@ impl Dal for Sqlite {
         resources: Vec<Resource>,
     ) -> Result<(), sqlx::Error> {
         let mut transaction = self.pool.begin().await?;
+        let now = Utc::now();
 
         sqlx::query("UPDATE resources SET is_active = false WHERE service_id = ?")
             .bind(service_id.to_string())
@@ -110,13 +111,18 @@ impl Dal for Sqlite {
                 }
             }
 
-            sqlx::query("INSERT OR REPLACE INTO resources (project_id, service_id, type, config, data, is_active) VALUES(?, ?, ?, ?, ?, ?)")
+            if !resource.is_active {
+                warn!("cannot add an inactive resource");
+            }
+
+            sqlx::query("INSERT OR REPLACE INTO resources (project_id, service_id, type, config, data, is_active, last_updated) VALUES(?, ?, ?, ?, ?, ?, ?)")
             .bind(project_id.to_string())
             .bind(service_id.to_string())
             .bind(resource.r#type)
             .bind(resource.config)
             .bind(resource.data)
             .bind(resource.is_active)
+            .bind(now)
             .execute(&mut transaction)
             .await?;
         }
@@ -158,6 +164,7 @@ pub struct Resource {
     config: Vec<u8>,
     is_active: bool,
     created_at: DateTime<Utc>,
+    last_updated: DateTime<Utc>,
 }
 
 impl FromRow<'_, SqliteRow> for Resource {
@@ -176,6 +183,7 @@ impl FromRow<'_, SqliteRow> for Resource {
             config: row.try_get("config")?,
             is_active: row.try_get("is_active")?,
             created_at: row.try_get("created_at")?,
+            last_updated: row.try_get("last_updated")?,
         })
     }
 }
@@ -204,6 +212,7 @@ impl From<Resource> for resource_recorder::Resource {
             data: value.data,
             is_active: value.is_active,
             created_at: Some(Timestamp::from(SystemTime::from(value.created_at))),
+            last_updated: Some(Timestamp::from(SystemTime::from(value.last_updated))),
         }
     }
 }
@@ -220,6 +229,9 @@ impl TryFrom<resource_recorder::Resource> for Resource {
             config: value.config,
             is_active: value.is_active,
             created_at: DateTime::from(SystemTime::try_from(value.created_at.unwrap_or_default())?),
+            last_updated: DateTime::from(SystemTime::try_from(
+                value.last_updated.unwrap_or_default(),
+            )?),
         })
     }
 }
@@ -235,6 +247,7 @@ impl Resource {
             config,
             is_active: true,
             created_at: Default::default(),
+            last_updated: Utc::now(),
         }
     }
 }

@@ -95,6 +95,7 @@ impl FromStr for Type {
                 "secrets" => Ok(Self::Secrets),
                 "static_folder" => Ok(Self::StaticFolder),
                 "persist" => Ok(Self::Persist),
+                "dynamodb" => Ok(Self::DynamoDB),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }
@@ -143,6 +144,7 @@ mod tests {
             Type::Secrets,
             Type::StaticFolder,
             Type::Persist,
+            Type::DynamoDB
         ];
 
         for input in inputs {

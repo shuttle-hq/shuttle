@@ -321,7 +321,7 @@ mod tests {
     use portpicker::pick_unused_port;
     use shuttle_proto::provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbRequest, DynamoDbResponse,
     };
     use tempfile::Builder;
     use tokio::{select, time::sleep};
@@ -443,6 +443,13 @@ mod tests {
             _request: tonic::Request<DatabaseRequest>,
         ) -> Result<tonic::Response<DatabaseResponse>, tonic::Status> {
             panic!("no deploy layer tests should request a db");
+        }
+
+        async fn provision_dynamo_db(
+            &self,
+            _request: tonic::Request<DynamoDbRequest>,
+        ) -> Result<tonic::Response<DynamoDbResponse>, tonic::Status> {
+            panic!("no deploy layer tests should request dynamodb");
         }
 
         async fn delete_database(

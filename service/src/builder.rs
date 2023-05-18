@@ -3,12 +3,6 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context};
-use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget, MessageFormat};
-use cargo::core::{Shell, Verbosity, Workspace};
-use cargo::ops::{self, compile, CompileOptions};
-use cargo::util::homedir;
-use cargo::util::interning::InternedString;
-use cargo::Config;
 use cargo_metadata::Message;
 use cargo_metadata::{Package, Target};
 use crossbeam_channel::Sender;
@@ -105,8 +99,7 @@ pub async fn build_workspace(
         }
     });
 
-    let config = get_config(write)?;
-    let manifest_path = project_path.join("Cargo.toml");
+    let manifest_path = project_path.clone().join("Cargo.toml");
 
     // This satisfies a test
     if !manifest_path.exists() {
@@ -115,7 +108,6 @@ pub async fn build_workspace(
     let metadata = cargo_metadata::MetadataCommand::new()
         .manifest_path(&manifest_path)
         .exec()?;
-    let ws = Workspace::new(&manifest_path, &config)?;
 
     let mut alpha_packages = Vec::new();
     let mut next_packages = Vec::new();
@@ -124,55 +116,25 @@ pub async fn build_workspace(
         println!("{}", member.name);
         if is_next(member) {
             ensure_cdylib(member)?;
-            next_packages.push(member.name.to_string());
+            next_packages.push(member);
         } else if is_alpha(member) {
             ensure_binary(member)?;
-            alpha_packages.push(member.name.to_string());
+            alpha_packages.push(member);
         }
     }
 
     let mut runtimes = Vec::new();
 
     if !alpha_packages.is_empty() {
-        let opts = get_compile_options(&config, alpha_packages, release_mode, false)?;
-        let compilation = compile(&ws, &opts)?;
+        let mut compilation = compiler(alpha_packages, release_mode, false, project_path.clone());
 
-        let mut alpha_binaries = compilation
-            .binaries
-            .iter()
-            .map(|binary| {
-                BuiltService::new(
-                    binary.path.clone(),
-                    false,
-                    binary.unit.pkg.name().to_string(),
-                    binary.unit.pkg.root().to_path_buf(),
-                    binary.unit.pkg.manifest_path().to_path_buf(),
-                )
-            })
-            .collect();
-
-        runtimes.append(&mut alpha_binaries);
+        runtimes.append(&mut compilation);
     }
 
     if !next_packages.is_empty() {
-        let opts = get_compile_options(&config, next_packages, release_mode, true)?;
-        let compilation = compile(&ws, &opts)?;
+        let mut compilation = compiler(next_packages, release_mode, true, project_path.clone());
 
-        let mut next_libraries = compilation
-            .cdylibs
-            .iter()
-            .map(|binary| {
-                BuiltService::new(
-                    binary.path.clone(),
-                    true,
-                    binary.unit.pkg.name().to_string(),
-                    binary.unit.pkg.root().to_path_buf(),
-                    binary.unit.pkg.manifest_path().to_path_buf(),
-                )
-            })
-            .collect();
-
-        runtimes.append(&mut next_libraries);
+        runtimes.append(&mut compilation);
     }
 
     Ok(runtimes)
@@ -227,22 +189,6 @@ pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Ve
     } else {
         Err(anyhow!("cargo clean failed"))
     }
-}
-
-/// Get the default compile config with output redirected to writer
-pub fn get_config(writer: PipeWriter) -> anyhow::Result<Config> {
-    let mut shell = Shell::from_write(Box::new(writer));
-    shell.set_verbosity(Verbosity::Normal);
-    let cwd = std::env::current_dir()
-        .with_context(|| "couldn't get the current directory of the process")?;
-    let homedir = homedir(&cwd).ok_or_else(|| {
-        anyhow!(
-            "Cargo couldn't find your home directory. \
-                 This probably means that $HOME was not set."
-        )
-    })?;
-
-    Ok(Config::new(shell, cwd, homedir))
 }
 
 /// Get options to compile in build mode
@@ -316,4 +262,84 @@ fn ensure_cdylib(package: &Package) -> anyhow::Result<()> {
 
 fn is_cdylib(target: &Target) -> bool {
     target.kind.iter().any(|kind| kind == "cdylib")
+}
+
+fn compiler(
+    packages: Vec<&Package>,
+    release_mode: bool,
+    wasm: bool,
+    project_path: &Path,
+) -> anyhow::Result<Vec<BuiltService>> {
+    let jobs = std::thread::available_parallelism()?.get();
+    let project_path = project_path.to_owned();
+    let manifest_path = project_path.clone().join("Cargo.toml");
+
+    let mut cargo = std::process::Command::new("cargo");
+
+    cargo
+        .arg("build")
+        .arg("-j")
+        .arg(jobs.to_string())
+        .arg("--manifest-path")
+        .arg(manifest_path);
+
+    for package in packages.clone() {
+        cargo.arg("--package").arg(package);
+    }
+
+    let mut profile = "debug";
+
+    if release_mode {
+        profile = "release";
+        cargo.arg("--profile").arg("release");
+    } else {
+        cargo.arg("--profile").arg("dev");
+    }
+
+    if wasm {
+        cargo.arg("--target").arg("wasm32-wasi");
+    }
+
+    cargo.output()?;
+
+    let mut outputs = Vec::new();
+
+    for package in packages.clone() {
+        if wasm {
+            let path = format!(
+                "{}/target/wasm32-wasi/{}/{}.wasm",
+                project_path.clone(),
+                profile,
+                package.clone().name,
+            );
+            let output = BuiltService::new(
+                path.clone(),
+                true,
+                package.clone().name,
+                std::env::current_dir()?,
+                package.clone().manifest_path.into_std_path_buf(),
+            );
+
+            output.push(output);
+        } else {
+            let path = format!(
+                "{}/target/{}/{}.{}",
+                project_path.clone(),
+                profile,
+                package.clone(),
+                std::env::consts::EXE_SUFFIX
+            );
+            let output = BuiltService::new(
+                path.clone(),
+                false,
+                package.clone().name,
+                std::env::current_dir()?,
+                package.clone().manifest_path.into_std_path_buf(),
+            );
+
+            outputs.push(output);
+        }
+    }
+
+    Ok(outputs)
 }

@@ -13,7 +13,6 @@ doctest = false
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-cargo = { workspace = true, optional = true }
 cargo_metadata = { workspace = true, optional = true }
 crossbeam-channel = { workspace = true, optional = true }
 pipe = { workspace = true, optional = true }
@@ -40,7 +39,6 @@ default = ["codegen"]
 
 codegen = ["shuttle-codegen/frameworks"]
 builder = [
-    "cargo",
     "cargo_metadata",
     "crossbeam-channel",
     "pipe",

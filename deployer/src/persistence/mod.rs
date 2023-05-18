@@ -200,7 +200,7 @@ impl Persistence {
 
         query
             .push_bind(service_id)
-            .push(" ORDER BY last_update LIMIT ")
+            .push(" ORDER BY last_update DESC LIMIT ")
             .push_bind(limit);
 
         if offset > 0 {

@@ -78,7 +78,6 @@ pub async fn build_workspace(
     _tx: Sender<Message>,
 ) -> anyhow::Result<Vec<BuiltService>> {
     let project_path = project_path.to_owned();
-    let cwd = std::env::current_dir()?;
 
     let manifest_path = project_path.join("Cargo.toml");
 
@@ -90,6 +89,8 @@ pub async fn build_workspace(
         .manifest_path(&manifest_path)
         .exec()?;
     trace!("Cargo metadata parsed");
+
+    let cwd = metadata.clone().workspace_root.into_std_path_buf();
 
     let mut alpha_packages = Vec::new();
     let mut next_packages = Vec::new();

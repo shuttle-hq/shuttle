@@ -226,8 +226,7 @@ These projects are linked to this account
 
 {}
 "#,
-            "More projects might be available on the next page using --page."
-                .bold()
+            "More projects might be available on the next page using --page.".bold()
         )
     }
 }

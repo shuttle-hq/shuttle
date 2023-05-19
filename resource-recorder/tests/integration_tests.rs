@@ -1,0 +1,309 @@
+use std::net::{Ipv4Addr, SocketAddr};
+
+use portpicker::pick_unused_port;
+use pretty_assertions::{assert_eq, assert_ne};
+use serde_json::json;
+use shuttle_common::claims::{Claim, Scope};
+use shuttle_proto::resource_recorder::{
+    record_request, resource_recorder_client::ResourceRecorderClient,
+    resource_recorder_server::ResourceRecorderServer, ProjectResourcesRequest, RecordRequest,
+    Resource, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
+};
+use shuttle_resource_recorder::{Service, Sqlite};
+use tokio::select;
+use tonic::{transport::Server, Request};
+use ulid::Ulid;
+
+#[tokio::test]
+async fn manage_resources() {
+    let port = pick_unused_port().unwrap();
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+
+    let server_future = async {
+        Server::builder()
+            .layer(JwtScopesLayer::new(vec![
+                Scope::Resources,
+                Scope::ResourcesWrite,
+            ]))
+            .add_service(ResourceRecorderServer::new(Service::new(
+                Sqlite::new_in_memory().await,
+            )))
+            .serve(addr)
+            .await
+            .unwrap()
+    };
+
+    let test_future = async {
+        // Make sure the server starts first
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+        let mut client = ResourceRecorderClient::connect(format!("http://localhost:{port}"))
+            .await
+            .unwrap();
+
+        let project_id = Ulid::new().to_string();
+        let service_id = Ulid::new().to_string();
+
+        // Add resources for on service
+        let response = client
+            .record_resources(Request::new(RecordRequest {
+                project_id: project_id.clone(),
+                service_id: service_id.clone(),
+                resources: vec![
+                    record_request::Resource {
+                        r#type: "database::shared::postgres".to_string(),
+                        config: serde_json::to_vec(&json!({"public": true})).unwrap(),
+                        data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
+                    },
+                    record_request::Resource {
+                        r#type: "secrets".to_string(),
+                        config: serde_json::to_vec(&json!({})).unwrap(),
+                        data: serde_json::to_vec(&json!({"password": "brrrr"})).unwrap(),
+                    },
+                ],
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+
+        let expected = ResultResponse {
+            success: true,
+            message: String::new(),
+        };
+
+        assert_eq!(response, expected);
+
+        // Add resources for another service on same project
+        let service_id2 = Ulid::new().to_string();
+
+        let response = client
+            .record_resources(Request::new(RecordRequest {
+                project_id: project_id.clone(),
+                service_id: service_id2.clone(),
+                resources: vec![record_request::Resource {
+                    r#type: "static_folder".to_string(),
+                    config: serde_json::to_vec(&json!({"folder": "static"})).unwrap(),
+                    data: serde_json::to_vec(&json!({"path": "/tmp/static"})).unwrap(),
+                }],
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+
+        assert_eq!(response, expected);
+
+        // Add resources to a new project
+        let project_id2 = Ulid::new().to_string();
+        let service_id3 = Ulid::new().to_string();
+
+        let response = client
+            .record_resources(Request::new(RecordRequest {
+                project_id: project_id2,
+                service_id: service_id3,
+                resources: vec![record_request::Resource {
+                    r#type: "static_folder".to_string(),
+                    config: serde_json::to_vec(&json!({"folder": "publi"})).unwrap(),
+                    data: serde_json::to_vec(&json!({"path": "/tmp/publi"})).unwrap(),
+                }],
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+
+        assert_eq!(response, expected);
+
+        // Fetching resources for a service
+        let response = client
+            .get_service_resources(Request::new(ServiceResourcesRequest {
+                service_id: service_id.clone(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+
+        let mut service_db = Resource {
+            project_id: project_id.clone(),
+            service_id: service_id.clone(),
+            r#type: "database::shared::postgres".to_string(),
+            config: serde_json::to_vec(&json!({"public": true})).unwrap(),
+            data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
+            is_active: true,
+            created_at: response.resources[0].created_at.clone(),
+            last_updated: response.resources[0].last_updated.clone(),
+        };
+        let mut service_secrets = Resource {
+            project_id: project_id.clone(),
+            service_id: service_id.clone(),
+            r#type: "secrets".to_string(),
+            config: serde_json::to_vec(&json!({})).unwrap(),
+            data: serde_json::to_vec(&json!({"password": "brrrr"})).unwrap(),
+            is_active: true,
+            created_at: response.resources[1].created_at.clone(),
+            last_updated: response.resources[1].last_updated.clone(),
+        };
+
+        let expected = ResourcesResponse {
+            success: true,
+            message: String::new(),
+            resources: vec![service_db.clone(), service_secrets.clone()],
+        };
+
+        assert_eq!(response, expected);
+
+        // Fetching resources for a project
+        let response = client
+            .get_project_resources(Request::new(ProjectResourcesRequest {
+                project_id: project_id.clone(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+
+        let service2_static_folder = Resource {
+            project_id: project_id.clone(),
+            service_id: service_id2.clone(),
+            r#type: "static_folder".to_string(),
+            config: serde_json::to_vec(&json!({"folder": "static"})).unwrap(),
+            data: serde_json::to_vec(&json!({"path": "/tmp/static"})).unwrap(),
+            is_active: true,
+            created_at: response.resources[2].created_at.clone(),
+            last_updated: response.resources[2].last_updated.clone(),
+        };
+
+        let expected = ResourcesResponse {
+            success: true,
+            message: String::new(),
+            resources: vec![
+                service_db.clone(),
+                service_secrets.clone(),
+                service2_static_folder.clone(),
+            ],
+        };
+
+        assert_eq!(response, expected);
+
+        // Deleting a resource
+        let response = client
+            .delete_resource(Request::new(service2_static_folder))
+            .await
+            .unwrap()
+            .into_inner();
+
+        let expected = ResultResponse {
+            success: true,
+            message: String::new(),
+        };
+
+        assert_eq!(response, expected);
+
+        // Updating resources on a service
+        service_db.config = serde_json::to_vec(&json!({"public": false})).unwrap();
+        service_db.data = serde_json::to_vec(&json!({"username": "inner"})).unwrap();
+
+        service_secrets.is_active = false;
+
+        let response = client
+            .record_resources(Request::new(RecordRequest {
+                project_id: project_id.clone(),
+                service_id: service_id.clone(),
+                resources: vec![record_request::Resource {
+                    r#type: "database::shared::postgres".to_string(),
+                    config: serde_json::to_vec(&json!({"public": false})).unwrap(),
+                    data: serde_json::to_vec(&json!({"username": "inner"})).unwrap(),
+                }],
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+
+        let expected = ResultResponse {
+            success: true,
+            message: String::new(),
+        };
+
+        assert_eq!(response, expected);
+
+        let response = client
+            .get_project_resources(Request::new(ProjectResourcesRequest {
+                project_id: project_id.clone(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+
+        assert_ne!(
+            response.resources[1].last_updated, service_db.last_updated,
+            "should update last_updated"
+        );
+
+        service_db.last_updated = response.resources[1].last_updated.clone();
+
+        let expected = ResourcesResponse {
+            success: true,
+            message: String::new(),
+            resources: vec![service_secrets, service_db],
+        };
+
+        assert_eq!(response, expected);
+    };
+
+    select! {
+        _ = server_future => panic!("server finished first"),
+        _ = test_future => {},
+    }
+}
+
+/// Layer to set JwtScopes on a request
+#[derive(Clone)]
+pub struct JwtScopesLayer {
+    /// Thes scopes to set
+    scopes: Vec<Scope>,
+}
+
+impl JwtScopesLayer {
+    /// Create a new layer to set scopes on requests
+    pub fn new(scopes: Vec<Scope>) -> Self {
+        Self { scopes }
+    }
+}
+
+impl<S> tower::Layer<S> for JwtScopesLayer {
+    type Service = JwtScopes<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        JwtScopes {
+            inner,
+            scopes: self.scopes.clone(),
+        }
+    }
+}
+
+/// Middleware to set scopes on a request
+#[derive(Clone)]
+pub struct JwtScopes<S> {
+    inner: S,
+    scopes: Vec<Scope>,
+}
+
+impl<S> tower::Service<hyper::Request<hyper::Body>> for JwtScopes<S>
+where
+    S: tower::Service<hyper::Request<hyper::Body>> + Send + Clone + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = S::Future;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: hyper::Request<hyper::Body>) -> Self::Future {
+        req.extensions_mut()
+            .insert(Claim::new("test".to_string(), self.scopes.clone()));
+        self.inner.call(req)
+    }
+}

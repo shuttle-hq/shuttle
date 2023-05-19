@@ -15,6 +15,7 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
+use strum::EnumMessage;
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -28,7 +29,7 @@ const ISS: &str = "shuttle";
 
 /// The scope of operations that can be performed on shuttle
 /// Every scope defaults to read and will use a suffix for updating tasks
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, EnumMessage)]
 #[serde(rename_all = "snake_case")]
 pub enum Scope {
     /// Read the details, such as status and address, of a deployment

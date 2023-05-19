@@ -512,6 +512,47 @@ jobs:
       # - run:
       #     name: Test Docker
       #     command: ./.circleci/qa-docker.sh
+  windows-qa:
+    executor:
+      name: win/server-2022
+      size: medium
+      shell: powershell.exe
+    environment:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - checkout
+      - run:
+          name: "Install Protobuf"
+          command: |
+            choco install -y protoc
+      - run:
+          name: Install Rust
+          command: |
+            wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
+            C:\rustup-init.exe -y --default-toolchain 1.68.0 --target x86_64-pc-windows-msvc
+      - run:
+          name: "Install Shuttle"
+          command:  ..\.cargo\bin\cargo.exe install cargo-shuttle --path ./cargo-shuttle
+      - run: ..\.cargo\bin\cargo.exe shuttle --version
+      - run:
+          name: Login
+          command: |
+            ..\.cargo\bin\cargo.exe shuttle login --api-key $env:SHUTTLE_API_KEY
+      - run:
+          name: QA
+          command: ./.circleci/qa.ps1
+          environment:
+            SHUTTLE_API: https://api.unstable.shuttle.rs
+      - run: git submodule sync
+      - run: git submodule update --init
+      # - run:
+      #     name: Test WASM
+      #     command: ./.circleci/qa-wasm.ps1
+      # We can't run linux containers on the Windows executor at this time
+      # https://circleci.com/docs/using-windows/#known-issues-and-limitations
+      # - run:
+      #     name: Test Docker
+      #     command: ./.circleci/qa-docker.ps1
 
 workflows:
   ci:
@@ -582,7 +623,7 @@ workflows:
             branches:
               only: main
       - build-and-push:
-          requires: 
+          requires:
             - approve-push-unstable
           filters:
             branches:
@@ -600,14 +641,16 @@ workflows:
           filters:
             branches:
               only: production
+      - windows-qa:
+          filters:
+            branches:
+              only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-gnu
           protoc_arch: linux-x86_64
           resource_class: xlarge
-          # requires:
-          #   - linux-qa
           filters:
             branches:
               only: production
@@ -617,8 +660,6 @@ workflows:
           target: x86_64-unknown-linux-musl
           protoc_arch: linux-x86_64
           resource_class: xlarge
-          # requires:
-          #   - linux-qa
           filters:
             branches:
               only: production
@@ -628,8 +669,6 @@ workflows:
           target: aarch64-unknown-linux-musl
           resource_class: arm.xlarge
           protoc_arch: linux-aarch_64
-          # requires:
-          #   - linux-qa
           filters:
             branches:
               only: production
@@ -638,8 +677,6 @@ workflows:
             branches:
               only: production
       - build-binaries-mac:
-          # requires:
-          #   - mac-qa
           filters:
             branches:
               only: production

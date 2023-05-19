@@ -17,8 +17,7 @@ fqdn = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 hyper = { workspace = true, features = ["stream"] }
-# not great, but waiting for WebSocket changes to be merged
-hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "bug/host_header" }
+hyper-reverse-proxy = { workspace = true }
 instant-acme = "0.2.0"
 lazy_static = "1.4.0"
 num_cpus = "1.15.0"

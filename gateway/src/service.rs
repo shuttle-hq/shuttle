@@ -281,7 +281,7 @@ impl GatewayService {
 
         query
             .push_bind(account_name)
-            .push(" ORDER BY project_name LIMIT ")
+            .push(" ORDER BY created_at DESC NULLS LAST, project_name LIMIT ")
             .push_bind(limit);
 
         if offset > 0 {
@@ -454,7 +454,7 @@ impl GatewayService {
             ProjectCreating::new_with_random_initial_key(project_name.clone(), idle_minutes),
         ));
 
-        query("INSERT INTO projects (project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4)")
+        query("INSERT INTO projects (project_name, account_name, initial_key, project_state, created_at) VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP)")
             .bind(&project_name)
             .bind(&account_name)
             .bind(project.initial_key().unwrap())

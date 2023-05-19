@@ -5549,6 +5549,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-resource-recorder"
+version = "0.14.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "clap",
+ "hyper",
+ "portpicker",
+ "pretty_assertions",
+ "prost-types",
+ "serde_json",
+ "shuttle-common",
+ "shuttle-proto",
+ "sqlx",
+ "strum",
+ "thiserror",
+ "tokio",
+ "tonic",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "ulid",
+]
+
+[[package]]
 name = "shuttle-runtime"
 version = "0.14.0"
 dependencies = [
@@ -6726,6 +6751,15 @@ name = "typenum"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "497961ef93d974e23eb6f433eb5fe1b7930b659f06d12dec6fc44a8f554c0bba"
+
+[[package]]
+name = "ulid"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13a3aaa69b04e5b66cc27309710a569ea23593612387d67daaf102e73aa974fd"
+dependencies = [
+ "rand",
+]
 
 [[package]]
 name = "unicase"

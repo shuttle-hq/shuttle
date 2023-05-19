@@ -1,0 +1,63 @@
+syntax = "proto3";
+package resource_recorder;
+
+import "google/protobuf/timestamp.proto";
+
+service ResourceRecorder {
+  // Record a new set of resources
+  rpc RecordResources(RecordRequest) returns (ResultResponse);
+
+  // Get the resources belonging to a project
+  rpc GetProjectResources(ProjectResourcesRequest) returns (ResourcesResponse);
+
+  // Get the resources belonging to a service
+  rpc GetServiceResources(ServiceResourcesRequest) returns (ResourcesResponse);
+
+  // Delete a resource
+  rpc DeleteResource(Resource) returns (ResultResponse);
+}
+
+message RecordRequest {
+  string project_id = 1;
+  string service_id = 2;
+
+  message Resource {
+    string type = 1;
+    bytes config = 2;
+    bytes data = 3;
+  }
+
+  repeated Resource resources = 3;
+}
+
+message ResultResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ProjectResourcesRequest {
+  string project_id = 1;
+}
+
+message ResourcesResponse {
+  bool success = 1;
+  string message = 2;
+
+  repeated Resource resources = 3;
+}
+
+message ServiceResourcesRequest {
+  string service_id = 1;
+}
+
+
+message Resource {
+  string project_id = 1;
+  string service_id = 2;
+  string type = 3;
+  bytes config = 4;
+  bytes data = 5;
+  bool is_active = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp last_updated = 8;
+}

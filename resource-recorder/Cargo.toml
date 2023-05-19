@@ -1,0 +1,39 @@
+[package]
+name = "shuttle-resource-recorder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+prost-types = { workspace = true }
+sqlx = { workspace = true, features = [
+    "chrono",
+    "migrate",
+    "runtime-tokio-native-tls",
+    "sqlite",
+] }
+strum = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+tonic = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["default"] }
+ulid = { workspace = true }
+
+[dependencies.shuttle-common]
+workspace = true
+features = ["backend", "tonic"]
+
+[dependencies.shuttle-proto]
+workspace = true
+
+[dev-dependencies]
+hyper = { workspace = true }
+portpicker = { workspace = true }
+pretty_assertions = { workspace = true }
+serde_json = { workspace = true }
+tower = { workspace = true }

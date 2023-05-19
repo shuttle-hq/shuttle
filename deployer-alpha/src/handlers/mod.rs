@@ -30,7 +30,7 @@ use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
-use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGetter, State};
+use crate::persistence::{Deployment, Log, Persistence, SecretGetter, State};
 
 use std::collections::HashMap;
 
@@ -237,15 +237,16 @@ pub async fn get_service_resources(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
-    if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let resources = persistence
-            .get_resources(&service.id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
+    if let Some(_service) = persistence.get_service_by_name(&service_name).await? {
+        // TODO: restore in new gateway
+        // let resources = persistence
+        //     .get_resources(&service.id)
+        //     .await?
+        //     .into_iter()
+        //     .map(Into::into)
+        //     .collect();
 
-        Ok(Json(resources))
+        Ok(Json(Default::default()))
     } else {
         Err(Error::NotFound("service not found".to_string()))
     }

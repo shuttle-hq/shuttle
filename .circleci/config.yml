@@ -788,7 +788,7 @@ workflows:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-codegen
+          name: publish-shuttle-codegen
           path: codegen
           requires:
             - approve-publish-crates
@@ -796,183 +796,175 @@ workflows:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-common
+          name: publish-shuttle-common
           path: common
           requires:
-            - shuttle-codegen
+            - publish-shuttle-codegen
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-proto
+          name: publish-shuttle-proto
           path: proto
           requires:
-            - shuttle-common
+            - publish-shuttle-common
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-service
+          name: publish-shuttle-service
           path: service
           requires:
-            - shuttle-proto
+            - publish-shuttle-proto
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-runtime
+          name: publish-shuttle-runtime
           path: runtime
           requires:
-            - shuttle-service
+            - publish-shuttle-service
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-aws-rds
+          name: publish-shuttle-aws-rds
           path: resources/aws-rds
           requires:
-            - shuttle-runtime
+            - publish-shuttle-runtime
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-shared-db
+          name: publish-shuttle-shared-db
           path: resources/shared-db
           requires:
-            - shuttle-aws-rds
+            - publish-shuttle-aws-rds
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-secrets
+          name: publish-shuttle-secrets
           path: resources/secrets
           requires:
-            - shuttle-shared-db
+            - publish-shuttle-shared-db
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-persist
+          name: publish-shuttle-persist
           path: resources/persist
           requires:
-            - shuttle-secrets
+            - publish-shuttle-secrets
       - publish-crates:
-          name: shuttle-static-folder
+          name: publish-shuttle-static-folder
           path: resources/static-folder
           requires:
-            - shuttle-persist
+            - publish-shuttle-persist
           filters:
             branches:
               only: production
       - publish-crates:
-          name: cargo-shuttle
+          name: publish-cargo-shuttle
           path: cargo-shuttle
           requires:
-            - shuttle-static-folder
+            - publish-shuttle-static-folder
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-actix-web
+          name: publish-shuttle-actix-web
           path: services/shuttle-actix-web
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-axum
+          name: publish-shuttle-axum
           path: services/shuttle-axum
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-next
+          name: publish-shuttle-next
           path: services/shuttle-next
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-poem
+          name: publish-shuttle-poem
           path: services/shuttle-poem
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-poise
+          name: publish-shuttle-poise
           path: services/shuttle-poise
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-rocket
+          name: publish-shuttle-rocket
           path: services/shuttle-rocket
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-salvo
+          name: publish-shuttle-salvo
           path: services/shuttle-salvo
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-salvo
-          path: services/shuttle-salvo
-          requires:
-            - cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: shuttle-serenity
+          name: publish-shuttle-serenity
           path: services/shuttle-serenity
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-thruster
+          name: publish-shuttle-thruster
           path: services/shuttle-thruset
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-tide
+          name: publish-shuttle-tide
           path: services/shuttle-tide
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-tower
+          name: publish-shuttle-tower
           path: services/shuttle-tower
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production
       - publish-crates:
-          name: shuttle-warp
+          name: publish-shuttle-warp
           path: services/shuttle-warp
           requires:
-            - cargo-shuttle
+            - publish-cargo-shuttle
           filters:
             branches:
               only: production

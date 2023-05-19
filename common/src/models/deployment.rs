@@ -101,10 +101,14 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, pa
             r#"
 Most recent {} for {}
 {}
+
+{}
 "#,
             "deployments".bold(),
             service_name,
             table,
+            "More projects might be available on the next page using --page."
+                .bold()
         )
     }
 }

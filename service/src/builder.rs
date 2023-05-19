@@ -132,7 +132,7 @@ pub async fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Res
         profile = "release";
     }
 
-    // It is easier just to use several pipes
+    // Pipes used to redirect the result of `cargo clean`.
     let (mut stderr_read, mut stderr_write) = pipe::pipe();
     let (mut stdout_read, mut stdout_write) = pipe::pipe();
     let (tx, rx) = tokio::sync::oneshot::channel();

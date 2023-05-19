@@ -43,7 +43,7 @@ async fn is_bin() {
 }
 
 #[tokio::test]
-#[should_panic(expected = "failed to read")]
+#[should_panic(expected = "failed to read the Shuttle project manifest")]
 async fn not_found() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!(

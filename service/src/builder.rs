@@ -81,9 +81,8 @@ pub async fn build_workspace(
 
     let manifest_path = project_path.join("Cargo.toml");
 
-    // This satisfies a test
     if !manifest_path.exists() {
-        return Err(anyhow!("failed to read"));
+        return Err(anyhow!("failed to read the Shuttle project manifest"));
     }
     let metadata = cargo_metadata::MetadataCommand::new()
         .manifest_path(&manifest_path)
@@ -94,7 +93,6 @@ pub async fn build_workspace(
     let mut next_packages = Vec::new();
 
     for member in metadata.workspace_packages() {
-        println!("{}", member.name);
         if is_next(member) {
             ensure_cdylib(member)?;
             next_packages.push(member);
@@ -107,14 +105,14 @@ pub async fn build_workspace(
     let mut runtimes = Vec::new();
 
     if !alpha_packages.is_empty() {
-        let mut compilation = compiler(alpha_packages, release_mode, false, project_path.clone())?;
+        let mut compilation = compile(alpha_packages, release_mode, false, project_path.clone())?;
         trace!("alpha packages compiled");
 
         runtimes.append(&mut compilation);
     }
 
     if !next_packages.is_empty() {
-        let mut compilation = compiler(next_packages, release_mode, true, project_path)?;
+        let mut compilation = compile(next_packages, release_mode, true, project_path)?;
         trace!("next packages compiled");
 
         runtimes.append(&mut compilation);
@@ -123,9 +121,12 @@ pub async fn build_workspace(
     Ok(runtimes)
 }
 
-pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Vec<String>> {
+pub async fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Vec<String>> {
     let project_path = project_path.to_owned();
     let manifest_path = project_path.join("Cargo.toml");
+    if !manifest_path.exists() {
+        return Err(anyhow!("failed to read the Shuttle project manifest"));
+    }
     let mut profile = "dev";
     if release_mode {
         profile = "release";
@@ -134,7 +135,7 @@ pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Ve
     // It is easier just to use several pipes
     let (mut stderr_read, mut stderr_write) = pipe::pipe();
     let (mut stdout_read, mut stdout_write) = pipe::pipe();
-    let (mut status_read, mut status_write) = pipe::pipe();
+    let (tx, rx) = tokio::sync::oneshot::channel();
 
     tokio::task::spawn_blocking(move || {
         let output = std::process::Command::new("cargo")
@@ -145,28 +146,22 @@ pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Ve
             .arg(profile)
             .output()
             .unwrap();
-        let mut status = "false";
         if output.clone().status.success() {
-            status = "true";
+            tx.send(true).unwrap();
+        } else {
+            tx.send(false).unwrap();
         }
 
         stdout_write.write_all(&output.clone().stdout).unwrap();
         stderr_write.write_all(&output.stderr).unwrap();
-        status_write.write_all(status.as_bytes()).unwrap();
     });
 
-    let mut buffer = String::new();
-    status_read.read_to_string(&mut buffer).unwrap();
-    let mut status = false;
-    if buffer == "true" {
-        status = true;
-    }
     let mut stderr = String::new();
     let mut stdout = String::new();
     stderr_read.read_to_string(&mut stderr)?;
     stdout_read.read_to_string(&mut stdout)?;
 
-    if status {
+    if rx.await? {
         let lines = vec![stderr, stdout];
         Ok(lines)
     } else {
@@ -210,7 +205,7 @@ fn is_cdylib(target: &Target) -> bool {
     target.kind.iter().any(|kind| kind == "cdylib")
 }
 
-fn compiler(
+fn compile(
     packages: Vec<&Package>,
     release_mode: bool,
     wasm: bool,

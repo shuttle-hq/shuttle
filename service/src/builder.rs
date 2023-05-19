@@ -248,7 +248,7 @@ fn compile(
 
     let mut outputs = Vec::new();
 
-    for package in packages.clone() {
+    for package in packages {
         if wasm {
             let mut path: PathBuf = [
                 project_path.clone(),

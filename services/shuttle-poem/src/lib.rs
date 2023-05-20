@@ -33,8 +33,8 @@ where
 {
     async fn bind(mut self, addr: std::net::SocketAddr) -> Result<(), shuttle_runtime::Error> {
         let app = poem::Route::new()
-            .at("/healthz", poem::get(healthz))
-            .nest("/", self.0);
+            .at("/", self.0)
+            .at("/healthz", poem::get(healthz));
 
         poem::Server::new(poem::listener::TcpListener::bind(addr))
             .run(app)

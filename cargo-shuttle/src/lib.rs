@@ -49,7 +49,7 @@ use shuttle_service::builder::{build_workspace, BuiltService};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tracing::{error, trace, warn};
+use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
 use crate::args::{DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand};
@@ -1175,6 +1175,7 @@ impl Shuttle {
 
         // Append all the entries to the archive.
         for (k, v) in entries {
+            info!("Packing {k:?}");
             tar.append_path_with_name(k, v)?;
         }
 

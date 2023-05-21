@@ -269,8 +269,12 @@ impl RequestContext {
     pub fn get_local_config(
         project_args: &ProjectArgs,
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
-        let local_manager =
-            LocalConfigManager::new(project_args.workspace_path()?, "Shuttle.toml".to_string());
+        let workspace_path = match project_args.workspace_path() {
+            Ok(workspace_path) => workspace_path,
+            Err(_) => project_args.working_directory.clone(),
+        };
+
+        let local_manager = LocalConfigManager::new(workspace_path, "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
 
         if !project.exists() {
@@ -300,7 +304,15 @@ impl RequestContext {
             // If name key is not in project config, then we infer from crate name
             (None, None) => {
                 trace!("using crate name as project name");
-                config.name = Some(project_args.project_name()?);
+                let project_name = project_args.project_name().map_err(|_| {
+                    anyhow!(
+                        "No project name found. \
+                        Run the command from inside a cargo folder, \
+                        or a folder containing Shuttle.toml \
+                        or specify project name on the command line with the '--name' option."
+                    )
+                })?;
+                config.name = Some(project_name);
             }
         };
         Ok(project)

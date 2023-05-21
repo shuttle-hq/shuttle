@@ -114,15 +114,13 @@ impl<'a> Archive<'a> {
     }
 
     pub fn entries(&mut self) -> Result<tokio_tar::Entries<&'a [u8]>> {
-        // Calling entries must be preceded by a reseted archive, which is denoted
-        // by a non empty Option. Consumers of the archive, meaning scopes where
-        // `.entries()` is called will take out the value from the Option leaving
-        // it empty for the next `.entries()` calls.
-        if self.archive.is_some() {
-            let mut inner = self.archive.take().expect("to get the inner archive");
-            return Ok(inner.entries()?);
-        }
-        Err(Error::ArchiveInner)
+        // We reinitialize the archive each time upon calling `.entries`.
+        // This is needed because we're doing nested `.entries` calls
+        // which require the reader offset to be set to 0:
+        // https://github.com/vorot93/tokio-tar/blob/master/src/archive.rs#L166
+        self.archive = Some(tokio_tar::Archive::new(self.inner));
+        let mut inner = self.archive.take().expect("to get the inner archive");
+        inner.entries().map_err(Error::UnknownIo)
     }
 
     pub async fn get_manifests(&mut self) -> Result<Vec<(ImageName, ImageManifest)>> {
@@ -148,15 +146,7 @@ impl<'a> Archive<'a> {
     }
 
     pub async fn get_index(&mut self) -> Result<ImageIndex> {
-        // We reinitialize each time the archive upon calling `.entries`.
-        // This is needed because we're doing nested `.entries` calls
-        // which require the reader offset to be set to 0:
-        // https://github.com/vorot93/tokio-tar/blob/master/src/archive.rs#L166
-        self.archive = Some(tokio_tar::Archive::new(self.inner));
-        let mut entries = self.entries()?;
-
-        let err_msg = "Couldn't find the index.json. The tarball might be corrupt.".to_string();
-        while let Some(entry) = entries.next().await {
+        while let Some(entry) = self.entries()?.next().await {
             match entry {
                 Ok(mut entry) => {
                     if entry
@@ -174,19 +164,13 @@ impl<'a> Archive<'a> {
                 Err(e) => Err(Error::MissingIndex(e.to_string())),
             }?;
         }
-
-        Err(Error::MissingIndex(err_msg))
+        Err(Error::MissingIndex(
+            "Couldn't find the index.json. The tarball might be corrupt.".to_string(),
+        ))
     }
 
     pub async fn get_blob(&mut self, digest: &Digest) -> Result<Vec<u8>> {
-        // We reinitialize each time the archive upon calling `.entries`.
-        // This is needed because we're doing nested `.entries` calls
-        // which require the reader offset to be set to 0:
-        // https://github.com/vorot93/tokio-tar/blob/master/src/archive.rs#L166
-        self.archive = Some(tokio_tar::Archive::new(self.inner));
-        let mut entries = self.entries()?;
-
-        while let Some(entry) = entries.next().await {
+        while let Some(entry) = self.entries()?.next().await {
             match entry {
                 Ok(mut entry) => {
                     if entry.path()? == digest.as_path() {

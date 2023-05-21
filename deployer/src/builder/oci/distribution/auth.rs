@@ -142,5 +142,3 @@ impl AuthChallenge {
 struct Token {
     token: String,
 }
-
-mod tests {}

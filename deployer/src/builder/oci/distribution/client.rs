@@ -193,7 +193,7 @@ mod tests {
     use super::*;
 
     //
-    // Following tests need registry server. See test/fixture.sh for setting.
+    // Following tests need a registry server. See test/fixture.sh for setting one up.
     // These tests are ignored by default.
     //
 

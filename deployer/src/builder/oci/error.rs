@@ -31,8 +31,6 @@ pub enum Error {
     MissingManifestName,
     #[error(transparent)]
     InvalidJson(#[from] serde_json::error::Error),
-    #[error("can not get the inner type")]
-    ArchiveInner,
 
     //
     // Error from OCI registry

@@ -3,6 +3,10 @@ use std::path::PathBuf;
 use tokio::{fs::File, io::AsyncReadExt};
 use tracing::debug;
 
+use crate::builder::error::Error;
+
+use self::oci::error::Result;
+
 pub mod error;
 mod oci;
 
@@ -41,16 +45,14 @@ impl MockedBuilder {
             .expect("to open the file");
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).await?;
-        self.push_image(buf).await;
+        self.push_image(buf).await.map_err(Error::Oci)?;
         debug!("Successfuly built and pushed the image to the container registry.");
 
         Ok(uuid::Uuid::new_v4())
     }
 
     /// Push a built image to an container registry.
-    pub async fn push_image(&self, image: Vec<u8>) {
-        self::oci::distribution::push_image(image)
-            .await
-            .expect("to not fail");
+    pub async fn push_image(&self, image: Vec<u8>) -> Result<()> {
+        self::oci::distribution::push_image(image).await
     }
 }

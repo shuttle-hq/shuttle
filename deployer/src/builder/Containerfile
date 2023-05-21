@@ -1,4 +1,3 @@
 FROM alpine:latest
 
-COPY shuttle-service /usr/bin/
-RUN chmod +x /usr/bin/shuttle-service
+RUN apk update

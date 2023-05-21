@@ -7,7 +7,7 @@ docker compose -f docker-compose.rendered.yml up auth
 
 In another terminal create an admin user with the API key set to `test-key`:
 ```bash
-AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-auth") \
+AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-dev-auth"); \
     docker exec $AUTH_CONTAINER_ID ./usr/local/bin/service \
     --state=/var/lib/shuttle-auth \
     init --name admin --key test-key
@@ -15,7 +15,7 @@ AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-auth") \
 
 Start the deployer prepared for a local run:
 ```bash
-RUST_LOG=DEBUG cargo run --manifest-path deployer/Cargo.toml --bin shuttle-deployer -- --api-address 0.0.0.0:8001 --local
+RUST_LOG=DEBUG cargo run --manifest-path deployer/Cargo.toml --bin shuttle-deployer -- --api-address 0.0.0.0:8001 --local --image-archive-path shuttle-service.tar
 ```
 
 In another terminal go to a shuttle project from the examples directory and run:

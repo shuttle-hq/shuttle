@@ -1,10 +1,14 @@
 use std::path::PathBuf;
 
-use tokio::{
-    fs::File,
-    io::{AsyncReadExt, BufReader},
-};
+use tokio::{fs::File, io::AsyncReadExt};
 use tracing::debug;
+
+use crate::builder::error::Error;
+
+use self::oci::error::Result;
+
+pub mod error;
+mod oci;
 
 #[derive(Clone)]
 pub struct MockedBuilder {
@@ -19,17 +23,36 @@ impl MockedBuilder {
         }
     }
 
-    /// This method consumes a source_code_archive and returns a deployable Docker image archive.
-    pub async fn get_default_image_archive(&self, source_code_archive: &Vec<u8>) -> Vec<u8> {
+    /// Consume a `source_code_archive` and return a deployment_id.
+    pub async fn build_and_push_image(
+        &self,
+        source_code_archive: &Vec<u8>,
+    ) -> error::Result<uuid::Uuid> {
         debug!(
-            "MockedBuilder received a source code archive of length: {}",
+            "MockedBuilder received a source code archive of length: {}. Now building it...",
             source_code_archive.len()
         );
-        let mut archive =
-            BufReader::new(File::open(&self.default_image_archive_path).await.unwrap());
+
+        if !self.default_image_archive_path.is_file() {
+            return Err(crate::builder::error::Error::Oci(
+                crate::builder::oci::error::Error::NotAFile(
+                    self.default_image_archive_path.clone(),
+                ),
+            ));
+        }
+        let mut f = File::open(self.default_image_archive_path.as_path())
+            .await
+            .expect("to open the file");
         let mut buf = Vec::new();
-        archive.read_to_end(&mut buf).await.unwrap();
-        debug!("MockedBuilder returing an image of length: {}", buf.len());
-        buf
+        f.read_to_end(&mut buf).await?;
+        self.push_image(buf).await.map_err(Error::Oci)?;
+        debug!("Successfuly built and pushed the image to the container registry.");
+
+        Ok(uuid::Uuid::new_v4())
+    }
+
+    /// Push a built image to an container registry.
+    pub async fn push_image(&self, image: Vec<u8>) -> Result<()> {
+        self::oci::distribution::push_image(image).await
     }
 }

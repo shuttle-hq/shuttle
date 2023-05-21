@@ -9,20 +9,32 @@ description = "Service to execute the deployment of projects on shuttle"
 
 [dependencies]
 anyhow = { workspace = true }
+async-recursion = "1.0.4"
 axum = { workspace = true, features = ["headers", "json", "query", "ws"] }
+base16ct = { version = "0.1.1", features = ["alloc"] }
 bytes = { workspace = true }
 clap = { workspace = true }
+dirs = { workspace = true }
+flate2 = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
+oci-spec = "0.5.7"
 once_cell = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = "0.10.2"
+regex = "1.5.6"
+reqwest = { workspace = true , features = ["json"]}
+tokio-stream = "0.1.14"
+tokio-tar = "0.3.0"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+ureq = { version = "2.5.0", features = ["json"] }
+url = { workspace = true }
 utoipa = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 

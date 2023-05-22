@@ -163,6 +163,7 @@ shuttle-%: ${SRC} Cargo.lock
 		--build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
 		--build-arg folder=$(*) \
 		--build-arg prepare_args=$(PREPARE_ARGS) \
+		--build-arg PROD=$(PROD) \
 		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
 		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \

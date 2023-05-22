@@ -642,15 +642,27 @@ impl GatewayService {
             .unwrap_or_else(|_| panic!("Malformed existing PEM certificate for the gateway."));
         let (_, x509_cert) = parse_x509_certificate(pem.contents.as_bytes())
             .unwrap_or_else(|_| panic!("Malformed existing X509 certificate for the gateway."));
-        let diff = x509_cert.validity().not_after.sub(ASN1Time::now()).unwrap();
-        if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
+
+        // We compute the difference between the certificate expiry date and current timestamp because we want to trigger the
+        // gateway certificate renewal only during it's last 30 days of validity or if the certificate is expired.
+        let diff = x509_cert.validity().not_after.sub(ASN1Time::now());
+
+        // Renew only when the difference is `None` (meaning certificate expired) or we're within the last 30 days of validity.
+        if diff.is_none()
+            || diff
+                .expect("to be Some given we checked for None previously")
+                .whole_days()
+                <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS
+        {
             let tls_path = self.state_location.join("ssl.pem");
             let certs = self.create_certificate(acme, account.credentials()).await;
             resolver
                 .serve_default_der(certs.clone())
                 .await
                 .expect("Failed to serve the default certs");
-            certs.save_pem(&tls_path).unwrap();
+            certs
+                .save_pem(&tls_path)
+                .expect("to save the certificate locally");
         }
     }
 

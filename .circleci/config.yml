@@ -601,6 +601,7 @@ jobs:
     resource_class: medium
     steps:
       - checkout
+      - install-protoc
       - run:
           name: Crate publishing in order
           command: |
@@ -860,7 +861,7 @@ workflows:
                   "services/shuttle-rocket",
                   "services/shuttle-salvo",
                   "services/shuttle-serenity",
-                  "services/shuttle-thruset",
+                  "services/shuttle-thruster",
                   "services/shuttle-tide",
                   "services/shuttle-tower",
                   "services/shuttle-warp"
@@ -868,6 +869,7 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-cargo-shuttle
+            - publish-shuttle-runtime
           filters:
             branches:
               only: production

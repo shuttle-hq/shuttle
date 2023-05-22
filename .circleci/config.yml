@@ -597,15 +597,10 @@ jobs:
       path:
         description: Crate to publish
         type: string
-    machine:
-      image: ubuntu-2204:2022.04.1
+    executor: docker-rust
     resource_class: medium
     steps:
       - checkout
-      - run:
-          name: "Install Rust"
-          command: |
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - run:
           name: Crate publishing in order
           command: |
@@ -664,7 +659,7 @@ workflows:
                   "shuttle-proto",
                   "shuttle-provisioner",
                   "shuttle-runtime",
-                  "shuttle-service",
+                  "shuttle-service"
                 ]
       - e2e-test:
           requires:
@@ -828,39 +823,19 @@ workflows:
             branches:
               only: production
       - publish-crates:
-          name: publish-shuttle-aws-rds
-          path: resources/aws-rds
+          matrix:
+            parameters:
+              path: 
+                [
+                  "resources/aws-rds",
+                  "resources/shared-db",
+                  "resources/secrets",
+                  "resources/persist",
+                  "resources/static-folder"
+                ]
+          name: publish-<< matrix.path >>
           requires:
             - publish-shuttle-runtime
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-shared-db
-          path: resources/shared-db
-          requires:
-            - publish-shuttle-aws-rds
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-secrets
-          path: resources/secrets
-          requires:
-            - publish-shuttle-shared-db
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-persist
-          path: resources/persist
-          requires:
-            - publish-shuttle-secrets
-      - publish-crates:
-          name: publish-shuttle-static-folder
-          path: resources/static-folder
-          requires:
-            - publish-shuttle-persist
           filters:
             branches:
               only: production
@@ -868,101 +843,29 @@ workflows:
           name: publish-cargo-shuttle
           path: cargo-shuttle
           requires:
-            - publish-shuttle-static-folder
+            - publish-shuttle-service
           filters:
             branches:
               only: production
       - publish-crates:
-          name: publish-shuttle-actix-web
-          path: services/shuttle-actix-web
-          requires:
-            - publish-cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-axum
-          path: services/shuttle-axum
-          requires:
-            - publish-cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-next
-          path: services/shuttle-next
-          requires:
-            - publish-cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-poem
-          path: services/shuttle-poem
-          requires:
-            - publish-cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-poise
-          path: services/shuttle-poise
-          requires:
-            - publish-cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-rocket
-          path: services/shuttle-rocket
-          requires:
-            - publish-cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-salvo
-          path: services/shuttle-salvo
-          requires:
-            - publish-cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-serenity
-          path: services/shuttle-serenity
-          requires:
-            - publish-cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-thruster
-          path: services/shuttle-thruset
-          requires:
-            - publish-cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-tide
-          path: services/shuttle-tide
-          requires:
-            - publish-cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-tower
-          path: services/shuttle-tower
-          requires:
-            - publish-cargo-shuttle
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-warp
-          path: services/shuttle-warp
+          matrix:
+            parameters:
+              path: 
+                [
+                  "services/shuttle-actix-web", 
+                  "services/shuttle-axum", 
+                  "services/shuttle-next", 
+                  "services/shuttle-poem", 
+                  "services/shuttle-poise",
+                  "services/shuttle-rocket",
+                  "services/shuttle-salvo",
+                  "services/shuttle-serenity",
+                  "services/shuttle-thruset",
+                  "services/shuttle-tide",
+                  "services/shuttle-tower",
+                  "services/shuttle-warp"
+                ]
+          name: publish-<< matrix.path >>
           requires:
             - publish-cargo-shuttle
           filters:

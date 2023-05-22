@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-aws-rds"
-version = "0.16.0"
+version = "0.17.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Plugin to provision AWS RDS resources"

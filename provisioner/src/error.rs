@@ -1,6 +1,8 @@
 use aws_sdk_rds::{
-    error::{CreateDBInstanceError, DescribeDBInstancesError},
-    types::SdkError,
+    error::SdkError,
+    operation::{
+        create_db_instance::CreateDBInstanceError, describe_db_instances::DescribeDBInstancesError,
+    },
 };
 use thiserror::Error;
 use tonic::Status;

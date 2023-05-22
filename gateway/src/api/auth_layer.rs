@@ -1,4 +1,4 @@
-use std::{convert::Infallible, net::Ipv4Addr, sync::Arc, time::Duration};
+use std::{convert::Infallible, fmt::Debug, net::Ipv4Addr, sync::Arc, time::Duration};
 
 use axum::{
     body::{boxed, HttpBody},
@@ -73,6 +73,7 @@ pub struct ShuttleAuthService<S> {
 impl<S> Service<Request<Body>> for ShuttleAuthService<S>
 where
     S: Service<Request<Body>, Response = Response> + Send + Clone + 'static,
+    S::Error: Debug,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
@@ -114,13 +115,18 @@ where
             other => other.starts_with("/users"),
         };
 
+        // If /users/reset-api-key is called, invalidate the cached JWT.
+        if req.uri().path() == "/users/reset-api-key" {
+            if let Some((cache_key, _)) = cache_key_and_token_req(&req) {
+                self.cache_manager.invalidate(&cache_key);
+            };
+        }
+
         // If logout is called, invalidate the cached JWT for the callers cookie.
         if req.uri().path() == "/logout" {
-            let cache_manager = self.cache_manager.clone();
-
             if let Ok(Some(cookie)) = req.headers().typed_try_get::<Cookie>() {
-                if let Some(key) = cookie.get("shuttle.sid").map(|id| id.to_string()) {
-                    cache_manager.invalidate(&key);
+                if let Some(cache_key) = cookie.get("shuttle.sid").map(|id| id.to_string()) {
+                    self.cache_manager.invalidate(&cache_key);
                 }
             };
         }
@@ -165,109 +171,91 @@ where
             let mut this = self.clone();
 
             Box::pin(async move {
-                let mut auth_details = None;
-                let mut cache_key = None;
-
-                if let Some(bearer) = req.headers().typed_get::<Authorization<Bearer>>() {
-                    cache_key = Some(bearer.token().trim().to_string());
-                    auth_details = Some(make_token_request("/auth/key", bearer));
-                }
-
-                if let Some(cookie) = req.headers().typed_get::<Cookie>() {
-                    if let Some(id) = cookie.get("shuttle.sid") {
-                        cache_key = Some(id.to_string());
-                        auth_details = Some(make_token_request("/auth/session", cookie));
-                    };
-                }
-
                 // Only if there is something to upgrade
-                if let Some(token_request) = auth_details {
+                if let Some((cache_key, token_request)) = cache_key_and_token_req(&req) {
                     let target_url = this.auth_uri.to_string();
 
-                    if let Some(key) = cache_key {
-                        // Check if the token is cached.
-                        if let Some(token) = this.cache_manager.get(&key) {
-                            trace!("JWT cache hit, setting token from cache on request");
+                    // Check if the token is cached.
+                    if let Some(token) = this.cache_manager.get(&cache_key) {
+                        trace!("JWT cache hit, setting token from cache on request");
 
-                            // Token is cached and not expired, return it in the response.
-                            req.headers_mut()
-                                .typed_insert(Authorization::bearer(&token).unwrap());
-                        } else {
-                            trace!("JWT cache missed, sending convert token request");
+                        // Token is cached and not expired, return it in the response.
+                        req.headers_mut()
+                            .typed_insert(Authorization::bearer(&token).unwrap());
+                    } else {
+                        trace!("JWT cache missed, sending convert token request");
 
-                            // Token is not in the cache, send a convert request.
-                            let token_response = match PROXY_CLIENT
-                                .call(Ipv4Addr::LOCALHOST.into(), &target_url, token_request)
-                                .await
-                            {
-                                Ok(res) => res,
-                                Err(error) => {
-                                    error!(?error, "failed to call authentication service");
+                        // Token is not in the cache, send a convert request.
+                        let token_response = match PROXY_CLIENT
+                            .call(Ipv4Addr::LOCALHOST.into(), &target_url, token_request)
+                            .await
+                        {
+                            Ok(res) => res,
+                            Err(error) => {
+                                error!(?error, "failed to call authentication service");
 
-                                    return Ok(Response::builder()
-                                        .status(StatusCode::SERVICE_UNAVAILABLE)
-                                        .body(boxed(Body::empty()))
-                                        .unwrap());
-                                }
-                            };
-
-                            // Bubble up auth errors
-                            if token_response.status() != StatusCode::OK {
-                                let (parts, body) = token_response.into_parts();
-                                let body = <Body as HttpBody>::map_err(body, axum::Error::new)
-                                    .boxed_unsync();
-
-                                return Ok(Response::from_parts(parts, body));
+                                return Ok(Response::builder()
+                                    .status(StatusCode::SERVICE_UNAVAILABLE)
+                                    .body(boxed(Body::empty()))
+                                    .unwrap());
                             }
+                        };
 
-                            let body = match hyper::body::to_bytes(token_response.into_body()).await
-                            {
-                                Ok(body) => body,
-                                Err(error) => {
-                                    error!(
-                                        error = &error as &dyn std::error::Error,
-                                        "failed to get response body"
-                                    );
+                        // Bubble up auth errors
+                        if token_response.status() != StatusCode::OK {
+                            let (parts, body) = token_response.into_parts();
+                            let body = body.map_err(axum::Error::new).boxed_unsync();
 
-                                    return Ok(Response::builder()
-                                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                                        .body(boxed(Body::empty()))
-                                        .unwrap());
-                                }
-                            };
-
-                            let response: ConvertResponse = match serde_json::from_slice(&body) {
-                                Ok(response) => response,
-                                Err(error) => {
-                                    error!(
-                                        error = &error as &dyn std::error::Error,
-                                        "failed to convert body to ConvertResponse"
-                                    );
-
-                                    return Ok(Response::builder()
-                                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                                        .body(boxed(Body::empty()))
-                                        .unwrap());
-                                }
-                            };
-
-                            this.cache_manager.insert(
-                                key.as_str(),
-                                response.token.clone(),
-                                Duration::from_secs(CACHE_MINUTES * 60),
-                            );
-
-                            trace!("token inserted in cache, request proceeding");
-                            req.headers_mut()
-                                .typed_insert(Authorization::bearer(&response.token).unwrap());
+                            return Ok(Response::from_parts(parts, body));
                         }
+
+                        let body = match hyper::body::to_bytes(token_response.into_body()).await {
+                            Ok(body) => body,
+                            Err(error) => {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to get response body"
+                                );
+
+                                return Ok(Response::builder()
+                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                    .body(boxed(Body::empty()))
+                                    .unwrap());
+                            }
+                        };
+
+                        let response = match serde_json::from_slice::<ConvertResponse>(&body) {
+                            Ok(response) => response,
+                            Err(error) => {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to convert body to ConvertResponse"
+                                );
+
+                                return Ok(Response::builder()
+                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                    .body(boxed(Body::empty()))
+                                    .unwrap());
+                            }
+                        };
+
+                        let bearer = Authorization::bearer(&response.token).expect("bearer token");
+
+                        this.cache_manager.insert(
+                            cache_key.as_str(),
+                            response.token,
+                            Duration::from_secs(CACHE_MINUTES * 60),
+                        );
+
+                        trace!("token inserted in cache, request proceeding");
+                        req.headers_mut().typed_insert(bearer);
                     };
                 }
 
                 match this.inner.call(req).await {
                     Ok(response) => Ok(response),
-                    Err(_) => {
-                        error!("unexpected internal error from gateway");
+                    Err(error) => {
+                        error!(?error, "unexpected internal error from gateway");
 
                         Ok(Response::builder()
                             .status(StatusCode::SERVICE_UNAVAILABLE)
@@ -278,6 +266,25 @@ where
             })
         }
     }
+}
+
+fn cache_key_and_token_req(req: &Request<Body>) -> Option<(String, Request<Body>)> {
+    req.headers()
+        .typed_get::<Authorization<Bearer>>()
+        .map(|bearer| {
+            let cache_key = bearer.token().trim().to_string();
+            let token_request = make_token_request("/auth/key", bearer);
+            (cache_key, token_request)
+        })
+        .or_else(|| {
+            req.headers().typed_get::<Cookie>().and_then(|cookie| {
+                cookie.get("shuttle.sid").map(|id| {
+                    let cache_key = id.to_string();
+                    let token_request = make_token_request("/auth/session", cookie.clone());
+                    (cache_key, token_request)
+                })
+            })
+        })
 }
 
 fn make_token_request(uri: &str, header: impl Header) -> Request<Body> {

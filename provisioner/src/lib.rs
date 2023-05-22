@@ -367,7 +367,22 @@ impl MyProvisioner {
     }
 
     async fn get_iam_identity_keys(&self, prefix: &str) -> Result<(String, String), Error> {
-        Ok(("todo".to_string(), "todo".to_string()))
+        let key = self
+            .iam_client
+            .create_access_key()
+            .user_name(self.get_iam_identity_user_name(prefix).await)
+            .send()
+            .await
+            .unwrap();
+        let access_key = key
+            .access_key()
+            .unwrap();
+
+        //TODO: Save these somewhere (somewhere in deployer, provisioner, auth, or resource recorder)
+        let access_key_id = access_key.access_key_id.as_ref().unwrap().to_string();
+        let secret_access_key = access_key.secret_access_key.as_ref().unwrap().to_string();
+
+        Ok((access_key_id, secret_access_key))
     }
 
     async fn delete_iam_identity(&self, prefix: &str) -> Result<DeleteUserOutput, Error> {

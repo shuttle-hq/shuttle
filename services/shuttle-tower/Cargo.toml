@@ -10,7 +10,7 @@ keywords = ["shuttle-service", "tower"]
 
 [dependencies]
 hyper = { version = "0.14.23", features = ["server", "tcp", "http1"] }
-shuttle-runtime = { path = "../../runtime", version = "0.16.0" }
+shuttle-runtime = { path = "../../runtime", version = "0.17.0" }
 tower = { version = "0.4.13", features = ["make"] }
 
 [dev-dependencies]

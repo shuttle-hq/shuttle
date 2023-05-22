@@ -10,7 +10,7 @@ keywords = ["shuttle-service", "axum"]
 
 [dependencies]
 axum = { version = "0.6.10" }
-shuttle-runtime = { path = "../../runtime", version = "0.16.0" }
+shuttle-runtime = { path = "../../runtime", version = "0.17.0" }
 
 [dev-dependencies]
 tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

@@ -642,7 +642,12 @@ impl GatewayService {
             .unwrap_or_else(|_| panic!("Malformed existing PEM certificate for the gateway."));
         let (_, x509_cert) = parse_x509_certificate(pem.contents.as_bytes())
             .unwrap_or_else(|_| panic!("Malformed existing X509 certificate for the gateway."));
+
+        // We compute the difference between the certificate expiry date and current timestamp because we want to trigger the
+        // gateway certificate renewal only during it's last 30 days of validity or if the certificate is expired.
         let diff = x509_cert.validity().not_after.sub(ASN1Time::now());
+
+        // Renew only when the difference is `None` (meaning certificate expired) or we're within the last 30 days of validity.
         if diff.is_none()
             || diff
                 .expect("to be Some given we checked for None previously")

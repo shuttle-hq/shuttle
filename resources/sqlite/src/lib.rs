@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -47,7 +48,7 @@ impl<'a> ResourceBuilder<sqlx::SqlitePool> for SQLite<'a> {
     /// Create a new instance of this resource builder
     fn new() -> Self {
         Self {
-            db_name: "sqlite_db",
+            db_name: "sqlite.db",
         }
     }
 
@@ -80,12 +81,19 @@ impl<'a> ResourceBuilder<sqlx::SqlitePool> for SQLite<'a> {
 
     /// Build this resource from its config output
     async fn build(build_data: &Self::Output) -> Result<sqlx::SqlitePool, shuttle_service::Error> {
-        let db_path = &build_data.db_path;
-        debug!("Connecting to database at {db_path:?}");
+        let db_path = &build_data.db_path.as_path().display();
+        let db_url = &format!("sqlite://{db_path}");
 
-        let pool = sqlx::SqlitePool::connect(&format!("sqlite:///{db_path:?}"))
+        debug!("Connecting to database at {db_path}");
+
+        let opts = sqlx::sqlite::SqliteConnectOptions::from_str(db_url)
+            .expect("Failed to parse conn string")
+            .create_if_missing(true);
+
+        let pool = sqlx::SqlitePool::connect_with(opts)
             .await
-            .unwrap();
+            .expect("Failed to create sqlite database");
+
         Ok(pool)
     }
 }

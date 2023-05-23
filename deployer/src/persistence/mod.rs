@@ -571,7 +571,7 @@ mod tests {
         let (p, _) = Persistence::new_in_memory().await;
         let service_id = add_service(&p.pool).await.unwrap();
 
-        let deployments: Vec<_> = (0..10)
+        let mut deployments: Vec<_> = (0..10)
             .map(|_| Deployment {
                 id: Uuid::new_v4(),
                 service_id,
@@ -586,9 +586,11 @@ mod tests {
             p.insert_deployment(deployment.clone()).await.unwrap();
         }
 
+        // Reverse to match last_updated desc order
+        deployments.reverse();
         assert_eq!(
             p.get_deployments(&service_id, 0, 5).await.unwrap(),
-            deployments[..5]
+            deployments[0..5]
         );
         assert_eq!(
             p.get_deployments(&service_id, 5, 5).await.unwrap(),
@@ -702,7 +704,7 @@ mod tests {
         }
 
         let actual = p.get_deployments(&service_id, 0, u32::MAX).await.unwrap();
-        let expected = vec![deployment_stopped, deployment_crashed, deployment_running];
+        let expected = vec![deployment_running, deployment_crashed, deployment_stopped];
 
         assert_eq!(actual, expected, "deployments should be sorted by time");
     }
@@ -798,13 +800,13 @@ mod tests {
             .map(|deployment| (deployment.id, deployment.state))
             .collect();
         let expected = vec![
-            (deployment_crashed.id, State::Crashed),
-            (deployment_stopped.id, State::Stopped),
-            (deployment_running.id, State::Running),
-            (deployment_queued.id, State::Stopped),
-            (deployment_building.id, State::Stopped),
-            (deployment_built.id, State::Stopped),
             (deployment_loading.id, State::Stopped),
+            (deployment_built.id, State::Stopped),
+            (deployment_building.id, State::Stopped),
+            (deployment_queued.id, State::Stopped),
+            (deployment_running.id, State::Running),
+            (deployment_stopped.id, State::Stopped),
+            (deployment_crashed.id, State::Crashed),
         ];
 
         assert_eq!(

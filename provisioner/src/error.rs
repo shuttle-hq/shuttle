@@ -43,9 +43,13 @@ pub enum Error {
 
     #[error("failed to create IAM user for AWS: {0}")]
     CreateIAMUser(#[from] CreateUserError),
+    
+    #[error("failed to get IAM identity keys for AWS: {0}")]
+    GetIAMIdentityKeys(#[from] std::io::Error),
 
     #[error["plain error: {0}"]]
     Plain(String),
+
 }
 
 unsafe impl Send for Error {}

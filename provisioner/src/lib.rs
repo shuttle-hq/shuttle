@@ -2,6 +2,7 @@ use std::time::Duration;
 
 pub use args::Args;
 use aws_config::timeout;
+use aws_sdk_dynamodb::types::{AttributeDefinition, KeySchemaElement};
 use aws_sdk_iam;
 use aws_sdk_iam::operation::create_policy::CreatePolicyError;
 use aws_sdk_iam::operation::create_user::CreateUserError;
@@ -26,6 +27,8 @@ use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info};
+use std::fs::File;
+use std::io::{ self, BufRead, BufReader };
 
 mod args;
 mod error;
@@ -68,6 +71,7 @@ impl MyProvisioner {
             .operation_timeout(Duration::from_secs(120))
             .operation_attempt_timeout(Duration::from_secs(120))
             .build();
+        
 
         let aws_config = aws_config::from_env()
             .timeout_config(timeout_config)
@@ -77,6 +81,25 @@ impl MyProvisioner {
         let rds_client = aws_sdk_rds::Client::new(&aws_config);
 
         let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
+
+        let a_name: String = "test".into();
+        let table_name: String = "test".into();
+
+        let ad = AttributeDefinition::builder()
+            .attribute_name(&a_name)
+            .build();
+
+        let ks = KeySchemaElement::builder()
+            .attribute_name(&a_name)
+            .build();
+
+        let create_table_response = dynamodb_client
+            .create_table()
+            .table_name(table_name)
+            .key_schema(ks)
+            .attribute_definitions(ad)
+            .send()
+            .await; 
 
         let iam_client = aws_sdk_iam::Client::new(&aws_config);
 
@@ -366,7 +389,38 @@ impl MyProvisioner {
         Ok(())
     }
 
+    async fn get_saved_access_key(&self, prefix: &str) -> Option<(String, String)> {
+        if let Ok(file) = std::fs::File::open(self.get_access_key_file_name(prefix)) {
+            let mut lines = std::io::BufReader::new(file).lines();
+
+            if let Some(Ok(access_key_id)) = lines.next() {
+                if let Some(Ok(secret_access_key)) = lines.next() {
+                    return Some((access_key_id, secret_access_key))
+                }
+            }
+        }
+
+        None
+    }
+
+    fn get_access_key_file_name(&self, prefix: &str) -> String {
+        format!("{}.txt", prefix)
+    }
+
+    async fn save_access_key(&self, prefix: &str, access_key_id: &str, secret_access_key: &str) -> Result<(), std::io::Error> {
+        use std::io::prelude::*;    
+        let mut file = File::create(self.get_access_key_file_name(prefix))?;
+        let contents = format!("{}\n{}", access_key_id, secret_access_key);
+        file.write_all(contents.as_bytes())?;
+
+        Ok(())
+    }
+
     async fn get_iam_identity_keys(&self, prefix: &str) -> Result<(String, String), Error> {
+        if let Some((access_key_id, secret_access_key)) = self.get_saved_access_key(prefix).await {
+            return Ok((access_key_id, secret_access_key));
+        }
+
         let key = self
             .iam_client
             .create_access_key()
@@ -378,9 +432,10 @@ impl MyProvisioner {
             .access_key()
             .unwrap();
 
-        //TODO: Save these somewhere (somewhere in deployer, provisioner, auth, or resource recorder)
         let access_key_id = access_key.access_key_id.as_ref().unwrap().to_string();
         let secret_access_key = access_key.secret_access_key.as_ref().unwrap().to_string();
+
+        self.save_access_key(prefix, &access_key_id, &secret_access_key).await.map_err(|e| Error::GetIAMIdentityKeys(e))?;
 
         Ok((access_key_id, secret_access_key))
     }
@@ -838,5 +893,23 @@ mod tests {
         .delete_dynamodb("test_delete_dynamodb")
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_access_key() {
+        let provisioner = make_test_provisioner().await;
+
+        let access_key_id = "my-access-key".to_string();
+        let secret_access_key = "my-secret-access-key".to_string();
+        let prefix = provisioner.get_prefix("test_get_access_key").await;
+
+        assert_eq!(provisioner.get_saved_access_key(&prefix).await, None);
+
+        provisioner.save_access_key(&prefix, &access_key_id, &secret_access_key).await.unwrap();
+
+        assert_eq!(provisioner.get_saved_access_key(&prefix).await, Some((access_key_id, secret_access_key)));
+
+        //cleanup
+        std::fs::remove_file(provisioner.get_access_key_file_name(&prefix)).unwrap();
     }
 }

@@ -1,6 +1,6 @@
 [package]
-name = "sqlite"
-version = "0.1.0"
+name = "shuttle-sqlite"
+version = "0.16.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -8,4 +8,7 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.68"
 serde = "1.0.163"
-shuttle-service = { version  = "0.16.0", path = "../../service" }
+shuttle-service = { version = "0.16.0", path = "../../service" }
+sqlx = { version = "0.6.3", features = ["sqlite", "runtime-tokio-rustls"] }
+thiserror = "1.0.40"
+tracing = "0.1.37"

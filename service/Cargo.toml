@@ -26,7 +26,6 @@ tracing = { workspace = true, optional = true }
 [dependencies.shuttle-common]
 workspace = true
 features = ["service"]
-path = "../common"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

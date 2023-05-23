@@ -1,16 +1,16 @@
 mod error;
 
+use crate::deployment::{DeploymentManager, Queued};
+use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGetter, State};
 use axum::extract::ws::{self, WebSocket};
 use axum::extract::{Extension, Path, Query};
 use axum::handler::Handler;
 use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
 use axum::routing::{get, post, Router};
-use axum::{extract::BodyStream, Json};
-use bytes::BufMut;
+use axum::Json;
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
-use futures::StreamExt;
 use hyper::Uri;
 use serde::Deserialize;
 use shuttle_common::backends::auth::{
@@ -19,21 +19,16 @@ use shuttle_common::backends::auth::{
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::models::deployment::{DeploymentRequest, GIT_STRINGS_MAX_LENGTH};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
-use tracing::{debug, error, field, instrument, trace, warn};
+use tracing::{error, field, instrument, trace, warn};
 use utoipa::{IntoParams, OpenApi};
-
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
-
-use crate::deployment::{DeploymentManager, Queued};
-use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGetter, State};
-
-use std::collections::HashMap;
 
 pub use {self::error::Error, self::error::Result, self::local::set_jwt_bearer};
 
@@ -315,11 +310,12 @@ pub async fn create_service(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     Path((project_name, service_name)): Path<(String, String)>,
-    Query(params): Query<HashMap<String, String>>,
-    mut stream: BodyStream,
+    Json(body): Json<DeploymentRequest>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     let service = persistence.get_or_create_service(&service_name).await?;
     let id = Uuid::new_v4();
+
+    let data = todo!("Base64 decode body.archive");
 
     let deployment = Deployment {
         id,
@@ -328,15 +324,17 @@ pub async fn create_service(
         last_update: Utc::now(),
         address: None,
         is_next: false,
+        git_commit_id: body
+            .git_commit_id
+            .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
+        git_commit_msg: body
+            .git_commit_msg
+            .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
+        git_branch: body
+            .git_branch
+            .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
+        git_dirty: body.git_dirty,
     };
-
-    let mut data = Vec::new();
-    while let Some(buf) = stream.next().await {
-        let buf = buf?;
-        debug!("Received {} bytes", buf.len());
-        data.put(buf);
-    }
-    debug!("Received a total of {} bytes", data.len());
 
     persistence.insert_deployment(deployment.clone()).await?;
 
@@ -345,7 +343,7 @@ pub async fn create_service(
         service_name: service.name,
         service_id: service.id,
         data,
-        will_run_tests: !params.contains_key("no-test"),
+        will_run_tests: !body.no_test,
         tracing_context: Default::default(),
         claim: Some(claim),
     };

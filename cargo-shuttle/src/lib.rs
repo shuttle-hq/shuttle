@@ -7,7 +7,9 @@ mod provisioner_server;
 use args::LogoutArgs;
 use indicatif::ProgressBar;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
-use shuttle_common::models::deployment::get_deployments_table;
+use shuttle_common::models::deployment::{
+    get_deployments_table, DeploymentRequest, GIT_STRINGS_MAX_LENGTH,
+};
 use shuttle_common::models::project::IDLE_MINUTES;
 use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
@@ -908,15 +910,48 @@ impl Shuttle {
     }
 
     async fn deploy(&self, client: &Client, args: DeployArgs) -> Result<CommandOutcome> {
-        if !args.allow_dirty {
-            self.is_dirty()?;
+        let working_directory = self.ctx.working_directory();
+
+        let mut deploy_req: DeploymentRequest = DeploymentRequest {
+            no_test: args.no_test,
+            ..Default::default()
+        };
+
+        if let Ok(repo) = Repository::discover(working_directory) {
+            let repo_path = repo
+                .workdir()
+                .context("getting working directory of repository")?;
+            let repo_path = dunce::canonicalize(repo_path)?;
+            trace!(?repo_path, "found git repository");
+
+            let is_dirty = self.is_dirty(&repo).err();
+            if !args.allow_dirty {
+                if let Some(err) = is_dirty {
+                    bail!(err);
+                }
+            }
+            deploy_req.git_dirty = Some(is_dirty.is_some());
+
+            if let Ok(head) = repo.head() {
+                // This is typically the name of the current branch
+                // It is "HEAD" when head detached, for example when a tag is checked out
+                deploy_req.git_branch = head
+                    .shorthand()
+                    .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect());
+                if let Ok(commit) = head.peel_to_commit() {
+                    deploy_req.git_commit_id = Some(commit.id().to_string());
+                    // Summary is None if error or invalid utf-8
+                    deploy_req.git_commit_msg = commit
+                        .summary()
+                        .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect());
+                }
+            }
         }
 
         let data = self.make_archive()?;
+        deploy_req.archive = todo!("Base64 encode the Vec<u8>");
 
-        let deployment = client
-            .deploy(data, self.ctx.project_name(), args.no_test)
-            .await?;
+        let deployment = client.deploy(self.ctx.project_name(), deploy_req).await?;
 
         let mut stream = client
             .get_logs_ws(self.ctx.project_name(), &deployment.id)
@@ -1197,61 +1232,35 @@ impl Shuttle {
         Ok(bytes)
     }
 
-    fn is_dirty(&self) -> Result<()> {
-        let working_directory = self.ctx.working_directory();
-        if let Ok(repo) = Repository::discover(working_directory) {
-            let repo_path = repo
-                .workdir()
-                .context("getting working directory of repository")?;
+    fn is_dirty(&self, repo: &Repository) -> Result<()> {
+        let mut status_options = StatusOptions::new();
+        status_options.include_untracked(true);
+        let statuses = repo
+            .statuses(Some(&mut status_options))
+            .context("getting status of repository files")?;
 
-            let repo_path = dunce::canonicalize(repo_path)?;
-
-            trace!(?repo_path, "found git repository");
-
-            let repo_rel_path = working_directory
-                .strip_prefix(repo_path.as_path())
-                .context("stripping repository path from working directory")?;
-
-            trace!(
-                ?repo_rel_path,
-                "got working directory path relative to git repository"
+        if !statuses.is_empty() {
+            let mut error = format!(
+                "{} files in the working directory contain changes that were not yet committed into git:\n",
+                statuses.len()
             );
 
-            let mut status_options = StatusOptions::new();
-            status_options
-                .pathspec(repo_rel_path)
-                .include_untracked(true);
+            for status in statuses.iter() {
+                trace!(
+                    path = status.path(),
+                    status = ?status.status(),
+                    "found file with updates"
+                );
 
-            let statuses = repo
-                .statuses(Some(&mut status_options))
-                .context("getting status of repository files")?;
+                let rel_path = status.path().context("getting path of changed file")?;
 
-            if !statuses.is_empty() {
-                let mut error: String = format!("{} files in the working directory contain changes that were not yet committed into git:", statuses.len());
-                writeln!(error).expect("to append error");
-
-                for status in statuses.iter() {
-                    trace!(
-                        path = status.path(),
-                        status = ?status.status(),
-                        "found file with updates"
-                    );
-
-                    let path =
-                        repo_path.join(status.path().context("getting path of changed file")?);
-                    let rel_path = path
-                        .strip_prefix(working_directory)
-                        .expect("getting relative path of changed file")
-                        .display();
-
-                    writeln!(error, "{rel_path}").expect("to append error");
-                }
-
-                writeln!(error).expect("to append error");
-                writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
-
-                bail!(error);
+                writeln!(error, "{rel_path}").expect("to append error");
             }
+
+            writeln!(error).expect("to append error");
+            writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
+
+            bail!(error);
         }
 
         Ok(())

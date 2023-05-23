@@ -115,3 +115,18 @@ Most recent {} for {}
         )
     }
 }
+
+#[derive(Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::deployment::DeploymentRequest))]
+pub struct DeploymentRequest {
+    /// Base64 encoded TAR archive
+    pub archive: String,
+    pub no_test: bool,
+    pub git_commit_id: Option<String>,
+    pub git_commit_msg: Option<String>,
+    pub git_branch: Option<String>,
+    pub git_dirty: Option<bool>,
+}
+
+pub const GIT_STRINGS_MAX_LENGTH: usize = 80;

@@ -7,6 +7,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
+use shuttle_common::models::deployment::DeploymentRequest;
 use shuttle_common::models::{deployment, project, secret, service, ToJson};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{resource, ApiKey, ApiUrl, LogItem};
@@ -36,19 +37,14 @@ impl Client {
 
     pub async fn deploy(
         &self,
-        data: Vec<u8>,
         project: &ProjectName,
-        no_test: bool,
+        body: DeploymentRequest,
     ) -> Result<deployment::Response> {
-        let mut path = format!(
+        let path = format!(
             "/projects/{}/services/{}",
             project.as_str(),
             project.as_str()
         );
-
-        if no_test {
-            let _ = write!(path, "?no-test");
-        }
 
         let url = format!("{}{}", self.api_url, path);
 
@@ -57,7 +53,7 @@ impl Client {
         builder = self.set_builder_auth(builder);
 
         builder
-            .body(data)
+            .json(&body)
             .header("Transfer-Encoding", "chunked")
             .send()
             .await

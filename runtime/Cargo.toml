@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-runtime"
-version = "0.16.0"
+version = "0.17.0"
 edition.workspace = true
 license.workspace = true
 description = "Runtime to start and manage any service that runs on shuttle"
@@ -16,7 +16,6 @@ doctest = false
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
-clap = { workspace = true }
 prost-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

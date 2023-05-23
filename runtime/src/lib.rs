@@ -27,9 +27,9 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.16.0"
+//! shuttle-runtime = "0.17.0"
 //! axum = "0.6.10"
-//! shuttle-axum = "0.16.0"
+//! shuttle-axum = "0.17.0"
 //! tokio = "1.26"
 //! ```
 //!
@@ -113,7 +113,7 @@
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.16.0", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.17.0", features = ["postgres"] }
 //! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
@@ -215,6 +215,7 @@
 //! You can also [open an issue or a discussion on GitHub](https://github.com/shuttle-hq/shuttle).
 //!
 mod alpha;
+mod args;
 mod logger;
 #[cfg(feature = "next")]
 mod next;

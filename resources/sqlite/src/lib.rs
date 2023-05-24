@@ -3,11 +3,17 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use shuttle_service::{database, Factory, ResourceBuilder, Type};
+use shuttle_service::{Factory, ResourceBuilder, Type};
+use sqlx::sqlite::SqliteConnectOptions;
 use thiserror::Error;
-use tracing::debug;
 
 pub use sqlx::SqlitePool;
+
+#[derive(Error, Debug)]
+pub enum SQLiteError {
+    #[error("Failed to open db connection")]
+    NoConnection,
+}
 
 // Builder struct
 #[derive(Serialize)]
@@ -21,12 +27,6 @@ pub struct SQLiteInstance {
     db_path: PathBuf,
 }
 
-#[derive(Error, Debug)]
-pub enum SQLiteError {
-    #[error("Failed to open db connection")]
-    NoConnection,
-}
-
 impl<'a> SQLite<'a> {
     pub fn db_name(mut self, db_name: &'a str) -> Self {
         self.db_name = db_name;
@@ -34,16 +34,22 @@ impl<'a> SQLite<'a> {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct SQLiteConnOpts {
+    // TODO: Which other options to add?
+    conn_str: String,
+}
+
 #[async_trait]
 impl<'a> ResourceBuilder<sqlx::SqlitePool> for SQLite<'a> {
     /// The type of resource this creates
-    const TYPE: Type = Type::Database(database::Type::Filesystem);
+    const TYPE: Type = Type::EmbeddedDatabase;
 
     /// The internal config being constructed by this builder. This will be used to find cached [Self::Output].
     type Config = Self;
 
     /// The output type used to build this resource later
-    type Output = SQLiteInstance;
+    type Output = SQLiteConnOpts;
 
     /// Create a new instance of this resource builder
     fn new() -> Self {
@@ -68,25 +74,22 @@ impl<'a> ResourceBuilder<sqlx::SqlitePool> for SQLite<'a> {
     /// skipped as explained in [Self::config()].
     async fn output(
         self,
-        factory: &mut dyn Factory,
+        _factory: &mut dyn Factory,
     ) -> Result<Self::Output, shuttle_service::Error> {
-        // TODO: Construct db name from service name + something?
-        let _service_name = factory.get_service_name();
-
-        let storage_path = factory.get_storage_path()?;
-        let db_path = storage_path.join(self.db_name);
-
-        Ok(SQLiteInstance { db_path })
+        // TODO: Construct this with an absolute path ("sqlite:///...") using storage_path
+        // let storage_path = factory.get_storage_path()?;
+        // let db_path = storage_path.join(self.db_name);
+        // let db_path = &build_data.db_path.as_path().display();
+        let db_path = self.db_name;
+        let conn_str = format!("sqlite://{db_path}");
+        Ok(SQLiteConnOpts { conn_str })
     }
 
     /// Build this resource from its config output
     async fn build(build_data: &Self::Output) -> Result<sqlx::SqlitePool, shuttle_service::Error> {
-        let db_path = &build_data.db_path.as_path().display();
-        let db_url = &format!("sqlite://{db_path}");
+        // debug!("Connecting to database at {db_path}");
 
-        debug!("Connecting to database at {db_path}");
-
-        let opts = sqlx::sqlite::SqliteConnectOptions::from_str(db_url)
+        let opts = SqliteConnectOptions::from_str(&build_data.conn_str)
             .expect("Failed to parse conn string")
             .create_if_missing(true);
 

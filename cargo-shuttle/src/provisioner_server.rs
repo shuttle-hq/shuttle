@@ -414,22 +414,5 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
                 "show databases;".to_string(),
             ],
         },
-        Type::Filesystem => EngineConfig {
-            // TODO: Update with real values
-            r#type: "local_sqlite".to_string(),
-            image: "docker.io/library/postgres:11".to_string(),
-            engine: "sqlite".to_string(),
-            username: "sqlite".to_string(),
-            password: "sqlite".to_string(),
-            database_name: "sqlite".to_string(),
-            port: "5432/tcp".to_string(),
-            env: Some(vec!["SQLITE_PASSWORD=sqlite".to_string()]),
-            is_ready_cmd: vec![],
-            // is_ready_cmd: vec![
-            //     "/bin/sh".to_string(),
-            //     "-c".to_string(),
-            //     "pg_isready | grep 'accepting connections'".to_string(),
-            // ],
-        },
     }
 }

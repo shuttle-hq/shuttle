@@ -12,7 +12,6 @@ message DatabaseRequest {
   oneof db_type {
     Shared Shared = 10;
     AwsRds AwsRds = 11;
-    Filesystem Filesystem = 12;
   };
 }
 
@@ -30,8 +29,6 @@ message AwsRds {
     RdsConfig mariadb = 3;
   }
 }
-
-message Filesystem {}
 
 message RdsConfig {}
 

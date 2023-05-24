@@ -3,7 +3,7 @@
 pub struct DatabaseRequest {
     #[prost(string, tag = "1")]
     pub project_name: ::prost::alloc::string::String,
-    #[prost(oneof = "database_request::DbType", tags = "10, 11, 12")]
+    #[prost(oneof = "database_request::DbType", tags = "10, 11")]
     pub db_type: ::core::option::Option<database_request::DbType>,
 }
 /// Nested message and enum types in `DatabaseRequest`.
@@ -15,8 +15,6 @@ pub mod database_request {
         Shared(super::Shared),
         #[prost(message, tag = "11")]
         AwsRds(super::AwsRds),
-        #[prost(message, tag = "12")]
-        Filesystem(super::Filesystem),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -55,9 +53,6 @@ pub mod aws_rds {
         Mariadb(super::RdsConfig),
     }
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Filesystem {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RdsConfig {}

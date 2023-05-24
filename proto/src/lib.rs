@@ -49,7 +49,6 @@ pub mod provisioner {
                         engine: Some(engine),
                     })
                 }
-                database::Type::Filesystem => database_request::DbType::Filesystem(Filesystem {}),
             }
         }
     }
@@ -78,9 +77,6 @@ pub mod provisioner {
                         Some(database::Type::AwsRds(AwsRdsEngine::MariaDB))
                     }
                 },
-                database_request::DbType::Filesystem(Filesystem {}) => {
-                    Some(database::Type::Filesystem)
-                }
                 database_request::DbType::Shared(Shared { engine: None })
                 | database_request::DbType::AwsRds(AwsRds { engine: None }) => None,
             }

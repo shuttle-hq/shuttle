@@ -8,7 +8,7 @@ use shuttle_common::{
     DatabaseReadyInfo,
     DynamoDbReadyInfo
 };
-use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest, DynamoDbResponse, DynamoDbRequest};
+use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest, DynamoDbRequest};
 use shuttle_service::{Environment, Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::info;

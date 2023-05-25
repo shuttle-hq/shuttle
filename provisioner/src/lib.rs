@@ -2,7 +2,6 @@ use std::time::Duration;
 
 pub use args::Args;
 use aws_config::timeout;
-use aws_sdk_dynamodb::types::{AttributeDefinition, KeySchemaElement};
 use aws_sdk_iam;
 use aws_sdk_iam::operation::create_policy::CreatePolicyError;
 use aws_sdk_iam::operation::create_user::CreateUserError;
@@ -17,7 +16,7 @@ use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use serde_json::json;
 use shuttle_common::claims::{Claim, Scope};
-use shuttle_proto::provisioner::{DynamoDbResponse, DynamoDbRequest};
+use shuttle_proto::provisioner::{DynamoDbResponse, DynamoDbRequest, DynamoDbDeletionResponse};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
@@ -28,7 +27,7 @@ use tokio::time::sleep;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info};
 use std::fs::File;
-use std::io::{ self, BufRead, BufReader };
+use std::io::BufRead;
 
 mod args;
 mod error;
@@ -489,14 +488,14 @@ impl MyProvisioner {
         })
     }
 
-    async fn delete_dynamodb(&self, project_name: &str) -> Result<DatabaseDeletionResponse, Error> {
+    async fn delete_dynamodb(&self, project_name: &str) -> Result<DynamoDbDeletionResponse, Error> {
         let prefix = self.get_prefix(project_name).await;
         self.detach_user_policy(&prefix).await?;
         self.delete_iam_identity(&prefix).await?;
         self.delete_dynamodb_policy(&prefix).await?;
 
         //TODO: delete tables that match the prefix
-        Ok(DatabaseDeletionResponse {})
+        Ok(DynamoDbDeletionResponse {})
     }
 
     async fn request_aws_rds(
@@ -731,6 +730,20 @@ impl Provisioner for MyProvisioner {
         let request = request.into_inner();
 
         let reply = self.request_dynamodb(&request.project_name).await?;
+
+        Ok(Response::new(reply))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn delete_dynamo_db(
+        &self,
+        request: Request<DynamoDbRequest>,
+    ) -> Result<Response<DynamoDbDeletionResponse>, Status> {
+        verify_claim(&request)?;
+
+        let request = request.into_inner();
+
+        let reply = self.delete_dynamodb(&request.project_name).await?;
 
         Ok(Response::new(reply))
     }

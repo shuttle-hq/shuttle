@@ -98,6 +98,9 @@ pub struct DynamoDbResponse {
     #[prost(string, tag = "4")]
     pub aws_default_region: ::prost::alloc::string::String,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DynamoDbDeletionResponse {}
 /// Generated client implementations.
 pub mod provisioner_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
@@ -224,6 +227,25 @@ pub mod provisioner_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
+        pub async fn delete_dynamo_db(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DynamoDbRequest>,
+        ) -> Result<tonic::Response<super::DynamoDbDeletionResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/provisioner.Provisioner/DeleteDynamoDB",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -245,6 +267,10 @@ pub mod provisioner_server {
             &self,
             request: tonic::Request<super::DatabaseRequest>,
         ) -> Result<tonic::Response<super::DatabaseDeletionResponse>, tonic::Status>;
+        async fn delete_dynamo_db(
+            &self,
+            request: tonic::Request<super::DynamoDbRequest>,
+        ) -> Result<tonic::Response<super::DynamoDbDeletionResponse>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct ProvisionerServer<T: Provisioner> {
@@ -414,6 +440,46 @@ pub mod provisioner_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = DeleteDatabaseSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/provisioner.Provisioner/DeleteDynamoDB" => {
+                    #[allow(non_camel_case_types)]
+                    struct DeleteDynamoDBSvc<T: Provisioner>(pub Arc<T>);
+                    impl<
+                        T: Provisioner,
+                    > tonic::server::UnaryService<super::DynamoDbRequest>
+                    for DeleteDynamoDBSvc<T> {
+                        type Response = super::DynamoDbDeletionResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DynamoDbRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).delete_dynamo_db(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = DeleteDynamoDBSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

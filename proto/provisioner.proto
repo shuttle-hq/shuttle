@@ -5,6 +5,7 @@ service Provisioner {
   rpc ProvisionDatabase(DatabaseRequest) returns (DatabaseResponse);
   rpc ProvisionDynamoDB(DynamoDBRequest) returns (DynamoDBResponse);
   rpc DeleteDatabase(DatabaseRequest) returns (DatabaseDeletionResponse);
+  rpc DeleteDynamoDB(DynamoDBRequest) returns (DynamoDBDeletionResponse);
 }
 
 
@@ -57,3 +58,5 @@ message DynamoDBResponse {
   string aws_secret_access_key = 3;
   string aws_default_region = 4;
 }
+
+message DynamoDBDeletionResponse {}

@@ -82,25 +82,6 @@ impl MyProvisioner {
 
         let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
 
-        let a_name: String = "test".into();
-        let table_name: String = "test".into();
-
-        let ad = AttributeDefinition::builder()
-            .attribute_name(&a_name)
-            .build();
-
-        let ks = KeySchemaElement::builder()
-            .attribute_name(&a_name)
-            .build();
-
-        let create_table_response = dynamodb_client
-            .create_table()
-            .table_name(table_name)
-            .key_schema(ks)
-            .attribute_definitions(ad)
-            .send()
-            .await; 
-
         let iam_client = aws_sdk_iam::Client::new(&aws_config);
 
         let sts_client = aws_sdk_sts::Client::new(&aws_config);

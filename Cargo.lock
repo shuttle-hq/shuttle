@@ -49,6 +49,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aho-corasick"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67fc08ce920c31afb70f013dcce1bfc3a3195de6a228474e45e1f145b36f8d04"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "ambient-authority"
 version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -363,6 +372,59 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-dynamodb"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67fb64867fe098cffee7e34352b01bbfa2beb3aa1b2ff0e0a7bf9ff293557852"
+dependencies = [
+ "aws-credential-types",
+ "aws-endpoint",
+ "aws-http",
+ "aws-sig-auth",
+ "aws-smithy-async",
+ "aws-smithy-client",
+ "aws-smithy-http",
+ "aws-smithy-http-tower",
+ "aws-smithy-json",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand",
+ "http",
+ "regex",
+ "tokio-stream",
+ "tower",
+ "tracing",
+]
+
+[[package]]
+name = "aws-sdk-iam"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "500fc5ac16af425a278ae38be56e01115fee3db6953e29c418138b4d3c41c605"
+dependencies = [
+ "aws-credential-types",
+ "aws-endpoint",
+ "aws-http",
+ "aws-sig-auth",
+ "aws-smithy-async",
+ "aws-smithy-client",
+ "aws-smithy-http",
+ "aws-smithy-http-tower",
+ "aws-smithy-json",
+ "aws-smithy-query",
+ "aws-smithy-types",
+ "aws-smithy-xml",
+ "aws-types",
+ "bytes",
+ "http",
+ "regex",
+ "tokio-stream",
+ "tower",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-rds"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -503,7 +565,7 @@ dependencies = [
  "hyper-rustls 0.23.2",
  "lazy_static",
  "pin-project-lite",
- "rustls",
+ "rustls 0.20.8",
  "tokio",
  "tower",
  "tracing",
@@ -2578,7 +2640,7 @@ version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "029d74589adefde59de1a0c4f4732695c32805624aec7b68d91503d4dba79afc"
 dependencies = [
- "aho-corasick",
+ "aho-corasick 0.7.20",
  "bstr",
  "fnv",
  "log",
@@ -4254,7 +4316,7 @@ dependencies = [
  "rand",
  "rand_chacha",
  "rand_xorshift",
- "regex-syntax",
+ "regex-syntax 0.6.29",
  "rusty-fork",
  "tempfile",
  "unarray",
@@ -4498,13 +4560,13 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.7.2"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cce168fea28d3e05f158bda4576cf0c844d5045bc2cc3620fa0292ed5bb5814c"
+checksum = "af83e617f331cc6ae2da5443c602dfa5af81e517212d9d611a5b3ba1777b5370"
 dependencies = [
- "aho-corasick",
+ "aho-corasick 1.0.1",
  "memchr",
- "regex-syntax",
+ "regex-syntax 0.7.1",
 ]
 
 [[package]]
@@ -4513,7 +4575,7 @@ version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
 dependencies = [
- "regex-syntax",
+ "regex-syntax 0.6.29",
 ]
 
 [[package]]
@@ -4521,6 +4583,12 @@ name = "regex-syntax"
 version = "0.6.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f162c6dd7b008981e4d40210aca20b4bd0f9b60ca9271061b07f78537722f2e1"
+
+[[package]]
+name = "regex-syntax"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5996294f19bd3aae0453a862ad728f60e6600695733dd5df01da90c54363a3c"
 
 [[package]]
 name = "reqwest"
@@ -7781,3 +7849,71 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "shuttle-actix-web"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-aws-rds"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-axum"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-next"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-persist"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-poem"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-poise"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-rocket"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-salvo"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-secrets"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-serenity"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-shared-db"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-static-folder"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-thruster"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-tide"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-tower"
+version = "0.16.0"
+
+[[patch.unused]]
+name = "shuttle-warp"
+version = "0.16.0"

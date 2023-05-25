@@ -1,47 +1,49 @@
-use std::path::PathBuf;
+//! Shuttle resource providing an SQLite database. The database will be created in-process by the shuttle runtime.
+//!
+//! ## Example
+//! ```rust
+//! TODO: SIMPLE EXAMPLE
+//! ```
+//! ## Configuration
+//! The database can be configured using `SQLiteConfig` that makes an almost complete subset of `sqlx::XXXX` available.
+//! Notably, the full connection is not exposed but constructed internally.
+//! Configuration can be done by passing a config struct or by passing individual fields. When both are being used, the one
+//! that specified later wins.
+//!
+//! ```rust
+//! TODO: CONFIG EXAMPLE
+//! ```
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use shuttle_service::{Factory, ResourceBuilder, Type};
 use sqlx::sqlite::SqliteConnectOptions;
-use thiserror::Error;
 
 pub use sqlx::SqlitePool;
 
-#[derive(Error, Debug)]
-pub enum SQLiteError {
-    #[error("Failed to open db connection")]
-    NoConnection,
-}
+pub mod conn_opts;
+pub use conn_opts::*;
 
-// Builder struct
 #[derive(Serialize)]
-pub struct SQLite<'a> {
-    db_name: &'a str,
+pub struct SQLite {
+    config: SQLiteConnOpts,
 }
 
-// Resource struct
-#[derive(Deserialize, Serialize, Clone)]
-pub struct SQLiteInstance {
-    db_path: PathBuf,
-}
+impl SQLite {
+    pub fn filename(mut self, filename: String) -> Self {
+        self.config.filename = filename;
+        self
+    }
 
-impl<'a> SQLite<'a> {
-    pub fn db_name(mut self, db_name: &'a str) -> Self {
-        self.db_name = db_name;
-        Self { db_name }
+    pub fn config(mut self, config: SQLiteConnOpts) -> Self {
+        self.config = config;
+        self
     }
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct SQLiteConnOpts {
-    // TODO: Which other options to add?
-    conn_str: String,
-}
-
 #[async_trait]
-impl<'a> ResourceBuilder<sqlx::SqlitePool> for SQLite<'a> {
+impl ResourceBuilder<sqlx::SqlitePool> for SQLite {
     /// The type of resource this creates
     const TYPE: Type = Type::EmbeddedDatabase;
 
@@ -54,7 +56,7 @@ impl<'a> ResourceBuilder<sqlx::SqlitePool> for SQLite<'a> {
     /// Create a new instance of this resource builder
     fn new() -> Self {
         Self {
-            db_name: "sqlite.db",
+            config: SQLiteConnOpts::default(),
         }
     }
 
@@ -73,16 +75,14 @@ impl<'a> ResourceBuilder<sqlx::SqlitePool> for SQLite<'a> {
     /// can at times even take minutes. That is why the output of this method is cached and calling this method can be
     /// skipped as explained in [Self::config()].
     async fn output(
-        self,
-        _factory: &mut dyn Factory,
+        mut self,
+        factory: &mut dyn Factory,
     ) -> Result<Self::Output, shuttle_service::Error> {
-        // TODO: Construct this with an absolute path ("sqlite:///...") using storage_path
-        // let storage_path = factory.get_storage_path()?;
-        // let db_path = storage_path.join(self.db_name);
-        // let db_path = &build_data.db_path.as_path().display();
-        let db_path = self.db_name;
-        let conn_str = format!("sqlite://{db_path}");
-        Ok(SQLiteConnOpts { conn_str })
+        // We construct an absolute path using `storage_path` to prevent user access to other parts of the file system.
+        let storage_path = factory.get_storage_path()?;
+        let db_path = storage_path.join(&self.config.filename);
+        self.config.conn_str = format!("sqlite:///{}", db_path.display());
+        Ok(self.config)
     }
 
     /// Build this resource from its config output

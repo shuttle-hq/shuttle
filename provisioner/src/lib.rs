@@ -488,6 +488,28 @@ impl MyProvisioner {
         })
     }
 
+    async fn delete_dynamodb_tables_by_prefix(&self, prefix: &str) {
+        let mut last_evaluated_table_name: Option<String> = Some(prefix.to_string());
+
+        'outer: while last_evaluated_table_name.is_some() {
+            let result = self.dynamodb_client.list_tables().exclusive_start_table_name(last_evaluated_table_name.unwrap()).send().await.unwrap();
+            last_evaluated_table_name = result.last_evaluated_table_name.clone();
+
+            if let Some(table_names) = result.table_names {
+                for table_name in table_names {
+                    if !table_name.starts_with(&prefix) {
+                        break 'outer;
+                    } else {
+                        self.dynamodb_client.delete_table().table_name(table_name).send().await.unwrap();
+                    }
+                }
+            }
+        }
+
+        // edge case to include just the prefix table name (if the user put only prefix for table name)
+        let _ = self.dynamodb_client.delete_table().table_name(prefix).send().await;
+    }
+
     async fn delete_dynamodb(&self, project_name: &str) -> Result<DynamoDbDeletionResponse, Error> {
         let prefix = self.get_prefix(project_name).await;
         self.detach_user_policy(&prefix).await?;
@@ -495,6 +517,20 @@ impl MyProvisioner {
         self.delete_dynamodb_policy(&prefix).await?;
 
         //TODO: delete tables that match the prefix
+
+        self.delete_dynamodb_tables_by_prefix(&prefix).await;
+
+        // let table_names = self.dynamodb_client.list_tables().
+
+        
+        
+        // let delete = self.dynamodb_client
+        //     .delete_table()
+        //     .table_name(table_name)
+        //     .send()
+        //     .await;
+
+
         Ok(DynamoDbDeletionResponse {})
     }
 
@@ -815,6 +851,11 @@ fn engine_to_port(engine: aws_rds::Engine) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use aws_sdk_dynamodb::types::{AttributeDefinition, ScalarAttributeType, KeySchemaElement, KeyType, ProvisionedThroughput};
+    use tokio::time::sleep;
+
     use crate::MyProvisioner;
 
     async fn make_test_provisioner() -> MyProvisioner {
@@ -888,6 +929,120 @@ mod tests {
         .await
         .unwrap();
     }
+
+    #[tokio::test]
+    async fn test_dynamodb_delete_table_names_by_prefix() {
+        let provisioner = make_test_provisioner().await;
+
+        let prefix = "test_dynamodb_delete_table_names_by_prefix-";
+
+        let attribute_definition = AttributeDefinition::builder()
+        .attribute_name("test")
+        .attribute_type(ScalarAttributeType::S)
+        .build();
+
+        let key_schema = KeySchemaElement::builder()
+            .attribute_name("test")
+            .key_type(KeyType::Hash)
+            .build();
+
+        let provisioned_throughput = ProvisionedThroughput::builder()
+            .read_capacity_units(10)
+            .write_capacity_units(5)
+            .build();
+
+        provisioner.dynamodb_client
+        .create_table()
+        .table_name(format!("{}1", prefix))
+        .key_schema(key_schema.clone())
+        .attribute_definitions(attribute_definition.clone())
+        .provisioned_throughput(provisioned_throughput.clone())
+        .send()
+        .await.unwrap();
+
+        provisioner.dynamodb_client
+        .create_table()
+        .table_name(format!("{}2", prefix))
+        .key_schema(key_schema.clone())
+        .attribute_definitions(attribute_definition.clone())
+        .provisioned_throughput(provisioned_throughput.clone())
+        .send()
+        .await.unwrap();
+
+        provisioner.dynamodb_client
+        .create_table()
+        .table_name(format!("{}", prefix))
+        .key_schema(key_schema.clone())
+        .attribute_definitions(attribute_definition.clone())
+        .provisioned_throughput(provisioned_throughput.clone())
+        .send()
+        .await.unwrap();
+
+        sleep(Duration::from_secs(60)).await;
+
+        provisioner.delete_dynamodb_tables_by_prefix(prefix).await;
+
+    }
+
+    // #[tokio::test]
+    // async fn test_listing_dynamodb() {
+    //     let provisioner = make_test_provisioner().await;
+
+        // let attribute_definition = AttributeDefinition::builder()
+        // .attribute_name("test")
+        // .attribute_type(ScalarAttributeType::S)
+        // .build();
+
+        // let key_schema = KeySchemaElement::builder()
+        //     .attribute_name("test")
+        //     .key_type(KeyType::Hash)
+        //     .build();
+
+        // let provisioned_throughput = ProvisionedThroughput::builder()
+        //     .read_capacity_units(10)
+        //     .write_capacity_units(5)
+        //     .build();
+
+        // provisioner.dynamodb_client
+        // .create_table()
+        // .table_name("zzz")
+        // .key_schema(key_schema.clone())
+        // .attribute_definitions(attribute_definition.clone())
+        // .provisioned_throughput(provisioned_throughput.clone())
+        // .send()
+        // .await.unwrap();
+
+    //     provisioner.dynamodb_client
+    //     .create_table()
+    //     .table_name("aaa")
+    //     .key_schema(key_schema.clone())
+    //     .attribute_definitions(attribute_definition.clone())
+    //     .provisioned_throughput(provisioned_throughput.clone())
+    //     .send()
+    //     .await.unwrap();
+
+    //     provisioner.dynamodb_client
+    //     .create_table()
+    //     .table_name("CCC")
+    //     .key_schema(key_schema.clone())
+    //     .attribute_definitions(attribute_definition.clone())
+    //     .provisioned_throughput(provisioned_throughput.clone())
+    //     .send()
+    //     .await.unwrap();
+
+    //     provisioner.dynamodb_client
+    //     .create_table()
+    //     .table_name("bbb")
+    //     .key_schema(key_schema)
+    //     .attribute_definitions(attribute_definition)
+    //     .provisioned_throughput(provisioned_throughput)
+    //     .send()
+    //     .await.unwrap();
+
+        // let result = provisioner.dynamodb_client.list_tables().send().await.unwrap();
+
+    //     println!("{:?}", result);
+    // }
 
     #[tokio::test]
     async fn test_get_access_key() {

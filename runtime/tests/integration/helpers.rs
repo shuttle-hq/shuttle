@@ -10,7 +10,7 @@ use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbRequest, DynamoDbResponse, DynamoDbDeletionResponse
     },
     runtime::{self, runtime_client::RuntimeClient},
 };
@@ -104,5 +104,19 @@ impl Provisioner for DummyProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("did not expect any runtime test to delete dbs")
+    }
+
+    async fn provision_dynamo_db(
+        &self,
+        _request: Request<DynamoDbRequest>,
+    ) -> Result<Response<DynamoDbResponse>, Status> {
+        panic!("did not expect any runtime test to use dynamodb");
+    }
+
+    async fn delete_dynamo_db(
+        &self,
+        _request: Request<DynamoDbRequest>,
+    ) -> Result<Response<DynamoDbDeletionResponse>, Status> {
+        panic!("no run tests should request delete a dynamodb");
     }
 }

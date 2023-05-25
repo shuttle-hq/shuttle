@@ -875,6 +875,33 @@ mod tests {
         provisioner
     }
 
+    async fn create_dynamodb_table(dynamodb_client: &aws_sdk_dynamodb::Client, table_name: &str) {
+        let attribute_definition = AttributeDefinition::builder()
+        .attribute_name("test")
+        .attribute_type(ScalarAttributeType::S)
+        .build();
+
+        let key_schema = KeySchemaElement::builder()
+            .attribute_name("test")
+            .key_type(KeyType::Hash)
+            .build();
+
+        let provisioned_throughput = ProvisionedThroughput::builder()
+            .read_capacity_units(10)
+            .write_capacity_units(5)
+            .build();
+
+        dynamodb_client
+        .create_table()
+        .table_name(table_name)
+        .key_schema(key_schema.clone())
+        .attribute_definitions(attribute_definition.clone())
+        .provisioned_throughput(provisioned_throughput.clone())
+        .send()
+        .await.unwrap();
+    }
+
+
     #[tokio::test]
     async fn test_create_and_delete_dynamodb_policy() {
         let provisioner = make_test_provisioner().await;
@@ -936,113 +963,15 @@ mod tests {
 
         let prefix = "test_dynamodb_delete_table_names_by_prefix-";
 
-        let attribute_definition = AttributeDefinition::builder()
-        .attribute_name("test")
-        .attribute_type(ScalarAttributeType::S)
-        .build();
+        create_dynamodb_table(&provisioner.dynamodb_client, &format!("{}1", prefix)).await;
+        create_dynamodb_table(&provisioner.dynamodb_client, &format!("{}2", prefix)).await;
+        create_dynamodb_table(&provisioner.dynamodb_client, &format!("{}", prefix)).await;
 
-        let key_schema = KeySchemaElement::builder()
-            .attribute_name("test")
-            .key_type(KeyType::Hash)
-            .build();
-
-        let provisioned_throughput = ProvisionedThroughput::builder()
-            .read_capacity_units(10)
-            .write_capacity_units(5)
-            .build();
-
-        provisioner.dynamodb_client
-        .create_table()
-        .table_name(format!("{}1", prefix))
-        .key_schema(key_schema.clone())
-        .attribute_definitions(attribute_definition.clone())
-        .provisioned_throughput(provisioned_throughput.clone())
-        .send()
-        .await.unwrap();
-
-        provisioner.dynamodb_client
-        .create_table()
-        .table_name(format!("{}2", prefix))
-        .key_schema(key_schema.clone())
-        .attribute_definitions(attribute_definition.clone())
-        .provisioned_throughput(provisioned_throughput.clone())
-        .send()
-        .await.unwrap();
-
-        provisioner.dynamodb_client
-        .create_table()
-        .table_name(format!("{}", prefix))
-        .key_schema(key_schema.clone())
-        .attribute_definitions(attribute_definition.clone())
-        .provisioned_throughput(provisioned_throughput.clone())
-        .send()
-        .await.unwrap();
-
-        sleep(Duration::from_secs(60)).await;
+        //takes a while for dynamodb tables to provision
+        sleep(Duration::from_secs(10)).await;
 
         provisioner.delete_dynamodb_tables_by_prefix(prefix).await;
-
     }
-
-    // #[tokio::test]
-    // async fn test_listing_dynamodb() {
-    //     let provisioner = make_test_provisioner().await;
-
-        // let attribute_definition = AttributeDefinition::builder()
-        // .attribute_name("test")
-        // .attribute_type(ScalarAttributeType::S)
-        // .build();
-
-        // let key_schema = KeySchemaElement::builder()
-        //     .attribute_name("test")
-        //     .key_type(KeyType::Hash)
-        //     .build();
-
-        // let provisioned_throughput = ProvisionedThroughput::builder()
-        //     .read_capacity_units(10)
-        //     .write_capacity_units(5)
-        //     .build();
-
-        // provisioner.dynamodb_client
-        // .create_table()
-        // .table_name("zzz")
-        // .key_schema(key_schema.clone())
-        // .attribute_definitions(attribute_definition.clone())
-        // .provisioned_throughput(provisioned_throughput.clone())
-        // .send()
-        // .await.unwrap();
-
-    //     provisioner.dynamodb_client
-    //     .create_table()
-    //     .table_name("aaa")
-    //     .key_schema(key_schema.clone())
-    //     .attribute_definitions(attribute_definition.clone())
-    //     .provisioned_throughput(provisioned_throughput.clone())
-    //     .send()
-    //     .await.unwrap();
-
-    //     provisioner.dynamodb_client
-    //     .create_table()
-    //     .table_name("CCC")
-    //     .key_schema(key_schema.clone())
-    //     .attribute_definitions(attribute_definition.clone())
-    //     .provisioned_throughput(provisioned_throughput.clone())
-    //     .send()
-    //     .await.unwrap();
-
-    //     provisioner.dynamodb_client
-    //     .create_table()
-    //     .table_name("bbb")
-    //     .key_schema(key_schema)
-    //     .attribute_definitions(attribute_definition)
-    //     .provisioned_throughput(provisioned_throughput)
-    //     .send()
-    //     .await.unwrap();
-
-        // let result = provisioner.dynamodb_client.list_tables().send().await.unwrap();
-
-    //     println!("{:?}", result);
-    // }
 
     #[tokio::test]
     async fn test_get_access_key() {

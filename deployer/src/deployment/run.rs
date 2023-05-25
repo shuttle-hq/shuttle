@@ -420,7 +420,7 @@ mod tests {
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
-            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbRequest, DynamoDbResponse,
+            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbRequest, DynamoDbResponse, DynamoDbDeletionResponse,
         },
         runtime::{StopReason, SubscribeStopResponse},
     };
@@ -475,6 +475,13 @@ mod tests {
             _request: tonic::Request<DatabaseRequest>,
         ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
             panic!("no run tests should delete a db");
+        }
+
+        async fn delete_dynamo_db(
+            &self,
+            _request: tonic::Request<DynamoDbRequest>,
+        ) -> Result<tonic::Response<DynamoDbDeletionResponse>, tonic::Status> {
+            panic!("no run tests should delete a dynamodb");
         }
     }
 

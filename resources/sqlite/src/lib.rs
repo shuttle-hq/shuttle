@@ -1,11 +1,25 @@
 //! Shuttle resource providing a SQLite database. The database will be created in-process by the shuttle runtime.
 //!
 //! ## Example
-//! ```rust
-//! TODO: SIMPLE EXAMPLE
+//! Simply annotate your main function to get a [`sqlx::SqlitePool`](https://docs.rs/sqlx/latest/sqlx/type.SqlitePool.html)
+//! with default configuration.
+//! Pass it to [`sqlx::query`](https://docs.rs/sqlx/latest/sqlx/macro.query.html) to interact with the database.
+//! ```no_run
+//! #[shuttle_runtime::main]
+//! async fn axum(
+//!     #[shuttle_sqlite::SQLite] pool: shuttle_sqlite::SqlitePool,
+//! ) -> shuttle_axum::ShuttleAxum {
+//!     let _ = sqlx::query(
+//!         "CREATE TABLE IF NOT EXISTS users(id int, name varchar(128), email varchar(128));",
+//!     )
+//!     .execute(&pool)
+//!     .await
+//!     .expect("Failed to create table");
+//! }
 //! ```
+//!
 //! ## Configuration
-//! The database can be configured using `SQLiteConnOpts` which mirrors `sqlx::sqlite::SQLiteConnectOptions` for the
+//! The database can be configured using [`SQLiteConnOpts`] which mirrors `sqlx::sqlite::SQLiteConnectOptions` for the
 //! options it exposes. Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`,
 //! `extension` options.
 //! Construction of the full connection string is handled internally for security reasons and defaults to creating a
@@ -14,8 +28,13 @@
 //! See the [`sqlx::sqlite::SQLiteConnectOptions`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SQLiteConnectOptions.html)
 //! docs for all other default settings.
 //!
-//! ```rust
-//! TODO: CONFIG EXAMPLE
+//! ```no_run
+//! #[shuttle_runtime::main]
+//! async fn axum(
+//!     #[shuttle_sqlite::SQLite(opts = SQLiteConnOpts::new().filename("custom.sqlite"))] pool: shuttle_sqlite::SqlitePool,
+//! ) -> shuttle_axum::ShuttleAxum {
+//!     // ...
+//! }
 //! ```
 use async_trait::async_trait;
 use serde::Serialize;

@@ -1,14 +1,18 @@
-//! Shuttle resource providing an SQLite database. The database will be created in-process by the shuttle runtime.
+//! Shuttle resource providing a SQLite database. The database will be created in-process by the shuttle runtime.
 //!
 //! ## Example
 //! ```rust
 //! TODO: SIMPLE EXAMPLE
 //! ```
 //! ## Configuration
-//! The database can be configured using `SQLiteConfig` that makes an almost complete subset of `sqlx::XXXX` available.
-//! Notably, the full connection is not exposed but constructed internally.
-//! Configuration can be done by passing a config struct or by passing individual fields. When both are being used, the one
-//! that specified later wins.
+//! The database can be configured using `SQLiteConnOpts` which mirrors `sqlx::sqlite::SQLiteConnectOptions` for the
+//! options it exposes. Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`,
+//! `extension` options.
+//! Construction of the full connection string is handled internally for security reasons and defaults to creating a
+//! file-based database named `default_db.sqlite` with `create_if_missing == true`. Use the `filename` and/or
+//! `in_memory` methods to configure the type of database created.
+//! See the [`sqlx::sqlite::SQLiteConnectOptions`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SQLiteConnectOptions.html)
+//! docs for all other default settings.
 //!
 //! ```rust
 //! TODO: CONFIG EXAMPLE
@@ -27,17 +31,17 @@ pub use conn_opts::*;
 
 #[derive(Serialize)]
 pub struct SQLite {
-    config: SQLiteConnOpts,
+    opts: SQLiteConnOpts,
 }
 
 impl SQLite {
-    pub fn filename(mut self, filename: String) -> Self {
-        self.config.filename = filename;
+    pub fn opts(mut self, opts: SQLiteConnOpts) -> Self {
+        self.opts = opts;
         self
     }
 
-    pub fn config(mut self, config: SQLiteConnOpts) -> Self {
-        self.config = config;
+    pub fn in_memory(mut self, on: bool) -> Self {
+        self.opts.in_memory = on;
         self
     }
 }
@@ -56,7 +60,7 @@ impl ResourceBuilder<sqlx::SqlitePool> for SQLite {
     /// Create a new instance of this resource builder
     fn new() -> Self {
         Self {
-            config: SQLiteConnOpts::default(),
+            opts: SQLiteConnOpts::default(),
         }
     }
 
@@ -80,9 +84,16 @@ impl ResourceBuilder<sqlx::SqlitePool> for SQLite {
     ) -> Result<Self::Output, shuttle_service::Error> {
         // We construct an absolute path using `storage_path` to prevent user access to other parts of the file system.
         let storage_path = factory.get_storage_path()?;
-        let db_path = storage_path.join(&self.config.filename);
-        self.config.conn_str = format!("sqlite:///{}", db_path.display());
-        Ok(self.config)
+        let db_path = storage_path.join(&self.opts.filename);
+
+        let conn_str = match self.opts.in_memory {
+            true => "sqlite::memory:".to_string(),
+            false => format!("sqlite:///{}", db_path.display()),
+        };
+
+        self.opts.conn_str = conn_str;
+
+        Ok(self.opts)
     }
 
     /// Build this resource from its config output

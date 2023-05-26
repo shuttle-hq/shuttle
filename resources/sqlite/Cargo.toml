@@ -1,12 +1,12 @@
 [package]
 name = "shuttle-sqlite"
-version = "0.16.0"
+version = "0.17.0"
 edition = "2021"
 
 [dependencies]
 async-trait = "0.1.68"
 indexmap = { version = "1.9.3", features = ["serde"] }
 serde = "1.0.163"
-shuttle-service = { version = "0.16.0", path = "../../service" }
+shuttle-service = { version = "0.17.0", path = "../../service" }
 sqlx = { version = "0.6.3", features = ["sqlite", "runtime-tokio-rustls"] }
 thiserror = "1.0.40"

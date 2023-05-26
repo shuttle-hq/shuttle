@@ -17,12 +17,9 @@
 //! ```rust
 //! TODO: CONFIG EXAMPLE
 //! ```
-use std::str::FromStr;
-
 use async_trait::async_trait;
 use serde::Serialize;
 use shuttle_service::{Factory, ResourceBuilder, Type};
-use sqlx::sqlite::SqliteConnectOptions;
 
 pub use sqlx::SqlitePool;
 
@@ -98,13 +95,7 @@ impl ResourceBuilder<sqlx::SqlitePool> for SQLite {
 
     /// Build this resource from its config output
     async fn build(build_data: &Self::Output) -> Result<sqlx::SqlitePool, shuttle_service::Error> {
-        // debug!("Connecting to database at {db_path}");
-
-        let opts = SqliteConnectOptions::from_str(&build_data.conn_str)
-            .expect("Failed to parse conn string")
-            .create_if_missing(true);
-
-        let pool = sqlx::SqlitePool::connect_with(opts)
+        let pool = sqlx::SqlitePool::connect_with(build_data.into())
             .await
             .expect("Failed to create sqlite database");
 

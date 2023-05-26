@@ -223,8 +223,8 @@ impl SQLiteConnOpts {
     }
 }
 
-impl From<SQLiteConnOpts> for SqliteConnectOptions {
-    fn from(opts: SQLiteConnOpts) -> Self {
+impl From<&SQLiteConnOpts> for SqliteConnectOptions {
+    fn from(opts: &SQLiteConnOpts) -> Self {
         let SQLiteConnOpts {
             conn_str,
             read_only,
@@ -242,18 +242,18 @@ impl From<SQLiteConnOpts> for SqliteConnectOptions {
 
         let mut opts = SqliteConnectOptions::from_str(&conn_str)
             .expect("Failed to parse conn string")
-            .read_only(read_only)
-            .create_if_missing(create_if_missing)
-            .shared_cache(shared_cache)
-            .statement_cache_capacity(statement_cache_capacity)
-            .busy_timeout(busy_timeout)
-            .immutable(immutable)
-            .serialized(serialized)
-            .command_buffer_size(command_channel_size)
-            .row_buffer_size(row_channel_size);
+            .read_only(*read_only)
+            .create_if_missing(*create_if_missing)
+            .shared_cache(*shared_cache)
+            .statement_cache_capacity(*statement_cache_capacity)
+            .busy_timeout(*busy_timeout)
+            .immutable(*immutable)
+            .serialized(*serialized)
+            .command_buffer_size(*command_channel_size)
+            .row_buffer_size(*row_channel_size);
 
         if let Some(vfs) = vfs {
-            opts = opts.vfs(vfs);
+            opts = opts.vfs(vfs.clone());
         }
 
         opts

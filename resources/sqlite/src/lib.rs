@@ -14,7 +14,7 @@
 //!     )
 //!     .execute(&pool)
 //!     .await
-//!     .expect("Failed to create table");
+//!     .unwrap();
 //! }
 //! ```
 //!
@@ -114,9 +114,9 @@ impl ResourceBuilder<sqlx::SqlitePool> for SQLite {
 
     /// Build this resource from its config output
     async fn build(build_data: &Self::Output) -> Result<sqlx::SqlitePool, shuttle_service::Error> {
-        let pool = sqlx::SqlitePool::connect_with(build_data.into())
+        let pool = sqlx::SqlitePool::connect_with(build_data.try_into()?)
             .await
-            .expect("Failed to create sqlite database");
+            .map_err(|e| shuttle_service::Error::Database(e.to_string()))?;
 
         Ok(pool)
     }

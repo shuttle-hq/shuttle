@@ -6,7 +6,6 @@ use std::time::Duration;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteConnectOptions;
-use thiserror::Error;
 
 mod auto_vacuum;
 use auto_vacuum::*;
@@ -19,12 +18,6 @@ use locking_mode::*;
 
 mod synchronous;
 use synchronous::*;
-
-#[derive(Error, Debug)]
-pub enum SQLiteError {
-    #[error("Failed to open db connection")]
-    NoConnection,
-}
 
 /// Options to configure the SQLite database mirroring `sqlx::sqlite::SQLiteConnectOptions` for the options it exposes.
 /// See [`sqlx::sqlite::SQLiteConnectOptions`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SQLiteConnectOptions.html)
@@ -97,7 +90,8 @@ impl SQLiteConnOpts {
             filename: Cow::Borrowed(Path::new(":memory:")),
             in_memory: false,
             read_only: false,
-            create_if_missing: false,
+            // Different to what sqlx does.
+            create_if_missing: true,
             shared_cache: false,
             statement_cache_capacity: 100,
             busy_timeout: Duration::from_secs(5),
@@ -223,8 +217,10 @@ impl SQLiteConnOpts {
     }
 }
 
-impl From<&SQLiteConnOpts> for SqliteConnectOptions {
-    fn from(opts: &SQLiteConnOpts) -> Self {
+impl TryFrom<&SQLiteConnOpts> for SqliteConnectOptions {
+    type Error = shuttle_service::Error;
+
+    fn try_from(opts: &SQLiteConnOpts) -> Result<Self, Self::Error> {
         let SQLiteConnOpts {
             conn_str,
             read_only,
@@ -241,7 +237,7 @@ impl From<&SQLiteConnOpts> for SqliteConnectOptions {
         } = opts;
 
         let mut opts = SqliteConnectOptions::from_str(&conn_str)
-            .expect("Failed to parse conn string")
+            .map_err(|e| shuttle_service::Error::Database(e.to_string()))?
             .read_only(*read_only)
             .create_if_missing(*create_if_missing)
             .shared_cache(*shared_cache)
@@ -256,6 +252,6 @@ impl From<&SQLiteConnOpts> for SqliteConnectOptions {
             opts = opts.vfs(vfs.clone());
         }
 
-        opts
+        Ok(opts)
     }
 }

@@ -791,11 +791,6 @@ impl Shuttle {
             }
         }
 
-        println!(
-            "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
-             Run `cargo shuttle deploy` to deploy your Shuttle service."
-        );
-
         // If prior signal received is set to true we must stop all the existing runtimes and
         // exit the `local_run`.
         if signal_received {
@@ -855,6 +850,11 @@ impl Shuttle {
                 }
             };
         }
+
+        println!(
+            "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
+             Run `cargo shuttle deploy` to deploy your Shuttle service."
+        );
 
         Ok(())
     }

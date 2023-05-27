@@ -54,10 +54,16 @@ where
 ///
 /// # Example
 /// ```rust,no_run
+/// use shuttle_thruster::ShuttleThruster;
+/// use thruster::{App, Server, ThrusterServer, BasicContext as Ctx, Request};
+///
 /// #[shuttle_runtime::main]
 /// async fn example_service() ->
-///     ShuttleThruster<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
-///     todo!()
+///     ShuttleThruster<impl thruster::ThrusterServer + Send + 'static> {
+///     let app = App::<Request, Ctx, ()>::new_basic();
+///     let server = Server::new(app);
+///
+///   Ok(server.into())
 /// }
 /// ```
 pub type ShuttleThruster<T> = Result<ThrusterService<T>, Error>;

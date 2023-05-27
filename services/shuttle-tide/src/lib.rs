@@ -42,9 +42,13 @@ impl<T> From<tide::Server<T>> for TideService<T> {
 /// # Example
 ///
 /// ```rust,no_run
+/// use shuttle_tide::ShuttleTide;
+/// use tide::Server;
+///
 /// #[shuttle_runtime::main]
 /// async fn example_service() -> ShuttleTide<()> {
-///    todo!()
+///    let server = Server::new();
+///   Ok(server.into())
 /// }
 /// ```
 pub type ShuttleTide<T> = Result<TideService<T>, Error>;

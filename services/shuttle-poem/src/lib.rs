@@ -52,7 +52,7 @@ where
 /// ```rust,no_run
 /// use poem::Endpoint;
 /// use shuttle_poem::ShuttlePoem;
-/// 
+///
 /// #[shuttle_runtime::main]
 /// async fn example_service() ->
 ///    ShuttlePoem<impl poem::Endpoint + Send + 'static> {

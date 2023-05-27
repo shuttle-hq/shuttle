@@ -50,10 +50,14 @@ where
 /// # Example
 ///
 /// ```rust,no_run
+/// use poem::Endpoint;
+/// use shuttle_poem::ShuttlePoem;
+/// 
 /// #[shuttle_runtime::main]
-/// async example_service() ->
-///    ShuttlePoem<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
-///    todo!()
+/// async fn example_service() ->
+///    ShuttlePoem<impl poem::Endpoint + Send + 'static> {
+///    let router = poem::Route::new();
+///    Ok(router.into())
 /// }
 /// ```
 pub type ShuttlePoem<T> = Result<PoemService<T>, shuttle_runtime::Error>;

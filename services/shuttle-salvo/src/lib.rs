@@ -47,10 +47,15 @@ impl From<salvo::Router> for SalvoService {
 /// # Example
 ///
 /// ```rust,no_run
+/// use shuttle_salvo::ShuttleSalvo;
+///
 /// #[shuttle_runtime::main]
-/// async example_service() ->
-///    ShuttleSalvo<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
-///    todo!()
+/// async fn example_service() ->
+///    ShuttleSalvo {
+///     let router = salvo::Router::new();
+///
+///    Ok(router.into())
+///
 /// }
 /// ```
 pub type ShuttleSalvo = Result<SalvoService, Error>;

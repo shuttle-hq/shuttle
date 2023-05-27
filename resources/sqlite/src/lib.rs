@@ -19,32 +19,36 @@
 //! ```
 //!
 //! ## Configuration
-//! The database can be configured using [`SQLiteConnOpts`] which mirrors `sqlx::sqlite::SQLiteConnectOptions` for the
-//! options it exposes. Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`,
-//! `extension` options.
+//! The database can be configured using [`SQLiteConnOpts`] which mirrors sqlx's [`SqliteConnectOptions`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html) for the
+//! options it exposes.
+//!
 //! Construction of the full connection string is handled internally for security reasons and defaults to creating a
 //! file-based database named `default_db.sqlite` with `create_if_missing == true`. Use the `filename` and/or
 //! `in_memory` methods to configure the type of database created.
-//! See the [`sqlx::sqlite::SQLiteConnectOptions`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SQLiteConnectOptions.html)
-//! docs for all other default settings.
+//!
+//! See [`SqliteConnectOptions::new()`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.new)
+//! for all default settings.
 //!
 //! ```no_run
 //! #[shuttle_runtime::main]
 //! async fn axum(
 //!     #[shuttle_sqlite::SQLite(opts = SQLiteConnOpts::new().filename("custom.sqlite"))] pool: shuttle_sqlite::SqlitePool,
-//! ) -> shuttle_axum::ShuttleAxum {
-//!     // ...
-//! }
+//! ) -> shuttle_axum::ShuttleAxum { /* ... */ }
 //! ```
+//! Note that Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`, `extension`
+//! options.
 use async_trait::async_trait;
 use serde::Serialize;
 use shuttle_service::{Factory, ResourceBuilder, Type};
 
-pub use sqlx::SqlitePool;
-
-pub mod conn_opts;
+mod conn_opts;
 pub use conn_opts::*;
 
+/// The [`sqlx::SqlitePool`](https://docs.rs/sqlx/latest/sqlx/type.SqlitePool.html) that is being returned to the user.
+///
+pub use sqlx::SqlitePool;
+
+/// Builder struct used to configure the database, e.g. `SQLite(opts = SQLiteConnOpts::new())`.
 #[derive(Serialize)]
 pub struct SQLite {
     opts: SQLiteConnOpts,

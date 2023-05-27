@@ -8,20 +8,26 @@ use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteConnectOptions;
 
 mod auto_vacuum;
-use auto_vacuum::*;
+pub use auto_vacuum::*;
 
 mod journal_mode;
-use journal_mode::*;
+pub use journal_mode::*;
 
 mod locking_mode;
-use locking_mode::*;
+pub use locking_mode::*;
 
 mod synchronous;
-use synchronous::*;
+pub use synchronous::*;
 
-/// Options to configure the SQLite database mirroring `sqlx::sqlite::SQLiteConnectOptions` for the options it exposes.
-/// See [`sqlx::sqlite::SQLiteConnectOptions`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SQLiteConnectOptions.html)
-/// for the full documentation.
+/// Options to configure the SQLite database mirroring sqlx's [`SqliteConnectOptions`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html)
+/// for the options it exposes, see their docs for reference.
+///
+/// Construction of the full connection string is handled internally for security reasons and defaults to creating a
+/// file-based database named `default_db.sqlite` with `create_if_missing == true`. Use the `filename` and/or
+/// `in_memory` methods to configure the type of database created.
+///
+/// Note that Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`, `extension`
+/// options.
 #[derive(Deserialize, Serialize)]
 pub struct SQLiteConnOpts {
     // The full connection string we construct internally in `ResourceBuilder::output`.
@@ -104,7 +110,7 @@ impl SQLiteConnOpts {
         }
     }
 
-    /// Constructing the full connection string is handled internally. Use this to set the database to in memory mode.
+    /// Use this to set the database to in memory mode.
     pub fn in_memory(mut self, on: bool) -> Self {
         self.in_memory = on;
         self

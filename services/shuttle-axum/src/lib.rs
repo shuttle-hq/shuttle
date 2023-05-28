@@ -46,15 +46,15 @@ impl<S> From<axum::Router<S>> for AxumService<S> {
 ///
 /// ```rust,no_run
 /// use axum::{routing::get, Router};
-/// 
+///
 /// async fn hello_world() -> &'static str {
 ///     "Hello, world!"
 /// }
-/// 
+///
 /// #[shuttle_runtime::main]
 /// async fn axum() -> shuttle_axum::ShuttleAxum {
 ///     let router = Router::new().route("/hello", get(hello_world));
-/// 
+///
 ///     Ok(router.into())
 /// }
 /// ```

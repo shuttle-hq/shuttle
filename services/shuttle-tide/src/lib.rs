@@ -43,12 +43,15 @@ impl<T> From<tide::Server<T>> for TideService<T> {
 ///
 /// ```rust,no_run
 /// use shuttle_tide::ShuttleTide;
-/// use tide::Server;
 ///
 /// #[shuttle_runtime::main]
-/// async fn example_service() -> ShuttleTide<()> {
-///    let server = Server::new();
-///   Ok(server.into())
+/// async fn tide() -> ShuttleTide<()> {
+///     let mut app = tide::new();
+///     app.with(tide::log::LogMiddleware::new());
+///
+///     app.at("/hello").get(|_| async { Ok("Hello, world!") });
+///
+///     Ok(app.into())
 /// }
 /// ```
 pub type ShuttleTide<T> = Result<TideService<T>, Error>;

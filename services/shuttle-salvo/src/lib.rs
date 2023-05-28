@@ -47,15 +47,19 @@ impl From<salvo::Router> for SalvoService {
 /// # Example
 ///
 /// ```rust,no_run
+/// use salvo::prelude::*;
 /// use shuttle_salvo::ShuttleSalvo;
 ///
+/// #[handler]
+/// async fn hello_world(res: &mut Response) {
+///     res.render(Text::Plain("Hello, world!"));
+/// }
+///
 /// #[shuttle_runtime::main]
-/// async fn example_service() ->
-///    ShuttleSalvo {
-///     let router = salvo::Router::new();
+/// async fn salvo() -> ShuttleSalvo {
+///     let router = Router::with_path("hello").get(hello_world);
 ///
-///    Ok(router.into())
-///
+///     Ok(router.into())
 /// }
 /// ```
 pub type ShuttleSalvo = Result<SalvoService, Error>;

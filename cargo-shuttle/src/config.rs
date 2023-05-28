@@ -269,10 +269,7 @@ impl RequestContext {
     pub fn get_local_config(
         project_args: &ProjectArgs,
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
-        let workspace_path = match project_args.workspace_path() {
-            Ok(workspace_path) => workspace_path,
-            Err(_) => project_args.working_directory.clone(),
-        };
+        let workspace_path = project_args.workspace_path().unwrap_or(project_args.working_directory.clone());
 
         let local_manager = LocalConfigManager::new(workspace_path, "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);

@@ -64,14 +64,19 @@ impl From<rocket::Rocket<rocket::Build>> for RocketService {
 /// # Example
 ///
 /// ```rust,no_run
+/// use rocket::{routes, get};
 /// use shuttle_rocket::ShuttleRocket;
-/// use rocket;
+///
+/// #[get("/")]
+/// fn index() -> &'static str {
+///     "Hello, world!"
+/// }
 ///
 /// #[shuttle_runtime::main]
-/// async fn example_service() ->
-///   ShuttleRocket {
-///   let router = rocket::build();
-///  Ok(router.into())
+/// async fn rocket() -> ShuttleRocket {
+///     let rocket = rocket::build().mount("/hello", routes![index]);
+///
+///     Ok(rocket.into())
 /// }
 /// ```
 pub type ShuttleRocket = Result<RocketService, shuttle_runtime::Error>;

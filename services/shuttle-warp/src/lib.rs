@@ -53,10 +53,15 @@ impl<T> Deref for WarpService<T> {
 ///
 ///  # Example
 /// ```rust,no_run
-///  [shuttle_runtime::main]
-/// async fn example_service() ->
-///    ShuttleWarp<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
-///   todo!()
+/// use shuttle_warp::ShuttleWarp;
+/// use warp::Filter;
+/// use warp::Reply;
+///
+/// #[shuttle_runtime::main]
+/// async fn warp() -> ShuttleWarp<(impl Reply,)> {
+///     let route = warp::any().map(|| "Hello, World");
+///     Ok(route.boxed().into())
 /// }
+///
 /// ```
 pub type ShuttleWarp<T> = Result<WarpService<warp::filters::BoxedFilter<T>>, Error>;

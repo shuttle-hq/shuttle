@@ -85,7 +85,7 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     };
 
     match router.serve(addr).await {
-        Ok(_) => println!("No issues serving address {addr}"),
+        Ok(_) => {},
         Err(e) => panic!("Error while serving address {addr}: {e}")
     };
 }

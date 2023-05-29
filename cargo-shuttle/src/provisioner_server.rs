@@ -59,11 +59,7 @@ impl LocalProvisioner {
         &self,
         project_name: &str,
     ) -> Result<DynamoDbReadyInfo, Status> {
-        let container_name = "shuttle_dynamodb".to_string();
-
-        let image = "amazon/dynamodb-local:latest".to_string();
-
-        let port =  "8000/tcp".to_string();
+        let DynamoDbConfig { container_name, image, port, aws_access_key_id, aws_secret_access_key, aws_default_region  } = dynamodb_config();
 
         let env = None;
 
@@ -154,9 +150,9 @@ impl LocalProvisioner {
         //https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html#docker
         Ok(DynamoDbReadyInfo {
             prefix: self.get_prefix(&project_name).await,
-            aws_access_key_id: "DUMMYIDEXAMPLE".to_string(),
-            aws_secret_access_key: "DUMMYEXAMPLEKEY".to_string(),
-            aws_default_region: "eu-west-1".to_string(),
+            aws_access_key_id,
+            aws_secret_access_key,
+            aws_default_region,
             endpoint: Some(endpoint),
         })
     }
@@ -319,6 +315,70 @@ impl LocalProvisioner {
         }
     }
 
+    async fn delete_dynamodb_tables_by_prefix(&self, prefix: &str) -> Result<DynamoDbDeletionResponse, Status> {
+        let DynamoDbConfig { container_name, image: _, port, aws_access_key_id, aws_secret_access_key, aws_default_region } = dynamodb_config();
+
+        let container = match self.docker.inspect_container(&container_name, None).await {
+            Ok(container) => {
+                trace!("found DB container {container_name}");
+                container
+            }
+            Err(error) => {
+                error!("got unexpected error while inspecting docker container: {error}");
+                return Err(Status::internal(error.to_string()));
+            }
+        };
+
+        let port = container
+            .host_config
+            .expect("container to have host config")
+            .port_bindings
+            .expect("port bindings on container")
+            .get(&port)
+            .expect("a port bindings entry")
+            .as_ref()
+            .expect("a port bindings")
+            .first()
+            .expect("at least one port binding")
+            .host_port
+            .as_ref()
+            .expect("a host port")
+            .clone();
+        
+        std::env::set_var("AWS_ACCESS_KEY_ID", aws_access_key_id);
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", aws_secret_access_key);
+        std::env::set_var("AWS_REGION", aws_default_region);
+        
+        let endpoint = format!("http://localhost:{}", port);
+        
+        let aws_config = aws_config::from_env().endpoint_url(endpoint).load().await;
+
+        let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
+
+        //TODO: Extract into common function for local and cloud provisioner
+        let mut last_evaluated_table_name: Option<String> = Some(prefix.to_string());
+
+        'outer: while last_evaluated_table_name.is_some() {
+            let result = dynamodb_client.list_tables().exclusive_start_table_name(last_evaluated_table_name.unwrap()).send().await.unwrap();
+            last_evaluated_table_name = result.last_evaluated_table_name.clone();
+
+            if let Some(table_names) = result.table_names {
+                for table_name in table_names {
+                    if !table_name.starts_with(&prefix) {
+                        break 'outer;
+                    } else {
+                        dynamodb_client.delete_table().table_name(table_name).send().await.unwrap();
+                    }
+                }
+            }
+        }
+
+        // edge case to include just the prefix table name (if the user put only prefix for table name)
+        let _ = dynamodb_client.delete_table().table_name(prefix).send().await;
+
+        Ok(DynamoDbDeletionResponse {})
+    }
+
     async fn pull_image(&self, image: &str) -> Result<(), String> {
         trace!("pulling latest image for '{image}'");
         let mut layers = Vec::new();
@@ -404,7 +464,15 @@ impl Provisioner for LocalProvisioner {
         &self,
         request: Request<DynamoDbRequest>,
     ) -> Result<Response<DynamoDbDeletionResponse>, Status> {
-        todo!() // possibly using AWS' local dynamodb docker image
+        let DynamoDbRequest {
+            project_name,
+        } = request.into_inner();
+
+        let res = self
+            .delete_dynamodb_tables_by_prefix(&project_name)
+            .await?;
+
+        Ok(Response::new(res.into()))
     }
 }
 
@@ -456,6 +524,27 @@ struct EngineConfig {
     port: String,
     env: Option<Vec<String>>,
     is_ready_cmd: Vec<String>,
+}
+
+struct DynamoDbConfig {
+    container_name: String,
+    image: String,
+    port: String,
+    aws_access_key_id: String,
+    aws_secret_access_key: String,
+    aws_default_region: String,
+    
+}
+
+fn dynamodb_config() -> DynamoDbConfig {
+    DynamoDbConfig { 
+        container_name: "shuttle_dynamodb".to_string(),
+        image: "amazon/dynamodb-local:latest".to_string(),
+        port: "8000/tcp".to_string(),
+        aws_access_key_id: "DUMMY_ID_EXAMPLE".to_string(),
+        aws_secret_access_key: "DUMMY_EXAMPLE_KEY".to_string(),
+        aws_default_region: "DUMMY_EXAMPLE_REGION".to_string(),
+    }
 }
 
 fn db_type_to_config(db_type: Type) -> EngineConfig {
@@ -543,5 +632,100 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
                 "show databases;".to_string(),
             ],
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use aws_sdk_dynamodb::error::SdkError;
+    use aws_sdk_dynamodb::operation::create_table::CreateTableError;
+    use aws_sdk_dynamodb::operation::create_table::CreateTableOutput;
+    use aws_sdk_dynamodb::operation::scan::ScanError;
+    use aws_sdk_dynamodb::operation::scan::ScanOutput;
+    use aws_sdk_dynamodb::types::AttributeDefinition;
+    use aws_sdk_dynamodb::types::KeySchemaElement;
+    use aws_sdk_dynamodb::types::KeyType;
+    use aws_sdk_dynamodb::types::ProvisionedThroughput;
+    use aws_sdk_dynamodb::types::ScalarAttributeType;
+
+    use crate::provisioner_server::LocalProvisioner;
+
+    async fn create_table(
+        dynamodb_client: &aws_sdk_dynamodb::Client,
+        table_name: &str,
+        attribute_name: &str,
+    ) -> Result<CreateTableOutput, SdkError<CreateTableError>> {
+        let attribute_definition = AttributeDefinition::builder()
+            .attribute_name(attribute_name)
+            .attribute_type(ScalarAttributeType::S)
+            .build();
+    
+        let key_schema = KeySchemaElement::builder()
+            .attribute_name(attribute_name)
+            .key_type(KeyType::Hash)
+            .build();
+    
+        let provisioned_throughput = ProvisionedThroughput::builder()
+            .read_capacity_units(10)
+            .write_capacity_units(5)
+            .build();
+    
+        let create_table_response = dynamodb_client
+            .create_table()
+            .table_name(table_name)
+            .key_schema(key_schema)
+            .attribute_definitions(attribute_definition)
+            .provisioned_throughput(provisioned_throughput)
+            .send()
+            .await;
+    
+        create_table_response
+    }
+
+    async fn select_from_table(
+        dynamodb_client: &aws_sdk_dynamodb::Client,
+        table_name: &str,
+    ) -> Result<ScanOutput, SdkError<ScanError>> {
+        let select_from_table_response = dynamodb_client.scan().table_name(table_name).send().await;
+    
+        select_from_table_response
+    }
+
+    #[tokio::test]
+    async fn test_create_and_delete_dynamodb() {
+        let provisioner = LocalProvisioner::new().unwrap();
+
+        let project_name = "test_create_and_delete_dynamodb".to_string();
+
+        let info = provisioner.get_dynamodb_connection_info(&project_name).await.unwrap();
+
+        std::env::set_var("AWS_ACCESS_KEY_ID", info.aws_access_key_id);
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", info.aws_secret_access_key);
+        std::env::set_var("AWS_REGION", info.aws_default_region);
+
+        let aws_config = aws_config::from_env().endpoint_url(info.endpoint.unwrap()).load().await;
+
+        // create dynamodb client
+        let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
+
+        // create dynamodb table
+        let table_name = format!("{}-table", &project_name);
+        let attribute_name = format!("{}-attribute", &project_name);
+        create_table(&dynamodb_client, &table_name, &attribute_name).await.unwrap();
+
+        // select from table (should work)
+        let result = select_from_table(&dynamodb_client, &table_name).await.unwrap();
+
+        println!("{result:?}");
+
+        // delete dynamodb resource
+        provisioner.delete_dynamodb_tables_by_prefix(&project_name).await.unwrap();
+
+        // select from table (should fail now that tables have been deleted)
+        let result = select_from_table(&dynamodb_client, &table_name).await;
+
+        assert!(result.is_err());
+
+        println!("{result:?}");
     }
 }

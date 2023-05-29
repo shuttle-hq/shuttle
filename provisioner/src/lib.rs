@@ -489,7 +489,8 @@ impl MyProvisioner {
             prefix,
             aws_access_key_id,
             aws_secret_access_key,
-            aws_default_region
+            aws_default_region,
+            endpoint: None
         })
     }
 

@@ -97,6 +97,8 @@ pub struct DynamoDbResponse {
     pub aws_secret_access_key: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub aws_default_region: ::prost::alloc::string::String,
+    #[prost(string, optional, tag = "5")]
+    pub endpoint: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

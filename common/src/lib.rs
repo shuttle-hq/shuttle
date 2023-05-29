@@ -198,6 +198,7 @@ pub struct DynamoDbReadyInfo {
     pub aws_access_key_id: String,
     pub aws_secret_access_key: String,
     pub aws_default_region: String,
+    pub endpoint: Option<String>,
 }
 
 impl DynamoDbReadyInfo {
@@ -205,13 +206,15 @@ impl DynamoDbReadyInfo {
         prefix: String,
         aws_access_key_id: String,
         aws_secret_access_key: String,
-        aws_default_region: String
+        aws_default_region: String,
+        endpoint: Option<String>,
     ) -> Self {
         Self {
             prefix,
             aws_access_key_id,
             aws_secret_access_key,
-            aws_default_region
+            aws_default_region,
+            endpoint,
         }
     }
 }

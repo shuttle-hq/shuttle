@@ -57,6 +57,7 @@ message DynamoDBResponse {
   string aws_access_key_id = 2;
   string aws_secret_access_key = 3;
   string aws_default_region = 4;
+  optional string endpoint = 5;
 }
 
 message DynamoDBDeletionResponse {}

@@ -14,7 +14,7 @@ use crossterm::{
 };
 use futures::StreamExt;
 use portpicker::pick_unused_port;
-use shuttle_common::database::{AwsRdsEngine, SharedEngine};
+use shuttle_common::{database::{AwsRdsEngine, SharedEngine}, DynamoDbReadyInfo};
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
     DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbRequest, DynamoDbResponse, DynamoDbDeletionResponse,
@@ -47,6 +47,117 @@ impl LocalProvisioner {
                 .add_service(ProvisionerServer::new(self))
                 .serve(address)
                 .await
+        })
+    }
+
+    async fn get_prefix(&self, project_name: &str) -> String {
+        //TODO: add userid or something else unique here
+        format!("shuttle-dynamodb-{}-", project_name)
+    }
+
+    async fn get_dynamodb_connection_info(
+        &self,
+        project_name: &str,
+    ) -> Result<DynamoDbReadyInfo, Status> {
+        let container_name = "shuttle_dynamodb".to_string();
+
+        let image = "amazon/dynamodb-local:latest".to_string();
+
+        let port =  "8000/tcp".to_string();
+
+        let env = None;
+
+        let container = match self.docker.inspect_container(&container_name, None).await {
+            Ok(container) => {
+                trace!("found DB container {container_name}");
+                container
+            }
+            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
+                if status_code == 404 =>
+            {
+                self.pull_image(&image).await.expect("failed to pull image");
+                trace!("will create DB container {container_name}");
+                let options = Some(CreateContainerOptions {
+                    name: container_name.clone(),
+                    platform: None,
+                });
+                let mut port_bindings = HashMap::new();
+                let host_port = pick_unused_port().expect("system to have a free port");
+                port_bindings.insert(
+                    port.clone(),
+                    Some(vec![PortBinding {
+                        host_port: Some(host_port.to_string()),
+                        ..Default::default()
+                    }]),
+                );
+                let host_config = HostConfig {
+                    port_bindings: Some(port_bindings),
+                    ..Default::default()
+                };
+
+                let config = Config {
+                    image: Some(image),
+                    env,
+                    host_config: Some(host_config),
+                    ..Default::default()
+                };
+
+                self.docker
+                    .create_container(options, config)
+                    .await
+                    .expect("to be able to create container");
+
+                self.docker
+                    .inspect_container(&container_name, None)
+                    .await
+                    .expect("container to be created")
+            }
+            Err(error) => {
+                error!("got unexpected error while inspecting docker container: {error}");
+                return Err(Status::internal(error.to_string()));
+            }
+        };
+
+        let port = container
+            .host_config
+            .expect("container to have host config")
+            .port_bindings
+            .expect("port bindings on container")
+            .get(&port)
+            .expect("a port bindings entry")
+            .as_ref()
+            .expect("a port bindings")
+            .first()
+            .expect("at least one port binding")
+            .host_port
+            .as_ref()
+            .expect("a host port")
+            .clone();
+
+        if !container
+            .state
+            .expect("container to have a state")
+            .running
+            .expect("state to have a running key")
+        {
+            trace!("DB container '{container_name}' not running, so starting it");
+            self.docker
+                .start_container(&container_name, None::<StartContainerOptions<String>>)
+                .await
+                .expect("failed to start none running container");
+        }
+
+        // self.wait_for_ready(&container_name, is_ready_cmd).await?;
+
+        let endpoint = format!("http://localhost:{}", port);
+
+        //https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html#docker
+        Ok(DynamoDbReadyInfo {
+            prefix: self.get_prefix(&project_name).await,
+            aws_access_key_id: "DUMMYIDEXAMPLE".to_string(),
+            aws_secret_access_key: "DUMMYEXAMPLEKEY".to_string(),
+            aws_default_region: "eu-west-1".to_string(),
+            endpoint: Some(endpoint),
         })
     }
 
@@ -278,7 +389,15 @@ impl Provisioner for LocalProvisioner {
         &self,
         request: Request<DynamoDbRequest>,
     ) -> Result<Response<DynamoDbResponse>, Status> {
-        todo!() // possibly using AWS' local dynamodb docker image
+        let DynamoDbRequest {
+            project_name,
+        } = request.into_inner();
+
+        let res = self
+            .get_dynamodb_connection_info(&project_name)
+            .await?;
+
+        Ok(Response::new(res.into()))
     }
 
     async fn delete_dynamo_db(

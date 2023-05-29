@@ -32,8 +32,21 @@ pub mod provisioner {
                 response.prefix,
                 response.aws_access_key_id,
                 response.aws_secret_access_key,
-                response.aws_default_region
+                response.aws_default_region,
+                response.endpoint,
             )
+        }
+    }
+
+    impl From<DynamoDbReadyInfo> for DynamoDbResponse {
+        fn from(info: DynamoDbReadyInfo) -> Self {
+            Self {
+                prefix: info.prefix,
+                aws_access_key_id: info.aws_access_key_id,
+                aws_secret_access_key: info.aws_secret_access_key,
+                aws_default_region: info.aws_default_region,
+                endpoint: info.endpoint,
+            }
         }
     }
 

@@ -5349,6 +5349,7 @@ version = "0.16.2"
 dependencies = [
  "anyhow",
  "async-trait",
+ "aws-sdk-dynamodb",
  "axum",
  "base64 0.13.1",
  "bytes",

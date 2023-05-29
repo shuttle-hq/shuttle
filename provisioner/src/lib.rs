@@ -16,6 +16,7 @@ use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use serde_json::json;
 use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::delete_dynamodb_tables_by_prefix;
 use shuttle_proto::provisioner::{DynamoDbResponse, DynamoDbRequest, DynamoDbDeletionResponse};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
@@ -494,35 +495,13 @@ impl MyProvisioner {
         })
     }
 
-    async fn delete_dynamodb_tables_by_prefix(&self, prefix: &str) {
-        let mut last_evaluated_table_name: Option<String> = Some(prefix.to_string());
-
-        'outer: while last_evaluated_table_name.is_some() {
-            let result = self.dynamodb_client.list_tables().exclusive_start_table_name(last_evaluated_table_name.unwrap()).send().await.unwrap();
-            last_evaluated_table_name = result.last_evaluated_table_name.clone();
-
-            if let Some(table_names) = result.table_names {
-                for table_name in table_names {
-                    if !table_name.starts_with(&prefix) {
-                        break 'outer;
-                    } else {
-                        self.dynamodb_client.delete_table().table_name(table_name).send().await.unwrap();
-                    }
-                }
-            }
-        }
-
-        // edge case to include just the prefix table name (if the user put only prefix for table name)
-        let _ = self.dynamodb_client.delete_table().table_name(prefix).send().await;
-    }
-
     async fn delete_dynamodb(&self, project_name: &str) -> Result<DynamoDbDeletionResponse, Error> {
         let prefix = self.get_prefix(project_name).await;
         self.detach_user_policy(&prefix).await?;
         self.delete_iam_identity(&prefix).await?;
         self.delete_dynamodb_policy(&prefix).await?;
 
-        self.delete_dynamodb_tables_by_prefix(&prefix).await;
+        delete_dynamodb_tables_by_prefix(&self.dynamodb_client, &prefix).await;
 
 
         self.delete_saved_access_key(&prefix).await?;
@@ -855,6 +834,8 @@ mod tests {
 
     use crate::MyProvisioner;
 
+    use shuttle_common::delete_dynamodb_tables_by_prefix;
+
     async fn make_test_provisioner() -> MyProvisioner {
         let pg_uri = format!("postgres://postgres:password@localhost:5432");
         let mongo_uri = format!("mongodb://mongodb:password@localhost:8080");
@@ -967,7 +948,7 @@ mod tests {
         //takes a while for dynamodb tables to provision
         sleep(Duration::from_secs(10)).await;
 
-        provisioner.delete_dynamodb_tables_by_prefix(prefix).await;
+        delete_dynamodb_tables_by_prefix(&provisioner.dynamodb_client, prefix).await;
     }
 
     #[tokio::test]

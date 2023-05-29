@@ -219,6 +219,28 @@ impl DynamoDbReadyInfo {
     }
 }
 
+pub async fn delete_dynamodb_tables_by_prefix(dynamodb_client: &aws_sdk_dynamodb::Client, prefix: &str) {
+    let mut last_evaluated_table_name: Option<String> = Some(prefix.to_string());
+
+    'outer: while last_evaluated_table_name.is_some() {
+        let result = dynamodb_client.list_tables().exclusive_start_table_name(last_evaluated_table_name.unwrap()).send().await.unwrap();
+        last_evaluated_table_name = result.last_evaluated_table_name.clone();
+
+        if let Some(table_names) = result.table_names {
+            for table_name in table_names {
+                if !table_name.starts_with(&prefix) {
+                    break 'outer;
+                } else {
+                    dynamodb_client.delete_table().table_name(table_name).send().await.unwrap();
+                }
+            }
+        }
+    }
+
+    // edge case to include just the prefix table name (if the user put only prefix for table name)
+    let _ = dynamodb_client.delete_table().table_name(prefix).send().await;
+}
+
 /// Store that holds all the secrets available to a deployment
 #[derive(Deserialize, Serialize, Clone)]
 pub struct SecretStore {

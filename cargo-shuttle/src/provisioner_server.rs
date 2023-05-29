@@ -5,7 +5,7 @@ use bollard::{
     exec::{CreateExecOptions, CreateExecResults},
     image::CreateImageOptions,
     models::{CreateImageInfo, HostConfig, PortBinding, ProgressDetail},
-    Docker,
+    Docker, service::ContainerInspectResponse,
 };
 use crossterm::{
     cursor::{MoveDown, MoveUp},
@@ -14,7 +14,7 @@ use crossterm::{
 };
 use futures::StreamExt;
 use portpicker::pick_unused_port;
-use shuttle_common::{database::{AwsRdsEngine, SharedEngine}, DynamoDbReadyInfo};
+use shuttle_common::{database::{AwsRdsEngine, SharedEngine}, DynamoDbReadyInfo, delete_dynamodb_tables_by_prefix};
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
     DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbRequest, DynamoDbResponse, DynamoDbDeletionResponse,
@@ -53,6 +53,40 @@ impl LocalProvisioner {
     async fn get_prefix(&self, project_name: &str) -> String {
         //TODO: add userid or something else unique here
         format!("shuttle-dynamodb-{}-", project_name)
+    }
+
+    fn get_container_host_port(&self, container: ContainerInspectResponse, port: &str) -> String {
+        container
+            .host_config
+            .expect("container to have host config")
+            .port_bindings
+            .expect("port bindings on container")
+            .get(port)
+            .expect("a port bindings entry")
+            .as_ref()
+            .expect("a port bindings")
+            .first()
+            .expect("at least one port binding")
+            .host_port
+            .as_ref()
+            .expect("a host port")
+            .clone()
+    }
+
+    async fn start_container_if_not_running(&self, container: ContainerInspectResponse, container_type: &str) {
+        let container_name = container.name.unwrap();
+        if !container
+            .state
+            .expect("container to have a state")
+            .running
+            .expect("state to have a running key")
+        {
+            trace!("{container_type} container '{container_name}' not running, so starting it");
+            self.docker
+                .start_container(&container_name, None::<StartContainerOptions<String>>)
+                .await
+                .expect("failed to start none running container");
+        }
     }
 
     async fn get_dynamodb_connection_info(
@@ -114,36 +148,9 @@ impl LocalProvisioner {
             }
         };
 
-        let port = container
-            .host_config
-            .expect("container to have host config")
-            .port_bindings
-            .expect("port bindings on container")
-            .get(&port)
-            .expect("a port bindings entry")
-            .as_ref()
-            .expect("a port bindings")
-            .first()
-            .expect("at least one port binding")
-            .host_port
-            .as_ref()
-            .expect("a host port")
-            .clone();
+        let port = self.get_container_host_port(container.clone(), &port);
 
-        if !container
-            .state
-            .expect("container to have a state")
-            .running
-            .expect("state to have a running key")
-        {
-            trace!("DB container '{container_name}' not running, so starting it");
-            self.docker
-                .start_container(&container_name, None::<StartContainerOptions<String>>)
-                .await
-                .expect("failed to start none running container");
-        }
-
-        // self.wait_for_ready(&container_name, is_ready_cmd).await?;
+        self.start_container_if_not_running(container, "DynamoDB").await;
 
         let endpoint = format!("http://localhost:{}", port);
 
@@ -228,34 +235,9 @@ impl LocalProvisioner {
             }
         };
 
-        let port = container
-            .host_config
-            .expect("container to have host config")
-            .port_bindings
-            .expect("port bindings on container")
-            .get(&port)
-            .expect("a port bindings entry")
-            .as_ref()
-            .expect("a port bindings")
-            .first()
-            .expect("at least one port binding")
-            .host_port
-            .as_ref()
-            .expect("a host port")
-            .clone();
+        let port = self.get_container_host_port(container.clone(), &port);
 
-        if !container
-            .state
-            .expect("container to have a state")
-            .running
-            .expect("state to have a running key")
-        {
-            trace!("DB container '{container_name}' not running, so starting it");
-            self.docker
-                .start_container(&container_name, None::<StartContainerOptions<String>>)
-                .await
-                .expect("failed to start none running container");
-        }
+        self.start_container_if_not_running(container, "DB").await;
 
         self.wait_for_ready(&container_name, is_ready_cmd).await?;
 
@@ -315,7 +297,7 @@ impl LocalProvisioner {
         }
     }
 
-    async fn delete_dynamodb_tables_by_prefix(&self, prefix: &str) -> Result<DynamoDbDeletionResponse, Status> {
+    async fn delete_dynamodb_tables_by_prefix_in_container(&self, prefix: &str) -> Result<DynamoDbDeletionResponse, Status> {
         let DynamoDbConfig { container_name, image: _, port, aws_access_key_id, aws_secret_access_key, aws_default_region } = dynamodb_config();
 
         let container = match self.docker.inspect_container(&container_name, None).await {
@@ -355,26 +337,7 @@ impl LocalProvisioner {
 
         let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
 
-        //TODO: Extract into common function for local and cloud provisioner
-        let mut last_evaluated_table_name: Option<String> = Some(prefix.to_string());
-
-        'outer: while last_evaluated_table_name.is_some() {
-            let result = dynamodb_client.list_tables().exclusive_start_table_name(last_evaluated_table_name.unwrap()).send().await.unwrap();
-            last_evaluated_table_name = result.last_evaluated_table_name.clone();
-
-            if let Some(table_names) = result.table_names {
-                for table_name in table_names {
-                    if !table_name.starts_with(&prefix) {
-                        break 'outer;
-                    } else {
-                        dynamodb_client.delete_table().table_name(table_name).send().await.unwrap();
-                    }
-                }
-            }
-        }
-
-        // edge case to include just the prefix table name (if the user put only prefix for table name)
-        let _ = dynamodb_client.delete_table().table_name(prefix).send().await;
+        delete_dynamodb_tables_by_prefix(&dynamodb_client, prefix).await;
 
         Ok(DynamoDbDeletionResponse {})
     }
@@ -469,7 +432,7 @@ impl Provisioner for LocalProvisioner {
         } = request.into_inner();
 
         let res = self
-            .delete_dynamodb_tables_by_prefix(&project_name)
+            .delete_dynamodb_tables_by_prefix_in_container(&project_name)
             .await?;
 
         Ok(Response::new(res.into()))
@@ -719,7 +682,7 @@ mod tests {
         println!("{result:?}");
 
         // delete dynamodb resource
-        provisioner.delete_dynamodb_tables_by_prefix(&project_name).await.unwrap();
+        provisioner.delete_dynamodb_tables_by_prefix_in_container(&project_name).await.unwrap();
 
         // select from table (should fail now that tables have been deleted)
         let result = select_from_table(&dynamodb_client, &table_name).await;

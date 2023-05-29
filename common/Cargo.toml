@@ -44,6 +44,7 @@ tracing-subscriber = { workspace = true, optional = true }
 ttl_cache = { workspace = true, optional = true }
 utoipa = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
+aws-sdk-dynamodb = { workspace = true }
 
 [features]
 backend = [

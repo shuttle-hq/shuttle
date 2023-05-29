@@ -56,8 +56,8 @@ url = "2.3.1"
 uuid = { workspace = true, features = ["v4"] }
 webbrowser = "0.8.2"
 semver = "1.0.17"
-aws-sdk-dynamodb = "0.27.0"
-aws-config = "0.55.2"
+aws-sdk-dynamodb = { workspace = true }
+aws-config = { workspace = true }
 
 [dependencies.shuttle-common]
 workspace = true

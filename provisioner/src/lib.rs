@@ -387,6 +387,11 @@ impl MyProvisioner {
         format!("{}.txt", prefix)
     }
 
+    async fn delete_saved_access_key(&self, prefix: &str) -> Result<(), std::io::Error> {
+        std::fs::remove_file(self.get_access_key_file_name(prefix))?;
+        Ok(())
+    }
+
     async fn save_access_key(&self, prefix: &str, access_key_id: &str, secret_access_key: &str) -> Result<(), std::io::Error> {
         use std::io::prelude::*;    
         let mut file = File::create(self.get_access_key_file_name(prefix))?;
@@ -516,19 +521,10 @@ impl MyProvisioner {
         self.delete_iam_identity(&prefix).await?;
         self.delete_dynamodb_policy(&prefix).await?;
 
-        //TODO: delete tables that match the prefix
-
         self.delete_dynamodb_tables_by_prefix(&prefix).await;
 
-        // let table_names = self.dynamodb_client.list_tables().
 
-        
-        
-        // let delete = self.dynamodb_client
-        //     .delete_table()
-        //     .table_name(table_name)
-        //     .send()
-        //     .await;
+        self.delete_saved_access_key(&prefix).await?;
 
 
         Ok(DynamoDbDeletionResponse {})
@@ -987,7 +983,6 @@ mod tests {
 
         assert_eq!(provisioner.get_saved_access_key(&prefix).await, Some((access_key_id, secret_access_key)));
 
-        //cleanup
-        std::fs::remove_file(provisioner.get_access_key_file_name(&prefix)).unwrap();
+        provisioner.delete_saved_access_key(&prefix).await.unwrap();        
     }
 }

@@ -13,7 +13,7 @@
   <a href="https://circleci.com/gh/shuttle-hq/shuttle/">
     <img alt="build status" src="https://circleci.com/gh/shuttle-hq/shuttle.svg?style=shield"/>
   </a>
-  <a href="https://discord.gg/H33rRDTm3p">
+  <a href="https://discord.gg/shuttle">
     <img alt="discord" src="https://img.shields.io/discord/803236282088161321?logo=discord"/>
   </a>
 </p>

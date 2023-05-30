@@ -19,7 +19,6 @@ fqdn = { workspace = true }
 futures = { workspace = true }
 home = { workspace = true }
 hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
-# not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { workspace = true }
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }

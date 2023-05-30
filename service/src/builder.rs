@@ -143,7 +143,10 @@ pub async fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Res
         .unwrap();
 
     if output.status.success() {
-        let lines = vec![String::from_utf8(output.clone().stderr)?, String::from_utf8(output.stdout)?];
+        let lines = vec![
+            String::from_utf8(output.clone().stderr)?,
+            String::from_utf8(output.stdout)?,
+        ];
         Ok(lines)
     } else {
         Err(anyhow!("cargo clean failed"))

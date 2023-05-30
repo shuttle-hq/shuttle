@@ -29,6 +29,8 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, info};
 use std::fs::File;
 use std::io::BufRead;
+use sha2::{Sha256, Digest};
+use base64ct::{Base64UrlUnpadded, Encoding};
 
 mod args;
 mod error;
@@ -260,12 +262,22 @@ impl MyProvisioner {
     }
 
     async fn get_prefix(&self, project_name: &str) -> String {
-        //TODO: add userid or something else unique here
-        format!("shuttle-dynamodb-{}-", project_name)
+        let mut hasher = Sha256::new();
+
+        hasher.update(project_name.as_bytes());
+
+        let hash = hasher.finalize();
+
+        // 43 characters long (4 characters correspond to 3 bytes of data)
+        // sha256 is 32 bytes. 32 / 3 * 4 ~ 43
+        // we care about this because various AWS identifiers have specific length constraints
+        let base64_string = Base64UrlUnpadded::encode_string(&hash);
+
+        base64_string
     }
 
     async fn get_dynamodb_policy_name(&self, prefix: &str) -> String {
-        format!("{}policy", prefix)
+        format!("{}-dynamo-policy", prefix)
     }
 
     async fn create_dynamodb_policy(&self, prefix: &str) -> Result<(), Error> {
@@ -347,7 +359,8 @@ impl MyProvisioner {
     }
 
     async fn get_iam_identity_user_name(&self, prefix: &str) -> String {
-        format!("{}user", prefix)
+        // max characters is 64
+        format!("{}-dynamo-user", prefix)
     }
 
     async fn create_iam_identity(&self, prefix: &str) -> Result<(), Error> {
@@ -477,15 +490,7 @@ impl MyProvisioner {
         //TODO:
         //store aws credentials in secrets
         //make them available in the project container
-        //setup dynamodb client
-
-        //create new example app with annotation, creating a table and then inserting a row
-
-        //as part of our delete, wipe out any tables with the matching prefix, we delete the policy, we delete the identity
-
-        //NOTE: for future, maybe allow multiple projects to access same database (for creating, just use username as prefix, for deleting will need to query whether projects exist)
-
-        // let client = &self.dynamodb_client;
+        
         Ok(DynamoDbResponse {
             prefix,
             aws_access_key_id,

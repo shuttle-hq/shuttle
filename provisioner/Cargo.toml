@@ -24,6 +24,8 @@ tonic = { workspace = true }
 tracing = { workspace = true, features = ["default"] }
 tracing-subscriber = { workspace = true, features = ["default", "fmt"] }
 serde_json = { workspace = true }
+sha2 = "0.10.6"
+base64ct = { version = "1.6.0", features = ["alloc"] }
 
 [dependencies.shuttle-common]
 workspace = true

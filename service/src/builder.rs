@@ -1,5 +1,4 @@
 use std::fs::read_to_string;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context};
@@ -133,11 +132,6 @@ pub async fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Res
         profile = "release";
     }
 
-    // Pipes used to redirect the result of `cargo clean`.
-    let (mut stderr_read, mut stderr_write) = pipe::pipe();
-    let (mut stdout_read, mut stdout_write) = pipe::pipe();
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
     let output = tokio::process::Command::new("cargo")
         .arg("clean")
         .arg("--manifest-path")
@@ -147,22 +141,9 @@ pub async fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Res
         .output()
         .await
         .unwrap();
-    if output.clone().status.success() {
-        tx.send(true).unwrap();
-    } else {
-        tx.send(false).unwrap();
-    }
 
-    stdout_write.write_all(&output.clone().stdout).unwrap();
-    stderr_write.write_all(&output.stderr).unwrap();
-
-    let mut stderr = String::new();
-    let mut stdout = String::new();
-    stderr_read.read_to_string(&mut stderr)?;
-    stdout_read.read_to_string(&mut stdout)?;
-
-    if rx.await? {
-        let lines = vec![stderr, stdout];
+    if output.status.success() {
+        let lines = vec![String::from_utf8(output.clone().stderr)?, String::from_utf8(output.stdout)?];
         Ok(lines)
     } else {
         Err(anyhow!("cargo clean failed"))

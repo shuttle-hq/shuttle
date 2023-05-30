@@ -149,7 +149,7 @@ pub async fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Res
         ];
         Ok(lines)
     } else {
-        Err(anyhow!("cargo clean failed"))
+        Err(anyhow!("cargo clean failed with exit code {} and error {}", output.clone().status.to_string(), String::from_utf8(output.stderr)?))
     }
 }
 

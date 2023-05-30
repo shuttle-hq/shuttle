@@ -211,17 +211,14 @@ fn compile(
     wasm: bool,
     project_path: PathBuf,
 ) -> anyhow::Result<Vec<BuiltService>> {
-    let jobs = std::thread::available_parallelism()?.get();
     let manifest_path = project_path.join("Cargo.toml");
 
     let mut cargo = std::process::Command::new("cargo");
 
-    cargo
-        .arg("build")
-        .arg("-j")
-        .arg(jobs.to_string())
-        .arg("--manifest-path")
-        .arg(manifest_path);
+    cargo.arg("build").arg("--manifest-path").arg(manifest_path);
+
+    #[cfg(!debug_assertions)]
+    cargo.arg("-j").arg(4);
 
     for package in packages.clone() {
         cargo.arg("--package").arg(package.name.clone());

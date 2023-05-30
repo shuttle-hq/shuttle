@@ -77,7 +77,7 @@ strum = { version = "0.24.1", features = ["derive"] }
 tempfile = "3.4.0"
 thiserror = "1.0.37"
 tar = "0.4.38"
-tokio = { version = "1.22.0" }
+tokio = { version = "1.22.0", features = ["process"] }
 toml = "0.5.9"
 toml_edit = "0.16.0"
 tonic = "0.8.3"

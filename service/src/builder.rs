@@ -105,14 +105,15 @@ pub async fn build_workspace(
     let mut runtimes = Vec::new();
 
     if !alpha_packages.is_empty() {
-        let mut compilation = compile(alpha_packages, release_mode, false, project_path.clone())?;
+        let mut compilation =
+            compile(alpha_packages, release_mode, false, project_path.clone()).await?;
         trace!("alpha packages compiled");
 
         runtimes.append(&mut compilation);
     }
 
     if !next_packages.is_empty() {
-        let mut compilation = compile(next_packages, release_mode, true, project_path)?;
+        let mut compilation = compile(next_packages, release_mode, true, project_path).await?;
         trace!("next packages compiled");
 
         runtimes.append(&mut compilation);
@@ -137,24 +138,23 @@ pub async fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Res
     let (mut stdout_read, mut stdout_write) = pipe::pipe();
     let (tx, rx) = tokio::sync::oneshot::channel();
 
-    tokio::task::spawn_blocking(move || {
-        let output = std::process::Command::new("cargo")
-            .arg("clean")
-            .arg("--manifest-path")
-            .arg(manifest_path.to_str().unwrap())
-            .arg("--profile")
-            .arg(profile)
-            .output()
-            .unwrap();
-        if output.clone().status.success() {
-            tx.send(true).unwrap();
-        } else {
-            tx.send(false).unwrap();
-        }
+    let output = tokio::process::Command::new("cargo")
+        .arg("clean")
+        .arg("--manifest-path")
+        .arg(manifest_path.to_str().unwrap())
+        .arg("--profile")
+        .arg(profile)
+        .output()
+        .await
+        .unwrap();
+    if output.clone().status.success() {
+        tx.send(true).unwrap();
+    } else {
+        tx.send(false).unwrap();
+    }
 
-        stdout_write.write_all(&output.clone().stdout).unwrap();
-        stderr_write.write_all(&output.stderr).unwrap();
-    });
+    stdout_write.write_all(&output.clone().stdout).unwrap();
+    stderr_write.write_all(&output.stderr).unwrap();
 
     let mut stderr = String::new();
     let mut stdout = String::new();
@@ -205,7 +205,7 @@ fn is_cdylib(target: &Target) -> bool {
     target.kind.iter().any(|kind| kind == "cdylib")
 }
 
-fn compile(
+async fn compile(
     packages: Vec<&Package>,
     release_mode: bool,
     wasm: bool,
@@ -213,12 +213,12 @@ fn compile(
 ) -> anyhow::Result<Vec<BuiltService>> {
     let manifest_path = project_path.join("Cargo.toml");
 
-    let mut cargo = std::process::Command::new("cargo");
+    let mut cargo = tokio::process::Command::new("cargo");
 
     cargo.arg("build").arg("--manifest-path").arg(manifest_path);
 
-    #[cfg(!debug_assertions)]
-    cargo.arg("-j").arg(4);
+    #[cfg(not(debug_assertions))]
+    cargo.arg("-j").arg(4.to_string());
 
     for package in packages.clone() {
         cargo.arg("--package").arg(package.name.clone());
@@ -237,7 +237,7 @@ fn compile(
         cargo.arg("--target").arg("wasm32-wasi");
     }
 
-    let command = cargo.output()?;
+    let command = cargo.output().await?;
 
     if !command.status.success() {
         bail!("Build failed. Is the Shuttle runtime missing?");

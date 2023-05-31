@@ -45,8 +45,16 @@ where
                 format!("[span] {}", metadata.name()).into(),
             );
 
+            let level = LogLevel::from(metadata.level()) as i32;
+
+            // Ignore span logs from the default level for #[instrument] (INFO) and below.
+            // TODO: make this configurable
+            if level < LogLevel::Warn as i32 {
+                return;
+            }
+
             LogItem {
-                level: LogLevel::from(metadata.level()) as i32,
+                level,
                 timestamp: Some(Timestamp::from(SystemTime::from(datetime))),
                 file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
                 line: visitor.line.or_else(|| metadata.line()),

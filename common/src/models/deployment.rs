@@ -7,6 +7,7 @@ use comfy_table::{
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
+
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -54,12 +55,19 @@ impl State {
     }
 }
 
-pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str) -> String {
+pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, page: u32) -> String {
     if deployments.is_empty() {
-        format!(
-            "{}\n",
-            "No deployments are linked to this service".yellow().bold()
-        )
+        if page <= 1 {
+            format!(
+                "{}\n",
+                "No deployments are linked to this service".yellow().bold()
+            )
+        } else {
+            format!(
+                "{}\n",
+                "No more deployments linked to this service".yellow().bold()
+            )
+        }
     } else {
         let mut table = Table::new();
         table
@@ -93,10 +101,13 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str) ->
             r#"
 Most recent {} for {}
 {}
+
+{}
 "#,
             "deployments".bold(),
             service_name,
             table,
+            "More projects might be available on the next page using --page.".bold()
         )
     }
 }

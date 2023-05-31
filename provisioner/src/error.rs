@@ -1,10 +1,11 @@
-use aws_sdk_iam::operation::{create_policy::CreatePolicyError, create_user::CreateUserError, delete_access_key::DeleteAccessKeyError};
+use aws_sdk_iam::operation::{create_policy::CreatePolicyError, create_user::CreateUserError, delete_access_key::DeleteAccessKeyError, delete_user::DeleteUserError, delete_policy::DeletePolicyError, create_access_key::CreateAccessKeyError, attach_user_policy::AttachUserPolicyError, detach_user_policy::DetachUserPolicyError};
 use aws_sdk_rds::{
     error::SdkError,
     operation::{
         create_db_instance::CreateDBInstanceError, describe_db_instances::DescribeDBInstancesError,
     },
 };
+use aws_sdk_sts::operation::get_caller_identity::GetCallerIdentityError;
 use thiserror::Error;
 use tonic::Status;
 use tracing::error;
@@ -52,6 +53,39 @@ pub enum Error {
 
     #[error("failed to delete IAM user access key for AWS: {0}")]
     DeleteAccessKey(#[from] SdkError<DeleteAccessKeyError>),
+
+    #[error("failed to delete IAM user for AWS: {0}")]
+    DeleteIAMUser(#[from] SdkError<DeleteUserError>),
+
+    #[error("failed to get caller identity for AWS: {0}")]
+    GetCallerIdentity(#[from] SdkError<GetCallerIdentityError>),
+
+    #[error("failed to get caller account for AWS: {0}")]
+    GetAccount(String),
+
+    #[error("failed to delete IAM policy for AWS: {0}")]
+    DeleteIAMPolicy(#[from] SdkError<DeletePolicyError>),
+
+    #[error("failed to create access key for AWS: {0}")]
+    CreateAccessKey(#[from] SdkError<CreateAccessKeyError>),
+
+    #[error("failed to get access key for AWS: {0}")]
+    GetAccessKey(String),
+
+    #[error("failed to get access key id for AWS: {0}")]
+    GetAccessKeyId(String),
+
+    #[error("failed to get secret access key for AWS: {0}")]
+    GetSecretAccessKey(String),
+
+    #[error("failed to attach user policy for AWS: {0}")]
+    AttachUserPolicy(#[from] SdkError<AttachUserPolicyError>),
+
+    #[error("failed to detach user policy for AWS: {0}")]
+    DetachUserPolicy(#[from] SdkError<DetachUserPolicyError>),
+
+    #[error("failed to get region for AWS: {0}")]
+    GetRegion(String),
 
     #[error["plain error: {0}"]]
     Plain(String),

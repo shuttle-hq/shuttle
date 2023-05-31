@@ -336,8 +336,8 @@ impl MyProvisioner {
     }
 
     async fn get_policy_arn(&self, prefix: &str) -> Result<String, Error> {
-        let identity = self.sts_client.get_caller_identity().send().await.unwrap();
-        let account = identity.account().unwrap();
+        let identity = self.sts_client.get_caller_identity().send().await.map_err(|e| Error::GetCallerIdentity(e))?;
+        let account = identity.account().ok_or_else(|| Error::GetAccount("empty account".to_string()))?;
 
         let policy_name = self.get_dynamodb_policy_name(prefix).await;
         let policy_arn = format!("arn:aws:iam::{account}:policy/{policy_name}");
@@ -346,14 +346,14 @@ impl MyProvisioner {
     }
 
     async fn delete_dynamodb_policy(&self, prefix: &str) -> Result<(), Error> {
-        let policy_arn = self.get_policy_arn(&prefix).await.unwrap();
+        let policy_arn = self.get_policy_arn(&prefix).await?;
 
         self.iam_client
             .delete_policy()
             .policy_arn(policy_arn)
             .send()
             .await
-            .unwrap();
+            .map_err(|e| Error::DeleteIAMPolicy(e))?;
 
         Ok(())
     }
@@ -426,13 +426,13 @@ impl MyProvisioner {
             .user_name(self.get_iam_identity_user_name(prefix).await)
             .send()
             .await
-            .unwrap();
+            .map_err(|e| Error::CreateAccessKey(e))?;
         let access_key = key
             .access_key()
-            .unwrap();
+            .ok_or_else(|| Error::GetAccessKey("empty access key".to_string()))?;
 
-        let access_key_id = access_key.access_key_id.as_ref().unwrap().to_string();
-        let secret_access_key = access_key.secret_access_key.as_ref().unwrap().to_string();
+        let access_key_id = access_key.access_key_id.as_ref().ok_or_else(|| Error::GetAccessKeyId("empty access key id".to_string()))?.to_string();
+        let secret_access_key = access_key.secret_access_key.as_ref().ok_or_else(|| Error::GetSecretAccessKey("empty access key secret".to_string()))?.to_string();
 
         self.save_access_key(prefix, &access_key_id, &secret_access_key).await.map_err(|e| Error::GetIAMIdentityKeys(e))?;
 
@@ -456,7 +456,7 @@ impl MyProvisioner {
             .user_name(self.get_iam_identity_user_name(prefix).await)
             .send()
             .await
-            .unwrap();
+            .map_err(|e| Error::DeleteIAMUser(e))?;
         Ok(user)
     }
 
@@ -465,10 +465,10 @@ impl MyProvisioner {
             .iam_client
             .attach_user_policy()
             .user_name(self.get_iam_identity_user_name(&prefix).await)
-            .policy_arn(self.get_policy_arn(&prefix).await.unwrap())
+            .policy_arn(self.get_policy_arn(&prefix).await?)
             .send()
             .await
-            .unwrap();
+            .map_err(|e| Error::AttachUserPolicy(e))?;
         Ok(())
     }
 
@@ -477,25 +477,25 @@ impl MyProvisioner {
             .iam_client
             .detach_user_policy()
             .user_name(self.get_iam_identity_user_name(&prefix).await)
-            .policy_arn(self.get_policy_arn(&prefix).await.unwrap())
+            .policy_arn(self.get_policy_arn(&prefix).await?)
             .send()
             .await
-            .unwrap();
+            .map_err(|e| Error::DetachUserPolicy(e))?;
         Ok(())
     }
 
     pub async fn request_dynamodb(&self, project_name: &str) -> Result<DynamoDbResponse, Error> {
         let prefix = self.get_prefix(&project_name).await;
 
-        self.create_dynamodb_policy(&prefix).await.unwrap();
+        self.create_dynamodb_policy(&prefix).await?;
 
-        self.create_iam_identity(&prefix).await.unwrap();
+        self.create_iam_identity(&prefix).await?;
 
-        self.attach_user_policy(&prefix).await.unwrap();
+        self.attach_user_policy(&prefix).await?;
 
-        let (aws_access_key_id, aws_secret_access_key)= self.get_iam_identity_keys(&prefix).await.unwrap();
+        let (aws_access_key_id, aws_secret_access_key)= self.get_iam_identity_keys(&prefix).await?;
 
-        let aws_default_region = self.dynamodb_client.conf().region().unwrap().to_string();
+        let aws_default_region = self.dynamodb_client.conf().region().ok_or_else(|| Error::GetRegion("empty region".to_string()))?.to_string();
 
         //TODO:
         //store aws credentials in secrets

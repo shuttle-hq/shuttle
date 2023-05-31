@@ -46,7 +46,7 @@ cargo_metadata = "0.15.3"
 chrono = { version = "0.4.23", default-features = false }
 clap = { version = "4.0.27", features = ["derive"] }
 crossbeam-channel = "0.5.7"
-crossterm = "0.25.0"
+crossterm = "0.26.0"
 ctor = "0.1.26"
 dirs = "5.0.0"
 flate2 = "1.0.25"

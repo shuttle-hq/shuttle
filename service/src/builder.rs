@@ -75,6 +75,7 @@ pub async fn build_workspace(
     project_path: &Path,
     release_mode: bool,
     _tx: Sender<Message>,
+    deployment: bool,
 ) -> anyhow::Result<Vec<BuiltService>> {
     let project_path = project_path.to_owned();
 
@@ -104,15 +105,22 @@ pub async fn build_workspace(
     let mut runtimes = Vec::new();
 
     if !alpha_packages.is_empty() {
-        let mut compilation =
-            compile(alpha_packages, release_mode, false, project_path.clone()).await?;
+        let mut compilation = compile(
+            alpha_packages,
+            release_mode,
+            false,
+            project_path.clone(),
+            deployment,
+        )
+        .await?;
         trace!("alpha packages compiled");
 
         runtimes.append(&mut compilation);
     }
 
     if !next_packages.is_empty() {
-        let mut compilation = compile(next_packages, release_mode, true, project_path).await?;
+        let mut compilation =
+            compile(next_packages, release_mode, true, project_path, deployment).await?;
         trace!("next packages compiled");
 
         runtimes.append(&mut compilation);
@@ -198,6 +206,7 @@ async fn compile(
     release_mode: bool,
     wasm: bool,
     project_path: PathBuf,
+    deployment: bool,
 ) -> anyhow::Result<Vec<BuiltService>> {
     let manifest_path = project_path.join("Cargo.toml");
 
@@ -205,8 +214,9 @@ async fn compile(
 
     cargo.arg("build").arg("--manifest-path").arg(manifest_path);
 
-    #[cfg(not(debug_assertions))]
-    cargo.arg("-j").arg(4.to_string());
+    if deployment {
+        cargo.arg("-j").arg(4.to_string());
+    }
 
     for package in packages.clone() {
         cargo.arg("--package").arg(package.name.clone());

@@ -7,7 +7,7 @@ use shuttle_service::builder::{build_workspace, BuiltService};
 async fn not_shuttle() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-shuttle", env!("CARGO_MANIFEST_DIR"));
-    build_workspace(Path::new(&project_path), false, tx)
+    build_workspace(Path::new(&project_path), false, tx, false)
         .await
         .unwrap();
 }
@@ -17,7 +17,7 @@ async fn not_shuttle() {
 async fn not_bin() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-bin", env!("CARGO_MANIFEST_DIR"));
-    match build_workspace(Path::new(&project_path), false, tx).await {
+    match build_workspace(Path::new(&project_path), false, tx, false).await {
         Ok(_) => {}
         Err(e) => panic!("{}", e.to_string()),
     }
@@ -29,7 +29,7 @@ async fn is_bin() {
     let project_path = format!("{}/tests/resources/is-bin", env!("CARGO_MANIFEST_DIR"));
 
     assert_eq!(
-        build_workspace(Path::new(&project_path), false, tx)
+        build_workspace(Path::new(&project_path), false, tx, false)
             .await
             .unwrap(),
         vec![BuiltService::new(
@@ -50,7 +50,7 @@ async fn not_found() {
         "{}/tests/resources/non-existing",
         env!("CARGO_MANIFEST_DIR")
     );
-    build_workspace(Path::new(&project_path), false, tx)
+    build_workspace(Path::new(&project_path), false, tx, false)
         .await
         .unwrap();
 }
@@ -62,7 +62,7 @@ async fn workspace() {
     let project_path = format!("{}/tests/resources/workspace", env!("CARGO_MANIFEST_DIR"));
 
     assert_eq!(
-        build_workspace(Path::new(&project_path), false, tx)
+        build_workspace(Path::new(&project_path), false, tx, false)
             .await
             .unwrap(),
         vec![

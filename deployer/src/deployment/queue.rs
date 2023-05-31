@@ -336,7 +336,7 @@ async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<BuiltService> {
-    let runtimes = build_workspace(project_path, true, tx)
+    let runtimes = build_workspace(project_path, true, tx, true)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 

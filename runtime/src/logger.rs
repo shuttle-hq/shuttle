@@ -133,7 +133,10 @@ mod tests {
         );
         assert_eq!(
             r.blocking_recv().map(to_tuple),
-            Some(("[span] this is an info span".to_string(), LogLevel::Debug as i32))
+            Some((
+                "[span] this is an info span".to_string(),
+                LogLevel::Debug as i32
+            ))
         );
         assert_eq!(
             r.blocking_recv().map(to_tuple),

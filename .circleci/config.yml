@@ -211,7 +211,6 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      - install-protoc
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
       # TODO: this is incompatible with workspace inheritance, uncomment when
@@ -440,8 +439,6 @@ jobs:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
-      - install-protoc:
-          arch: osx-x86_64
       - run:
           name: Install Rust
           command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.68.0 --target x86_64-apple-darwin
@@ -591,7 +588,6 @@ jobs:
     resource_class: medium
     steps:
       - checkout
-      - install-protoc
       - run:
           name: Crate publishing in order
           command: |

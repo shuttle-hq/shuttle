@@ -439,6 +439,16 @@ impl MyProvisioner {
         Ok((access_key_id, secret_access_key))
     }
 
+    async fn delete_access_key(&self, prefix: &str) -> Result<(), Error> {
+        let (access_key_id, _secret_access_key) = self.get_iam_identity_keys(prefix).await?;
+        
+        self.iam_client.delete_access_key().user_name(self.get_iam_identity_user_name(prefix).await).access_key_id(access_key_id).send().await.map_err(|e| Error::DeleteAccessKey(e))?;
+
+        self.delete_saved_access_key(prefix).await?;
+
+        Ok(())
+    }
+
     async fn delete_iam_identity(&self, prefix: &str) -> Result<DeleteUserOutput, Error> {
         let user = self
             .iam_client
@@ -503,13 +513,12 @@ impl MyProvisioner {
     async fn delete_dynamodb(&self, project_name: &str) -> Result<DynamoDbDeletionResponse, Error> {
         let prefix = self.get_prefix(project_name).await;
         self.detach_user_policy(&prefix).await?;
+        self.delete_access_key(&prefix).await?;
         self.delete_iam_identity(&prefix).await?;
         self.delete_dynamodb_policy(&prefix).await?;
 
-        delete_dynamodb_tables_by_prefix(&self.dynamodb_client, &prefix).await;
+        delete_dynamodb_tables_by_prefix(&self.dynamodb_client, &prefix).await.map_err(|e| Error::DeleteDynamoDBTableError(e))?;
 
-
-        self.delete_saved_access_key(&prefix).await?;
 
 
         Ok(DynamoDbDeletionResponse {})
@@ -953,7 +962,7 @@ mod tests {
         //takes a while for dynamodb tables to provision
         sleep(Duration::from_secs(10)).await;
 
-        delete_dynamodb_tables_by_prefix(&provisioner.dynamodb_client, prefix).await;
+        delete_dynamodb_tables_by_prefix(&provisioner.dynamodb_client, prefix).await.unwrap();
     }
 
     #[tokio::test]

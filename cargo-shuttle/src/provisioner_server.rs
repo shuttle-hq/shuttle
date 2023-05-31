@@ -51,7 +51,6 @@ impl LocalProvisioner {
     }
 
     async fn get_prefix(&self, project_name: &str) -> String {
-        //TODO: add userid or something else unique here
         format!("shuttle-dynamodb-{}-", project_name)
     }
 
@@ -73,8 +72,7 @@ impl LocalProvisioner {
             .clone()
     }
 
-    async fn start_container_if_not_running(&self, container: ContainerInspectResponse, container_type: &str) {
-        let container_name = container.name.unwrap();
+    async fn start_container_if_not_running(&self, container: ContainerInspectResponse, container_type: &str, container_name: &str) {
         if !container
             .state
             .expect("container to have a state")
@@ -150,7 +148,7 @@ impl LocalProvisioner {
 
         let port = self.get_container_host_port(container.clone(), &port);
 
-        self.start_container_if_not_running(container, "DynamoDB").await;
+        self.start_container_if_not_running(container, "DynamoDB", &container_name).await;
 
         let endpoint = format!("http://localhost:{}", port);
 
@@ -237,7 +235,7 @@ impl LocalProvisioner {
 
         let port = self.get_container_host_port(container.clone(), &port);
 
-        self.start_container_if_not_running(container, "DB").await;
+        self.start_container_if_not_running(container, "DB", &container_name).await;
 
         self.wait_for_ready(&container_name, is_ready_cmd).await?;
 
@@ -337,7 +335,7 @@ impl LocalProvisioner {
 
         let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
 
-        delete_dynamodb_tables_by_prefix(&dynamodb_client, prefix).await;
+        delete_dynamodb_tables_by_prefix(&dynamodb_client, prefix).await.map_err(|e| Status::internal(e.to_string()))?;
 
         Ok(DynamoDbDeletionResponse {})
     }

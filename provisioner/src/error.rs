@@ -1,4 +1,4 @@
-use aws_sdk_iam::operation::{create_policy::CreatePolicyError, create_user::CreateUserError};
+use aws_sdk_iam::operation::{create_policy::CreatePolicyError, create_user::CreateUserError, delete_access_key::DeleteAccessKeyError};
 use aws_sdk_rds::{
     error::SdkError,
     operation::{
@@ -46,6 +46,12 @@ pub enum Error {
     
     #[error("failed to get IAM identity keys for AWS: {0}")]
     GetIAMIdentityKeys(#[from] std::io::Error),
+
+    #[error("failed to delete a DynamoDB table in AWS: {0}")]
+    DeleteDynamoDBTableError(#[from] Box<dyn std::error::Error>),
+
+    #[error("failed to delete IAM user access key for AWS: {0}")]
+    DeleteAccessKey(#[from] SdkError<DeleteAccessKeyError>),
 
     #[error["plain error: {0}"]]
     Plain(String),

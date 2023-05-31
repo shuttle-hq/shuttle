@@ -1177,7 +1177,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "crossbeam-channel",
- "crossterm 0.25.0",
+ "crossterm",
  "dialoguer",
  "dirs 5.0.1",
  "dunce",
@@ -1380,7 +1380,7 @@ version = "6.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e959d788268e3bf9d35ace83e81b124190378e4c91c9067524675e33394b8ba"
 dependencies = [
- "crossterm 0.26.1",
+ "crossterm",
  "strum",
  "strum_macros",
  "unicode-width",
@@ -1727,22 +1727,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c063cd8cc95f5c377ed0d4b49a4b21f632396ff690e8470c29b3359b346984b"
 dependencies = [
  "cfg-if 1.0.0",
-]
-
-[[package]]
-name = "crossterm"
-version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e64e6c0fbe2c17357405f7c758c1ef960fce08bdfb2c03d88d2a18d7e09c4b67"
-dependencies = [
- "bitflags",
- "crossterm_winapi",
- "libc",
- "mio",
- "parking_lot 0.12.1",
- "signal-hook",
- "signal-hook-mio",
- "winapi",
 ]
 
 [[package]]
@@ -5315,7 +5299,7 @@ dependencies = [
  "cap-std",
  "chrono",
  "comfy-table",
- "crossterm 0.25.0",
+ "crossterm",
  "headers",
  "http",
  "http-body",

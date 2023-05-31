@@ -19,7 +19,7 @@ pipe = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 strfmt = "0.2.2"
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["sync"], optional = true }
+tokio = { workspace = true, features = ["sync", "process"], optional = true }
 toml = { workspace = true, optional = true  }
 tracing = { workspace = true, optional = true }
 

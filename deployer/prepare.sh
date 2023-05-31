@@ -66,3 +66,7 @@ done
 # TODO: restore when we know how to prefetch from our mirror
 # cd /usr/src/shuttle/service
 # cargo fetch
+
+# Install common build tools for external crates
+apt update
+apt install -y llvm-dev libclang-dev gcc clang cmake make automake autoconf libtool

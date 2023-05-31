@@ -34,6 +34,13 @@ else
     touch $CARGO_HOME/config.toml
 fi
 
+# Install protoc since some users may need it
+ARCH="linux-x86_64" && \
+VERSION="22.2" && \
+curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v$VERSION/protoc-$VERSION-$ARCH.zip" && \
+    unzip -o "protoc-$VERSION-$ARCH.zip" bin/protoc "include/*" -d /usr/local && \
+    rm -f "protoc-$VERSION-$ARCH.zip"
+
 # Add the wasm32-wasi target
 rustup target add wasm32-wasi
 

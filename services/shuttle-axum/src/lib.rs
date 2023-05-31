@@ -18,7 +18,7 @@ use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
 /// A wrapper type for [axum::Router] so we can implement [shuttle_runtime::Service] for it.
-pub struct AxumService(pub axum::Router);
+pub struct AxumService<S = ()>(pub axum::Router<S>);
 
 #[shuttle_runtime::async_trait]
 impl shuttle_runtime::Service for AxumService {
@@ -34,10 +34,11 @@ impl shuttle_runtime::Service for AxumService {
     }
 }
 
-impl From<axum::Router> for AxumService {
-    fn from(router: axum::Router) -> Self {
+impl<S> From<axum::Router<S>> for AxumService<S> {
+    fn from(router: axum::Router<S>) -> Self {
         Self(router)
     }
 }
+
 /// The return type that should be returned from the [shuttle_runtime::main] function.
 pub type ShuttleAxum = Result<AxumService, Error>;

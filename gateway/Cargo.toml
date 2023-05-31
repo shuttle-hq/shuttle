@@ -50,6 +50,7 @@ utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 x509-parser = "0.14.0"
+tower-sanitize-path = "0.1.2"
 
 [dependencies.shuttle-common]
 workspace = true

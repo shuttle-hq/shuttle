@@ -5428,6 +5428,7 @@ dependencies = [
  "tokio",
  "tower",
  "tower-http 0.4.0",
+ "tower-sanitize-path",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
@@ -6443,6 +6444,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c20c8dbed6283a09604c3e69b4b7eeb54e298b8a600d4d5ecb5ad39de609f1d0"
 
 [[package]]
+name = "tower-sanitize-path"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d4accf4be86b13057d30cd97f606c707b6ec8df01c2e91ee735f89de8216f21"
+dependencies = [
+ "http",
+ "tower-layer",
+ "tower-service",
+ "url-escape",
+]
+
+[[package]]
 name = "tower-service"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6751,6 +6764,15 @@ checksum = "0d68c799ae75762b8c3fe375feb6600ef5602c883c5d21eb51c09f22b83c4643"
 dependencies = [
  "form_urlencoded",
  "idna 0.3.0",
+ "percent-encoding",
+]
+
+[[package]]
+name = "url-escape"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44e0ce4d1246d075ca5abec4b41d33e87a6054d08e2366b63205665e950db218"
+dependencies = [
  "percent-encoding",
 ]
 

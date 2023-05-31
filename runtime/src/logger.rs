@@ -112,18 +112,17 @@ mod tests {
 
         let _guard = tracing_subscriber::registry().with(logger).set_default();
 
-        let span = tracing::debug_span!("this is a span");
+        let span = tracing::warn_span!("this is a warn span");
         span.in_scope(|| {
             tracing::debug!("this is");
             tracing::info!("hi");
+        });
+        let span = tracing::info_span!("this is an info span");
+        span.in_scope(|| {
             tracing::warn!("from");
             tracing::error!("logger");
         });
 
-        assert_eq!(
-            r.blocking_recv().map(to_tuple),
-            Some(("[span] this is a span".to_string(), LogLevel::Debug as i32))
-        );
         assert_eq!(
             r.blocking_recv().map(to_tuple),
             Some(("this is".to_string(), LogLevel::Debug as i32))
@@ -131,6 +130,10 @@ mod tests {
         assert_eq!(
             r.blocking_recv().map(to_tuple),
             Some(("hi".to_string(), LogLevel::Info as i32))
+        );
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("[span] this is an info span".to_string(), LogLevel::Debug as i32))
         );
         assert_eq!(
             r.blocking_recv().map(to_tuple),

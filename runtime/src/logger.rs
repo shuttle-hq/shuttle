@@ -35,15 +35,6 @@ where
 
         let item = {
             let metadata = attrs.metadata();
-            let mut visitor = JsonVisitor::default();
-
-            attrs.record(&mut visitor);
-
-            // Make the span name the log message
-            visitor.fields.insert(
-                "message".to_string(),
-                format!("[span] {}", metadata.name()).into(),
-            );
 
             let level = LogLevel::from(metadata.level()) as i32;
 
@@ -52,6 +43,15 @@ where
             if level < LogLevel::Warn as i32 {
                 return;
             }
+
+            let mut visitor = JsonVisitor::default();
+            attrs.record(&mut visitor);
+
+            // Make the span name the log message
+            visitor.fields.insert(
+                "message".to_string(),
+                format!("[span] {}", metadata.name()).into(),
+            );
 
             LogItem {
                 level,
@@ -112,12 +112,12 @@ mod tests {
 
         let _guard = tracing_subscriber::registry().with(logger).set_default();
 
-        let span = tracing::warn_span!("this is a warn span");
+        let span = tracing::info_span!("this is an info span");
         span.in_scope(|| {
             tracing::debug!("this is");
             tracing::info!("hi");
         });
-        let span = tracing::info_span!("this is an info span");
+        let span = tracing::warn_span!("this is a warn span");
         span.in_scope(|| {
             tracing::warn!("from");
             tracing::error!("logger");
@@ -134,8 +134,8 @@ mod tests {
         assert_eq!(
             r.blocking_recv().map(to_tuple),
             Some((
-                "[span] this is an info span".to_string(),
-                LogLevel::Debug as i32
+                "[span] this is a warn span".to_string(),
+                LogLevel::Warn as i32
             ))
         );
         assert_eq!(

@@ -4,7 +4,7 @@
 //! Simply annotate your main function to get a [`sqlx::SqlitePool`](https://docs.rs/sqlx/latest/sqlx/type.SqlitePool.html)
 //! with default configuration.
 //! Pass it to [`sqlx::query`](https://docs.rs/sqlx/latest/sqlx/macro.query.html) to interact with the database.
-//! ```no_run
+//! ```ignore
 //! #[shuttle_runtime::main]
 //! async fn axum(
 //!     #[shuttle_sqlite::SQLite] pool: shuttle_sqlite::SqlitePool,
@@ -29,21 +29,23 @@
 //! See [`SqliteConnectOptions::new()`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.new)
 //! for all default settings.
 //!
-//! ```no_run
+//! ```ignore
 //! #[shuttle_runtime::main]
 //! async fn axum(
 //!     #[shuttle_sqlite::SQLite(opts = SQLiteConnOpts::new().filename("custom.sqlite"))] pool: shuttle_sqlite::SqlitePool,
 //! ) -> shuttle_axum::ShuttleAxum { /* ... */ }
 //! ```
-//! Note that Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`, `extension`
-//! options.
+//! Note that Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`, `extension`,
+//! `shared_cache` options.
 use async_trait::async_trait;
 use serde::Serialize;
 use shuttle_service::{Factory, ResourceBuilder, Type};
+// use tracing::debug;
 
 mod conn_opts;
 pub use conn_opts::*;
 
+use sqlx::sqlite::SqliteConnectOptions;
 /// The [`sqlx::SqlitePool`](https://docs.rs/sqlx/latest/sqlx/type.SqlitePool.html) that is being returned to the user.
 ///
 pub use sqlx::SqlitePool;
@@ -104,21 +106,17 @@ impl ResourceBuilder<sqlx::SqlitePool> for SQLite {
     ) -> Result<Self::Output, shuttle_service::Error> {
         // We construct an absolute path using `storage_path` to prevent user access to other parts of the file system.
         let storage_path = factory.get_storage_path()?;
-        let db_path = storage_path.join(&self.opts.filename);
-
-        let conn_str = match self.opts.in_memory {
-            true => "sqlite::memory:".to_string(),
-            false => format!("sqlite:///{}", db_path.display()),
-        };
-
-        self.opts.conn_str = conn_str;
+        self.opts.storage_path = storage_path;
 
         Ok(self.opts)
     }
 
     /// Build this resource from its config output
     async fn build(build_data: &Self::Output) -> Result<sqlx::SqlitePool, shuttle_service::Error> {
-        let pool = sqlx::SqlitePool::connect_with(build_data.try_into()?)
+        let opts = SqliteConnectOptions::try_from(build_data).unwrap();
+        // debug!("{:#?}", opts);
+
+        let pool = sqlx::SqlitePool::connect_with(opts)
             .await
             .map_err(|e| shuttle_service::Error::Database(e.to_string()))?;
 
@@ -128,10 +126,50 @@ impl ResourceBuilder<sqlx::SqlitePool> for SQLite {
 
 #[cfg(test)]
 mod tests {
+    use assert_json_diff::assert_json_eq;
+
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn it_works() {
-        //
+        // TODO: Some in-memory test right here, some e2e tests in shuttle/e2e
+        // NOTES:
+        // - Use e2e/poem as example
+        // - Most important opts: Journaling mode, synchronous
+        // - Test: Does `in_memory` affect the JournalMode? See https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.journal_mode
+        // let opts = SQLiteConnOpts::new().in_memory(true);
+        // let resource = SQLite::new().opts(opts);
+
+        // let build_data = opts;
+        // let pool = SQLite::build(&build_data);
     }
+
+    #[test]
+    fn created_opts_are_the_same() {
+        // TODO: Make sure that SqliteConnectOptions are the same as what SQLiteConnOpts creates, esp.
+        // if in_memory == true then shared_cache == true
+        let sqlx_opts = SqliteConnectOptions::from_str("sqlite::memory:").unwrap();
+        let sqlx_opts = sqlx_opts.create_if_missing(true);
+
+        // TODO: Internalise construction of conn_str to `try_from`, attach only `storage_path` before.
+        let our_opts = SQLiteConnOpts::new().in_memory(true);
+        let from_opts = SqliteConnectOptions::try_from(&our_opts).unwrap();
+
+        let str = format!("{:?}", sqlx_opts);
+        let str2 = format!("{:?}", from_opts);
+        let json = serde_json::json!(str);
+        let json2 = serde_json::json!(str2);
+
+        assert_json_eq!(json, json2);
+    }
+
+    #[test]
+    fn conn_str_constructed_correctly() {}
+
+    #[test]
+    fn journal_modes() {}
+
+    #[test]
+    fn synchronous_modes() {}
 }

@@ -1,7 +1,7 @@
-use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration;
+use std::{borrow::Cow, path::PathBuf};
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,7 @@ pub use locking_mode::*;
 
 mod synchronous;
 pub use synchronous::*;
+use tracing::debug;
 
 /// Options to configure the SQLite database mirroring sqlx's [`SqliteConnectOptions`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html)
 /// for the options it exposes, see their docs for reference.
@@ -26,18 +27,17 @@ pub use synchronous::*;
 /// file-based database named `default_db.sqlite` with `create_if_missing == true`. Use the `filename` and/or
 /// `in_memory` methods to configure the type of database created.
 ///
-/// Note that Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`, `extension`
-/// options.
-#[derive(Deserialize, Serialize)]
+/// Note that Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`, `extension`,
+/// `shared_cache` options.
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SQLiteConnOpts {
-    // The full connection string we construct internally in `ResourceBuilder::output`.
-    pub(crate) conn_str: String,
+    // Used for constructing the full connection string internally in `try_from`.
+    pub(crate) storage_path: PathBuf,
     // Mirrored options from the original.
     pub(crate) filename: Cow<'static, Path>,
     pub(crate) in_memory: bool,
     pub(crate) read_only: bool,
     pub(crate) create_if_missing: bool,
-    pub(crate) shared_cache: bool,
     pub(crate) statement_cache_capacity: usize,
     pub(crate) busy_timeout: Duration,
     pub(crate) immutable: bool,
@@ -92,13 +92,12 @@ impl SQLiteConnOpts {
         pragmas.insert("auto_vacuum".into(), None);
 
         Self {
-            conn_str: String::new(),
+            storage_path: PathBuf::new(),
             filename: Cow::Borrowed(Path::new(":memory:")),
             in_memory: false,
             read_only: false,
             // Different to what sqlx does.
             create_if_missing: true,
-            shared_cache: false,
             statement_cache_capacity: 100,
             busy_timeout: Duration::from_secs(5),
             immutable: false,
@@ -125,12 +124,6 @@ impl SQLiteConnOpts {
     /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.foreign_keys).
     pub fn foreign_keys(self, on: bool) -> Self {
         self.pragma("foreign_keys", if on { "ON" } else { "OFF" })
-    }
-
-    /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.shared_cache).
-    pub fn shared_cache(mut self, on: bool) -> Self {
-        self.shared_cache = on;
-        self
     }
 
     /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.journal_mode).
@@ -228,10 +221,11 @@ impl TryFrom<&SQLiteConnOpts> for SqliteConnectOptions {
 
     fn try_from(opts: &SQLiteConnOpts) -> Result<Self, Self::Error> {
         let SQLiteConnOpts {
-            conn_str,
+            storage_path,
+            filename,
+            in_memory,
             read_only,
             create_if_missing,
-            shared_cache,
             statement_cache_capacity,
             busy_timeout,
             immutable,
@@ -242,11 +236,19 @@ impl TryFrom<&SQLiteConnOpts> for SqliteConnectOptions {
             ..
         } = opts;
 
+        let db_path = storage_path.join(&filename);
+
+        let conn_str = match in_memory {
+            true => "sqlite::memory:".to_string(),
+            false => format!("sqlite:///{}", db_path.display()),
+        };
+
+        debug!("Creating SqliteConnectOptions from {:?}", conn_str);
+
         let mut opts = SqliteConnectOptions::from_str(&conn_str)
             .map_err(|e| shuttle_service::Error::Database(e.to_string()))?
             .read_only(*read_only)
             .create_if_missing(*create_if_missing)
-            .shared_cache(*shared_cache)
             .statement_cache_capacity(*statement_cache_capacity)
             .busy_timeout(*busy_timeout)
             .immutable(*immutable)
@@ -256,6 +258,12 @@ impl TryFrom<&SQLiteConnOpts> for SqliteConnectOptions {
 
         if let Some(vfs) = vfs {
             opts = opts.vfs(vfs.clone());
+        }
+
+        // Undocumented interaction between `in_memory` and `shared_cache`. When using only a conn string, sqlx sets this
+        // to true internally.
+        if *in_memory {
+            opts = opts.shared_cache(true);
         }
 
         Ok(opts)

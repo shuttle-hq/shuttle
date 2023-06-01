@@ -3,9 +3,6 @@
 use thiserror::Error;
 
 /// An error that can occur in the process of building and deploying a service.
-///
-/// This is an enum encapsulating the various errors that can occur in the process of building and deploying a service.
-///
 #[derive(Debug, Error)]
 pub enum Error {
     /// An Input/Output error.

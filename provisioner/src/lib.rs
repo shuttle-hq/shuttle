@@ -875,8 +875,8 @@ mod tests {
     use shuttle_common::delete_dynamodb_tables_by_prefix;
 
     async fn make_test_provisioner() -> MyProvisioner {
-        let pg_uri = format!("postgres://postgres:password@localhost:5432");
-        let mongo_uri = format!("mongodb://mongodb:password@localhost:8080");
+        let pg_uri = "postgres://postgres:password@localhost:5432".to_string();
+        let mongo_uri = "mongodb://mongodb:password@localhost:8080".to_string();
 
         MyProvisioner::new(
             &pg_uri,
@@ -977,7 +977,7 @@ mod tests {
 
         create_dynamodb_table(&provisioner.dynamodb_client, &format!("{}1", prefix)).await;
         create_dynamodb_table(&provisioner.dynamodb_client, &format!("{}2", prefix)).await;
-        create_dynamodb_table(&provisioner.dynamodb_client, &format!("{}", prefix)).await;
+        create_dynamodb_table(&provisioner.dynamodb_client, prefix).await;
 
         //takes a while for dynamodb tables to provision
         sleep(Duration::from_secs(10)).await;

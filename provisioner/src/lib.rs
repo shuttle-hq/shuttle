@@ -2,7 +2,6 @@ use std::time::Duration;
 
 pub use args::Args;
 use aws_config::timeout;
-use aws_sdk_iam;
 use aws_sdk_iam::operation::create_policy::CreatePolicyError;
 use aws_sdk_iam::operation::create_user::CreateUserError;
 use aws_sdk_iam::operation::delete_user::DeleteUserOutput;
@@ -10,7 +9,6 @@ use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
     Client,
 };
-use aws_sdk_sts;
 use base64ct::{Base64UrlUnpadded, Encoding};
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
@@ -270,9 +268,7 @@ impl MyProvisioner {
         // 43 characters long (4 characters correspond to 3 bytes of data)
         // sha256 is 32 bytes. 32 / 3 * 4 ~ 43
         // we care about this because various AWS identifiers have specific length constraints
-        let base64_string = Base64UrlUnpadded::encode_string(&hash);
-
-        base64_string
+        Base64UrlUnpadded::encode_string(&hash)
     }
 
     async fn get_dynamodb_policy_name(&self, prefix: &str) -> String {
@@ -340,7 +336,7 @@ impl MyProvisioner {
             .get_caller_identity()
             .send()
             .await
-            .map_err(|e| Error::GetCallerIdentity(e))?;
+            .map_err(Error::GetCallerIdentity)?;
         let account = identity
             .account()
             .ok_or_else(|| Error::GetAccount("empty account".to_string()))?;
@@ -352,14 +348,14 @@ impl MyProvisioner {
     }
 
     async fn delete_dynamodb_policy(&self, prefix: &str) -> Result<(), Error> {
-        let policy_arn = self.get_policy_arn(&prefix).await?;
+        let policy_arn = self.get_policy_arn(prefix).await?;
 
         self.iam_client
             .delete_policy()
             .policy_arn(policy_arn)
             .send()
             .await
-            .map_err(|e| Error::DeleteIAMPolicy(e))?;
+            .map_err(Error::DeleteIAMPolicy)?;
 
         Ok(())
     }
@@ -436,7 +432,7 @@ impl MyProvisioner {
             .user_name(self.get_iam_identity_user_name(prefix).await)
             .send()
             .await
-            .map_err(|e| Error::CreateAccessKey(e))?;
+            .map_err(Error::CreateAccessKey)?;
         let access_key = key
             .access_key()
             .ok_or_else(|| Error::GetAccessKey("empty access key".to_string()))?;
@@ -454,7 +450,7 @@ impl MyProvisioner {
 
         self.save_access_key(prefix, &access_key_id, &secret_access_key)
             .await
-            .map_err(|e| Error::GetIAMIdentityKeys(e))?;
+            .map_err(Error::GetIAMIdentityKeys)?;
 
         Ok((access_key_id, secret_access_key))
     }
@@ -468,7 +464,7 @@ impl MyProvisioner {
             .access_key_id(access_key_id)
             .send()
             .await
-            .map_err(|e| Error::DeleteAccessKey(e))?;
+            .map_err(Error::DeleteAccessKey)?;
 
         self.delete_saved_access_key(prefix).await?;
 
@@ -482,34 +478,34 @@ impl MyProvisioner {
             .user_name(self.get_iam_identity_user_name(prefix).await)
             .send()
             .await
-            .map_err(|e| Error::DeleteIAMUser(e))?;
+            .map_err(Error::DeleteIAMUser)?;
         Ok(user)
     }
 
     async fn attach_user_policy(&self, prefix: &str) -> Result<(), Error> {
         self.iam_client
             .attach_user_policy()
-            .user_name(self.get_iam_identity_user_name(&prefix).await)
-            .policy_arn(self.get_policy_arn(&prefix).await?)
+            .user_name(self.get_iam_identity_user_name(prefix).await)
+            .policy_arn(self.get_policy_arn(prefix).await?)
             .send()
             .await
-            .map_err(|e| Error::AttachUserPolicy(e))?;
+            .map_err(Error::AttachUserPolicy)?;
         Ok(())
     }
 
     async fn detach_user_policy(&self, prefix: &str) -> Result<(), Error> {
         self.iam_client
             .detach_user_policy()
-            .user_name(self.get_iam_identity_user_name(&prefix).await)
-            .policy_arn(self.get_policy_arn(&prefix).await?)
+            .user_name(self.get_iam_identity_user_name(prefix).await)
+            .policy_arn(self.get_policy_arn(prefix).await?)
             .send()
             .await
-            .map_err(|e| Error::DetachUserPolicy(e))?;
+            .map_err(Error::DetachUserPolicy)?;
         Ok(())
     }
 
     pub async fn request_dynamodb(&self, project_name: &str) -> Result<DynamoDbResponse, Error> {
-        let prefix = self.get_prefix(&project_name).await;
+        let prefix = self.get_prefix(project_name).await;
 
         self.create_dynamodb_policy(&prefix).await?;
 
@@ -882,7 +878,7 @@ mod tests {
         let pg_uri = format!("postgres://postgres:password@localhost:5432");
         let mongo_uri = format!("mongodb://mongodb:password@localhost:8080");
 
-        let provisioner = MyProvisioner::new(
+        MyProvisioner::new(
             &pg_uri,
             &mongo_uri,
             "fqdn".to_string(),
@@ -890,9 +886,7 @@ mod tests {
             "mongodb".to_string(),
         )
         .await
-        .unwrap();
-
-        provisioner
+        .unwrap()
     }
 
     async fn create_dynamodb_table(dynamodb_client: &aws_sdk_dynamodb::Client, table_name: &str) {
@@ -928,9 +922,7 @@ mod tests {
 
         let prefix = provisioner.get_prefix("my_cool_project").await;
 
-        let result = provisioner.create_dynamodb_policy(&prefix).await.unwrap();
-
-        println!("{result:?}");
+        provisioner.create_dynamodb_policy(&prefix).await.unwrap();
 
         provisioner.delete_dynamodb_policy(&prefix).await.unwrap();
     }

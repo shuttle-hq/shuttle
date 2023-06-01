@@ -91,7 +91,7 @@ impl LocalProvisioner {
         {
             trace!("{container_type} container '{container_name}' not running, so starting it");
             self.docker
-                .start_container(&container_name, None::<StartContainerOptions<String>>)
+                .start_container(container_name, None::<StartContainerOptions<String>>)
                 .await
                 .expect("failed to start none running container");
         }
@@ -172,7 +172,7 @@ impl LocalProvisioner {
 
         //https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html#docker
         Ok(DynamoDbReadyInfo {
-            prefix: self.get_prefix(&project_name).await,
+            prefix: self.get_prefix(project_name).await,
             aws_access_key_id,
             aws_secret_access_key,
             aws_default_region,
@@ -458,7 +458,7 @@ impl Provisioner for LocalProvisioner {
             .delete_dynamodb_tables_by_prefix_in_container(&project_name)
             .await?;
 
-        Ok(Response::new(res.into()))
+        Ok(Response::new(res))
     }
 }
 
@@ -655,25 +655,21 @@ mod tests {
             .write_capacity_units(5)
             .build();
 
-        let create_table_response = dynamodb_client
+        dynamodb_client
             .create_table()
             .table_name(table_name)
             .key_schema(key_schema)
             .attribute_definitions(attribute_definition)
             .provisioned_throughput(provisioned_throughput)
             .send()
-            .await;
-
-        create_table_response
+            .await
     }
 
     async fn select_from_table(
         dynamodb_client: &aws_sdk_dynamodb::Client,
         table_name: &str,
     ) -> Result<ScanOutput, SdkError<ScanError>> {
-        let select_from_table_response = dynamodb_client.scan().table_name(table_name).send().await;
-
-        select_from_table_response
+        dynamodb_client.scan().table_name(table_name).send().await
     }
 
     #[tokio::test]

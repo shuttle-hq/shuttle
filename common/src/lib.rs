@@ -226,7 +226,7 @@ pub async fn delete_dynamodb_tables_by_prefix(
 
         if let Some(table_names) = result.table_names {
             for table_name in table_names {
-                if !table_name.starts_with(&prefix) {
+                if !table_name.starts_with(prefix) {
                     break 'outer;
                 } else {
                     dynamodb_client

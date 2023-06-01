@@ -46,7 +46,7 @@ impl Display for Response {
 impl State {
     /// We return a &str rather than a Color here, since `comfy-table` re-exports
     /// crossterm::style::Color and we depend on both `comfy-table` and `crossterm`
-    /// we may end up with two different version of Color.
+    /// we may end up with two different versions of Color.
     pub fn get_color(&self) -> &str {
         match self {
             State::Queued | State::Building | State::Built | State::Loading => "cyan",

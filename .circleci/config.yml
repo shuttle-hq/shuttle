@@ -177,7 +177,6 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      - install-protoc
       # Check this to make sure we do not include patched dependencies in
       # the Cargo.lock.
       - run:
@@ -212,7 +211,6 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      - install-protoc
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
       # TODO: this is incompatible with workspace inheritance, uncomment when
@@ -389,14 +387,9 @@ jobs:
       resource_class:
         description: "The resource type to use for the machine"
         type: string
-      protoc_arch:
-        description: "Architecture to use to install protoc"
-        type: string
     steps:
       - checkout
       - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
-      - install-protoc:
-          arch: << parameters.protoc_arch >>
       - run:
           name: Install Rust
           command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.68.0 --target << parameters.target >>
@@ -419,7 +412,7 @@ jobs:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
-      - run: choco install -y strawberryperl protoc
+      - run: choco install -y strawberryperl
       - run:
           name: Install Rust
           command: |
@@ -446,8 +439,6 @@ jobs:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
-      - install-protoc:
-          arch: osx-x86_64
       - run:
           name: Install Rust
           command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.68.0 --target x86_64-apple-darwin
@@ -516,10 +507,6 @@ jobs:
     resource_class: medium
     steps:
       - checkout
-      - run:
-          name: "Install Protobuf"
-          command: |
-            brew install protobuf
       - run:
           name: "Install Rust"
           command: |
@@ -708,7 +695,6 @@ workflows:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-gnu
-          protoc_arch: linux-x86_64
           resource_class: xlarge
           filters:
             branches:
@@ -717,7 +703,6 @@ workflows:
           name: build-binaries-x86_64-musl
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-musl
-          protoc_arch: linux-x86_64
           resource_class: xlarge
           filters:
             branches:
@@ -727,7 +712,6 @@ workflows:
           image: ubuntu-2004:202101-01
           target: aarch64-unknown-linux-musl
           resource_class: arm.xlarge
-          protoc_arch: linux-aarch_64
           filters:
             branches:
               only: production
@@ -860,7 +844,7 @@ workflows:
                   "services/shuttle-rocket",
                   "services/shuttle-salvo",
                   "services/shuttle-serenity",
-                  "services/shuttle-thruset",
+                  "services/shuttle-thruster",
                   "services/shuttle-tide",
                   "services/shuttle-tower",
                   "services/shuttle-warp"
@@ -868,6 +852,7 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-cargo-shuttle
+            - publish-shuttle-runtime
           filters:
             branches:
               only: production

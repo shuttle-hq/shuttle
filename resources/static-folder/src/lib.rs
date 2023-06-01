@@ -3,7 +3,7 @@ use fs_extra::dir::{copy, CopyOptions};
 use serde::Serialize;
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
-    Factory, ResourceBuilder, Type, 
+    Factory, ResourceBuilder, Type,
 };
 use std::path::{Path, PathBuf};
 use tracing::{error, trace};
@@ -123,7 +123,7 @@ mod tests {
     use std::path::PathBuf;
 
     use async_trait::async_trait;
-    use shuttle_service::{DatabaseReadyInfo, Factory, ResourceBuilder, DynamoDbReadyInfo};
+    use shuttle_service::{DatabaseReadyInfo, DynamoDbReadyInfo, Factory, ResourceBuilder};
     use tempfile::{Builder, TempDir};
 
     use crate::StaticFolder;

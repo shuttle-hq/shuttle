@@ -9,7 +9,6 @@ members = [
   "gateway",
   "proto",
   "provisioner",
-  "resources/dynamodb",
   "runtime",
   "service",
 ]

@@ -5442,15 +5442,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shuttle-dynamodb"
-version = "0.17.0"
-dependencies = [
- "async-trait",
- "serde",
- "shuttle-service",
-]
-
-[[package]]
 name = "shuttle-gateway"
 version = "0.17.0"
 dependencies = [
@@ -7875,71 +7866,3 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "shuttle-actix-web"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-aws-rds"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-axum"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-next"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-persist"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-poem"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-poise"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-rocket"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-salvo"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-secrets"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-serenity"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-shared-db"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-static-folder"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-thruster"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-tide"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-tower"
-version = "0.17.0"
-
-[[patch.unused]]
-name = "shuttle-warp"
-version = "0.17.0"

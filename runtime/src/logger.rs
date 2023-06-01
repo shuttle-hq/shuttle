@@ -7,7 +7,7 @@ use shuttle_proto::runtime::{LogItem, LogLevel};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{
     span::{Attributes, Id},
-    Subscriber,
+    Subscriber, Level,
 };
 use tracing_subscriber::Layer;
 
@@ -35,12 +35,11 @@ where
 
         let item = {
             let metadata = attrs.metadata();
-
-            let level = LogLevel::from(metadata.level()) as i32;
+            let level = metadata.level();
 
             // Ignore span logs from the default level for #[instrument] (INFO) and below.
             // TODO: make this configurable
-            if level < LogLevel::Warn as i32 {
+            if level < &Level::WARN {
                 return;
             }
 
@@ -54,7 +53,7 @@ where
             );
 
             LogItem {
-                level,
+                level: LogLevel::from(level) as i32,
                 timestamp: Some(Timestamp::from(SystemTime::from(datetime))),
                 file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
                 line: visitor.line.or_else(|| metadata.line()),

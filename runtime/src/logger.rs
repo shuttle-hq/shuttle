@@ -7,7 +7,7 @@ use shuttle_proto::runtime::{LogItem, LogLevel};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{
     span::{Attributes, Id},
-    Subscriber, Level,
+    Level, Subscriber,
 };
 use tracing_subscriber::Layer;
 

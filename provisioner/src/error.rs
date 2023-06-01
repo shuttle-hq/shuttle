@@ -1,4 +1,9 @@
-use aws_sdk_iam::operation::{create_policy::CreatePolicyError, create_user::CreateUserError, delete_access_key::DeleteAccessKeyError, delete_user::DeleteUserError, delete_policy::DeletePolicyError, create_access_key::CreateAccessKeyError, attach_user_policy::AttachUserPolicyError, detach_user_policy::DetachUserPolicyError};
+use aws_sdk_iam::operation::{
+    attach_user_policy::AttachUserPolicyError, create_access_key::CreateAccessKeyError,
+    create_policy::CreatePolicyError, create_user::CreateUserError,
+    delete_access_key::DeleteAccessKeyError, delete_policy::DeletePolicyError,
+    delete_user::DeleteUserError, detach_user_policy::DetachUserPolicyError,
+};
 use aws_sdk_rds::{
     error::SdkError,
     operation::{
@@ -44,7 +49,7 @@ pub enum Error {
 
     #[error("failed to create IAM user for AWS: {0}")]
     CreateIAMUser(#[from] CreateUserError),
-    
+
     #[error("failed to get IAM identity keys for AWS: {0}")]
     GetIAMIdentityKeys(#[from] std::io::Error),
 
@@ -89,7 +94,6 @@ pub enum Error {
 
     #[error["plain error: {0}"]]
     Plain(String),
-
 }
 
 unsafe impl Send for Error {}

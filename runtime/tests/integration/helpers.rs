@@ -10,7 +10,8 @@ use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbRequest, DynamoDbResponse, DynamoDbDeletionResponse
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbDeletionResponse,
+        DynamoDbRequest, DynamoDbResponse,
     },
     runtime::{self, runtime_client::RuntimeClient},
 };

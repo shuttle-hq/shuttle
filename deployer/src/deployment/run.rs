@@ -420,7 +420,8 @@ mod tests {
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
-            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbRequest, DynamoDbResponse, DynamoDbDeletionResponse,
+            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbDeletionResponse,
+            DynamoDbRequest, DynamoDbResponse,
         },
         runtime::{StopReason, SubscribeStopResponse},
     };

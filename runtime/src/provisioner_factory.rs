@@ -5,10 +5,11 @@ use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
     database,
     storage_manager::StorageManager,
-    DatabaseReadyInfo,
-    DynamoDbReadyInfo
+    DatabaseReadyInfo, DynamoDbReadyInfo,
 };
-use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest, DynamoDbRequest};
+use shuttle_proto::provisioner::{
+    provisioner_client::ProvisionerClient, DatabaseRequest, DynamoDbRequest,
+};
 use shuttle_service::{Environment, Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::info;
@@ -45,8 +46,12 @@ impl ProvisionerFactory {
 
 #[async_trait]
 impl Factory for ProvisionerFactory {
-    async fn get_dynamodb_connection(&mut self) -> Result<DynamoDbReadyInfo, shuttle_service::Error> {
-        let mut request = Request::new(DynamoDbRequest { project_name: self.service_name.to_string() });
+    async fn get_dynamodb_connection(
+        &mut self,
+    ) -> Result<DynamoDbReadyInfo, shuttle_service::Error> {
+        let mut request = Request::new(DynamoDbRequest {
+            project_name: self.service_name.to_string(),
+        });
 
         if let Some(claim) = &self.claim {
             request.extensions_mut().insert(claim.clone());

@@ -5,7 +5,8 @@ use bollard::{
     exec::{CreateExecOptions, CreateExecResults},
     image::CreateImageOptions,
     models::{CreateImageInfo, HostConfig, PortBinding, ProgressDetail},
-    Docker, service::ContainerInspectResponse,
+    service::ContainerInspectResponse,
+    Docker,
 };
 use crossterm::{
     cursor::{MoveDown, MoveUp},
@@ -14,10 +15,14 @@ use crossterm::{
 };
 use futures::StreamExt;
 use portpicker::pick_unused_port;
-use shuttle_common::{database::{AwsRdsEngine, SharedEngine}, DynamoDbReadyInfo, delete_dynamodb_tables_by_prefix};
+use shuttle_common::{
+    database::{AwsRdsEngine, SharedEngine},
+    delete_dynamodb_tables_by_prefix, DynamoDbReadyInfo,
+};
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
-    DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbRequest, DynamoDbResponse, DynamoDbDeletionResponse,
+    DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbDeletionResponse,
+    DynamoDbRequest, DynamoDbResponse,
 };
 use shuttle_service::database::Type;
 use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
@@ -72,7 +77,12 @@ impl LocalProvisioner {
             .clone()
     }
 
-    async fn start_container_if_not_running(&self, container: ContainerInspectResponse, container_type: &str, container_name: &str) {
+    async fn start_container_if_not_running(
+        &self,
+        container: ContainerInspectResponse,
+        container_type: &str,
+        container_name: &str,
+    ) {
         if !container
             .state
             .expect("container to have a state")
@@ -91,7 +101,14 @@ impl LocalProvisioner {
         &self,
         project_name: &str,
     ) -> Result<DynamoDbReadyInfo, Status> {
-        let DynamoDbConfig { container_name, image, port, aws_access_key_id, aws_secret_access_key, aws_default_region  } = dynamodb_config();
+        let DynamoDbConfig {
+            container_name,
+            image,
+            port,
+            aws_access_key_id,
+            aws_secret_access_key,
+            aws_default_region,
+        } = dynamodb_config();
 
         let env = None;
 
@@ -148,7 +165,8 @@ impl LocalProvisioner {
 
         let port = self.get_container_host_port(container.clone(), &port);
 
-        self.start_container_if_not_running(container, "DynamoDB", &container_name).await;
+        self.start_container_if_not_running(container, "DynamoDB", &container_name)
+            .await;
 
         let endpoint = format!("http://localhost:{}", port);
 
@@ -235,7 +253,8 @@ impl LocalProvisioner {
 
         let port = self.get_container_host_port(container.clone(), &port);
 
-        self.start_container_if_not_running(container, "DB", &container_name).await;
+        self.start_container_if_not_running(container, "DB", &container_name)
+            .await;
 
         self.wait_for_ready(&container_name, is_ready_cmd).await?;
 
@@ -295,8 +314,18 @@ impl LocalProvisioner {
         }
     }
 
-    async fn delete_dynamodb_tables_by_prefix_in_container(&self, prefix: &str) -> Result<DynamoDbDeletionResponse, Status> {
-        let DynamoDbConfig { container_name, image: _, port, aws_access_key_id, aws_secret_access_key, aws_default_region } = dynamodb_config();
+    async fn delete_dynamodb_tables_by_prefix_in_container(
+        &self,
+        prefix: &str,
+    ) -> Result<DynamoDbDeletionResponse, Status> {
+        let DynamoDbConfig {
+            container_name,
+            image: _,
+            port,
+            aws_access_key_id,
+            aws_secret_access_key,
+            aws_default_region,
+        } = dynamodb_config();
 
         let container = match self.docker.inspect_container(&container_name, None).await {
             Ok(container) => {
@@ -324,18 +353,20 @@ impl LocalProvisioner {
             .as_ref()
             .expect("a host port")
             .clone();
-        
+
         std::env::set_var("AWS_ACCESS_KEY_ID", aws_access_key_id);
         std::env::set_var("AWS_SECRET_ACCESS_KEY", aws_secret_access_key);
         std::env::set_var("AWS_REGION", aws_default_region);
-        
+
         let endpoint = format!("http://localhost:{}", port);
-        
+
         let aws_config = aws_config::from_env().endpoint_url(endpoint).load().await;
 
         let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
 
-        delete_dynamodb_tables_by_prefix(&dynamodb_client, prefix).await.map_err(|e| Status::internal(e.to_string()))?;
+        delete_dynamodb_tables_by_prefix(&dynamodb_client, prefix)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
 
         Ok(DynamoDbDeletionResponse {})
     }
@@ -410,13 +441,9 @@ impl Provisioner for LocalProvisioner {
         &self,
         request: Request<DynamoDbRequest>,
     ) -> Result<Response<DynamoDbResponse>, Status> {
-        let DynamoDbRequest {
-            project_name,
-        } = request.into_inner();
+        let DynamoDbRequest { project_name } = request.into_inner();
 
-        let res = self
-            .get_dynamodb_connection_info(&project_name)
-            .await?;
+        let res = self.get_dynamodb_connection_info(&project_name).await?;
 
         Ok(Response::new(res.into()))
     }
@@ -425,9 +452,7 @@ impl Provisioner for LocalProvisioner {
         &self,
         request: Request<DynamoDbRequest>,
     ) -> Result<Response<DynamoDbDeletionResponse>, Status> {
-        let DynamoDbRequest {
-            project_name,
-        } = request.into_inner();
+        let DynamoDbRequest { project_name } = request.into_inner();
 
         let res = self
             .delete_dynamodb_tables_by_prefix_in_container(&project_name)
@@ -494,11 +519,10 @@ struct DynamoDbConfig {
     aws_access_key_id: String,
     aws_secret_access_key: String,
     aws_default_region: String,
-    
 }
 
 fn dynamodb_config() -> DynamoDbConfig {
-    DynamoDbConfig { 
+    DynamoDbConfig {
         container_name: "shuttle_dynamodb".to_string(),
         image: "amazon/dynamodb-local:latest".to_string(),
         port: "8000/tcp".to_string(),
@@ -620,17 +644,17 @@ mod tests {
             .attribute_name(attribute_name)
             .attribute_type(ScalarAttributeType::S)
             .build();
-    
+
         let key_schema = KeySchemaElement::builder()
             .attribute_name(attribute_name)
             .key_type(KeyType::Hash)
             .build();
-    
+
         let provisioned_throughput = ProvisionedThroughput::builder()
             .read_capacity_units(10)
             .write_capacity_units(5)
             .build();
-    
+
         let create_table_response = dynamodb_client
             .create_table()
             .table_name(table_name)
@@ -639,7 +663,7 @@ mod tests {
             .provisioned_throughput(provisioned_throughput)
             .send()
             .await;
-    
+
         create_table_response
     }
 
@@ -648,7 +672,7 @@ mod tests {
         table_name: &str,
     ) -> Result<ScanOutput, SdkError<ScanError>> {
         let select_from_table_response = dynamodb_client.scan().table_name(table_name).send().await;
-    
+
         select_from_table_response
     }
 
@@ -658,13 +682,19 @@ mod tests {
 
         let project_name = "test_create_and_delete_dynamodb".to_string();
 
-        let info = provisioner.get_dynamodb_connection_info(&project_name).await.unwrap();
+        let info = provisioner
+            .get_dynamodb_connection_info(&project_name)
+            .await
+            .unwrap();
 
         std::env::set_var("AWS_ACCESS_KEY_ID", info.aws_access_key_id);
         std::env::set_var("AWS_SECRET_ACCESS_KEY", info.aws_secret_access_key);
         std::env::set_var("AWS_REGION", info.aws_default_region);
 
-        let aws_config = aws_config::from_env().endpoint_url(info.endpoint.unwrap()).load().await;
+        let aws_config = aws_config::from_env()
+            .endpoint_url(info.endpoint.unwrap())
+            .load()
+            .await;
 
         // create dynamodb client
         let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
@@ -672,15 +702,22 @@ mod tests {
         // create dynamodb table
         let table_name = format!("{}-table", &project_name);
         let attribute_name = format!("{}-attribute", &project_name);
-        create_table(&dynamodb_client, &table_name, &attribute_name).await.unwrap();
+        create_table(&dynamodb_client, &table_name, &attribute_name)
+            .await
+            .unwrap();
 
         // select from table (should work)
-        let result = select_from_table(&dynamodb_client, &table_name).await.unwrap();
+        let result = select_from_table(&dynamodb_client, &table_name)
+            .await
+            .unwrap();
 
         println!("{result:?}");
 
         // delete dynamodb resource
-        provisioner.delete_dynamodb_tables_by_prefix_in_container(&project_name).await.unwrap();
+        provisioner
+            .delete_dynamodb_tables_by_prefix_in_container(&project_name)
+            .await
+            .unwrap();
 
         // select from table (should fail now that tables have been deleted)
         let result = select_from_table(&dynamodb_client, &table_name).await;

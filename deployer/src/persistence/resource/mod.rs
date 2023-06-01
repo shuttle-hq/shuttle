@@ -42,7 +42,7 @@ pub enum Type {
     Secrets,
     StaticFolder,
     Persist,
-    DynamoDB
+    DynamoDB,
 }
 
 impl From<Type> for shuttle_common::resource::Type {
@@ -52,7 +52,7 @@ impl From<Type> for shuttle_common::resource::Type {
             Type::Secrets => Self::Secrets,
             Type::StaticFolder => Self::StaticFolder,
             Type::Persist => Self::Persist,
-            Type::DynamoDB => Self::DynamoDB
+            Type::DynamoDB => Self::DynamoDB,
         }
     }
 }
@@ -64,7 +64,7 @@ impl From<shuttle_common::resource::Type> for Type {
             shuttle_common::resource::Type::Secrets => Self::Secrets,
             shuttle_common::resource::Type::StaticFolder => Self::StaticFolder,
             shuttle_common::resource::Type::Persist => Self::Persist,
-            shuttle_common::resource::Type::DynamoDB => Self::DynamoDB
+            shuttle_common::resource::Type::DynamoDB => Self::DynamoDB,
         }
     }
 }
@@ -76,7 +76,7 @@ impl Display for Type {
             Type::Secrets => write!(f, "secrets"),
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
-            Type::DynamoDB => write!(f, "dynamodb")
+            Type::DynamoDB => write!(f, "dynamodb"),
         }
     }
 }
@@ -144,7 +144,7 @@ mod tests {
             Type::Secrets,
             Type::StaticFolder,
             Type::Persist,
-            Type::DynamoDB
+            Type::DynamoDB,
         ];
 
         for input in inputs {

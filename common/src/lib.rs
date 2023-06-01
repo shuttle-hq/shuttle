@@ -210,11 +210,18 @@ impl DynamoDbReadyInfo {
     }
 }
 
-pub async fn delete_dynamodb_tables_by_prefix(dynamodb_client: &aws_sdk_dynamodb::Client, prefix: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn delete_dynamodb_tables_by_prefix(
+    dynamodb_client: &aws_sdk_dynamodb::Client,
+    prefix: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut last_evaluated_table_name: Option<String> = Some(prefix.to_string());
 
     'outer: while let Some(table_name) = last_evaluated_table_name {
-        let result = dynamodb_client.list_tables().exclusive_start_table_name(table_name).send().await?;
+        let result = dynamodb_client
+            .list_tables()
+            .exclusive_start_table_name(table_name)
+            .send()
+            .await?;
         last_evaluated_table_name = result.last_evaluated_table_name.clone();
 
         if let Some(table_names) = result.table_names {
@@ -222,7 +229,11 @@ pub async fn delete_dynamodb_tables_by_prefix(dynamodb_client: &aws_sdk_dynamodb
                 if !table_name.starts_with(&prefix) {
                     break 'outer;
                 } else {
-                    dynamodb_client.delete_table().table_name(table_name).send().await?;
+                    dynamodb_client
+                        .delete_table()
+                        .table_name(table_name)
+                        .send()
+                        .await?;
                 }
             }
         }
@@ -230,7 +241,11 @@ pub async fn delete_dynamodb_tables_by_prefix(dynamodb_client: &aws_sdk_dynamodb
 
     // edge case to include just the prefix table name (if the user put only prefix for table name)
     // failure ok if no table found
-    let _ = dynamodb_client.delete_table().table_name(prefix).send().await;
+    let _ = dynamodb_client
+        .delete_table()
+        .table_name(prefix)
+        .send()
+        .await;
 
     Ok(())
 }

@@ -321,7 +321,8 @@ mod tests {
     use portpicker::pick_unused_port;
     use shuttle_proto::provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbRequest, DynamoDbResponse, DynamoDbDeletionResponse,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbDeletionResponse,
+        DynamoDbRequest, DynamoDbResponse,
     };
     use tempfile::Builder;
     use tokio::{select, time::sleep};

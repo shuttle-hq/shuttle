@@ -21,7 +21,7 @@ pub fn get_resources_table(resources: &Vec<Response>, service_name: &str) -> Str
                 Type::Secrets => "Secrets",
                 Type::StaticFolder => "Static Folder",
                 Type::Persist => "Persist",
-                Type::DynamoDB => "DynamoDB"
+                Type::DynamoDB => "DynamoDB",
             };
 
             let elements = acc.entry(title).or_insert(Vec::new());

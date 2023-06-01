@@ -37,9 +37,9 @@ where
             let metadata = attrs.metadata();
             let level = metadata.level();
 
-            // Ignore span logs from the default level for #[instrument] (INFO) and below.
+            // Ignore span logs from the default level for #[instrument] (INFO) and below (greater than).
             // TODO: make this configurable
-            if level < &Level::WARN {
+            if level >= &Level::INFO {
                 return;
             }
 

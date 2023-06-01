@@ -496,10 +496,6 @@ impl MyProvisioner {
         let (aws_access_key_id, aws_secret_access_key)= self.get_iam_identity_keys(&prefix).await?;
 
         let aws_default_region = self.dynamodb_client.conf().region().ok_or_else(|| Error::GetRegion("empty region".to_string()))?.to_string();
-
-        //TODO:
-        //store aws credentials in secrets
-        //make them available in the project container
         
         Ok(DynamoDbResponse {
             prefix,

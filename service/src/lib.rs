@@ -85,7 +85,7 @@ pub trait Factory: Send + Sync {
         db_type: database::Type,
     ) -> Result<DatabaseReadyInfo, crate::Error>;
 
-     /// Get a database connection
+     /// Get a dynamodb connection
      async fn get_dynamodb_connection(
         &mut self,
     ) -> Result<DynamoDbReadyInfo, crate::Error>;

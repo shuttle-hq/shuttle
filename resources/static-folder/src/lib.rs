@@ -3,7 +3,7 @@ use fs_extra::dir::{copy, CopyOptions};
 use serde::Serialize;
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
-    Factory, ResourceBuilder, Type,
+    Factory, ResourceBuilder, Type, 
 };
 use std::path::{Path, PathBuf};
 use tracing::{error, trace};
@@ -123,7 +123,7 @@ mod tests {
     use std::path::PathBuf;
 
     use async_trait::async_trait;
-    use shuttle_service::{DatabaseReadyInfo, Factory, ResourceBuilder};
+    use shuttle_service::{DatabaseReadyInfo, Factory, ResourceBuilder, DynamoDbReadyInfo};
     use tempfile::{Builder, TempDir};
 
     use crate::StaticFolder;
@@ -179,6 +179,12 @@ mod tests {
             _db_type: shuttle_service::database::Type,
         ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
             panic!("no static folder test should try to get a db connection string")
+        }
+
+        async fn get_dynamodb_connection(
+            &mut self,
+        ) -> Result<DynamoDbReadyInfo, shuttle_service::Error> {
+            panic!("no static folder test should try to get a dynamodb connection")
         }
 
         async fn get_secrets(

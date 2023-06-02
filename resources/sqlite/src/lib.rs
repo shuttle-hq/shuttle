@@ -107,7 +107,6 @@ impl ResourceBuilder<sqlx::SqlitePool> for SQLite {
         // We construct an absolute path using `storage_path` to prevent user access to other parts of the file system.
         let storage_path = factory.get_storage_path()?;
         self.opts.storage_path = storage_path;
-
         Ok(self.opts)
     }
 
@@ -132,44 +131,42 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn it_works() {
-        // TODO: Some in-memory test right here, some e2e tests in shuttle/e2e
-        // NOTES:
-        // - Use e2e/poem as example
-        // - Most important opts: Journaling mode, synchronous
-        // - Test: Does `in_memory` affect the JournalMode? See https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.journal_mode
-        // let opts = SQLiteConnOpts::new().in_memory(true);
-        // let resource = SQLite::new().opts(opts);
+    fn try_from_file_based() {
+        let filename = "test.sqlite";
+        let mut opts_sqlx =
+            SqliteConnectOptions::from_str(format!("sqlite:///{filename}").as_str()).unwrap();
+        opts_sqlx = opts_sqlx.create_if_missing(true); // Match our default setting
+        let str_sqlx = format!("{:?}", opts_sqlx);
 
-        // let build_data = opts;
-        // let pool = SQLite::build(&build_data);
+        let ours = SQLiteConnOpts::new().filename(&filename);
+        let opts_from = SqliteConnectOptions::try_from(&ours).unwrap();
+        let str_from = format!("{:?}", opts_from);
+
+        let json_sqlx = serde_json::json!(str_sqlx);
+        let json_from = serde_json::json!(str_from);
+
+        assert_json_eq!(json_sqlx, json_from);
     }
 
     #[test]
-    fn created_opts_are_the_same() {
-        // TODO: Make sure that SqliteConnectOptions are the same as what SQLiteConnOpts creates, esp.
-        // if in_memory == true then shared_cache == true
-        let sqlx_opts = SqliteConnectOptions::from_str("sqlite::memory:").unwrap();
-        let sqlx_opts = sqlx_opts.create_if_missing(true);
+    fn try_from_in_memory() {
+        // Sqlx has an undocumented interaction between two options where the in-memory version only
+        // works when `shared_cache` is `true`, this test makes sure that `try_from` handles this correctly.
+        let mut opts_sqlx = SqliteConnectOptions::from_str("sqlite::memory:").unwrap();
+        opts_sqlx = opts_sqlx.create_if_missing(true); // Match our default setting
+        let str_sqlx = format!("{:?}", opts_sqlx);
 
-        // TODO: Internalise construction of conn_str to `try_from`, attach only `storage_path` before.
-        let our_opts = SQLiteConnOpts::new().in_memory(true);
-        let from_opts = SqliteConnectOptions::try_from(&our_opts).unwrap();
+        let ours = SQLiteConnOpts::new().in_memory(true);
+        let opts_from = SqliteConnectOptions::try_from(&ours).unwrap();
+        let str_from = format!("{:?}", opts_from);
 
-        let str = format!("{:?}", sqlx_opts);
-        let str2 = format!("{:?}", from_opts);
-        let json = serde_json::json!(str);
-        let json2 = serde_json::json!(str2);
+        let re = regex::Regex::new(r#"filename:.*\d""#).unwrap();
+        let str_sqlx = re.replace(&str_sqlx, "filename: ");
+        let str_from = re.replace(&str_from, "filename: ");
 
-        assert_json_eq!(json, json2);
+        let json_sqlx = serde_json::json!(str_sqlx);
+        let json_from = serde_json::json!(str_from);
+
+        assert_json_eq!(json_sqlx, json_from);
     }
-
-    #[test]
-    fn conn_str_constructed_correctly() {}
-
-    #[test]
-    fn journal_modes() {}
-
-    #[test]
-    fn synchronous_modes() {}
 }

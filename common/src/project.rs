@@ -1,4 +1,4 @@
-use once_cell::sync::OnceCell;
+use std::sync::OnceCell;
 use rustrict::{Censor, Type};
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};

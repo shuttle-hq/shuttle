@@ -75,6 +75,7 @@ services:
       - ${DOCKER_SOCK}:/var/run/docker.sock
     environment:
       - RUST_LOG=${RUST_LOG}
+      - SSL_CERT_FILE=/usr/src/shuttle/pebble.minica.pem
     command:
       - "--state=/var/lib/shuttle"
       - "start"

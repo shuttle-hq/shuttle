@@ -569,7 +569,7 @@ impl GatewayService {
             }) => Ok((certificate, private_key)),
             Err(err) if err.kind() == ErrorKind::CustomDomainNotFound => {
                 let (certs, private_key) = acme_client
-                    .create_certificate(&fqdn.to_string(), ChallengeType::Http01, creds)
+                    .create_certificate(&[fqdn.to_string()], ChallengeType::Http01, creds)
                     .await?;
                 self.create_custom_domain(project_name, fqdn, &certs, &private_key)
                     .await?;
@@ -585,12 +585,12 @@ impl GatewayService {
         creds: AccountCredentials<'a>,
     ) -> ChainAndPrivateKey {
         let public: FQDN = self.context().settings.fqdn.parse().unwrap();
-        let identifier = format!("*.{public}");
+        let identifiers = &[format!("*.{public}"), public.to_string()];
 
         // Use ::Dns01 challenge because that's the only supported
         // challenge type for wildcard domains.
         let (chain, private_key) = acme
-            .create_certificate(&identifier, ChallengeType::Dns01, creds)
+            .create_certificate(identifiers, ChallengeType::Dns01, creds)
             .await
             .unwrap();
 

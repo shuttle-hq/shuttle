@@ -98,16 +98,19 @@ impl AcmeClient {
     /// associated PEM-encoded private key
     pub async fn create_certificate(
         &self,
-        identifier: &str,
+        identifiers: &[String],
         challenge_type: ChallengeType,
         credentials: AccountCredentials<'_>,
     ) -> Result<(String, String), AcmeClientError> {
-        trace!(identifier, "requesting acme certificate");
+        trace!("requesting acme certificate");
 
         let mut order = AccountWrapper::from(credentials)
             .0
             .new_order(&NewOrder {
-                identifiers: &[Identifier::Dns(identifier.to_string())],
+                identifiers: &identifiers
+                    .iter()
+                    .map(|i| Identifier::Dns(i.clone()))
+                    .collect::<Vec<_>>(),
             })
             .await
             .map_err(|error| {
@@ -130,7 +133,7 @@ impl AcmeClient {
             .await?;
 
         let certificate = {
-            let mut params = CertificateParams::new(vec![identifier.to_owned()]);
+            let mut params = CertificateParams::new(identifiers);
             params.distinguished_name = DistinguishedName::new();
             Certificate::from_params(params).map_err(|error| {
                 error!(%error, "failed to create certificate");

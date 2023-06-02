@@ -537,7 +537,7 @@ async fn renew_custom_domain_acme_certificate(
             // If current certificate validity less_or_eq than 30 days, attempt renewal.
             if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
                 return match acme_client
-                    .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)
+                    .create_certificate(&[fqdn.to_string()], ChallengeType::Http01, credentials)
                     .await
                 {
                     // If successfuly created, save the certificate in memory to be

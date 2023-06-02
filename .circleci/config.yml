@@ -8,7 +8,7 @@ orbs:
 executors:
   docker-rust:
     docker:
-      - image: cimg/rust:1.68.0
+      - image: cimg/rust:1.70.0
     resource_class: small
   image-ubuntu:
     machine:
@@ -172,8 +172,6 @@ jobs:
   workspace:
     executor: docker-rust
     resource_class: xlarge
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - restore-cargo-cache
@@ -206,8 +204,6 @@ jobs:
         type: string
         default: --all-features
     executor: docker-rust
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - restore-cargo-cache
@@ -255,8 +251,6 @@ jobs:
       - save-cargo-cache
   e2e-test:
     executor: image-ubuntu
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - install-rust
       - checkout
@@ -288,8 +282,6 @@ jobs:
           when: always
   build-and-push:
     executor: image-ubuntu
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     parameters:
       aws-access-key-id:
         description: "AWS cli access key id"
@@ -375,8 +367,6 @@ jobs:
     machine:
       image: << parameters.image >>
     resource_class: << parameters.resource_class >>
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     parameters:
       target:
         description: "Linux target to build for"
@@ -392,7 +382,7 @@ jobs:
       - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
       - run:
           name: Install Rust
-          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.68.0 --target << parameters.target >>
+          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.70.0 --target << parameters.target >>
       - run:
           name: Build
           command: |
@@ -409,7 +399,6 @@ jobs:
       shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - run: choco install -y strawberryperl
@@ -417,7 +406,7 @@ jobs:
           name: Install Rust
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
-            C:\rustup-init.exe -y --default-toolchain 1.68.0 --target x86_64-pc-windows-msvc
+            C:\rustup-init.exe -y --default-toolchain 1.70.0 --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - run:
           name: Build
@@ -435,13 +424,11 @@ jobs:
     macos:
       xcode: 12.5.1
     resource_class: medium
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - run:
           name: Install Rust
-          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.68.0 --target x86_64-apple-darwin
+          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.70.0 --target x86_64-apple-darwin
       - run:
           name: Build
           command: |
@@ -555,7 +542,7 @@ jobs:
           name: Install Rust
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
-            C:\rustup-init.exe -y --default-toolchain 1.68.0 --target x86_64-pc-windows-msvc
+            C:\rustup-init.exe -y --default-toolchain 1.70.0 --target x86_64-pc-windows-msvc
       - run:
           name: "Install Shuttle"
           command:  ..\.cargo\bin\cargo.exe install cargo-shuttle --path ./cargo-shuttle

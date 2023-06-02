@@ -7,7 +7,7 @@ use shuttle_proto::runtime::{LogItem, LogLevel};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{
     span::{Attributes, Id},
-    Subscriber,
+    Level, Subscriber,
 };
 use tracing_subscriber::Layer;
 
@@ -35,8 +35,15 @@ where
 
         let item = {
             let metadata = attrs.metadata();
-            let mut visitor = JsonVisitor::default();
+            let level = metadata.level();
 
+            // Ignore span logs from the default level for #[instrument] (INFO) and below (greater than).
+            // TODO: make this configurable
+            if level >= &Level::INFO {
+                return;
+            }
+
+            let mut visitor = JsonVisitor::default();
             attrs.record(&mut visitor);
 
             // Make the span name the log message
@@ -46,7 +53,7 @@ where
             );
 
             LogItem {
-                level: LogLevel::from(metadata.level()) as i32,
+                level: LogLevel::from(level) as i32,
                 timestamp: Some(Timestamp::from(SystemTime::from(datetime))),
                 file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
                 line: visitor.line.or_else(|| metadata.line()),
@@ -104,18 +111,17 @@ mod tests {
 
         let _guard = tracing_subscriber::registry().with(logger).set_default();
 
-        let span = tracing::debug_span!("this is a span");
+        let span = tracing::info_span!("this is an info span");
         span.in_scope(|| {
             tracing::debug!("this is");
             tracing::info!("hi");
+        });
+        let span = tracing::warn_span!("this is a warn span");
+        span.in_scope(|| {
             tracing::warn!("from");
             tracing::error!("logger");
         });
 
-        assert_eq!(
-            r.blocking_recv().map(to_tuple),
-            Some(("[span] this is a span".to_string(), LogLevel::Debug as i32))
-        );
         assert_eq!(
             r.blocking_recv().map(to_tuple),
             Some(("this is".to_string(), LogLevel::Debug as i32))
@@ -123,6 +129,13 @@ mod tests {
         assert_eq!(
             r.blocking_recv().map(to_tuple),
             Some(("hi".to_string(), LogLevel::Info as i32))
+        );
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some((
+                "[span] this is a warn span".to_string(),
+                LogLevel::Warn as i32
+            ))
         );
         assert_eq!(
             r.blocking_recv().map(to_tuple),

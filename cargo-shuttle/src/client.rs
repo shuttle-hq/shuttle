@@ -93,7 +93,7 @@ impl Client {
         let path = format!(
             "/projects/{}/services/{}/resources",
             project.as_str(),
-            project.as_str()
+            project.as_str(),
         );
 
         self.get(path).await
@@ -129,8 +129,8 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
-        let path = "/projects".to_string();
+    pub async fn get_projects_list(&self, page: u32, limit: u32) -> Result<Vec<project::Response>> {
+        let path = format!("/projects?page={}&limit={}", page.saturating_sub(1), limit);
 
         self.get(path).await
     }
@@ -182,8 +182,15 @@ impl Client {
     pub async fn get_deployments(
         &self,
         project: &ProjectName,
+        page: u32,
+        limit: u32,
     ) -> Result<Vec<deployment::Response>> {
-        let path = format!("/projects/{}/deployments", project.as_str());
+        let path = format!(
+            "/projects/{}/deployments?page={}&limit={}",
+            project.as_str(),
+            page.saturating_sub(1),
+            limit,
+        );
 
         self.get(path).await
     }

@@ -34,6 +34,13 @@ else
     touch $CARGO_HOME/config.toml
 fi
 
+# Install protoc since some users may need it
+ARCH="linux-x86_64" && \
+VERSION="22.2" && \
+curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v$VERSION/protoc-$VERSION-$ARCH.zip" && \
+    unzip -o "protoc-$VERSION-$ARCH.zip" bin/protoc "include/*" -d /usr/local && \
+    rm -f "protoc-$VERSION-$ARCH.zip"
+
 # Add the wasm32-wasi target
 rustup target add wasm32-wasi
 
@@ -59,3 +66,8 @@ done
 # TODO: restore when we know how to prefetch from our mirror
 # cd /usr/src/shuttle/service
 # cargo fetch
+
+# Install common build tools for external crates
+# The image should already have these: https://github.com/docker-library/buildpack-deps/blob/65d69325ad741cea6dee20781c1faaab2e003d87/debian/buster/Dockerfile
+apt update
+apt install -y llvm-dev libclang-dev clang cmake

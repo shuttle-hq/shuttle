@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 use chrono::{DateTime, Utc};
 use comfy_table::{
@@ -44,13 +44,16 @@ impl Display for Response {
 }
 
 impl State {
-    pub fn get_color(&self) -> Color {
+    /// We return a &str rather than a Color here, since `comfy-table` re-exports
+    /// crossterm::style::Color and we depend on both `comfy-table` and `crossterm`
+    /// we may end up with two different versions of Color.
+    pub fn get_color(&self) -> &str {
         match self {
-            State::Queued | State::Building | State::Built | State::Loading => Color::Cyan,
-            State::Running => Color::Green,
-            State::Completed | State::Stopped => Color::Blue,
-            State::Crashed => Color::Red,
-            State::Unknown => Color::Yellow,
+            State::Queued | State::Building | State::Built | State::Loading => "cyan",
+            State::Running => "green",
+            State::Completed | State::Stopped => "blue",
+            State::Crashed => "red",
+            State::Unknown => "yellow",
         }
     }
 }
@@ -90,7 +93,8 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, pa
             table.add_row(vec![
                 Cell::new(deploy.id),
                 Cell::new(&deploy.state)
-                    .fg(deploy.state.get_color())
+                    // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
+                    .fg(Color::from_str(deploy.state.get_color()).unwrap())
                     .set_alignment(CellAlignment::Center),
                 Cell::new(deploy.last_update.format("%Y-%m-%dT%H:%M:%SZ"))
                     .set_alignment(CellAlignment::Center),

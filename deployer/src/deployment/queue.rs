@@ -381,7 +381,7 @@ async fn run_pre_deploy_tests(
     let stdout_reader = BufReader::new(stdout);
     stdout_reader
         .lines()
-        .map_while(Result::ok)
+        .map_while(|line| line.ok())
         .for_each(|line| {
             if let Err(error) = write.send(format!("{}\n", line.trim_end_matches('\n'))) {
                 error!("failed to send line to pipe: {error}");

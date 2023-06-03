@@ -1,3 +1,4 @@
+use once_cell::sync::OnceCell;
 use rustrict::{Censor, Type};
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -5,7 +6,6 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use once_cell::sync::OnceCell;
 
 /// Project names should conform to valid Host segments (or labels)
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).

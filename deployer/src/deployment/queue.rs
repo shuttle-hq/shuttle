@@ -379,9 +379,10 @@ async fn run_pre_deploy_tests(
 
     let stdout = cmd.stdout.take().unwrap();
     let stdout_reader = BufReader::new(stdout);
+    #[allow(clippy::lines_filter_map_ok)]
     stdout_reader
         .lines()
-        .map_while(|line| line.ok())
+        .filter_map(|line| line.ok())
         .for_each(|line| {
             if let Err(error) = write.send(format!("{}\n", line.trim_end_matches('\n'))) {
                 error!("failed to send line to pipe: {error}");

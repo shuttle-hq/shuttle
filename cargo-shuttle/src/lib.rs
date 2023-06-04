@@ -49,7 +49,7 @@ use shuttle_service::builder::{build_workspace, BuiltService};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
 use crate::args::{DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand};
@@ -113,8 +113,8 @@ impl Shuttle {
             Command::Logs { id, latest, follow } => {
                 self.logs(&self.client()?, id, latest, follow).await
             }
-            Command::Deployment(DeploymentCommand::List) => {
-                self.deployments_list(&self.client()?).await
+            Command::Deployment(DeploymentCommand::List { page, limit }) => {
+                self.deployments_list(&self.client()?, page, limit).await
             }
             Command::Deployment(DeploymentCommand::Status { id }) => {
                 self.deployment_get(&self.client()?, id).await
@@ -132,7 +132,9 @@ impl Shuttle {
             Command::Project(ProjectCommand::Status { follow }) => {
                 self.project_status(&self.client()?, follow).await
             }
-            Command::Project(ProjectCommand::List) => self.projects_list(&self.client()?).await,
+            Command::Project(ProjectCommand::List { page, limit }) => {
+                self.projects_list(&self.client()?, page, limit).await
+            }
             Command::Project(ProjectCommand::Stop) => self.project_delete(&self.client()?).await,
         }
         .map(|_| CommandOutcome::Ok)
@@ -387,7 +389,7 @@ impl Shuttle {
 
             if latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client.get_deployments(proj_name).await?;
+                let deployments = client.get_deployments(proj_name, 0, u32::MAX).await?;
                 let most_recent = deployments.last().context(format!(
                     "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
                 ))?;
@@ -424,10 +426,15 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deployments_list(&self, client: &Client) -> Result<()> {
+    async fn deployments_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
+        if limit == 0 {
+            println!();
+            return Ok(());
+        }
+
         let proj_name = self.ctx.project_name();
-        let deployments = client.get_deployments(proj_name).await?;
-        let table = get_deployments_table(&deployments, proj_name.as_str());
+        let deployments = client.get_deployments(proj_name, page, limit).await?;
+        let table = get_deployments_table(&deployments, proj_name.as_str(), page);
 
         println!("{table}");
         println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
@@ -1041,9 +1048,14 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn projects_list(&self, client: &Client) -> Result<()> {
-        let projects = client.get_projects_list().await?;
-        let projects_table = project::get_table(&projects);
+    async fn projects_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
+        if limit == 0 {
+            println!();
+            return Ok(());
+        }
+
+        let projects = client.get_projects_list(page, limit).await?;
+        let projects_table = project::get_table(&projects, page);
 
         println!("{projects_table}");
 
@@ -1175,6 +1187,7 @@ impl Shuttle {
 
         // Append all the entries to the archive.
         for (k, v) in entries {
+            debug!("Packing {k:?}");
             tar.append_path_with_name(k, v)?;
         }
 

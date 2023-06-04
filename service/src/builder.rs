@@ -252,11 +252,20 @@ async fn compile(
 
     let mut handle = cargo.spawn()?;
 
-    drop(cargo);
-
     tokio::task::spawn_blocking(move || {
+        let mut paused = false;
         let mut buf = [0; 30];
-        while reader.read(&mut buf).unwrap() == 30_usize {
+        let mut read: usize = 30;
+        loop {
+            if read == 0_usize {
+                if paused {
+                    println!("broken");
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10000));
+                paused = true;
+            }
+            read = reader.read(&mut buf).unwrap();
             if let Err(error) = tx.send(Message::TextLine(
                 String::from_utf8(buf.clone().to_vec()).unwrap(),
             )) {

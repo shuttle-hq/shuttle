@@ -4971,7 +4971,6 @@ dependencies = [
  "cargo_metadata",
  "crossbeam-channel",
  "os_pipe",
- "pipe",
  "serde",
  "shuttle-codegen",
  "shuttle-common",

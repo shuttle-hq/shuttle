@@ -7,7 +7,7 @@ use cargo_metadata::Message;
 use cargo_metadata::{Package, Target};
 use crossbeam_channel::Sender;
 use shuttle_common::project::ProjectName;
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 
 use crate::{NEXT_NAME, RUNTIME_NAME};
 
@@ -106,26 +106,30 @@ pub async fn build_workspace(
     let mut runtimes = Vec::new();
 
     if !alpha_packages.is_empty() {
-        let compilation = compile(
+        let mut service = compile(
             alpha_packages,
             release_mode,
             false,
             project_path.clone(),
             deployment,
+            tx.clone(),
         )
         .await?;
-        let (mut service, logs) = compilation;
-        tx.send(cargo_metadata::Message::TextLine(logs))?;
         trace!("alpha packages compiled");
 
         runtimes.append(&mut service);
     }
 
     if !next_packages.is_empty() {
-        let compilation =
-            compile(next_packages, release_mode, true, project_path, deployment).await?;
-        let (mut service, logs) = compilation;
-        tx.send(cargo_metadata::Message::TextLine(logs))?;
+        let mut service = compile(
+            next_packages,
+            release_mode,
+            true,
+            project_path,
+            deployment,
+            tx,
+        )
+        .await?;
         trace!("next packages compiled");
 
         runtimes.append(&mut service);
@@ -212,7 +216,8 @@ async fn compile(
     wasm: bool,
     project_path: PathBuf,
     deployment: bool,
-) -> anyhow::Result<(Vec<BuiltService>, String)> {
+    tx: Sender<Message>,
+) -> anyhow::Result<Vec<BuiltService>> {
     let manifest_path = project_path.join("Cargo.toml");
 
     let mut cargo = tokio::process::Command::new("cargo");
@@ -249,8 +254,14 @@ async fn compile(
 
     drop(cargo);
 
-    let mut logs = String::new();
-    reader.read_to_string(&mut logs)?;
+    tokio::task::spawn_blocking(move || {
+        let mut buf = [0; 30];
+        while reader.read(&mut buf).unwrap() == 30_usize {
+            if let Err(error) = tx.send(Message::TextLine(String::from_utf8(buf.clone().to_vec()).unwrap())) { 
+                error!("failed to send cargo message on channel: {error}");
+            };
+        }
+    });
 
     let command = handle.wait().await?;
 
@@ -311,5 +322,5 @@ async fn compile(
         }
     }
 
-    Ok((outputs, logs))
+    Ok(outputs)
 }

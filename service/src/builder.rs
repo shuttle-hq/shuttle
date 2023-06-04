@@ -1,5 +1,5 @@
 use std::fs::read_to_string;
-use std::io::Read;
+use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context};
@@ -222,7 +222,7 @@ async fn compile(
 
     let mut cargo = tokio::process::Command::new("cargo");
 
-    let (mut reader, writer) = os_pipe::pipe()?;
+    let (reader, writer) = os_pipe::pipe()?;
     let writer_clone = writer.try_clone()?;
     cargo.stdout(writer);
     cargo.stderr(writer_clone);
@@ -253,23 +253,14 @@ async fn compile(
     let mut handle = cargo.spawn()?;
 
     tokio::task::spawn_blocking(move || {
-        let mut paused = false;
-        let mut buf = [0; 30];
-        let mut read: usize = 30;
-        loop {
-            if read == 0_usize {
-                if paused {
-                    println!("broken");
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(10000));
-                paused = true;
-            }
-            read = reader.read(&mut buf).unwrap();
-            if let Err(error) = tx.send(Message::TextLine(
-                String::from_utf8(buf.clone().to_vec()).unwrap(),
-            )) {
-                error!("failed to send cargo message on channel: {error}");
+        let reader = std::io::BufReader::new(reader);
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                if let Err(error) = tx.send(Message::TextLine(line)) {
+                    error!("failed to send cargo message on channel: {error}");
+                };
+            } else {
+                error!("Failed to read Cargo log messages");
             };
         }
     });

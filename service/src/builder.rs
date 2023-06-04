@@ -257,7 +257,9 @@ async fn compile(
     tokio::task::spawn_blocking(move || {
         let mut buf = [0; 30];
         while reader.read(&mut buf).unwrap() == 30_usize {
-            if let Err(error) = tx.send(Message::TextLine(String::from_utf8(buf.clone().to_vec()).unwrap())) { 
+            if let Err(error) = tx.send(Message::TextLine(
+                String::from_utf8(buf.clone().to_vec()).unwrap(),
+            )) {
                 error!("failed to send cargo message on channel: {error}");
             };
         }

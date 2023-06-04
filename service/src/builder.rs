@@ -1,4 +1,5 @@
 use std::fs::read_to_string;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context};
@@ -74,7 +75,7 @@ fn extract_shuttle_toml_name(path: PathBuf) -> anyhow::Result<String> {
 pub async fn build_workspace(
     project_path: &Path,
     release_mode: bool,
-    _tx: Sender<Message>,
+    tx: Sender<Message>,
     deployment: bool,
 ) -> anyhow::Result<Vec<BuiltService>> {
     let project_path = project_path.to_owned();
@@ -105,7 +106,7 @@ pub async fn build_workspace(
     let mut runtimes = Vec::new();
 
     if !alpha_packages.is_empty() {
-        let mut compilation = compile(
+        let compilation = compile(
             alpha_packages,
             release_mode,
             false,
@@ -113,17 +114,21 @@ pub async fn build_workspace(
             deployment,
         )
         .await?;
+        let (mut service, logs) = compilation;
+        tx.send(cargo_metadata::Message::TextLine(logs))?;
         trace!("alpha packages compiled");
 
-        runtimes.append(&mut compilation);
+        runtimes.append(&mut service);
     }
 
     if !next_packages.is_empty() {
-        let mut compilation =
+        let compilation =
             compile(next_packages, release_mode, true, project_path, deployment).await?;
+        let (mut service, logs) = compilation;
+        tx.send(cargo_metadata::Message::TextLine(logs))?;
         trace!("next packages compiled");
 
-        runtimes.append(&mut compilation);
+        runtimes.append(&mut service);
     }
 
     Ok(runtimes)
@@ -207,10 +212,15 @@ async fn compile(
     wasm: bool,
     project_path: PathBuf,
     deployment: bool,
-) -> anyhow::Result<Vec<BuiltService>> {
+) -> anyhow::Result<(Vec<BuiltService>, String)> {
     let manifest_path = project_path.join("Cargo.toml");
 
     let mut cargo = tokio::process::Command::new("cargo");
+
+    let (mut reader, writer) = os_pipe::pipe()?;
+    let writer_clone = writer.try_clone()?;
+    cargo.stdout(writer);
+    cargo.stderr(writer_clone);
 
     cargo.arg("build").arg("--manifest-path").arg(manifest_path);
 
@@ -235,9 +245,16 @@ async fn compile(
         cargo.arg("--target").arg("wasm32-wasi");
     }
 
-    let command = cargo.output().await?;
+    let mut handle = cargo.spawn()?;
 
-    if !command.status.success() {
+    drop(cargo);
+
+    let mut logs = String::new();
+    reader.read_to_string(&mut logs)?;
+
+    let command = handle.wait().await?;
+
+    if !command.success() {
         bail!("Build failed. Is the Shuttle runtime missing?");
     }
 
@@ -294,5 +311,5 @@ async fn compile(
         }
     }
 
-    Ok(outputs)
+    Ok((outputs, logs))
 }

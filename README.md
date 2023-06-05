@@ -13,7 +13,7 @@
   <a href="https://circleci.com/gh/shuttle-hq/shuttle/">
     <img alt="build status" src="https://circleci.com/gh/shuttle-hq/shuttle.svg?style=shield"/>
   </a>
-  <a href="https://discord.gg/H33rRDTm3p">
+  <a href="https://discord.gg/shuttle">
     <img alt="discord" src="https://img.shields.io/discord/803236282088161321?logo=discord"/>
   </a>
 </p>
@@ -55,8 +55,6 @@ Shuttle is built for productivity, reliability and performance:
 *The gif above demonstrates the ease of adding/managing resources to your project(s) in our upcoming console. Bear in mind that the ease of adding resources is already there, albeit without the visualization coming from the console.*
 
 ## Getting Started
-
-To run a Shuttle project, you need to install protoc, check out the [protoc installation guide](https://docs.shuttle.rs/support/installing-protoc) in our docs.
 
 The `cargo-shuttle` CLI can be installed with a pre-built binary or from source with cargo.
 

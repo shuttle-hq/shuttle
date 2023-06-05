@@ -280,7 +280,7 @@ async fn compile(
                 "target".into(),
                 "wasm32-wasi".into(),
                 profile.into(),
-                package.clone().name.into(),
+                package.clone().name.replace("-", "_").into(),
             ]
             .iter()
             .collect();
@@ -303,7 +303,7 @@ async fn compile(
                 project_path.clone(),
                 "target".into(),
                 profile.into(),
-                package.clone().name.into(),
+                package.clone().name.replace("-", "_").into(),
             ]
             .iter()
             .collect();

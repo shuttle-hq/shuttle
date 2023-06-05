@@ -2,7 +2,7 @@ version: 2.1
 
 orbs:
   docker-buildx: sensu/docker-buildx@1.1.1
-  aws-ecr: circleci/aws-ecr@8.1.2
+  aws-ecr: circleci/aws-ecr@8.2.1
   win: circleci/windows@5.0
 
 executors:
@@ -29,7 +29,8 @@ commands:
       - run:
           name: Install sccache
           command: |
-            ls ~/.cargo/bin/sccache || cargo install sccache
+            export SCCACHE_VERSION='v0.4.2'
+            ls ~/.cargo/bin/sccache || curl -L https://github.com/mozilla/sccache/releases/download/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz | tar -xOz sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache > ~/.cargo/bin/sccache && chmod +x ~/.cargo/bin/sccache
             # This configures Rust to use sccache.
             echo 'export "RUSTC_WRAPPER"="sccache"' >> $BASH_ENV
             sccache --version
@@ -200,6 +201,10 @@ jobs:
       path:
         description: "Path to crate external from workspace"
         type: string
+      features:
+        description: "Features to enable"
+        type: string
+        default: --all-features
     executor: docker-rust
     environment:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
@@ -215,13 +220,13 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --all-features \
+                       << parameters.features >> \
                        --manifest-path << parameters.path >>/Cargo.toml \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
-      - run: cargo test --all-features --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
+      - run: cargo test << parameters.features >> --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
       - save-cargo-cache
   platform-test:
     parameters:
@@ -285,18 +290,100 @@ jobs:
     executor: image-ubuntu
     environment:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
+    parameters:
+      aws-access-key-id:
+        description: "AWS cli access key id"
+        type: env_var_name
+      aws-secret-access-key:
+        description: "AWS cli secret access key"
+        type: env_var_name
+      public-registry:
+        description: "Use public registry"
+        type: boolean
+        default: true
+      production:
+        description: "Push and deploy to production"
+        type: boolean
+        default: false
     steps:
       - checkout
+      - run: 
+          name: Set git tag in bash_env
+          command: |
+            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
       - restore-buildx-cache
       - aws-ecr/ecr-login:
-          aws-access-key-id: AWS_ACCESS_KEY_ID
-          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
-          public-registry: true
+          aws-access-key-id: << parameters.aws-access-key-id >>
+          aws-secret-access-key: << parameters.aws-secret-access-key >>
+          public-registry: << parameters.public-registry >>
+          # `registry-id`` field is required, although we don't need it (used for private registry).
+          # We give it a non-empty env variable name to bypass the `ecr-login` empty check.
+          registry-id: TAG
       - run:
           name: Make and push images
           command: |
-            PUSH=true PLATFORMS=linux/amd64 make images
+            PUSH=true PROD=<< parameters.production >> PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
+  deploy-images:
+    executor: image-ubuntu
+    parameters:
+      ssh-fingerprint:
+        description: "SSH-key fingerprint"
+        type: string
+        default: 6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78
+      ssh-config-script:
+        description: "SSH config script to use."
+        type: string
+        default: unstable-ssh-config.sh
+      ssh-host:
+        description: "Shuttle SSH host"
+        type: string
+        default: shuttle.internal
+      postgres-password:
+        description: "Shuttle shared postgres password"
+        type: env_var_name
+      mongodb-password:
+        description: "Shuttle shared mongodb password"
+        type: env_var_name
+      production:
+        description: "Push and deploy to production"
+        type: boolean
+        default: false
+    steps:
+    - checkout
+    - run:
+        name: Set git tag in bash_env
+        command: |
+          echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+    - add_ssh_keys:
+        fingerprints:
+          - << parameters.ssh-fingerprint >>
+    - run:
+        name: Generate ssh config
+        command: ./.circleci/<< parameters.ssh-config-script >>
+    - run:
+        name: Deploy images
+        command: |
+          DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> USE_TLS=enable PROD=<< parameters.production >> DD_API_KEY=$DD_API_KEY \
+          POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
+          MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
+          TAG=$TAG \
+          make deploy
+    - when:
+        condition: << parameters.production >>
+        steps:
+          - run:
+              name: Pull new deployer image on prod
+              command: |
+                ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
+    - when:
+        condition:
+          not: << parameters.production >>
+        steps:
+          - run:
+              name: Pull new deployer image on dev
+              command: |
+                ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
       image: << parameters.image >>
@@ -338,6 +425,7 @@ jobs:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
+      - run: choco install -y strawberryperl
       - run:
           name: Install Rust
           command: |
@@ -423,9 +511,9 @@ jobs:
       - run:
           name: Test WASM
           command: ./.circleci/qa-wasm.sh
-      - run:
-          name: Test Docker
-          command: ./.circleci/qa-docker.sh
+      # - run:
+      #     name: Test Docker
+      #     command: ./.circleci/qa-docker.sh
   mac-qa:
     macos:
       xcode: 12.5.1
@@ -463,7 +551,60 @@ jobs:
       # - run:
       #     name: Test Docker
       #     command: ./.circleci/qa-docker.sh
-
+  windows-qa:
+    executor:
+      name: win/server-2022
+      size: medium
+      shell: powershell.exe
+    environment:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - checkout
+      - run:
+          name: "Install Protobuf"
+          command: |
+            choco install -y protoc
+      - run:
+          name: Install Rust
+          command: |
+            wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
+            C:\rustup-init.exe -y --default-toolchain 1.68.0 --target x86_64-pc-windows-msvc
+      - run:
+          name: "Install Shuttle"
+          command:  ..\.cargo\bin\cargo.exe install cargo-shuttle --path ./cargo-shuttle
+      - run: ..\.cargo\bin\cargo.exe shuttle --version
+      - run:
+          name: Login
+          command: |
+            ..\.cargo\bin\cargo.exe shuttle login --api-key $env:SHUTTLE_API_KEY
+      - run:
+          name: QA
+          command: ./.circleci/qa.ps1
+          environment:
+            SHUTTLE_API: https://api.unstable.shuttle.rs
+      - run: git submodule sync
+      - run: git submodule update --init
+      # - run:
+      #     name: Test WASM
+      #     command: ./.circleci/qa-wasm.ps1
+      # We can't run linux containers on the Windows executor at this time
+      # https://circleci.com/docs/using-windows/#known-issues-and-limitations
+      # - run:
+      #     name: Test Docker
+      #     command: ./.circleci/qa-docker.ps1
+  publish-crates:
+    parameters:
+      path:
+        description: Crate to publish
+        type: string
+    executor: docker-rust
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Crate publishing in order
+          command: |
+            cargo publish --manifest-path << parameters.path >>/Cargo.toml
 workflows:
   ci:
     jobs:
@@ -476,7 +617,6 @@ workflows:
                 - resources/aws-rds
                 - resources/persist
                 - resources/secrets
-                - resources/shared-db
                 - resources/static-folder
                 - services/shuttle-actix-web
                 - services/shuttle-axum
@@ -490,6 +630,18 @@ workflows:
                 - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
+      - check-standalone:
+        # shuttle-shared-db has mutually exclusive features
+        # so we run checks for each feature separately
+          name: "resources/shared-db: << matrix.features >>"
+          matrix:
+            alias: check-standalone-shared-db
+            parameters:
+              path: [resources/shared-db]
+              features:
+                - "-F mongodb"
+                - "-F postgres"
+                - "-F postgres-rustls"
       - platform-test:
           name: << matrix.crate >>
           requires:
@@ -506,21 +658,37 @@ workflows:
                   "shuttle-proto",
                   "shuttle-provisioner",
                   "shuttle-runtime",
-                  "shuttle-service",
+                  "shuttle-service"
                 ]
       - e2e-test:
           requires:
             - platform-test
             - check-standalone
+            - check-standalone-shared-db
           filters:
             branches:
               only: production
+      - approve-push-unstable:
+          type: approval
+          filters:
+            branches:
+              only: main
       - build-and-push:
+          name: build-and-push-unstable
+          aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
+          aws-secret-access-key: DEV_AWS_SECRET_ACCESS_KEY
+          production: false
           requires:
-            - e2e-test
+            - approve-push-unstable
           filters:
             branches:
-              only: production
+              only: main
+      - deploy-images:
+          name: Deploy images to unstable
+          postgres-password: DEV_POSTGRES_PASSWORD
+          mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
+          requires:
+            - build-and-push-unstable
   release:
     jobs:
       - linux-qa:
@@ -531,13 +699,15 @@ workflows:
           filters:
             branches:
               only: production
+      - windows-qa:
+          filters:
+            branches:
+              only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-gnu
           resource_class: xlarge
-          requires:
-            - linux-qa
           filters:
             branches:
               only: production
@@ -546,8 +716,6 @@ workflows:
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-musl
           resource_class: xlarge
-          requires:
-            - linux-qa
           filters:
             branches:
               only: production
@@ -556,8 +724,6 @@ workflows:
           image: ubuntu-2004:202101-01
           target: aarch64-unknown-linux-musl
           resource_class: arm.xlarge
-          requires:
-            - linux-qa
           filters:
             branches:
               only: production
@@ -566,8 +732,6 @@ workflows:
             branches:
               only: production
       - build-binaries-mac:
-          requires:
-            - mac-qa
           filters:
             branches:
               only: production
@@ -578,6 +742,129 @@ workflows:
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac
+          filters:
+            branches:
+              only: production
+      - approve-push-production:
+          type: approval
+          filters:
+            branches:
+              only: production
+      - build-and-push:
+          name: build-and-push-production
+          aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
+          aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
+          production: true
+          requires:
+            - approve-push-production
+          filters:
+            branches:
+              only: production
+      - deploy-images:
+          name: deploy-images-to-production
+          postgres-password: PROD_POSTGRES_PASSWORD
+          mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
+          ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
+          ssh-config-script: production-ssh-config.sh
+          ssh-host: shuttle.prod.internal
+          production: true
+          requires:
+            - build-and-push-production
+          filters:
+            branches:
+              only: production
+      - approve-publish-crates:
+          type: approval
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: publish-shuttle-codegen
+          path: codegen
+          requires:
+            - approve-publish-crates
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: publish-shuttle-common
+          path: common
+          requires:
+            - publish-shuttle-codegen
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: publish-shuttle-proto
+          path: proto
+          requires:
+            - publish-shuttle-common
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: publish-shuttle-service
+          path: service
+          requires:
+            - publish-shuttle-proto
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: publish-shuttle-runtime
+          path: runtime
+          requires:
+            - publish-shuttle-service
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          matrix:
+            parameters:
+              path: 
+                [
+                  "resources/aws-rds",
+                  "resources/shared-db",
+                  "resources/secrets",
+                  "resources/persist",
+                  "resources/static-folder"
+                ]
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-shuttle-runtime
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          name: publish-cargo-shuttle
+          path: cargo-shuttle
+          requires:
+            - publish-shuttle-service
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          matrix:
+            parameters:
+              path: 
+                [
+                  "services/shuttle-actix-web", 
+                  "services/shuttle-axum", 
+                  "services/shuttle-next", 
+                  "services/shuttle-poem", 
+                  "services/shuttle-poise",
+                  "services/shuttle-rocket",
+                  "services/shuttle-salvo",
+                  "services/shuttle-serenity",
+                  "services/shuttle-thruster",
+                  "services/shuttle-tide",
+                  "services/shuttle-tower",
+                  "services/shuttle-warp"
+                ]
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-cargo-shuttle
+            - publish-shuttle-runtime
           filters:
             branches:
               only: production

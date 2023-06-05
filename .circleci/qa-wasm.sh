@@ -16,7 +16,7 @@ cargo shuttle run &
 sleep 70
 
 echo "Testing local wasm endpoint"
-output=$(curl --silent localhost:8000/hello)
-[ "$output" != "Hello, world!" ] && ( echo "Did not expect output: $output"; exit 1 )
+output=$(curl --silent localhost:8000)
+[ "$output" != "Hello, World!" ] && ( echo "Did not expect output: $output"; exit 1 )
 
 killall cargo-shuttle

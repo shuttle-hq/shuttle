@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::Body;
-use axum::extract::{Extension, Path, State};
+use axum::extract::{Extension, Path, Query, State};
 use axum::handler::Handler;
 use axum::http::Request;
 use axum::middleware::from_extractor;
@@ -28,6 +28,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
+use utoipa::IntoParams;
 
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -62,6 +63,14 @@ pub enum GatewayStatus {
 #[derive(Serialize, Deserialize)]
 pub struct StatusResponse {
     status: GatewayStatus,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
+pub struct PaginationDetails {
+    /// Page to fetch, starting from 0.
+    pub page: Option<u32>,
+    /// Number of results per page.
+    pub limit: Option<u32>,
 }
 
 impl StatusResponse {
@@ -115,14 +124,21 @@ async fn get_project(
     responses(
         (status = 200, description = "Successfully got the projects list.", body = [shuttle_common::models::project::Response]),
         (status = 500, description = "Server internal error.")
+    ),
+    params(
+        PaginationDetails
     )
 )]
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
     User { name, .. }: User,
+    Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
+    let limit = limit.unwrap_or(u32::MAX);
+    let page = page.unwrap_or(0);
     let projects = service
-        .iter_user_projects_detailed(name.clone())
+        // The `offset` is page size * amount of pages
+        .iter_user_projects_detailed(&name, limit * page, limit)
         .await?
         .map(|project| project::Response {
             name: project.0.to_string(),
@@ -132,24 +148,6 @@ async fn get_projects_list(
 
     Ok(AxumJson(projects))
 }
-
-// async fn get_projects_list_with_filter(
-//     State(RouterState { service, .. }): State<RouterState>,
-//     User { name, .. }: User,
-//     Path(project_status): Path<String>,
-// ) -> Result<AxumJson<Vec<project::Response>>, Error> {
-//     let projects = service
-//         .iter_user_projects_detailed_filtered(name.clone(), project_status)
-//         .await?
-//         .into_iter()
-//         .map(|project| project::Response {
-//             name: project.0.to_string(),
-//             state: project.1.into(),
-//         })
-//         .collect();
-
-//     Ok(AxumJson(projects))
-// }
 
 #[instrument(skip_all, fields(%project))]
 #[utoipa::path(

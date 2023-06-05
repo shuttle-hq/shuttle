@@ -12,6 +12,7 @@ use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::StreamExt;
 use hyper::Uri;
+use serde::Deserialize;
 use shuttle_common::backends::auth::{
     AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
 };
@@ -24,7 +25,7 @@ use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
 use tracing::{debug, error, field, instrument, trace, warn};
-use utoipa::OpenApi;
+use utoipa::{IntoParams, OpenApi};
 
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
@@ -72,6 +73,14 @@ mod project;
     ))
 )]
 pub struct ApiDoc;
+
+#[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
+pub struct PaginationDetails {
+    /// Page to fetch, starting from 0.
+    pub page: Option<u32>,
+    /// Number of results per page.
+    pub limit: Option<u32>,
+}
 
 #[derive(Clone)]
 pub struct RouterBuilder {
@@ -397,16 +406,20 @@ pub async fn stop_service(
         (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
-        ("project_name" = String, Path, description = "Name of the project that owns the deployments.")
+        ("project_name" = String, Path, description = "Name of the project that owns the deployments."),
+        PaginationDetails
     )
 )]
 pub async fn get_deployments(
     Extension(persistence): Extension<Persistence>,
     Path(project_name): Path<String>,
+    Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<Json<Vec<shuttle_common::models::deployment::Response>>> {
     if let Some(service) = persistence.get_service_by_name(&project_name).await? {
+        let limit = limit.unwrap_or(u32::MAX);
+        let page = page.unwrap_or(0);
         let deployments = persistence
-            .get_deployments(&service.id)
+            .get_deployments(&service.id, page * limit, limit)
             .await?
             .into_iter()
             .map(Into::into)

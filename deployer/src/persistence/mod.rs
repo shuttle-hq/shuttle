@@ -11,6 +11,7 @@ use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
 use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 use error::{Error, Result};
+use sqlx::QueryBuilder;
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -189,9 +190,25 @@ impl Persistence {
         get_deployment(&self.pool, id).await
     }
 
-    pub async fn get_deployments(&self, service_id: &Uuid) -> Result<Vec<Deployment>> {
-        sqlx::query_as("SELECT * FROM deployments WHERE service_id = ? ORDER BY last_update")
-            .bind(service_id)
+    pub async fn get_deployments(
+        &self,
+        service_id: &Uuid,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Deployment>> {
+        let mut query = QueryBuilder::new("SELECT * FROM deployments WHERE service_id = ");
+
+        query
+            .push_bind(service_id)
+            .push(" ORDER BY last_update DESC LIMIT ")
+            .push_bind(limit);
+
+        if offset > 0 {
+            query.push(" OFFSET ").push_bind(offset);
+        }
+
+        query
+            .build_query_as()
             .fetch_all(&self.pool)
             .await
             .map_err(Error::from)
@@ -550,6 +567,39 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn get_deployments() {
+        let (p, _) = Persistence::new_in_memory().await;
+        let service_id = add_service(&p.pool).await.unwrap();
+
+        let mut deployments: Vec<_> = (0..10)
+            .map(|_| Deployment {
+                id: Uuid::new_v4(),
+                service_id,
+                state: State::Running,
+                last_update: Utc::now(),
+                address: None,
+                is_next: false,
+            })
+            .collect();
+
+        for deployment in &deployments {
+            p.insert_deployment(deployment.clone()).await.unwrap();
+        }
+
+        // Reverse to match last_updated desc order
+        deployments.reverse();
+        assert_eq!(
+            p.get_deployments(&service_id, 0, 5).await.unwrap(),
+            deployments[0..5]
+        );
+        assert_eq!(
+            p.get_deployments(&service_id, 5, 5).await.unwrap(),
+            deployments[5..10]
+        );
+        assert_eq!(p.get_deployments(&service_id, 20, 5).await.unwrap(), vec![]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn deployment_active() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -653,8 +703,8 @@ mod tests {
             p.insert_deployment(deployment.clone()).await.unwrap();
         }
 
-        let actual = p.get_deployments(&service_id).await.unwrap();
-        let expected = vec![deployment_stopped, deployment_crashed, deployment_running];
+        let actual = p.get_deployments(&service_id, 0, u32::MAX).await.unwrap();
+        let expected = vec![deployment_running, deployment_crashed, deployment_stopped];
 
         assert_eq!(actual, expected, "deployments should be sorted by time");
     }
@@ -743,20 +793,20 @@ mod tests {
         p.cleanup_invalid_states().await.unwrap();
 
         let actual: Vec<_> = p
-            .get_deployments(&service_id)
+            .get_deployments(&service_id, 0, u32::MAX)
             .await
             .unwrap()
             .into_iter()
             .map(|deployment| (deployment.id, deployment.state))
             .collect();
         let expected = vec![
-            (deployment_crashed.id, State::Crashed),
-            (deployment_stopped.id, State::Stopped),
-            (deployment_running.id, State::Running),
-            (deployment_queued.id, State::Stopped),
-            (deployment_building.id, State::Stopped),
-            (deployment_built.id, State::Stopped),
             (deployment_loading.id, State::Stopped),
+            (deployment_built.id, State::Stopped),
+            (deployment_building.id, State::Stopped),
+            (deployment_queued.id, State::Stopped),
+            (deployment_running.id, State::Running),
+            (deployment_stopped.id, State::Stopped),
+            (deployment_crashed.id, State::Crashed),
         ];
 
         assert_eq!(

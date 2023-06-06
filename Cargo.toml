@@ -6,7 +6,6 @@ members = [
   "codegen",
   "common",
   "deployer",
-  "deployer-alpha",
   "gateway",
   "proto",
   "provisioner",
@@ -19,6 +18,7 @@ members = [
 exclude = [
   "e2e",
   "examples",
+  "deployer-alpha",
   "resources",
   "services",
 ]

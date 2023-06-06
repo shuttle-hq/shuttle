@@ -641,7 +641,7 @@ pub async fn clean_project(
         .service_build_path(&project_name)
         .map_err(anyhow::Error::new)?;
 
-    let lines = clean_crate(&project_path, true)?;
+    let lines = clean_crate(&project_path, true).await?;
 
     Ok(Json(lines))
 }

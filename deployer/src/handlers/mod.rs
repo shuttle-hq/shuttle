@@ -2,17 +2,22 @@ mod error;
 
 use crate::deployment::{DeploymentManager, Queued};
 use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGetter, State};
-use axum::extract::ws::{self, WebSocket};
+use async_trait::async_trait;
+use axum::extract::{
+    ws::{self, WebSocket},
+    FromRequest,
+};
 use axum::extract::{Extension, Path, Query};
 use axum::handler::Handler;
 use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
 use axum::routing::{get, post, Router};
 use axum::Json;
+use bytes::Bytes;
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
-use hyper::Uri;
-use serde::Deserialize;
+use hyper::{Request, StatusCode, Uri};
+use serde::{de::DeserializeOwned, Deserialize};
 use shuttle_common::backends::auth::{
     AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
 };
@@ -310,12 +315,10 @@ pub async fn create_service(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     Path((project_name, service_name)): Path<(String, String)>,
-    Json(body): Json<DeploymentRequest>,
+    Rmp(deployment_req): Rmp<DeploymentRequest>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     let service = persistence.get_or_create_service(&service_name).await?;
     let id = Uuid::new_v4();
-
-    let data = todo!("Base64 decode body.archive");
 
     let deployment = Deployment {
         id,
@@ -324,16 +327,16 @@ pub async fn create_service(
         last_update: Utc::now(),
         address: None,
         is_next: false,
-        git_commit_id: body
+        git_commit_id: deployment_req
             .git_commit_id
             .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
-        git_commit_msg: body
+        git_commit_msg: deployment_req
             .git_commit_msg
             .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
-        git_branch: body
+        git_branch: deployment_req
             .git_branch
             .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
-        git_dirty: body.git_dirty,
+        git_dirty: deployment_req.git_dirty,
     };
 
     persistence.insert_deployment(deployment.clone()).await?;
@@ -342,8 +345,8 @@ pub async fn create_service(
         id,
         service_name: service.name,
         service_id: service.id,
-        data,
-        will_run_tests: !body.no_test,
+        data: deployment_req.data,
+        will_run_tests: !deployment_req.no_test,
         tracing_context: Default::default(),
         claim: Some(claim),
     };
@@ -646,4 +649,28 @@ pub async fn clean_project(
 
 async fn get_status() -> String {
     "Ok".to_string()
+}
+
+pub struct Rmp<T>(T);
+
+#[async_trait]
+impl<S, B, T> FromRequest<S, B> for Rmp<T>
+where
+    S: Send + Sync,
+    B: Send + 'static,
+    Bytes: FromRequest<S, B>,
+    T: DeserializeOwned,
+{
+    type Rejection = StatusCode;
+
+    async fn from_request(
+        req: Request<B>,
+        state: &S,
+    ) -> std::result::Result<Self, Self::Rejection> {
+        let bytes = Bytes::from_request(req, state)
+            .await
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        let t = rmp_serde::from_slice::<T>(&bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
+        Ok(Self(t))
+    }
 }

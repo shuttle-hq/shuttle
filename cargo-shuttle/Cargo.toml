@@ -36,6 +36,7 @@ portpicker = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = "0.2.0"
 reqwest-retry = "0.2.0"
+rmp-serde = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio-native-tls", "postgres"] }

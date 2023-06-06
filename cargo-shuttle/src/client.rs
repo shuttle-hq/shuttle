@@ -1,5 +1,3 @@
-use std::fmt::Write;
-
 use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
 use reqwest::Response;
@@ -38,23 +36,23 @@ impl Client {
     pub async fn deploy(
         &self,
         project: &ProjectName,
-        body: DeploymentRequest,
+        deployment_req: DeploymentRequest,
     ) -> Result<deployment::Response> {
         let path = format!(
             "/projects/{}/services/{}",
             project.as_str(),
             project.as_str()
         );
+        let deployment_req = rmp_serde::to_vec(&deployment_req)
+            .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 
         let url = format!("{}{}", self.api_url, path);
-
         let mut builder = Self::get_retry_client().post(url);
-
         builder = self.set_builder_auth(builder);
 
         builder
-            .json(&body)
             .header("Transfer-Encoding", "chunked")
+            .body(deployment_req)
             .send()
             .await
             .context("failed to send deployment to the Shuttle server")?

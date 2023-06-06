@@ -912,7 +912,7 @@ impl Shuttle {
     async fn deploy(&self, client: &Client, args: DeployArgs) -> Result<CommandOutcome> {
         let working_directory = self.ctx.working_directory();
 
-        let mut deploy_req: DeploymentRequest = DeploymentRequest {
+        let mut deployment_req: DeploymentRequest = DeploymentRequest {
             no_test: args.no_test,
             ..Default::default()
         };
@@ -930,28 +930,29 @@ impl Shuttle {
                     bail!(err);
                 }
             }
-            deploy_req.git_dirty = Some(is_dirty.is_some());
+            deployment_req.git_dirty = Some(is_dirty.is_some());
 
             if let Ok(head) = repo.head() {
                 // This is typically the name of the current branch
                 // It is "HEAD" when head detached, for example when a tag is checked out
-                deploy_req.git_branch = head
+                deployment_req.git_branch = head
                     .shorthand()
                     .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect());
                 if let Ok(commit) = head.peel_to_commit() {
-                    deploy_req.git_commit_id = Some(commit.id().to_string());
+                    deployment_req.git_commit_id = Some(commit.id().to_string());
                     // Summary is None if error or invalid utf-8
-                    deploy_req.git_commit_msg = commit
+                    deployment_req.git_commit_msg = commit
                         .summary()
                         .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect());
                 }
             }
         }
 
-        let data = self.make_archive()?;
-        deploy_req.archive = todo!("Base64 encode the Vec<u8>");
+        deployment_req.data = self.make_archive()?;
 
-        let deployment = client.deploy(self.ctx.project_name(), deploy_req).await?;
+        let deployment = client
+            .deploy(self.ctx.project_name(), deployment_req)
+            .await?;
 
         let mut stream = client
             .get_logs_ws(self.ctx.project_name(), &deployment.id)

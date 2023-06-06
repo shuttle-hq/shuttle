@@ -5,13 +5,14 @@ mod init;
 mod provisioner_server;
 
 use args::DeployArgs;
+use args::LogoutArgs;
 use indicatif::ProgressBar;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::deployment::get_deployments_table;
-use shuttle_common::models::project::{State, IDLE_MINUTES};
+use shuttle_common::models::project::IDLE_MINUTES;
 use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
-use shuttle_common::resource;
+use shuttle_common::{resource, ApiKey};
 use shuttle_proto::runtime::runtime_client::RuntimeClient;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, StopRequest, SubscribeLogsRequest};
 
@@ -30,7 +31,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 pub use args::{Args, Command, InitArgs, LoginArgs, ProjectArgs, RunArgs};
 use cargo_metadata::Message;
 use clap::CommandFactory;
@@ -49,15 +50,17 @@ use shuttle_service::builder::{build_workspace, BuiltService};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
-use crate::args::{DeploymentCommand, ProjectCommand, ResourceCommand};
+use crate::args::{DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand};
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+const SHUTTLE_LOGIN_URL: &str = "https://shuttle.rs/login";
+const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -71,6 +74,8 @@ impl Shuttle {
 
     pub async fn run(mut self, mut args: Args) -> Result<CommandOutcome> {
         trace!("running local client");
+
+        // All commands that need to know which project is being handled
         if matches!(
             args.cmd,
             Command::Deploy(..)
@@ -99,18 +104,18 @@ impl Shuttle {
             Command::Init(init_args) => self.init(init_args, args.project_args).await,
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
-            Command::Logout => self.logout().await,
+            Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback().await,
             Command::Run(run_args) => self.local_run(run_args).await,
             Command::Deploy(deploy_args) => {
-                return self.deploy(deploy_args, &self.client()?).await;
+                return self.deploy(&self.client()?, deploy_args).await;
             }
             Command::Status => self.status(&self.client()?).await,
             Command::Logs { id, latest, follow } => {
                 self.logs(&self.client()?, id, latest, follow).await
             }
-            Command::Deployment(DeploymentCommand::List) => {
-                self.deployments_list(&self.client()?).await
+            Command::Deployment(DeploymentCommand::List { page, limit }) => {
+                self.deployments_list(&self.client()?, page, limit).await
             }
             Command::Deployment(DeploymentCommand::Status { id }) => {
                 self.deployment_get(&self.client()?, id).await
@@ -119,17 +124,17 @@ impl Shuttle {
             Command::Stop => self.stop(&self.client()?).await,
             Command::Clean => self.clean(&self.client()?).await,
             Command::Secrets => self.secrets(&self.client()?).await,
-            Command::Project(ProjectCommand::Start { idle_minutes }) => {
+            Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
                 self.project_create(&self.client()?, idle_minutes).await
             }
-            Command::Project(ProjectCommand::Restart { idle_minutes }) => {
+            Command::Project(ProjectCommand::Restart(ProjectStartArgs { idle_minutes })) => {
                 self.project_recreate(&self.client()?, idle_minutes).await
             }
             Command::Project(ProjectCommand::Status { follow }) => {
                 self.project_status(&self.client()?, follow).await
             }
-            Command::Project(ProjectCommand::List { filter }) => {
-                self.projects_list(&self.client()?, filter).await
+            Command::Project(ProjectCommand::List { page, limit }) => {
+                self.projects_list(&self.client()?, page, limit).await
             }
             Command::Project(ProjectCommand::Stop) => self.project_delete(&self.client()?).await,
         }
@@ -159,7 +164,7 @@ impl Shuttle {
                 println!();
             } else if args.login_args.api_key.is_some() {
                 self.login(args.login_args.clone()).await?;
-            } else if args.new {
+            } else if args.create_env {
                 bail!("Tried to login to create a Shuttle environment, but no API key was set.")
             }
         }
@@ -202,7 +207,7 @@ impl Shuttle {
                 println!(
                     "Shuttle works with a range of web frameworks. Which one do you want to use?"
                 );
-                let frameworks = init::Framework::iter().collect::<Vec<_>>();
+                let frameworks = init::Template::iter().collect::<Vec<_>>();
                 let index = FuzzySelect::with_theme(&theme)
                     .items(&frameworks)
                     .default(0)
@@ -213,14 +218,14 @@ impl Shuttle {
         };
 
         // 5. Initialize locally
-        init::cargo_init(path.clone())?;
+        init::cargo_init(path.clone(), project_args.name.clone().unwrap())?;
         init::cargo_shuttle_init(path.clone(), framework)?;
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
         let should_create_environment = if !interactive {
-            args.new
-        } else if args.new {
+            args.create_env
+        } else if args.create_env {
             true
         } else {
             let should_create = Confirm::with_theme(&theme)
@@ -239,6 +244,10 @@ impl Shuttle {
 
             self.load_project(&mut project_args)?;
             self.project_create(&self.client()?, IDLE_MINUTES).await?;
+        } else {
+            println!(
+                "Run `cargo shuttle project start` to create a project environment on Shuttle."
+            );
         }
 
         Ok(())
@@ -252,10 +261,9 @@ impl Shuttle {
 
     /// Provide feedback on GitHub.
     async fn feedback(&self) -> Result<()> {
-        let url = "https://github.com/shuttle-hq/shuttle/issues/new";
-        let _ = webbrowser::open(url);
+        let _ = webbrowser::open(SHUTTLE_GH_ISSUE_URL);
+        println!("If your browser did not open automatically, go to {SHUTTLE_GH_ISSUE_URL}");
 
-        println!("\nIf your browser did not open automatically, go to {url}");
         Ok(())
     }
 
@@ -264,50 +272,43 @@ impl Shuttle {
         let api_key_str = match login_args.api_key {
             Some(api_key) => api_key,
             None => {
-                let url = "https://shuttle.rs/login";
-                let _ = webbrowser::open(url);
-
-                println!("If your browser did not automatically open, go to {url}");
+                let _ = webbrowser::open(SHUTTLE_LOGIN_URL);
+                println!("If your browser did not automatically open, go to {SHUTTLE_LOGIN_URL}");
 
                 Password::with_theme(&ColorfulTheme::default())
                     .with_prompt("API key")
-                    .validate_with(|input: &String| {
-                        let key = input.trim().to_string();
-
-                        let mut errors = vec![];
-                        if !key.chars().all(char::is_alphanumeric) {
-                            errors.push(
-                                "The API key should consist of only alphanumeric characters.",
-                            );
-                        };
-
-                        if key.len() != 16 {
-                            errors.push("The API key should be exactly 16 characters in length.");
-                        };
-
-                        if errors.is_empty() {
-                            Ok(())
-                        } else {
-                            let message = errors.join("\n");
-                            Err(format!("Invalid API key:\n{message}"))
-                        }
-                    })
+                    .validate_with(|input: &String| ApiKey::parse(input).map(|_| {}))
                     .interact()?
             }
         };
 
-        let api_key = api_key_str.trim().parse()?;
+        let api_key = ApiKey::parse(&api_key_str)?;
 
         self.ctx.set_api_key(api_key)?;
 
         Ok(())
     }
 
-    async fn logout(&mut self) -> Result<()> {
+    async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {
+        if logout_args.reset_api_key {
+            self.reset_api_key(&self.client()?).await?;
+            println!("Successfully reset the API key.");
+            println!(" -> Go to {SHUTTLE_LOGIN_URL} to get a new one.\n");
+        }
         self.ctx.clear_api_key()?;
-
         println!("Successfully logged out of shuttle.");
+
         Ok(())
+    }
+
+    async fn reset_api_key(&self, client: &Client) -> Result<()> {
+        client.reset_api_key().await.and_then(|res| {
+            if res.status().is_success() {
+                Ok(())
+            } else {
+                Err(anyhow!("Resetting API key failed."))
+            }
+        })
     }
 
     async fn stop(&self, client: &Client) -> Result<()> {
@@ -330,6 +331,7 @@ impl Shuttle {
         progress_bar.finish_and_clear();
 
         println!("{}\n{}", "Successfully stopped service".bold(), service);
+        println!("Run `cargo shuttle deploy` to re-deploy your service.");
 
         Ok(())
     }
@@ -388,7 +390,7 @@ impl Shuttle {
 
             if latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client.get_deployments(proj_name).await?;
+                let deployments = client.get_deployments(proj_name, 0, u32::MAX).await?;
                 let most_recent = deployments.last().context(format!(
                     "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
                 ))?;
@@ -425,12 +427,18 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deployments_list(&self, client: &Client) -> Result<()> {
+    async fn deployments_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
+        if limit == 0 {
+            println!();
+            return Ok(());
+        }
+
         let proj_name = self.ctx.project_name();
-        let deployments = client.get_deployments(proj_name).await?;
-        let table = get_deployments_table(&deployments, proj_name.as_str());
+        let deployments = client.get_deployments(proj_name, page, limit).await?;
+        let table = get_deployments_table(&deployments, proj_name.as_str(), page);
 
         println!("{table}");
+        println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
 
         Ok(())
     }
@@ -653,7 +661,7 @@ impl Shuttle {
         runtime_client: &mut RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     ) -> Result<(), Status> {
         let stop_request = StopRequest {};
-        info!(?stop_request, "stopping service");
+        trace!(?stop_request, "stopping service");
         let response = runtime_client
             .stop(tonic::Request::new(stop_request))
             .or_else(|err| async {
@@ -663,7 +671,7 @@ impl Shuttle {
             })
             .await?
             .into_inner();
-        info!(response = ?response,  "client stop response: ");
+        trace!(response = ?response,  "client stop response: ");
         Ok(())
     }
 
@@ -703,7 +711,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn local_run(&self, run_args: RunArgs) -> Result<()> {
+    async fn pre_local_run(&self, run_args: &RunArgs) -> Result<Vec<BuiltService>> {
         trace!("starting a local run for a service: {run_args:?}");
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
@@ -730,6 +738,12 @@ impl Shuttle {
             working_directory.display()
         );
 
+        // Compile all the alpha or shuttle-next services in the workspace.
+        build_workspace(working_directory, run_args.release, tx, false).await
+    }
+
+    async fn setup_local_provisioner(
+    ) -> Result<(JoinHandle<Result<(), tonic::transport::Error>>, u16)> {
         let provisioner = LocalProvisioner::new()?;
         let provisioner_port =
             portpicker::pick_unused_port().expect("unable to find available port");
@@ -738,23 +752,19 @@ impl Shuttle {
             provisioner_port,
         ));
 
-        // Compile all the alpha or shuttle-next services in the workspace.
-        let services = build_workspace(working_directory, run_args.release, tx).await?;
+        Ok((provisioner_server, provisioner_port))
+    }
 
-        let (mut sigterm_notif, mut sigint_notif) = if cfg!(target_family = "unix") {
-            (
-                Some(
-                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                        .expect("Can not get the SIGTERM signal receptor"),
-                ),
-                Some(
-                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
-                        .expect("Can not get the SIGINT signal receptor"),
-                ),
-            )
-        } else {
-            (None, None)
-        };
+    #[cfg(target_family = "unix")]
+    async fn local_run(&self, run_args: RunArgs) -> Result<()> {
+        let services = Shuttle::pre_local_run(self, &run_args).await?;
+        let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
+        let mut sigterm_notif =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("Can not get the SIGTERM signal receptor");
+        let mut sigint_notif =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+                .expect("Can not get the SIGINT signal receptor");
 
         // Start all the services.
         let mut runtimes: Vec<(
@@ -764,46 +774,28 @@ impl Shuttle {
         let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {
             // We must cover the case of starting multiple workspace services and receiving a signal in parallel.
-            // This must stop all the existing runtimes and stop creating new ones.
-            if cfg!(target_family = "unix") {
-                let sigterm = sigterm_notif.as_mut().expect("SIGTERM reactor failure");
-                let sigint = sigint_notif.as_mut().expect("SIGINT reactor failure");
-                signal_received = tokio::select! {
-                    res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
-                        Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &provisioner_server).await?;
-                        false
-                    },
-                    _ = sigterm.recv() => {
-                        println!(
-                            "cargo-shuttle received SIGTERM. Killing all the runtimes..."
-                        );
-                        true
-                    },
-                    _ = sigint.recv() => {
-                        println!(
-                            "cargo-shuttle received SIGINT. Killing all the runtimes..."
-                        );
-                        true
-                    }
-                };
-
-                if signal_received {
-                    break;
+            // This must stop all the existing runtimes and creating new ones.
+            signal_received = tokio::select! {
+                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
+                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &provisioner_server).await?;
+                    false
+                },
+                _ = sigterm_notif.recv() => {
+                    println!(
+                        "cargo-shuttle received SIGTERM. Killing all the runtimes..."
+                    );
+                    true
+                },
+                _ = sigint_notif.recv() => {
+                    println!(
+                        "cargo-shuttle received SIGINT. Killing all the runtimes..."
+                    );
+                    true
                 }
-            } else {
-                Shuttle::add_runtime_info(
-                    Shuttle::spin_local_runtime(
-                        &run_args,
-                        service,
-                        &provisioner_server,
-                        i as u16,
-                        provisioner_port,
-                    )
-                    .await?,
-                    &mut runtimes,
-                    &provisioner_server,
-                )
-                .await?;
+            };
+
+            if signal_received {
+                break;
             }
         }
 
@@ -815,7 +807,7 @@ impl Shuttle {
                 Shuttle::stop_runtime(&mut rt, &mut rt_client)
                     .await
                     .unwrap_or_else(|err| {
-                        info!(status = ?err, "stopping the runtime errored out");
+                        trace!(status = ?err, "stopping the runtime errored out");
                     });
             }
             return Ok(());
@@ -823,67 +815,100 @@ impl Shuttle {
 
         // If no signal was received during runtimes initialization, then we must handle each runtime until
         // completion and handle the signals during this time.
-        if cfg!(target_family = "unix") {
-            let sigterm = sigterm_notif.as_mut().expect("SIGTERM reactor failure");
-            let sigint = sigint_notif.as_mut().expect("SIGINT reactor failure");
-            for (mut rt, mut rt_client) in runtimes {
-                // If we received a signal while waiting for any runtime we must stop the rest and exit
-                // the waiting loop.
-                if signal_received {
-                    Shuttle::stop_runtime(&mut rt, &mut rt_client)
-                        .await
-                        .unwrap_or_else(|err| {
-                            info!(status = ?err, "stopping the runtime errored out");
-                        });
-                    continue;
-                }
+        for (mut rt, mut rt_client) in runtimes {
+            // If we received a signal while waiting for any runtime we must stop the rest and exit
+            // the waiting loop.
+            if signal_received {
+                Shuttle::stop_runtime(&mut rt, &mut rt_client)
+                    .await
+                    .unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+                continue;
+            }
 
-                // Receiving a signal will stop the current runtime we're waiting for.
-                signal_received = tokio::select! {
-                    res = rt.wait() => {
-                        println!(
-                            "a service future completed with exit status: {:?}",
-                            res.unwrap().code()
-                        );
-                        false
-                    },
-                    _ = sigterm.recv() => {
-                        println!(
-                            "cargo-shuttle received SIGTERM. Killing all the runtimes..."
-                        );
-                        provisioner_server.abort();
-                        Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
-                            info!(status = ?err, "stopping the runtime errored out");
-                        });
-                        true
-                    },
-                    _ = sigint.recv() => {
-                        println!(
-                            "cargo-shuttle received SIGINT. Killing all the runtimes..."
-                        );
-                        provisioner_server.abort();
-                        Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
-                            info!(status = ?err, "stopping the runtime errored out");
-                        });
-                        true
-                    }
-                };
-            }
-        } else {
-            // In case we're not on an unix family OS, we're simply waiting for the runtimes
-            // to end.
-            for (mut rt, _) in runtimes {
-                println!(
-                    "a service future completed with exit status: {:?}",
-                    rt.wait().await?.code()
-                );
-            }
+            // Receiving a signal will stop the current runtime we're waiting for.
+            signal_received = tokio::select! {
+                res = rt.wait() => {
+                    println!(
+                        "a service future completed with exit status: {:?}",
+                        res.unwrap().code()
+                    );
+                    false
+                },
+                _ = sigterm_notif.recv() => {
+                    println!(
+                        "cargo-shuttle received SIGTERM. Killing all the runtimes..."
+                    );
+                    provisioner_server.abort();
+                    Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+                    true
+                },
+                _ = sigint_notif.recv() => {
+                    println!(
+                        "cargo-shuttle received SIGINT. Killing all the runtimes..."
+                    );
+                    provisioner_server.abort();
+                    Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+                    true
+                }
+            };
         }
+
+        println!(
+            "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
+             Run `cargo shuttle deploy` to deploy your Shuttle service."
+        );
 
         Ok(())
     }
 
-    async fn deploy(&self, args: DeployArgs, client: &Client) -> Result<CommandOutcome> {
+    #[cfg(target_family = "windows")]
+    async fn local_run(&self, run_args: RunArgs) -> Result<()> {
+        let services = Shuttle::pre_local_run(&self, &run_args).await?;
+        let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
+
+        // Start all the services.
+        let mut runtimes: Vec<(
+            Child,
+            RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+        )> = Vec::new();
+        for (i, service) in services.iter().enumerate() {
+            Shuttle::add_runtime_info(
+                Shuttle::spin_local_runtime(
+                    &run_args,
+                    service,
+                    &provisioner_server,
+                    i as u16,
+                    provisioner_port,
+                )
+                .await?,
+                &mut runtimes,
+                &provisioner_server,
+            )
+            .await?;
+        }
+
+        for (mut rt, _) in runtimes {
+            println!(
+                "a service future completed with exit status: {:?}",
+                rt.wait().await?.code()
+            );
+        }
+
+        println!(
+            "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
+             Run `cargo shuttle deploy` to deploy your Shuttle service."
+        );
+
+        Ok(())
+    }
+
+    async fn deploy(&self, client: &Client, args: DeployArgs) -> Result<CommandOutcome> {
         if !args.allow_dirty {
             self.is_dirty()?;
         }
@@ -908,6 +933,7 @@ impl Shuttle {
             client,
         )
         .await?;
+        println!("Run `cargo shuttle deploy` to deploy your Shuttle service.");
 
         Ok(())
     }
@@ -919,21 +945,14 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn projects_list(&self, client: &Client, filter: Option<String>) -> Result<()> {
-        let projects = match filter {
-            Some(filter) => {
-                if let Ok(filter) = State::from_str(filter.trim()) {
-                    client
-                        .get_projects_list_filtered(filter.to_string())
-                        .await?
-                } else {
-                    bail!("That's not a valid project status!");
-                }
-            }
-            None => client.get_projects_list().await?,
-        };
+    async fn projects_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
+        if limit == 0 {
+            println!();
+            return Ok(());
+        }
 
-        let projects_table = project::get_table(&projects);
+        let projects = client.get_projects_list(page, limit).await?;
+        let projects_table = project::get_table(&projects, page);
 
         println!("{projects_table}");
 
@@ -976,6 +995,7 @@ impl Shuttle {
             client,
         )
         .await?;
+        println!("Run `cargo shuttle project start` to recreate project environment on Shuttle.");
 
         Ok(())
     }
@@ -1064,6 +1084,7 @@ impl Shuttle {
 
         // Append all the entries to the archive.
         for (k, v) in entries {
+            debug!("Packing {k:?}");
             tar.append_path_with_name(k, v)?;
         }
 

@@ -4,7 +4,7 @@ use shuttle_auth::{sqlite_init, ApiBuilder};
 use sqlx::query;
 use tower::ServiceExt;
 
-pub(crate) const ADMIN_KEY: &str = "my-api-key";
+pub(crate) const ADMIN_KEY: &str = "ndh9z58jttoes3qv";
 
 pub(crate) struct TestApp {
     pub router: Router,

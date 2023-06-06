@@ -26,7 +26,7 @@ async fn convert_api_key_to_jwt() {
     // GET /auth/key with invalid bearer token.
     let request = Request::builder()
         .uri("/auth/key")
-        .header(AUTHORIZATION, "Bearer notadmin")
+        .header(AUTHORIZATION, "Bearer ndh9z58jttoefake")
         .body(Body::empty())
         .unwrap();
 

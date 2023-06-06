@@ -27,9 +27,9 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.14.0"
+//! shuttle-runtime = "0.18.0"
 //! axum = "0.6.10"
-//! shuttle-axum = "0.14.0"
+//! shuttle-axum = "0.18.0"
 //! tokio = "1.26"
 //! ```
 //!
@@ -51,7 +51,7 @@
 //! ```
 //!
 //! Check out [our docs](https://docs.shuttle.rs/introduction/welcome) to see all the frameworks we support, or
-//! our [examples](https://github.com/shuttle-hq/examples) if you prefer that format.
+//! our [examples](https://github.com/shuttle-hq/shuttle-examples) if you prefer that format.
 //!
 //! ## Running locally
 //! To test your app locally before deploying, use:
@@ -113,7 +113,7 @@
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.14.0", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.18.0", features = ["postgres"] }
 //! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
@@ -215,6 +215,7 @@
 //! You can also [open an issue or a discussion on GitHub](https://github.com/shuttle-hq/shuttle).
 //!
 mod alpha;
+mod args;
 mod logger;
 #[cfg(feature = "next")]
 mod next;

@@ -10,7 +10,6 @@ use std::{
 
 use anyhow::Context;
 use async_trait::async_trait;
-use clap::Parser;
 use core::future::Future;
 use shuttle_common::{
     backends::{
@@ -51,7 +50,7 @@ use self::args::Args;
 mod args;
 
 pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
-    let args = Args::parse();
+    let args = Args::parse().expect("could not parse arguments");
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
     let provisioner_address = args.provisioner_address;
@@ -85,7 +84,10 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         server_builder.add_service(svc)
     };
 
-    router.serve(addr).await.unwrap();
+    match router.serve(addr).await {
+        Ok(_) => {}
+        Err(e) => panic!("Error while serving address {addr}: {e}"),
+    };
 }
 
 pub struct Alpha<L, S> {
@@ -247,10 +249,13 @@ where
 
                 if error.is_panic() {
                     let panic = error.into_panic();
-                    let msg = panic
-                        .downcast_ref::<&str>()
-                        .map(|x| x.to_string())
-                        .unwrap_or_else(|| "<no panic message>".to_string());
+                    let msg = match panic.downcast_ref::<String>() {
+                        Some(msg) => msg.to_string(),
+                        None => match panic.downcast_ref::<&str>() {
+                            Some(msg) => msg.to_string(),
+                            None => "<no panic message>".to_string(),
+                        },
+                    };
 
                     error!(error = msg, "loading service panicked");
 
@@ -325,9 +330,13 @@ where
                         Err(error) => {
                             if error.is_panic() {
                                 let panic = error.into_panic();
-                                let msg = panic.downcast_ref::<&str>()
-                                    .map(|x| x.to_string())
-                                    .unwrap_or_else(|| "<no panic message>".to_string());
+                                let msg = match panic.downcast_ref::<String>() {
+                                    Some(msg) => msg.to_string(),
+                                    None => match panic.downcast_ref::<&str>() {
+                                        Some(msg) => msg.to_string(),
+                                        None => "<no panic message>".to_string(),
+                                    },
+                                };
 
                                 error!(error = msg, "service panicked");
 

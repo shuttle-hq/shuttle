@@ -2,7 +2,7 @@
 
 ## Tenets
 
-Our goal with shuttle open-source maintenance is to foster a thriving, collaborative, and sustainable ecosystem around the project, which allows it to continue to grow and evolve over time.
+Our goal with Shuttle open-source maintenance is to foster a thriving, collaborative, and sustainable ecosystem around the project, which allows it to continue to grow and evolve over time.
 
 We will strive to adhere to the following tenets:
 
@@ -22,13 +22,13 @@ are always appreciated!
 
 ## Running Locally
 
-You can use Docker and docker-compose to test shuttle locally during development. See the [Docker install](https://docs.docker.com/get-docker/)
+You can use Docker and docker-compose to test Shuttle locally during development. See the [Docker install](https://docs.docker.com/get-docker/)
 and [docker-compose install](https://docs.docker.com/compose/install/) instructions if you do not have them installed already.
 
 > Note for Windows: The current [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile) does not work on Windows systems by itself - if you want to build the local environment on Windows you could use [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install). Additional Windows considerations are listed at the bottom of this page.
 > Note for Linux: When building on Linux systems, if the error unknown flag: --build-arg is received, install the docker-buildx package using the package management tool for your particular system.
 
-Clone the shuttle repository (or your fork):
+Clone the Shuttle repository (or your fork):
 
 ```bash
 git clone git@github.com:shuttle-hq/shuttle.git
@@ -36,11 +36,11 @@ cd shuttle
 ```
 
 > Note: We need the git tags for the local development workflow, but they may not be included when you clone the repository.
-To make sure you have them, run `git fetch upstream --tags`, where upstream is the name of the shuttle remote repository.
+To make sure you have them, run `git fetch upstream --tags`, where upstream is the name of the Shuttle remote repository.
 
 You should now be ready to setup a local environment to test code changes to core `shuttle` packages as follows:
 
-From the root of the shuttle repo, build the required images with:
+From the root of the Shuttle repo, build the required images with:
 
 ```bash
 USE_PANAMAX=disable make images
@@ -50,13 +50,15 @@ USE_PANAMAX=disable make images
 
 The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straight away.
 
-You can now start a local deployment of shuttle and the required containers with:
+You can now start a local deployment of Shuttle and the required containers with:
 
 ```bash
 USE_PANAMAX=disable make up
 ```
 
 > Note: `make up` does not start [panamax](https://github.com/panamax-rs/panamax) by default, if you do need to start panamax for local development, run this command with `make COMPOSE_PROFILES=panamax up`.
+
+> Note: `make up` can also be run with `SHUTTLE_DETACH=disable`, which means docker-compose will not be run with `--detach`. This is often desirable for local testing.
 
 > Note: Other useful commands can be found within the [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile).
 
@@ -89,20 +91,22 @@ shuttle-tower = { path = "[base]/shuttle/services/shuttle-tower" }
 shuttle-warp = { path = "[base]/shuttle/services/shuttle-warp" }
 ```
 
-Before we can login to our local instance of shuttle, we need to create a user.
+Before we can login to our local instance of Shuttle, we need to create a user.
 The following command inserts a user into the `auth` state with admin privileges:
 
 ```bash
-docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key test-key
+# the --key needs to be 16 alphanumeric characters
+docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key dh9z58jttoes3qvt
 ```
 
-Login to shuttle service in a new terminal window from the root of the shuttle directory:
+Login to Shuttle service in a new terminal window from the root of the Shuttle directory:
 
 ```bash
-cargo run --bin cargo-shuttle -- login --api-key "test-key"
+# the --api-kei should be the same one you inserted in the auth state
+cargo run --bin cargo-shuttle -- login --api-key "dh9z58jttoes3qvt"
 ```
 
-The [shuttle examples](https://github.com/shuttle-hq/examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:
+The [shuttle examples](https://github.com/shuttle-hq/shuttle-examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:
 
 ```bash
 git submodule init
@@ -119,7 +123,7 @@ Create a new project, this will prompt your local instance of the gateway to
 start a deployer container:
 
 ```bash
-# the --manifest-path is used to locate the root of the shuttle workspace
+# the --manifest-path is used to locate the root of the Shuttle workspace
 cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- project start
 ```
 
@@ -133,7 +137,7 @@ Test if the deployment is working:
 
 ```bash
 # the Host header should match the Host from the deploy output
-curl --header "Host: {app}.unstable.shuttleapp.rs" localhost:8000/hello
+curl --header "Host: {app}.unstable.shuttleapp.rs" localhost:8000
 ```
 
 View logs from the current deployment:
@@ -145,62 +149,56 @@ cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- logs
 
 ### Testing deployer only
 
-The steps outlined above starts all the services used by shuttle locally (ie. both `gateway` and `deployer`). However, sometimes you will want to quickly test changes to `deployer` only. To do this replace `make up` with the following:
+The steps outlined above starts all the services used by Shuttle locally (ie. both `gateway` and `deployer`). However, sometimes you will want to quickly test changes to `deployer` only. To do this replace `make up` with the following:
 
 ```bash
-# first generate the local docker-compose file
+# if you didn't do this already, make the images
+USE_PANAMAX=disable make images
+
+# then generate the local docker-compose file
 make docker-compose.rendered.yml
 
 # then run it
 docker compose -f docker-compose.rendered.yml up provisioner
 ```
 
-This starts the provisioner and the auth service, while preventing `gateway` from starting up. Next up we need to
-insert an admin user into the `auth` state using the ID of the `auth` container and the auth CLI `init` command:
+This starts the provisioner and the auth service, while preventing `gateway` from starting up.
+Next up we need to insert an admin user into the `auth` state using the ID of the `auth`
+container and the auth CLI `init` command:
 
 ```bash
-AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-auth") \
+AUTH_CONTAINER_ID=$(docker ps -qf "name=auth") \
     docker exec $AUTH_CONTAINER_ID ./usr/local/bin/service \
     --state=/var/lib/shuttle-auth \
-    init --name admin --key test-key
+    init --name admin --key dh9z58jttoes3qvt
 ```
+> Note: if you have done this already for this container you will get a "UNIQUE constraint failed"
+> error, you can ignore this.
 
-Before we can run commands against a local deployer, we need to get a valid JWT and set it in our
-`.config/shuttle/config.toml` as our `api_key`. By running the following curl command, we will request
-that our api-key in the `Authorization` header be converted to a JWT, which will be returned in the response:
+We need to make sure we're logged in with the same key we inserted for the admin user in the
+previous step:
 
 ```bash
-curl -H "Authorization: Bearer test-key" localhost:8008/auth/key
+cargo shuttle login --api-key dh9z58jttoes3qvt
 ```
 
-Now copy the `token` value (just the value, not the key) from the curl response, and write it to your shuttle
-config (which will be a file named `config.toml` in a directory named `shuttle` in one of 
-[these places](https://docs.rs/dirs/latest/dirs/fn.config_dir.html) depending on your OS).
+We're now ready to start a local run of the deployer:
 
 ```bash
-# replace <jwt> with the token from the previous command
-echo "api_key = '<jwt>'" > ~/.config/shuttle/config.toml
+cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --proxy-fqdn local.rs --admin-secret test-key --local --project <project_name>
 ```
 
-> Note: The JWT will expire in 15 minutes, at which point you need to run the commands again.
-> If you have [`jq`](https://github.com/stedolan/jq/wiki/Installation) installed you can combine
-> the two above commands into the following:
-```bash
-curl -s -H "Authorization: Bearer test-key" localhost:8008/auth/key \
-    | jq -r '.token' \
-    | read token; echo "api_key='$token'" > ~/.config/shuttle/config.toml
-```
+The `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.
 
-Finally we need to comment out the admin layer in the deployer handlers. So in `deployer/handlers/mod.rs`,
-in the `make_router` function comment out this line: `.layer(AdminSecretLayer::new(admin_secret))`.
-
-And that's it, we're ready to start our deployer!
+Now that your local deployer is running, you can run commands against using the cargo-shuttle CLI.
+To do that you should navigate into an example, it needs to have the same project name as the
+one you submitted when starting the deployer above. Then you can use the CLI like you normally
+would:
 
 ```bash
-cargo run -p shuttle-deployer -- --provisioner-address http://localhost:8000 --proxy-fqdn local.rs --admin-secret test-key --project <project_name>
+# the manifest path is the path to the root Shuttle manifest from the example directory
+cargo run --bin cargo-shuttle --manifest-path="../../../Cargo.toml" -- deploy
 ```
-
-The `--admin-secret` can safely be changed to your api-key to make testing easier. While `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.
 
 ### Using Podman instead of Docker
 
@@ -211,7 +209,7 @@ Use Podman for building container images by setting `DOCKER_BUILD`.
 export DOCKER_BUILD=podman build --network host
 ```
 
-The shuttle containers expect access to a Docker-compatible API over a socket. Expose a rootless Podman socket either
+The Shuttle containers expect access to a Docker-compatible API over a socket. Expose a rootless Podman socket either
 - [with systemd](https://github.com/containers/podman/tree/main/contrib/systemd), if your system supports it,
     ```sh
     systemctl start --user podman.service
@@ -239,7 +237,7 @@ If you are using `nftables`, even with `iptables-nft`, it may be necessary to in
 
 ## Running Tests
 
-shuttle has reasonable test coverage - and we are working on improving this
+Shuttle has reasonable test coverage - and we are working on improving this
 every day. We encourage PRs to come with tests. If you're not sure about
 what a test should look like, feel free to [get in touch](https://discord.gg/shuttle).
 
@@ -260,7 +258,7 @@ cargo test --package <crate-name> --all-features --test '*' -- --nocapture
 To run the end-to-end tests, from the root of the repository run:
 
 ```bash
-make test
+USE_PANAMAX=disable make test
 ```
 
 > Note: Running all the end-to-end tests may take a long time, so it is recommended to run individual tests shipped as part of each crate in the workspace first.
@@ -276,7 +274,6 @@ Before committing:
 
 - Make sure your commits don't trigger any warnings from Clippy by running: `cargo clippy --tests --all-targets`. If you have a good reason to contradict Clippy, insert an `#[allow(clippy::<lint>)]` macro, so that it won't complain.
 - Make sure your code is correctly formatted: `cargo fmt --all --check`.
-- Make sure your `Cargo.toml`'s are sorted: `cargo +nightly sort --workspace`. This command uses the [cargo-sort crate](https://crates.io/crates/cargo-sort) to sort the `Cargo.toml` dependencies alphabetically.
 - If you've made changes to examples, make sure the above commands are ran there as well.
 
 ## Project Layout
@@ -322,7 +319,7 @@ graph BT
 
 ### Binaries
 
-- `cargo-shuttle` is the CLI used by users to initialize, deploy and manage their projects and services on shuttle.
+- `cargo-shuttle` is the CLI used by users to initialize, deploy and manage their projects and services on Shuttle.
 - `gateway` starts and manages instances of `deployer`. It proxies commands from the user sent via the CLI on port 8001 and traffic on port 8000 to the correct instance of `deployer`.
 - `auth` is an authentication service that creates and manages users. In addition to that, requests to the `gateway` that contain an api-key or cookie will be proxied to the `auth` service where it will be converted to a JWT for authorization between internal services (like a `deployer` requesting a database from
 `provisioner`).

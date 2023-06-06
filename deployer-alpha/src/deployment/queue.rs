@@ -5,14 +5,13 @@ use crate::error::{Error, Result, TestError};
 use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
 use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
 
-use cargo::util::interning::InternedString;
 use cargo_metadata::Message;
 use chrono::Utc;
 use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
 use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_workspace, get_config, BuiltService};
+use shuttle_service::builder::{build_workspace, BuiltService};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -21,13 +20,11 @@ use uuid::Uuid;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::fs::remove_file;
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use cargo::core::compiler::{CompileMode, MessageFormat};
-use cargo::core::Workspace;
-use cargo::ops::{self, CompileOptions, TestOptions};
 use flate2::read::GzDecoder;
 use tar::Archive;
 use tokio::fs;
@@ -339,7 +336,7 @@ async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<BuiltService> {
-    let runtimes = build_workspace(project_path, true, tx)
+    let runtimes = build_workspace(project_path, true, tx, true)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 
@@ -370,36 +367,32 @@ async fn run_pre_deploy_tests(
         }
     });
 
-    let config = get_config(write)?;
-    let manifest_path = project_path.join("Cargo.toml");
+    let mut cmd = Command::new("cargo")
+        .arg("test")
+        .arg("--release")
+        .arg("--jobs=4")
+        .arg("--message-format=json")
+        .current_dir(project_path)
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(TestError::Run)?;
 
-    let ws = Workspace::new(&manifest_path, &config)?;
+    let stdout = cmd.stdout.take().unwrap();
+    let stdout_reader = BufReader::new(stdout);
+    stdout_reader
+        .lines()
+        .filter_map(|line| line.ok())
+        .for_each(|line| {
+            if let Err(error) = write.send(format!("{}\n", line.trim_end_matches('\n'))) {
+                error!("failed to send line to pipe: {error}");
+            }
+        });
 
-    let mut compile_opts = CompileOptions::new(&config, CompileMode::Test)?;
-
-    compile_opts.build_config.message_format = MessageFormat::Json {
-        render_diagnostics: false,
-        short: false,
-        ansi: false,
-    };
-
-    // We set the tests to build with the release profile since deployments compile
-    // with the release profile by default. This means crates don't need to be
-    // recompiled in debug mode for the tests, reducing memory usage during deployment.
-    compile_opts.build_config.requested_profile = InternedString::new("release");
-
-    // Build tests with a maximum of 4 workers.
-    compile_opts.build_config.jobs = 4;
-
-    compile_opts.spec = ops::Packages::All;
-
-    let opts = TestOptions {
-        compile_opts,
-        no_run: false,
-        no_fail_fast: false,
-    };
-
-    ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
+    if cmd.wait().map_err(TestError::Run)?.success() {
+        Ok(())
+    } else {
+        Err(TestError::Failed)
+    }
 }
 
 /// This will store the path to the executable for each runtime, which will be the users project with
@@ -541,7 +534,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         let failure_project_path = root.join("tests/resources/tests-fail");
         assert!(matches!(
             super::run_pre_deploy_tests(&failure_project_path, tx.clone()).await,
-            Err(TestError::Failed(_))
+            Err(TestError::Failed)
         ));
 
         let pass_project_path = root.join("tests/resources/tests-pass");

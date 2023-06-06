@@ -12,12 +12,11 @@ use shuttle_common::{
     backends::metrics::{Metrics, TraceLayer},
     request_span,
 };
-use sqlx::SqlitePool;
 use tracing::field;
 
 use crate::{
+    dal::{Dal, Sqlite},
     secrets::{EdDsaManager, KeyManager},
-    user::{UserManagement, UserManager},
     COOKIE_EXPIRATION,
 };
 
@@ -26,7 +25,7 @@ use super::handlers::{
     put_user_reset_key, refresh_token,
 };
 
-pub type UserManagerState = Arc<Box<dyn UserManagement>>;
+pub type UserManagerState = Arc<Box<dyn Dal + Send + Sync + 'static>>;
 pub type KeyManagerState = Arc<Box<dyn KeyManager>>;
 
 #[derive(Clone)]
@@ -51,7 +50,7 @@ impl FromRef<RouterState> for KeyManagerState {
 
 pub struct ApiBuilder {
     router: Router<RouterState>,
-    pool: Option<SqlitePool>,
+    sqlite: Option<Sqlite>,
     session_layer: Option<SessionLayer<MemoryStore>>,
 }
 
@@ -88,13 +87,13 @@ impl ApiBuilder {
 
         Self {
             router,
-            pool: None,
+            sqlite: None,
             session_layer: None,
         }
     }
 
-    pub fn with_sqlite_pool(mut self, pool: SqlitePool) -> Self {
-        self.pool = Some(pool);
+    pub fn with_sqlite(mut self, sqlite: Sqlite) -> Self {
+        self.sqlite = Some(sqlite);
         self
     }
 
@@ -113,14 +112,13 @@ impl ApiBuilder {
     }
 
     pub fn into_router(self) -> Router {
-        let pool = self.pool.expect("an sqlite pool is required");
+        let sqlite = self.sqlite.expect("an sqlite database is required");
         let session_layer = self.session_layer.expect("a session layer is required");
 
-        let user_manager = UserManager { pool };
         let key_manager = EdDsaManager::new();
 
         let state = RouterState {
-            user_manager: Arc::new(Box::new(user_manager)),
+            user_manager: Arc::new(Box::new(sqlite)),
             key_manager: Arc::new(Box::new(key_manager)),
         };
 

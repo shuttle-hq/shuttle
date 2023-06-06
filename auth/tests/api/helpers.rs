@@ -1,7 +1,6 @@
 use axum::{body::Body, response::Response, Router};
 use hyper::http::{header::AUTHORIZATION, Request};
-use shuttle_auth::{sqlite_init, ApiBuilder};
-use sqlx::query;
+use shuttle_auth::{ApiBuilder, Sqlite};
 use tower::ServiceExt;
 
 pub(crate) const ADMIN_KEY: &str = "ndh9z58jttoes3qv";
@@ -12,19 +11,13 @@ pub(crate) struct TestApp {
 
 /// Initialize a router with an in-memory sqlite database for each test.
 pub(crate) async fn app() -> TestApp {
-    let sqlite_pool = sqlite_init("sqlite::memory:").await;
+    let sqlite = Sqlite::new_in_memory().await;
 
     // Insert an admin user for the tests.
-    query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
-        .bind("admin")
-        .bind(ADMIN_KEY)
-        .bind("admin")
-        .execute(&sqlite_pool)
-        .await
-        .unwrap();
+    sqlite.insert_admin("admin", Some(ADMIN_KEY)).await;
 
     let router = ApiBuilder::new()
-        .with_sqlite_pool(sqlite_pool)
+        .with_sqlite(sqlite)
         .with_sessions()
         .into_router();
 

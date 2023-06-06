@@ -53,7 +53,9 @@ pub(crate) async fn put_user_reset_key(
         },
     };
 
-    user_manager.reset_key(account_name).await
+    let result = user_manager.reset_key(account_name).await?;
+
+    Ok(result)
 }
 
 pub(crate) async fn login(

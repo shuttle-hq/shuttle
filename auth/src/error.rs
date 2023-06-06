@@ -7,6 +7,8 @@ use axum::Json;
 use serde::{ser::SerializeMap, Serialize};
 use shuttle_common::models::error::ApiError;
 
+use crate::dal::DalError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("User could not be found")]
@@ -17,8 +19,8 @@ pub enum Error {
     Unauthorized,
     #[error("Forbidden.")]
     Forbidden,
-    #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
+    #[error("failed to interact with database: {0}")]
+    Dal(#[from] DalError),
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -41,7 +43,7 @@ impl IntoResponse for Error {
         let code = match self {
             Error::Forbidden => StatusCode::FORBIDDEN,
             Error::Unauthorized | Error::KeyMissing => StatusCode::UNAUTHORIZED,
-            Error::Database(_) | Error::UserNotFound => StatusCode::NOT_FOUND,
+            Error::Dal(_) | Error::UserNotFound => StatusCode::NOT_FOUND,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 

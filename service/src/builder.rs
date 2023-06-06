@@ -280,7 +280,8 @@ async fn compile(
                 "target".into(),
                 "wasm32-wasi".into(),
                 profile.into(),
-                package.clone().name.replace('-', '_').into(),
+                #[allow(clippy::single_char_pattern)]
+                package.clone().name.replace("-", "_").into(),
             ]
             .iter()
             .collect();
@@ -303,7 +304,8 @@ async fn compile(
                 project_path.clone(),
                 "target".into(),
                 profile.into(),
-                package.clone().name.replace('-', '_').into(),
+                #[allow(clippy::single_char_pattern)]
+                package.clone().name.replace("-", "_").into(),
             ]
             .iter()
             .collect();

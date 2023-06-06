@@ -148,7 +148,6 @@ pub async fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Res
     if release_mode {
         profile = "release";
     }
-
     let output = tokio::process::Command::new("cargo")
         .arg("clean")
         .arg("--manifest-path")

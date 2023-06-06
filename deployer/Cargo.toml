@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-deployer"
-version = "0.15.0"
+version = "0.18.0"
 edition.workspace = true
 license.workspace = true
 description = "Service with instances created per project for handling the compilation, loading, and execution of Shuttle services"
@@ -10,7 +10,6 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["headers", "json", "query", "ws"] }
 bytes = { workspace = true }
-cargo = { workspace = true }
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
@@ -20,8 +19,7 @@ fqdn = { workspace = true }
 futures = { workspace = true }
 home = { workspace = true }
 hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
-# not great, but waiting for WebSocket changes to be merged
-hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
+hyper-reverse-proxy = { workspace = true }
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-http = { workspace = true }

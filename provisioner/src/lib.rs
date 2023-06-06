@@ -2,7 +2,10 @@ use std::time::Duration;
 
 pub use args::Args;
 use aws_config::timeout;
-use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::SdkError, Client};
+use aws_sdk_rds::{
+    error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
+    Client,
+};
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
@@ -255,8 +258,8 @@ impl MyProvisioner {
             Ok(_) => {
                 wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
             }
-            Err(SdkError::ServiceError { err, .. }) => {
-                if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
+            Err(SdkError::ServiceError(err)) => {
+                if let ModifyDBInstanceError::DbInstanceNotFoundFault(_) = err.err() {
                     debug!("creating new AWS RDS {instance_name}");
 
                     client
@@ -280,7 +283,7 @@ impl MyProvisioner {
                 } else {
                     return Err(Error::Plain(format!(
                         "got unexpected error from AWS RDS service: {}",
-                        err
+                        err.err()
                     )));
                 }
             }
@@ -392,10 +395,11 @@ impl MyProvisioner {
             .await;
 
         // Did we get an error that wasn't "db instance not found"
-        if let Err(SdkError::ServiceError { err, .. }) = delete_result {
-            if !err.is_db_instance_not_found_fault() {
+        if let Err(SdkError::ServiceError(err)) = delete_result {
+            if !err.err().is_db_instance_not_found_fault() {
                 return Err(Error::Plain(format!(
-                    "got unexpected error from AWS RDS service: {err}"
+                    "got unexpected error from AWS RDS service: {}",
+                    err.err()
                 )));
             }
         }

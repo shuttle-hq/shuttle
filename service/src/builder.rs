@@ -1,16 +1,11 @@
 use std::fs::read_to_string;
+use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context};
-use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget, MessageFormat};
-use cargo::core::{Package, Shell, Verbosity, Workspace};
-use cargo::ops::{self, clean, compile, CleanOptions, CompileOptions};
-use cargo::util::homedir;
-use cargo::util::interning::InternedString;
-use cargo::Config;
 use cargo_metadata::Message;
+use cargo_metadata::{Package, Target};
 use crossbeam_channel::Sender;
-use pipe::PipeWriter;
 use shuttle_common::project::ProjectName;
 use tracing::{debug, error, trace};
 
@@ -81,208 +76,120 @@ pub async fn build_workspace(
     project_path: &Path,
     release_mode: bool,
     tx: Sender<Message>,
+    deployment: bool,
 ) -> anyhow::Result<Vec<BuiltService>> {
-    let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
-    // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
-    tokio::task::spawn_blocking(move || {
-        trace!("started thread to to capture build output stream");
-        for message in Message::parse_stream(read) {
-            trace!(?message, "parsed cargo message");
-            match message {
-                Ok(message) => {
-                    if let Err(error) = tx.send(message) {
-                        error!("failed to send cargo message on channel: {error}");
-                    }
-                }
-                Err(error) => {
-                    error!("failed to parse cargo message: {error}");
-                }
-            }
-        }
-    });
-
-    let config = get_config(write)?;
     let manifest_path = project_path.join("Cargo.toml");
-    let ws = Workspace::new(&manifest_path, &config)?;
-    check_no_panic(&ws)?;
+
+    if !manifest_path.exists() {
+        return Err(anyhow!("failed to read the Shuttle project manifest"));
+    }
+    let metadata = cargo_metadata::MetadataCommand::new()
+        .manifest_path(&manifest_path)
+        .exec()?;
+    trace!("Cargo metadata parsed");
 
     let mut alpha_packages = Vec::new();
     let mut next_packages = Vec::new();
 
-    for member in ws.members() {
+    for member in metadata.workspace_packages() {
         if is_next(member) {
             ensure_cdylib(member)?;
-            next_packages.push(member.name().to_string());
+            next_packages.push(member);
         } else if is_alpha(member) {
             ensure_binary(member)?;
-            alpha_packages.push(member.name().to_string());
+            alpha_packages.push(member);
         }
     }
 
     let mut runtimes = Vec::new();
 
     if !alpha_packages.is_empty() {
-        let opts = get_compile_options(&config, alpha_packages, release_mode, false)?;
-        let compilation = compile(&ws, &opts)?;
+        let mut service = compile(
+            alpha_packages,
+            release_mode,
+            false,
+            project_path.clone(),
+            deployment,
+            tx.clone(),
+        )
+        .await?;
+        trace!("alpha packages compiled");
 
-        let mut alpha_binaries = compilation
-            .binaries
-            .iter()
-            .map(|binary| {
-                BuiltService::new(
-                    binary.path.clone(),
-                    false,
-                    binary.unit.pkg.name().to_string(),
-                    binary.unit.pkg.root().to_path_buf(),
-                    binary.unit.pkg.manifest_path().to_path_buf(),
-                )
-            })
-            .collect();
-
-        runtimes.append(&mut alpha_binaries);
+        runtimes.append(&mut service);
     }
 
     if !next_packages.is_empty() {
-        let opts = get_compile_options(&config, next_packages, release_mode, true)?;
-        let compilation = compile(&ws, &opts)?;
+        let mut service = compile(
+            next_packages,
+            release_mode,
+            true,
+            project_path,
+            deployment,
+            tx,
+        )
+        .await?;
+        trace!("next packages compiled");
 
-        let mut next_libraries = compilation
-            .cdylibs
-            .iter()
-            .map(|binary| {
-                BuiltService::new(
-                    binary.path.clone(),
-                    true,
-                    binary.unit.pkg.name().to_string(),
-                    binary.unit.pkg.root().to_path_buf(),
-                    binary.unit.pkg.manifest_path().to_path_buf(),
-                )
-            })
-            .collect();
-
-        runtimes.append(&mut next_libraries);
+        runtimes.append(&mut service);
     }
 
     Ok(runtimes)
 }
 
-pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Vec<String>> {
-    let (read, write) = pipe::pipe();
+pub async fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Vec<String>> {
     let project_path = project_path.to_owned();
-
-    tokio::task::spawn_blocking(move || {
-        let config = get_config(write).unwrap();
-        let manifest_path = project_path.join("Cargo.toml");
-        let ws = Workspace::new(&manifest_path, &config).unwrap();
-
-        let requested_profile = if release_mode {
-            InternedString::new("release")
-        } else {
-            InternedString::new("dev")
-        };
-
-        let opts = CleanOptions {
-            config: &config,
-            spec: Vec::new(),
-            targets: Vec::new(),
-            requested_profile,
-            profile_specified: true,
-            doc: false,
-        };
-
-        clean(&ws, &opts).unwrap();
-    });
-
-    let mut lines = Vec::new();
-
-    for message in Message::parse_stream(read) {
-        trace!(?message, "parsed cargo message");
-        match message {
-            Ok(Message::TextLine(line)) => {
-                lines.push(line);
-            }
-            Ok(_) => {}
-            Err(error) => {
-                error!("failed to parse cargo message: {error}");
-            }
-        }
+    let manifest_path = project_path.join("Cargo.toml");
+    if !manifest_path.exists() {
+        return Err(anyhow!("failed to read the Shuttle project manifest"));
     }
-
-    Ok(lines)
-}
-
-/// Get the default compile config with output redirected to writer
-pub fn get_config(writer: PipeWriter) -> anyhow::Result<Config> {
-    let mut shell = Shell::from_write(Box::new(writer));
-    shell.set_verbosity(Verbosity::Normal);
-    let cwd = std::env::current_dir()
-        .with_context(|| "couldn't get the current directory of the process")?;
-    let homedir = homedir(&cwd).ok_or_else(|| {
-        anyhow!(
-            "Cargo couldn't find your home directory. \
-                 This probably means that $HOME was not set."
-        )
-    })?;
-
-    Ok(Config::new(shell, cwd, homedir))
-}
-
-/// Get options to compile in build mode
-fn get_compile_options(
-    config: &Config,
-    packages: Vec<String>,
-    release_mode: bool,
-    wasm: bool,
-) -> anyhow::Result<CompileOptions> {
-    let mut opts = CompileOptions::new(config, CompileMode::Build)?;
-    opts.build_config.message_format = MessageFormat::Json {
-        render_diagnostics: false,
-        short: false,
-        ansi: false,
-    };
-
-    opts.build_config.requested_profile = if release_mode {
-        InternedString::new("release")
-    } else {
-        InternedString::new("dev")
-    };
-
-    // This sets the max workers for cargo build to 4 for release mode (aka deployment),
-    // but leaves it as default (num cpus) for local runs
+    let mut profile = "dev";
     if release_mode {
-        opts.build_config.jobs = 4
-    };
+        profile = "release";
+    }
+    let output = tokio::process::Command::new("cargo")
+        .arg("clean")
+        .arg("--manifest-path")
+        .arg(manifest_path.to_str().unwrap())
+        .arg("--profile")
+        .arg(profile)
+        .output()
+        .await
+        .unwrap();
 
-    opts.build_config.requested_kinds = vec![if wasm {
-        CompileKind::Target(CompileTarget::new("wasm32-wasi")?)
+    if output.status.success() {
+        let lines = vec![
+            String::from_utf8(output.clone().stderr)?,
+            String::from_utf8(output.stdout)?,
+        ];
+        Ok(lines)
     } else {
-        CompileKind::Host
-    }];
-
-    opts.spec = ops::Packages::Packages(packages);
-
-    Ok(opts)
+        Err(anyhow!(
+            "cargo clean failed with exit code {} and error {}",
+            output.clone().status.to_string(),
+            String::from_utf8(output.stderr)?
+        ))
+    }
 }
 
 fn is_next(package: &Package) -> bool {
     package
-        .dependencies()
+        .dependencies
         .iter()
-        .any(|dependency| dependency.package_name() == NEXT_NAME)
+        .any(|dependency| dependency.name == NEXT_NAME)
 }
 
 fn is_alpha(package: &Package) -> bool {
     package
-        .dependencies()
+        .dependencies
         .iter()
-        .any(|dependency| dependency.package_name() == RUNTIME_NAME)
+        .any(|dependency| dependency.name == RUNTIME_NAME)
 }
 
 /// Make sure the project is a binary for alpha projects.
 fn ensure_binary(package: &Package) -> anyhow::Result<()> {
-    if package.targets().iter().any(|target| target.is_bin()) {
+    if package.targets.iter().any(|target| target.is_bin()) {
         Ok(())
     } else {
         bail!("Your Shuttle project must be a binary.")
@@ -291,22 +198,131 @@ fn ensure_binary(package: &Package) -> anyhow::Result<()> {
 
 /// Make sure "cdylib" is set for shuttle-next projects, else set it if possible.
 fn ensure_cdylib(package: &Package) -> anyhow::Result<()> {
-    if package.targets().iter().any(|target| target.is_lib()) {
+    if package.targets.iter().any(is_cdylib) {
         Ok(())
     } else {
         bail!("Your Shuttle next project must be a library. Please add `[lib]` to your Cargo.toml file.")
     }
 }
 
-/// Ensure `panic = "abort"` is not set:
-fn check_no_panic(ws: &Workspace) -> anyhow::Result<()> {
-    if let Some(profiles) = ws.profiles() {
-        for profile in profiles.get_all().values() {
-            if profile.panic.as_deref() == Some("abort") {
-                return Err(anyhow!("Your Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles."));
-            }
+fn is_cdylib(target: &Target) -> bool {
+    target.kind.iter().any(|kind| kind == "cdylib")
+}
+
+async fn compile(
+    packages: Vec<&Package>,
+    release_mode: bool,
+    wasm: bool,
+    project_path: PathBuf,
+    deployment: bool,
+    tx: Sender<Message>,
+) -> anyhow::Result<Vec<BuiltService>> {
+    let manifest_path = project_path.join("Cargo.toml");
+
+    let mut cargo = tokio::process::Command::new("cargo");
+
+    let (reader, writer) = os_pipe::pipe()?;
+    let writer_clone = writer.try_clone()?;
+    cargo.stdout(writer);
+    cargo.stderr(writer_clone);
+
+    cargo.arg("build").arg("--manifest-path").arg(manifest_path);
+
+    if deployment {
+        cargo.arg("-j").arg(4.to_string());
+    }
+
+    for package in packages.clone() {
+        cargo.arg("--package").arg(package.name.clone());
+    }
+
+    let mut profile = "debug";
+
+    if release_mode {
+        profile = "release";
+        cargo.arg("--profile").arg("release");
+    } else {
+        cargo.arg("--profile").arg("dev");
+    }
+
+    if wasm {
+        cargo.arg("--target").arg("wasm32-wasi");
+    }
+
+    let mut handle = cargo.spawn()?;
+
+    tokio::task::spawn_blocking(move || {
+        let reader = std::io::BufReader::new(reader);
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                if let Err(error) = tx.send(Message::TextLine(line)) {
+                    error!("failed to send cargo message on channel: {error}");
+                };
+            } else {
+                error!("Failed to read Cargo log messages");
+            };
+        }
+    });
+
+    let command = handle.wait().await?;
+
+    if !command.success() {
+        bail!("Build failed. Is the Shuttle runtime missing?");
+    }
+
+    let mut outputs = Vec::new();
+
+    for package in packages {
+        if wasm {
+            let mut path: PathBuf = [
+                project_path.clone(),
+                "target".into(),
+                "wasm32-wasi".into(),
+                profile.into(),
+                #[allow(clippy::single_char_pattern)]
+                package.clone().name.replace("-", "_").into(),
+            ]
+            .iter()
+            .collect();
+            path.set_extension("wasm");
+
+            let mut working_directory = package.clone().manifest_path.into_std_path_buf();
+            working_directory.pop();
+
+            let output = BuiltService::new(
+                path.clone(),
+                true,
+                package.clone().name,
+                working_directory,
+                package.clone().manifest_path.into_std_path_buf(),
+            );
+
+            outputs.push(output);
+        } else {
+            let mut path: PathBuf = [
+                project_path.clone(),
+                "target".into(),
+                profile.into(),
+                package.clone().name.into(),
+            ]
+            .iter()
+            .collect();
+            path.set_extension(std::env::consts::EXE_SUFFIX);
+
+            let mut working_directory = package.clone().manifest_path.into_std_path_buf();
+            working_directory.pop();
+
+            let output = BuiltService::new(
+                path.clone(),
+                false,
+                package.clone().name,
+                working_directory,
+                package.clone().manifest_path.into_std_path_buf(),
+            );
+
+            outputs.push(output);
         }
     }
 
-    Ok(())
+    Ok(outputs)
 }

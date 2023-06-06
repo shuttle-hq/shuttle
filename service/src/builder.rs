@@ -304,8 +304,7 @@ async fn compile(
                 project_path.clone(),
                 "target".into(),
                 profile.into(),
-                #[allow(clippy::single_char_pattern)]
-                package.clone().name.replace("-", "_").into(),
+                package.clone().name.into(),
             ]
             .iter()
             .collect();

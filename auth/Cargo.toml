@@ -9,7 +9,7 @@ repository.workspace = true
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["headers"] }
-axum-sessions = "0.4.1"
+axum-sessions = { workspace = true }
 clap = { workspace = true }
 http = { workspace = true }
 jsonwebtoken = { workspace = true }

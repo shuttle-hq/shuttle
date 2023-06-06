@@ -16,6 +16,7 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use tracing::error;
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub struct Client {
     api_url: ApiUrl,
     api_key: Option<ApiKey>,
@@ -92,7 +93,7 @@ impl Client {
         let path = format!(
             "/projects/{}/services/{}/resources",
             project.as_str(),
-            project.as_str()
+            project.as_str(),
         );
 
         self.get(path).await
@@ -128,8 +129,8 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
-        let path = "/projects".to_string();
+    pub async fn get_projects_list(&self, page: u32, limit: u32) -> Result<Vec<project::Response>> {
+        let path = format!("/projects?page={}&limit={}", page.saturating_sub(1), limit);
 
         self.get(path).await
     }
@@ -181,8 +182,15 @@ impl Client {
     pub async fn get_deployments(
         &self,
         project: &ProjectName,
+        page: u32,
+        limit: u32,
     ) -> Result<Vec<deployment::Response>> {
-        let path = format!("/projects/{}/deployments", project.as_str());
+        let path = format!(
+            "/projects/{}/deployments?page={}&limit={}",
+            project.as_str(),
+            page.saturating_sub(1),
+            limit,
+        );
 
         self.get(path).await
     }
@@ -199,6 +207,11 @@ impl Client {
         );
 
         self.get(path).await
+    }
+
+    pub async fn reset_api_key(&self) -> Result<Response> {
+        self.put("/users/reset-api-key".into(), Option::<()>::None)
+            .await
     }
 
     async fn ws_get(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
@@ -241,6 +254,22 @@ impl Client {
         let url = format!("{}{}", self.api_url, path);
 
         let mut builder = Self::get_retry_client().post(url);
+
+        builder = self.set_builder_auth(builder);
+
+        if let Some(body) = body {
+            let body = serde_json::to_string(&body)?;
+            builder = builder.body(body);
+            builder = builder.header("Content-Type", "application/json");
+        }
+
+        Ok(builder.send().await?)
+    }
+
+    async fn put<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = Self::get_retry_client().put(url);
 
         builder = self.set_builder_auth(builder);
 

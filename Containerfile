@@ -4,13 +4,6 @@ FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-build
 RUN apt-get update &&\
     apt-get install -y curl
 
-# download protoc binary and unzip it in usr/bin
-ARG PROTOC_ARCH
-RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-${PROTOC_ARCH}.zip &&\
-    unzip -o protoc-21.9-linux-${PROTOC_ARCH}.zip -d /usr bin/protoc &&\
-    unzip -o protoc-21.9-linux-${PROTOC_ARCH}.zip -d /usr/ 'include/*' &&\
-    rm -f protoc-21.9-linux-${PROTOC_ARCH}.zip
-
 RUN cargo install cargo-chef
 WORKDIR /build
 
@@ -37,14 +30,6 @@ RUN cargo build --bin shuttle-${folder} $(if [ "$CARGO_PROFILE" = "release" ]; t
 
 ARG RUSTUP_TOOLCHAIN
 FROM rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-common
-RUN apt-get update &&\
-    apt-get install -y curl
-# download protoc binary and unzip it in usr/bin
-ARG PROTOC_ARCH
-RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-${PROTOC_ARCH}.zip &&\
-    unzip -o protoc-21.9-linux-${PROTOC_ARCH}.zip -d /usr/ bin/protoc &&\
-    unzip -o protoc-21.9-linux-${PROTOC_ARCH}.zip -d /usr/ 'include/*' &&\
-    rm -f protoc-21.9-linux-${PROTOC_ARCH}.zip
 RUN rustup component add rust-src
 
 COPY --from=cache /build/ /usr/src/shuttle/
@@ -52,6 +37,7 @@ COPY --from=cache /build/ /usr/src/shuttle/
 FROM shuttle-common
 ARG folder
 ARG prepare_args
+ARG PROD
 COPY ${folder}/prepare.sh /prepare.sh
 RUN /prepare.sh "${prepare_args}"
 ARG CARGO_PROFILE

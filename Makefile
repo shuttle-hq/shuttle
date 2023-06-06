@@ -147,7 +147,7 @@ docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 # to start panamax locally run this command with an override for the profiles:
 # `make COMPOSE_PROFILES=panamax up`
 up: $(DOCKER_COMPOSE_FILES)
-	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) up -d
+	if [ "$(SHUTTLE_DETACH)" = "disable" ]; then $(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) up; else $(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) up --detach; fi
 
 down: $(DOCKER_COMPOSE_FILES)
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) down
@@ -156,6 +156,7 @@ shuttle-%: ${SRC} Cargo.lock
 	$(DOCKER_BUILD) \
 		--build-arg folder=$(*) \
 		--build-arg prepare_args=$(PREPARE_ARGS) \
+		--build-arg PROD=$(PROD) \
 		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
 		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \

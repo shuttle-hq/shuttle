@@ -2,47 +2,49 @@ use std::fs::{read_to_string, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use cargo_edit::{find, get_latest_dependency, registry_url};
 use indoc::indoc;
+use shuttle_common::project::ProjectName;
 use toml_edit::{value, Array, Document, Table};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum::Display, strum::EnumIter)]
 #[strum(serialize_all = "kebab-case")]
-pub enum Framework {
+pub enum Template {
     ActixWeb,
     Axum,
-    Rocket,
-    Tide,
-    Tower,
+    Poise,
     Poem,
+    Rocket,
     Salvo,
     Serenity,
-    Poise,
-    Warp,
+    Tide,
     Thruster,
+    Tower,
+    Warp,
     None,
 }
 
-impl Framework {
+impl Template {
     /// Returns a framework-specific struct that implements the trait `ShuttleInit`
     /// for writing framework-specific dependencies to `Cargo.toml` and generating
     /// boilerplate code in `src/main.rs`.
     pub fn init_config(&self) -> Box<dyn ShuttleInit> {
+        use Template::*;
         match self {
-            Framework::ActixWeb => Box::new(ShuttleInitActixWeb),
-            Framework::Axum => Box::new(ShuttleInitAxum),
-            Framework::Rocket => Box::new(ShuttleInitRocket),
-            Framework::Tide => Box::new(ShuttleInitTide),
-            Framework::Tower => Box::new(ShuttleInitTower),
-            Framework::Poem => Box::new(ShuttleInitPoem),
-            Framework::Salvo => Box::new(ShuttleInitSalvo),
-            Framework::Serenity => Box::new(ShuttleInitSerenity),
-            Framework::Poise => Box::new(ShuttleInitPoise),
-            Framework::Warp => Box::new(ShuttleInitWarp),
-            Framework::Thruster => Box::new(ShuttleInitThruster),
-            Framework::None => Box::new(ShuttleInitNoOp),
+            ActixWeb => Box::new(ShuttleInitActixWeb),
+            Axum => Box::new(ShuttleInitAxum),
+            Rocket => Box::new(ShuttleInitRocket),
+            Tide => Box::new(ShuttleInitTide),
+            Tower => Box::new(ShuttleInitTower),
+            Poem => Box::new(ShuttleInitPoem),
+            Salvo => Box::new(ShuttleInitSalvo),
+            Serenity => Box::new(ShuttleInitSerenity),
+            Poise => Box::new(ShuttleInitPoise),
+            Warp => Box::new(ShuttleInitWarp),
+            Thruster => Box::new(ShuttleInitThruster),
+            None => Box::new(ShuttleInitNoOp),
         }
     }
 }
@@ -101,7 +103,7 @@ impl ShuttleInit for ShuttleInitActixWeb {
         use actix_web::{get, web::ServiceConfig};
         use shuttle_actix_web::ShuttleActixWeb;
 
-        #[get("/hello")]
+        #[get("/")]
         async fn hello_world() -> &'static str {
             "Hello World!"
         }
@@ -166,7 +168,7 @@ impl ShuttleInit for ShuttleInitAxum {
 
         #[shuttle_runtime::main]
         async fn axum() -> shuttle_axum::ShuttleAxum {
-            let router = Router::new().route("/hello", get(hello_world));
+            let router = Router::new().route("/", get(hello_world));
 
             Ok(router.into())
         }"#}
@@ -223,7 +225,7 @@ impl ShuttleInit for ShuttleInitRocket {
 
         #[shuttle_runtime::main]
         async fn rocket() -> shuttle_rocket::ShuttleRocket {
-            let rocket = rocket::build().mount("/hello", routes![index]);
+            let rocket = rocket::build().mount("/", routes![index]);
 
             Ok(rocket.into())
         }"#}
@@ -275,7 +277,7 @@ impl ShuttleInit for ShuttleInitTide {
             let mut app = tide::new();
             app.with(tide::log::LogMiddleware::new());
 
-            app.at("/hello").get(|_| async { Ok("Hello, world!") });
+            app.at("/").get(|_| async { Ok("Hello, world!") });
 
             Ok(app.into())
         }"#}
@@ -332,7 +334,7 @@ impl ShuttleInit for ShuttleInitPoem {
 
         #[shuttle_runtime::main]
         async fn poem() -> ShuttlePoem<impl poem::Endpoint> {
-            let app = Route::new().at("/hello", get(hello_world));
+            let app = Route::new().at("/", get(hello_world));
 
             Ok(app.into())
         }"#}
@@ -839,7 +841,7 @@ impl ShuttleInit for ShuttleInitThruster {
         #[shuttle_runtime::main]
         async fn thruster() -> shuttle_thruster::ShuttleThruster<HyperServer<Ctx, ()>> {
             let server = HyperServer::new(
-                App::<HyperRequest, Ctx, ()>::create(generate_context, ()).get("/hello", m![hello]),
+                App::<HyperRequest, Ctx, ()>::create(generate_context, ()).get("/", m![hello]),
             );
             
             Ok(server.into())
@@ -863,20 +865,27 @@ impl ShuttleInit for ShuttleInitNoOp {
     }
 }
 
-/// Interoprates with `cargo` crate and calls `cargo init [path]`.
-pub fn cargo_init(path: PathBuf) -> Result<()> {
-    std::process::Command::new("cargo")
-        .arg("init")
+pub fn cargo_init(path: PathBuf, name: ProjectName) -> Result<()> {
+    let mut cmd = std::process::Command::new("cargo");
+    cmd.arg("init")
         .arg("--bin")
-        .arg(path)
-        .output()
-        .expect("Failed to initialize with cargo init.");
+        .arg("--name")
+        .arg(name.as_str())
+        .arg(path.as_os_str());
+    println!(r#"    Creating project "{name}" in {path:?}"#);
+    let output = cmd.output().expect("Failed to initialize with cargo init.");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    if !output.status.success() {
+        bail!("cargo init failed:\n{}", stderr)
+    }
+    print!("{}", stderr);
 
     Ok(())
 }
 
 /// Performs shuttle init on the existing files generated by `cargo init [path]`.
-pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
+pub fn cargo_shuttle_init(path: PathBuf, framework: Template) -> Result<()> {
+    println!(r#"     Setting up "{framework}" template"#);
     let cargo_toml_path = path.join("Cargo.toml");
     let mut cargo_doc = read_to_string(cargo_toml_path.clone())
         .unwrap()

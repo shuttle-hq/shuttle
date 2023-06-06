@@ -39,7 +39,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
     let runtime_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), runtime_port);
 
     let (tx, _) = crossbeam_channel::unbounded();
-    let runtimes = build_workspace(Path::new(&project_path), false, tx).await?;
+    let runtimes = build_workspace(Path::new(&project_path), false, tx, false).await?;
 
     let secrets: HashMap<String, String> = Default::default();
 

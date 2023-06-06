@@ -93,7 +93,7 @@ impl Sqlite {
         };
 
         sqlx::query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
-            .bind(&account_name)
+            .bind(account_name)
             .bind(&key)
             .bind(AccountTier::Admin)
             .execute(&self.pool)

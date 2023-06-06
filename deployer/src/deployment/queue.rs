@@ -379,11 +379,9 @@ async fn run_pre_deploy_tests(
 
     let stdout = cmd.stdout.take().unwrap();
     let stdout_reader = BufReader::new(stdout);
-    for line in stdout_reader.lines() {
-        if let Ok(line) = line {
-            if let Err(error) = write.send(format!("{}\n", line.trim_end_matches('\n'))) {
-                error!("failed to send to pipe: {error}");
-            }
+    for line in stdout_reader.lines().flatten() {
+        if let Err(error) = write.send(format!("{}\n", line.trim_end_matches('\n'))) {
+            error!("failed to send to pipe: {error}");
         }
     }
 

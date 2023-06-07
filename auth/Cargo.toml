@@ -26,6 +26,7 @@ sqlx = { workspace = true, features = [
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -33,6 +34,9 @@ tracing-subscriber = { workspace = true }
 [dependencies.shuttle-common]
 workspace = true
 features = ["backend", "models", "persist"]
+
+[dependencies.shuttle-proto]
+workspace = true
 
 [dev-dependencies]
 axum-extra = { version = "0.7.1", features = ["cookie"] }

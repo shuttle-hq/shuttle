@@ -132,6 +132,21 @@ impl From<AccountTier> for Vec<Scope> {
     }
 }
 
+impl TryFrom<String> for AccountTier {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<AccountTier, Error> {
+        let tier = match value.as_str() {
+            "basic" => AccountTier::Basic,
+            "pro" => AccountTier::Pro,
+            "team" => AccountTier::Team,
+            "admin" => AccountTier::Admin,
+            other => return Err(Error::InvalidAccountTier(other.to_string())),
+        };
+
+        Ok(tier)
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
 #[sqlx(transparent)]
 pub struct AccountName(String);

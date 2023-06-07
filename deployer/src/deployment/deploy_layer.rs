@@ -574,9 +574,14 @@ mod tests {
     async fn test_states(id: &Uuid, expected_states: Vec<StateLog>) {
         loop {
             let states = RECORDER.lock().unwrap().get_deployment_states(id);
+            if states == expected_states {
+                return;
+            }
 
-            if *states == expected_states {
-                break;
+            for (actual, expected) in states.iter().zip(&expected_states) {
+                if actual != expected {
+                    return;
+                }
             }
 
             sleep(Duration::from_millis(250)).await;

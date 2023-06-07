@@ -276,3 +276,7 @@ pub mod runtime {
 pub mod resource_recorder {
     include!("generated/resource_recorder.rs");
 }
+
+pub mod auth {
+    include!("generated/auth.rs");
+}

@@ -5,8 +5,9 @@ use shuttle_common::{
     claims::{Scope, ScopeBuilder},
     ApiKey,
 };
+use tonic::{metadata::MetadataMap, Status};
 
-use crate::Error;
+use crate::{dal::Dal, Error};
 
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
 pub struct User {
@@ -29,75 +30,32 @@ impl User {
     }
 }
 
-// #[async_trait]
-// impl<S> FromRequestParts<S> for User
-// where
-//     S: Send + Sync,
-//     UserManagerState: FromRef<S>,
-// {
-//     type Rejection = Error;
+/// Check the request metadata for the bearer token of a user with admin scopes. If we cannot
+/// establish that for any reason, return an error with a permission denied status.
+pub async fn verify_admin<D: Dal + Send + Sync + 'static>(
+    headers: &MetadataMap,
+    dal: &D,
+) -> Result<(), Status> {
+    let err = || Status::permission_denied("Unauthorized.");
 
-//     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-//         let key = Key::from_request_parts(parts, state).await?;
+    let bearer = headers.get("authorization").ok_or_else(err)?;
 
-//         let user_manager: UserManagerState = UserManagerState::from_ref(state);
+    let bearer = bearer.to_str().map_err(|_| err())?;
 
-//         let user = user_manager
-//             .get_user_by_key(key.into())
-//             .await
-//             // Absorb any error into `Unauthorized`
-//             .map_err(|_| Error::Unauthorized)?;
+    let (_, token) = bearer.split_once("Bearer ").ok_or_else(err)?;
 
-//         // Record current account name for tracing purposes
-//         Span::current().record("account.name", &user.name.to_string());
+    let key = ApiKey::parse(token).map_err(|_| err())?;
 
-//         Ok(user)
-//     }
-// }
-
-// impl From<User> for shuttle_common::models::user::Response {
-//     fn from(user: User) -> Self {
-//         Self {
-//             name: user.name.to_string(),
-//             key: user.key.as_ref().to_string(),
-//             account_tier: user.account_tier.to_string(),
-//         }
-//     }
-// }
-
-// /// A wrapper around [ApiKey] so we can implement [FromRequestParts] for it.
-// pub struct Key(ApiKey);
-
-// impl From<Key> for ApiKey {
-//     fn from(key: Key) -> Self {
-//         key.0
-//     }
-// }
-
-// #[async_trait]
-// impl<S> FromRequestParts<S> for Key
-// where
-//     S: Send + Sync,
-// {
-//     type Rejection = Error;
-
-//     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-//         let key = TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
-//             .await
-//             .map_err(|_| Error::KeyMissing)
-//             .and_then(|TypedHeader(Authorization(bearer))| {
-//                 let bearer = bearer.token().trim();
-//                 ApiKey::parse(bearer).map_err(|error| {
-//                     debug!(error = ?error, "received a malformed api-key");
-//                     Self::Rejection::Unauthorized
-//                 })
-//             })?;
-
-//         trace!("got bearer key");
-
-//         Ok(Key(key))
-//     }
-// }
+    if !dal
+        .get_user_by_key(key)
+        .await
+        .is_ok_and(|user| user.is_admin())
+    {
+        Err(Status::permission_denied("Unauthorized."))
+    } else {
+        Ok(())
+    }
+}
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq, Serialize, Debug, sqlx::Type, strum::Display)]
 #[sqlx(rename_all = "lowercase")]
@@ -173,26 +131,3 @@ impl<'de> Deserialize<'de> for AccountName {
             .map_err(serde::de::Error::custom)
     }
 }
-
-// pub struct Admin {
-//     pub user: User,
-// }
-
-// #[async_trait]
-// impl<S> FromRequestParts<S> for Admin
-// where
-//     S: Send + Sync,
-//     UserManagerState: FromRef<S>,
-// {
-//     type Rejection = Error;
-
-//     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-//         let user = User::from_request_parts(parts, state).await?;
-
-//         if user.is_admin() {
-//             Ok(Self { user })
-//         } else {
-//             Err(Error::Forbidden)
-//         }
-//     }
-// }

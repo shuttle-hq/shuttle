@@ -20,7 +20,7 @@ use sqlx::migrate::Migrator;
 use thiserror::Error;
 use tonic::{Request, Response, Status};
 use tracing::instrument;
-use user::User;
+use user::{verify_admin, User};
 
 use crate::dal::DalError;
 
@@ -111,13 +111,13 @@ where
             .dal
             .get_user_by_key(key)
             .await
-            .map_err(|_| Error::Unauthorized)?;
+            .map_err(|_| Error::UserNotFound)?;
 
         let claim = Claim::new(name.to_string(), account_tier.into());
 
         let token = claim
             .into_token(self.key_manager.get_private_key())
-            // TODO: refactor .into_token error handling?
+            // TODO: error handling
             .map_err(|_| Error::Unauthorized)?;
 
         Ok(token)
@@ -136,12 +136,16 @@ where
     K: KeyManager + Send + Sync + 'static,
 {
     /// Get a user
+    ///
+    /// **This endpoint can only be called by admin scoped users**
     async fn get_user_request(
         &self,
         request: Request<UserRequest>,
     ) -> Result<Response<UserResponse>, Status> {
+        verify_admin(request.metadata(), &self.dal).await?;
+
         let request = request.into_inner();
-        // TODO: verify caller is admin.
+
         let User {
             account_tier,
             key,
@@ -149,7 +153,6 @@ where
         } = self
             .get_user(request.account_name)
             .await
-            // TODO: error handling
             .map_err(|err| Status::not_found(err.to_string()))?;
 
         Ok(Response::new(UserResponse {
@@ -160,13 +163,16 @@ where
     }
 
     /// Create a new user
+    ///
+    /// **This endpoint can only be called by admin scoped users**
     async fn post_user_request(
         &self,
         request: Request<NewUser>,
     ) -> Result<Response<UserResponse>, Status> {
+        verify_admin(request.metadata(), &self.dal).await?;
+
         let request = request.into_inner();
 
-        // TODO: verify caller is admin.
         let User {
             account_tier,
             key,
@@ -174,7 +180,6 @@ where
         } = self
             .post_user(request)
             .await
-            // TODO: error handling
             .map_err(|err| Status::internal(err.to_string()))?;
 
         Ok(Response::new(UserResponse {
@@ -191,7 +196,7 @@ where
     ) -> Result<Response<TokenResponse>, Status> {
         let request = request.into_inner();
 
-        // TODO: error handling
+        // TODO: error handling upstream
         let token = self
             .convert_key(request)
             .await

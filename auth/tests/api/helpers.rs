@@ -9,6 +9,7 @@ use shuttle_proto::auth::{
     auth_client::AuthClient, auth_server::AuthServer, NewUser, UserRequest, UserResponse,
 };
 use tonic::{
+    metadata::MetadataValue,
     transport::{Channel, Server},
     Status,
 };
@@ -65,20 +66,26 @@ impl TestApp {
         name: &str,
         tier: &str,
     ) -> Result<Response<UserResponse>, Status> {
-        self.client
-            .post_user_request(Request::new(NewUser {
-                account_name: name.to_string(),
-                account_tier: tier.to_string(),
-            }))
-            .await
+        let mut request = Request::new(NewUser {
+            account_name: name.to_string(),
+            account_tier: tier.to_string(),
+        });
+
+        let bearer: MetadataValue<_> = format!("Bearer {ADMIN_KEY}").parse().unwrap();
+        request.metadata_mut().insert("authorization", bearer);
+
+        self.client.post_user_request(request).await
     }
 
     // TODO: test that caller is admin
     pub async fn get_user(&mut self, name: &str) -> Result<Response<UserResponse>, Status> {
-        self.client
-            .get_user_request(Request::new(UserRequest {
-                account_name: name.to_string(),
-            }))
-            .await
+        let mut request = Request::new(UserRequest {
+            account_name: name.to_string(),
+        });
+
+        let bearer: MetadataValue<_> = format!("Bearer {ADMIN_KEY}").parse().unwrap();
+        request.metadata_mut().insert("authorization", bearer);
+
+        self.client.get_user_request(request).await
     }
 }

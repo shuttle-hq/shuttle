@@ -1,109 +1,90 @@
+use shuttle_proto::auth::{NewUser, UserRequest};
+use tonic::{metadata::MetadataValue, Code, Request};
+
 use crate::helpers::spawn_app;
 
-// #[ignore]
-// #[tokio::test]
-// async fn post_user() {
-//     let app = test_app().await;
+#[tokio::test]
+async fn post_user() {
+    let mut app = spawn_app().await;
 
-//     // POST user without bearer token.
-//     let request = Request::builder()
-//         .uri("/users/test-user/basic")
-//         .method("POST")
-//         .body(Body::empty())
-//         .unwrap();
+    // POST user without admin bearer token.
+    let request = || {
+        Request::new(NewUser {
+            account_name: "basic-user".to_string(),
+            account_tier: "basic".to_string(),
+        })
+    };
 
-//     let response = app.send_request(request).await;
+    let response = app.client.post_user_request(request()).await.err();
 
-//     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.unwrap().code(), Code::PermissionDenied);
 
-//     // POST user with invalid bearer token.
-//     let request = Request::builder()
-//         .uri("/users/test-user/basic")
-//         .method("POST")
-//         .header(AUTHORIZATION, "Bearer notadmin")
-//         .body(Body::empty())
-//         .unwrap();
+    // POST user with invalid admin bearer token.
+    let mut request = request();
+    let bearer: MetadataValue<_> = ("Bearer notadmintoken123").parse().unwrap();
+    request.metadata_mut().insert("authorization", bearer);
 
-//     let response = app.send_request(request).await;
+    let response = app.client.post_user_request(request).await.err();
 
-//     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.unwrap().code(), Code::PermissionDenied);
 
-//     // POST user with valid bearer token and basic tier.
-//     let response = app.post_user("test-user", "basic").await;
+    // POST user with valid admin bearer token and basic tier.
+    let response = app
+        .post_user("basic-user", "basic")
+        .await
+        .unwrap()
+        .into_inner();
 
-//     assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.account_name, "basic-user".to_string());
+    assert_eq!(response.account_tier, "basic".to_string());
 
-//     let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-//     let user: Value = serde_json::from_slice(&body).unwrap();
+    // POST user with valid admin bearer token and pro tier.
+    let response = app.post_user("pro-user", "pro").await.unwrap().into_inner();
 
-//     assert_eq!(user["name"], "test-user");
-//     assert_eq!(user["account_tier"], "basic");
-//     assert!(user["key"].to_string().is_ascii());
-
-//     // POST user with valid bearer token and pro tier.
-//     let response = app.post_user("pro-user", "pro").await;
-
-//     assert_eq!(response.status(), StatusCode::OK);
-
-//     let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-//     let user: Value = serde_json::from_slice(&body).unwrap();
-
-//     assert_eq!(user["name"], "pro-user");
-//     assert_eq!(user["account_tier"], "pro");
-//     assert!(user["key"].to_string().is_ascii());
-// }
+    assert_eq!(response.account_name, "pro-user".to_string());
+    assert_eq!(response.account_tier, "pro".to_string());
+}
 
 #[tokio::test]
 async fn get_user() {
     let mut app = spawn_app().await;
 
     // POST user first so one exists in the database.
-    let post_response = app
+    let persisted_user = app
         .post_user("test-user", "basic")
         .await
         .unwrap()
         .into_inner();
 
-    // GET user.
-    let get_response = app.get_user("test-user").await.unwrap().into_inner();
+    // GET user without bearer token.
+    let request = || {
+        Request::new(UserRequest {
+            account_name: "test-user".to_string(),
+        })
+    };
 
-    assert_eq!(post_response, get_response);
+    let response = app.client.get_user_request(request()).await.err();
 
-    // // GET user without bearer token.
-    // let request = Request::builder()
-    //     .uri("/users/test-user")
-    //     .body(Body::empty())
-    //     .unwrap();
+    assert_eq!(response.unwrap().code(), Code::PermissionDenied);
 
-    // let response = app.send_request(request).await;
+    // GET user with invalid bearer token.
+    let mut request = request();
+    let bearer: MetadataValue<_> = ("Bearer notadmintoken123").parse().unwrap();
+    request.metadata_mut().insert("authorization", bearer);
 
-    // assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let response = app.client.get_user_request(request).await.err();
 
-    // // GET user with invalid bearer token.
-    // let request = Request::builder()
-    //     .uri("/users/test-user")
-    //     .header(AUTHORIZATION, "Bearer notadmin")
-    //     .body(Body::empty())
-    //     .unwrap();
+    assert_eq!(response.unwrap().code(), Code::PermissionDenied);
 
-    // let response = app.send_request(request).await;
+    // GET user that doesn't exist with valid bearer token.
+    let response = app.get_user("not-test-user").await.err();
 
-    // assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.unwrap().code(), Code::NotFound);
 
-    // // GET user that doesn't exist with valid bearer token.
-    // let response = app.get_user("not-test-user").await;
+    // GET user with valid bearer token.
+    let response = app.get_user("test-user").await;
 
-    // assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-    // // GET user with valid bearer token.
-    // let response = app.get_user("test-user").await;
-
-    // assert_eq!(response.status(), StatusCode::OK);
-
-    // let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-    // let persisted_user: Value = serde_json::from_slice(&body).unwrap();
-
-    // assert_eq!(user, persisted_user);
+    assert_eq!(response.unwrap().into_inner(), persisted_user);
 }
 
 // #[tokio::test]

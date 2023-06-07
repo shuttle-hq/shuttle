@@ -188,7 +188,7 @@ impl ShuttleInit for ShuttleInitNoOp {
     }
 
     fn get_sub_path(&self) -> Option<&'static str> {
-        todo!()
+        Some("custom/none")
     }
 }
 

@@ -7,7 +7,6 @@ mod user;
 use std::error::Error as StdError;
 use std::time::Duration;
 
-use args::StartArgs;
 use async_trait::async_trait;
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
@@ -26,15 +25,14 @@ use shuttle_proto::auth::{
 use sqlx::migrate::Migrator;
 use thiserror::Error;
 use tonic::{Request, Response, Status};
-use tracing::{info, instrument};
+use tracing::instrument;
 use user::User;
 
-use crate::api::serve;
 use crate::dal::DalError;
 
-pub use api::ApiBuilder;
 pub use args::{Args, Commands, InitArgs};
 pub use dal::Sqlite;
+pub use secrets::EdDsaManager;
 
 pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // One day
 
@@ -93,17 +91,6 @@ impl IntoResponse for Error {
         )
             .into_response()
     }
-}
-
-pub async fn start(sqlite: Sqlite, args: StartArgs) {
-    let router = api::ApiBuilder::new()
-        .with_sqlite(sqlite)
-        .with_sessions()
-        .into_router();
-
-    info!(address=%args.address, "Binding to and listening at address");
-
-    serve(router, args.address).await;
 }
 
 pub struct Service<D, K> {
@@ -284,8 +271,6 @@ where
     ) -> Result<Response<PublicKeyResponse>, Status> {
         let public_key = self.public_key().await;
 
-        Ok(Response::new(PublicKeyResponse {
-            public_key: public_key.into(),
-        }))
+        Ok(Response::new(PublicKeyResponse { public_key }))
     }
 }

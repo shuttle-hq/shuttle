@@ -23,7 +23,7 @@ pub(crate) async fn get_user(
     State(user_manager): State<UserManagerState>,
     Path(account_name): Path<AccountName>,
 ) -> Result<Json<user::Response>, Error> {
-    let user = user_manager.get_user(account_name).await?;
+    let user = user_manager.get_user_by_name(account_name).await?;
 
     Ok(Json(user.into()))
 }
@@ -53,7 +53,7 @@ pub(crate) async fn put_user_reset_key(
         },
     };
 
-    user_manager.reset_key(account_name).await?;
+    user_manager.reset_api_key(account_name).await?;
 
     Ok(())
 }
@@ -63,7 +63,7 @@ pub(crate) async fn login(
     State(user_manager): State<UserManagerState>,
     Json(request): Json<LoginRequest>,
 ) -> Result<Json<user::Response>, Error> {
-    let user = user_manager.get_user(request.account_name).await?;
+    let user = user_manager.get_user_by_name(request.account_name).await?;
 
     session
         .insert("account_name", user.name.clone())
@@ -93,7 +93,7 @@ pub(crate) async fn convert_cookie(
 
     let claim = Claim::new(account_name, account_tier.into());
 
-    let token = claim.into_token(key_manager.private_key())?;
+    let token = claim.into_token(key_manager.get_private_key())?;
 
     let response = shuttle_common::backends::auth::ConvertResponse { token };
 
@@ -117,7 +117,7 @@ pub(crate) async fn convert_key(
 
     let claim = Claim::new(name.to_string(), account_tier.into());
 
-    let token = claim.into_token(key_manager.private_key())?;
+    let token = claim.into_token(key_manager.get_private_key())?;
 
     let response = shuttle_common::backends::auth::ConvertResponse { token };
 
@@ -127,7 +127,7 @@ pub(crate) async fn convert_key(
 pub(crate) async fn refresh_token() {}
 
 pub(crate) async fn get_public_key(State(key_manager): State<KeyManagerState>) -> Vec<u8> {
-    key_manager.public_key().to_vec()
+    key_manager.get_public_key().to_vec()
 }
 
 #[derive(Deserialize, Serialize)]

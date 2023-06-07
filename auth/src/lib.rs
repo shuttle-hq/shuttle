@@ -123,7 +123,7 @@ where
     /// Get a user from the database.
     #[instrument(skip(self))]
     async fn get_user(&self, account_name: String) -> Result<User, Error> {
-        let user = self.dal.get_user(account_name.into()).await?;
+        let user = self.dal.get_user_by_name(account_name.into()).await?;
 
         Ok(user)
     }
@@ -147,16 +147,20 @@ where
 
     /// Reset a users API-key, returning nothing on success. To get the new key the
     /// user will need to login on the website.
-    async fn put_user_reset_key(&self, key: ApiKey) -> Result<(), Error> {
+    async fn reset_key(&self, request: ApiKeyRequest) -> Result<(), Error> {
+        let key = ApiKey::parse(&request.api_key)?;
+
         let account_name = self.dal.get_user_by_key(key).await?.name;
 
-        self.dal.reset_key(account_name).await?;
+        self.dal.reset_api_key(account_name).await?;
 
         Ok(())
     }
 
     /// Convert a valid API-key bearer token to a JWT.
-    async fn convert_key(&self, key: ApiKey) -> Result<String, Error> {
+    async fn convert_key(&self, request: ApiKeyRequest) -> Result<String, Error> {
+        let key = ApiKey::parse(&request.api_key)?;
+
         let User {
             name, account_tier, ..
         } = self
@@ -168,7 +172,7 @@ where
         let claim = Claim::new(name.to_string(), account_tier.into());
 
         let token = claim
-            .into_token(self.key_manager.private_key())
+            .into_token(self.key_manager.get_private_key())
             // TODO: refactor .into_token error handling?
             .map_err(|_| Error::Unauthorized)?;
 
@@ -176,11 +180,11 @@ where
     }
 
     /// Get the public key for decoding JWTs.
-    async fn get_public_key(&self) -> Vec<u8> {
-        self.key_manager.public_key().to_vec()
+    async fn public_key(&self) -> Vec<u8> {
+        self.key_manager.get_public_key().to_vec()
     }
 
-    async fn refresh_token() {}
+    async fn _refresh_token() {}
 }
 
 #[async_trait]
@@ -192,40 +196,96 @@ where
     /// Get a user
     async fn get_user_request(
         &self,
-        req: Request<UserRequest>,
+        request: Request<UserRequest>,
     ) -> Result<Response<UserResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+
+        // TODO: verify caller is admin.
+        let User {
+            account_tier,
+            key,
+            name,
+        } = self
+            .get_user(request.account_name)
+            .await
+            // TODO: error handling
+            .map_err(|err| Status::not_found(err.to_string()))?;
+
+        Ok(Response::new(UserResponse {
+            account_name: name.to_string(),
+            account_tier: account_tier.to_string(),
+            key: key.to_string(),
+        }))
     }
 
     /// Create a new user
     async fn post_user_request(
         &self,
-        req: Request<NewUser>,
+        request: Request<NewUser>,
     ) -> Result<Response<UserResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+
+        // TODO: verify caller is admin.
+        let User {
+            account_tier,
+            key,
+            name,
+        } = self
+            .post_user(request)
+            .await
+            // TODO: error handling
+            .map_err(|err| Status::internal(err.to_string()))?;
+
+        Ok(Response::new(UserResponse {
+            account_name: name.to_string(),
+            account_tier: account_tier.to_string(),
+            key: key.to_string(),
+        }))
     }
 
     /// Convert an API key to a JWT
     async fn convert_api_key(
         &self,
-        req: Request<ApiKeyRequest>,
+        request: Request<ApiKeyRequest>,
     ) -> Result<Response<TokenResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+
+        // TODO: error handling
+        let token = self
+            .convert_key(request)
+            .await
+            .map_err(|err| Status::internal(err.to_string()))?;
+
+        Ok(Response::new(TokenResponse { token }))
     }
 
     /// Reset a users API key
     async fn reset_api_key(
         &self,
-        req: Request<ApiKeyRequest>,
+        request: Request<ApiKeyRequest>,
     ) -> Result<Response<ResultResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+
+        // TODO: error handling
+        self.reset_key(request)
+            .await
+            .map_err(|err| Status::not_found(err.to_string()))?;
+
+        Ok(Response::new(ResultResponse {
+            success: true,
+            message: Default::default(),
+        }))
     }
 
     /// Get the auth service public key to decode tokens
     async fn public_key(
         &self,
-        req: Request<PublicKeyRequest>,
+        _request: Request<PublicKeyRequest>,
     ) -> Result<Response<PublicKeyResponse>, Status> {
-        todo!()
+        let public_key = self.public_key().await;
+
+        Ok(Response::new(PublicKeyResponse {
+            public_key: public_key.into(),
+        }))
     }
 }

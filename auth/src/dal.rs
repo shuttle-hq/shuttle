@@ -44,13 +44,13 @@ pub trait Dal {
     async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, DalError>;
 
     /// Get an account by [AccountName]
-    async fn get_user(&self, name: AccountName) -> Result<User, DalError>;
+    async fn get_user_by_name(&self, name: AccountName) -> Result<User, DalError>;
 
     /// Get an account by [ApiKey]
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, DalError>;
 
     /// Reset an account's [ApiKey]
-    async fn reset_key(&self, name: AccountName) -> Result<(), DalError>;
+    async fn reset_api_key(&self, name: AccountName) -> Result<(), DalError>;
 }
 
 pub struct Sqlite {
@@ -138,7 +138,7 @@ impl Dal for Sqlite {
         Ok(User::new(name, key, tier))
     }
 
-    async fn get_user(&self, name: AccountName) -> Result<User, DalError> {
+    async fn get_user_by_name(&self, name: AccountName) -> Result<User, DalError> {
         sqlx::query("SELECT account_name, key, account_tier FROM users WHERE account_name = ?1")
             .bind(&name)
             .fetch_optional(&self.pool)
@@ -170,7 +170,7 @@ impl Dal for Sqlite {
             .ok_or(DalError::UserNotFound)
     }
 
-    async fn reset_key(&self, name: AccountName) -> Result<(), DalError> {
+    async fn reset_api_key(&self, name: AccountName) -> Result<(), DalError> {
         let key = ApiKey::generate();
 
         let rows_affected = sqlx::query("UPDATE users SET key = ?1 WHERE account_name = ?2")

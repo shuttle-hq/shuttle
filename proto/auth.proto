@@ -43,8 +43,7 @@ message ApiKeyRequest {
 }
 
 message TokenResponse {
-  bool success = 1;
-  string token = 2;
+  string token = 1;
 }
 
 message PublicKeyResponse {

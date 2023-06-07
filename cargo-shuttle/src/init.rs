@@ -192,7 +192,7 @@ impl ShuttleInit for ShuttleInitNoOp {
     }
 }
 
-pub fn cargo_generate(path: PathBuf, name: ProjectName, framework: Template) -> Result<()> {
+pub fn cargo_generate(path: PathBuf, name: &ProjectName, framework: Template) -> Result<()> {
     let config = framework.init_config();
 
     println!(r#"    Creating project "{name}" in {path:?}"#);

@@ -84,7 +84,7 @@ impl ShuttleInit for ShuttleInitRocket {
     }
 
     fn get_sub_path(&self) -> Option<&'static str> {
-        Some("shuttle/hello-world")
+        Some("rocket/hello-world")
     }
 }
 

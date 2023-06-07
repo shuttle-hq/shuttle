@@ -38,12 +38,8 @@ pub enum Error {
     UserNotFound,
     #[error("{0} is not a valid account tier")]
     InvalidAccountTier(String),
-    #[error("API key is missing")]
-    KeyMissing,
     #[error("unauthorized")]
     Unauthorized,
-    #[error("forbidden")]
-    Forbidden,
     #[error("failed to interact with database: {0}")]
     Dal(#[from] DalError),
     #[error(transparent)]

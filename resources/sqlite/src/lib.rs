@@ -150,8 +150,8 @@ mod tests {
 
     #[test]
     fn try_from_in_memory() {
-        // Sqlx has an undocumented interaction between two options where the in-memory version only
-        // works when `shared_cache` is `true`, this test makes sure that `try_from` handles this correctly.
+        // `shared_cache` must be enabled to use a conn pool (instead of single conns) with an in-memory sqlite db.
+        // This makes sure that `try_from` handles this correctly.
         let mut opts_sqlx = SqliteConnectOptions::from_str("sqlite::memory:").unwrap();
         opts_sqlx = opts_sqlx.create_if_missing(true); // Match our default setting
         let str_sqlx = format!("{:?}", opts_sqlx);

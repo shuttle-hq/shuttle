@@ -260,8 +260,7 @@ impl TryFrom<&SQLiteConnOpts> for SqliteConnectOptions {
             opts = opts.vfs(vfs.clone());
         }
 
-        // Undocumented interaction between `in_memory` and `shared_cache`. When using only a conn string, sqlx sets this
-        // to true internally.
+        // `shared_cache` must be enabled to use a conn pool (instead of single conns) with an in-memory sqlite db.
         if *in_memory {
             opts = opts.shared_cache(true);
         }

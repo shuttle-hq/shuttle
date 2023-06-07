@@ -127,8 +127,6 @@ where
     async fn public_key(&self) -> Vec<u8> {
         self.key_manager.get_public_key().to_vec()
     }
-
-    async fn _refresh_token() {}
 }
 
 #[async_trait]
@@ -143,7 +141,6 @@ where
         request: Request<UserRequest>,
     ) -> Result<Response<UserResponse>, Status> {
         let request = request.into_inner();
-
         // TODO: verify caller is admin.
         let User {
             account_tier,
@@ -210,15 +207,18 @@ where
     ) -> Result<Response<ResultResponse>, Status> {
         let request = request.into_inner();
 
-        // TODO: error handling
-        self.reset_key(request)
-            .await
-            .map_err(|err| Status::not_found(err.to_string()))?;
+        let result = match self.reset_key(request).await {
+            Ok(()) => ResultResponse {
+                success: true,
+                message: Default::default(),
+            },
+            Err(e) => ResultResponse {
+                success: false,
+                message: e.to_string(),
+            },
+        };
 
-        Ok(Response::new(ResultResponse {
-            success: true,
-            message: Default::default(),
-        }))
+        Ok(Response::new(result))
     }
 
     /// Get the auth service public key to decode tokens

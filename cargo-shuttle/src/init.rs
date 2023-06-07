@@ -200,7 +200,7 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, framework: Template) ->
         init: true,
         template_path: TemplatePath {
             git: Some(config.get_repo_url().to_string()),
-            subfolder: config.get_sub_path().map(str::to_string),
+            auto_path: config.get_sub_path().map(str::to_string),
             ..Default::default()
         },
         name: Some(name.to_string()),

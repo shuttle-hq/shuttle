@@ -5027,6 +5027,7 @@ dependencies = [
  "hyper",
  "jsonwebtoken",
  "opentelemetry",
+ "portpicker",
  "rand",
  "ring",
  "serde",

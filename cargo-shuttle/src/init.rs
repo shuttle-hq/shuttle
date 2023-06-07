@@ -216,6 +216,8 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, framework: Template) ->
 
     set_crate_name(&path, name.as_str()).with_context(|| "Failed to set crate name.")?;
 
+    remove_shuttle_toml(&path);
+
     Ok(())
 }
 
@@ -235,4 +237,18 @@ fn set_crate_name(path: &Path, name: &str) -> Result<()> {
     std::fs::write(&path, doc.to_string())?;
 
     Ok(())
+}
+
+/*
+Currently Shuttle.toml only has a project name override.
+This project name will already be in use, so the file is useless.
+
+If we start putting more things in Shuttle.toml we may wish to re-evaluate.
+*/
+fn remove_shuttle_toml(path: &Path) {
+    let mut path = path.to_path_buf();
+    path.push("Shuttle.toml");
+
+    // this file only exists for some of the examples, it's fine if we don't find it
+    _ = std::fs::remove_file(path);
 }

@@ -389,8 +389,8 @@ impl Shuttle {
 
             if latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client.get_deployments(proj_name, 0, u32::MAX).await?;
-                let most_recent = deployments.last().context(format!(
+                let deployments = client.get_deployments(proj_name, 0, 1).await?;
+                let most_recent = deployments.first().context(format!(
                     "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
                 ))?;
 

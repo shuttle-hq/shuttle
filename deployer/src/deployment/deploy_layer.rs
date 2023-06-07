@@ -324,7 +324,7 @@ mod tests {
         DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
     };
     use tempfile::Builder;
-    use tokio::{select, time::sleep};
+    use tokio::{select, task::JoinSet, time::sleep};
     use tonic::transport::Server;
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     use uuid::Uuid;
@@ -585,7 +585,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
-        let deployment_manager = get_deployment_manager().await;
+        let (_set, deployment_manager) = get_deployment_manager();
 
         let queued = get_queue("sleep-async");
         let id = queued.id;
@@ -665,7 +665,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_self_stop() {
-        let deployment_manager = get_deployment_manager().await;
+        let (_set, deployment_manager) = get_deployment_manager();
 
         let queued = get_queue("self-stop");
         let id = queued.id;
@@ -712,7 +712,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_bind_panic() {
-        let deployment_manager = get_deployment_manager().await;
+        let (_set, deployment_manager) = get_deployment_manager();
 
         let queued = get_queue("bind-panic");
         let id = queued.id;
@@ -759,7 +759,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_main_panic() {
-        let deployment_manager = get_deployment_manager().await;
+        let (_set, deployment_manager) = get_deployment_manager();
 
         let queued = get_queue("main-panic");
         let id = queued.id;
@@ -802,7 +802,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_from_run() {
-        let deployment_manager = get_deployment_manager().await;
+        let (_set, deployment_manager) = get_deployment_manager();
 
         let id = Uuid::new_v4();
         deployment_manager
@@ -845,7 +845,7 @@ mod tests {
 
     #[tokio::test]
     async fn scope_with_nil_id() {
-        let deployment_manager = get_deployment_manager().await;
+        let (_set, deployment_manager) = get_deployment_manager();
 
         let id = Uuid::nil();
         deployment_manager
@@ -872,7 +872,7 @@ mod tests {
         );
     }
 
-    async fn get_deployment_manager() -> DeploymentManager {
+    fn get_deployment_manager() -> (JoinSet<()>, DeploymentManager) {
         DeploymentManager::builder()
             .build_log_recorder(RECORDER.clone())
             .secret_recorder(RECORDER.clone())

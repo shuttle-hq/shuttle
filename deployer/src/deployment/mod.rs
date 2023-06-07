@@ -15,7 +15,10 @@ use crate::{
     persistence::{DeploymentUpdater, ResourceManager, SecretGetter, SecretRecorder, State},
     RuntimeManager,
 };
-use tokio::sync::{mpsc, Mutex};
+use tokio::{
+    sync::{mpsc, Mutex},
+    task::JoinSet,
+};
 use uuid::Uuid;
 
 use self::{deploy_layer::LogRecorder, gateway_client::BuildQueueClient};
@@ -103,7 +106,7 @@ where
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
     /// deployments between the aforementioned tasks.
-    pub fn build(self) -> DeploymentManager {
+    pub fn build(self) -> (JoinSet<()>, DeploymentManager) {
         let build_log_recorder = self
             .build_log_recorder
             .expect("a build log recorder to be set");
@@ -125,8 +128,9 @@ where
         let storage_manager = ArtifactsStorageManager::new(artifacts_path);
 
         let run_send_clone = run_send.clone();
+        let mut set = JoinSet::new();
 
-        tokio::spawn(queue::task(
+        set.spawn(queue::task(
             queue_recv,
             run_send_clone,
             deployment_updater.clone(),
@@ -135,7 +139,7 @@ where
             storage_manager.clone(),
             queue_client,
         ));
-        tokio::spawn(run::task(
+        set.spawn(run::task(
             run_recv,
             runtime_manager.clone(),
             deployment_updater,
@@ -145,12 +149,15 @@ where
             storage_manager.clone(),
         ));
 
-        DeploymentManager {
-            queue_send,
-            run_send,
-            runtime_manager,
-            storage_manager,
-        }
+        (
+            set,
+            DeploymentManager {
+                queue_send,
+                run_send,
+                runtime_manager,
+                storage_manager,
+            },
+        )
     }
 }
 

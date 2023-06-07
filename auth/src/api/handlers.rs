@@ -1,6 +1,6 @@
 use crate::{
-    error::Error,
     user::{AccountName, AccountTier, Admin, Key, User},
+    Error,
 };
 use axum::{
     extract::{Path, State},

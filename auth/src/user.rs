@@ -14,7 +14,7 @@ use shuttle_common::{
 };
 use tracing::{debug, trace, Span};
 
-use crate::{api::UserManagerState, error::Error};
+use crate::{api::UserManagerState, Error};
 
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
 pub struct User {

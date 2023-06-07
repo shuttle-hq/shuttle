@@ -137,7 +137,7 @@ where
 {
     /// Get a user
     ///
-    /// **This endpoint can only be called by admin scoped users**
+    /// This endpoint can only be called by admin scoped users
     async fn get_user_request(
         &self,
         request: Request<UserRequest>,
@@ -164,7 +164,7 @@ where
 
     /// Create a new user
     ///
-    /// **This endpoint can only be called by admin scoped users**
+    /// This endpoint can only be called by admin scoped users
     async fn post_user_request(
         &self,
         request: Request<NewUser>,

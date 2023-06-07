@@ -12,6 +12,7 @@ use opentelemetry::global;
 use serde_json::json;
 use shuttle_common::claims::Claim;
 use shuttle_service::builder::{build_workspace, BuiltService};
+use tokio::task::JoinSet;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -40,6 +41,8 @@ pub async fn task(
 ) {
     info!("Queue task started");
 
+    let mut tasks = JoinSet::new();
+
     while let Some(queued) = recv.recv().await {
         let id = queued.id;
 
@@ -52,7 +55,7 @@ pub async fn task(
         let storage_manager = storage_manager.clone();
         let queue_client = queue_client.clone();
 
-        tokio::spawn(async move {
+        tasks.spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
                 propagator.extract(&queued.tracing_context)
             });
@@ -92,6 +95,13 @@ pub async fn task(
             .instrument(span)
             .await
         });
+    }
+
+    while let Some(res) = tasks.join_next().await {
+        match res {
+            Ok(_) => (),
+            Err(err) => error!(error = %err, "an error happened when joining a builder task"),
+        }
     }
 }
 

@@ -633,12 +633,8 @@ mod tests {
         // Send kill signal
         deployment_manager.kill(id).await;
 
-        sleep(Duration::from_secs(1)).await;
-
-        let states = RECORDER.lock().unwrap().get_deployment_states(&id);
-
-        assert_eq!(
-            *states,
+        let test = test_states(
+            &id,
             vec![
                 StateLog {
                     id,
@@ -664,8 +660,16 @@ mod tests {
                     id,
                     state: State::Stopped,
                 },
-            ]
+            ],
         );
+
+        select! {
+            _ = sleep(Duration::from_secs(60)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Stopped' for a valid service: {:#?}", states);
+            },
+            _ = test => {}
+        };
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -6,6 +6,7 @@ use std::{
 use anyhow::{Context, Result};
 use cargo_generate::{GenerateArgs, TemplatePath};
 use shuttle_common::project::ProjectName;
+use toml_edit::{value, Document};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum::Display, strum::EnumIter)]
 #[strum(serialize_all = "kebab-case")]
@@ -220,8 +221,6 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, framework: Template) ->
 
 // since I can't get cargo-generate to do this for me...
 fn set_crate_name(path: &Path, name: &str) -> Result<()> {
-    use toml_edit::{value, Document};
-
     // read the Cargo.toml file
     let mut path = path.to_path_buf();
     path.push("Cargo.toml");

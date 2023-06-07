@@ -1,4 +1,7 @@
-use std::{fs::read_to_string, path::PathBuf};
+use std::{
+    fs::read_to_string,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 use cargo_generate::{GenerateArgs, TemplatePath};
@@ -210,18 +213,18 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, framework: Template) ->
     cargo_generate::generate(generate_args)
         .with_context(|| "Failed to initialize with cargo generate.")?;
 
-    set_crate_name(&path, &name.as_str()).with_context(|| "Failed to set crate name.")?;
+    set_crate_name(&path, name.as_str()).with_context(|| "Failed to set crate name.")?;
 
     Ok(())
 }
 
 // since I can't get cargo-generate to do this for me...
-fn set_crate_name(path: &PathBuf, name: &str) -> Result<()> {
+fn set_crate_name(path: &Path, name: &str) -> Result<()> {
     use toml_edit::{value, Document};
 
     // read the Cargo.toml file
-    let mut path = path.clone();
-    path.push("Cargo.toml".to_string());
+    let mut path = path.to_path_buf();
+    path.push("Cargo.toml");
 
     let toml_str = read_to_string(&path)?;
     let mut doc = toml_str.parse::<Document>()?;

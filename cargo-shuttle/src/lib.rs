@@ -924,13 +924,10 @@ impl Shuttle {
             let repo_path = dunce::canonicalize(repo_path)?;
             trace!(?repo_path, "found git repository");
 
-            let is_dirty = self.is_dirty(&repo).err();
             if !args.allow_dirty {
-                if let Some(err) = is_dirty {
-                    bail!(err);
-                }
+                self.is_dirty(&repo).context("dirty not allowed")?;
             }
-            deployment_req.git_dirty = Some(is_dirty.is_some());
+            deployment_req.git_dirty = Some(self.is_dirty(&repo).is_err());
 
             if let Ok(head) = repo.head() {
                 // This is typically the name of the current branch

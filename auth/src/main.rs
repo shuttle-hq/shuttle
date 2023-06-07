@@ -3,13 +3,10 @@ use std::time::Duration;
 use clap::Parser;
 use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_proto::auth::auth_server::AuthServer;
-use sqlx::migrate::Migrator;
 use tonic::transport::Server;
 use tracing::trace;
 
 use shuttle_auth::{Args, Commands, EdDsaManager, Service, Sqlite};
-
-pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[tokio::main]
 async fn main() {
@@ -19,7 +16,9 @@ async fn main() {
 
     setup_tracing(tracing_subscriber::registry(), "auth");
 
-    let sqlite = Sqlite::new(&args.state.display().to_string()).await;
+    let db_path = args.state.join("auth.sqlite");
+
+    let sqlite = Sqlite::new(db_path.to_str().unwrap()).await;
 
     match args.command {
         Commands::Start(args) => {

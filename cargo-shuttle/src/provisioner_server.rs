@@ -94,6 +94,10 @@ impl LocalProvisioner {
                 .start_container(container_name, None::<StartContainerOptions<String>>)
                 .await
                 .expect("failed to start none running container");
+
+            // the DynamoDB local test container seems to need a few seconds to actually be ready
+            // give it 10 seconds
+            tokio::time::sleep(Duration::from_secs(10)).await;
         }
     }
 

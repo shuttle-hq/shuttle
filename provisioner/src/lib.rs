@@ -916,6 +916,7 @@ mod tests {
             .unwrap();
     }
 
+    #[ignore = "requires AWS credentials to be set"]
     #[tokio::test]
     async fn test_create_and_delete_dynamodb_policy() {
         let provisioner = make_test_provisioner().await;
@@ -927,6 +928,7 @@ mod tests {
         provisioner.delete_dynamodb_policy(&prefix).await.unwrap();
     }
 
+    #[ignore = "requires AWS credentials to be set"]
     #[tokio::test]
     async fn test_create_and_delete_aws_user() {
         let provisioner = make_test_provisioner().await;
@@ -938,6 +940,7 @@ mod tests {
         provisioner.delete_iam_identity(&prefix).await.unwrap();
     }
 
+    #[ignore = "requires AWS credentials to be set"]
     #[tokio::test]
     async fn test_request_dynamodb_multiple_times() {
         let provisioner = make_test_provisioner().await;
@@ -954,6 +957,7 @@ mod tests {
             .unwrap();
     }
 
+    #[ignore = "requires AWS credentials to be set"]
     #[tokio::test]
     async fn test_delete_dynamodb() {
         let provisioner = make_test_provisioner().await;
@@ -969,6 +973,7 @@ mod tests {
             .unwrap();
     }
 
+    #[ignore = "requires AWS credentials to be set"]
     #[tokio::test]
     async fn test_dynamodb_delete_table_names_by_prefix() {
         let provisioner = make_test_provisioner().await;

@@ -718,8 +718,6 @@ mod tests {
         // select from table (should fail now that tables have been deleted)
         let result = select_from_table(&dynamodb_client, &table_name).await;
 
-        assert!(result.is_err());
-
-        println!("{result:?}");
+        assert!(result.is_err(), "expected result to be an error, but found: {result:?}");
     }
 }

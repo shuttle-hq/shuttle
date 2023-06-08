@@ -97,6 +97,66 @@ impl LocalProvisioner {
         }
     }
 
+    async fn get_container(
+        &self,
+        container_name: &str,
+        image: String,
+        port: &str,
+        env: Option<Vec<String>>,
+    ) -> Result<ContainerInspectResponse, Status> {
+        match self.docker.inspect_container(container_name, None).await {
+            Ok(container) => {
+                trace!("found DB container {container_name}");
+                Ok(container)
+            }
+            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
+                if status_code == 404 =>
+            {
+                self.pull_image(&image).await.expect("failed to pull image");
+                trace!("will create DB container {container_name}");
+                let options = Some(CreateContainerOptions {
+                    name: container_name.clone(),
+                    platform: None,
+                });
+                let mut port_bindings = HashMap::new();
+                let host_port = pick_unused_port().expect("system to have a free port");
+                port_bindings.insert(
+                    port.to_string(),
+                    Some(vec![PortBinding {
+                        host_port: Some(host_port.to_string()),
+                        ..Default::default()
+                    }]),
+                );
+                let host_config = HostConfig {
+                    port_bindings: Some(port_bindings),
+                    ..Default::default()
+                };
+
+                let config: Config<String> = Config {
+                    image: Some(image.to_string()),
+                    env,
+                    host_config: Some(host_config),
+                    ..Default::default()
+                };
+
+                self.docker
+                    .create_container(options, config)
+                    .await
+                    .expect("to be able to create container");
+
+                Ok(self
+                    .docker
+                    .inspect_container(container_name, None)
+                    .await
+                    .expect("container to be created"))
+            }
+            Err(error) => {
+                error!("got unexpected error while inspecting docker container: {error}");
+                Err(Status::internal(error.to_string()))
+            }
+        }
+    }
+
     async fn get_dynamodb_connection_info(
         &self,
         project_name: &str,
@@ -112,56 +172,9 @@ impl LocalProvisioner {
 
         let env = None;
 
-        let container = match self.docker.inspect_container(&container_name, None).await {
-            Ok(container) => {
-                trace!("found DB container {container_name}");
-                container
-            }
-            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
-                if status_code == 404 =>
-            {
-                self.pull_image(&image).await.expect("failed to pull image");
-                trace!("will create DB container {container_name}");
-                let options = Some(CreateContainerOptions {
-                    name: container_name.clone(),
-                    platform: None,
-                });
-                let mut port_bindings = HashMap::new();
-                let host_port = pick_unused_port().expect("system to have a free port");
-                port_bindings.insert(
-                    port.clone(),
-                    Some(vec![PortBinding {
-                        host_port: Some(host_port.to_string()),
-                        ..Default::default()
-                    }]),
-                );
-                let host_config = HostConfig {
-                    port_bindings: Some(port_bindings),
-                    ..Default::default()
-                };
-
-                let config = Config {
-                    image: Some(image),
-                    env,
-                    host_config: Some(host_config),
-                    ..Default::default()
-                };
-
-                self.docker
-                    .create_container(options, config)
-                    .await
-                    .expect("to be able to create container");
-
-                self.docker
-                    .inspect_container(&container_name, None)
-                    .await
-                    .expect("container to be created")
-            }
-            Err(error) => {
-                error!("got unexpected error while inspecting docker container: {error}");
-                return Err(Status::internal(error.to_string()));
-            }
-        };
+        let container = self
+            .get_container(&container_name, image, &port, env)
+            .await?;
 
         let port = self.get_container_host_port(container.clone(), &port);
 
@@ -200,56 +213,9 @@ impl LocalProvisioner {
         } = db_type_to_config(db_type);
         let container_name = format!("shuttle_{service_name}_{type}");
 
-        let container = match self.docker.inspect_container(&container_name, None).await {
-            Ok(container) => {
-                trace!("found DB container {container_name}");
-                container
-            }
-            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
-                if status_code == 404 =>
-            {
-                self.pull_image(&image).await.expect("failed to pull image");
-                trace!("will create DB container {container_name}");
-                let options = Some(CreateContainerOptions {
-                    name: container_name.clone(),
-                    platform: None,
-                });
-                let mut port_bindings = HashMap::new();
-                let host_port = pick_unused_port().expect("system to have a free port");
-                port_bindings.insert(
-                    port.clone(),
-                    Some(vec![PortBinding {
-                        host_port: Some(host_port.to_string()),
-                        ..Default::default()
-                    }]),
-                );
-                let host_config = HostConfig {
-                    port_bindings: Some(port_bindings),
-                    ..Default::default()
-                };
-
-                let config = Config {
-                    image: Some(image),
-                    env,
-                    host_config: Some(host_config),
-                    ..Default::default()
-                };
-
-                self.docker
-                    .create_container(options, config)
-                    .await
-                    .expect("to be able to create container");
-
-                self.docker
-                    .inspect_container(&container_name, None)
-                    .await
-                    .expect("container to be created")
-            }
-            Err(error) => {
-                error!("got unexpected error while inspecting docker container: {error}");
-                return Err(Status::internal(error.to_string()));
-            }
-        };
+        let container = self
+            .get_container(&container_name, image, &port, env)
+            .await?;
 
         let port = self.get_container_host_port(container.clone(), &port);
 
@@ -338,21 +304,7 @@ impl LocalProvisioner {
             }
         };
 
-        let port = container
-            .host_config
-            .expect("container to have host config")
-            .port_bindings
-            .expect("port bindings on container")
-            .get(&port)
-            .expect("a port bindings entry")
-            .as_ref()
-            .expect("a port bindings")
-            .first()
-            .expect("at least one port binding")
-            .host_port
-            .as_ref()
-            .expect("a host port")
-            .clone();
+        let port = self.get_container_host_port(container.clone(), &port);
 
         std::env::set_var("AWS_ACCESS_KEY_ID", aws_access_key_id);
         std::env::set_var("AWS_SECRET_ACCESS_KEY", aws_secret_access_key);
@@ -718,6 +670,9 @@ mod tests {
         // select from table (should fail now that tables have been deleted)
         let result = select_from_table(&dynamodb_client, &table_name).await;
 
-        assert!(result.is_err(), "expected result to be an error, but found: {result:?}");
+        assert!(
+            result.is_err(),
+            "expected result to be an error, but found: {result:?}"
+        );
     }
 }

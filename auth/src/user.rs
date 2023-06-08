@@ -45,11 +45,11 @@ pub async fn verify_admin<D: Dal + Send + Sync + 'static>(
 
     let key = ApiKey::parse(token).map_err(|_| err())?;
 
-    if !dal
-        .get_user_by_key(key)
-        .await
-        .is_ok_and(|user| user.is_admin())
-    {
+    // TODO: refactor to `is_ok_and(|user| user.is_admin())` when
+    // 1.70 PR is merged.
+    let user = dal.get_user_by_key(key).await.map_err(|_| err())?;
+
+    if !user.is_admin() {
         Err(err())
     } else {
         Ok(())

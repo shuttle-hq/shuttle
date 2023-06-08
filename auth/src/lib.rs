@@ -1,4 +1,3 @@
-mod api;
 mod args;
 mod dal;
 mod secrets;

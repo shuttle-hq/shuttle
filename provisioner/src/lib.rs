@@ -555,18 +555,18 @@ struct DynamoDBHandler {
 
 impl DynamoDBHandler {
     fn new(prefix: &str, aws_config: &aws_config::SdkConfig) -> Self {
-        let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
-        let iam_client = aws_sdk_iam::Client::new(&aws_config);
-        let sts_client = aws_sdk_sts::Client::new(&aws_config);
+        let dynamodb_client = aws_sdk_dynamodb::Client::new(aws_config);
+        let iam_client = aws_sdk_iam::Client::new(aws_config);
+        let sts_client = aws_sdk_sts::Client::new(aws_config);
 
         Self {
             prefix: prefix.to_string(),
             dynamodb_client,
             iam_client,
-            sts_client
+            sts_client,
         }
     }
-    
+
     async fn get_dynamodb_policy_name(&self) -> String {
         format!("{}-dynamo-policy", self.prefix)
     }
@@ -626,7 +626,7 @@ impl DynamoDBHandler {
         Ok(())
     }
 
-    async fn get_policy_arn(&self, ) -> Result<String, Error> {
+    async fn get_policy_arn(&self) -> Result<String, Error> {
         let identity = self
             .sts_client
             .get_caller_identity()
@@ -643,7 +643,7 @@ impl DynamoDBHandler {
         Ok(policy_arn)
     }
 
-    async fn delete_dynamodb_policy(&self, ) -> Result<(), Error> {
+    async fn delete_dynamodb_policy(&self) -> Result<(), Error> {
         let policy_arn = self.get_policy_arn().await?;
 
         self.iam_client
@@ -763,7 +763,6 @@ impl DynamoDBHandler {
         Ok(())
     }
 
-
     async fn get_saved_access_key(&self) -> Option<(String, String)> {
         if let Ok(file) = std::fs::File::open(self.get_access_key_file_name()) {
             let mut lines = std::io::BufReader::new(file).lines();
@@ -800,8 +799,6 @@ impl DynamoDBHandler {
         Ok(())
     }
 }
-
-
 
 fn get_prefix(project_name: &str) -> String {
     let mut hasher = Sha256::new();
@@ -889,7 +886,7 @@ mod tests {
     };
     use tokio::time::sleep;
 
-    use crate::{MyProvisioner, DynamoDBHandler, get_prefix};
+    use crate::{get_prefix, DynamoDBHandler, MyProvisioner};
 
     use shuttle_common::delete_dynamodb_tables_by_prefix;
 

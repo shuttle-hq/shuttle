@@ -468,7 +468,7 @@ mod tests {
             &self,
             _request: tonic::Request<DynamoDbRequest>,
         ) -> Result<tonic::Response<DynamoDbResponse>, tonic::Status> {
-            panic!("no deploy layer tests should request dynamodb");
+            panic!("no tests should request dynamodb");
         }
 
         async fn delete_database(

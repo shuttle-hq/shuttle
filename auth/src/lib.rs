@@ -5,7 +5,7 @@ mod user;
 
 use std::time::Duration;
 
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use async_trait::async_trait;
 use dal::Dal;
 use secrets::KeyManager;

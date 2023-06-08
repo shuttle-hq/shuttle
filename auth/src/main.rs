@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use shuttle_common::backends::tracing::setup_tracing;
+use shuttle_common::backends::tracing::{setup_tracing, ExtractPropagationLayer};
 use shuttle_proto::auth::auth_server::AuthServer;
 use tonic::transport::Server;
 use tracing::trace;
@@ -22,8 +22,9 @@ async fn main() {
 
     match args.command {
         Commands::Start(args) => {
-            let mut server_builder =
-                Server::builder().http2_keepalive_interval(Some(Duration::from_secs(60)));
+            let mut server_builder = Server::builder()
+                .http2_keepalive_interval(Some(Duration::from_secs(60)))
+                .layer(ExtractPropagationLayer);
 
             let key_manager = EdDsaManager::default();
 

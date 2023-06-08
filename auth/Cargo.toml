@@ -13,7 +13,6 @@ jsonwebtoken = { workspace = true }
 opentelemetry = { workspace = true }
 rand = { workspace = true }
 ring = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 sqlx = { workspace = true, features = [
     "sqlite",
     "json",
@@ -37,5 +36,4 @@ workspace = true
 
 [dev-dependencies]
 portpicker = { workspace = true }
-serde_json = { workspace = true }
-tower = { workspace = true, features = ["util"] }
+pretty_assertions = { workspace = true }

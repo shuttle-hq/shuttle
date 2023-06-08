@@ -1,6 +1,5 @@
 use std::{fmt::Formatter, str::FromStr};
 
-use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::{
     claims::{Scope, ScopeBuilder},
     ApiKey,
@@ -9,7 +8,7 @@ use tonic::{metadata::MetadataMap, Status};
 
 use crate::{dal::Dal, Error};
 
-#[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct User {
     pub name: AccountName,
     pub key: ApiKey,
@@ -51,15 +50,14 @@ pub async fn verify_admin<D: Dal + Send + Sync + 'static>(
         .await
         .is_ok_and(|user| user.is_admin())
     {
-        Err(Status::permission_denied("Unauthorized."))
+        Err(err())
     } else {
         Ok(())
     }
 }
 
-#[derive(Clone, Copy, Deserialize, PartialEq, Eq, Serialize, Debug, sqlx::Type, strum::Display)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, sqlx::Type, strum::Display)]
 #[sqlx(rename_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[derive(Default)]
 pub enum AccountTier {
@@ -97,7 +95,7 @@ impl TryFrom<String> for AccountTier {
         Ok(tier)
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct AccountName(String);
 
@@ -118,16 +116,5 @@ impl FromStr for AccountName {
 impl std::fmt::Display for AccountName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
-    }
-}
-
-impl<'de> Deserialize<'de> for AccountName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
     }
 }

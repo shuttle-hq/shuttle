@@ -1,49 +1,41 @@
-// use http::header::AUTHORIZATION;
-// use http::{Request, StatusCode};
-// use hyper::Body;
+use crate::helpers::spawn_app;
+use pretty_assertions::assert_eq;
+use shuttle_common::claims::Claim;
+use shuttle_proto::auth::{ApiKeyRequest, PublicKeyRequest, UserResponse};
+use tonic::Request;
 
-// use crate::helpers::{test_app, ADMIN_KEY};
+#[tokio::test]
+async fn convert_api_key_to_jwt_and_decode_jwt() {
+    let mut app = spawn_app().await;
 
-// #[tokio::test]
-// async fn convert_api_key_to_jwt() {
-//     let app = test_app().await;
+    // Create test user.
+    let UserResponse {
+        key, account_name, ..
+    } = app
+        .post_user("basic-user", "basic")
+        .await
+        .unwrap()
+        .into_inner();
 
-//     // Create test user
-//     let response = app.post_user("test-user", "basic").await;
+    // Create a request to convert the API-key for the user we just created.
+    let request = Request::new(ApiKeyRequest { api_key: key });
 
-//     assert!(response.is_ok());
+    // Send convert request.
+    let response = app
+        .client
+        .convert_api_key(request)
+        .await
+        .unwrap()
+        .into_inner();
 
-//     // // GET /auth/key without bearer token.
-//     // let request = Request::builder()
-//     //     .uri("/auth/key")
-//     //     .body(Body::empty())
-//     //     .unwrap();
+    let token = response.token;
 
-//     // let response = app.send_request(request).await;
+    // We need to get the public key to decode the JWT.
+    let request = Request::new(PublicKeyRequest {});
 
-//     // assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let response = app.client.public_key(request).await.unwrap().into_inner();
 
-//     // // GET /auth/key with invalid bearer token.
-//     // let request = Request::builder()
-//     //     .uri("/auth/key")
-//     //     .header(AUTHORIZATION, "Bearer ndh9z58jttoefake")
-//     //     .body(Body::empty())
-//     //     .unwrap();
+    let claim = Claim::from_token(&token, &response.public_key).unwrap();
 
-//     // let response = app.send_request(request).await;
-
-//     // assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-//     // // GET /auth/key with valid bearer token.
-//     // let request = Request::builder()
-//     //     .uri("/auth/key")
-//     //     .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
-//     //     .body(Body::empty())
-//     //     .unwrap();
-
-//     // let response = app.send_request(request).await;
-
-//     // assert_eq!(response.status(), StatusCode::OK);
-
-//     // TODO: decode the JWT?
-// }
+    assert_eq!(account_name, claim.sub);
+}

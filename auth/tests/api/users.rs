@@ -1,4 +1,5 @@
-use shuttle_proto::auth::{NewUser, UserRequest};
+use pretty_assertions::{assert_eq, assert_ne};
+use shuttle_proto::auth::{ApiKeyRequest, NewUser, UserRequest, UserResponse};
 use tonic::{metadata::MetadataValue, Code, Request};
 
 use crate::helpers::spawn_app;
@@ -87,56 +88,33 @@ async fn get_user() {
     assert_eq!(response.unwrap().into_inner(), persisted_user);
 }
 
-// #[tokio::test]
-// async fn test_reset_key() {
-//     let app = app().await;
+#[tokio::test]
+async fn test_reset_key() {
+    let mut app = spawn_app().await;
 
-//     // Reset API key without cookie or API key.
-//     let request = Request::builder()
-//         .uri("/users/reset-api-key")
-//         .method("PUT")
-//         .body(Body::empty())
-//         .unwrap();
-//     let response = app.send_request(request).await;
-//     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    // First create a new user who's key we can reset.
+    let UserResponse { key, .. } = app
+        .post_user("basic-user", "basic")
+        .await
+        .unwrap()
+        .into_inner();
 
-//     // Reset API key with cookie.
-//     let response = app.post_user("test-user", "basic").await;
-//     assert_eq!(response.status(), StatusCode::OK);
+    // Reset API key with api key from the user we created.
+    let request = Request::new(ApiKeyRequest {
+        api_key: key.clone(),
+    });
 
-//     let body = serde_json::to_vec(&json! ({"account_name": "test-user"})).unwrap();
-//     let request = Request::builder()
-//         .uri("/login")
-//         .method("POST")
-//         .header("Content-Type", "application/json")
-//         .body(Body::from(body))
-//         .unwrap();
-//     let response = app.send_request(request).await;
-//     assert_eq!(response.status(), StatusCode::OK);
-//     let cookie = response
-//         .headers()
-//         .get("set-cookie")
-//         .unwrap()
-//         .to_str()
-//         .unwrap();
-//     let cookie = Cookie::parse(cookie).unwrap();
+    let response = app
+        .client
+        .reset_api_key(request)
+        .await
+        .unwrap()
+        .into_inner();
 
-//     let request = Request::builder()
-//         .uri("/users/reset-api-key")
-//         .method("PUT")
-//         .header("Cookie", cookie.stripped().to_string())
-//         .body(Body::empty())
-//         .unwrap();
-//     let response = app.send_request(request).await;
-//     assert_eq!(response.status(), StatusCode::OK);
+    assert!(response.success);
 
-//     // Reset API key with API key.
-//     let request = Request::builder()
-//         .uri("/users/reset-api-key")
-//         .method("PUT")
-//         .header(AUTHORIZATION, format!("Bearer {}", helpers::ADMIN_KEY))
-//         .body(Body::empty())
-//         .unwrap();
-//     let response = app.send_request(request).await;
-//     assert_eq!(response.status(), StatusCode::OK);
-// }
+    // GET the new user to verify it's api key changed.
+    let response = app.get_user("basic-user").await.unwrap().into_inner();
+
+    assert_ne!(key, response.key);
+}

@@ -41,9 +41,7 @@ pub struct MyProvisioner {
     pool: PgPool,
     rds_client: aws_sdk_rds::Client,
     mongodb_client: mongodb::Client,
-    dynamodb_client: aws_sdk_dynamodb::Client,
-    iam_client: aws_sdk_iam::Client,
-    sts_client: aws_sdk_sts::Client,
+    aws_config: aws_config::SdkConfig,
     fqdn: String,
     internal_pg_address: String,
     internal_mongodb_address: String,
@@ -79,19 +77,11 @@ impl MyProvisioner {
 
         let rds_client = aws_sdk_rds::Client::new(&aws_config);
 
-        let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
-
-        let iam_client = aws_sdk_iam::Client::new(&aws_config);
-
-        let sts_client = aws_sdk_sts::Client::new(&aws_config);
-
         Ok(Self {
             pool,
             rds_client,
             mongodb_client,
-            dynamodb_client,
-            iam_client,
-            sts_client,
+            aws_config,
             fqdn,
             internal_pg_address,
             internal_mongodb_address,
@@ -258,265 +248,21 @@ impl MyProvisioner {
         }
     }
 
-    async fn get_prefix(&self, project_name: &str) -> String {
-        let mut hasher = Sha256::new();
-
-        hasher.update(project_name.as_bytes());
-
-        let hash = hasher.finalize();
-
-        // 43 characters long (4 characters correspond to 3 bytes of data)
-        // sha256 is 32 bytes. 32 / 3 * 4 ~ 43
-        // we care about this because various AWS identifiers have specific length constraints
-        Base64UrlUnpadded::encode_string(&hash)
-    }
-
-    async fn get_dynamodb_policy_name(&self, prefix: &str) -> String {
-        format!("{}-dynamo-policy", prefix)
-    }
-
-    async fn create_dynamodb_policy(&self, prefix: &str) -> Result<(), Error> {
-        let table_name = format!("arn:aws:dynamodb:*:*:table/{}*", prefix);
-        let policy_document = json!({
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Sid": "SpecificTable",
-                    "Effect": "Allow",
-                    "Action": [
-                        "dynamodb:BatchGet*",
-                        "dynamodb:DescribeStream",
-                        "dynamodb:DescribeTable",
-                        "dynamodb:Get*",
-                        "dynamodb:Query",
-                        "dynamodb:Scan",
-                        "dynamodb:BatchWrite*",
-                        "dynamodb:CreateTable",
-                        "dynamodb:Delete*",
-                        "dynamodb:Update*",
-                        "dynamodb:PutItem",
-                        "dynamodb:List*",
-                        "dynamodb:DescribeReservedCapacity*",
-                        "dynamodb:DescribeLimits",
-                        "dynamodb:DescribeTimeToLive"
-                    ],
-                    "Resource": table_name
-                }
-            ]
-        })
-        .to_string();
-
-        let policy_name = self.get_dynamodb_policy_name(prefix).await;
-
-        match self
-            .iam_client
-            .create_policy()
-            .policy_name(policy_name)
-            .policy_document(policy_document)
-            .send()
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => {
-                match e.into_service_error() {
-                    CreatePolicyError::EntityAlreadyExistsException(_) => {} // for idempotency
-                    e => {
-                        return Err(Error::CreateIAMPolicy(e));
-                    }
-                }
-            }
-        };
-
-        Ok(())
-    }
-
-    async fn get_policy_arn(&self, prefix: &str) -> Result<String, Error> {
-        let identity = self
-            .sts_client
-            .get_caller_identity()
-            .send()
-            .await
-            .map_err(Error::GetCallerIdentity)?;
-        let account = identity
-            .account()
-            .ok_or_else(|| Error::GetAccount("empty account".to_string()))?;
-
-        let policy_name = self.get_dynamodb_policy_name(prefix).await;
-        let policy_arn = format!("arn:aws:iam::{account}:policy/{policy_name}");
-
-        Ok(policy_arn)
-    }
-
-    async fn delete_dynamodb_policy(&self, prefix: &str) -> Result<(), Error> {
-        let policy_arn = self.get_policy_arn(prefix).await?;
-
-        self.iam_client
-            .delete_policy()
-            .policy_arn(policy_arn)
-            .send()
-            .await
-            .map_err(Error::DeleteIAMPolicy)?;
-
-        Ok(())
-    }
-
-    async fn get_iam_identity_user_name(&self, prefix: &str) -> String {
-        // max characters is 64
-        format!("{}-dynamo-user", prefix)
-    }
-
-    async fn create_iam_identity(&self, prefix: &str) -> Result<(), Error> {
-        match self
-            .iam_client
-            .create_user()
-            .user_name(self.get_iam_identity_user_name(prefix).await)
-            .send()
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => match e.into_service_error() {
-                CreateUserError::EntityAlreadyExistsException(_) => {}
-                e => {
-                    return Err(Error::CreateIAMUser(e));
-                }
-            },
-        };
-        Ok(())
-    }
-
-    async fn get_saved_access_key(&self, prefix: &str) -> Option<(String, String)> {
-        if let Ok(file) = std::fs::File::open(self.get_access_key_file_name(prefix)) {
-            let mut lines = std::io::BufReader::new(file).lines();
-
-            if let Some(Ok(access_key_id)) = lines.next() {
-                if let Some(Ok(secret_access_key)) = lines.next() {
-                    return Some((access_key_id, secret_access_key));
-                }
-            }
-        }
-
-        None
-    }
-
-    fn get_access_key_file_name(&self, prefix: &str) -> String {
-        format!("{}.txt", prefix)
-    }
-
-    async fn delete_saved_access_key(&self, prefix: &str) -> Result<(), std::io::Error> {
-        std::fs::remove_file(self.get_access_key_file_name(prefix))?;
-        Ok(())
-    }
-
-    async fn save_access_key(
-        &self,
-        prefix: &str,
-        access_key_id: &str,
-        secret_access_key: &str,
-    ) -> Result<(), std::io::Error> {
-        use std::io::prelude::*;
-        let mut file = File::create(self.get_access_key_file_name(prefix))?;
-        let contents = format!("{}\n{}", access_key_id, secret_access_key);
-        file.write_all(contents.as_bytes())?;
-
-        Ok(())
-    }
-
-    async fn get_iam_identity_keys(&self, prefix: &str) -> Result<(String, String), Error> {
-        if let Some((access_key_id, secret_access_key)) = self.get_saved_access_key(prefix).await {
-            return Ok((access_key_id, secret_access_key));
-        }
-
-        let key = self
-            .iam_client
-            .create_access_key()
-            .user_name(self.get_iam_identity_user_name(prefix).await)
-            .send()
-            .await
-            .map_err(Error::CreateAccessKey)?;
-        let access_key = key
-            .access_key()
-            .ok_or_else(|| Error::GetAccessKey("empty access key".to_string()))?;
-
-        let access_key_id = access_key
-            .access_key_id
-            .as_ref()
-            .ok_or_else(|| Error::GetAccessKeyId("empty access key id".to_string()))?
-            .to_string();
-        let secret_access_key = access_key
-            .secret_access_key
-            .as_ref()
-            .ok_or_else(|| Error::GetSecretAccessKey("empty access key secret".to_string()))?
-            .to_string();
-
-        self.save_access_key(prefix, &access_key_id, &secret_access_key)
-            .await
-            .map_err(Error::GetIAMIdentityKeys)?;
-
-        Ok((access_key_id, secret_access_key))
-    }
-
-    async fn delete_access_key(&self, prefix: &str) -> Result<(), Error> {
-        let (access_key_id, _secret_access_key) = self.get_iam_identity_keys(prefix).await?;
-
-        self.iam_client
-            .delete_access_key()
-            .user_name(self.get_iam_identity_user_name(prefix).await)
-            .access_key_id(access_key_id)
-            .send()
-            .await
-            .map_err(Error::DeleteAccessKey)?;
-
-        self.delete_saved_access_key(prefix).await?;
-
-        Ok(())
-    }
-
-    async fn delete_iam_identity(&self, prefix: &str) -> Result<DeleteUserOutput, Error> {
-        let user = self
-            .iam_client
-            .delete_user()
-            .user_name(self.get_iam_identity_user_name(prefix).await)
-            .send()
-            .await
-            .map_err(Error::DeleteIAMUser)?;
-        Ok(user)
-    }
-
-    async fn attach_user_policy(&self, prefix: &str) -> Result<(), Error> {
-        self.iam_client
-            .attach_user_policy()
-            .user_name(self.get_iam_identity_user_name(prefix).await)
-            .policy_arn(self.get_policy_arn(prefix).await?)
-            .send()
-            .await
-            .map_err(Error::AttachUserPolicy)?;
-        Ok(())
-    }
-
-    async fn detach_user_policy(&self, prefix: &str) -> Result<(), Error> {
-        self.iam_client
-            .detach_user_policy()
-            .user_name(self.get_iam_identity_user_name(prefix).await)
-            .policy_arn(self.get_policy_arn(prefix).await?)
-            .send()
-            .await
-            .map_err(Error::DetachUserPolicy)?;
-        Ok(())
-    }
-
     pub async fn request_dynamodb(&self, project_name: &str) -> Result<DynamoDbResponse, Error> {
-        let prefix = self.get_prefix(project_name).await;
+        let prefix = get_prefix(project_name);
 
-        self.create_dynamodb_policy(&prefix).await?;
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &self.aws_config);
 
-        self.create_iam_identity(&prefix).await?;
+        dynamodb_handler.create_dynamodb_policy().await?;
 
-        self.attach_user_policy(&prefix).await?;
+        dynamodb_handler.create_iam_identity().await?;
+
+        dynamodb_handler.attach_user_policy().await?;
 
         let (aws_access_key_id, aws_secret_access_key) =
-            self.get_iam_identity_keys(&prefix).await?;
+            dynamodb_handler.get_iam_identity_keys().await?;
 
-        let aws_default_region = self
+        let aws_default_region = dynamodb_handler
             .dynamodb_client
             .conf()
             .region()
@@ -533,13 +279,16 @@ impl MyProvisioner {
     }
 
     async fn delete_dynamodb(&self, project_name: &str) -> Result<DynamoDbDeletionResponse, Error> {
-        let prefix = self.get_prefix(project_name).await;
-        self.detach_user_policy(&prefix).await?;
-        self.delete_access_key(&prefix).await?;
-        self.delete_iam_identity(&prefix).await?;
-        self.delete_dynamodb_policy(&prefix).await?;
+        let prefix = get_prefix(project_name);
 
-        delete_dynamodb_tables_by_prefix(&self.dynamodb_client, &prefix)
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &self.aws_config);
+
+        dynamodb_handler.detach_user_policy().await?;
+        dynamodb_handler.delete_access_key().await?;
+        dynamodb_handler.delete_iam_identity().await?;
+        dynamodb_handler.delete_dynamodb_policy().await?;
+
+        delete_dynamodb_tables_by_prefix(&dynamodb_handler.dynamodb_client, &prefix)
             .await
             .map_err(|e| Error::DeleteDynamoDBTableError(e))?;
 
@@ -797,6 +546,276 @@ impl Provisioner for MyProvisioner {
     }
 }
 
+struct DynamoDBHandler {
+    prefix: String,
+    dynamodb_client: aws_sdk_dynamodb::Client,
+    iam_client: aws_sdk_iam::Client,
+    sts_client: aws_sdk_sts::Client,
+}
+
+impl DynamoDBHandler {
+    fn new(prefix: &str, aws_config: &aws_config::SdkConfig) -> Self {
+        let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
+        let iam_client = aws_sdk_iam::Client::new(&aws_config);
+        let sts_client = aws_sdk_sts::Client::new(&aws_config);
+
+        Self {
+            prefix: prefix.to_string(),
+            dynamodb_client,
+            iam_client,
+            sts_client
+        }
+    }
+    
+    async fn get_dynamodb_policy_name(&self) -> String {
+        format!("{}-dynamo-policy", self.prefix)
+    }
+
+    async fn create_dynamodb_policy(&self) -> Result<(), Error> {
+        let table_name = format!("arn:aws:dynamodb:*:*:table/{}*", self.prefix);
+        let policy_document = json!({
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "SpecificTable",
+                    "Effect": "Allow",
+                    "Action": [
+                        "dynamodb:BatchGet*",
+                        "dynamodb:DescribeStream",
+                        "dynamodb:DescribeTable",
+                        "dynamodb:Get*",
+                        "dynamodb:Query",
+                        "dynamodb:Scan",
+                        "dynamodb:BatchWrite*",
+                        "dynamodb:CreateTable",
+                        "dynamodb:Delete*",
+                        "dynamodb:Update*",
+                        "dynamodb:PutItem",
+                        "dynamodb:List*",
+                        "dynamodb:DescribeReservedCapacity*",
+                        "dynamodb:DescribeLimits",
+                        "dynamodb:DescribeTimeToLive"
+                    ],
+                    "Resource": table_name
+                }
+            ]
+        })
+        .to_string();
+
+        let policy_name = self.get_dynamodb_policy_name().await;
+
+        match self
+            .iam_client
+            .create_policy()
+            .policy_name(policy_name)
+            .policy_document(policy_document)
+            .send()
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => {
+                match e.into_service_error() {
+                    CreatePolicyError::EntityAlreadyExistsException(_) => {} // for idempotency
+                    e => {
+                        return Err(Error::CreateIAMPolicy(e));
+                    }
+                }
+            }
+        };
+
+        Ok(())
+    }
+
+    async fn get_policy_arn(&self, ) -> Result<String, Error> {
+        let identity = self
+            .sts_client
+            .get_caller_identity()
+            .send()
+            .await
+            .map_err(Error::GetCallerIdentity)?;
+        let account = identity
+            .account()
+            .ok_or_else(|| Error::GetAccount("empty account".to_string()))?;
+
+        let policy_name = self.get_dynamodb_policy_name().await;
+        let policy_arn = format!("arn:aws:iam::{account}:policy/{policy_name}");
+
+        Ok(policy_arn)
+    }
+
+    async fn delete_dynamodb_policy(&self, ) -> Result<(), Error> {
+        let policy_arn = self.get_policy_arn().await?;
+
+        self.iam_client
+            .delete_policy()
+            .policy_arn(policy_arn)
+            .send()
+            .await
+            .map_err(Error::DeleteIAMPolicy)?;
+
+        Ok(())
+    }
+
+    async fn get_iam_identity_keys(&self) -> Result<(String, String), Error> {
+        if let Some((access_key_id, secret_access_key)) = self.get_saved_access_key().await {
+            return Ok((access_key_id, secret_access_key));
+        }
+
+        let key = self
+            .iam_client
+            .create_access_key()
+            .user_name(self.get_iam_identity_user_name().await)
+            .send()
+            .await
+            .map_err(Error::CreateAccessKey)?;
+        let access_key = key
+            .access_key()
+            .ok_or_else(|| Error::GetAccessKey("empty access key".to_string()))?;
+
+        let access_key_id = access_key
+            .access_key_id
+            .as_ref()
+            .ok_or_else(|| Error::GetAccessKeyId("empty access key id".to_string()))?
+            .to_string();
+        let secret_access_key = access_key
+            .secret_access_key
+            .as_ref()
+            .ok_or_else(|| Error::GetSecretAccessKey("empty access key secret".to_string()))?
+            .to_string();
+
+        self.save_access_key(&access_key_id, &secret_access_key)
+            .await
+            .map_err(Error::GetIAMIdentityKeys)?;
+
+        Ok((access_key_id, secret_access_key))
+    }
+
+    async fn delete_access_key(&self) -> Result<(), Error> {
+        let (access_key_id, _secret_access_key) = self.get_iam_identity_keys().await?;
+
+        self.iam_client
+            .delete_access_key()
+            .user_name(self.get_iam_identity_user_name().await)
+            .access_key_id(access_key_id)
+            .send()
+            .await
+            .map_err(Error::DeleteAccessKey)?;
+
+        self.delete_saved_access_key().await?;
+
+        Ok(())
+    }
+
+    async fn delete_iam_identity(&self) -> Result<DeleteUserOutput, Error> {
+        let user = self
+            .iam_client
+            .delete_user()
+            .user_name(self.get_iam_identity_user_name().await)
+            .send()
+            .await
+            .map_err(Error::DeleteIAMUser)?;
+        Ok(user)
+    }
+
+    async fn attach_user_policy(&self) -> Result<(), Error> {
+        self.iam_client
+            .attach_user_policy()
+            .user_name(self.get_iam_identity_user_name().await)
+            .policy_arn(self.get_policy_arn().await?)
+            .send()
+            .await
+            .map_err(Error::AttachUserPolicy)?;
+        Ok(())
+    }
+
+    async fn detach_user_policy(&self) -> Result<(), Error> {
+        self.iam_client
+            .detach_user_policy()
+            .user_name(self.get_iam_identity_user_name().await)
+            .policy_arn(self.get_policy_arn().await?)
+            .send()
+            .await
+            .map_err(Error::DetachUserPolicy)?;
+        Ok(())
+    }
+
+    async fn get_iam_identity_user_name(&self) -> String {
+        // max characters is 64
+        format!("{}-dynamo-user", self.prefix)
+    }
+
+    async fn create_iam_identity(&self) -> Result<(), Error> {
+        match self
+            .iam_client
+            .create_user()
+            .user_name(self.get_iam_identity_user_name().await)
+            .send()
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => match e.into_service_error() {
+                CreateUserError::EntityAlreadyExistsException(_) => {}
+                e => {
+                    return Err(Error::CreateIAMUser(e));
+                }
+            },
+        };
+        Ok(())
+    }
+
+
+    async fn get_saved_access_key(&self) -> Option<(String, String)> {
+        if let Ok(file) = std::fs::File::open(self.get_access_key_file_name()) {
+            let mut lines = std::io::BufReader::new(file).lines();
+
+            if let Some(Ok(access_key_id)) = lines.next() {
+                if let Some(Ok(secret_access_key)) = lines.next() {
+                    return Some((access_key_id, secret_access_key));
+                }
+            }
+        }
+
+        None
+    }
+
+    fn get_access_key_file_name(&self) -> String {
+        format!("{}.txt", self.prefix)
+    }
+
+    async fn delete_saved_access_key(&self) -> Result<(), std::io::Error> {
+        std::fs::remove_file(self.get_access_key_file_name())?;
+        Ok(())
+    }
+
+    async fn save_access_key(
+        &self,
+        access_key_id: &str,
+        secret_access_key: &str,
+    ) -> Result<(), std::io::Error> {
+        use std::io::prelude::*;
+        let mut file = File::create(self.get_access_key_file_name())?;
+        let contents = format!("{}\n{}", access_key_id, secret_access_key);
+        file.write_all(contents.as_bytes())?;
+
+        Ok(())
+    }
+}
+
+
+
+fn get_prefix(project_name: &str) -> String {
+    let mut hasher = Sha256::new();
+
+    hasher.update(project_name.as_bytes());
+
+    let hash = hasher.finalize();
+
+    // 43 characters long (4 characters correspond to 3 bytes of data)
+    // sha256 is 32 bytes. 32 / 3 * 4 ~ 43
+    // we care about this because various AWS identifiers have specific length constraints
+    Base64UrlUnpadded::encode_string(&hash)
+}
+
 /// Verify the claim on the request has the correct scope to call this service
 fn verify_claim<B>(request: &Request<B>) -> Result<(), Status> {
     let claim = request
@@ -870,7 +889,7 @@ mod tests {
     };
     use tokio::time::sleep;
 
-    use crate::MyProvisioner;
+    use crate::{MyProvisioner, DynamoDBHandler, get_prefix};
 
     use shuttle_common::delete_dynamodb_tables_by_prefix;
 
@@ -920,24 +939,24 @@ mod tests {
     #[tokio::test]
     async fn test_create_and_delete_dynamodb_policy() {
         let provisioner = make_test_provisioner().await;
+        let prefix = get_prefix("test_create_and_delete_dynamodb_policy");
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config);
 
-        let prefix = provisioner.get_prefix("my_cool_project").await;
+        dynamodb_handler.create_dynamodb_policy().await.unwrap();
 
-        provisioner.create_dynamodb_policy(&prefix).await.unwrap();
-
-        provisioner.delete_dynamodb_policy(&prefix).await.unwrap();
+        dynamodb_handler.delete_dynamodb_policy().await.unwrap();
     }
 
     #[ignore = "requires AWS credentials to be set"]
     #[tokio::test]
     async fn test_create_and_delete_aws_user() {
         let provisioner = make_test_provisioner().await;
+        let prefix = get_prefix("test_create_and_delete_aws_user");
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config);
 
-        let prefix = provisioner.get_prefix("my_cool_project").await;
+        dynamodb_handler.create_iam_identity().await.unwrap();
 
-        provisioner.create_iam_identity(&prefix).await.unwrap();
-
-        provisioner.delete_iam_identity(&prefix).await.unwrap();
+        dynamodb_handler.delete_iam_identity().await.unwrap();
     }
 
     #[ignore = "requires AWS credentials to be set"]
@@ -946,13 +965,13 @@ mod tests {
         let provisioner = make_test_provisioner().await;
 
         provisioner
-            .request_dynamodb("test_request_dynamodb") //NOTE: User names should be less that 64 characters
+            .request_dynamodb("test_request_dynamodb_multiple_times") //NOTE: User names should be less that 64 characters
             .await
             .unwrap();
 
         // you should be able to request the same resource multiple times without error
         provisioner
-            .request_dynamodb("test_request_dynamodb")
+            .request_dynamodb("test_request_dynamodb_multiple_times")
             .await
             .unwrap();
     }
@@ -977,17 +996,17 @@ mod tests {
     #[tokio::test]
     async fn test_dynamodb_delete_table_names_by_prefix() {
         let provisioner = make_test_provisioner().await;
+        let prefix = get_prefix("test_dynamodb_delete_table_names_by_prefix");
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config);
 
-        let prefix = "test_dynamodb_delete_table_names_by_prefix-";
-
-        create_dynamodb_table(&provisioner.dynamodb_client, &format!("{}1", prefix)).await;
-        create_dynamodb_table(&provisioner.dynamodb_client, &format!("{}2", prefix)).await;
-        create_dynamodb_table(&provisioner.dynamodb_client, prefix).await;
+        create_dynamodb_table(&dynamodb_handler.dynamodb_client, &format!("{}1", prefix)).await;
+        create_dynamodb_table(&dynamodb_handler.dynamodb_client, &format!("{}2", prefix)).await;
+        create_dynamodb_table(&dynamodb_handler.dynamodb_client, &prefix).await;
 
         //takes a while for dynamodb tables to provision
         sleep(Duration::from_secs(10)).await;
 
-        delete_dynamodb_tables_by_prefix(&provisioner.dynamodb_client, prefix)
+        delete_dynamodb_tables_by_prefix(&dynamodb_handler.dynamodb_client, &prefix)
             .await
             .unwrap();
     }
@@ -998,20 +1017,21 @@ mod tests {
 
         let access_key_id = "my-access-key".to_string();
         let secret_access_key = "my-secret-access-key".to_string();
-        let prefix = provisioner.get_prefix("test_get_access_key").await;
+        let prefix = get_prefix("test_get_access_key");
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config);
 
-        assert_eq!(provisioner.get_saved_access_key(&prefix).await, None);
+        assert_eq!(dynamodb_handler.get_saved_access_key().await, None);
 
-        provisioner
-            .save_access_key(&prefix, &access_key_id, &secret_access_key)
+        dynamodb_handler
+            .save_access_key(&access_key_id, &secret_access_key)
             .await
             .unwrap();
 
         assert_eq!(
-            provisioner.get_saved_access_key(&prefix).await,
+            dynamodb_handler.get_saved_access_key().await,
             Some((access_key_id, secret_access_key))
         );
 
-        provisioner.delete_saved_access_key(&prefix).await.unwrap();
+        dynamodb_handler.delete_saved_access_key().await.unwrap();
     }
 }

@@ -1,5 +1,4 @@
-use std::{fmt::Display, str::FromStr};
-
+use crate::deployment::State;
 use chrono::{DateTime, Utc};
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Attribute, Cell, CellAlignment, Color,
@@ -7,12 +6,10 @@ use comfy_table::{
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
-
+use std::{fmt::Display, str::FromStr};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 use uuid::Uuid;
-
-use crate::deployment::State;
 
 #[derive(Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
@@ -115,3 +112,17 @@ Most recent {} for {}
         )
     }
 }
+
+#[derive(Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::deployment::DeploymentRequest))]
+pub struct DeploymentRequest {
+    pub data: Vec<u8>,
+    pub no_test: bool,
+    pub git_commit_id: Option<String>,
+    pub git_commit_msg: Option<String>,
+    pub git_branch: Option<String>,
+    pub git_dirty: Option<bool>,
+}
+
+pub const GIT_STRINGS_MAX_LENGTH: usize = 80;

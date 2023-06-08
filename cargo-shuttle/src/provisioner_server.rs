@@ -115,7 +115,7 @@ impl LocalProvisioner {
                 self.pull_image(&image).await.expect("failed to pull image");
                 trace!("will create DB container {container_name}");
                 let options = Some(CreateContainerOptions {
-                    name: container_name.clone(),
+                    name: container_name,
                     platform: None,
                 });
                 let mut port_bindings = HashMap::new();

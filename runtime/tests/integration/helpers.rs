@@ -118,6 +118,6 @@ impl Provisioner for DummyProvisioner {
         &self,
         _request: Request<DynamoDbRequest>,
     ) -> Result<Response<DynamoDbDeletionResponse>, Status> {
-        panic!("no run tests should request delete a dynamodb");
+        panic!("no run tests should delete a dynamodb");
     }
 }

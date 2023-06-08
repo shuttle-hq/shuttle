@@ -36,8 +36,6 @@ pub fn cargo_generate(
     remove_shuttle_toml(&path);
     create_gitignore_file(&path).with_context(|| "Failed to create .gitignore file.")?;
 
-    remove_shuttle_toml(&path);
-
     Ok(())
 }
 

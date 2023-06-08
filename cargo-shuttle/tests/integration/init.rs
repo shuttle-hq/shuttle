@@ -28,7 +28,11 @@ async fn non_interactive_basic_init() {
         "none",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new().unwrap().run(args).await.unwrap();
+    if let Err(e) = Shuttle::new().unwrap().run(args).await {
+        // DEBUG CI: Failed to init with cargo generate
+        println!("Failed due to {:?}", e);
+        panic!();
+    }
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
 
@@ -54,7 +58,11 @@ async fn non_interactive_rocket_init() {
         "rocket",
         temp_dir_path.to_str().unwrap(),
     ]);
-    Shuttle::new().unwrap().run(args).await.unwrap();
+    if let Err(e) = Shuttle::new().unwrap().run(args).await {
+        // DEBUG CI: Failed to init with cargo generate
+        println!("Failed due to {:?}", e);
+        panic!();
+    }
 
     assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
 }

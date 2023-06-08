@@ -1,10 +1,12 @@
 use std::{
-    fs::read_to_string,
+    fs::{read_to_string, OpenOptions},
+    io::{ErrorKind, Write},
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
-use cargo_generate::{GenerateArgs, TemplatePath};
+use anyhow::{anyhow, Context, Result};
+use cargo_generate::{GenerateArgs, TemplatePath, Vcs};
+use indoc::indoc;
 use shuttle_common::project::ProjectName;
 use toml_edit::{value, Document};
 
@@ -209,14 +211,15 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, framework: Template) ->
         },
         name: Some(name.to_string()), // appears to do nothing...
         destination: Some(path.clone()),
+        vcs: Some(Vcs::Git),
         ..Default::default()
     };
     cargo_generate::generate(generate_args)
         .with_context(|| "Failed to initialize with cargo generate.")?;
 
     set_crate_name(&path, name.as_str()).with_context(|| "Failed to set crate name.")?;
-
     remove_shuttle_toml(&path);
+    create_gitignore_file(&path).with_context(|| "Failed to create .gitignore file.")?;
 
     Ok(())
 }
@@ -251,4 +254,31 @@ fn remove_shuttle_toml(path: &Path) {
 
     // this file only exists for some of the examples, it's fine if we don't find it
     _ = std::fs::remove_file(path);
+}
+
+fn create_gitignore_file(path: &Path) -> Result<()> {
+    let mut path = path.to_path_buf();
+    path.push(".gitignore");
+
+    let mut file = match OpenOptions::new().create_new(true).write(true).open(path) {
+        Ok(f) => f,
+        Err(e) => {
+            match e.kind() {
+                ErrorKind::AlreadyExists => {
+                    // if the example already has a .gitignore file, just use that
+                    return Ok(());
+                }
+                _ => {
+                    return Err(anyhow!(e));
+                }
+            }
+        }
+    };
+
+    file.write_all(indoc! {b"
+        /target
+        Secrets*.toml
+    "})?;
+
+    Ok(())
 }

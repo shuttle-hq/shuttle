@@ -54,7 +54,9 @@ use tar::Builder;
 use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
-use crate::args::{DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand, GitTemplate};
+use crate::args::{
+    DeploymentCommand, GitTemplate, ProjectCommand, ProjectStartArgs, ResourceCommand,
+};
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
 
@@ -226,7 +228,8 @@ impl Shuttle {
                 .name
                 .as_ref()
                 .expect("to have a project name provided"),
-            git,git_path,
+            git,
+            git_path,
         )?;
         println!();
 

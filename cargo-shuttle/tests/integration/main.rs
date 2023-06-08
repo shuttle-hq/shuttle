@@ -1,7 +1,7 @@
 mod init;
 mod run;
 
-use cargo_shuttle::{ShuttleArgs, Command, CommandOutcome, ProjectArgs, Shuttle};
+use cargo_shuttle::{Command, CommandOutcome, ProjectArgs, Shuttle, ShuttleArgs};
 use std::path::Path;
 
 /// creates a `cargo-shuttle` run instance with some reasonable defaults set.

@@ -254,7 +254,7 @@ pub struct InitArgs {
     pub login_args: LoginArgs,
 }
 
-#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq, strum::Display, strum::EnumIter)]
+#[derive(ValueEnum, Clone, Debug, strum::Display, strum::EnumIter)]
 #[strum(serialize_all = "kebab-case")]
 pub enum InitTemplateArg {
     /// Actix-web framework
@@ -286,35 +286,41 @@ pub enum InitTemplateArg {
 /// git repo and path for chosen template or given URL+path
 pub type GitTemplate = Option<(String, Option<String>)>;
 
-const EXAMPLES_REPO: &str = "http://github.com/shuttle-hq/shuttle-examples.git";
+const EXAMPLES_REPO: &str = "https://github.com/shuttle-hq/shuttle-examples.git";
 
 impl From<&InitArgs> for GitTemplate {
     fn from(value: &InitArgs) -> Self {
         if let Some(git) = value.git.clone() {
-            return Some((git, value.git_path.clone()));
+            Some((git, value.git_path.clone()))
+        } else {
+            value.template.as_ref().and_then(|t| t.into())
         }
-
-        value.template.and_then(|t| (&t).into())
     }
 }
 
 impl From<&InitTemplateArg> for GitTemplate {
     fn from(value: &InitTemplateArg) -> Self {
         use InitTemplateArg::*;
-        Some(match value {
-            ActixWeb => (EXAMPLES_REPO.into(), Some("actix-web/hello-world".into())),
-            Axum => (EXAMPLES_REPO.into(), Some("axum/hello-world".into())),
-            Poem => (EXAMPLES_REPO.into(), Some("poem/hello-world".into())),
-            Poise => (EXAMPLES_REPO.into(), Some("poise/hello-world".into())),
-            Rocket => (EXAMPLES_REPO.into(), Some("rocket/hello-world".into())),
-            Salvo => (EXAMPLES_REPO.into(), Some("salvo/hello-world".into())),
-            Serenity => (EXAMPLES_REPO.into(), Some("serenity/hello-world".into())),
-            Tide => (EXAMPLES_REPO.into(), Some("tide/hello-world".into())),
-            Thruster => (EXAMPLES_REPO.into(), Some("thruster/hello-world".into())),
-            Tower => (EXAMPLES_REPO.into(), Some("tower/hello-world".into())),
-            Warp => (EXAMPLES_REPO.into(), Some("warp/hello-world".into())),
-            None => (EXAMPLES_REPO.into(), Some("custon/none".into())),
-        })
+        Some((
+            EXAMPLES_REPO.into(),
+            Some(
+                match value {
+                    ActixWeb => "actix-web/hello-world",
+                    Axum => "axum/hello-world",
+                    Poem => "poem/hello-world",
+                    Poise => "poise/hello-world",
+                    Rocket => "rocket/hello-world",
+                    Salvo => "salvo/hello-world",
+                    Serenity => "serenity/hello-world",
+                    Tide => "tide/hello-world",
+                    Thruster => "thruster/hello-world",
+                    Tower => "tower/hello-world",
+                    Warp => "warp/hello-world",
+                    None => "custom/none",
+                }
+                .into(),
+            ),
+        ))
     }
 }
 
@@ -344,28 +350,61 @@ mod tests {
 
     #[test]
     fn test_init_args_framework() {
-        todo!();
-        // let init_args = InitArgs {
-        //     template: Some(InitTemplateArg::Axum),
-        //     create_env: false,
-        //     login_args: LoginArgs { api_key: None },
-        //     path: PathBuf::new(),
-        // };
-        // assert_eq!(init_args.framework(), Some(Template::Axum));
-        // let init_args = InitArgs {
-        //     template: Some(InitTemplateArg::None),
-        //     create_env: false,
-        //     login_args: LoginArgs { api_key: None },
-        //     path: PathBuf::new(),
-        // };
-        // assert_eq!(init_args.framework(), Some(Template::None));
-        // let init_args = InitArgs {
-        //     template: None,
-        //     create_env: false,
-        //     login_args: LoginArgs { api_key: None },
-        //     path: PathBuf::new(),
-        // };
-        // assert_eq!(init_args.framework(), None);
+        // pre-defined template
+        let init_args = InitArgs {
+            template: Some(InitTemplateArg::Axum),
+            git: None,
+            git_path: None,
+            create_env: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+        assert_eq!(
+            GitTemplate::from(&init_args),
+            Some((EXAMPLES_REPO.into(), Some("axum/hello-world".into())))
+        );
+
+        // predefined "none" template
+        let init_args = InitArgs {
+            template: Some(InitTemplateArg::None),
+            git: None,
+            git_path: None,
+            create_env: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+        assert_eq!(
+            GitTemplate::from(&init_args),
+            Some((EXAMPLES_REPO.into(), Some("custom/none".into())))
+        );
+
+        // git template with path
+        let init_args = InitArgs {
+            template: None,
+            git: Some("https://github.com/some/repo".into()),
+            git_path: Some("some/path".into()),
+            create_env: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+        assert_eq!(
+            GitTemplate::from(&init_args),
+            Some((
+                "https://github.com/some/repo".into(),
+                Some("some/path".into())
+            ))
+        );
+
+        // No template or repo chosen
+        let init_args = InitArgs {
+            template: None,
+            git: None,
+            git_path: None,
+            create_env: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+        assert_eq!(GitTemplate::from(&init_args), None);
     }
 
     #[test]

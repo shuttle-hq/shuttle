@@ -1,4 +1,4 @@
-use cargo_shuttle::{ShuttleArgs, Command, ProjectArgs, RunArgs, Shuttle};
+use cargo_shuttle::{Command, ProjectArgs, RunArgs, Shuttle, ShuttleArgs};
 use portpicker::pick_unused_port;
 use reqwest::StatusCode;
 use std::{fs::canonicalize, process::exit, time::Duration};

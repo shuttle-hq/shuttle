@@ -1,5 +1,5 @@
 use anyhow::Result;
-use cargo_shuttle::{ShuttleArgs, CommandOutcome, Shuttle};
+use cargo_shuttle::{CommandOutcome, Shuttle, ShuttleArgs};
 use clap::Parser;
 
 #[tokio::main(flavor = "multi_thread")]

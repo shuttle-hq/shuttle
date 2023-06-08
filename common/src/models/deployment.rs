@@ -23,6 +23,10 @@ pub struct Response {
     pub state: State,
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]
     pub last_update: DateTime<Utc>,
+    pub git_commit_id: Option<String>,
+    pub git_commit_msg: Option<String>,
+    pub git_branch: Option<String>,
+    pub git_dirty: Option<bool>,
 }
 
 impl Display for Response {
@@ -84,9 +88,33 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, pa
                 Cell::new("Last updated")
                     .set_alignment(CellAlignment::Center)
                     .add_attribute(Attribute::Bold),
+                Cell::new("Commit ID")
+                    .set_alignment(CellAlignment::Center)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Commit Message")
+                    .set_alignment(CellAlignment::Center)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Branch")
+                    .set_alignment(CellAlignment::Center)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Dirty")
+                    .set_alignment(CellAlignment::Center)
+                    .add_attribute(Attribute::Bold),
             ]);
 
         for deploy in deployments.iter() {
+            let truncated_commit_id = deploy
+                .git_commit_id
+                .as_ref()
+                .map_or(String::from("No Data"), |val| val.chars().take(7).collect());
+
+            let truncated_commit_msg = deploy
+                .git_commit_msg
+                .as_ref()
+                .map_or(String::from("No Data"), |val| {
+                    val.chars().take(24).collect::<String>()
+                });
+
             table.add_row(vec![
                 Cell::new(deploy.id),
                 Cell::new(&deploy.state)
@@ -95,6 +123,20 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, pa
                     .set_alignment(CellAlignment::Center),
                 Cell::new(deploy.last_update.format("%Y-%m-%dT%H:%M:%SZ"))
                     .set_alignment(CellAlignment::Center),
+                Cell::new(truncated_commit_id),
+                Cell::new(truncated_commit_msg),
+                Cell::new(
+                    deploy
+                        .git_branch
+                        .as_ref()
+                        .map_or("No Data", |val| val as &str),
+                ),
+                Cell::new(
+                    deploy
+                        .git_dirty
+                        .map_or(String::from("No Data"), |val| val.to_string()),
+                )
+                .set_alignment(CellAlignment::Center),
             ]);
         }
 

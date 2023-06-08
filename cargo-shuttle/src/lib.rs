@@ -33,7 +33,7 @@ use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
-pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
+pub use args::{Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs, ShuttleArgs};
 use cargo_metadata::Message;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
@@ -54,7 +54,7 @@ use tar::Builder;
 use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
-use crate::args::{DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand};
+use crate::args::{DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand, GitTemplate};
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
 
@@ -73,7 +73,7 @@ impl Shuttle {
         Ok(Self { ctx })
     }
 
-    pub async fn run(mut self, mut args: Args) -> Result<CommandOutcome> {
+    pub async fn run(mut self, mut args: ShuttleArgs) -> Result<CommandOutcome> {
         trace!("running local client");
 
         // All commands that need to know which project is being handled
@@ -153,7 +153,8 @@ impl Shuttle {
     /// If both a project name and framework are passed as arguments, it will run without any extra
     /// interaction.
     async fn init(&mut self, args: InitArgs, mut project_args: ProjectArgs) -> Result<()> {
-        let interactive = project_args.name.is_none() || args.framework().is_none();
+        let git_template = GitTemplate::from(&args);
+        let interactive = project_args.name.is_none() || git_template.is_none();
 
         let theme = ColorfulTheme::default();
 
@@ -202,19 +203,19 @@ impl Shuttle {
         };
 
         // 4. Ask for the framework
-        let framework = match args.framework() {
-            Some(framework) => framework,
+        let (git, git_path) = match git_template {
+            Some(git_template) => git_template,
             None => {
                 println!(
                     "Shuttle works with a range of web frameworks. Which one do you want to use?"
                 );
-                let frameworks = init::Template::iter().collect::<Vec<_>>();
+                let frameworks = args::InitTemplateArg::iter().collect::<Vec<_>>();
                 let index = FuzzySelect::with_theme(&theme)
                     .items(&frameworks)
                     .default(0)
                     .interact()?;
                 println!();
-                frameworks[index]
+                GitTemplate::from(&frameworks[index]).unwrap()
             }
         };
 
@@ -225,7 +226,7 @@ impl Shuttle {
                 .name
                 .as_ref()
                 .expect("to have a project name provided"),
-            framework,
+            git,git_path,
         )?;
         println!();
 

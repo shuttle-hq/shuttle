@@ -2,17 +2,20 @@ use std::fs::read_to_string;
 use std::path::Path;
 use std::process::Command;
 
-use cargo_shuttle::{Args, Shuttle};
+use cargo_shuttle::{ShuttleArgs, Shuttle};
 use clap::Parser;
 use indoc::indoc;
 use tempfile::Builder;
+
+// quite high timeout since the template is being cloned over network
+const EXPECT_TIMEOUT_MS: u64 = 10000;
 
 #[tokio::test]
 async fn non_interactive_basic_init() {
     let temp_dir = Builder::new().prefix("basic-init").tempdir().unwrap();
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let args = Args::parse_from([
+    let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
         "--api-url",
         "http://shuttle.invalid:80",
@@ -38,7 +41,7 @@ async fn non_interactive_rocket_init() {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
     let temp_dir_path = temp_dir.path().to_owned();
 
-    let args = Args::parse_from([
+    let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
         "--api-url",
         "http://shuttle.invalid:80",
@@ -70,7 +73,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
         "--api-key",
         "dh9z58jttoes3qvt",
     ]);
-    let mut session = rexpect::session::spawn_command(command, Some(2000))?;
+    let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string(
         "How do you want to name your project? It will be hosted at ${project_name}.shuttleapp.rs.",
@@ -111,7 +114,7 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
         "--template",
         "rocket",
     ]);
-    let mut session = rexpect::session::spawn_command(command, Some(2000))?;
+    let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string(
         "How do you want to name your project? It will be hosted at ${project_name}.shuttleapp.rs.",
@@ -147,7 +150,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
         "--name",
         "my-project",
     ]);
-    let mut session = rexpect::session::spawn_command(command, Some(2000))?;
+    let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
@@ -188,7 +191,8 @@ fn assert_valid_rocket_project(path: &Path, name: &str) {
         let rocket = rocket::build().mount("/", routes![index]);
 
         Ok(rocket.into())
-    }"#};
+    }
+    "#};
 
     assert_eq!(main_file, expected);
 }

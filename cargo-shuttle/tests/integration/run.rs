@@ -1,4 +1,4 @@
-use cargo_shuttle::{Args, Command, ProjectArgs, RunArgs, Shuttle};
+use cargo_shuttle::{ShuttleArgs, Command, ProjectArgs, RunArgs, Shuttle};
 use portpicker::pick_unused_port;
 use reqwest::StatusCode;
 use std::{fs::canonicalize, process::exit, time::Duration};
@@ -22,7 +22,7 @@ async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
         release: false,
     };
 
-    let runner = Shuttle::new().unwrap().run(Args {
+    let runner = Shuttle::new().unwrap().run(ShuttleArgs {
         api_url: Some("http://shuttle.invalid:80".to_string()),
         project_args: ProjectArgs {
             working_directory: working_directory.clone(),

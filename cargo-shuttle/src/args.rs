@@ -15,8 +15,6 @@ use clap_complete::Shell;
 use shuttle_common::{models::project::IDLE_MINUTES, project::ProjectName};
 use uuid::Uuid;
 
-use crate::init::Template;
-
 #[derive(Parser)]
 #[command(
     version,
@@ -28,7 +26,7 @@ use crate::init::Template;
         .required(false)
         .hide(true))
 )]
-pub struct Args {
+pub struct ShuttleArgs {
     #[command(flatten)]
     pub project_args: ProjectArgs,
     /// Run this command against the API at the supplied URL
@@ -228,77 +226,94 @@ pub struct RunArgs {
     /// Use 0.0.0.0 instead of localhost (for usage with local external devices)
     #[arg(long)]
     pub external: bool,
-    /// Use release mode for building the project.
+    /// Use release mode for building the project
     #[arg(long, short = 'r')]
     pub release: bool,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 pub struct InitArgs {
-    /// Initialize the project with a template
-    #[arg(long, short, value_enum)]
+    /// Initialize the project with a starter template
+    #[arg(long, short, value_enum, conflicts_with_all = &["git", "git_path"])]
     pub template: Option<InitTemplateArg>,
+    /// Initialize the project from a git repository
+    #[arg(long, short)]
+    pub git: Option<String>,
+    /// Path to the folder in the repository (used with --git)
+    #[arg(long, requires = "git")]
+    pub git_path: Option<String>,
+
+    /// Path to initialize a new shuttle project
+    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
+    pub path: PathBuf,
+
     /// Whether to create the environment for this project on shuttle
     #[arg(long)]
     pub create_env: bool,
     #[command(flatten)]
     pub login_args: LoginArgs,
-    /// Path to initialize a new shuttle project
-    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
-    pub path: PathBuf,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq, strum::Display, strum::EnumIter)]
+#[strum(serialize_all = "kebab-case")]
 pub enum InitTemplateArg {
-    /// Initialize with actix-web framework
+    /// Actix-web framework
     ActixWeb,
-    /// Initialize with axum framework
+    /// Axum web framework
     Axum,
-    /// Initialize with poem framework
+    /// Poem web framework
     Poem,
-    /// Initialize with poise framework
+    /// Poise Discord framework
     Poise,
-    /// Initialize with rocket framework
+    /// Rocket web framework
     Rocket,
-    /// Initialize with salvo framework
+    /// Salvo web framework
     Salvo,
-    /// Initialize with serenity framework
+    /// Serenity Discord framework
     Serenity,
-    /// Initialize with tide framework
+    /// Tide web framework
     Tide,
-    /// Initialize with thruster framework
+    /// Thruster web framework
     Thruster,
-    /// Initialize with tower framework
+    /// Tower web framework
     Tower,
-    /// Initialize with warp framework
+    /// Warp web framework
     Warp,
-    /// Initialize with no template
+    /// No template - Custom empty service
     None,
 }
 
-impl InitArgs {
-    /// `None` -> No template chosen, ask for it
-    ///
-    /// `Some(Template::None)` -> Init with a blank cargo project
-    pub fn framework(&self) -> Option<Template> {
-        // Why separate enums?
-        // Future might have more options that pre-defined templates
-        self.template.as_ref().map(|t| {
-            use InitTemplateArg::*;
-            match t {
-                ActixWeb => Template::ActixWeb,
-                Axum => Template::Axum,
-                Poem => Template::Poem,
-                Poise => Template::Poise,
-                Rocket => Template::Rocket,
-                Salvo => Template::Salvo,
-                Serenity => Template::Serenity,
-                Tide => Template::Tide,
-                Thruster => Template::Thruster,
-                Tower => Template::Tower,
-                Warp => Template::Warp,
-                None => Template::None,
-            }
+/// git repo and path for chosen template or given URL+path
+pub type GitTemplate = Option<(String, Option<String>)>;
+
+const EXAMPLES_REPO: &str = "http://github.com/shuttle-hq/shuttle-examples.git";
+
+impl From<&InitArgs> for GitTemplate {
+    fn from(value: &InitArgs) -> Self {
+        if let Some(git) = value.git.clone() {
+            return Some((git, value.git_path.clone()));
+        }
+
+        value.template.and_then(|t| (&t).into())
+    }
+}
+
+impl From<&InitTemplateArg> for GitTemplate {
+    fn from(value: &InitTemplateArg) -> Self {
+        use InitTemplateArg::*;
+        Some(match value {
+            ActixWeb => (EXAMPLES_REPO.into(), Some("actix-web/hello-world".into())),
+            Axum => (EXAMPLES_REPO.into(), Some("axum/hello-world".into())),
+            Poem => (EXAMPLES_REPO.into(), Some("poem/hello-world".into())),
+            Poise => (EXAMPLES_REPO.into(), Some("poise/hello-world".into())),
+            Rocket => (EXAMPLES_REPO.into(), Some("rocket/hello-world".into())),
+            Salvo => (EXAMPLES_REPO.into(), Some("salvo/hello-world".into())),
+            Serenity => (EXAMPLES_REPO.into(), Some("serenity/hello-world".into())),
+            Tide => (EXAMPLES_REPO.into(), Some("tide/hello-world".into())),
+            Thruster => (EXAMPLES_REPO.into(), Some("thruster/hello-world".into())),
+            Tower => (EXAMPLES_REPO.into(), Some("tower/hello-world".into())),
+            Warp => (EXAMPLES_REPO.into(), Some("warp/hello-world".into())),
+            None => (EXAMPLES_REPO.into(), Some("custon/none".into())),
         })
     }
 }
@@ -329,27 +344,28 @@ mod tests {
 
     #[test]
     fn test_init_args_framework() {
-        let init_args = InitArgs {
-            template: Some(InitTemplateArg::Axum),
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
-        };
-        assert_eq!(init_args.framework(), Some(Template::Axum));
-        let init_args = InitArgs {
-            template: Some(InitTemplateArg::None),
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
-        };
-        assert_eq!(init_args.framework(), Some(Template::None));
-        let init_args = InitArgs {
-            template: None,
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
-        };
-        assert_eq!(init_args.framework(), None);
+        todo!();
+        // let init_args = InitArgs {
+        //     template: Some(InitTemplateArg::Axum),
+        //     create_env: false,
+        //     login_args: LoginArgs { api_key: None },
+        //     path: PathBuf::new(),
+        // };
+        // assert_eq!(init_args.framework(), Some(Template::Axum));
+        // let init_args = InitArgs {
+        //     template: Some(InitTemplateArg::None),
+        //     create_env: false,
+        //     login_args: LoginArgs { api_key: None },
+        //     path: PathBuf::new(),
+        // };
+        // assert_eq!(init_args.framework(), Some(Template::None));
+        // let init_args = InitArgs {
+        //     template: None,
+        //     create_env: false,
+        //     login_args: LoginArgs { api_key: None },
+        //     path: PathBuf::new(),
+        // };
+        // assert_eq!(init_args.framework(), None);
     }
 
     #[test]

@@ -5,6 +5,7 @@ mod user;
 
 use std::time::Duration;
 
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use dal::Dal;
 use secrets::KeyManager;
@@ -112,8 +113,7 @@ where
 
         let token = claim
             .into_token(self.key_manager.get_private_key())
-            // TODO: error handling
-            .map_err(|_| Error::Unauthorized)?;
+            .map_err(|_| anyhow!("internal server error when attempting to encode claim"))?;
 
         Ok(token)
     }
@@ -193,7 +193,6 @@ where
     ) -> Result<Response<TokenResponse>, Status> {
         let request = request.into_inner();
 
-        // TODO: error handling upstream
         let token = self
             .convert_key(request)
             .await

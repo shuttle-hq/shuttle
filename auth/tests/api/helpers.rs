@@ -52,15 +52,6 @@ pub(crate) async fn spawn_app() -> TestApp {
 
 // Convenience methods for testing.
 impl TestApp {
-    // pub async fn send_request(&self, request: Request<Body>) -> Response {
-    //     self.router
-    //         .clone()
-    //         .oneshot(request)
-    //         .await
-    //         .expect("Failed to execute request.")
-    // }
-
-    // TODO: test that caller is admin
     pub async fn post_user(
         &mut self,
         name: &str,
@@ -71,18 +62,19 @@ impl TestApp {
             account_tier: tier.to_string(),
         });
 
+        // Insert admin bearer token in request metadata.
         let bearer: MetadataValue<_> = format!("Bearer {ADMIN_KEY}").parse().unwrap();
         request.metadata_mut().insert("authorization", bearer);
 
         self.client.post_user_request(request).await
     }
 
-    // TODO: test that caller is admin
     pub async fn get_user(&mut self, name: &str) -> Result<Response<UserResponse>, Status> {
         let mut request = Request::new(UserRequest {
             account_name: name.to_string(),
         });
 
+        // Insert admin bearer token in request metadata.
         let bearer: MetadataValue<_> = format!("Bearer {ADMIN_KEY}").parse().unwrap();
         request.metadata_mut().insert("authorization", bearer);
 

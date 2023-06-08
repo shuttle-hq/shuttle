@@ -12,7 +12,7 @@ use shuttle_common::{
 use shuttle_proto::auth::AuthPublicKey;
 use tracing::warn;
 
-use crate::builder::MockedBuilder;
+use shuttle_common::builder::MockedBuilder;
 
 pub mod error;
 mod local;

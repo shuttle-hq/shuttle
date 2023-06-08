@@ -10,7 +10,8 @@ use tracing::{debug, error, instrument};
 use utoipa::OpenApi;
 use uuid::Uuid;
 
-use crate::{builder::MockedBuilder, handlers::error::Result};
+use crate::handlers::error::Result;
+use shuttle_common::builder::MockedBuilder;
 
 #[derive(OpenApi)]
 #[openapi(paths(deploy_project))]

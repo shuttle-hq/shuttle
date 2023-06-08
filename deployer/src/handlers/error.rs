@@ -16,7 +16,7 @@ pub enum Error {
     #[error("Custom error: {0}")]
     Custom(#[from] anyhow::Error),
     #[error("Builder error: {0}")]
-    Builder(#[from] crate::builder::error::Error),
+    Builder(#[from] shuttle_common::builder::error::Error),
 }
 
 impl Serialize for Error {

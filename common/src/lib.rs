@@ -18,6 +18,8 @@ pub mod storage_manager;
 pub mod tracing;
 #[cfg(feature = "wasm")]
 pub mod wasm;
+#[cfg(feature = "builder")]
+pub mod builder;
 
 use std::collections::BTreeMap;
 use std::fmt::Debug;

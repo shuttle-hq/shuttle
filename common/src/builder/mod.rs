@@ -8,7 +8,7 @@ use crate::builder::error::Error;
 use self::oci::error::Result;
 
 pub mod error;
-mod oci;
+pub mod oci;
 
 #[derive(Clone)]
 pub struct MockedBuilder {

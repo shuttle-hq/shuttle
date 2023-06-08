@@ -161,7 +161,7 @@ impl FromStr for ProjectName {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse::<shuttle_common::project::ProjectName>()
+        s.parse::<shuttle_common::project::RawProjectName>()
             .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName))
             .map(|pn| Self(pn.to_string()))
     }

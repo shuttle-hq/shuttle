@@ -45,14 +45,20 @@ impl MockedBuilder {
             .expect("to open the file");
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).await?;
-        self.push_image(buf).await.map_err(Error::Oci)?;
-        debug!("Successfuly built and pushed the image to the container registry.");
+
+        // We do not expect multi-arch images to be returned from the builder, so we're expecting
+        // a single image name, corresponding to a single image manifest, for a single architecture.
+        let image_names = self.push_image(buf).await.map_err(Error::Oci)?;
+        if image_names.len() == 1 {
+            todo!();
+        }
 
         Ok(uuid::Uuid::new_v4())
     }
 
-    /// Push a built image to an container registry.
-    pub async fn push_image(&self, image: Vec<u8>) -> Result<()> {
+    /// Push an image (including multi-arch manifests) to a container registry
+    /// and get the associated image name.
+    pub async fn push_image(&self, image: Vec<u8>) -> Result<Vec<String>> {
         self::oci::distribution::push_image(image).await
     }
 }

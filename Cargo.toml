@@ -14,7 +14,7 @@ members = [
   "provisioner",
   "resource-recorder",
   "runtime",
-  "service",
+  "service"
 ]
 
 exclude = [

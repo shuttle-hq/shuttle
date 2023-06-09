@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.17.0"
+version = "0.18.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -11,7 +11,6 @@ homepage = "https://www.shuttle.rs"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bollard = { workspace = true }
-cargo-edit = { version = "0.11.9", features = ["cli"] }
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
@@ -23,26 +22,24 @@ dirs = { workspace = true }
 dunce = "1.0.3"
 flate2 = { workspace = true }
 futures = { workspace = true }
-# This needs to be 0.16.0 for its dependency on libgit2-sys to be compatible
-# with cargo 0.69.0's dependency on libgit2-sys.
-git2 = "0.16.0"
+git2 = "0.17.2"
 home = { workspace = true }
 headers = { workspace = true }
 indicatif = "0.17.3"
 ignore = "0.4.20"
 indoc = "2.0.1"
-openssl = { version = "0.10", optional = true }
 portpicker = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = "0.2.0"
 reqwest-retry = "0.2.0"
+rmp-serde = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sqlx = { workspace = true, features = ["runtime-tokio-native-tls", "postgres"] }
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres"] }
 strum = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal"] }
-tokio-tungstenite = { version = "0.18.0", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.18.0", features = ["rustls-tls-webpki-roots"] }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tonic = { workspace = true }
@@ -58,6 +55,7 @@ webbrowser = "0.8.2"
 semver = "1.0.17"
 aws-sdk-dynamodb = { workspace = true }
 aws-config = { workspace = true }
+cargo-generate = "0.18.3"
 
 [dependencies.shuttle-common]
 workspace = true
@@ -69,9 +67,6 @@ workspace = true
 [dependencies.shuttle-service]
 workspace = true
 features = ["builder"]
-
-[features]
-vendored-openssl = ["openssl/vendored"]
 
 [dev-dependencies]
 assert_cmd = "2.0.6"

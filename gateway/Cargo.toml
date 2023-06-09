@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-gateway"
-version = "0.17.0"
+version = "0.18.0"
 edition.workspace = true
 license.workspace = true
 publish = false
@@ -35,7 +35,7 @@ serde_json = { workspace = true }
 sqlx = { workspace = true, features = [
     "sqlite",
     "json",
-    "runtime-tokio-native-tls",
+    "runtime-tokio-rustls",
     "migrate",
 ] }
 strum = { workspace = true }

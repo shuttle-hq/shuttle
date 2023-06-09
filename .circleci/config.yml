@@ -2,13 +2,13 @@ version: 2.1
 
 orbs:
   docker-buildx: sensu/docker-buildx@1.1.1
-  aws-ecr: circleci/aws-ecr@8.1.2
+  aws-ecr: circleci/aws-ecr@8.2.1
   win: circleci/windows@5.0
 
 executors:
   docker-rust:
     docker:
-      - image: cimg/rust:1.68.0
+      - image: cimg/rust:1.70.0
     resource_class: small
   image-ubuntu:
     machine:
@@ -115,7 +115,7 @@ commands:
       - run:
           name: Install Rust
           command: |
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --target add wasm32-wasi
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.70.0 --target add wasm32-wasi
             sudo apt update && sudo apt install -y libssl1.1
   install-protoc:
     parameters:
@@ -172,8 +172,6 @@ jobs:
   workspace:
     executor: docker-rust
     resource_class: xlarge
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - restore-cargo-cache
@@ -206,8 +204,6 @@ jobs:
         type: string
         default: --all-features
     executor: docker-rust
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - restore-cargo-cache
@@ -255,8 +251,6 @@ jobs:
       - save-cargo-cache
   e2e-test:
     executor: image-ubuntu
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - install-rust
       - checkout
@@ -288,8 +282,6 @@ jobs:
           when: always
   build-and-push:
     executor: image-ubuntu
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     parameters:
       aws-access-key-id:
         description: "AWS cli access key id"
@@ -316,6 +308,9 @@ jobs:
           aws-access-key-id: << parameters.aws-access-key-id >>
           aws-secret-access-key: << parameters.aws-secret-access-key >>
           public-registry: << parameters.public-registry >>
+          # `registry-id`` field is required, although we don't need it (used for private registry).
+          # We give it a non-empty env variable name to bypass the `ecr-login` empty check.
+          registry-id: TAG
       - run:
           name: Make and push images
           command: |
@@ -338,17 +333,17 @@ jobs:
         default: shuttle.internal
       postgres-password:
         description: "Shuttle shared postgres password"
-        type: string
+        type: env_var_name
       mongodb-password:
         description: "Shuttle shared mongodb password"
-        type: string
+        type: env_var_name
       production:
         description: "Push and deploy to production"
         type: boolean
         default: false
     steps:
     - checkout
-    - run: 
+    - run:
         name: Set git tag in bash_env
         command: |
           echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
@@ -362,21 +357,29 @@ jobs:
         name: Deploy images
         command: |
           DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> USE_TLS=enable PROD=<< parameters.production >> DD_API_KEY=$DD_API_KEY \
-          POSTGRES_PASSWORD=<< parameters.postgres-password >> \
-          MONGO_INITDB_ROOT_PASSWORD=<< parameters.mongodb-password >> \
+          POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
+          MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
           TAG=$TAG \
           make deploy
-    - run:
-        name: Pull new deployer image
-        command: |
-          [[ << parameters.production >> == true ]] && ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-prod/deployer:$TAG" || \
-          ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
+    - when:
+        condition: << parameters.production >>
+        steps:
+          - run:
+              name: Pull new deployer image on prod
+              command: |
+                ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
+    - when:
+        condition:
+          not: << parameters.production >>
+        steps:
+          - run:
+              name: Pull new deployer image on dev
+              command: |
+                ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
       image: << parameters.image >>
     resource_class: << parameters.resource_class >>
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     parameters:
       target:
         description: "Linux target to build for"
@@ -392,7 +395,7 @@ jobs:
       - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
       - run:
           name: Install Rust
-          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.68.0 --target << parameters.target >>
+          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.70.0 --target << parameters.target >>
       - run:
           name: Build
           command: |
@@ -409,7 +412,6 @@ jobs:
       shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - run: choco install -y strawberryperl
@@ -417,7 +419,7 @@ jobs:
           name: Install Rust
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
-            C:\rustup-init.exe -y --default-toolchain 1.68.0 --target x86_64-pc-windows-msvc
+            C:\rustup-init.exe -y --default-toolchain 1.70.0 --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - run:
           name: Build
@@ -435,13 +437,11 @@ jobs:
     macos:
       xcode: 12.5.1
     resource_class: medium
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - run:
           name: Install Rust
-          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.68.0 --target x86_64-apple-darwin
+          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.70.0 --target x86_64-apple-darwin
       - run:
           name: Build
           command: |
@@ -555,7 +555,7 @@ jobs:
           name: Install Rust
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
-            C:\rustup-init.exe -y --default-toolchain 1.68.0 --target x86_64-pc-windows-msvc
+            C:\rustup-init.exe -y --default-toolchain 1.70.0 --target x86_64-pc-windows-msvc
       - run:
           name: "Install Shuttle"
           command:  ..\.cargo\bin\cargo.exe install cargo-shuttle --path ./cargo-shuttle
@@ -592,7 +592,6 @@ jobs:
           name: Crate publishing in order
           command: |
             cargo publish --manifest-path << parameters.path >>/Cargo.toml
-
 workflows:
   ci:
     jobs:
@@ -663,8 +662,8 @@ workflows:
               only: main
       - build-and-push:
           name: build-and-push-unstable
-          aws-access-key-id: AWS_ACCESS_KEY_ID
-          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
+          aws-secret-access-key: DEV_AWS_SECRET_ACCESS_KEY
           production: false
           requires:
             - approve-push-unstable

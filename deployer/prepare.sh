@@ -67,3 +67,8 @@ done
 # TODO: restore when we know how to prefetch from our mirror
 # cd /usr/src/shuttle/service
 # cargo fetch
+
+# Install common build tools for external crates
+# The image should already have these: https://github.com/docker-library/buildpack-deps/blob/65d69325ad741cea6dee20781c1faaab2e003d87/debian/buster/Dockerfile
+apt update
+apt install -y llvm-dev libclang-dev clang cmake

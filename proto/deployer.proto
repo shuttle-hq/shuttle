@@ -1,0 +1,18 @@
+syntax = "proto3";
+package deployer;
+
+service Deployer {
+  rpc Deploy(DeployRequest) returns (DeployResponse);
+}
+
+message DeployRequest {
+  string project_id = 1;
+  string git_commit_message = 2;
+  string git_commit_hash = 3;
+  string git_branch = 4;
+  bool git_dirty = 5;
+}
+
+message DeployResponse {
+    string deployment_id = 1;
+}

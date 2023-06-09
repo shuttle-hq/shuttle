@@ -72,6 +72,12 @@ pub struct SubscribeStopResponse {
 pub struct SubscribeLogsRequest {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Ping {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Pong {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogItem {
     #[prost(message, optional, tag = "2")]
     pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
@@ -276,6 +282,26 @@ pub mod runtime_client {
             let path = http::uri::PathAndQuery::from_static("/runtime.Runtime/Stop");
             self.inner.unary(request.into_request(), path, codec).await
         }
+        /// Ping a service to check the health
+        pub async fn health_check(
+            &mut self,
+            request: impl tonic::IntoRequest<super::Ping>,
+        ) -> Result<tonic::Response<super::Pong>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/runtime.Runtime/HealthCheck",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
         /// Channel to notify a service has been stopped
         pub async fn subscribe_stop(
             &mut self,
@@ -346,6 +372,11 @@ pub mod runtime_server {
             &self,
             request: tonic::Request<super::StopRequest>,
         ) -> Result<tonic::Response<super::StopResponse>, tonic::Status>;
+        /// Ping a service to check the health
+        async fn health_check(
+            &self,
+            request: tonic::Request<super::Ping>,
+        ) -> Result<tonic::Response<super::Pong>, tonic::Status>;
         /// Server streaming response type for the SubscribeStop method.
         type SubscribeStopStream: futures_core::Stream<
                 Item = Result<super::SubscribeStopResponse, tonic::Status>,
@@ -525,6 +556,44 @@ pub mod runtime_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = StopSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/runtime.Runtime/HealthCheck" => {
+                    #[allow(non_camel_case_types)]
+                    struct HealthCheckSvc<T: Runtime>(pub Arc<T>);
+                    impl<T: Runtime> tonic::server::UnaryService<super::Ping>
+                    for HealthCheckSvc<T> {
+                        type Response = super::Pong;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::Ping>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).health_check(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = HealthCheckSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

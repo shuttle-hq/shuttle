@@ -23,8 +23,9 @@ use shuttle_proto::{
     runtime::{
         self,
         runtime_server::{Runtime, RuntimeServer},
-        LoadRequest, LoadResponse, LogItem, StartRequest, StartResponse, StopReason, StopRequest,
-        StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
+        LoadRequest, LoadResponse, LogItem, Ping, Pong, StartRequest, StartResponse, StopReason,
+        StopRequest, StopResponse, SubscribeLogsRequest, SubscribeStopRequest,
+        SubscribeStopResponse,
     },
 };
 use shuttle_service::{Environment, Factory, Service, ServiceName};
@@ -435,5 +436,12 @@ where
         } else {
             Err(Status::internal("logs have already been subscribed to"))
         }
+    }
+
+    async fn health_check(
+        &self,
+        _request: tonic::Request<Ping>,
+    ) -> Result<tonic::Response<Pong>, tonic::Status> {
+        Ok(Response::new(Pong {}))
     }
 }

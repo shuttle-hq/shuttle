@@ -1,22 +1,14 @@
 use std::{fmt::Formatter, str::FromStr};
 
-use async_trait::async_trait;
-use axum::{
-    extract::{FromRef, FromRequestParts},
-    headers::{authorization::Bearer, Authorization},
-    http::request::Parts,
-    TypedHeader,
-};
-use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::{
     claims::{Scope, ScopeBuilder},
     ApiKey,
 };
-use tracing::{debug, trace, Span};
+use tonic::{metadata::MetadataMap, Status};
 
-use crate::{api::UserManagerState, Error};
+use crate::{dal::Dal, Error};
 
-#[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct User {
     pub name: AccountName,
     pub key: ApiKey,
@@ -37,79 +29,35 @@ impl User {
     }
 }
 
-#[async_trait]
-impl<S> FromRequestParts<S> for User
-where
-    S: Send + Sync,
-    UserManagerState: FromRef<S>,
-{
-    type Rejection = Error;
+/// Check the request metadata for the bearer token of a user with admin tier. If we cannot
+/// establish that for any reason, return an error with a permission denied status.
+pub async fn verify_admin<D: Dal + Send + Sync + 'static>(
+    headers: &MetadataMap,
+    dal: &D,
+) -> Result<(), Status> {
+    let err = || Status::permission_denied("Unauthorized.");
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let key = Key::from_request_parts(parts, state).await?;
+    let bearer = headers.get("authorization").ok_or_else(err)?;
 
-        let user_manager: UserManagerState = UserManagerState::from_ref(state);
+    let bearer = bearer.to_str().map_err(|_| err())?;
 
-        let user = user_manager
-            .get_user_by_key(key.into())
-            .await
-            // Absorb any error into `Unauthorized`
-            .map_err(|_| Error::Unauthorized)?;
+    let (_, token) = bearer.split_once("Bearer ").ok_or_else(err)?;
 
-        // Record current account name for tracing purposes
-        Span::current().record("account.name", &user.name.to_string());
+    let key = ApiKey::parse(token).map_err(|_| err())?;
 
-        Ok(user)
+    // TODO: refactor to `is_ok_and(|user| user.is_admin())` when
+    // 1.70 PR is merged.
+    let user = dal.get_user_by_key(key).await.map_err(|_| err())?;
+
+    if !user.is_admin() {
+        Err(err())
+    } else {
+        Ok(())
     }
 }
 
-impl From<User> for shuttle_common::models::user::Response {
-    fn from(user: User) -> Self {
-        Self {
-            name: user.name.to_string(),
-            key: user.key.as_ref().to_string(),
-            account_tier: user.account_tier.to_string(),
-        }
-    }
-}
-
-/// A wrapper around [ApiKey] so we can implement [FromRequestParts] for it.
-pub struct Key(ApiKey);
-
-impl From<Key> for ApiKey {
-    fn from(key: Key) -> Self {
-        key.0
-    }
-}
-
-#[async_trait]
-impl<S> FromRequestParts<S> for Key
-where
-    S: Send + Sync,
-{
-    type Rejection = Error;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let key = TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
-            .await
-            .map_err(|_| Error::KeyMissing)
-            .and_then(|TypedHeader(Authorization(bearer))| {
-                let bearer = bearer.token().trim();
-                ApiKey::parse(bearer).map_err(|error| {
-                    debug!(error = ?error, "received a malformed api-key");
-                    Self::Rejection::Unauthorized
-                })
-            })?;
-
-        trace!("got bearer key");
-
-        Ok(Key(key))
-    }
-}
-
-#[derive(Clone, Copy, Deserialize, PartialEq, Eq, Serialize, Debug, sqlx::Type, strum::Display)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, sqlx::Type, strum::Display)]
 #[sqlx(rename_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[derive(Default)]
 pub enum AccountTier {
@@ -132,7 +80,22 @@ impl From<AccountTier> for Vec<Scope> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
+impl TryFrom<String> for AccountTier {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<AccountTier, Error> {
+        let tier = match value.as_str() {
+            "basic" => AccountTier::Basic,
+            "pro" => AccountTier::Pro,
+            "team" => AccountTier::Team,
+            "admin" => AccountTier::Admin,
+            other => return Err(Error::InvalidAccountTier(other.to_string())),
+        };
+
+        Ok(tier)
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct AccountName(String);
 
@@ -153,39 +116,5 @@ impl FromStr for AccountName {
 impl std::fmt::Display for AccountName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
-    }
-}
-
-impl<'de> Deserialize<'de> for AccountName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
-    }
-}
-
-pub struct Admin {
-    pub user: User,
-}
-
-#[async_trait]
-impl<S> FromRequestParts<S> for Admin
-where
-    S: Send + Sync,
-    UserManagerState: FromRef<S>,
-{
-    type Rejection = Error;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let user = User::from_request_parts(parts, state).await?;
-
-        if user.is_admin() {
-            Ok(Self { user })
-        } else {
-            Err(Error::Forbidden)
-        }
     }
 }

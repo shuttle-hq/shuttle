@@ -1,0 +1,53 @@
+syntax = "proto3";
+package auth;
+
+service Auth {
+  // Get a user by their account name
+  rpc GetUserRequest(UserRequest) returns (UserResponse);
+  
+  // Send a request to create a new user
+  rpc PostUserRequest(NewUser) returns (UserResponse);
+
+  // Send a request to convert an API key to a JWT
+  rpc ConvertApiKey(ApiKeyRequest) returns (TokenResponse);
+  
+  // Send a request to reset a users API key
+  rpc ResetApiKey(ApiKeyRequest) returns (ResultResponse);
+
+  // Get the auth service public key to decode tokens
+  rpc PublicKey(PublicKeyRequest) returns (PublicKeyResponse);
+}
+
+message UserRequest {
+  string account_name = 1;
+}
+
+message NewUser {
+  string account_name = 1;
+  string account_tier = 2;
+}
+
+message UserResponse {
+  string account_name = 1;
+  string account_tier = 2;
+  string key = 3;
+}
+
+message ResultResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ApiKeyRequest {
+  string api_key = 1;
+}
+
+message TokenResponse {
+  string token = 1;
+}
+
+message PublicKeyResponse {
+  bytes public_key = 1;
+}
+
+message PublicKeyRequest {}

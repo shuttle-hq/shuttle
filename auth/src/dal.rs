@@ -41,16 +41,21 @@ impl fmt::Display for DalError {
 #[async_trait]
 pub trait Dal {
     /// Create a new account
-    async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, DalError>;
+    async fn create_user(
+        &self,
+        name: AccountName,
+        key: ApiKey,
+        tier: AccountTier,
+    ) -> Result<User, DalError>;
 
     /// Get an account by [AccountName]
-    async fn get_user(&self, name: AccountName) -> Result<User, DalError>;
+    async fn get_user_by_name(&self, name: AccountName) -> Result<User, DalError>;
 
     /// Get an account by [ApiKey]
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, DalError>;
 
     /// Reset an account's [ApiKey]
-    async fn reset_key(&self, name: AccountName) -> Result<(), DalError>;
+    async fn update_api_key(&self, name: AccountName, new_key: ApiKey) -> Result<(), DalError>;
 }
 
 pub struct Sqlite {
@@ -86,27 +91,6 @@ impl Sqlite {
         Self::from_pool(pool).await
     }
 
-    pub async fn insert_admin(&self, account_name: &str, key: Option<&str>) {
-        let key = match key {
-            Some(key) => ApiKey::parse(key).unwrap(),
-            None => ApiKey::generate(),
-        };
-
-        sqlx::query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
-            .bind(account_name)
-            .bind(&key)
-            .bind(AccountTier::Admin)
-            .execute(&self.pool)
-            .await
-            .expect("should be able to insert admin user, does it already exist?");
-
-        println!(
-            "`{}` created as super user with key: {}",
-            account_name,
-            key.as_ref()
-        );
-    }
-
     /// A utility for creating a migrating an in-memory database for testing.
     /// Currently only used for integration tests so the compiler thinks it is
     /// dead code.
@@ -125,9 +109,12 @@ impl Sqlite {
 
 #[async_trait]
 impl Dal for Sqlite {
-    async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, DalError> {
-        let key = ApiKey::generate();
-
+    async fn create_user(
+        &self,
+        name: AccountName,
+        key: ApiKey,
+        tier: AccountTier,
+    ) -> Result<User, DalError> {
         sqlx::query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
             .bind(&name)
             .bind(&key)
@@ -138,7 +125,7 @@ impl Dal for Sqlite {
         Ok(User::new(name, key, tier))
     }
 
-    async fn get_user(&self, name: AccountName) -> Result<User, DalError> {
+    async fn get_user_by_name(&self, name: AccountName) -> Result<User, DalError> {
         sqlx::query("SELECT account_name, key, account_tier FROM users WHERE account_name = ?1")
             .bind(&name)
             .fetch_optional(&self.pool)
@@ -170,11 +157,9 @@ impl Dal for Sqlite {
             .ok_or(DalError::UserNotFound)
     }
 
-    async fn reset_key(&self, name: AccountName) -> Result<(), DalError> {
-        let key = ApiKey::generate();
-
+    async fn update_api_key(&self, name: AccountName, new_key: ApiKey) -> Result<(), DalError> {
         let rows_affected = sqlx::query("UPDATE users SET key = ?1 WHERE account_name = ?2")
-            .bind(&key)
+            .bind(&new_key)
             .bind(&name)
             .execute(&self.pool)
             .await?

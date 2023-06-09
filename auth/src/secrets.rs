@@ -29,6 +29,12 @@ impl EdDsaManager {
     }
 }
 
+impl Default for EdDsaManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KeyManager for EdDsaManager {
     fn private_key(&self) -> &EncodingKey {
         &self.encoding_key

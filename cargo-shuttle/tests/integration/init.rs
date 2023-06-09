@@ -13,6 +13,8 @@ const EXPECT_TIMEOUT_MS: u64 = 10000;
 #[tokio::test]
 async fn non_interactive_basic_init() {
     let temp_dir = Builder::new().prefix("basic-init").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
     let args = ShuttleArgs::parse_from([
@@ -28,21 +30,25 @@ async fn non_interactive_basic_init() {
         "none",
         temp_dir_path.to_str().unwrap(),
     ]);
-    if let Err(e) = Shuttle::new().unwrap().run(args).await {
-        // DEBUG CI: Failed to init with cargo generate
-        println!("Failed due to {:?}", e);
-        panic!();
-    }
+    Shuttle::new().unwrap().run(args).await.unwrap();
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
-
     assert!(cargo_toml.contains("name = \"my-project\""));
     assert!(cargo_toml.contains("shuttle-runtime = "));
+
+    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
+    // attempts to enter the original (temp) working directory again.
+    // If both are dropped at the same time, the test can sometimes crash.
+    // Added sleep here to prevent.
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    drop(temp_dir);
 }
 
 #[tokio::test]
 async fn non_interactive_rocket_init() {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let temp_dir_path = temp_dir.path().to_owned();
 
     let args = ShuttleArgs::parse_from([
@@ -58,18 +64,23 @@ async fn non_interactive_rocket_init() {
         "rocket",
         temp_dir_path.to_str().unwrap(),
     ]);
-    if let Err(e) = Shuttle::new().unwrap().run(args).await {
-        // DEBUG CI: Failed to init with cargo generate
-        println!("Failed due to {:?}", e);
-        panic!();
-    }
+    Shuttle::new().unwrap().run(args).await.unwrap();
 
     assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
+
+    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
+    // attempts to enter the original (temp) working directory again.
+    // If both are dropped at the same time, the test can sometimes crash.
+    // Added sleep here to prevent.
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    drop(temp_dir);
 }
 
 #[test]
 fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    std::thread::sleep(std::time::Duration::from_millis(500));
     let temp_dir_path = temp_dir.path().to_owned();
 
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
@@ -109,6 +120,8 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    std::thread::sleep(std::time::Duration::from_millis(500));
     let temp_dir_path = temp_dir.path().to_owned();
 
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
@@ -145,6 +158,8 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
 #[test]
 fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    std::thread::sleep(std::time::Duration::from_millis(500));
     let temp_dir_path = temp_dir.path().to_owned();
 
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
@@ -203,4 +218,40 @@ fn assert_valid_rocket_project(path: &Path, name: &str) {
     "#};
 
     assert_eq!(main_file, expected);
+}
+
+#[tokio::test]
+async fn non_interactive_git_init() {
+    let temp_dir = Builder::new().prefix("basic-git-init").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    let temp_dir_path = temp_dir.path().to_owned();
+
+    let args = ShuttleArgs::parse_from([
+        "cargo-shuttle",
+        "--api-url",
+        "http://shuttle.invalid:80",
+        "init",
+        "--api-key",
+        "dh9z58jttoes3qvt",
+        "--name",
+        "my-project",
+        "--git",
+        "https://github.com/shuttle-hq/shuttle-examples",
+        "--git-path",
+        "tower/hello-world",
+        temp_dir_path.to_str().unwrap(),
+    ]);
+    Shuttle::new().unwrap().run(args).await.unwrap();
+
+    let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
+    assert!(cargo_toml.contains("name = \"my-project\""));
+    assert!(cargo_toml.contains("shuttle-tower ="));
+
+    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
+    // attempts to enter the original (temp) working directory again.
+    // If both are dropped at the same time, the test can sometimes crash.
+    // Added sleep here to prevent.
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    drop(temp_dir);
 }

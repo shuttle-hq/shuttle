@@ -107,6 +107,9 @@ impl Sqlite {
         );
     }
 
+    /// A utility for creating a migrating an in-memory database for testing.
+    /// Currently only used for integration tests so the compiler thinks it is
+    /// dead code.
     #[allow(dead_code)]
     pub async fn new_in_memory() -> Self {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -142,8 +145,10 @@ impl Dal for Sqlite {
             .await?
             .map(|row| User {
                 name,
-                key: row.try_get("key").unwrap(),
-                account_tier: row.try_get("account_tier").unwrap(),
+                key: row.try_get("key").expect("a user should always have a key"),
+                account_tier: row
+                    .try_get("account_tier")
+                    .expect("a user should always have an account tier"),
             })
             .ok_or(DalError::UserNotFound)
     }
@@ -154,9 +159,13 @@ impl Dal for Sqlite {
             .fetch_optional(&self.pool)
             .await?
             .map(|row| User {
-                name: row.try_get("account_name").unwrap(),
+                name: row
+                    .try_get("account_name")
+                    .expect("a user should always have an account name"),
                 key,
-                account_tier: row.try_get("account_tier").unwrap(),
+                account_tier: row
+                    .try_get("account_tier")
+                    .expect("a user should always have an account tier"),
             })
             .ok_or(DalError::UserNotFound)
     }

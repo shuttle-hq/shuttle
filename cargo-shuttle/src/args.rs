@@ -87,21 +87,8 @@ impl ProjectArgs {
 
 /// A cargo command for the shuttle platform (https://www.shuttle.rs/)
 ///
-/// # Commonly used commands:
-///
-/// cargo shuttle run                   Run the project locally so you can test your changes.
-///
-/// cargo shuttle project start         Initialize an environment for this project on shuttle.
-///
-/// cargo shuttle deploy                Deploy the current state of the project to the public internet though shuttle.
-///
-/// cargo shuttle deploy --allow-dirty  Deploy the project to shuttle (including files not committed to git).
-///
-/// cargo shuttle deployment            Either list existing deployments or get the status of a particular deployment.
-///
-/// cargo shuttle logs --follow         Fetch the logs of the deployed service and stream them to your terminal.
-///
-/// See the [docs](https://docs.shuttle.rs) for more information.
+/// See the CLI docs (https://docs.shuttle.rs/introduction/shuttle-commands)
+/// for more information.
 #[derive(Parser)]
 pub enum Command {
     /// Create a new shuttle project

@@ -219,8 +219,14 @@ impl Shuttle {
         };
 
         // 5. Initialize locally
-        init::cargo_init(path.clone(), project_args.name.clone().unwrap())?;
-        init::cargo_shuttle_init(path.clone(), framework)?;
+        init::cargo_generate(
+            path.clone(),
+            project_args
+                .name
+                .as_ref()
+                .expect("to have a project name provided"),
+            framework,
+        )?;
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle

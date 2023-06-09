@@ -94,10 +94,6 @@ impl LocalProvisioner {
                 .start_container(container_name, None::<StartContainerOptions<String>>)
                 .await
                 .expect("failed to start none running container");
-
-            // the DynamoDB local test container seems to need a few seconds to actually be ready
-            // give it 10 seconds
-            tokio::time::sleep(Duration::from_secs(10)).await;
         }
     }
 
@@ -172,6 +168,7 @@ impl LocalProvisioner {
             aws_access_key_id,
             aws_secret_access_key,
             aws_default_region,
+            is_ready_cmd,
         } = dynamodb_config();
 
         let env = None;
@@ -184,6 +181,8 @@ impl LocalProvisioner {
 
         self.start_container_if_not_running(container, "DynamoDB", &container_name)
             .await;
+
+        self.wait_for_ready(&container_name, is_ready_cmd).await?;
 
         let endpoint = format!("http://localhost:{}", port);
 
@@ -295,6 +294,7 @@ impl LocalProvisioner {
             aws_access_key_id,
             aws_secret_access_key,
             aws_default_region,
+            is_ready_cmd: _,
         } = dynamodb_config();
 
         let container = match self.docker.inspect_container(&container_name, None).await {
@@ -475,6 +475,7 @@ struct DynamoDbConfig {
     aws_access_key_id: String,
     aws_secret_access_key: String,
     aws_default_region: String,
+    is_ready_cmd: Vec<String>,
 }
 
 fn dynamodb_config() -> DynamoDbConfig {
@@ -485,6 +486,10 @@ fn dynamodb_config() -> DynamoDbConfig {
         aws_access_key_id: "DUMMY_ID_EXAMPLE".to_string(),
         aws_secret_access_key: "DUMMY_EXAMPLE_KEY".to_string(),
         aws_default_region: "DUMMY_EXAMPLE_REGION".to_string(),
+        is_ready_cmd: vec![
+            "curl".to_string(),
+            "0.0.0.0:8000".to_string(),
+        ],
     }
 }
 

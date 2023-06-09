@@ -4,7 +4,8 @@ use std::{
 };
 
 use portpicker::pick_unused_port;
-use shuttle_auth::{EdDsaManager, Service, Sqlite};
+use shuttle_auth::{AccountTier, Dal, EdDsaManager, Service, Sqlite};
+use shuttle_common::ApiKey;
 use shuttle_proto::auth::{
     auth_client::AuthClient, auth_server::AuthServer, NewUser, UserRequest, UserResponse,
 };
@@ -29,7 +30,13 @@ pub(crate) async fn spawn_app() -> TestApp {
 
     // Initialize an in-memory DB with an admin user.
     let sqlite = Sqlite::new_in_memory().await;
-    sqlite.insert_admin("admin", Some(ADMIN_KEY)).await;
+
+    let admin_key = ApiKey::parse(ADMIN_KEY).unwrap();
+
+    sqlite
+        .create_user("admin".to_string().into(), admin_key, AccountTier::Admin)
+        .await
+        .unwrap();
 
     let mut server_builder =
         Server::builder().http2_keepalive_interval(Some(Duration::from_secs(60)));

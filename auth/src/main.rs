@@ -1,12 +1,15 @@
 use std::time::Duration;
 
 use clap::Parser;
-use shuttle_common::backends::tracing::{setup_tracing, ExtractPropagationLayer};
+use shuttle_common::{
+    backends::tracing::{setup_tracing, ExtractPropagationLayer},
+    ApiKey,
+};
 use shuttle_proto::auth::auth_server::AuthServer;
 use tonic::transport::Server;
 use tracing::trace;
 
-use shuttle_auth::{Args, Commands, EdDsaManager, Service, Sqlite};
+use shuttle_auth::{AccountTier, Args, Commands, Dal, EdDsaManager, Service, Sqlite};
 
 #[tokio::main]
 async fn main() {
@@ -34,6 +37,15 @@ async fn main() {
 
             router.serve(args.address).await.unwrap();
         }
-        Commands::Init(args) => sqlite.insert_admin(&args.name, args.key.as_deref()).await,
+        Commands::Init(args) => {
+            let key = args
+                .key
+                .map_or_else(ApiKey::generate, |key| ApiKey::parse(&key).unwrap());
+
+            sqlite
+                .create_user(args.name.into(), key, AccountTier::Admin)
+                .await
+                .unwrap();
+        }
     }
 }

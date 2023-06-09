@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use dal::Dal;
 use secrets::KeyManager;
 use shuttle_common::claims::Claim;
 use shuttle_common::ApiKey;
@@ -25,8 +24,9 @@ use user::{verify_admin, User};
 use crate::dal::DalError;
 
 pub use args::{Args, Commands, InitArgs};
-pub use dal::Sqlite;
+pub use dal::{Dal, Sqlite};
 pub use secrets::EdDsaManager;
+pub use user::AccountTier;
 
 pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // One day
 
@@ -77,9 +77,11 @@ where
             account_tier,
         }: NewUser,
     ) -> Result<User, Error> {
+        let key = ApiKey::generate();
+
         let user = self
             .dal
-            .create_user(account_name.into(), account_tier.try_into()?)
+            .create_user(account_name.into(), key, account_tier.try_into()?)
             .await?;
 
         Ok(user)
@@ -92,7 +94,9 @@ where
 
         let account_name = self.dal.get_user_by_key(key).await?.name;
 
-        self.dal.reset_api_key(account_name).await?;
+        let new_key = ApiKey::generate();
+
+        self.dal.reset_api_key(account_name, new_key).await?;
 
         Ok(())
     }

@@ -25,10 +25,11 @@ opentelemetry = { workspace = true }
 opentelemetry-http = { workspace = true }
 pipe = { workspace = true }
 portpicker = { workspace = true }
+rmp-serde = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = [
-  "runtime-tokio-native-tls",
+  "runtime-tokio-rustls",
   "sqlite",
   "chrono",
   "json",

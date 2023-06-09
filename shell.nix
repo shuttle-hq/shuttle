@@ -7,7 +7,6 @@ in
   stdenv.mkDerivation {
     name = "moz_overlay_shell";
     nativeBuildInputs = with nixpkgs; [
-      openssl
       pkg-config
     ];
     buildInputs = with nixpkgs; [

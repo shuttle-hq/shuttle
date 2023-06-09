@@ -35,7 +35,7 @@ serde_json = { workspace = true }
 sqlx = { workspace = true, features = [
     "sqlite",
     "json",
-    "runtime-tokio-native-tls",
+    "runtime-tokio-rustls",
     "migrate",
 ] }
 strum = { workspace = true }

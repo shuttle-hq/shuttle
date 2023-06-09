@@ -1,39 +1,39 @@
 mod error;
 
-use axum::extract::ws::{self, WebSocket};
+use crate::deployment::{DeploymentManager, Queued};
+use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGetter, State};
+use async_trait::async_trait;
+use axum::extract::{
+    ws::{self, WebSocket},
+    FromRequest,
+};
 use axum::extract::{Extension, Path, Query};
 use axum::handler::Handler;
 use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
 use axum::routing::{get, post, Router};
-use axum::{extract::BodyStream, Json};
-use bytes::BufMut;
+use axum::Json;
+use bytes::Bytes;
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
-use futures::StreamExt;
-use hyper::Uri;
-use serde::Deserialize;
+use hyper::{Request, StatusCode, Uri};
+use serde::{de::DeserializeOwned, Deserialize};
 use shuttle_common::backends::auth::{
     AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
 };
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::models::deployment::{DeploymentRequest, GIT_STRINGS_MAX_LENGTH};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
-use tracing::{debug, error, field, instrument, trace, warn};
+use tracing::{error, field, instrument, trace, warn};
 use utoipa::{IntoParams, OpenApi};
-
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
-
-use crate::deployment::{DeploymentManager, Queued};
-use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGetter, State};
-
-use std::collections::HashMap;
 
 pub use {self::error::Error, self::error::Result, self::local::set_jwt_bearer};
 
@@ -315,8 +315,7 @@ pub async fn create_service(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     Path((project_name, service_name)): Path<(String, String)>,
-    Query(params): Query<HashMap<String, String>>,
-    mut stream: BodyStream,
+    Rmp(deployment_req): Rmp<DeploymentRequest>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     let service = persistence.get_or_create_service(&service_name).await?;
     let id = Uuid::new_v4();
@@ -328,15 +327,17 @@ pub async fn create_service(
         last_update: Utc::now(),
         address: None,
         is_next: false,
+        git_commit_id: deployment_req
+            .git_commit_id
+            .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
+        git_commit_msg: deployment_req
+            .git_commit_msg
+            .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
+        git_branch: deployment_req
+            .git_branch
+            .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
+        git_dirty: deployment_req.git_dirty,
     };
-
-    let mut data = Vec::new();
-    while let Some(buf) = stream.next().await {
-        let buf = buf?;
-        debug!("Received {} bytes", buf.len());
-        data.put(buf);
-    }
-    debug!("Received a total of {} bytes", data.len());
 
     persistence.insert_deployment(deployment.clone()).await?;
 
@@ -344,8 +345,8 @@ pub async fn create_service(
         id,
         service_name: service.name,
         service_id: service.id,
-        data,
-        will_run_tests: !params.contains_key("no-test"),
+        data: deployment_req.data,
+        will_run_tests: !deployment_req.no_test,
         tracing_context: Default::default(),
         claim: Some(claim),
     };
@@ -648,4 +649,28 @@ pub async fn clean_project(
 
 async fn get_status() -> String {
     "Ok".to_string()
+}
+
+pub struct Rmp<T>(T);
+
+#[async_trait]
+impl<S, B, T> FromRequest<S, B> for Rmp<T>
+where
+    S: Send + Sync,
+    B: Send + 'static,
+    Bytes: FromRequest<S, B>,
+    T: DeserializeOwned,
+{
+    type Rejection = StatusCode;
+
+    async fn from_request(
+        req: Request<B>,
+        state: &S,
+    ) -> std::result::Result<Self, Self::Rejection> {
+        let bytes = Bytes::from_request(req, state)
+            .await
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        let t = rmp_serde::from_slice::<T>(&bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
+        Ok(Self(t))
+    }
 }

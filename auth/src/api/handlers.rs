@@ -1,6 +1,6 @@
 use crate::{
-    error::Error,
     user::{AccountName, AccountTier, Admin, Key, User},
+    Error,
 };
 use axum::{
     extract::{Path, State},
@@ -53,7 +53,9 @@ pub(crate) async fn put_user_reset_key(
         },
     };
 
-    user_manager.reset_key(account_name).await
+    user_manager.reset_key(account_name).await?;
+
+    Ok(())
 }
 
 pub(crate) async fn login(

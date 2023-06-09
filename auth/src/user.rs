@@ -12,82 +12,9 @@ use shuttle_common::{
     claims::{Scope, ScopeBuilder},
     ApiKey,
 };
-use sqlx::{query, Row, SqlitePool};
 use tracing::{debug, trace, Span};
 
-use crate::{api::UserManagerState, error::Error};
-
-#[async_trait]
-pub trait UserManagement: Send + Sync {
-    async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error>;
-    async fn get_user(&self, name: AccountName) -> Result<User, Error>;
-    async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
-    async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
-}
-
-#[derive(Clone)]
-pub struct UserManager {
-    pub pool: SqlitePool,
-}
-
-#[async_trait]
-impl UserManagement for UserManager {
-    async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error> {
-        let key = ApiKey::generate();
-
-        query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
-            .bind(&name)
-            .bind(&key)
-            .bind(tier)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(User::new(name, key, tier))
-    }
-
-    async fn get_user(&self, name: AccountName) -> Result<User, Error> {
-        query("SELECT account_name, key, account_tier FROM users WHERE account_name = ?1")
-            .bind(&name)
-            .fetch_optional(&self.pool)
-            .await?
-            .map(|row| User {
-                name,
-                key: row.try_get("key").unwrap(),
-                account_tier: row.try_get("account_tier").unwrap(),
-            })
-            .ok_or(Error::UserNotFound)
-    }
-
-    async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error> {
-        query("SELECT account_name, key, account_tier FROM users WHERE key = ?1")
-            .bind(&key)
-            .fetch_optional(&self.pool)
-            .await?
-            .map(|row| User {
-                name: row.try_get("account_name").unwrap(),
-                key,
-                account_tier: row.try_get("account_tier").unwrap(),
-            })
-            .ok_or(Error::UserNotFound)
-    }
-
-    async fn reset_key(&self, name: AccountName) -> Result<(), Error> {
-        let key = ApiKey::generate();
-
-        let rows_affected = query("UPDATE users SET key = ?1 WHERE account_name = ?2")
-            .bind(&key)
-            .bind(&name)
-            .execute(&self.pool)
-            .await?
-            .rows_affected();
-
-        if rows_affected > 0 {
-            Ok(())
-        } else {
-            Err(Error::UserNotFound)
-        }
-    }
-}
+use crate::{api::UserManagerState, Error};
 
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
 pub struct User {

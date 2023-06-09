@@ -29,7 +29,7 @@ impl User {
     }
 }
 
-/// Check the request metadata for the bearer token of a user with admin scopes. If we cannot
+/// Check the request metadata for the bearer token of a user with admin tier. If we cannot
 /// establish that for any reason, return an error with a permission denied status.
 pub async fn verify_admin<D: Dal + Send + Sync + 'static>(
     headers: &MetadataMap,

@@ -10,6 +10,7 @@ pub mod docker;
 pub mod driver;
 pub mod error;
 pub mod handlers;
+pub mod manager;
 pub mod project;
 
 pub struct DeployerService {

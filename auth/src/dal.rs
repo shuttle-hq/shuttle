@@ -55,7 +55,7 @@ pub trait Dal {
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, DalError>;
 
     /// Reset an account's [ApiKey]
-    async fn reset_api_key(&self, name: AccountName, new_key: ApiKey) -> Result<(), DalError>;
+    async fn update_api_key(&self, name: AccountName, new_key: ApiKey) -> Result<(), DalError>;
 }
 
 pub struct Sqlite {
@@ -157,7 +157,7 @@ impl Dal for Sqlite {
             .ok_or(DalError::UserNotFound)
     }
 
-    async fn reset_api_key(&self, name: AccountName, new_key: ApiKey) -> Result<(), DalError> {
+    async fn update_api_key(&self, name: AccountName, new_key: ApiKey) -> Result<(), DalError> {
         let rows_affected = sqlx::query("UPDATE users SET key = ?1 WHERE account_name = ?2")
             .bind(&new_key)
             .bind(&name)

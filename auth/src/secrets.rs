@@ -3,10 +3,10 @@ use ring::signature::{Ed25519KeyPair, KeyPair};
 
 pub trait KeyManager: Send + Sync {
     /// Get a private key for signing secrets
-    fn get_private_key(&self) -> &EncodingKey;
+    fn private_key(&self) -> &EncodingKey;
 
     /// Get a public key to verify signed secrets
-    fn get_public_key(&self) -> &[u8];
+    fn public_key(&self) -> &[u8];
 }
 
 pub struct EdDsaManager {
@@ -36,11 +36,11 @@ impl Default for EdDsaManager {
 }
 
 impl KeyManager for EdDsaManager {
-    fn get_private_key(&self) -> &EncodingKey {
+    fn private_key(&self) -> &EncodingKey {
         &self.encoding_key
     }
 
-    fn get_public_key(&self) -> &[u8] {
+    fn public_key(&self) -> &[u8] {
         &self.public_key
     }
 }

@@ -96,7 +96,7 @@ where
 
         let new_key = ApiKey::generate();
 
-        self.dal.reset_api_key(account_name, new_key).await?;
+        self.dal.update_api_key(account_name, new_key).await?;
 
         Ok(())
     }
@@ -116,7 +116,7 @@ where
         let claim = Claim::new(name.to_string(), account_tier.into());
 
         let token = claim
-            .into_token(self.key_manager.get_private_key())
+            .into_token(self.key_manager.private_key())
             .map_err(|_| anyhow!("internal server error when attempting to encode claim"))?;
 
         Ok(token)
@@ -124,7 +124,7 @@ where
 
     /// Get the public key for decoding JWTs.
     async fn public_key(&self) -> Vec<u8> {
-        self.key_manager.get_public_key().to_vec()
+        self.key_manager.public_key().to_vec()
     }
 }
 

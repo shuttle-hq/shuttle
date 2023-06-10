@@ -1,25 +1,19 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
-use http::Uri;
+use tonic::transport::Uri;
 
-/// Service to deploy projects on the shuttle infrastructure
-#[derive(Debug, Parser)]
-#[clap(author, version, about)]
+#[derive(Parser, Debug)]
 pub struct Args {
+    /// Address to bind to
+    #[arg(long, default_value = "127.0.0.1:8000")]
+    pub address: SocketAddr,
+
+    /// Where to store resources state
+    #[arg(long, default_value = "./")]
+    pub state: PathBuf,
+
     /// Address to reach the authentication service at
-    #[clap(long, default_value = "http://127.0.0.1:8008")]
+    #[arg(long, default_value = "http://127.0.0.1:8008")]
     pub auth_uri: Uri,
-
-    /// Address to bind API to
-    #[clap(long, default_value = "0.0.0.0:8001")]
-    pub api_address: SocketAddr,
-
-    /// Flag used to prepare the deployer for a local run
-    #[clap(long)]
-    pub local: bool,
-
-    /// Path used by the mocked builder to return an image archive.
-    #[clap(long)]
-    pub image_archive_path: String,
 }

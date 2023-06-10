@@ -1,16 +1,19 @@
-use std::path::PathBuf;
+use std::time::Duration;
 
 use clap::Parser;
-use shuttle_common::backends::tracing::setup_tracing;
-use shuttle_deployer::args::Args;
-use shuttle_deployer::handlers::RouterBuilder;
+use shuttle_common::backends::{
+    auth::{AuthPublicKey, JwtAuthenticationLayer},
+    tracing::{setup_tracing, ExtractPropagationLayer},
+};
+use shuttle_deployer::{args::Args, dal::Sqlite, DeployerService};
+use shuttle_proto::deployer::deployer_server::DeployerServer;
+use tonic::transport::Server;
 use tracing::trace;
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
 
-    trace!(args = ?args, "parsed args");
     setup_tracing(tracing_subscriber::registry(), "deployer");
 
     // Configure the deployer router.
@@ -18,13 +21,21 @@ async fn main() {
     if args.local {
         router_builder = router_builder.with_local_admin_layer();
     }
+    trace!(args = ?args, "parsed args");
 
-    let iapb = PathBuf::from(args.image_archive_path);
-    router_builder = router_builder.with_mocked_builder_image_archive_path(iapb);
+    let mut server_builder = Server::builder()
+        .http2_keepalive_interval(Some(Duration::from_secs(60)))
+        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
+            args.auth_uri,
+        )))
+        .layer(ExtractPropagationLayer);
 
-    let router = router_builder.into_router();
-    axum::Server::bind(&args.api_address)
-        .serve(router.into_make_service())
+    let svc = DeployerService::new(Sqlite::new(&args.state.display().to_string()).await).await;
+    let svc = DeployerServer::new(svc);
+    let router = server_builder.add_service(svc);
+
+    router
+        .serve(args.address)
         .await
-        .unwrap_or_else(|_| panic!("Failed to bind to address: {}", args.api_address));
+        .expect("to serve on address");
 }

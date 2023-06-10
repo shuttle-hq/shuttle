@@ -3,17 +3,12 @@ use std::path::Path;
 use std::str::FromStr;
 
 use axum::async_trait;
-use futures::future::ok;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
-use sqlx::types::Json as SqlxJson;
-use sqlx::{migrate::Migrator, query, Row, SqlitePool};
+use sqlx::{migrate::Migrator, SqlitePool};
 use thiserror::Error;
 use tracing::{error, info};
-
-use crate::account::AccountName;
-use crate::project::machine::Project;
-use crate::project::name::ProjectName;
+use ulid::Ulid;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -43,15 +38,9 @@ impl fmt::Display for DalError {
 #[async_trait]
 pub trait Dal {
     /// Fetch project state if project exists.
-    async fn project_state(&self, project_name: &ProjectName) -> Result<Project, DalError>;
-    /// Fetch the account name of a project.
-    async fn account(&self, project_name: &ProjectName) -> Result<AccountName, DalError>;
+    async fn service_state(&self, service_id: &Ulid) -> Result<(), DalError>;
     /// Update the project information.
-    async fn update_project(
-        &self,
-        project_name: &ProjectName,
-        project: &Project,
-    ) -> Result<(), DalError>;
+    async fn update_service_state(&self, service_id: &Ulid, project: ()) -> Result<(), DalError>;
 }
 
 pub struct Sqlite {
@@ -102,175 +91,39 @@ impl Sqlite {
 
 #[async_trait]
 impl Dal for Sqlite {
-    async fn project_state(&self, project_name: &ProjectName) -> Result<Project, DalError> {
-        Ok(
-            query("SELECT project_state FROM projects WHERE project_id=?1")
-                .bind(project_name.to_string())
-                .fetch_optional(&self.pool)
-                .await?
-                .ok_or(DalError::ProjectNotFound)?
-                .try_get::<SqlxJson<Project>, _>("project_state")
-                .map_err(|err| DalError::Sqlx(err))?
-                .0,
-        )
+    async fn service_state(&self, service_id: &Ulid) -> Result<(), DalError> {
+        Ok(())
     }
 
-    async fn account(&self, project_name: &ProjectName) -> Result<AccountName, DalError> {
-        Ok(
-            query("SELECT account_name FROM projects WHERE project_name = ?1")
-                .bind(project_name.to_string())
-                .fetch_optional(&self.pool)
-                .await?
-                .ok_or(DalError::ProjectNotFound)?
-                .get("account_name"),
-        )
-    }
+    // async fn account(&self, service_id: &Ulid) -> Result<AccountName, DalError> {
+    //     Ok(
+    //         query("SELECT account_name FROM projects WHERE service_id = ?1")
+    //             .bind(service_id.to_string())
+    //             .fetch_optional(&self.pool)
+    //             .await?
+    //             .ok_or(DalError::ProjectNotFound)?
+    //             .get("account_name"),
+    //     )
+    // }
 
-    async fn update_project(
-        &self,
-        project_name: &ProjectName,
-        project: &Project,
-    ) -> Result<(), DalError> {
-        let query = match project {
-            Project::Creating(state) => query(
-                "UPDATE projects SET initial_key = ?1, project_state = ?2 WHERE project_name = ?3",
-            )
-            .bind(state.initial_key())
-            .bind(SqlxJson(project))
-            .bind(project_name),
-            _ => query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
-                .bind(SqlxJson(project))
-                .bind(project_name),
-        };
+    async fn update_service_state(&self, service_id: &Ulid, project: ()) -> Result<(), DalError> {
+        // let query = match project {
+        //     ServiceState::Creating(state) => {
+        //         query("UPDATE projects SET initial_key = ?1, state = ?2 WHERE service_id = ?3")
+        //             .bind(state.initial_key())
+        //             .bind(SqlxJson(project))
+        //             .bind(service_id.to_string())
+        //     }
+        //     _ => query("UPDATE projects SET state = ?1 WHERE service_id = ?2")
+        //         .bind(SqlxJson(project))
+        //         .bind(service_id.to_string()),
+        // };
 
-        query
-            .execute(&self.pool)
-            .await
-            .map_err(|err| DalError::Sqlx(err))?;
+        // query
+        //     .execute(&self.pool)
+        //     .await
+        //     .map_err(|err| DalError::Sqlx(err))?;
 
         Ok(())
     }
 }
-
-// query("SELECT account_name FROM projects WHERE project_name = ?1")
-// .bind(project_name)
-// .fetch_optional(&self.db)
-// .await?
-// .map(|row| row.get("account_name"))
-// .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))
-
-// impl FromRow<'_, SqliteRow> for Project {
-//     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-//         Ok(Self {
-//             project_id: Some(
-//                 Ulid::from_string(row.try_get("project_id")?)
-//                     .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
-//             ),
-//             project_name: Some(row.try_get("service_id")?)
-//                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
-//             r#type: row.try_get("type")?,
-//             data: row.try_get("data")?,
-//             config: row.try_get("config")?,
-//             is_active: row.try_get("is_active")?,
-//             created_at: row.try_get("created_at")?,
-//             last_updated: row.try_get("last_updated")?,
-//         })
-//     }
-// }
-
-// #[derive(Clone, Debug, Eq, PartialEq)]
-// pub struct Resource {
-//     project_id: Option<Ulid>,
-//     service_id: Option<Ulid>,
-//     r#type: Type,
-//     data: Vec<u8>,
-//     config: Vec<u8>,
-//     is_active: bool,
-//     created_at: DateTime<Utc>,
-//     last_updated: DateTime<Utc>,
-// }
-
-// impl FromRow<'_, SqliteRow> for Resource {
-//     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-//         Ok(Self {
-//             project_id: Some(
-//                 Ulid::from_string(row.try_get("project_id")?)
-//                     .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
-//             ),
-//             service_id: Some(
-//                 Ulid::from_string(row.try_get("service_id")?)
-//                     .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
-//             ),
-//             r#type: row.try_get("type")?,
-//             data: row.try_get("data")?,
-//             config: row.try_get("config")?,
-//             is_active: row.try_get("is_active")?,
-//             created_at: row.try_get("created_at")?,
-//             last_updated: row.try_get("last_updated")?,
-//         })
-//     }
-// }
-
-// impl TryFrom<record_request::Resource> for Resource {
-//     type Error = String;
-
-//     fn try_from(value: record_request::Resource) -> Result<Self, Self::Error> {
-//         Ok(Self::new(value.r#type.parse()?, value.data, value.config))
-//     }
-// }
-
-// impl From<Resource> for resource_recorder::Resource {
-//     fn from(value: Resource) -> Self {
-//         Self {
-//             project_id: value
-//                 .project_id
-//                 .expect("row to have a project id")
-//                 .to_string(),
-//             service_id: value
-//                 .service_id
-//                 .expect("row to have a service id")
-//                 .to_string(),
-//             r#type: value.r#type.to_string(),
-//             config: value.config,
-//             data: value.data,
-//             is_active: value.is_active,
-//             created_at: Some(Timestamp::from(SystemTime::from(value.created_at))),
-//             last_updated: Some(Timestamp::from(SystemTime::from(value.last_updated))),
-//         }
-//     }
-// }
-
-// impl TryFrom<resource_recorder::Resource> for Resource {
-//     type Error = Error;
-
-//     fn try_from(value: resource_recorder::Resource) -> Result<Self, Self::Error> {
-//         Ok(Self {
-//             project_id: Some(value.project_id.parse()?),
-//             service_id: Some(value.service_id.parse()?),
-//             r#type: value.r#type.parse()?,
-//             data: value.data,
-//             config: value.config,
-//             is_active: value.is_active,
-//             created_at: DateTime::from(SystemTime::try_from(value.created_at.unwrap_or_default())?),
-//             last_updated: DateTime::from(SystemTime::try_from(
-//                 value.last_updated.unwrap_or_default(),
-//             )?),
-//         })
-//     }
-// }
-
-// impl Resource {
-//     /// Create a new type of resource
-//     fn new(r#type: Type, data: Vec<u8>, config: Vec<u8>) -> Self {
-//         Self {
-//             project_id: None,
-//             service_id: None,
-//             r#type,
-//             data,
-//             config,
-//             is_active: true,
-//             created_at: Default::default(),
-//             last_updated: Default::default(),
-//         }
-//     }
-// }

@@ -50,7 +50,15 @@ use self::args::Args;
 mod args;
 
 pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
-    let args = Args::parse().expect("could not parse arguments");
+    let args = match Args::parse() {
+        Ok(args) => args,
+        Err(_) => {
+            let help_str = "[HINT]: Run shuttle with `cargo shuttle run`";
+            let wrapper_str = "-".repeat(help_str.len());
+            return println!("{wrapper_str}\n{help_str}\n{wrapper_str}",);
+        }
+    };
+
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
     let provisioner_address = args.provisioner_address;

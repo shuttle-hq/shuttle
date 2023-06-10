@@ -66,6 +66,7 @@ which will automatically install the correct target for your system.
 To install with `cargo-binstall`, run:
 
 ```sh
+cargo install binstall
 cargo binstall cargo-shuttle
 ```
 
@@ -74,6 +75,8 @@ Although a bit slower, you can also install directly with cargo:
 ```sh
 cargo install cargo-shuttle
 ```
+
+*If installing binstall or cargo-shuttle fails, try adding `--locked`.*
 
 After installing, log in with:
 

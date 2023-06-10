@@ -106,12 +106,14 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, pa
             let truncated_commit_id = deploy
                 .git_commit_id
                 .as_ref()
-                .map_or(String::from("No Data"), |val| val.chars().take(7).collect());
+                .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| {
+                    val.chars().take(7).collect()
+                });
 
             let truncated_commit_msg = deploy
                 .git_commit_msg
                 .as_ref()
-                .map_or(String::from("No Data"), |val| {
+                .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| {
                     val.chars().take(24).collect::<String>()
                 });
 
@@ -129,12 +131,12 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, pa
                     deploy
                         .git_branch
                         .as_ref()
-                        .map_or("No Data", |val| val as &str),
+                        .map_or(GIT_OPTION_NONE_TEXT, |val| val as &str),
                 ),
                 Cell::new(
                     deploy
                         .git_dirty
-                        .map_or(String::from("No Data"), |val| val.to_string()),
+                        .map_or(String::from(GIT_OPTION_NONE_TEXT), |val| val.to_string()),
                 )
                 .set_alignment(CellAlignment::Center),
             ]);
@@ -168,3 +170,4 @@ pub struct DeploymentRequest {
 }
 
 pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
+const GIT_OPTION_NONE_TEXT: &str = "N/A";

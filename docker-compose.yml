@@ -103,6 +103,9 @@ services:
       - auth
     environment:
       - RUST_LOG=${RUST_LOG}
+      - AWS_ACCESS_KEY_ID=AKIAT5FN432JF5HYFNPU
+      - AWS_SECRET_ACCESS_KEY=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
+      - AWS_DEFAULT_REGION=us-east-1
     networks:
       user-net:
     deploy:

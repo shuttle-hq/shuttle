@@ -7,7 +7,7 @@ pub mod provisioner {
 
     use shuttle_common::{
         database::{self, AwsRdsEngine, SharedEngine},
-        DatabaseReadyInfo,
+        DatabaseReadyInfo, S3BucketReadyInfo,
     };
 
     include!("generated/provisioner.rs");
@@ -26,6 +26,16 @@ pub mod provisioner {
         }
     }
 
+    impl From<StorageResponse> for S3BucketReadyInfo {
+        fn from(response: StorageResponse) -> Self {
+            S3BucketReadyInfo::new(
+                response.bucket_name,
+                response.username,
+                response.access_key,
+                response.secret_key,
+            )
+        }
+    }
     impl From<database::Type> for database_request::DbType {
         fn from(db_type: database::Type) -> Self {
             match db_type {

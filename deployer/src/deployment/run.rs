@@ -420,7 +420,7 @@ mod tests {
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
-            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, StorageRequest, StorageResponse, StorageDeletionResponse,
         },
         runtime::{StopReason, SubscribeStopResponse},
     };
@@ -468,6 +468,20 @@ mod tests {
             _request: tonic::Request<DatabaseRequest>,
         ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
             panic!("no run tests should delete a db");
+        }
+        
+        async fn provision_storage(
+            &self,
+            _request: tonic::Request<StorageRequest>,
+        ) -> Result<tonic::Response<StorageResponse>, tonic::Status> {
+            panic!("no deploy layer tests should request a storage");
+        }
+        
+        async fn delete_storage(
+            &self,
+            _request: tonic::Request<StorageRequest>,
+        ) -> Result<tonic::Response<StorageDeletionResponse>, tonic::Status> {
+            panic!("no deploy layer tests should delete a storage");
         }
     }
 

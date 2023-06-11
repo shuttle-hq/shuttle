@@ -13,6 +13,7 @@ shuttle-runtime = { path = "/usr/src/shuttle/runtime" }
 
 shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" }
 shuttle-persist = { path = "/usr/src/shuttle/resources/persist" }
+shuttle-s3 = { path = "/usr/src/shuttle/resources/s3" }
 shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
 shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
 shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }

@@ -1,0 +1,14 @@
+[package]
+name = "shuttle-s3"
+version = "0.16.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Plugin to provision AWS S3 Object Storage"
+keywords = ["shuttle-service", "s3"]
+
+[dependencies]
+async-trait = "0.1.68"
+aws-sdk-s3 = "0.26.0"
+serde = "1.0.160"
+shuttle-common = { path = "../../common", version = "0.16.0", default-features = false }
+shuttle-service = { path = "../../service", version = "0.16.0", default-features = false }

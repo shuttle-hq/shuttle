@@ -179,6 +179,32 @@ impl DatabaseReadyInfo {
     }
 }
 
+
+/// Holds the details for a s3 bucket
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct S3BucketReadyInfo {
+    bucket_name: String,
+    username: String,
+    access_key: String,
+    secret_key: String,
+}
+
+impl S3BucketReadyInfo {
+    pub fn new(
+        bucket_name: String,
+        username: String,
+        access_key: String,
+        secret_key: String,
+    ) -> Self {
+        Self {
+            bucket_name,
+            username,
+            access_key,
+            secret_key,
+        }
+    }
+}
+
 /// Store that holds all the secrets available to a deployment
 #[derive(Deserialize, Serialize, Clone)]
 pub struct SecretStore {

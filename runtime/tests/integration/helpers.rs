@@ -10,7 +10,7 @@ use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, StorageRequest, StorageResponse, StorageDeletionResponse,
     },
     runtime::{self, runtime_client::RuntimeClient},
 };
@@ -104,5 +104,18 @@ impl Provisioner for DummyProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("did not expect any runtime test to delete dbs")
+    }
+    async fn provision_storage(
+        &self,
+        _request: tonic::Request<StorageRequest>,
+    ) -> Result<tonic::Response<StorageResponse>, tonic::Status> {
+        panic!("no deploy layer tests should request a storage");
+    }
+
+    async fn delete_storage(
+        &self,
+        _request: tonic::Request<StorageRequest>,
+    ) -> Result<tonic::Response<StorageDeletionResponse>, tonic::Status> {
+        panic!("no deploy layer tests should delete a storage");
     }
 }

@@ -321,7 +321,7 @@ mod tests {
     use portpicker::pick_unused_port;
     use shuttle_proto::provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, StorageRequest, StorageResponse, StorageDeletionResponse,
     };
     use tempfile::Builder;
     use tokio::{select, time::sleep};
@@ -450,6 +450,20 @@ mod tests {
             _request: tonic::Request<DatabaseRequest>,
         ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
             panic!("no deploy layer tests should request delete a db");
+        }
+
+        async fn provision_storage(
+            &self,
+            _request: tonic::Request<StorageRequest>,
+        ) -> Result<tonic::Response<StorageResponse>, tonic::Status> {
+            panic!("no deploy layer tests should request a storage");
+        }
+
+        async fn delete_storage(
+            &self,
+            _request: tonic::Request<StorageRequest>,
+        ) -> Result<tonic::Response<StorageDeletionResponse>, tonic::Status> {
+            panic!("no deploy layer tests should delete a storage");
         }
     }
 

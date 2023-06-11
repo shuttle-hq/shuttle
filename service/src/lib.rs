@@ -8,6 +8,7 @@ pub mod error;
 pub use error::{CustomError, Error};
 
 use serde::{de::DeserializeOwned, Serialize};
+use shuttle_common::S3BucketReadyInfo;
 pub use shuttle_common::{
     database, resource::Type, DatabaseReadyInfo, DbInput, DbOutput, SecretStore,
 };
@@ -84,6 +85,11 @@ pub trait Factory: Send + Sync {
         &mut self,
         db_type: database::Type,
     ) -> Result<DatabaseReadyInfo, crate::Error>;
+
+    /// Get a s3 bucket connection
+    async fn get_s3_bucket(
+        &mut self,
+    ) -> Result<S3BucketReadyInfo, crate::Error>;
 
     /// Get all the secrets for a service
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, crate::Error>;

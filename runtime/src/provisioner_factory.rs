@@ -5,9 +5,9 @@ use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
     database,
     storage_manager::StorageManager,
-    DatabaseReadyInfo,
+    DatabaseReadyInfo, S3BucketReadyInfo,
 };
-use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
+use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest, StorageRequest, Bucket, storage_request::StorageType};
 use shuttle_service::{Environment, Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::info;
@@ -69,6 +69,34 @@ impl Factory for ProvisionerFactory {
         let info: DatabaseReadyInfo = response.into();
 
         info!("Done provisioning database");
+
+        Ok(info)
+    }
+
+    async fn get_s3_bucket(
+        &mut self,
+    ) -> Result<S3BucketReadyInfo, shuttle_service::Error> {
+        info!("Provisioning a S3 Bucket. This can take a while...");
+
+        let mut request = Request::new(StorageRequest {
+            project_name: self.service_name.to_string(),
+            storage_type: Some(StorageType::Bucket(Bucket{}))
+        });
+
+        if let Some(claim) = &self.claim {
+            request.extensions_mut().insert(claim.clone());
+        }
+
+        let response = self
+            .provisioner_client
+            .provision_storage(request)
+            .await
+            .map_err(shuttle_service::error::CustomError::new)?
+            .into_inner();
+
+        let info: S3BucketReadyInfo = response.into();
+
+        info!("Done provisioning s3 bucket");
 
         Ok(info)
     }

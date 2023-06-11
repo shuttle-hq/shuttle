@@ -15,6 +15,8 @@ pub struct DeployRequest {
     pub git_dirty: bool,
     #[prost(bool, tag = "7")]
     pub is_next: bool,
+    #[prost(uint32, tag = "8")]
+    pub idle_minutes: u32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

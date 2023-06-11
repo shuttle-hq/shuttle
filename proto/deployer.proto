@@ -13,8 +13,9 @@ message DeployRequest {
   string git_branch = 5;
   bool git_dirty = 6;
   bool is_next = 7;
+  uint32 idle_minutes = 8;
 }
 
 message DeployResponse {
-    string deployment_id = 1;
+  string deployment_id = 1;
 }

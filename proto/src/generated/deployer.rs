@@ -2,15 +2,19 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeployRequest {
     #[prost(string, tag = "1")]
-    pub project_id: ::prost::alloc::string::String,
+    pub service_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub git_commit_message: ::prost::alloc::string::String,
+    pub service_name: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub git_commit_hash: ::prost::alloc::string::String,
+    pub git_commit_message: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
+    pub git_commit_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
     pub git_branch: ::prost::alloc::string::String,
-    #[prost(bool, tag = "5")]
+    #[prost(bool, tag = "6")]
     pub git_dirty: bool,
+    #[prost(bool, tag = "7")]
+    pub is_next: bool,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

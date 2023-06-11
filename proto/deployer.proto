@@ -6,11 +6,13 @@ service Deployer {
 }
 
 message DeployRequest {
-  string project_id = 1;
-  string git_commit_message = 2;
-  string git_commit_hash = 3;
-  string git_branch = 4;
-  bool git_dirty = 5;
+  string service_id = 1;
+  string service_name = 2;
+  string git_commit_message = 3;
+  string git_commit_hash = 4;
+  string git_branch = 5;
+  bool git_dirty = 6;
+  bool is_next = 7;
 }
 
 message DeployResponse {

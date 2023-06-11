@@ -25,6 +25,7 @@ use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::XShuttleProject;
 use tokio::sync::mpsc::Sender;
 use tower::{Service, ServiceBuilder};
+use tower_sanitize_path::SanitizePath;
 use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -80,6 +81,18 @@ impl<'r> AsResponderTo<&'r AddrStream> for UserProxy {
     fn as_responder_to(&self, addr_stream: &'r AddrStream) -> Self {
         let mut responder = self.clone();
         responder.remote_addr = addr_stream.remote_addr();
+        responder
+    }
+}
+
+impl<S, R> AsResponderTo<R> for SanitizePath<S>
+where
+    S: AsResponderTo<R> + Clone,
+{
+    fn as_responder_to(&self, req: R) -> Self {
+        let responder = self.clone();
+        responder.inner().as_responder_to(req);
+
         responder
     }
 }
@@ -300,12 +313,13 @@ impl UserServiceBuilder {
             .user_binds_to
             .expect("a socket address to bind to is required");
 
-        let user_proxy = UserProxy {
+        let user_proxy = SanitizePath::sanitize_paths(UserProxy {
             gateway: service.clone(),
             task_sender,
             remote_addr: "127.0.0.1:80".parse().unwrap(),
             public: public.clone(),
-        };
+        })
+        .into_make_service();
 
         let bouncer = self.bouncer_binds_to.as_ref().map(|_| Bouncer {
             gateway: service.clone(),
@@ -335,7 +349,7 @@ impl UserServiceBuilder {
 
             let user_with_tls = axum_server::Server::bind(user_binds_to)
                 .acceptor(tls_acceptor)
-                .serve(user_proxy.into_make_service())
+                .serve(user_proxy)
                 .map(|handle| ("user proxy (with TLS)", handle))
                 .boxed();
             futs.push(user_with_tls);
@@ -351,7 +365,7 @@ impl UserServiceBuilder {
             }
 
             let user_without_tls = axum_server::Server::bind(user_binds_to)
-                .serve(user_proxy.into_make_service())
+                .serve(user_proxy)
                 .map(|handle| ("user proxy (no TLS)", handle))
                 .boxed();
             futs.push(user_without_tls);

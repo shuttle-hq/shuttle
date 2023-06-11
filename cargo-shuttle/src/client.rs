@@ -1,5 +1,3 @@
-use std::fmt::Write;
-
 use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
 use reqwest::Response;
@@ -7,6 +5,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
+use shuttle_common::models::deployment::DeploymentRequest;
 use shuttle_common::models::{deployment, project, secret, service, ToJson};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{resource, ApiKey, ApiUrl, LogItem};
@@ -36,29 +35,24 @@ impl Client {
 
     pub async fn deploy(
         &self,
-        data: Vec<u8>,
         project: &ProjectName,
-        no_test: bool,
+        deployment_req: DeploymentRequest,
     ) -> Result<deployment::Response> {
-        let mut path = format!(
+        let path = format!(
             "/projects/{}/services/{}",
             project.as_str(),
             project.as_str()
         );
-
-        if no_test {
-            let _ = write!(path, "?no-test");
-        }
+        let deployment_req = rmp_serde::to_vec(&deployment_req)
+            .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 
         let url = format!("{}{}", self.api_url, path);
-
         let mut builder = Self::get_retry_client().post(url);
-
         builder = self.set_builder_auth(builder);
 
         builder
-            .body(data)
             .header("Transfer-Encoding", "chunked")
+            .body(deployment_req)
             .send()
             .await
             .context("failed to send deployment to the Shuttle server")?
@@ -93,7 +87,7 @@ impl Client {
         let path = format!(
             "/projects/{}/services/{}/resources",
             project.as_str(),
-            project.as_str()
+            project.as_str(),
         );
 
         self.get(path).await
@@ -129,8 +123,8 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
-        let path = "/projects".to_string();
+    pub async fn get_projects_list(&self, page: u32, limit: u32) -> Result<Vec<project::Response>> {
+        let path = format!("/projects?page={}&limit={}", page.saturating_sub(1), limit);
 
         self.get(path).await
     }
@@ -182,8 +176,15 @@ impl Client {
     pub async fn get_deployments(
         &self,
         project: &ProjectName,
+        page: u32,
+        limit: u32,
     ) -> Result<Vec<deployment::Response>> {
-        let path = format!("/projects/{}/deployments", project.as_str());
+        let path = format!(
+            "/projects/{}/deployments?page={}&limit={}",
+            project.as_str(),
+            page.saturating_sub(1),
+            limit,
+        );
 
         self.get(path).await
     }

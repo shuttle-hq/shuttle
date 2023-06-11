@@ -5,8 +5,7 @@ labels: ["bug"]
 body:
   - type: markdown
     attributes:
-      value: |
-        Thanks for taking the time to fill out this bug report!
+      value: Thanks for taking the time to fill out this bug report!
   - type: textarea
     id: what-happened
     attributes:
@@ -21,18 +20,19 @@ body:
     attributes:
       label: Version
       description: What version of `cargo-shuttle` are you running (`cargo shuttle --version`)?
-      placeholder: "v0.11.0"
+      placeholder: "v0.18.0"
     validations:
       required: true
   - type: dropdown
     id: os
     attributes:
-      label: Which operating systems are you seeing the problem on?
+      label: Which operating system(s) are you seeing the problem on?
       multiple: true
       options:
         - macOS
         - Windows
         - Linux
+        - In deployment
     validations:
       required: true
   - type: dropdown
@@ -44,6 +44,7 @@ body:
         - x86_64
         - ARM64
         - Other
+        - In deployment
   - type: textarea
     id: logs
     attributes:

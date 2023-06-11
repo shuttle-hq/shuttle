@@ -23,7 +23,7 @@ use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
-use sqlx::{query, Error as SqlxError, Row};
+use sqlx::{query, Error as SqlxError, QueryBuilder, Row};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -271,20 +271,34 @@ impl GatewayService {
 
     pub async fn iter_user_projects_detailed(
         &self,
-        account_name: AccountName,
+        account_name: &AccountName,
+        offset: u32,
+        limit: u32,
     ) -> Result<impl Iterator<Item = (ProjectName, Project)>, Error> {
-        let iter =
-            query("SELECT project_name, project_state FROM projects WHERE account_name = ?1")
-                .bind(account_name)
-                .fetch_all(&self.db)
-                .await?
-                .into_iter()
-                .map(|row| {
-                    (
-                        row.get("project_name"),
-                        row.get::<SqlxJson<Project>, _>("project_state").0,
-                    )
-                });
+        let mut query = QueryBuilder::new(
+            "SELECT project_name, project_state FROM projects WHERE account_name = ",
+        );
+
+        query
+            .push_bind(account_name)
+            .push(" ORDER BY created_at DESC NULLS LAST, project_name LIMIT ")
+            .push_bind(limit);
+
+        if offset > 0 {
+            query.push(" OFFSET ").push_bind(offset);
+        }
+
+        let iter = query
+            .build()
+            .fetch_all(&self.db)
+            .await?
+            .into_iter()
+            .map(|row| {
+                (
+                    row.get("project_name"),
+                    row.get::<SqlxJson<Project>, _>("project_state").0,
+                )
+            });
         Ok(iter)
     }
 
@@ -376,9 +390,9 @@ impl GatewayService {
     ) -> Result<Project, Error> {
         if let Some(row) = query(
             r#"
-        SELECT project_name, account_name, initial_key, project_state 
-        FROM projects 
-        WHERE (project_name = ?1) 
+        SELECT project_name, account_name, initial_key, project_state
+        FROM projects
+        WHERE (project_name = ?1)
         AND (account_name = ?2 OR ?3)
         "#,
         )
@@ -440,7 +454,7 @@ impl GatewayService {
             ProjectCreating::new_with_random_initial_key(project_name.clone(), idle_minutes),
         ));
 
-        query("INSERT INTO projects (project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4)")
+        query("INSERT INTO projects (project_name, account_name, initial_key, project_state, created_at) VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP)")
             .bind(&project_name)
             .bind(&account_name)
             .bind(project.initial_key().unwrap())
@@ -642,15 +656,27 @@ impl GatewayService {
             .unwrap_or_else(|_| panic!("Malformed existing PEM certificate for the gateway."));
         let (_, x509_cert) = parse_x509_certificate(pem.contents.as_bytes())
             .unwrap_or_else(|_| panic!("Malformed existing X509 certificate for the gateway."));
-        let diff = x509_cert.validity().not_after.sub(ASN1Time::now()).unwrap();
-        if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
+
+        // We compute the difference between the certificate expiry date and current timestamp because we want to trigger the
+        // gateway certificate renewal only during it's last 30 days of validity or if the certificate is expired.
+        let diff = x509_cert.validity().not_after.sub(ASN1Time::now());
+
+        // Renew only when the difference is `None` (meaning certificate expired) or we're within the last 30 days of validity.
+        if diff.is_none()
+            || diff
+                .expect("to be Some given we checked for None previously")
+                .whole_days()
+                <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS
+        {
             let tls_path = self.state_location.join("ssl.pem");
             let certs = self.create_certificate(acme, account.credentials()).await;
             resolver
                 .serve_default_der(certs.clone())
                 .await
                 .expect("Failed to serve the default certs");
-            certs.save_pem(&tls_path).unwrap();
+            certs
+                .save_pem(&tls_path)
+                .expect("to save the certificate locally");
         }
     }
 
@@ -772,12 +798,55 @@ pub mod tests {
             }
         );
         assert_eq!(
-            svc.iter_user_projects_detailed(neo.clone())
+            svc.iter_user_projects_detailed(&neo, 0, u32::MAX)
                 .await
                 .unwrap()
                 .map(|item| item.0)
                 .collect::<Vec<_>>(),
             vec![matrix.clone()]
+        );
+
+        let mut all_projects: Vec<ProjectName> = (1..60)
+            .map(|p| ProjectName(format!("matrix-{p}")))
+            .collect();
+        for p in &all_projects {
+            svc.create_project(p.clone(), neo.clone(), false, 0)
+                .await
+                .unwrap();
+        }
+        all_projects.insert(0, matrix.clone());
+
+        assert_eq!(
+            svc.iter_user_projects_detailed(&neo, 0, u32::MAX)
+                .await
+                .unwrap()
+                .map(|item| item.0)
+                .collect::<Vec<_>>(),
+            all_projects
+        );
+        assert_eq!(
+            svc.iter_user_projects_detailed(&neo, 0, 20)
+                .await
+                .unwrap()
+                .map(|item| item.0)
+                .collect::<Vec<_>>(),
+            all_projects[..20]
+        );
+        assert_eq!(
+            svc.iter_user_projects_detailed(&neo, 20, 20)
+                .await
+                .unwrap()
+                .map(|item| item.0)
+                .collect::<Vec<_>>(),
+            all_projects[20..40]
+        );
+        assert_eq!(
+            svc.iter_user_projects_detailed(&neo, 200, 20)
+                .await
+                .unwrap()
+                .map(|item| item.0)
+                .collect::<Vec<_>>(),
+            vec![]
         );
 
         // assert_eq!(

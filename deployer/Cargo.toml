@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-deployer"
-version = "0.16.0"
+version = "0.18.0"
 edition.workspace = true
 license.workspace = true
 description = "Service with instances created per project for handling the compilation, loading, and execution of Shuttle services"
@@ -19,17 +19,17 @@ fqdn = { workspace = true }
 futures = { workspace = true }
 home = { workspace = true }
 hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
-# not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { workspace = true }
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-http = { workspace = true }
 pipe = { workspace = true }
 portpicker = { workspace = true }
+rmp-serde = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = [
-  "runtime-tokio-native-tls",
+  "runtime-tokio-rustls",
   "sqlite",
   "chrono",
   "json",

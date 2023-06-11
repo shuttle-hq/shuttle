@@ -1,0 +1,24 @@
+name: Improvement suggestion
+description: Suggest an improvement to an existing feature
+title: "[Improvement]: "
+labels: ["improvement"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to suggest an improvement!
+  - type: textarea
+    id: describe
+    attributes:
+      label: Describe the improvement
+      description: A high level description.
+      placeholder: Add functionality that allows users to ...
+    validations:
+      required: true
+  - type: checkboxes
+    id: duplicate
+    attributes:
+      label: Duplicate declaration
+      description: Please confirm that you are not creating a duplicate issue.
+      options:
+        - label: I have searched the issues and this improvement has not been requested before.
+          required: true

@@ -7,7 +7,9 @@ mod provisioner_server;
 use args::LogoutArgs;
 use indicatif::ProgressBar;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
-use shuttle_common::models::deployment::get_deployments_table;
+use shuttle_common::models::deployment::{
+    get_deployments_table, DeploymentRequest, GIT_STRINGS_MAX_LENGTH,
+};
 use shuttle_common::models::project::IDLE_MINUTES;
 use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
@@ -49,7 +51,7 @@ use shuttle_service::builder::{build_workspace, BuiltService};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
 use crate::args::{DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand};
@@ -113,8 +115,8 @@ impl Shuttle {
             Command::Logs { id, latest, follow } => {
                 self.logs(&self.client()?, id, latest, follow).await
             }
-            Command::Deployment(DeploymentCommand::List) => {
-                self.deployments_list(&self.client()?).await
+            Command::Deployment(DeploymentCommand::List { page, limit }) => {
+                self.deployments_list(&self.client()?, page, limit).await
             }
             Command::Deployment(DeploymentCommand::Status { id }) => {
                 self.deployment_get(&self.client()?, id).await
@@ -132,7 +134,9 @@ impl Shuttle {
             Command::Project(ProjectCommand::Status { follow }) => {
                 self.project_status(&self.client()?, follow).await
             }
-            Command::Project(ProjectCommand::List) => self.projects_list(&self.client()?).await,
+            Command::Project(ProjectCommand::List { page, limit }) => {
+                self.projects_list(&self.client()?, page, limit).await
+            }
             Command::Project(ProjectCommand::Stop) => self.project_delete(&self.client()?).await,
         }
         .map(|_| CommandOutcome::Ok)
@@ -215,8 +219,14 @@ impl Shuttle {
         };
 
         // 5. Initialize locally
-        init::cargo_init(path.clone(), project_args.name.clone().unwrap())?;
-        init::cargo_shuttle_init(path.clone(), framework)?;
+        init::cargo_generate(
+            path.clone(),
+            project_args
+                .name
+                .as_ref()
+                .expect("to have a project name provided"),
+            framework,
+        )?;
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
@@ -387,8 +397,8 @@ impl Shuttle {
 
             if latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client.get_deployments(proj_name).await?;
-                let most_recent = deployments.last().context(format!(
+                let deployments = client.get_deployments(proj_name, 0, 1).await?;
+                let most_recent = deployments.first().context(format!(
                     "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
                 ))?;
 
@@ -424,10 +434,15 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deployments_list(&self, client: &Client) -> Result<()> {
+    async fn deployments_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
+        if limit == 0 {
+            println!();
+            return Ok(());
+        }
+
         let proj_name = self.ctx.project_name();
-        let deployments = client.get_deployments(proj_name).await?;
-        let table = get_deployments_table(&deployments, proj_name.as_str());
+        let deployments = client.get_deployments(proj_name, page, limit).await?;
+        let table = get_deployments_table(&deployments, proj_name.as_str(), page);
 
         println!("{table}");
         println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
@@ -731,7 +746,7 @@ impl Shuttle {
         );
 
         // Compile all the alpha or shuttle-next services in the workspace.
-        build_workspace(working_directory, run_args.release, tx).await
+        build_workspace(working_directory, run_args.release, tx, false).await
     }
 
     async fn setup_local_provisioner(
@@ -790,11 +805,6 @@ impl Shuttle {
                 break;
             }
         }
-
-        println!(
-            "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
-             Run `cargo shuttle deploy` to deploy your Shuttle service."
-        );
 
         // If prior signal received is set to true we must stop all the existing runtimes and
         // exit the `local_run`.
@@ -856,6 +866,11 @@ impl Shuttle {
             };
         }
 
+        println!(
+            "Run `cargo shuttle project start` to create a project environment on Shuttle.\n\
+             Run `cargo shuttle deploy` to deploy your Shuttle service."
+        );
+
         Ok(())
     }
 
@@ -901,14 +916,45 @@ impl Shuttle {
     }
 
     async fn deploy(&self, client: &Client, args: DeployArgs) -> Result<CommandOutcome> {
-        if !args.allow_dirty {
-            self.is_dirty()?;
+        let working_directory = self.ctx.working_directory();
+
+        let mut deployment_req: DeploymentRequest = DeploymentRequest {
+            no_test: args.no_test,
+            ..Default::default()
+        };
+
+        if let Ok(repo) = Repository::discover(working_directory) {
+            let repo_path = repo
+                .workdir()
+                .context("getting working directory of repository")?;
+            let repo_path = dunce::canonicalize(repo_path)?;
+            trace!(?repo_path, "found git repository");
+
+            if !args.allow_dirty {
+                self.is_dirty(&repo).context("dirty not allowed")?;
+            }
+            deployment_req.git_dirty = Some(self.is_dirty(&repo).is_err());
+
+            if let Ok(head) = repo.head() {
+                // This is typically the name of the current branch
+                // It is "HEAD" when head detached, for example when a tag is checked out
+                deployment_req.git_branch = head
+                    .shorthand()
+                    .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect());
+                if let Ok(commit) = head.peel_to_commit() {
+                    deployment_req.git_commit_id = Some(commit.id().to_string());
+                    // Summary is None if error or invalid utf-8
+                    deployment_req.git_commit_msg = commit
+                        .summary()
+                        .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect());
+                }
+            }
         }
 
-        let data = self.make_archive()?;
+        deployment_req.data = self.make_archive()?;
 
         let deployment = client
-            .deploy(data, self.ctx.project_name(), args.no_test)
+            .deploy(self.ctx.project_name(), deployment_req)
             .await?;
 
         let mut stream = client
@@ -1041,9 +1087,14 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn projects_list(&self, client: &Client) -> Result<()> {
-        let projects = client.get_projects_list().await?;
-        let projects_table = project::get_table(&projects);
+    async fn projects_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
+        if limit == 0 {
+            println!();
+            return Ok(());
+        }
+
+        let projects = client.get_projects_list(page, limit).await?;
+        let projects_table = project::get_table(&projects, page);
 
         println!("{projects_table}");
 
@@ -1175,6 +1226,7 @@ impl Shuttle {
 
         // Append all the entries to the archive.
         for (k, v) in entries {
+            debug!("Packing {k:?}");
             tar.append_path_with_name(k, v)?;
         }
 
@@ -1184,61 +1236,35 @@ impl Shuttle {
         Ok(bytes)
     }
 
-    fn is_dirty(&self) -> Result<()> {
-        let working_directory = self.ctx.working_directory();
-        if let Ok(repo) = Repository::discover(working_directory) {
-            let repo_path = repo
-                .workdir()
-                .context("getting working directory of repository")?;
+    fn is_dirty(&self, repo: &Repository) -> Result<()> {
+        let mut status_options = StatusOptions::new();
+        status_options.include_untracked(true);
+        let statuses = repo
+            .statuses(Some(&mut status_options))
+            .context("getting status of repository files")?;
 
-            let repo_path = dunce::canonicalize(repo_path)?;
-
-            trace!(?repo_path, "found git repository");
-
-            let repo_rel_path = working_directory
-                .strip_prefix(repo_path.as_path())
-                .context("stripping repository path from working directory")?;
-
-            trace!(
-                ?repo_rel_path,
-                "got working directory path relative to git repository"
+        if !statuses.is_empty() {
+            let mut error = format!(
+                "{} files in the working directory contain changes that were not yet committed into git:\n",
+                statuses.len()
             );
 
-            let mut status_options = StatusOptions::new();
-            status_options
-                .pathspec(repo_rel_path)
-                .include_untracked(true);
+            for status in statuses.iter() {
+                trace!(
+                    path = status.path(),
+                    status = ?status.status(),
+                    "found file with updates"
+                );
 
-            let statuses = repo
-                .statuses(Some(&mut status_options))
-                .context("getting status of repository files")?;
+                let rel_path = status.path().context("getting path of changed file")?;
 
-            if !statuses.is_empty() {
-                let mut error: String = format!("{} files in the working directory contain changes that were not yet committed into git:", statuses.len());
-                writeln!(error).expect("to append error");
-
-                for status in statuses.iter() {
-                    trace!(
-                        path = status.path(),
-                        status = ?status.status(),
-                        "found file with updates"
-                    );
-
-                    let path =
-                        repo_path.join(status.path().context("getting path of changed file")?);
-                    let rel_path = path
-                        .strip_prefix(working_directory)
-                        .expect("getting relative path of changed file")
-                        .display();
-
-                    writeln!(error, "{rel_path}").expect("to append error");
-                }
-
-                writeln!(error).expect("to append error");
-                writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
-
-                bail!(error);
+                writeln!(error, "{rel_path}").expect("to append error");
             }
+
+            writeln!(error).expect("to append error");
+            writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
+
+            bail!(error);
         }
 
         Ok(())

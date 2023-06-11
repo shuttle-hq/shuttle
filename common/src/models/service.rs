@@ -1,6 +1,7 @@
-use crossterm::style::Stylize;
+use crossterm::style::{Color, Stylize};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use std::str::FromStr;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -39,10 +40,10 @@ URI:           {}
 "#,
                 self.name.clone().bold(),
                 deployment.id,
-                deployment
-                    .state
-                    .to_string()
-                    .with(deployment.state.get_color()),
+                deployment.state.to_string().with(
+                    // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
+                    Color::from_str(deployment.state.get_color()).unwrap()
+                ),
                 deployment.last_update.format("%Y-%m-%dT%H:%M:%SZ"),
                 self.uri,
             )

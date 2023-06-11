@@ -11,6 +11,7 @@ use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
 use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 use error::{Error, Result};
+use sqlx::QueryBuilder;
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -170,28 +171,46 @@ impl Persistence {
     pub async fn insert_deployment(&self, deployment: impl Into<Deployment>) -> Result<()> {
         let deployment = deployment.into();
 
-        sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update, address, is_next) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(deployment.id)
-        .bind(deployment.service_id)
-        .bind(deployment.state)
-        .bind(deployment.last_update)
-        .bind(deployment.address.map(|socket| socket.to_string()))
-        .bind(deployment.is_next)
-        .execute(&self.pool)
-        .await
-        .map(|_| ())
-        .map_err(Error::from)
+        sqlx::query("INSERT INTO deployments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(deployment.id)
+            .bind(deployment.service_id)
+            .bind(deployment.state)
+            .bind(deployment.last_update)
+            .bind(deployment.address.map(|socket| socket.to_string()))
+            .bind(deployment.is_next)
+            .bind(deployment.git_commit_id)
+            .bind(deployment.git_commit_msg)
+            .bind(deployment.git_branch)
+            .bind(deployment.git_dirty)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(Error::from)
     }
 
     pub async fn get_deployment(&self, id: &Uuid) -> Result<Option<Deployment>> {
         get_deployment(&self.pool, id).await
     }
 
-    pub async fn get_deployments(&self, service_id: &Uuid) -> Result<Vec<Deployment>> {
-        sqlx::query_as("SELECT * FROM deployments WHERE service_id = ? ORDER BY last_update")
-            .bind(service_id)
+    pub async fn get_deployments(
+        &self,
+        service_id: &Uuid,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Deployment>> {
+        let mut query = QueryBuilder::new("SELECT * FROM deployments WHERE service_id = ");
+
+        query
+            .push_bind(service_id)
+            .push(" ORDER BY last_update DESC LIMIT ")
+            .push_bind(limit);
+
+        if offset > 0 {
+            query.push(" OFFSET ").push_bind(offset);
+        }
+
+        query
+            .build_query_as()
             .fetch_all(&self.pool)
             .await
             .map_err(Error::from)
@@ -517,8 +536,7 @@ mod tests {
             service_id,
             state: State::Queued,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap(),
-            address: None,
-            is_next: false,
+            ..Default::default()
         };
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 12345);
 
@@ -550,6 +568,43 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn get_deployments() {
+        let (p, _) = Persistence::new_in_memory().await;
+        let service_id = add_service(&p.pool).await.unwrap();
+
+        let mut deployments: Vec<_> = (0..10)
+            .map(|_| Deployment {
+                id: Uuid::new_v4(),
+                service_id,
+                state: State::Running,
+                last_update: Utc::now(),
+                address: None,
+                is_next: false,
+                git_commit_id: None,
+                git_commit_msg: None,
+                git_branch: None,
+                git_dirty: None,
+            })
+            .collect();
+
+        for deployment in &deployments {
+            p.insert_deployment(deployment.clone()).await.unwrap();
+        }
+
+        // Reverse to match last_updated desc order
+        deployments.reverse();
+        assert_eq!(
+            p.get_deployments(&service_id, 0, 5).await.unwrap(),
+            deployments[0..5]
+        );
+        assert_eq!(
+            p.get_deployments(&service_id, 5, 5).await.unwrap(),
+            deployments[5..10]
+        );
+        assert_eq!(p.get_deployments(&service_id, 20, 5).await.unwrap(), vec![]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn deployment_active() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -563,6 +618,7 @@ mod tests {
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 29, 35).unwrap(),
             address: None,
             is_next: false,
+            ..Default::default()
         };
         let deployment_stopped = Deployment {
             id: Uuid::new_v4(),
@@ -571,6 +627,7 @@ mod tests {
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 49, 35).unwrap(),
             address: None,
             is_next: false,
+            ..Default::default()
         };
         let deployment_other = Deployment {
             id: Uuid::new_v4(),
@@ -579,6 +636,7 @@ mod tests {
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 39, 39).unwrap(),
             address: None,
             is_next: false,
+            ..Default::default()
         };
         let deployment_running = Deployment {
             id: Uuid::new_v4(),
@@ -587,6 +645,7 @@ mod tests {
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 48, 29).unwrap(),
             address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
             is_next: true,
+            ..Default::default()
         };
 
         for deployment in [
@@ -618,6 +677,7 @@ mod tests {
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(),
             address: None,
             is_next: false,
+            ..Default::default()
         };
         let deployment_crashed = Deployment {
             id: Uuid::new_v4(),
@@ -626,6 +686,7 @@ mod tests {
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(), // second
             address: None,
             is_next: false,
+            ..Default::default()
         };
         let deployment_stopped = Deployment {
             id: Uuid::new_v4(),
@@ -634,6 +695,7 @@ mod tests {
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 1).unwrap(), // first
             address: None,
             is_next: false,
+            ..Default::default()
         };
         let deployment_running = Deployment {
             id: Uuid::new_v4(),
@@ -642,6 +704,7 @@ mod tests {
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 3).unwrap(), // third
             address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
             is_next: true,
+            ..Default::default()
         };
 
         for deployment in [
@@ -653,8 +716,8 @@ mod tests {
             p.insert_deployment(deployment.clone()).await.unwrap();
         }
 
-        let actual = p.get_deployments(&service_id).await.unwrap();
-        let expected = vec![deployment_stopped, deployment_crashed, deployment_running];
+        let actual = p.get_deployments(&service_id, 0, u32::MAX).await.unwrap();
+        let expected = vec![deployment_running, deployment_crashed, deployment_stopped];
 
         assert_eq!(actual, expected, "deployments should be sorted by time");
     }
@@ -678,6 +741,7 @@ mod tests {
             last_update: time,
             address: None,
             is_next: false,
+            ..Default::default()
         };
         let deployment_stopped = Deployment {
             id: Uuid::new_v4(),
@@ -686,6 +750,7 @@ mod tests {
             last_update: time.checked_add_signed(Duration::seconds(1)).unwrap(),
             address: None,
             is_next: false,
+            ..Default::default()
         };
         let deployment_running = Deployment {
             id: Uuid::new_v4(),
@@ -694,6 +759,7 @@ mod tests {
             last_update: time.checked_add_signed(Duration::seconds(2)).unwrap(),
             address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
             is_next: false,
+            ..Default::default()
         };
         let deployment_queued = Deployment {
             id: Uuid::new_v4(),
@@ -702,6 +768,7 @@ mod tests {
             last_update: time.checked_add_signed(Duration::seconds(3)).unwrap(),
             address: None,
             is_next: false,
+            ..Default::default()
         };
         let deployment_building = Deployment {
             id: Uuid::new_v4(),
@@ -710,6 +777,7 @@ mod tests {
             last_update: time.checked_add_signed(Duration::seconds(4)).unwrap(),
             address: None,
             is_next: false,
+            ..Default::default()
         };
         let deployment_built = Deployment {
             id: Uuid::new_v4(),
@@ -718,6 +786,7 @@ mod tests {
             last_update: time.checked_add_signed(Duration::seconds(5)).unwrap(),
             address: None,
             is_next: true,
+            ..Default::default()
         };
         let deployment_loading = Deployment {
             id: Uuid::new_v4(),
@@ -726,6 +795,7 @@ mod tests {
             last_update: time.checked_add_signed(Duration::seconds(6)).unwrap(),
             address: None,
             is_next: false,
+            ..Default::default()
         };
 
         for deployment in [
@@ -743,20 +813,20 @@ mod tests {
         p.cleanup_invalid_states().await.unwrap();
 
         let actual: Vec<_> = p
-            .get_deployments(&service_id)
+            .get_deployments(&service_id, 0, u32::MAX)
             .await
             .unwrap()
             .into_iter()
             .map(|deployment| (deployment.id, deployment.state))
             .collect();
         let expected = vec![
-            (deployment_crashed.id, State::Crashed),
-            (deployment_stopped.id, State::Stopped),
-            (deployment_running.id, State::Running),
-            (deployment_queued.id, State::Stopped),
-            (deployment_building.id, State::Stopped),
-            (deployment_built.id, State::Stopped),
             (deployment_loading.id, State::Stopped),
+            (deployment_built.id, State::Stopped),
+            (deployment_building.id, State::Stopped),
+            (deployment_queued.id, State::Stopped),
+            (deployment_running.id, State::Running),
+            (deployment_stopped.id, State::Stopped),
+            (deployment_crashed.id, State::Crashed),
         ];
 
         assert_eq!(
@@ -785,6 +855,7 @@ mod tests {
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
                 address: None,
                 is_next: false,
+                ..Default::default()
             },
             Deployment {
                 id: id_1,
@@ -793,6 +864,7 @@ mod tests {
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
                 address: None,
                 is_next: false,
+                ..Default::default()
             },
             Deployment {
                 id: id_2,
@@ -801,6 +873,7 @@ mod tests {
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
                 address: None,
                 is_next: true,
+                ..Default::default()
             },
             Deployment {
                 id: Uuid::new_v4(),
@@ -809,6 +882,7 @@ mod tests {
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
                 address: None,
                 is_next: true,
+                ..Default::default()
             },
             Deployment {
                 id: id_3,
@@ -817,6 +891,7 @@ mod tests {
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
                 address: None,
                 is_next: false,
+                ..Default::default()
             },
         ] {
             p.insert_deployment(deployment).await.unwrap();
@@ -969,6 +1044,7 @@ mod tests {
             last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 39).unwrap(),
             address: None,
             is_next: false,
+            ..Default::default()
         })
         .await
         .unwrap();
@@ -1009,6 +1085,7 @@ mod tests {
                 last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 59).unwrap(),
                 address: None,
                 is_next: false,
+                ..Default::default()
             }
         );
     }
@@ -1190,6 +1267,7 @@ mod tests {
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
                 address: None,
                 is_next: false,
+                ..Default::default()
             },
             Deployment {
                 id: Uuid::new_v4(),
@@ -1198,6 +1276,7 @@ mod tests {
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
                 address: None,
                 is_next: false,
+                ..Default::default()
             },
             Deployment {
                 id: id_1,
@@ -1206,6 +1285,7 @@ mod tests {
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
                 address: None,
                 is_next: false,
+                ..Default::default()
             },
             Deployment {
                 id: Uuid::new_v4(),
@@ -1214,6 +1294,7 @@ mod tests {
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
                 address: None,
                 is_next: false,
+                ..Default::default()
             },
             Deployment {
                 id: id_2,
@@ -1222,6 +1303,7 @@ mod tests {
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
                 address: None,
                 is_next: true,
+                ..Default::default()
             },
         ] {
             p.insert_deployment(deployment).await.unwrap();

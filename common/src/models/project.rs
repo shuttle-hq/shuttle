@@ -6,6 +6,7 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use strum::EnumString;
+
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
@@ -184,12 +185,20 @@ pub struct AdminResponse {
     pub account_name: String,
 }
 
-pub fn get_table(projects: &Vec<Response>) -> String {
+pub fn get_table(projects: &Vec<Response>, page: u32) -> String {
     if projects.is_empty() {
-        format!(
-            "{}\n",
-            "No projects are linked to this account".yellow().bold()
-        )
+        // The page starts at 1 in the CLI.
+        if page <= 1 {
+            format!(
+                "{}\n",
+                "No projects are linked to this account".yellow().bold()
+            )
+        } else {
+            format!(
+                "{}\n",
+                "No more projects linked to this account".yellow().bold()
+            )
+        }
     } else {
         let mut table = Table::new();
         table
@@ -214,7 +223,10 @@ pub fn get_table(projects: &Vec<Response>) -> String {
             r#"
 These projects are linked to this account
 {table}
+
+{}
 "#,
+            "More projects might be available on the next page using --page.".bold()
         )
     }
 }

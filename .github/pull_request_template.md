@@ -1,9 +1,10 @@
 ## Description of change
+<!-- Please write a summary of your changes and why you made them. -->
+<!-- Be sure to reference any related issues by adding `Closes #`. -->
 
-Please write a summary of your changes and why you made them. 
 
-Be sure to reference any related issues by adding `closes issue #`.
 
-## How Has This Been Tested (if applicable)?
+## How has this been tested? (if applicable)
+<!-- Please describe the tests that you ran to verify your changes. -->
 
-Please describe the tests that you ran to verify your changes.
+

@@ -22,7 +22,7 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 
 # the rust version used by our containers, and as an override for our deployers
 # ensuring all user crates are compiled with the same rustc toolchain
-RUSTUP_TOOLCHAIN=1.68.0
+RUSTUP_TOOLCHAIN=1.70.0
 
 TAG?=$(shell git describe --tags)
 BACKEND_TAG?=$(TAG)
@@ -63,12 +63,6 @@ DD_ENV=unstable
 USE_TLS?=disable
 CARGO_PROFILE=debug
 RUST_LOG?=shuttle=trace,debug
-endif
-
-ARCH=$(shell uname -m)
-PROTOC_ARCH=$(ARCH)
-ifeq ($(ARCH), arm64)
-PROTOC_ARCH=aarch_64
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres
@@ -160,9 +154,9 @@ down: $(DOCKER_COMPOSE_FILES)
 
 shuttle-%: ${SRC} Cargo.lock
 	$(DOCKER_BUILD) \
-		--build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
 		--build-arg folder=$(*) \
 		--build-arg prepare_args=$(PREPARE_ARGS) \
+		--build-arg PROD=$(PROD) \
 		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
 		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \

@@ -84,7 +84,10 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         server_builder.add_service(svc)
     };
 
-    router.serve(addr).await.unwrap();
+    match router.serve(addr).await {
+        Ok(_) => {}
+        Err(e) => panic!("Error while serving address {addr}: {e}"),
+    };
 }
 
 pub struct Alpha<L, S> {

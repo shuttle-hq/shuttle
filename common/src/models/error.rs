@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use comfy_table::Color;
-use crossterm::style::Stylize;
+use crossterm::style::{Color, Stylize};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};

@@ -1008,7 +1008,7 @@ impl Shuttle {
             );
         }
 
-        let deployment = client
+        client
             .deploy(self.ctx.project_name(), deployment_req)
             .await?;
 

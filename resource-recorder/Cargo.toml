@@ -13,7 +13,7 @@ prost-types = { workspace = true }
 sqlx = { workspace = true, features = [
     "chrono",
     "migrate",
-    "runtime-tokio-native-tls",
+    "runtime-tokio-rustls",
     "sqlite",
 ] }
 strum = { workspace = true }

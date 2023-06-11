@@ -17,19 +17,22 @@ use shuttle_proto::runtime::{
     runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
     SubscribeStopResponse,
 };
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
 use tonic::{transport::Channel, Code};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use super::persistence::{DeploymentUpdater, SecretGetter};
-use super::{RunReceiver, State};
+use super::machine::State;
 use crate::{
+    engine::persistence::{DeploymentUpdater, SecretGetter},
     error::{Error, Result},
     runtime_manager::RuntimeManager,
 };
+
+type RunSender = mpsc::Sender<Built>;
+type RunReceiver = mpsc::Receiver<Built>;
 
 /// Run a task which takes runnable deploys from a channel and starts them up on our runtime
 /// A deploy is killed when it receives a signal from the kill channel
@@ -178,7 +181,7 @@ pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
 pub struct Built {
     pub id: Ulid,
     pub service_name: String,
-    pub service_id: Ulid,
+    pub service_id: Uuid,
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
 }

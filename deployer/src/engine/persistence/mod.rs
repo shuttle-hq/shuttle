@@ -5,19 +5,18 @@ use error::{Error, Result};
 use sqlx::QueryBuilder;
 
 use std::net::SocketAddr;
-use std::path::Path;
 use std::str::FromStr;
 
 use chrono::Utc;
 use serde_json::json;
 use shuttle_common::STATE_MESSAGE;
-use sqlx::migrate::{MigrateDatabase, Migrator};
-use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteJournalMode, SqlitePool};
+use sqlx::migrate::Migrator;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
-use tracing::{error, info, instrument, trace};
+use tracing::{error, instrument, trace};
 use uuid::Uuid;
 
+use self::dal::Dal;
 pub use self::deployment::{Deployment, DeploymentState, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
@@ -39,60 +38,21 @@ mod user;
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[derive(Clone)]
-pub struct Persistence {
-    pool: SqlitePool,
+pub struct Persistence<D: Dal + Send + Sync + 'static> {
+    dal: D,
     log_send: crossbeam_channel::Sender<deploy_layer::Log>,
     stream_log_send: Sender<deploy_layer::Log>,
 }
 
-impl Persistence {
-    /// Creates a persistent storage solution (i.e., SQL database). This
-    /// function creates all necessary tables and sets up a database connection
-    /// pool - new connections should be made by cloning [`Persistence`] rather
-    /// than repeatedly calling [`Persistence::new`].
-    pub async fn new(path: &str) -> (Self, JoinHandle<()>) {
-        if !Path::new(path).exists() {
-            Sqlite::create_database(path).await.unwrap();
-        }
-
-        info!(
-            "state db: {}",
-            std::fs::canonicalize(path).unwrap().to_string_lossy()
-        );
-
-        // We have found in the past that setting synchronous to anything other than the default (full) breaks the
-        // broadcast channel in deployer. The broken symptoms are that the ws socket connections won't get any logs
-        // from the broadcast channel and would then close. When users did deploys, this would make it seem like the
-        // deploy is done (while it is still building for most of the time) and the status of the previous deployment
-        // would be returned to the user.
-        //
-        // If you want to activate a faster synchronous mode, then also do proper testing to confirm this bug is no
-        // longer present.
-        let sqlite_options = SqliteConnectOptions::from_str(path)
-            .unwrap()
-            .journal_mode(SqliteJournalMode::Wal);
-
-        let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
-
-        Self::from_pool(pool).await
-    }
-
-    #[allow(dead_code)]
-    async fn new_in_memory() -> (Self, JoinHandle<()>) {
-        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        Self::from_pool(pool).await
-    }
-
-    async fn from_pool(pool: SqlitePool) -> (Self, JoinHandle<()>) {
-        MIGRATIONS.run(&pool).await.unwrap();
-
+impl<D: Dal + Send + Sync + 'static> Persistence<D> {
+    pub async fn from_dal(dal: D) -> (Self, JoinHandle<()>) {
         let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
             crossbeam_channel::bounded(0);
 
         let (stream_log_send, _) = broadcast::channel(1);
         let stream_log_send_clone = stream_log_send.clone();
 
-        let pool_cloned = pool.clone();
+        let dal_cloned = dal.clone();
 
         // The logs are received on a non-async thread.
         // This moves them to an async thread
@@ -101,7 +61,8 @@ impl Persistence {
                 trace!(?log, "persistence received got log");
                 match log.r#type {
                     LogType::Event => {
-                        insert_log(&pool_cloned, log.clone())
+                        dal_cloned
+                            .insert_log(log.clone())
                             .await
                             .unwrap_or_else(|error| {
                                 error!(
@@ -111,9 +72,8 @@ impl Persistence {
                             });
                     }
                     LogType::State => {
-                        insert_log(
-                            &pool_cloned,
-                            Log {
+                        dal_cloned
+                            .insert_log(Log {
                                 id: log.id,
                                 timestamp: log.timestamp,
                                 state: log.state,
@@ -122,16 +82,15 @@ impl Persistence {
                                 line: log.line,
                                 target: String::new(),
                                 fields: json!(STATE_MESSAGE),
-                            },
-                        )
-                        .await
-                        .unwrap_or_else(|error| {
-                            error!(
-                                error = &error as &dyn std::error::Error,
-                                "failed to insert state log"
-                            )
-                        });
-                        update_deployment(&pool_cloned, log.clone())
+                            })
+                            .await
+                            .unwrap_or_else(|error| {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to insert state log"
+                                )
+                            });
+                        dal.update_deployment_state(log.clone())
                             .await
                             .unwrap_or_else(|error| {
                                 error!(
@@ -159,7 +118,7 @@ impl Persistence {
         });
 
         let persistence = Self {
-            pool,
+            dal,
             log_send,
             stream_log_send,
         };
@@ -167,27 +126,31 @@ impl Persistence {
         (persistence, handle)
     }
 
-    pub async fn insert_deployment(&self, deployment: impl Into<Deployment>) -> Result<()> {
-        let deployment = deployment.into();
-
-        sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update, address, is_next) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(deployment.id)
-        .bind(deployment.service_id)
-        .bind(deployment.state)
-        .bind(deployment.last_update)
-        .bind(deployment.address.map(|socket| socket.to_string()))
-        .bind(deployment.is_next)
-        .execute(&self.pool)
-        .await
-        .map(|_| ())
-        .map_err(Error::from)
+    pub fn dal(&self) -> &D {
+        &self.dal
     }
 
-    pub async fn get_deployment(&self, id: &Uuid) -> Result<Option<Deployment>> {
-        get_deployment(&self.pool, id).await
-    }
+    // pub async fn insert_deployment(&self, deployment: impl Into<Deployment>) -> Result<()> {
+    //     let deployment = deployment.into();
+
+    //     sqlx::query(
+    //         "INSERT INTO deployments (id, service_id, state, last_update, address, is_next) VALUES (?, ?, ?, ?, ?, ?)",
+    //     )
+    //     .bind(deployment.id)
+    //     .bind(deployment.service_id)
+    //     .bind(deployment.state)
+    //     .bind(deployment.last_update)
+    //     .bind(deployment.address.map(|socket| socket.to_string()))
+    //     .bind(deployment.is_next)
+    //     .execute(&self.pool)
+    //     .await
+    //     .map(|_| ())
+    //     .map_err(Error::from)
+    // }
+
+    // pub async fn get_deployment(&self, id: &Uuid) -> Result<Option<Deployment>> {
+    //     get_deployment(&self.pool, id).await
+    // }
 
     pub async fn get_deployments(
         &self,
@@ -222,38 +185,38 @@ impl Persistence {
             .map_err(Error::from)
     }
 
-    // Clean up all invalid states inside persistence
-    pub async fn cleanup_invalid_states(&self) -> Result<()> {
-        sqlx::query("UPDATE deployments SET state = ? WHERE state IN(?, ?, ?, ?)")
-            .bind(State::Stopped)
-            .bind(State::Queued)
-            .bind(State::Built)
-            .bind(State::Building)
-            .bind(State::Loading)
-            .execute(&self.pool)
-            .await?;
+    // // Clean up all invalid states inside persistence
+    // pub async fn cleanup_invalid_states(&self) -> Result<()> {
+    //     sqlx::query("UPDATE deployments SET state = ? WHERE state IN(?, ?, ?, ?)")
+    //         .bind(State::Stopped)
+    //         .bind(State::Queued)
+    //         .bind(State::Built)
+    //         .bind(State::Building)
+    //         .bind(State::Loading)
+    //         .execute(&self.pool)
+    //         .await?;
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    pub async fn get_or_create_service(&self, name: &str) -> Result<Service> {
-        if let Some(service) = self.get_service_by_name(name).await? {
-            Ok(service)
-        } else {
-            let service = Service {
-                id: Uuid::new_v4(),
-                name: name.to_string(),
-            };
+    // pub async fn get_or_create_service(&self, name: &str) -> Result<Service> {
+    //     if let Some(service) = self.get_service_by_name(name).await? {
+    //         Ok(service)
+    //     } else {
+    //         let service = Service {
+    //             id: Uuid::new_v4(),
+    //             name: name.to_string(),
+    //         };
 
-            sqlx::query("INSERT INTO services (id, name) VALUES (?, ?)")
-                .bind(service.id)
-                .bind(&service.name)
-                .execute(&self.pool)
-                .await?;
+    //         sqlx::query("INSERT INTO services (id, name) VALUES (?, ?)")
+    //             .bind(service.id)
+    //             .bind(&service.name)
+    //             .execute(&self.pool)
+    //             .await?;
 
-            Ok(service)
-        }
-    }
+    //         Ok(service)
+    //     }
+    // }
 
     pub async fn get_service_by_name(&self, name: &str) -> Result<Option<Service>> {
         sqlx::query_as("SELECT * FROM services WHERE name = ?")
@@ -279,24 +242,24 @@ impl Persistence {
             .map_err(Error::from)
     }
 
-    pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>> {
-        sqlx::query_as(
-            r#"SELECT d.id, service_id, s.name AS service_name, d.is_next
-                FROM deployments AS d
-                JOIN services AS s ON s.id = d.service_id
-                WHERE state = ?
-                ORDER BY last_update"#,
-        )
-        .bind(State::Running)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(Error::from)
-    }
+    // pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>> {
+    //     sqlx::query_as(
+    //         r#"SELECT d.id, service_id, s.name AS service_name, d.is_next
+    //             FROM deployments AS d
+    //             JOIN services AS s ON s.id = d.service_id
+    //             WHERE state = ?
+    //             ORDER BY last_update"#,
+    //     )
+    //     .bind(State::Running)
+    //     .fetch_all(&self.pool)
+    //     .await
+    //     .map_err(Error::from)
+    // }
 
-    pub(crate) async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
-        // TODO: stress this a bit
-        get_deployment_logs(&self.pool, id).await
-    }
+    // pub(crate) async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
+    //     // TODO: stress this a bit
+    //     get_deployment_logs(&self.pool, id).await
+    // }
 
     /// Get a broadcast channel for listening to logs that are being stored into persistence
     pub fn get_log_subscriber(&self) -> Receiver<deploy_layer::Log> {
@@ -309,176 +272,176 @@ impl Persistence {
     }
 }
 
-async fn update_deployment(pool: &SqlitePool, state: impl Into<DeploymentState>) -> Result<()> {
-    let state = state.into();
+// async fn update_deployment(pool: &SqlitePool, state: impl Into<DeploymentState>) -> Result<()> {
+//     let state = state.into();
 
-    sqlx::query("UPDATE deployments SET state = ?, last_update = ? WHERE id = ?")
-        .bind(state.state)
-        .bind(state.last_update)
-        .bind(state.id)
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(Error::from)
-}
+//     sqlx::query("UPDATE deployments SET state = ?, last_update = ? WHERE id = ?")
+//         .bind(state.state)
+//         .bind(state.last_update)
+//         .bind(state.id)
+//         .execute(pool)
+//         .await
+//         .map(|_| ())
+//         .map_err(Error::from)
+// }
 
-async fn get_deployment(pool: &SqlitePool, id: &Uuid) -> Result<Option<Deployment>> {
-    sqlx::query_as("SELECT * FROM deployments WHERE id = ?")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(Error::from)
-}
+// async fn get_deployment(dal: &SqlitePool, id: &Uuid) -> Result<Option<Deployment>> {
+//     sqlx::query_as("SELECT * FROM deployments WHERE id = ?")
+//         .bind(id)
+//         .fetch_optional(pool)
+//         .await
+//         .map_err(Error::from)
+// }
 
-async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
-    let log = log.into();
+// async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
+//     // let log = log.into();
 
-    sqlx::query("INSERT INTO logs (id, timestamp, state, level, file, line, target, fields) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(log.id)
-        .bind(log.timestamp)
-        .bind(log.state)
-        .bind(log.level)
-        .bind(log.file)
-        .bind(log.line)
-        .bind(log.target)
-        .bind(log.fields)
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(Error::from)
-}
+//     // sqlx::query("INSERT INTO logs (id, timestamp, state, level, file, line, target, fields) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+//     //     .bind(log.id)
+//     //     .bind(log.timestamp)
+//     //     .bind(log.state)
+//     //     .bind(log.level)
+//     //     .bind(log.file)
+//     //     .bind(log.line)
+//     //     .bind(log.target)
+//     //     .bind(log.fields)
+//     //     .execute(pool)
+//     //     .await
+//     //     .map(|_| ())
+//     //     .map_err(Error::from)
+// }
 
-async fn get_deployment_logs(pool: &SqlitePool, id: &Uuid) -> Result<Vec<Log>> {
-    sqlx::query_as("SELECT * FROM logs WHERE id = ? ORDER BY timestamp")
-        .bind(id)
-        .fetch_all(pool)
-        .await
-        .map_err(Error::from)
-}
+// async fn get_deployment_logs(pool: &SqlitePool, id: &Uuid) -> Result<Vec<Log>> {
+//     sqlx::query_as("SELECT * FROM logs WHERE id = ? ORDER BY timestamp")
+//         .bind(id)
+//         .fetch_all(pool)
+//         .await
+//         .map_err(Error::from)
+// }
 
-impl LogRecorder for Persistence {
-    fn record(&self, log: deploy_layer::Log) {
-        self.log_send
-            .send(log)
-            .expect("failed to move log to async thread");
-    }
-}
+// impl LogRecorder for Persistence {
+//     fn record(&self, log: deploy_layer::Log) {
+//         self.log_send
+//             .send(log)
+//             .expect("failed to move log to async thread");
+//     }
+// }
 
-#[async_trait::async_trait]
-impl SecretRecorder for Persistence {
-    type Err = Error;
+// #[async_trait::async_trait]
+// impl SecretRecorder for Persistence {
+//     type Err = Error;
 
-    async fn insert_secret(&self, service_id: &Uuid, key: &str, value: &str) -> Result<()> {
-        sqlx::query(
-            "INSERT OR REPLACE INTO secrets (service_id, key, value, last_update) VALUES (?, ?, ?, ?)",
-        )
-        .bind(service_id)
-        .bind(key)
-        .bind(value)
-        .bind(Utc::now())
-        .execute(&self.pool)
-        .await
-        .map(|_| ())
-        .map_err(Error::from)
-    }
-}
+//     async fn insert_secret(&self, service_id: &Uuid, key: &str, value: &str) -> Result<()> {
+//         sqlx::query(
+//             "INSERT OR REPLACE INTO secrets (service_id, key, value, last_update) VALUES (?, ?, ?, ?)",
+//         )
+//         .bind(service_id)
+//         .bind(key)
+//         .bind(value)
+//         .bind(Utc::now())
+//         .execute(&self.pool)
+//         .await
+//         .map(|_| ())
+//         .map_err(Error::from)
+//     }
+// }
 
-#[async_trait::async_trait]
-impl SecretGetter for Persistence {
-    type Err = Error;
+// #[async_trait::async_trait]
+// impl SecretGetter for Persistence {
+//     type Err = Error;
 
-    async fn get_secrets(&self, service_id: &Uuid) -> Result<Vec<Secret>> {
-        sqlx::query_as("SELECT * FROM secrets WHERE service_id = ? ORDER BY key")
-            .bind(service_id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Error::from)
-    }
-}
+//     async fn get_secrets(&self, service_id: &Uuid) -> Result<Vec<Secret>> {
+//         sqlx::query_as("SELECT * FROM secrets WHERE service_id = ? ORDER BY key")
+//             .bind(service_id)
+//             .fetch_all(&self.pool)
+//             .await
+//             .map_err(Error::from)
+//     }
+// }
 
-#[async_trait::async_trait]
-impl AddressGetter for Persistence {
-    #[instrument(skip(self))]
-    async fn get_address_for_service(
-        &self,
-        service_name: &str,
-    ) -> crate::proxy::error::Result<Option<std::net::SocketAddr>> {
-        let address_str = sqlx::query_as::<_, (String,)>(
-            r#"SELECT d.address
-                FROM deployments AS d
-                JOIN services AS s ON d.service_id = s.id
-                WHERE s.name = ? AND d.state = ?
-                ORDER BY d.last_update"#,
-        )
-        .bind(service_name)
-        .bind(State::Running)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Error::from)
-        .map_err(crate::proxy::error::Error::Persistence)?;
+// #[async_trait::async_trait]
+// impl AddressGetter for Persistence {
+//     #[instrument(skip(self))]
+//     async fn get_address_for_service(
+//         &self,
+//         service_name: &str,
+//     ) -> crate::proxy::error::Result<Option<std::net::SocketAddr>> {
+//         let address_str = sqlx::query_as::<_, (String,)>(
+//             r#"SELECT d.address
+//                 FROM deployments AS d
+//                 JOIN services AS s ON d.service_id = s.id
+//                 WHERE s.name = ? AND d.state = ?
+//                 ORDER BY d.last_update"#,
+//         )
+//         .bind(service_name)
+//         .bind(State::Running)
+//         .fetch_optional(&self.pool)
+//         .await
+//         .map_err(Error::from)
+//         .map_err(crate::proxy::error::Error::Persistence)?;
 
-        if let Some((address_str,)) = address_str {
-            SocketAddr::from_str(&address_str).map(Some).map_err(|err| {
-                crate::proxy::error::Error::Convert {
-                    from: "String".to_string(),
-                    to: "SocketAddr".to_string(),
-                    message: err.to_string(),
-                }
-            })
-        } else {
-            Ok(None)
-        }
-    }
-}
+//         if let Some((address_str,)) = address_str {
+//             SocketAddr::from_str(&address_str).map(Some).map_err(|err| {
+//                 crate::proxy::error::Error::Convert {
+//                     from: "String".to_string(),
+//                     to: "SocketAddr".to_string(),
+//                     message: err.to_string(),
+//                 }
+//             })
+//         } else {
+//             Ok(None)
+//         }
+//     }
+// }
 
-#[async_trait::async_trait]
-impl DeploymentUpdater for Persistence {
-    type Err = Error;
+// #[async_trait::async_trait]
+// impl DeploymentUpdater for Persistence {
+//     type Err = Error;
 
-    async fn set_address(&self, id: &Uuid, address: &SocketAddr) -> Result<()> {
-        sqlx::query("UPDATE deployments SET address = ? WHERE id = ?")
-            .bind(address.to_string())
-            .bind(id)
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(Error::from)
-    }
+//     async fn set_address(&self, id: &Uuid, address: &SocketAddr) -> Result<()> {
+//         sqlx::query("UPDATE deployments SET address = ? WHERE id = ?")
+//             .bind(address.to_string())
+//             .bind(id)
+//             .execute(&self.pool)
+//             .await
+//             .map(|_| ())
+//             .map_err(Error::from)
+//     }
 
-    async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<()> {
-        sqlx::query("UPDATE deployments SET is_next = ? WHERE id = ?")
-            .bind(is_next)
-            .bind(id)
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(Error::from)
-    }
-}
+//     async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<()> {
+//         sqlx::query("UPDATE deployments SET is_next = ? WHERE id = ?")
+//             .bind(is_next)
+//             .bind(id)
+//             .execute(&self.pool)
+//             .await
+//             .map(|_| ())
+//             .map_err(Error::from)
+//     }
+// }
 
-#[async_trait::async_trait]
-impl ActiveDeploymentsGetter for Persistence {
-    type Err = Error;
+// #[async_trait::async_trait]
+// impl ActiveDeploymentsGetter for Persistence {
+//     type Err = Error;
 
-    async fn get_active_deployments(
-        &self,
-        service_id: &Uuid,
-    ) -> std::result::Result<Vec<Uuid>, Self::Err> {
-        let ids: Vec<_> = sqlx::query_as::<_, Deployment>(
-            "SELECT * FROM deployments WHERE service_id = ? AND state = ?",
-        )
-        .bind(service_id)
-        .bind(State::Running)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(Error::from)?
-        .into_iter()
-        .map(|deployment| deployment.id)
-        .collect();
+//     async fn get_active_deployments(
+//         &self,
+//         service_id: &Uuid,
+//     ) -> std::result::Result<Vec<Uuid>, Self::Err> {
+//         let ids: Vec<_> = sqlx::query_as::<_, Deployment>(
+//             "SELECT * FROM deployments WHERE service_id = ? AND state = ?",
+//         )
+//         .bind(service_id)
+//         .bind(State::Running)
+//         .fetch_all(&self.pool)
+//         .await
+//         .map_err(Error::from)?
+//         .into_iter()
+//         .map(|deployment| deployment.id)
+//         .collect();
 
-        Ok(ids)
-    }
-}
+//         Ok(ids)
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

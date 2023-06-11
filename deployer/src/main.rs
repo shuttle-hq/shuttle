@@ -5,10 +5,16 @@ use shuttle_common::backends::{
     auth::{AuthPublicKey, JwtAuthenticationLayer},
     tracing::{setup_tracing, ExtractPropagationLayer},
 };
-use shuttle_deployer::{args::Args, dal::Sqlite, DeployerService};
+use shuttle_deployer::{
+    args::Args,
+    dal::Sqlite,
+    engine::persistence::{dal::Sqlite, Persistence},
+    runtime_manager::RuntimeManager,
+    DeployerService,
+};
 use shuttle_proto::deployer::deployer_server::DeployerServer;
 use tonic::transport::Server;
-use tracing::trace;
+use tracing::{error, trace};
 
 #[tokio::main]
 async fn main() {
@@ -23,19 +29,25 @@ async fn main() {
     }
     trace!(args = ?args, "parsed args");
 
-    let mut server_builder = Server::builder()
-        .http2_keepalive_interval(Some(Duration::from_secs(60)))
-        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
-            args.auth_uri,
-        )))
-        .layer(ExtractPropagationLayer);
+    let (persistence, _) = Persistence::from_dal(Sqlite::new(&args.state)).await;
+    setup_tracing(
+        tracing_subscriber::registry().with(DeployLayer::new(persistence.clone())),
+        "deployer",
+    );
 
-    let svc = DeployerService::new(Sqlite::new(&args.state.display().to_string()).await).await;
-    let svc = DeployerServer::new(svc);
-    let router = server_builder.add_service(svc);
+    let runtime_manager = RuntimeManager::new(
+        args.artifacts_path.clone(),
+        args.provisioner_address.uri().to_string(),
+        Some(args.auth_uri.to_string()),
+        persistence.get_log_sender(),
+    );
 
-    router
-        .serve(args.address)
-        .await
-        .expect("to serve on address");
+    let svc = DeployerService::new(
+        runtime_manager,
+        persistence,
+        args.gateway_uri,
+        args.auth_uri,
+        args.address,
+    )
+    .await;
 }

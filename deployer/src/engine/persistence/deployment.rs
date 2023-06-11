@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
 use tracing::error;
+use ulid::Ulid;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -11,12 +12,16 @@ use super::state::State;
 
 #[derive(Clone, Debug, Eq, PartialEq, ToSchema)]
 pub struct Deployment {
-    pub id: Uuid,
-    pub service_id: Uuid,
+    pub id: Ulid,
+    pub service_id: Ulid,
     pub state: State,
     pub last_update: DateTime<Utc>,
     pub address: Option<SocketAddr>,
     pub is_next: bool,
+    pub git_commit_hash: Option<String>,
+    pub git_commit_message: Option<String>,
+    pub git_branch: Option<String>,
+    pub git_dirty: Option<bool>,
 }
 
 impl FromRow<'_, SqliteRow> for Deployment {
@@ -40,6 +45,10 @@ impl FromRow<'_, SqliteRow> for Deployment {
             last_update: row.try_get("last_update")?,
             address,
             is_next: row.try_get("is_next")?,
+            git_commit_hash: None,
+            git_commit_message: None,
+            git_branch: None,
+            git_dirty: None,
         })
     }
 }
@@ -61,22 +70,22 @@ pub trait DeploymentUpdater: Clone + Send + Sync + 'static {
     type Err: std::error::Error + Send;
 
     /// Set the address for a deployment
-    async fn set_address(&self, id: &Uuid, address: &SocketAddr) -> Result<(), Self::Err>;
+    async fn set_address(&self, id: &Ulid, address: &SocketAddr) -> Result<(), Self::Err>;
 
     /// Set if a deployment is build on shuttle-next
-    async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<(), Self::Err>;
+    async fn set_is_next(&self, id: &Ulid, is_next: bool) -> Result<(), Self::Err>;
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct DeploymentState {
-    pub id: Uuid,
+    pub id: Ulid,
     pub state: State,
     pub last_update: DateTime<Utc>,
 }
 
 #[derive(sqlx::FromRow, Debug, PartialEq, Eq)]
 pub struct DeploymentRunnable {
-    pub id: Uuid,
+    pub id: Ulid,
     pub service_name: String,
     pub service_id: Uuid,
     pub is_next: bool,

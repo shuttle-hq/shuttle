@@ -53,7 +53,7 @@ impl RuntimeManager {
         }))
     }
 
-    pub async fn get_runtime_client(
+    pub async fn runtime_client(
         &mut self,
         id: Ulid,
         alpha_runtime_path: Option<PathBuf>,
@@ -164,6 +164,10 @@ impl RuntimeManager {
             trace!("no client running");
             true
         }
+    }
+
+    pub fn artifacts_path(&self) -> &PathBuf {
+        &self.artifacts_path
     }
 }
 

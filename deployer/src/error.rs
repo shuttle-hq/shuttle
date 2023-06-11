@@ -1,4 +1,4 @@
-use crate::dal::DalError;
+use super::engine::persistence::dal::DalError;
 
 /// A wrapper to capture any error possible with this service
 #[derive(thiserror::Error, Debug)]

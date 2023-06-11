@@ -8,7 +8,9 @@ use args::DeployArgs;
 use args::LogoutArgs;
 use indicatif::ProgressBar;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
-use shuttle_common::models::deployment::get_deployments_table;
+use shuttle_common::models::deployment::{
+    get_deployments_table, DeploymentRequest, GIT_STRINGS_MAX_LENGTH,
+};
 use shuttle_common::models::project::IDLE_MINUTES;
 use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
@@ -218,8 +220,14 @@ impl Shuttle {
         };
 
         // 5. Initialize locally
-        init::cargo_init(path.clone(), project_args.name.clone().unwrap())?;
-        init::cargo_shuttle_init(path.clone(), framework)?;
+        init::cargo_generate(
+            path.clone(),
+            project_args
+                .name
+                .as_ref()
+                .expect("to have a project name provided"),
+            framework,
+        )?;
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
@@ -390,8 +398,8 @@ impl Shuttle {
 
             if latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client.get_deployments(proj_name, 0, u32::MAX).await?;
-                let most_recent = deployments.last().context(format!(
+                let deployments = client.get_deployments(proj_name, 0, 1).await?;
+                let most_recent = deployments.first().context(format!(
                     "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
                 ))?;
 
@@ -909,14 +917,139 @@ impl Shuttle {
     }
 
     async fn deploy(&self, client: &Client, args: DeployArgs) -> Result<CommandOutcome> {
-        if !args.allow_dirty {
-            self.is_dirty()?;
+        let working_directory = self.ctx.working_directory();
+
+        let mut deployment_req: DeploymentRequest = DeploymentRequest {
+            no_test: args.no_test,
+            ..Default::default()
+        };
+
+        if let Ok(repo) = Repository::discover(working_directory) {
+            let repo_path = repo
+                .workdir()
+                .context("getting working directory of repository")?;
+            let repo_path = dunce::canonicalize(repo_path)?;
+            trace!(?repo_path, "found git repository");
+
+            if !args.allow_dirty {
+                self.is_dirty(&repo).context("dirty not allowed")?;
+            }
+            deployment_req.git_dirty = Some(self.is_dirty(&repo).is_err());
+
+            if let Ok(head) = repo.head() {
+                // This is typically the name of the current branch
+                // It is "HEAD" when head detached, for example when a tag is checked out
+                deployment_req.git_branch = head
+                    .shorthand()
+                    .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect());
+                if let Ok(commit) = head.peel_to_commit() {
+                    deployment_req.git_commit_id = Some(commit.id().to_string());
+                    // Summary is None if error or invalid utf-8
+                    deployment_req.git_commit_msg = commit
+                        .summary()
+                        .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect());
+                }
+            }
         }
 
-        let data = self.make_archive()?;
-        client.deploy(data, self.ctx.project_name()).await?;
-        Ok(CommandOutcome::Ok)
-    }
+        deployment_req.data = self.make_archive()?;
+
+        let deployment = client
+            .deploy(self.ctx.project_name(), deployment_req)
+            .await?;
+
+        let mut stream = client
+            .get_logs_ws(self.ctx.project_name(), &deployment.id)
+            .await?;
+
+        loop {
+            let message = stream.next().await;
+            if let Some(Ok(msg)) = message {
+                if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
+                    let log_item: shuttle_common::LogItem =
+                        serde_json::from_str(&line).expect("to parse log line");
+
+                    match log_item.state.clone() {
+                        shuttle_common::deployment::State::Queued
+                        | shuttle_common::deployment::State::Building
+                        | shuttle_common::deployment::State::Built
+                        | shuttle_common::deployment::State::Loading => {
+                            println!("{log_item}");
+                        }
+                        shuttle_common::deployment::State::Crashed => {
+                            println!();
+                            println!("{}", "Deployment crashed".red());
+                            println!();
+                            println!("Run the following for more details");
+                            println!();
+                            print!("cargo shuttle logs {}", &deployment.id);
+                            println!();
+
+                            return Ok(CommandOutcome::DeploymentFailure);
+                        }
+                        shuttle_common::deployment::State::Running
+                        | shuttle_common::deployment::State::Completed
+                        | shuttle_common::deployment::State::Stopped
+                        | shuttle_common::deployment::State::Unknown => {
+                            break;
+                        }
+                    };
+                }
+            } else {
+                println!("Reconnecting websockets logging");
+                // A wait time short enough for not much state to have changed, long enough that
+                // the terminal isn't completely spammed
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                stream = client
+                    .get_logs_ws(self.ctx.project_name(), &deployment.id)
+                    .await?;
+            }
+        }
+
+        // Temporary fix.
+        // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+        let deployment = client
+            .get_deployment_details(self.ctx.project_name(), &deployment.id)
+            .await?;
+
+        // A deployment will only exist if there is currently one in the running state
+        if deployment.state == shuttle_common::deployment::State::Running {
+            let service = client.get_service(self.ctx.project_name()).await?;
+
+            let resources = client
+                .get_service_resources(self.ctx.project_name())
+                .await?;
+            let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
+
+            println!("{resources}{service}");
+
+            Ok(CommandOutcome::Ok)
+        } else {
+            println!("{}", "Deployment has not entered the running state".red());
+            println!();
+
+            match deployment.state {
+                shuttle_common::deployment::State::Stopped => {
+                    println!("State: Stopped - Deployment was running, but has been stopped by the user.")
+                }
+                shuttle_common::deployment::State::Completed => {
+                    println!("State: Completed - Deployment was running, but stopped running all by itself.")
+                }
+                shuttle_common::deployment::State::Unknown => {
+                    println!("State: Unknown - Deployment was in an unknown state. We never expect this state and entering this state should be considered a bug.")
+                }
+                shuttle_common::deployment::State::Crashed => {
+                    println!(
+                        "{}",
+                        "State: Crashed - Deployment crashed after startup.".red()
+                    );
+                }
+                _ => println!(
+                    "Deployment encountered an unexpected error - Please create a ticket to report this."
+                ),
+            }
 
     async fn project_create(&self, client: &Client, idle_minutes: u64) -> Result<()> {
         let config = project::Config { idle_minutes };
@@ -1094,61 +1227,35 @@ impl Shuttle {
         Ok(bytes)
     }
 
-    fn is_dirty(&self) -> Result<()> {
-        let working_directory = self.ctx.working_directory();
-        if let Ok(repo) = Repository::discover(working_directory) {
-            let repo_path = repo
-                .workdir()
-                .context("getting working directory of repository")?;
+    fn is_dirty(&self, repo: &Repository) -> Result<()> {
+        let mut status_options = StatusOptions::new();
+        status_options.include_untracked(true);
+        let statuses = repo
+            .statuses(Some(&mut status_options))
+            .context("getting status of repository files")?;
 
-            let repo_path = dunce::canonicalize(repo_path)?;
-
-            trace!(?repo_path, "found git repository");
-
-            let repo_rel_path = working_directory
-                .strip_prefix(repo_path.as_path())
-                .context("stripping repository path from working directory")?;
-
-            trace!(
-                ?repo_rel_path,
-                "got working directory path relative to git repository"
+        if !statuses.is_empty() {
+            let mut error = format!(
+                "{} files in the working directory contain changes that were not yet committed into git:\n",
+                statuses.len()
             );
 
-            let mut status_options = StatusOptions::new();
-            status_options
-                .pathspec(repo_rel_path)
-                .include_untracked(true);
+            for status in statuses.iter() {
+                trace!(
+                    path = status.path(),
+                    status = ?status.status(),
+                    "found file with updates"
+                );
 
-            let statuses = repo
-                .statuses(Some(&mut status_options))
-                .context("getting status of repository files")?;
+                let rel_path = status.path().context("getting path of changed file")?;
 
-            if !statuses.is_empty() {
-                let mut error: String = format!("{} files in the working directory contain changes that were not yet committed into git:", statuses.len());
-                writeln!(error).expect("to append error");
-
-                for status in statuses.iter() {
-                    trace!(
-                        path = status.path(),
-                        status = ?status.status(),
-                        "found file with updates"
-                    );
-
-                    let path =
-                        repo_path.join(status.path().context("getting path of changed file")?);
-                    let rel_path = path
-                        .strip_prefix(working_directory)
-                        .expect("getting relative path of changed file")
-                        .display();
-
-                    writeln!(error, "{rel_path}").expect("to append error");
-                }
-
-                writeln!(error).expect("to append error");
-                writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
-
-                bail!(error);
+                writeln!(error, "{rel_path}").expect("to append error");
             }
+
+            writeln!(error).expect("to append error");
+            writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
+
+            bail!(error);
         }
 
         Ok(())

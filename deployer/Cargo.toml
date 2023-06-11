@@ -22,6 +22,7 @@ hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
 oci-spec = "0.5.7"
 once_cell = { workspace = true }
+rmp-serde = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10.2"

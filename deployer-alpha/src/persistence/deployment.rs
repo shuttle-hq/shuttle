@@ -9,7 +9,8 @@ use uuid::Uuid;
 
 use super::state::State;
 
-#[derive(Clone, Debug, Eq, PartialEq, ToSchema)]
+// We are using `Option` for the additional `git_*` fields for backward compat.
+#[derive(Clone, Debug, Default, Eq, PartialEq, ToSchema)]
 pub struct Deployment {
     pub id: Uuid,
     pub service_id: Uuid,
@@ -17,6 +18,10 @@ pub struct Deployment {
     pub last_update: DateTime<Utc>,
     pub address: Option<SocketAddr>,
     pub is_next: bool,
+    pub git_commit_id: Option<String>,
+    pub git_commit_msg: Option<String>,
+    pub git_branch: Option<String>,
+    pub git_dirty: Option<bool>,
 }
 
 impl FromRow<'_, SqliteRow> for Deployment {
@@ -40,6 +45,10 @@ impl FromRow<'_, SqliteRow> for Deployment {
             last_update: row.try_get("last_update")?,
             address,
             is_next: row.try_get("is_next")?,
+            git_commit_id: row.try_get("git_commit_id")?,
+            git_commit_msg: row.try_get("git_commit_msg")?,
+            git_branch: row.try_get("git_branch")?,
+            git_dirty: row.try_get("git_dirty")?,
         })
     }
 }

@@ -11,11 +11,10 @@ use std::str::FromStr;
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).
 /// Initially we'll implement a strict subset of the IETF RFC 1123, concretely:
 /// - It does not start or end with `-` or `_`.
-/// - It does not contain any characters outside of the alphanumeric range, except for `-` or '_'.
+/// - It does not contain any characters outside of the alphanumeric range, except for `-` or `_`.
 /// - It is not empty.
 /// - It does not contain profanity.
 /// - It is not a reserved word.
-///
 #[derive(Clone, Serialize, Debug, Eq, PartialEq)]
 pub struct ProjectName(String);
 

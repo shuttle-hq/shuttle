@@ -6,3 +6,20 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
+flate2 = { workspace = true }
+nbuild-core = "0.1.1"
+tar = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "process", "rt-multi-thread"] }
+tonic = { workspace = true }
+tracing = { workspace = true }
+ulid = { workspace = true }
+
+[dependencies.shuttle-common]
+workspace = true
+features = ["backend", "tonic"]
+
+[dependencies.shuttle-proto]
+workspace = true

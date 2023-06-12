@@ -11,6 +11,7 @@ fn bootstrap() {
         "runtime.proto",
         "resource-recorder.proto",
         "auth.proto",
+        "builder.proto",
     ];
 
     let out_dir = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))

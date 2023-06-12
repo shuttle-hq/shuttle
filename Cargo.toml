@@ -2,6 +2,7 @@
 members = [
   "admin",
   "auth",
+  "builder",
   "cargo-shuttle",
   "codegen",
   "common",

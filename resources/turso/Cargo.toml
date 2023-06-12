@@ -1,0 +1,14 @@
+[package]
+name = "shuttle-turso"
+version = "0.18.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Plugin to obtain a client connected to a Turso database"
+keywords = ["shuttle-service", "turso"]
+
+[dependencies]
+async-trait = "0.1.56"
+libsql-client = { version = "0.27" }
+serde = { version = "1.0.148", features = ["derive"] }
+shuttle-service = { path = "../../service", version = "0.18.0", default-features = false }
+url = { version = "2.3.1", features = ["serde"] }

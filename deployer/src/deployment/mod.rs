@@ -1,18 +1,21 @@
 pub mod deploy_layer;
 pub mod gateway_client;
 pub mod persistence;
-mod run;
 
-use std::{path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 pub use run::{ActiveDeploymentsGetter, Built};
 use shuttle_common::storage_manager::ArtifactsStorageManager;
+use sqlx::{sqlite::SqliteRow, FromRow};
 use tracing::instrument;
 use ulid::Ulid;
 
 use crate::runtime_manager::RuntimeManager;
-use persistence::{DeploymentUpdater, SecretGetter, SecretRecorder, State};
+use persistence::{SecretGetter, SecretRecorder, State};
 use tokio::sync::{mpsc, Mutex};
+use tracing::error;
 
 use self::{deploy_layer::LogRecorder, gateway_client::BuildQueueClient};
 
@@ -179,3 +182,88 @@ impl DeploymentManager {
 
 type RunSender = mpsc::Sender<run::Built>;
 type RunReceiver = mpsc::Receiver<run::Built>;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Deployment {
+    pub id: Ulid,
+    pub service_id: Ulid,
+    pub state: State,
+    pub last_update: DateTime<Utc>,
+    pub address: Option<SocketAddr>,
+    pub is_next: bool,
+    pub git_commit_hash: Option<String>,
+    pub git_commit_message: Option<String>,
+    pub git_branch: Option<String>,
+    pub git_dirty: Option<bool>,
+}
+
+impl FromRow<'_, SqliteRow> for Deployment {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        let address = if let Some(address_str) = row.try_get::<Option<String>, _>("address")? {
+            match SocketAddr::from_str(&address_str) {
+                Ok(address) => Some(address),
+                Err(err) => {
+                    error!(error = %err, "failed to parse address from DB");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        Ok(Self {
+            id: Ulid::from_string(row.try_get("id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            service_id: Ulid::from_string(row.try_get("service_id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            state: row.try_get("state")?,
+            last_update: row.try_get("last_update")?,
+            address,
+            is_next: row.try_get("is_next")?,
+            git_commit_hash: row.try_get("git_commit_hash")?,
+            git_commit_message: row.try_get("git_commit_message")?,
+            git_branch: row.try_get("git_branch")?,
+            git_dirty: row.try_get("git_dirty")?,
+        })
+    }
+}
+
+/// Update the details of a deployment
+#[async_trait]
+pub trait DeploymentUpdater: Clone + Send + Sync + 'static {
+    type Err: std::error::Error + Send;
+
+    /// Set the address for a deployment
+    async fn set_address(&self, id: &Ulid, address: &SocketAddr) -> Result<(), Self::Err>;
+
+    /// Set if a deployment is build on shuttle-next
+    async fn set_is_next(&self, id: &Ulid, is_next: bool) -> Result<(), Self::Err>;
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct DeploymentState {
+    pub id: Ulid,
+    pub state: State,
+    pub last_update: DateTime<Utc>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct DeploymentRunnable {
+    pub id: Ulid,
+    pub service_name: String,
+    pub service_id: Ulid,
+    pub is_next: bool,
+}
+
+impl FromRow<'_, SqliteRow> for DeploymentRunnable {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            id: Ulid::from_string(row.try_get("id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            service_name: row.try_get("service_name")?,
+            service_id: Ulid::from_string(row.try_get("service_id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            is_next: row.try_get("is_next")?,
+        })
+    }
+}

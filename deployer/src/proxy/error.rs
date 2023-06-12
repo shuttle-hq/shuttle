@@ -14,7 +14,7 @@ pub enum Error {
     #[error("Streaming error: {0}")]
     Streaming(#[from] axum::Error),
     #[error("Persistence failure: {0}")]
-    Persistence(#[from] crate::engine::persistence::PersistenceError),
+    Persistence(#[from] crate::deployment::persistence::PersistenceError),
     #[error("Failed to convert {from} to {to}")]
     Convert {
         from: String,

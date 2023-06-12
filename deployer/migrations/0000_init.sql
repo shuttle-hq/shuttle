@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS deployments (
 
 CREATE TABLE IF NOT EXISTS services (
   id TEXT PRIMARY KEY,
-  service_name TEXT NOT NULL,
+  name TEXT NOT NULL,
   state_variant TEXT NOT NULL,
   state JSON NOT NULL,
 );

@@ -3,4 +3,3 @@ pub mod driver;
 pub mod error;
 pub mod machine;
 pub mod service;
-pub mod state;

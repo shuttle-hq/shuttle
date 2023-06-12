@@ -1,35 +1,32 @@
+use std::fmt::Display;
+
+use async_trait::async_trait;
 use bollard::{
     container::{Config, CreateContainerOptions},
+    errors::Error as DockerError,
     service::ContainerInspectResponse,
 };
+use futures::TryFutureExt;
 use portpicker::pick_unused_port;
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::project::idle_minutes;
+use tracing::{debug, instrument};
 
-use crate::project::{
-    docker::{ContainerSettings, DockerContext},
-    state::error::Error,
+use crate::{
+    deserialize_json,
+    project::{
+        docker::{ContainerInspectResponseExt, ContainerSettings, DockerContext},
+        machine::State,
+        service::error::Error,
+    },
 };
 
-use super::error::ProjectError;
-
-macro_rules! deserialize_json {
-    {$ty:ty: $($json:tt)+} => {{
-        let __ty_json = serde_json::json!($($json)+);
-        serde_json::from_value::<$ty>(__ty_json).unwrap()
-    }};
-    {$($json:tt)+} => {{
-        let __ty_json = serde_json::json!($($json)+);
-        serde_json::from_value(__ty_json).unwrap()
-    }}
-}
+use super::{attaching::ServiceAttaching, errored::ServiceErrored};
 
 // TODO: We need to send down the runtime_manager from the deployer-alpha
 // Add the fields that are present in Built to the `ServiceCreating` (they will be persisted, maybe not all of them should be passed)
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceCreating {
-    /// The service name
-    service_name: String,
     /// The service Ulid
     service_id: String,
     /// Override the default image (specified in the args to this gateway)
@@ -46,14 +43,8 @@ pub struct ServiceCreating {
 }
 
 impl ServiceCreating {
-    pub fn new(
-        service_name: String,
-        service_id: String,
-        initial_key: String,
-        idle_minutes: u64,
-    ) -> Self {
+    pub fn new(service_id: String, idle_minutes: u64) -> Self {
         Self {
-            service_name,
             service_id,
             image: None,
             from: None,
@@ -65,15 +56,12 @@ impl ServiceCreating {
     pub fn from_container(
         container: ContainerInspectResponse,
         recreate_count: usize,
-    ) -> Result<Self, ProjectError> {
-        let service_name = container.service_name();
+    ) -> Result<Self, ServiceErrored> {
         let service_id = container.service_id()?;
         let idle_minutes = container.idle_minutes();
-        let initial_key = container.initial_key()?;
 
         Ok(Self {
-            service_name,
-            service_id,
+            service_id: service_id.to_string(),
             image: None,
             from: Some(container),
             recreate_count,
@@ -106,20 +94,17 @@ impl ServiceCreating {
     fn generate_container_config<C: DockerContext>(
         &self,
         ctx: &C,
-    ) -> (CreateContainerOptions<String>, Config<String>) {
+    ) -> Result<(CreateContainerOptions<String>, Config<String>), Error> {
         let ContainerSettings {
             image: default_image,
             prefix,
             provisioner_host,
             auth_uri,
-            fqdn: public,
             ..
         } = ctx.container_settings();
 
         let Self {
-            initial_key,
             service_id,
-            fqdn,
             image,
             idle_minutes,
             ..
@@ -134,7 +119,7 @@ impl ServiceCreating {
             Some(port) => port,
             None => {
                 return Err(Error::RuntimePrepare(
-                    "could not find a free port to deploy service on".to_string(),
+                    "could not find a free port to deploy the service on".to_string(),
                 ))
             }
         };
@@ -146,7 +131,7 @@ impl ServiceCreating {
             .unwrap_or_else(|| {
                 deserialize_json!({
                     "Image": image.as_ref().unwrap_or(default_image),
-                    "Hostname": format!("{prefix}{service_id}"),
+                    "Hostname": format!("{prefix}{service_id}"), // TODO: add volumes migration APIs
                     "Labels": {
                         "shuttle.prefix": prefix,
                         "shuttle.service_id": service_id,
@@ -171,7 +156,7 @@ impl ServiceCreating {
         config.host_config = deserialize_json!({
             "Mounts": [{
                 "Target": "/opt/shuttle",
-                "Source": format!("{prefix}{project_name}_vol"),
+                "Source": format!("{prefix}{service_id}_vol"),
                 "Type": "volume"
             }],
             // https://docs.docker.com/config/containers/resource_constraints/#memory
@@ -189,17 +174,17 @@ Config: {config:#?}
 "
         );
 
-        (create_container_options, config)
+        Ok((create_container_options, config))
     }
 }
 
 #[async_trait]
-impl<Ctx> State<Ctx> for ProjectCreating
+impl<Ctx> State<Ctx> for ServiceCreating
 where
     Ctx: DockerContext,
 {
-    type Next = ProjectAttaching;
-    type Error = ProjectError;
+    type Next = ServiceAttaching;
+    type Error = ServiceErrored;
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
@@ -213,17 +198,18 @@ where
             // Otherwise create it
             .or_else(|err| async move {
                 if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 404) {
-                    let (opts, config) = self.generate_container_config(ctx);
+                    let (opts, config) = self.generate_container_config(ctx).map_err(|err| ServiceErrored::internal(err.to_string()))?;
                     ctx.docker()
                         .create_container(Some(opts), config)
                         .and_then(|_| ctx.docker().inspect_container(&container_name, None))
                         .await
+                        .map_err(ServiceErrored::from)
                 } else {
-                    Err(err)
+                    Err(ServiceErrored::from(err))
                 }
             })
             .await?;
-        Ok(ProjectAttaching {
+        Ok(ServiceAttaching {
             container,
             recreate_count,
         })

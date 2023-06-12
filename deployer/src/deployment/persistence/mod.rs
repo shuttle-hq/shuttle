@@ -1,6 +1,4 @@
-use crate::engine::deploy_layer::{self, LogRecorder, LogType};
-use crate::engine::ActiveDeploymentsGetter;
-use crate::proxy::AddressGetter;
+use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
 use error::{Error, Result};
 use sqlx::QueryBuilder;
 
@@ -17,17 +15,16 @@ use tracing::{error, instrument, trace};
 use uuid::Uuid;
 
 use self::dal::Dal;
-pub use self::deployment::{Deployment, DeploymentState, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
 pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
 pub use self::state::State;
 pub use self::user::User;
-use deployment::DeploymentRunnable;
+
+use super::Deployment;
 
 pub mod dal;
-pub mod deployment;
 mod error;
 pub mod log;
 mod secret;
@@ -38,7 +35,7 @@ mod user;
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[derive(Clone)]
-pub struct Persistence<D: Dal + Send + Sync + 'static> {
+pub struct Persistence<D: Dal + 'static> {
     dal: D,
     log_send: crossbeam_channel::Sender<deploy_layer::Log>,
     stream_log_send: Sender<deploy_layer::Log>,
@@ -62,7 +59,7 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
                 match log.r#type {
                     LogType::Event => {
                         dal_cloned
-                            .insert_log(log.clone())
+                            .insert_log(log.clone().into())
                             .await
                             .unwrap_or_else(|error| {
                                 error!(
@@ -90,7 +87,8 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
                                     "failed to insert state log"
                                 )
                             });
-                        dal.update_deployment_state(log.clone())
+                        dal_cloned
+                            .update_deployment_state(log.clone())
                             .await
                             .unwrap_or_else(|error| {
                                 error!(
@@ -319,13 +317,13 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
 //         .map_err(Error::from)
 // }
 
-// impl LogRecorder for Persistence {
-//     fn record(&self, log: deploy_layer::Log) {
-//         self.log_send
-//             .send(log)
-//             .expect("failed to move log to async thread");
-//     }
-// }
+impl<D: Dal + 'static> LogRecorder for Persistence<D> {
+    fn record(&self, log: deploy_layer::Log) {
+        self.log_send
+            .send(log)
+            .expect("failed to move log to async thread");
+    }
+}
 
 // #[async_trait::async_trait]
 // impl SecretRecorder for Persistence {

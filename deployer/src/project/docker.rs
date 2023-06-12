@@ -1,8 +1,12 @@
 use async_trait::async_trait;
 use bollard::{errors::Error as DockerError, service::ContainerInspectResponse, Docker};
 use http::Uri;
+use shuttle_common::models::project::IDLE_MINUTES;
+use ulid::Ulid;
 
-use super::machine::Refresh;
+use crate::safe_unwrap;
+
+use super::{machine::Refresh, service::state::errored::ServiceErrored};
 
 #[derive(Debug, Clone)]
 pub struct ContextArgs {
@@ -152,5 +156,58 @@ where
         ctx.docker()
             .inspect_container(self.id.as_ref().unwrap(), None)
             .await
+    }
+}
+
+pub trait ContainerInspectResponseExt {
+    fn container(&self) -> &ContainerInspectResponse;
+
+    fn service_id(&self) -> Result<Ulid, ServiceErrored> {
+        let container = self.container();
+
+        Ulid::from_string(safe_unwrap!(container
+            .config
+            .labels
+            .get("shuttle.service_id")))
+        .map_err(|err| ServiceErrored::internal(err.to_string()))
+    }
+
+    fn idle_minutes(&self) -> u64 {
+        let container = self.container();
+
+        if let Some(config) = &container.config {
+            if let Some(labels) = &config.labels {
+                if let Some(idle_minutes) = labels.get("shuttle.idle_minutes") {
+                    return idle_minutes.parse::<u64>().unwrap_or(IDLE_MINUTES);
+                }
+            }
+        }
+
+        IDLE_MINUTES
+    }
+
+    fn find_arg_and_then<'s, F, O>(&'s self, find: &str, and_then: F) -> Result<O, ServiceErrored>
+    where
+        F: FnOnce(&'s str) -> O,
+        O: 's,
+    {
+        let mut args = self.args()?.iter();
+        let out = if args.any(|arg| arg.as_str() == find) {
+            args.next().map(|s| and_then(s.as_str()))
+        } else {
+            None
+        };
+        out.ok_or_else(|| ServiceErrored::internal(format!("no such argument: {find}")))
+    }
+
+    fn args(&self) -> Result<&Vec<String>, ServiceErrored> {
+        let container = self.container();
+        Ok(safe_unwrap!(container.args))
+    }
+}
+
+impl ContainerInspectResponseExt for ContainerInspectResponse {
+    fn container(&self) -> &ContainerInspectResponse {
+        self
     }
 }

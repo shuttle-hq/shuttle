@@ -1,10 +1,13 @@
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
-use engine::persistence::{dal::Dal, Service};
-use engine::persistence::{Deployment, Persistence, State};
+use deployment::persistence::{dal::Dal, Service};
+use deployment::persistence::{Persistence, State};
+use deployment::Deployment;
 use error::Result;
 use http::Uri;
 use project::driver::Built;
+use project::service::state::creating::ServiceCreating;
+use project::service::ServiceState;
 use runtime_manager::RuntimeManager;
 use shuttle_common::{
     backends::{
@@ -17,15 +20,16 @@ use shuttle_proto::deployer::{
     deployer_server::{Deployer, DeployerServer},
     DeployRequest, DeployResponse,
 };
+use sqlx::types::Json as SqlxJson;
 use tonic::{transport::Server, Response, Result as TonicResult};
 use tracing::info;
 use ulid::Ulid;
 
-use crate::engine::{gateway_client::GatewayClient, DeploymentManager};
+use crate::deployment::{gateway_client::GatewayClient, DeploymentManager};
 
 pub mod account;
 pub mod args;
-pub mod engine;
+pub mod deployment;
 pub mod error;
 pub mod project;
 pub mod proxy;
@@ -103,11 +107,13 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             .expect("to serve on address")
     }
 
-    pub async fn push_deployment(&self, req: DeployRequest) -> Result<String> {
+    pub async fn push_deployment(&self, req: DeployRequest, state: ServiceState) -> Result<String> {
         // Insert the service if not present.
         let service = Service {
             id: Ulid::from(req.service_id),
             name: req.service_name,
+            state_variant: state.to_string(),
+            state,
         };
         self.persistence
             .dal()
@@ -156,13 +162,54 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
     ) -> TonicResult<tonic::Response<DeployResponse>, tonic::Status> {
         request.verify(Scope::DeploymentPush)?;
         let request = request.into_inner();
-        // Propagate the failure as an internal error, with the message being the error to string.
-        // We're protected from bubling up sensitive info because the error thrown is Dal which is
-        // `Display` controlled.
+        // Propagate the failure as an internal error, with the message being the displayed error.
+        // We're protected from bubling up sensitive info because the error thrown is a DalError
+        // which is `Display` controlled.
+        let state = SqlxJson(ServiceState::Creating(ServiceCreating::new(
+            request.service_id,
+            u64::from(request.idle_minutes),
+        )));
         let deployment_id = self
-            .push_deployment(request)
+            .push_deployment(request, state)
             .await
             .map_err(|err| tonic::Status::new(tonic::Code::Internal, err.to_string()))?;
+        let service_id: Ulid = Ulid::from_string(request.service_id.as_str())
+            .map_err(tonic::Status::invalid_argument("Invalid service id."))?;
+
+        // If the service already lives in the persistence.
+        if let Some(state) = self.persistence.dal().service_state().await? {
+            // But is in the destroyed state.
+            if state.is_destroyed() {
+                // Recreate it.
+                let mut creating = ServiceCreating::new_with_random_initial_key(
+                    request.service_name,
+                    request.idle_minutes,
+                );
+
+                let project = ServiceState::Creating(creating);
+                self.persistence
+                    .dal()
+                    .update_service_state(&service_id, state)
+                    .await?;
+                Ok(project)
+            } else {
+                // Otherwise it already exists
+                Err(tonic::Status::already_exists(
+                    "The service already exists in deployer persistence, skipping its creation.",
+                ))
+            }
+        } else {
+            // Insert the service.
+            self.persistence
+                .dal()
+                .insert_service_if_absent(Service {
+                    id: &service_id,
+                    name: "".to_string(),
+                    state_variant: state.to_string(),
+                    state,
+                })
+                .await?;
+        }
         Ok(Response::new(DeployResponse { deployment_id }))
     }
 }

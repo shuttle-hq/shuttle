@@ -99,6 +99,7 @@ impl GatewayClient {
     }
 }
 
+// TODO: Clarify what's about the `get_slote` and `release_slot` methods and if they need to be used.
 #[async_trait::async_trait]
 impl BuildQueueClient for GatewayClient {
     async fn get_slot(&self, id: Ulid) -> Result<bool, Error> {

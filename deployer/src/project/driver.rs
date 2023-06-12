@@ -10,6 +10,7 @@ use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
+    deployment::State,
     storage_manager::ArtifactsStorageManager,
 };
 
@@ -24,12 +25,12 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use super::machine::State;
 use crate::{
-    engine::persistence::{DeploymentUpdater, SecretGetter},
-    error::{Error, Result},
+    deployment::{persistence::SecretGetter, DeploymentUpdater},
     runtime_manager::RuntimeManager,
 };
+
+use super::error::{Error, Result};
 
 type RunSender = mpsc::Sender<Built>;
 type RunReceiver = mpsc::Receiver<Built>;
@@ -43,21 +44,22 @@ pub async fn task(
     active_deployment_getter: impl ActiveDeploymentsGetter,
     secret_getter: impl SecretGetter,
     storage_manager: ArtifactsStorageManager,
+    claim: Option<Claim>,
 ) {
     info!("Run task started");
 
     while let Some(built) = recv.recv().await {
-        let id = built.id;
-
-        info!("Built deployment at the front of run queue: {id}");
+        let cloned_claim = claim.clone();
+        let deployment_id = built.id.clone();
+        info!("Built deployment at the front of run queue: {deployment_id}");
 
         let deployment_updater = deployment_updater.clone();
         let secret_getter = secret_getter.clone();
         let storage_manager = storage_manager.clone();
 
         let old_deployments_killer = kill_old_deployments(
-            built.service_id,
-            id,
+            built.service_id.clone(),
+            built.id.clone(),
             active_deployment_getter.clone(),
             runtime_manager.clone(),
         );
@@ -66,16 +68,16 @@ pub async fn task(
 
             if let Some(response) = response {
                 match StopReason::from_i32(response.reason).unwrap_or_default() {
-                    StopReason::Request => stopped_cleanup(&id),
-                    StopReason::End => completed_cleanup(&id),
+                    StopReason::Request => stopped_cleanup(&deployment_id),
+                    StopReason::End => completed_cleanup(&deployment_id),
                     StopReason::Crash => crashed_cleanup(
-                        &id,
+                        &deployment_id,
                         Error::Run(anyhow::Error::msg(response.message).into()),
                     ),
                 }
             } else {
                 crashed_cleanup(
-                    &id,
+                    &deployment_id,
                     Error::Runtime(anyhow::anyhow!(
                         "stop subscribe channel stopped unexpectedly"
                     )),
@@ -90,7 +92,7 @@ pub async fn task(
             });
             let span = debug_span!("runner");
             span.set_parent(parent_cx);
-
+            let deployment_id = built.id.clone();
             async move {
                 if let Err(err) = built
                     .handle(
@@ -100,10 +102,11 @@ pub async fn task(
                         deployment_updater,
                         old_deployments_killer,
                         cleanup,
+                        cloned_claim,
                     )
                     .await
                 {
-                    start_crashed_cleanup(&id, err)
+                    start_crashed_cleanup(&deployment_id, err)
                 }
 
                 info!("deployment done");
@@ -116,8 +119,8 @@ pub async fn task(
 
 #[instrument(skip(active_deployment_getter, runtime_manager))]
 async fn kill_old_deployments(
-    service_id: Uuid,
-    deployment_id: Uuid,
+    service_id: Ulid,
+    deployment_id: Ulid,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
 ) -> Result<()> {
@@ -142,17 +145,17 @@ async fn kill_old_deployments(
 }
 
 #[instrument(skip(_id), fields(id = %_id, state = %State::Completed))]
-fn completed_cleanup(_id: &Uuid) {
+fn completed_cleanup(_id: &Ulid) {
     info!("service finished all on its own");
 }
 
 #[instrument(skip(_id), fields(id = %_id, state = %State::Stopped))]
-fn stopped_cleanup(_id: &Uuid) {
+fn stopped_cleanup(_id: &Ulid) {
     info!("service was stopped by the user");
 }
 
 #[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
-fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
+fn crashed_cleanup(_id: &Ulid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
         "service encountered an error"
@@ -160,7 +163,7 @@ fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
 }
 
 #[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
-fn start_crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
+fn start_crashed_cleanup(_id: &Ulid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
         "service startup encountered an error"
@@ -173,15 +176,15 @@ pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
 
     async fn get_active_deployments(
         &self,
-        service_id: &Uuid,
-    ) -> std::result::Result<Vec<Uuid>, Self::Err>;
+        service_id: &Ulid,
+    ) -> std::result::Result<Vec<Ulid>, Self::Err>;
 }
 
 #[derive(Clone, Debug)]
 pub struct Built {
     pub id: Ulid,
     pub service_name: String,
-    pub service_id: Uuid,
+    pub service_id: Ulid,
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
 }
@@ -197,11 +200,14 @@ impl Built {
         deployment_updater: impl DeploymentUpdater,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
+        claim: Option<Claim>,
     ) -> Result<()> {
         // For alpha this is the path to the users project with an embedded runtime.
         // For shuttle-next this is the path to the compiled .wasm file, which will be
         // used in the load request.
-        let executable_path = storage_manager.deployment_executable_path(&self.id)?;
+        let executable_path = storage_manager
+            .deployment_executable_path(&self.id)
+            .map_err(Error::IoError)?;
 
         let port = match pick_unused_port() {
             Some(port) => port,
@@ -237,7 +243,7 @@ impl Built {
             executable_path.clone(),
             secret_getter,
             runtime_client.clone(),
-            self.claim,
+            claim,
         )
         .await?;
 
@@ -256,7 +262,7 @@ impl Built {
 
 async fn load(
     service_name: String,
-    service_id: Uuid,
+    service_id: Ulid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
@@ -335,7 +341,7 @@ async fn load(
 
 #[instrument(skip(runtime_client, deployment_updater, cleanup), fields(state = %State::Running))]
 async fn run(
-    id: Uuid,
+    id: Ulid,
     service_name: String,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     address: SocketAddr,

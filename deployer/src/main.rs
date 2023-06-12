@@ -8,7 +8,7 @@ use shuttle_common::backends::{
 use shuttle_deployer::{
     args::Args,
     dal::Sqlite,
-    engine::persistence::{dal::Sqlite, Persistence},
+    deployment::persistence::{dal::Sqlite, Persistence},
     runtime_manager::RuntimeManager,
     DeployerService,
 };

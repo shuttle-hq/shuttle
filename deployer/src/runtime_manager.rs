@@ -10,7 +10,7 @@ use tonic::transport::Channel;
 use tracing::{debug, info, trace};
 use ulid::Ulid;
 
-use crate::engine::deploy_layer;
+use crate::deployment::deploy_layer;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 

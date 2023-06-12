@@ -29,7 +29,10 @@ use tracing_subscriber::Layer;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use super::persistence::{self, DeploymentState, LogLevel, State};
+use super::{
+    persistence::{self, LogLevel, State},
+    DeploymentState,
+};
 
 /// Records logs for the deployment progress
 pub trait LogRecorder: Clone + Send + 'static {
@@ -84,21 +87,6 @@ impl From<Log> for persistence::Log {
             line: log.line,
             target: log.target,
             fields,
-        }
-    }
-}
-
-impl From<Log> for shuttle_common::LogItem {
-    fn from(log: Log) -> Self {
-        Self {
-            id: log.id,
-            timestamp: log.timestamp,
-            state: log.state.into(),
-            level: log.level.into(),
-            file: log.file,
-            line: log.line,
-            target: log.target,
-            fields: serde_json::to_vec(&log.fields).unwrap(),
         }
     }
 }
@@ -255,7 +243,7 @@ where
 /// Used to keep track of the current state a deployment scope is in
 #[derive(Debug, Default)]
 struct ScopeDetails {
-    id: Uuid,
+    id: Ulid,
     state: State,
 }
 
@@ -296,7 +284,7 @@ impl Visit for NewStateVisitor {
         if field.name() == Self::STATE_IDENT {
             self.details.state = State::from_str(&format!("{value:?}")).unwrap_or_default();
         } else if field.name() == Self::ID_IDENT {
-            self.details.id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
+            self.details.id = Ulid::from_string(&format!("{value:?}")).unwrap_or_default();
         }
     }
 }

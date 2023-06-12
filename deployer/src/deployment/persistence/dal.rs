@@ -4,21 +4,26 @@ use std::str::FromStr;
 
 use axum::async_trait;
 use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
-use sqlx::{migrate::Migrator, SqlitePool};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow};
+use sqlx::types::Json as SqlxJson;
+use sqlx::{migrate::Migrator, Row, SqlitePool};
+use sqlx::{query, FromRow};
 use thiserror::Error;
 use tracing::{error, info};
 use ulid::Ulid;
 
-use super::deployment::DeploymentRunnable;
-use super::{Deployment, DeploymentState, Log, Service, State};
+use crate::deployment::deploy_layer::Log;
+use crate::deployment::{Deployment, DeploymentRunnable, DeploymentState};
+use crate::project::service::ServiceState;
+
+use super::{Service, State};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[derive(Error, Debug)]
 pub enum DalError {
     Sqlx(#[from] sqlx::Error),
-    ProjectNotFound,
+    ServiceNotFound,
 }
 
 // We are not using the `thiserror`'s `#[error]` syntax to prevent sensitive details from bubbling up to the users.
@@ -31,7 +36,7 @@ impl fmt::Display for DalError {
 
                 "failed to interact with recorder"
             }
-            DalError::ProjectNotFound => "the queried project couldn't be found",
+            DalError::ServiceNotFound => "service not found",
         };
 
         write!(f, "{msg}")
@@ -39,20 +44,18 @@ impl fmt::Display for DalError {
 }
 
 #[async_trait]
-pub trait Dal: Clone {
+pub trait Dal: Send + Clone {
     // Have the dal connected to the log service.
-    async fn insert_log(&self, log: impl Into<Log>) -> Result<(), DalError> {
-        todo!()
-    }
+    async fn insert_log(&self, log: Log) -> Result<(), DalError>;
 
     // Get a service by id
-    async fn service(&self, id: &String) -> Result<Service, DalError>;
+    async fn service(&self, id: &Ulid) -> Result<Option<Service>, DalError>;
 
     // Insert a service if absent
     async fn insert_service_if_absent(&self, service: Service) -> Result<bool, DalError>;
 
     // Insert a new deployment
-    async fn insert_deployment(&self, deployment: impl Into<Deployment>) -> Result<(), DalError>;
+    async fn insert_deployment(&self, deployment: Deployment) -> Result<(), DalError>;
 
     // Update all invalid states inside persistence to `Stopped`.
     async fn update_invalid_states_to_stopped(&self) -> Result<(), DalError>;
@@ -60,17 +63,23 @@ pub trait Dal: Clone {
     // Get runnable deployments
     async fn runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>, DalError>;
 
+    async fn service_state(&self, service_id: &Ulid) -> Result<Option<ServiceState>, DalError>;
+
     // Update a deployment state
     async fn update_deployment_state(
         &self,
         state: impl Into<DeploymentState>,
     ) -> Result<(), DalError>;
-    /// Fetch project state if project exists.
-    async fn service_state(&self, service_id: &Ulid) -> Result<(), DalError>;
-    /// Update the project information.
-    async fn update_service_state(&self, service_id: &Ulid, project: ()) -> Result<(), DalError>;
+
+    // Update the project information.
+    async fn update_service_state(
+        &self,
+        service_id: &Ulid,
+        state: ServiceState,
+    ) -> Result<(), DalError>;
 }
 
+#[derive(Clone)]
 pub struct Sqlite {
     pool: SqlitePool,
 }
@@ -119,50 +128,65 @@ impl Sqlite {
 
 #[async_trait]
 impl Dal for Sqlite {
-    async fn service_state(&self, service_id: &Ulid) -> Result<(), DalError> {
+    async fn insert_log(&self, log: Log) -> Result<(), DalError> {
         Ok(())
     }
 
-    async fn service(&self, service_id: &Ulid) -> Result<Option<Service>, DalError> {
-        sqlx::query_as("SELECT * FROM services WHERE id = ?")
-            .bind(service_id)
+    async fn service_state(&self, service_id: &Ulid) -> Result<Option<ServiceState>, DalError> {
+        query(
+            r#"
+            SELECT state
+            FROM services
+            WHERE (id = ?1)
+            "#,
+        )
+        .bind(&service_id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(DalError::from)
+        .map(|row| row.map(|inner| inner.get::<SqlxJson<ServiceState>, _>("state").0))
+    }
+
+    async fn service(&self, id: &Ulid) -> Result<Option<Service>, DalError> {
+        let row = sqlx::query("SELECT * FROM services WHERE id = ?")
+            .bind(id.to_string())
             .fetch_optional(&self.pool)
             .await
-            .map_err(DalError::from)
+            .map_err(DalError::from)?
+            .ok_or(DalError::ServiceNotFound)?;
+        Service::from_row(&row)
+            .map(|service| Some(service))
+            .map_err(DalError::Sqlx)
     }
 
-    async fn insert_service_if_absent(
-        &self,
-        service_name: String,
-        id: Ulid,
-    ) -> Result<bool, DalError> {
-        let service = Service {
+    async fn insert_service_if_absent(&self, service: Service) -> Result<bool, DalError> {
+        let Service {
             id,
-            name: service_name,
-        };
+            name,
+            state_variant,
+            state,
+        } = service;
 
-        let service_id = Ulid::from(service.id.clone);
-        if self.service(&service_id).is_none() {
-            sqlx::query("INSERT INTO services (id, name) VALUES (?, ?)")
-                .bind(service.id)
-                .bind(&service.name)
-                .execute(&self.pool)
-                .await?;
-            Ok(true)
+        if self.service(&id).await?.is_some() {
+            return Ok(false);
         }
 
-        Ok(false)
+        sqlx::query("INSERT INTO services (id, name, state_variant, state) VALUES (?, ?, ?, ?)")
+            .bind(id.to_string())
+            .bind(name)
+            .bind(state_variant)
+            .bind(SqlxJson(state))
+            .execute(&self.pool)
+            .await?;
+        Ok(true)
     }
 
-    async fn insert_deployment(&self, deployment: impl Into<Deployment>) -> Result<(), DalError> {
-        let deployment = deployment.into();
-
+    async fn insert_deployment(&self, deployment: Deployment) -> Result<(), DalError> {
         sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update, address, is_next, git_commit_hash, git_commit_message, git_branch, git_dirty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO deployments (id, service_id, state, last_update, address, is_next, git_commit_hash, git_commit_message, git_branch, git_dirty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .bind(deployment.id)
-        .bind(deployment.service_id)
-        .bind(deployment.state_variant)
+        .bind(deployment.id.to_string())
+        .bind(deployment.service_id.to_string())
         .bind(deployment.state)
         .bind(deployment.last_update)
         .bind(deployment.address.map(|socket| socket.to_string()))
@@ -191,8 +215,8 @@ impl Dal for Sqlite {
     }
 
     async fn runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>, DalError> {
-        sqlx::query_as(
-            r#"SELECT d.id, service_id, s.name AS service_name, d.is_next
+        Ok(sqlx::query_as(
+            r#"SELECT d.id as id, service_id, s.name AS service_name, d.is_next as is_next
                     FROM deployments AS d
                     JOIN services AS s ON s.id = d.service_id
                     WHERE d.state = ?
@@ -201,7 +225,10 @@ impl Dal for Sqlite {
         .bind(State::Running)
         .fetch_all(&self.pool)
         .await
-        .map_err(DalError::from)
+        .map_err(DalError::from)?
+        .iter()
+        .map(|dr| DeploymentRunnable::from_row(&dr))
+        .collect::<Vec<DeploymentRunnable>>())
     }
 
     async fn update_deployment_state(&self, state: impl Into<Log>) -> Result<(), DalError> {
@@ -216,34 +243,26 @@ impl Dal for Sqlite {
             .map_err(|e| DalError::from(e))
     }
 
-    // async fn account(&self, service_id: &Ulid) -> Result<AccountName, DalError> {
-    //     Ok(
-    //         query("SELECT account_name FROM projects WHERE service_id = ?1")
-    //             .bind(service_id.to_string())
-    //             .fetch_optional(&self.pool)
-    //             .await?
-    //             .ok_or(DalError::ProjectNotFound)?
-    //             .get("account_name"),
-    //     )
-    // }
+    async fn update_service_state(
+        &self,
+        service_id: &Ulid,
+        state: ServiceState,
+    ) -> Result<(), DalError> {
+        let query = match state {
+            ServiceState::Creating(inner) => {
+                query("UPDATE services SET state = ?1 WHERE service_id = ?2")
+                    .bind(SqlxJson(state))
+                    .bind(service_id.to_string())
+            }
+            _ => query("UPDATE projects SET state = ?1 WHERE service_id = ?2")
+                .bind(SqlxJson(project))
+                .bind(service_id.to_string()),
+        };
 
-    async fn update_service_state(&self, service_id: &Ulid, project: ()) -> Result<(), DalError> {
-        // let query = match project {
-        //     ServiceState::Creating(state) => {
-        //         query("UPDATE projects SET initial_key = ?1, state = ?2 WHERE service_id = ?3")
-        //             .bind(state.initial_key())
-        //             .bind(SqlxJson(project))
-        //             .bind(service_id.to_string())
-        //     }
-        //     _ => query("UPDATE projects SET state = ?1 WHERE service_id = ?2")
-        //         .bind(SqlxJson(project))
-        //         .bind(service_id.to_string()),
-        // };
-
-        // query
-        //     .execute(&self.pool)
-        //     .await
-        //     .map_err(|err| DalError::Sqlx(err))?;
+        query
+            .execute(&self.pool)
+            .await
+            .map_err(|err| DalError::Sqlx(err))?;
 
         Ok(())
     }

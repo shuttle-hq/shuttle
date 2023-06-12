@@ -23,10 +23,9 @@ use tonic::{transport::Channel, Code};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
-use uuid::Uuid;
 
 use crate::{
-    deployment::{persistence::SecretGetter, DeploymentUpdater},
+    deployment::{persistence::dal::Dal, DeploymentUpdater},
     runtime_manager::RuntimeManager,
 };
 
@@ -37,30 +36,25 @@ type RunReceiver = mpsc::Receiver<Built>;
 
 /// Run a task which takes runnable deploys from a channel and starts them up on our runtime
 /// A deploy is killed when it receives a signal from the kill channel
-pub async fn task(
+pub async fn task<D: Dal + Sync + 'static>(
     mut recv: RunReceiver,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
-    deployment_updater: impl DeploymentUpdater,
-    active_deployment_getter: impl ActiveDeploymentsGetter,
-    secret_getter: impl SecretGetter,
     storage_manager: ArtifactsStorageManager,
+    dal: D,
     claim: Option<Claim>,
 ) {
     info!("Run task started");
 
     while let Some(built) = recv.recv().await {
-        let cloned_claim = claim.clone();
         let deployment_id = built.id.clone();
+        let dal_cloned = dal.clone();
         info!("Built deployment at the front of run queue: {deployment_id}");
 
-        let deployment_updater = deployment_updater.clone();
-        let secret_getter = secret_getter.clone();
         let storage_manager = storage_manager.clone();
-
         let old_deployments_killer = kill_old_deployments(
             built.service_id.clone(),
             built.id.clone(),
-            active_deployment_getter.clone(),
+            dal_cloned,
             runtime_manager.clone(),
         );
         let cleanup = move |response: Option<SubscribeStopResponse>| {
@@ -85,7 +79,8 @@ pub async fn task(
             }
         };
         let runtime_manager = runtime_manager.clone();
-
+        let dal_cloned = dal.clone();
+        let claim_cloned = claim.clone();
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
                 propagator.extract(&built.tracing_context)
@@ -93,16 +88,17 @@ pub async fn task(
             let span = debug_span!("runner");
             span.set_parent(parent_cx);
             let deployment_id = built.id.clone();
+            let dal_cloned_cloned = dal_cloned.clone();
+            let claim_cloned = claim_cloned;
             async move {
                 if let Err(err) = built
                     .handle(
                         storage_manager,
-                        secret_getter,
                         runtime_manager,
-                        deployment_updater,
+                        dal_cloned,
                         old_deployments_killer,
                         cleanup,
-                        cloned_claim,
+                        claim_cloned,
                     )
                     .await
                 {
@@ -117,20 +113,19 @@ pub async fn task(
     }
 }
 
-#[instrument(skip(active_deployment_getter, runtime_manager))]
-async fn kill_old_deployments(
+#[instrument(skip(dal, runtime_manager))]
+async fn kill_old_deployments<D: Dal + Sync + 'static>(
     service_id: Ulid,
     deployment_id: Ulid,
-    active_deployment_getter: impl ActiveDeploymentsGetter,
+    dal: D,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
 ) -> Result<()> {
     let mut guard = runtime_manager.lock().await;
 
-    for old_id in active_deployment_getter
-        .clone()
-        .get_active_deployments(&service_id)
+    for old_id in dal
+        .active_deployments(&service_id)
         .await
-        .map_err(|e| Error::OldCleanup(Box::new(e)))?
+        .map_err(|e| Error::Dal(e))?
         .into_iter()
         .filter(|old_id| old_id != &deployment_id)
     {
@@ -190,14 +185,13 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, storage_manager, secret_getter, runtime_manager, deployment_updater, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(skip(self, storage_manager, runtime_manager, dal, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
-    async fn handle(
+    async fn handle<D: Dal + Sync + 'static>(
         self,
         storage_manager: ArtifactsStorageManager,
-        secret_getter: impl SecretGetter,
         runtime_manager: Arc<Mutex<RuntimeManager>>,
-        deployment_updater: impl DeploymentUpdater,
+        dal: D,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
         claim: Option<Claim>,
@@ -241,7 +235,6 @@ impl Built {
             self.service_name.clone(),
             self.service_id,
             executable_path.clone(),
-            secret_getter,
             runtime_client.clone(),
             claim,
         )
@@ -252,7 +245,7 @@ impl Built {
             self.service_name,
             runtime_client,
             address,
-            deployment_updater,
+            dal,
             cleanup,
         ));
 
@@ -264,7 +257,6 @@ async fn load(
     service_name: String,
     service_id: Ulid,
     executable_path: PathBuf,
-    secret_getter: impl SecretGetter,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Option<Claim>,
 ) -> Result<()> {
@@ -277,20 +269,8 @@ async fn load(
             .unwrap_or_default()
     );
 
-    // Get resources from cache when a claim is not set (ie an idl project is started)
-    let resources = if claim.is_none() {
-        Default::default()
-    } else {
-        Default::default()
-    };
-
-    let secrets = secret_getter
-        .get_secrets(&service_id)
-        .await
-        .map_err(|e| Error::SecretsGet(Box::new(e)))?
-        .into_iter()
-        .map(|secret| (secret.key, secret.value));
-    let secrets = HashMap::from_iter(secrets);
+    // TODO: remove this part
+    let resources = Default::default();
 
     let mut load_request = tonic::Request::new(LoadRequest {
         path: executable_path
@@ -298,8 +278,10 @@ async fn load(
             .into_string()
             .unwrap_or_default(),
         service_name: service_name.clone(),
+        // TODO: must remove the secrets for the load request
         resources,
-        secrets,
+        // TODO: must remove the secrets for the load request
+        secrets: HashMap::new(),
     });
 
     if let Some(claim) = claim {
@@ -339,17 +321,16 @@ async fn load(
     }
 }
 
-#[instrument(skip(runtime_client, deployment_updater, cleanup), fields(state = %State::Running))]
-async fn run(
+#[instrument(skip(runtime_client, dal, cleanup), fields(state = %State::Running))]
+async fn run<D: Dal + Sync + 'static>(
     id: Ulid,
     service_name: String,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     address: SocketAddr,
-    deployment_updater: impl DeploymentUpdater,
+    dal: D,
     cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
 ) {
-    deployment_updater
-        .set_address(&id, &address)
+    dal.set_address(&id, &address)
         .await
         .expect("to set deployment address");
 

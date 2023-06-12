@@ -1,8 +1,5 @@
 use crate::{
-    project::{
-        docker::{ContainerSettings, DockerContext},
-        machine::{Refresh, State},
-    },
+    project::docker::{ContainerSettings, DockerContext},
     safe_unwrap,
 };
 use async_trait::async_trait;
@@ -11,14 +8,18 @@ use bollard::{network::DisconnectNetworkOptions, service::ContainerInspectRespon
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, instrument};
 
-use super::{errored::ServiceErrored, starting::ServiceStarting};
+use super::{
+    errored::ServiceErrored,
+    machine::{Refresh, State},
+    starting::ServiceStarting,
+};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceAttaching {
-    container: ContainerInspectResponse,
+    pub container: ContainerInspectResponse,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default)]
-    recreate_count: usize,
+    pub recreate_count: usize,
 }
 
 #[async_trait]

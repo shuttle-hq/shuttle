@@ -7,19 +7,20 @@ use tokio::time::sleep;
 use tracing::{debug, instrument};
 
 use crate::{
-    project::{docker::DockerContext, machine::State, service::state::starting::ServiceStarting},
+    project::{docker::DockerContext, service::state::starting::ServiceStarting},
     safe_unwrap,
 };
 
 use super::errored::ServiceErrored;
+use super::machine::State;
 
 const MAX_RESTARTS: usize = 5;
 
 /// Special state for when `ProjectStarting` fails to retry it
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceRestarting {
-    container: ContainerInspectResponse,
-    restart_count: usize,
+    pub container: ContainerInspectResponse,
+    pub restart_count: usize,
 }
 
 #[async_trait]

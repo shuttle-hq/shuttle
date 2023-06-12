@@ -6,10 +6,8 @@ use bollard::{
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::{
-    project::{docker::DockerContext, machine::State},
-    safe_unwrap,
-};
+use super::machine::State;
+use crate::{project::docker::DockerContext, safe_unwrap};
 
 use super::{destroyed::ServiceDestroyed, errored::ServiceErrored};
 

@@ -1,10 +1,11 @@
 use std::fmt;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::str::FromStr;
 
 use axum::async_trait;
 use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
 use sqlx::types::Json as SqlxJson;
 use sqlx::{migrate::Migrator, Row, SqlitePool};
 use sqlx::{query, FromRow};
@@ -12,11 +13,10 @@ use thiserror::Error;
 use tracing::{error, info};
 use ulid::Ulid;
 
-use crate::deployment::deploy_layer::Log;
 use crate::deployment::{Deployment, DeploymentRunnable, DeploymentState};
 use crate::project::service::ServiceState;
 
-use super::{Service, State};
+use super::{Log, Service, State};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -66,17 +66,23 @@ pub trait Dal: Send + Clone {
     async fn service_state(&self, service_id: &Ulid) -> Result<Option<ServiceState>, DalError>;
 
     // Update a deployment state
-    async fn update_deployment_state(
-        &self,
-        state: impl Into<DeploymentState>,
-    ) -> Result<(), DalError>;
+    async fn update_deployment_state(&self, state: DeploymentState) -> Result<(), DalError>;
 
     // Update the project information.
     async fn update_service_state(
         &self,
-        service_id: &Ulid,
+        service_id: Ulid,
         state: ServiceState,
     ) -> Result<(), DalError>;
+
+    // Get active deployments
+    async fn active_deployments(&self, service_id: &Ulid) -> Result<Vec<Ulid>, DalError>;
+
+    // Set the deployment address
+    async fn set_address(&self, id: &Ulid, address: &SocketAddr) -> Result<(), DalError>;
+
+    // Set whether is a shuttle-next runtime
+    async fn set_is_next(&self, id: &Ulid, is_next: bool) -> Result<(), DalError>;
 }
 
 #[derive(Clone)]
@@ -215,7 +221,7 @@ impl Dal for Sqlite {
     }
 
     async fn runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>, DalError> {
-        Ok(sqlx::query_as(
+        sqlx::query_as(
             r#"SELECT d.id as id, service_id, s.name AS service_name, d.is_next as is_next
                     FROM deployments AS d
                     JOIN services AS s ON s.id = d.service_id
@@ -225,18 +231,14 @@ impl Dal for Sqlite {
         .bind(State::Running)
         .fetch_all(&self.pool)
         .await
-        .map_err(DalError::from)?
-        .iter()
-        .map(|dr| DeploymentRunnable::from_row(&dr))
-        .collect::<Vec<DeploymentRunnable>>())
+        .map_err(DalError::from)
     }
 
-    async fn update_deployment_state(&self, state: impl Into<Log>) -> Result<(), DalError> {
-        let state = state.into();
+    async fn update_deployment_state(&self, state: DeploymentState) -> Result<(), DalError> {
         sqlx::query("UPDATE deployments SET state = ?, last_update = ? WHERE id = ?")
             .bind(state.state)
             .bind(state.last_update)
-            .bind(state.id)
+            .bind(state.id.to_string())
             .execute(&self.pool)
             .await
             .map(|_| ())
@@ -245,25 +247,52 @@ impl Dal for Sqlite {
 
     async fn update_service_state(
         &self,
-        service_id: &Ulid,
+        service_id: Ulid,
         state: ServiceState,
     ) -> Result<(), DalError> {
-        let query = match state {
-            ServiceState::Creating(inner) => {
-                query("UPDATE services SET state = ?1 WHERE service_id = ?2")
-                    .bind(SqlxJson(state))
-                    .bind(service_id.to_string())
-            }
-            _ => query("UPDATE projects SET state = ?1 WHERE service_id = ?2")
-                .bind(SqlxJson(project))
-                .bind(service_id.to_string()),
-        };
-
-        query
+        let query = query("UPDATE services SET state = ?1 WHERE service_id = ?2")
+            .bind(SqlxJson(state))
+            .bind(service_id.to_string())
             .execute(&self.pool)
             .await
             .map_err(|err| DalError::Sqlx(err))?;
 
         Ok(())
+    }
+
+    async fn active_deployments(&self, service_id: &Ulid) -> Result<Vec<Ulid>, DalError> {
+        let ids: Vec<_> = sqlx::query_as::<_, Deployment>(
+            "SELECT * FROM deployments WHERE service_id = ? AND state = ?",
+        )
+        .bind(service_id.to_string())
+        .bind(State::Running)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|err| DalError::Sqlx(err))?
+        .into_iter()
+        .map(|deployment| deployment.id)
+        .collect();
+
+        Ok(ids)
+    }
+
+    async fn set_address(&self, service_id: &Ulid, address: &SocketAddr) -> Result<(), DalError> {
+        sqlx::query("UPDATE deployments SET address = ? WHERE id = ?")
+            .bind(address.to_string())
+            .bind(service_id.to_string())
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(|err| DalError::Sqlx(err))
+    }
+
+    async fn set_is_next(&self, service_id: &Ulid, is_next: bool) -> Result<(), DalError> {
+        sqlx::query("UPDATE deployments SET is_next = ? WHERE id = ?")
+            .bind(is_next)
+            .bind(service_id.to_string())
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(|err| DalError::Sqlx(err))
     }
 }

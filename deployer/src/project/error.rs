@@ -1,22 +1,38 @@
+use crate::deployment::persistence::dal::DalError;
+use std::{error::Error as StdError, fmt::Formatter};
+
 /// A wrapper to capture any error possible with this service
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("Old cleanup : {0}")]
-    OldCleanup(Box<dyn std::error::Error + Send>),
-    #[error("Run error: {0}")]
     Run(anyhow::Error),
-    #[error("Runtime error: {0}")]
     Runtime(anyhow::Error),
-    #[error("Prepare run: {0}")]
     PrepareRun(String),
-    #[error("IO error: {0}")]
     IoError(std::io::Error),
-    #[error("Secrets get: {0}")]
-    SecretsGet(Box<dyn std::error::Error + Send + Sync>),
-    #[error("Load error: {0}")]
     Load(String),
-    #[error("Start error: {0}")]
     Start(String),
+    TaskInternal,
+    ServiceUnavailable,
+    Dal(DalError),
+    Service(super::service::error::Error),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Self::Run(err) => write!(f, "{}", err),
+            Self::Runtime(err) => write!(f, "{}", err),
+            Self::PrepareRun(msg) => write!(f, "{}", msg),
+            Self::IoError(err) => write!(f, "{}", err),
+            Self::Load(msg) => write!(f, "{}", msg),
+            Self::Start(msg) => write!(f, "{}", msg),
+            Self::TaskInternal => write!(f, "task internal error"),
+            Self::ServiceUnavailable => write!(f, "user service is unavailable"),
+            Self::Dal(_) => write!(f, "persistence error triggered by service state machine"),
+            Self::Service(err) => write!(f, "{}", err),
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl StdError for Error {}

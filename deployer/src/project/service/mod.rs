@@ -1,24 +1,39 @@
 use std::{
+    collections::VecDeque,
+    convert::Infallible,
     fmt::Display,
     net::{IpAddr, SocketAddr},
     time::Duration,
 };
 
-use bollard::service::ContainerInspectResponse;
+use async_trait::async_trait;
+use bollard::errors::Error as DockerError;
+use bollard::service::{ContainerInspectResponse, ContainerStateStatusEnum};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, error, instrument};
 
 use self::{
     error::Error,
     state::{
-        attaching::ServiceAttaching, creating::ServiceCreating, destroyed::ServiceDestroyed,
-        destroying::ServiceDestroying, errored::ServiceErrored, ready::ServiceReady,
-        rebooting::ServiceRebooting, recreating::ServiceRecreating, restarting::ServiceRestarting,
-        started::ServiceStarted, starting::ServiceStarting, stopped::ServiceStopped,
+        attaching::ServiceAttaching,
+        creating::ServiceCreating,
+        destroyed::ServiceDestroyed,
+        destroying::ServiceDestroying,
+        errored::{ServiceErrored, ServiceErroredKind},
+        ready::ServiceReady,
+        readying::ServiceReadying,
+        rebooting::ServiceRebooting,
+        recreating::ServiceRecreating,
+        restarting::ServiceRestarting,
+        started::ServiceStarted,
+        starting::ServiceStarting,
+        stopped::ServiceStopped,
         stopping::ServiceStopping,
     },
 };
 
-use super::docker::ContainerInspectResponseExt;
+use super::docker::{ContainerInspectResponseExt, DockerContext};
+use state::machine::{EndState, IntoTryState, Refresh, State, TryState};
 
 pub mod error;
 pub mod state;
@@ -51,6 +66,18 @@ macro_rules! deserialize_json {
     }}
 }
 
+macro_rules! impl_from_variant {
+    {$e:ty: $($s:ty => $v:ident $(,)?)+} => {
+        $(
+            impl From<$s> for $e {
+                fn from(s: $s) -> $e {
+                    <$e>::$v(s)
+                }
+            }
+        )+
+    };
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ServiceState {
@@ -69,8 +96,23 @@ pub enum ServiceState {
     Errored(ServiceErrored),
 }
 
+impl_from_variant!(ServiceState:
+    ServiceCreating => Creating,
+    ServiceAttaching => Attaching,
+    ServiceRecreating => Recreating,
+    ServiceStarting => Starting,
+    ServiceRestarting => Restarting,
+    ServiceStarted => Started,
+    ServiceReady => Ready,
+    ServiceStopping => Stopping,
+    ServiceStopped => Stopped,
+    ServiceRebooting => Rebooting,
+    ServiceDestroying => Destroying,
+    ServiceDestroyed => Destroyed,
+    ServiceErrored => Errored);
+
 impl Display for ServiceState {
-    fn fmt(&self, f: std::fmt::Formatter<'_>) {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             ServiceState::Creating(_) => write!(f, "Creating"),
             ServiceState::Attaching(_) => write!(f, "Attaching"),
@@ -219,6 +261,210 @@ impl ServiceState {
 
     pub fn container_id(&self) -> Option<String> {
         self.container().and_then(|container| container.id)
+    }
+}
+
+#[async_trait]
+impl<Ctx> State<Ctx> for ServiceState
+where
+    Ctx: DockerContext,
+{
+    type Next = Self;
+    type Error = Infallible;
+
+    #[instrument(skip_all, fields(state = %self.state()))]
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+        let previous = self.clone();
+        let previous_state = previous.state();
+
+        let mut new = match self {
+            Self::Creating(creating) => creating.next(ctx).await.into_try_state(),
+            Self::Attaching(attaching) => match attaching.clone().next(ctx).await {
+                Err(ServiceErrored {
+                    kind: ServiceErroredKind::NoNetwork,
+                    ..
+                }) => {
+                    // Recreate the container to try and connect to the network again
+                    Ok(Self::Recreating(ServiceRecreating {
+                        container: attaching.container,
+                        recreate_count: attaching.recreate_count,
+                    }))
+                }
+                attaching => attaching.into_try_state(),
+            },
+            Self::Recreating(recreating) => recreating.next(ctx).await.into_try_state(),
+            Self::Starting(starting) => match starting.clone().next(ctx).await {
+                Err(error) => {
+                    error!(
+                        error = &error as &dyn std::error::Error,
+                        "project failed to start. Will restart it"
+                    );
+
+                    Ok(Self::Restarting(ServiceRestarting {
+                        container: starting.container,
+                        restart_count: starting.restart_count,
+                    }))
+                }
+                starting => starting.into_try_state(),
+            },
+            Self::Restarting(restarting) => restarting.next(ctx).await.into_try_state(),
+            Self::Started(started) => match started.next(ctx).await {
+                Ok(ServiceReadying::Ready(ready)) => Ok(ready.into()),
+                Ok(ServiceReadying::Started(started)) => Ok(started.into()),
+                Ok(ServiceReadying::Idle(stopping)) => Ok(stopping.into()),
+                Err(err) => Ok(Self::Errored(err)),
+            },
+            Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
+            Self::Stopped(stopped) => stopped.next(ctx).await.into_try_state(),
+            Self::Stopping(stopping) => stopping.next(ctx).await.into_try_state(),
+            Self::Rebooting(rebooting) => rebooting.next(ctx).await.into_try_state(),
+            Self::Destroying(destroying) => destroying.next(ctx).await.into_try_state(),
+            Self::Destroyed(destroyed) => destroyed.next(ctx).await.into_try_state(),
+            Self::Errored(errored) => Ok(Self::Errored(errored)),
+        };
+
+        if let Ok(Self::Errored(errored)) = &mut new {
+            errored.ctx = Some(Box::new(previous));
+            error!(error = ?errored, "state for project errored");
+        }
+
+        let new_state = new.as_ref().unwrap().state();
+        let container_id = new
+            .as_ref()
+            .unwrap()
+            .container_id()
+            .map(|id| format!("{id}: "))
+            .unwrap_or_default();
+        debug!("{container_id}{previous_state} -> {new_state}");
+
+        new
+    }
+}
+
+impl<Ctx> EndState<Ctx> for ServiceState
+where
+    Ctx: DockerContext,
+{
+    fn is_done(&self) -> bool {
+        matches!(
+            self,
+            Self::Errored(_) | Self::Ready(_) | Self::Destroyed(_) | Self::Stopped(_)
+        )
+    }
+}
+
+impl TryState for ServiceState {
+    type ErrorVariant = ServiceErrored;
+
+    fn into_result(self) -> Result<Self, Self::ErrorVariant> {
+        match self {
+            Self::Errored(perr) => Err(perr),
+            otherwise => Ok(otherwise),
+        }
+    }
+}
+
+#[async_trait]
+impl<Ctx> Refresh<Ctx> for ServiceState
+where
+    Ctx: DockerContext,
+{
+    type Error = Error;
+
+    /// TODO: we could be a bit more clever than this by using the
+    /// health checks instead of matching against the raw container
+    /// state which is probably prone to erroneously setting the
+    /// project into the wrong state if the docker is transitioning
+    /// the state of its resources under us
+    async fn refresh(self, ctx: &Ctx) -> Result<Self, Self::Error> {
+        let refreshed = match self {
+            Self::Creating(creating) => Self::Creating(creating),
+            Self::Attaching(attaching) => Self::Attaching(attaching),
+            Self::Starting(ServiceStarting { container, restart_count }) => match container
+                .clone()
+                .refresh(ctx)
+                .await
+            {
+                Ok(container) => match safe_unwrap!(container.state.status) {
+                    ContainerStateStatusEnum::RUNNING => {
+                        Self::Started(ServiceStarted::new(container, VecDeque::new()))
+                    }
+                    ContainerStateStatusEnum::CREATED => Self::Starting(ServiceStarting {
+                        container,
+                        restart_count,
+                    }),
+                    ContainerStateStatusEnum::EXITED => Self::Restarting(ServiceRestarting  { container, restart_count: 0 }),
+                    _ => {
+                        return Err(Error::Internal(
+                            "container resource has drifted out of sync from the starting state: cannot recover".to_string(),
+                        ))
+                    }
+                },
+                Err(DockerError::DockerResponseServerError {
+                    status_code: 404, ..
+                }) => {
+                    // container not found, let's try to recreate it
+                    // with the same image
+                    Self::Creating(ServiceCreating::from_container(container, 0)?)
+                }
+                Err(err) => return Err(Error::Docker(err)),
+            },
+            Self::Started(ServiceStarted { container, stats, .. })
+            | Self::Ready(ServiceReady { container, stats, .. })
+             => match container
+                .clone()
+                .refresh(ctx)
+                .await
+            {
+                Ok(container) => match safe_unwrap!(container.state.status) {
+                    ContainerStateStatusEnum::RUNNING => {
+                        Self::Started(ServiceStarted::new(container, stats))
+                    }
+                    // Restart the container if it went down
+                    ContainerStateStatusEnum::EXITED => Self::Restarting(ServiceRestarting  { container, restart_count: 0 }),
+                    _ => {
+                        return Err(Error::Internal(
+                            "container resource has drifted out of sync from a started state: cannot recover".to_string(),
+                        ))
+                    }
+                },
+                Err(DockerError::DockerResponseServerError {
+                    status_code: 404, ..
+                }) => {
+                    // container not found, let's try to recreate it
+                    // with the same image
+                    Self::Creating(ServiceCreating::from_container(container, 0)?)
+                }
+                Err(err) => return Err(Error::Docker(err)),
+            },
+            Self::Stopping(ServiceStopping { container })
+             => match container
+                .clone()
+                .refresh(ctx)
+                .await
+            {
+                Ok(container) => match safe_unwrap!(container.state.status) {
+                    ContainerStateStatusEnum::RUNNING => {
+                        Self::Stopping(ServiceStopping{ container })
+                    }
+                    ContainerStateStatusEnum::EXITED => Self::Stopped(ServiceStopped { container }),
+                    _ => {
+                        return Err(Error::Internal(
+                            "container resource has drifted out of sync from a stopping state: cannot recover".to_string(),
+                        ))
+                    }
+                },
+                Err(err) => return Err(Error::Docker(err)),
+            },
+            Self::Restarting(restarting) => Self::Restarting(restarting),
+            Self::Recreating(recreating) => Self::Recreating(recreating),
+            Self::Stopped(stopped) => Self::Stopped(stopped),
+            Self::Rebooting(rebooting) => Self::Rebooting(rebooting),
+            Self::Destroying(destroying) => Self::Destroying(destroying),
+            Self::Destroyed(destroyed) => Self::Destroyed(destroyed),
+            Self::Errored(err) => Self::Errored(err),
+        };
+        Ok(refreshed)
     }
 }
 

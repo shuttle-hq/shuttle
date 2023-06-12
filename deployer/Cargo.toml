@@ -42,7 +42,7 @@ tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
 utoipa = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
-ulid = { workspace = true }
+ulid = { workspace = true, features = ["serde", "uuid"] }
 
 [dependencies.shuttle-common]
 workspace = true

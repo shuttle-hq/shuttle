@@ -45,9 +45,9 @@ async fn main() {
     let svc = DeployerService::new(
         runtime_manager,
         persistence,
-        args.gateway_uri,
-        args.auth_uri,
+        args.artifacts_path,
         args.address,
+        args.gateway_uri,
     )
     .await;
 }

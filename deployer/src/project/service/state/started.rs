@@ -12,13 +12,13 @@ use tracing::{debug, instrument};
 use crate::{
     project::{
         docker::{ContainerInspectResponseExt, DockerContext},
-        machine::{Refresh, State},
         service::state::stopping::ServiceStopping,
         service::Service,
     },
     safe_unwrap,
 };
 
+use super::machine::{Refresh, State};
 use super::{errored::ServiceErrored, ready::ServiceReady, readying::ServiceReadying};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

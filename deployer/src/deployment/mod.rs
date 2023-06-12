@@ -2,44 +2,37 @@ pub mod deploy_layer;
 pub mod gateway_client;
 pub mod persistence;
 
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-pub use run::{ActiveDeploymentsGetter, Built};
-use shuttle_common::storage_manager::ArtifactsStorageManager;
-use sqlx::{sqlite::SqliteRow, FromRow};
+use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
+use sqlx::{sqlite::SqliteRow, FromRow, Row};
 use tracing::instrument;
 use ulid::Ulid;
 
-use crate::runtime_manager::RuntimeManager;
-use persistence::{SecretGetter, SecretRecorder, State};
+use crate::{project::driver::Built, runtime_manager::RuntimeManager};
+use persistence::State;
 use tokio::sync::{mpsc, Mutex};
 use tracing::error;
 
-use self::{deploy_layer::LogRecorder, gateway_client::BuildQueueClient};
+use self::{deploy_layer::LogRecorder, gateway_client::BuildQueueClient, persistence::dal::Dal};
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 
-pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
+pub struct DeploymentManagerBuilder<LR, QC, D: Dal + Sync + 'static> {
     build_log_recorder: Option<LR>,
-    secret_recorder: Option<SR>,
-    active_deployment_getter: Option<ADG>,
     artifacts_path: Option<PathBuf>,
     runtime_manager: Option<Arc<Mutex<RuntimeManager>>>,
-    deployment_updater: Option<DU>,
-    secret_getter: Option<SG>,
     queue_client: Option<QC>,
+    dal: Option<D>,
+    claim: Option<Claim>,
 }
 
-impl<LR, SR, ADG, DU, SG, QC> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC>
+impl<LR, QC, D: Dal + Send + Sync + 'static> DeploymentManagerBuilder<LR, QC, D>
 where
     LR: LogRecorder,
-    SR: SecretRecorder,
-    ADG: ActiveDeploymentsGetter,
-    DU: DeploymentUpdater,
-    SG: SecretGetter,
     QC: BuildQueueClient,
 {
     pub fn build_log_recorder(mut self, build_log_recorder: LR) -> Self {
@@ -48,14 +41,8 @@ where
         self
     }
 
-    pub fn secret_recorder(mut self, secret_recorder: SR) -> Self {
-        self.secret_recorder = Some(secret_recorder);
-
-        self
-    }
-
-    pub fn active_deployment_getter(mut self, active_deployment_getter: ADG) -> Self {
-        self.active_deployment_getter = Some(active_deployment_getter);
+    pub fn dal(mut self, dal: D) -> Self {
+        self.dal = Some(dal);
 
         self
     }
@@ -72,20 +59,13 @@ where
         self
     }
 
-    pub fn secret_getter(mut self, secret_getter: SG) -> Self {
-        self.secret_getter = Some(secret_getter);
-
+    pub fn claim(mut self, claim: Claim) -> Self {
+        self.claim = Some(claim);
         self
     }
 
     pub fn runtime(mut self, runtime_manager: Arc<Mutex<RuntimeManager>>) -> Self {
         self.runtime_manager = Some(runtime_manager);
-
-        self
-    }
-
-    pub fn deployment_updater(mut self, deployment_updater: DU) -> Self {
-        self.deployment_updater = Some(deployment_updater);
 
         self
     }
@@ -98,31 +78,21 @@ where
         let build_log_recorder = self
             .build_log_recorder
             .expect("a build log recorder to be set");
-        let secret_recorder = self.secret_recorder.expect("a secret recorder to be set");
-        let active_deployment_getter = self
-            .active_deployment_getter
-            .expect("an active deployment getter to be set");
         let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
         let queue_client = self.queue_client.expect("a queue client to be set");
         let runtime_manager = self.runtime_manager.expect("a runtime manager to be set");
-        let deployment_updater = self
-            .deployment_updater
-            .expect("a deployment updater to be set");
-        let secret_getter = self.secret_getter.expect("a secret getter to be set");
-
-        let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
         let storage_manager = ArtifactsStorageManager::new(artifacts_path);
+        let dal = self.dal.expect("a DAL is required");
 
         let run_send_clone = run_send.clone();
 
-        tokio::spawn(run::task(
+        tokio::spawn(crate::project::driver::task(
             run_recv,
             runtime_manager.clone(),
-            deployment_updater,
-            active_deployment_getter,
-            secret_getter,
             storage_manager.clone(),
+            dal.clone(),
+            self.claim,
         ));
 
         DeploymentManager {
@@ -153,16 +123,14 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<LR, SR, ADG, DU, SG, QC>() -> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
+    pub fn builder<LR, QC, D: Dal + Sync + 'static>() -> DeploymentManagerBuilder<LR, QC, D> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
-            secret_recorder: None,
-            active_deployment_getter: None,
             artifacts_path: None,
             runtime_manager: None,
-            deployment_updater: None,
-            secret_getter: None,
             queue_client: None,
+            dal: None,
+            claim: None,
         }
     }
 
@@ -180,8 +148,8 @@ impl DeploymentManager {
     }
 }
 
-type RunSender = mpsc::Sender<run::Built>;
-type RunReceiver = mpsc::Receiver<run::Built>;
+type RunSender = mpsc::Sender<Built>;
+type RunReceiver = mpsc::Receiver<Built>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Deployment {

@@ -9,10 +9,8 @@ use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
 use tracing::instrument;
 
-use crate::{
-    project::{docker::DockerContext, machine::State},
-    safe_unwrap,
-};
+use super::machine::State;
+use crate::{project::docker::DockerContext, safe_unwrap};
 
 use super::{creating::ServiceCreating, errored::ServiceErrored};
 
@@ -21,8 +19,8 @@ const MAX_RECREATES: usize = 5;
 // Special state to try and recreate a container if it failed to be created
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceRecreating {
-    container: ContainerInspectResponse,
-    recreate_count: usize,
+    pub container: ContainerInspectResponse,
+    pub recreate_count: usize,
 }
 
 #[async_trait]

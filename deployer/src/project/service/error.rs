@@ -1,7 +1,8 @@
 use tracing::error;
 
-use super::state::errored::ServiceErrored;
 use bollard::errors::Error as DockerError;
+
+use super::state::errored::ServiceErrored;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -11,4 +12,16 @@ pub enum Error {
     InvalidOperation(String),
     #[error("Docker error: {0}")]
     Docker(DockerError),
+    #[error("Invalid project name")]
+    InvalidProjectName,
+    #[error("State internal error: {0}")]
+    Internal(String),
+    #[error("Service error: {0}")]
+    Service(ServiceErrored),
+}
+
+impl From<ServiceErrored> for Error {
+    fn from(err: ServiceErrored) -> Self {
+        Self::Service(err)
+    }
 }

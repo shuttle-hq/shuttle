@@ -27,7 +27,6 @@ use std::{convert::TryFrom, str::FromStr, time::SystemTime};
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use ulid::Ulid;
-use uuid::Uuid;
 
 use super::{
     persistence::{self, LogLevel, State},

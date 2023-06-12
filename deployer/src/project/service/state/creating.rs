@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::models::project::idle_minutes;
 use tracing::{debug, instrument};
 
+use super::machine::State;
 use crate::{
     deserialize_json,
     project::{
         docker::{ContainerInspectResponseExt, ContainerSettings, DockerContext},
-        machine::State,
         service::error::Error,
     },
 };

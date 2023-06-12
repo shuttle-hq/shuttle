@@ -2,22 +2,17 @@ use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
 use error::{Error, Result};
 use sqlx::QueryBuilder;
 
-use std::net::SocketAddr;
-use std::str::FromStr;
-
-use chrono::Utc;
 use serde_json::json;
 use shuttle_common::STATE_MESSAGE;
 use sqlx::migrate::Migrator;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
-use tracing::{error, instrument, trace};
+use tracing::{error, trace};
 use uuid::Uuid;
 
 use self::dal::Dal;
 pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
-pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
 pub use self::state::State;
 pub use self::user::User;
@@ -27,7 +22,6 @@ use super::Deployment;
 pub mod dal;
 mod error;
 pub mod log;
-mod secret;
 pub mod service;
 mod state;
 mod user;
@@ -88,7 +82,7 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
                                 )
                             });
                         dal_cloned
-                            .update_deployment_state(log.clone())
+                            .update_deployment_state(log.clone().into())
                             .await
                             .unwrap_or_else(|error| {
                                 error!(
@@ -150,38 +144,38 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
     //     get_deployment(&self.pool, id).await
     // }
 
-    pub async fn get_deployments(
-        &self,
-        service_id: &Uuid,
-        offset: u32,
-        limit: u32,
-    ) -> Result<Vec<Deployment>> {
-        let mut query = QueryBuilder::new("SELECT * FROM deployments WHERE service_id = ");
+    // pub async fn get_deployments(
+    //     &self,
+    //     service_id: &Uuid,
+    //     offset: u32,
+    //     limit: u32,
+    // ) -> Result<Vec<Deployment>> {
+    //     let mut query = QueryBuilder::new("SELECT * FROM deployments WHERE service_id = ");
 
-        query
-            .push_bind(service_id)
-            .push(" ORDER BY last_update DESC LIMIT ")
-            .push_bind(limit);
+    //     query
+    //         .push_bind(service_id)
+    //         .push(" ORDER BY last_update DESC LIMIT ")
+    //         .push_bind(limit);
 
-        if offset > 0 {
-            query.push(" OFFSET ").push_bind(offset);
-        }
+    //     if offset > 0 {
+    //         query.push(" OFFSET ").push_bind(offset);
+    //     }
 
-        query
-            .build_query_as()
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Error::from)
-    }
+    //     query
+    //         .build_query_as()
+    //         .fetch_all(&self.pool)
+    //         .await
+    //         .map_err(Error::from)
+    // }
 
-    pub async fn get_active_deployment(&self, service_id: &Uuid) -> Result<Option<Deployment>> {
-        sqlx::query_as("SELECT * FROM deployments WHERE service_id = ? AND state = ?")
-            .bind(service_id)
-            .bind(State::Running)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(Error::from)
-    }
+    // pub async fn get_active_deployment(&self, service_id: &Uuid) -> Result<Option<Deployment>> {
+    //     sqlx::query_as("SELECT * FROM deployments WHERE service_id = ? AND state = ?")
+    //         .bind(service_id)
+    //         .bind(State::Running)
+    //         .fetch_optional(&self.pool)
+    //         .await
+    //         .map_err(Error::from)
+    // }
 
     // // Clean up all invalid states inside persistence
     // pub async fn cleanup_invalid_states(&self) -> Result<()> {
@@ -216,29 +210,29 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
     //     }
     // }
 
-    pub async fn get_service_by_name(&self, name: &str) -> Result<Option<Service>> {
-        sqlx::query_as("SELECT * FROM services WHERE name = ?")
-            .bind(name)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(Error::from)
-    }
+    // pub async fn get_service_by_name(&self, name: &str) -> Result<Option<Service>> {
+    //     sqlx::query_as("SELECT * FROM services WHERE name = ?")
+    //         .bind(name)
+    //         .fetch_optional(&self.pool)
+    //         .await
+    //         .map_err(Error::from)
+    // }
 
-    pub async fn delete_service(&self, id: &Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM services WHERE id = ?")
-            .bind(id)
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(Error::from)
-    }
+    // pub async fn delete_service(&self, id: &Uuid) -> Result<()> {
+    //     sqlx::query("DELETE FROM services WHERE id = ?")
+    //         .bind(id)
+    //         .execute(&self.pool)
+    //         .await
+    //         .map(|_| ())
+    //         .map_err(Error::from)
+    // }
 
-    pub async fn get_all_services(&self) -> Result<Vec<Service>> {
-        sqlx::query_as("SELECT * FROM services")
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Error::from)
-    }
+    // pub async fn get_all_services(&self) -> Result<Vec<Service>> {
+    //     sqlx::query_as("SELECT * FROM services")
+    //         .fetch_all(&self.pool)
+    //         .await
+    //         .map_err(Error::from)
+    // }
 
     // pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>> {
     //     sqlx::query_as(
@@ -259,15 +253,15 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
     //     get_deployment_logs(&self.pool, id).await
     // }
 
-    /// Get a broadcast channel for listening to logs that are being stored into persistence
-    pub fn get_log_subscriber(&self) -> Receiver<deploy_layer::Log> {
-        self.stream_log_send.subscribe()
-    }
+    // /// Get a broadcast channel for listening to logs that are being stored into persistence
+    // pub fn get_log_subscriber(&self) -> Receiver<deploy_layer::Log> {
+    //     self.stream_log_send.subscribe()
+    // }
 
-    /// Returns a sender for sending logs to persistence storage
-    pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
-        self.log_send.clone()
-    }
+    // /// Returns a sender for sending logs to persistence storage
+    // pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
+    //     self.log_send.clone()
+    // }
 }
 
 // async fn update_deployment(pool: &SqlitePool, state: impl Into<DeploymentState>) -> Result<()> {
@@ -326,38 +320,6 @@ impl<D: Dal + 'static> LogRecorder for Persistence<D> {
 }
 
 // #[async_trait::async_trait]
-// impl SecretRecorder for Persistence {
-//     type Err = Error;
-
-//     async fn insert_secret(&self, service_id: &Uuid, key: &str, value: &str) -> Result<()> {
-//         sqlx::query(
-//             "INSERT OR REPLACE INTO secrets (service_id, key, value, last_update) VALUES (?, ?, ?, ?)",
-//         )
-//         .bind(service_id)
-//         .bind(key)
-//         .bind(value)
-//         .bind(Utc::now())
-//         .execute(&self.pool)
-//         .await
-//         .map(|_| ())
-//         .map_err(Error::from)
-//     }
-// }
-
-// #[async_trait::async_trait]
-// impl SecretGetter for Persistence {
-//     type Err = Error;
-
-//     async fn get_secrets(&self, service_id: &Uuid) -> Result<Vec<Secret>> {
-//         sqlx::query_as("SELECT * FROM secrets WHERE service_id = ? ORDER BY key")
-//             .bind(service_id)
-//             .fetch_all(&self.pool)
-//             .await
-//             .map_err(Error::from)
-//     }
-// }
-
-// #[async_trait::async_trait]
 // impl AddressGetter for Persistence {
 //     #[instrument(skip(self))]
 //     async fn get_address_for_service(
@@ -389,55 +351,6 @@ impl<D: Dal + 'static> LogRecorder for Persistence<D> {
 //         } else {
 //             Ok(None)
 //         }
-//     }
-// }
-
-// #[async_trait::async_trait]
-// impl DeploymentUpdater for Persistence {
-//     type Err = Error;
-
-//     async fn set_address(&self, id: &Uuid, address: &SocketAddr) -> Result<()> {
-//         sqlx::query("UPDATE deployments SET address = ? WHERE id = ?")
-//             .bind(address.to_string())
-//             .bind(id)
-//             .execute(&self.pool)
-//             .await
-//             .map(|_| ())
-//             .map_err(Error::from)
-//     }
-
-//     async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<()> {
-//         sqlx::query("UPDATE deployments SET is_next = ? WHERE id = ?")
-//             .bind(is_next)
-//             .bind(id)
-//             .execute(&self.pool)
-//             .await
-//             .map(|_| ())
-//             .map_err(Error::from)
-//     }
-// }
-
-// #[async_trait::async_trait]
-// impl ActiveDeploymentsGetter for Persistence {
-//     type Err = Error;
-
-//     async fn get_active_deployments(
-//         &self,
-//         service_id: &Uuid,
-//     ) -> std::result::Result<Vec<Uuid>, Self::Err> {
-//         let ids: Vec<_> = sqlx::query_as::<_, Deployment>(
-//             "SELECT * FROM deployments WHERE service_id = ? AND state = ?",
-//         )
-//         .bind(service_id)
-//         .bind(State::Running)
-//         .fetch_all(&self.pool)
-//         .await
-//         .map_err(Error::from)?
-//         .into_iter()
-//         .map(|deployment| deployment.id)
-//         .collect();
-
-//         Ok(ids)
 //     }
 // }
 

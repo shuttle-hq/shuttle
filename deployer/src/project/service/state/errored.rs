@@ -6,7 +6,8 @@ use http::uri::InvalidUri;
 use serde::{Deserialize, Serialize};
 use tracing::{error, instrument};
 
-use crate::project::{docker::DockerContext, machine::State, service::ServiceState};
+use super::machine::State;
+use crate::project::{docker::DockerContext, service::ServiceState};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ServiceErroredKind {
@@ -19,7 +20,7 @@ pub enum ServiceErroredKind {
 pub struct ServiceErrored {
     kind: ServiceErroredKind,
     message: String,
-    ctx: Option<Box<ServiceState>>,
+    pub ctx: Option<Box<ServiceState>>,
 }
 
 impl ServiceErrored {

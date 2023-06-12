@@ -54,7 +54,7 @@ ttl_cache = { workspace = true, optional = true }
 url = { workspace = true }
 utoipa = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
-ulid = { workspace = true }
+ulid = { workspace = true, features = ["serde", "uuid"] }
 
 [features]
 backend = [

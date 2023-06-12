@@ -5,7 +5,8 @@ use bollard::{container::Stats, service::ContainerInspectResponse};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::project::{docker::DockerContext, machine::State, service::Service};
+use super::machine::State;
+use crate::project::{docker::DockerContext, service::Service};
 
 use super::errored::ServiceErrored;
 

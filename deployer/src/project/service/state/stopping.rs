@@ -3,15 +3,9 @@ use bollard::{container::KillContainerOptions, service::ContainerInspectResponse
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::{
-    project::{
-        docker::DockerContext,
-        machine::{Refresh, State},
-    },
-    safe_unwrap,
-};
-
+use super::machine::{Refresh, State};
 use super::{errored::ServiceErrored, stopped::ServiceStopped};
+use crate::{project::docker::DockerContext, safe_unwrap};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceStopping {

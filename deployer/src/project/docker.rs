@@ -6,7 +6,8 @@ use ulid::Ulid;
 
 use crate::safe_unwrap;
 
-use super::{machine::Refresh, service::state::errored::ServiceErrored};
+use super::service::state::errored::ServiceErrored;
+use super::service::state::machine::Refresh;
 
 #[derive(Debug, Clone)]
 pub struct ContextArgs {
@@ -125,18 +126,34 @@ impl ContainerSettingsBuilder {
     }
 }
 
+#[derive(Clone)]
 pub struct ContainerSettings {
     pub prefix: String,
     pub image: String,
     pub provisioner_host: String,
     pub auth_uri: String,
     pub network_name: String,
-    // pub fqdn: String,
 }
 
 impl ContainerSettings {
     pub fn builder() -> ContainerSettingsBuilder {
         ContainerSettingsBuilder::new()
+    }
+}
+
+#[derive(Clone)]
+pub struct ServiceDockerContext {
+    docker: Docker,
+    settings: ContainerSettings,
+}
+
+impl DockerContext for ServiceDockerContext {
+    fn docker(&self) -> &Docker {
+        &self.docker
+    }
+
+    fn container_settings(&self) -> &ContainerSettings {
+        &self.settings
     }
 }
 

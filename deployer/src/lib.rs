@@ -1,9 +1,15 @@
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+
 use async_trait::async_trait;
-use chrono::{Duration, Utc};
+use bollard::service;
+use chrono::Utc;
 use deployment::persistence::{dal::Dal, Service};
 use deployment::persistence::{Persistence, State};
 use deployment::Deployment;
-use error::Result;
+use error::{Error, Result};
 use http::Uri;
 use project::driver::Built;
 use project::service::state::creating::ServiceCreating;
@@ -20,7 +26,7 @@ use shuttle_proto::deployer::{
     deployer_server::{Deployer, DeployerServer},
     DeployRequest, DeployResponse,
 };
-use sqlx::types::Json as SqlxJson;
+use tokio::sync::Mutex;
 use tonic::{transport::Server, Response, Result as TonicResult};
 use tracing::info;
 use ulid::Ulid;
@@ -36,43 +42,36 @@ pub mod proxy;
 pub mod runtime_manager;
 
 pub struct DeployerService<D: Dal + Send + Sync + 'static> {
-    runtime_manager: RuntimeManager,
+    runtime_manager: Arc<Mutex<RuntimeManager>>,
     persistence: Persistence<D>,
     deployment_manager: DeploymentManager,
-    gateway_uri: Uri,
-    auth_uri: Uri,
-    deployer_bind_address: Uri,
+    bind_address: SocketAddr,
 }
 
 impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     pub async fn new(
-        runtime_manager: RuntimeManager,
+        runtime_manager: Arc<Mutex<RuntimeManager>>,
         persistence: Persistence<D>,
+        artifacts_path: PathBuf,
+        bind_address: SocketAddr,
         gateway_uri: Uri,
-        auth_uri: Uri,
-        deployer_bind_address: Uri,
     ) -> Self {
         let deployment_manager = DeploymentManager::builder()
             .build_log_recorder(persistence.clone())
-            .secret_recorder(persistence.clone())
-            .active_deployment_getter(persistence.clone())
-            .artifacts_path(runtime_manager.artifacts_path().clone())
+            .artifacts_path(artifacts_path)
             .runtime(runtime_manager.clone())
-            .deployment_updater(persistence.clone())
-            .secret_getter(persistence.clone())
             .queue_client(GatewayClient::new(gateway_uri.clone()))
+            .dal(persistence.dal().clone())
             .build();
         Self {
             runtime_manager,
             persistence,
             deployment_manager,
-            gateway_uri,
-            auth_uri,
-            deployer_bind_address,
+            bind_address,
         }
     }
 
-    pub async fn start(self) -> Result<()> {
+    pub async fn start(self, auth_uri: Uri) -> Result<()> {
         self.persistence
             .dal()
             .update_invalid_states_to_stopped()
@@ -94,24 +93,26 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
 
         let mut server_builder = Server::builder()
             .http2_keepalive_interval(Some(Duration::from_secs(60)))
-            .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
-                self.auth_uri,
-            )))
+            .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_uri)))
             .layer(ExtractPropagationLayer);
+        let bind_address = self.bind_address.clone();
         let svc = DeployerServer::new(self);
         let router = server_builder.add_service(svc);
 
         router
-            .serve(self.deployer_bind_address)
+            .serve(bind_address)
             .await
-            .expect("to serve on address")
+            .expect("to serve on address");
+        Ok(())
     }
 
     pub async fn push_deployment(&self, req: DeployRequest, state: ServiceState) -> Result<String> {
         // Insert the service if not present.
+        let service_id =
+            Ulid::from_string(req.service_id.as_str()).map_err(|err| Error::UlidDecode(err))?;
         let service = Service {
-            id: Ulid::from(req.service_id),
-            name: req.service_name,
+            id: service_id.clone(),
+            name: req.service_name.clone(),
             state_variant: state.to_string(),
             state,
         };
@@ -144,7 +145,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         let built = Built {
             id: deployment.id,
             service_name: req.service_name,
-            service_id: Ulid::from(req.service_id),
+            service_id,
             tracing_context: Default::default(),
             is_next: req.is_next,
         };
@@ -165,51 +166,64 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
         // Propagate the failure as an internal error, with the message being the displayed error.
         // We're protected from bubling up sensitive info because the error thrown is a DalError
         // which is `Display` controlled.
-        let state = SqlxJson(ServiceState::Creating(ServiceCreating::new(
+        let state = ServiceState::Creating(ServiceCreating::new(
             request.service_id,
             u64::from(request.idle_minutes),
-        )));
+        ));
         let deployment_id = self
-            .push_deployment(request, state)
+            .push_deployment(request, state.clone())
             .await
             .map_err(|err| tonic::Status::new(tonic::Code::Internal, err.to_string()))?;
         let service_id: Ulid = Ulid::from_string(request.service_id.as_str())
-            .map_err(tonic::Status::invalid_argument("Invalid service id."))?;
+            .map_err(|_| tonic::Status::invalid_argument("invalid service id"))?;
+
+        let mut creating =
+            ServiceCreating::new(request.service_name, u64::from(request.idle_minutes));
+        let service_state = ServiceState::Creating(creating);
 
         // If the service already lives in the persistence.
-        if let Some(state) = self.persistence.dal().service_state().await? {
+        if let Some(state) = self
+            .persistence
+            .dal()
+            .service_state(&service_id)
+            .await
+            .map_err(|_| tonic::Status::not_found("service not found"))?
+        {
             // But is in the destroyed state.
             if state.is_destroyed() {
                 // Recreate it.
-                let mut creating = ServiceCreating::new_with_random_initial_key(
-                    request.service_name,
-                    request.idle_minutes,
-                );
-
-                let project = ServiceState::Creating(creating);
                 self.persistence
                     .dal()
-                    .update_service_state(&service_id, state)
-                    .await?;
-                Ok(project)
+                    .update_service_state(service_id, service_state)
+                    .await
+                    .map_err(|_| tonic::Status::invalid_argument("invalid service id"))?;
             } else {
                 // Otherwise it already exists
-                Err(tonic::Status::already_exists(
+                return Err(tonic::Status::already_exists(
                     "The service already exists in deployer persistence, skipping its creation.",
-                ))
+                ));
             }
         } else {
             // Insert the service.
+            let service = Service {
+                id: service_id,
+                name: request.service_name,
+                state_variant: state.to_string(),
+                state,
+            };
             self.persistence
                 .dal()
-                .insert_service_if_absent(Service {
-                    id: &service_id,
-                    name: "".to_string(),
-                    state_variant: state.to_string(),
-                    state,
-                })
-                .await?;
+                .insert_service_if_absent(service)
+                .await
+                .map_err(|_| {
+                    tonic::Status::internal(
+                        "failed because the service already exists or persisting it errored",
+                    )
+                });
         }
+
+        // TODO: add the starting of the task
+
         Ok(Response::new(DeployResponse { deployment_id }))
     }
 }

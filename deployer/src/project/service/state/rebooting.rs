@@ -8,12 +8,9 @@ use futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
+use super::machine::{Refresh, State};
 use crate::{
-    project::{
-        docker::DockerContext,
-        machine::{Refresh, State},
-        service::state::errored::ServiceErrored,
-    },
+    project::{docker::DockerContext, service::state::errored::ServiceErrored},
     safe_unwrap,
 };
 

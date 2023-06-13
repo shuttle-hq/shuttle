@@ -23,6 +23,8 @@ use tokio::{
 use tonic::{Request, Response, Status};
 use tracing::{debug, error, info, instrument};
 
+pub mod args;
+
 /// A wrapper to capture any error possible with this service
 #[derive(Debug, Error)]
 pub enum Error {

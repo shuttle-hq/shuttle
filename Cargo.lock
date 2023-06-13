@@ -5281,6 +5281,7 @@ name = "shuttle-builder"
 version = "0.18.0"
 dependencies = [
  "async-trait",
+ "clap",
  "flate2",
  "hyper",
  "nbuild-core",
@@ -5296,6 +5297,7 @@ dependencies = [
  "tonic",
  "tower",
  "tracing",
+ "tracing-subscriber",
  "ulid",
 ]
 

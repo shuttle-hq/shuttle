@@ -7,6 +7,7 @@ repository.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
+clap = { workspace = true }
 flate2 = { workspace = true }
 nbuild-core = "0.1.1"
 tar = { workspace = true }
@@ -16,6 +17,7 @@ tokio = { workspace = true, features = ["fs", "macros", "io-util", "process", "r
 toml = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["default"] }
 ulid = { workspace = true }
 
 [dependencies.shuttle-common]

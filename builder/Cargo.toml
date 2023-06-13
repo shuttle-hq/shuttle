@@ -28,6 +28,7 @@ features = ["backend", "tonic"]
 workspace = true
 
 [dev-dependencies]
+hex = "0.4.3"
 portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
 shuttle-common-tests = { workspace = true }

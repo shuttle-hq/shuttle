@@ -207,3 +207,67 @@ async fn get_secrets(path: &Path) -> Result<BTreeMap<String, String>, Error> {
         Ok(Default::default())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeMap, fs::File, io::Write};
+
+    use tempfile::Builder;
+    use tokio::fs;
+
+    #[tokio::test]
+    async fn extract_tar_gz_data() {
+        let dir = Builder::new()
+            .prefix("shuttle-extraction-test")
+            .tempdir()
+            .unwrap();
+        let p = dir.path();
+
+        // Binary data for an archive in the following form:
+        //
+        // - temp
+        //   - world.txt
+        //   - subdir
+        //     - hello.txt
+        let test_data = hex::decode(
+            "\
+1f8b0800000000000003edd5d10a823014c6f15df7143e41ede8997b1e4d\
+a3c03074528f9f0a41755174b1a2faff6e0653d8818f7d0bf5feb03271d9\
+91f76e5ac53b7bbd5e18d1d4a96a96e6a9b16225f7267191e79a0d7d28ba\
+2431fbe2f4f0bf67dfbf5498f23fb65d532dc329c439630a38cff541fe7a\
+977f6a9d98c4c619e7d69fe75f94ebc5a767c0e7ccf7bf1fca6ad7457b06\
+5eea7f95f1fe8b3aa5ffdfe13aff6ddd346d8467e0a5fef7e3be649928fd\
+ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
+        )
+        .unwrap();
+
+        super::extract_tar_gz_data(test_data.as_slice(), &p)
+            .await
+            .unwrap();
+        assert!(fs::read_to_string(p.join("world.txt"))
+            .await
+            .unwrap()
+            .starts_with("abc"));
+        assert!(fs::read_to_string(p.join("subdir/hello.txt"))
+            .await
+            .unwrap()
+            .starts_with("def"));
+    }
+
+    #[tokio::test]
+    async fn get_secrets() {
+        let temp = Builder::new().prefix("secrets").tempdir().unwrap();
+        let temp_p = temp.path();
+
+        let secret_p = temp_p.join("Secrets.toml");
+        let mut secret_file = File::create(secret_p.clone()).unwrap();
+        secret_file.write_all(b"KEY = 'value'").unwrap();
+
+        let actual = super::get_secrets(temp_p).await.unwrap();
+        let expected = BTreeMap::from([("KEY".to_string(), "value".to_string())]);
+
+        assert_eq!(actual, expected);
+
+        assert!(!secret_p.exists(), "the secrets file should be deleted");
+    }
+}

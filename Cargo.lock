@@ -5283,6 +5283,7 @@ dependencies = [
  "async-trait",
  "clap",
  "flate2",
+ "hex",
  "nbuild-core",
  "portpicker",
  "pretty_assertions",

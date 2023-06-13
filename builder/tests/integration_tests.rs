@@ -46,7 +46,6 @@ async fn build_crate() {
             .build(Request::new(BuildRequest {
                 deployment_id: deployment_id.clone(),
                 archive,
-                ..Default::default()
             }))
             .await
             .unwrap()
@@ -63,7 +62,6 @@ async fn build_crate() {
             .build(Request::new(BuildRequest {
                 deployment_id: deployment_id.clone(),
                 archive,
-                ..Default::default()
             }))
             .await
             .unwrap()
@@ -87,7 +85,6 @@ async fn build_crate() {
         //     .build(Request::new(BuildRequest {
         //         deployment_id: deployment_id.clone(),
         //         archive,
-        //         ..Default::default()
         //     }))
         //     .await
         //     .unwrap()
@@ -105,7 +102,6 @@ async fn build_crate() {
         //     .build(Request::new(BuildRequest {
         //         deployment_id: deployment_id.clone(),
         //         archive,
-        //         ..Default::default()
         //     }))
         //     .await
         //     .unwrap()

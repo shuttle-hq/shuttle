@@ -38,6 +38,7 @@ pub enum Error {
     Secrets(#[from] toml::de::Error),
 }
 
+#[derive(Default)]
 pub struct Service;
 
 impl Service {

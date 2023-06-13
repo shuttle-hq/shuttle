@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use bollard::{errors::Error as DockerError, service::ContainerInspectResponse, Docker};
-use http::Uri;
 use shuttle_common::models::project::IDLE_MINUTES;
 use ulid::Ulid;
 
@@ -9,33 +8,12 @@ use crate::safe_unwrap;
 use super::service::state::errored::ServiceErrored;
 use super::service::state::machine::Refresh;
 
-#[derive(Debug, Clone)]
-pub struct ContextArgs {
-    /// Default image to deploy user runtimes into
-    pub image: String,
-    /// Prefix to add to the name of all docker resources managed by
-    /// this service
-    pub prefix: String,
-    /// The address at which an active runtime container will find
-    /// the provisioner service
-    pub provisioner_host: String,
-    /// Address to reach the authentication service at
-    pub auth_uri: Uri,
-    /// The Docker Network name in which to deploy user runtimes
-    pub network_name: String,
-    /// FQDN where the proxy can be reached at
-    // pub proxy_fqdn: FQDN,
-    /// The path to the docker daemon socket
-    pub docker_host: String,
-}
-
 pub struct ContainerSettingsBuilder {
     prefix: Option<String>,
     image: Option<String>,
     provisioner: Option<String>,
     auth_uri: Option<String>,
     network_name: Option<String>,
-    // fqdn: Option<String>,
 }
 
 impl Default for ContainerSettingsBuilder {
@@ -52,28 +30,7 @@ impl ContainerSettingsBuilder {
             provisioner: None,
             auth_uri: None,
             network_name: None,
-            // fqdn: None,
         }
-    }
-
-    pub async fn from_args(self, args: &ContextArgs) -> ContainerSettings {
-        let ContextArgs {
-            prefix,
-            network_name,
-            provisioner_host,
-            auth_uri,
-            image,
-            // proxy_fqdn,
-            ..
-        } = args;
-        self.prefix(prefix)
-            .image(image)
-            .provisioner_host(provisioner_host)
-            .auth_uri(auth_uri)
-            .network_name(network_name)
-            // .fqdn(proxy_fqdn)
-            .build()
-            .await
     }
 
     pub fn prefix<S: ToString>(mut self, prefix: S) -> Self {
@@ -101,19 +58,12 @@ impl ContainerSettingsBuilder {
         self
     }
 
-    // pub fn fqdn<S: ToString>(mut self, fqdn: S) -> Self {
-    //     self.fqdn = Some(fqdn.to_string().trim_end_matches('.').to_string());
-    //     self
-    // }
-
     pub async fn build(mut self) -> ContainerSettings {
         let prefix = self.prefix.take().unwrap();
         let image = self.image.take().unwrap();
         let provisioner_host = self.provisioner.take().unwrap();
         let auth_uri = self.auth_uri.take().unwrap();
-
         let network_name = self.network_name.take().unwrap();
-        // let fqdn = self.fqdn.take().unwrap();
 
         ContainerSettings {
             prefix,
@@ -121,7 +71,6 @@ impl ContainerSettingsBuilder {
             provisioner_host,
             auth_uri,
             network_name,
-            // fqdn,
         }
     }
 }
@@ -145,6 +94,15 @@ impl ContainerSettings {
 pub struct ServiceDockerContext {
     docker: Docker,
     settings: ContainerSettings,
+}
+
+impl ServiceDockerContext {
+    pub fn new(docker: Docker, cs: ContainerSettings) -> Self {
+        Self {
+            docker,
+            settings: cs,
+        }
+    }
 }
 
 impl DockerContext for ServiceDockerContext {

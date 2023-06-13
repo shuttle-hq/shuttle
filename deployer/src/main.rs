@@ -48,6 +48,11 @@ async fn main() {
         args.artifacts_path,
         args.address,
         args.gateway_uri,
+        docker_host,
+        args.provisioner_uri,
+        args.auth_uri,
+        args.network_name,
+        args.prefix,
     )
     .await;
 }

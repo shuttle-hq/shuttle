@@ -19,7 +19,7 @@ pub struct Args {
 
     /// Address to connect to the provisioning service
     #[clap(long, default_value = "http://provisioner:5000")]
-    pub provisioner_address: Endpoint,
+    pub provisioner_uri: Endpoint,
 
     /// Uri to folder to store all artifacts
     #[clap(long, default_value = "/tmp")]
@@ -28,4 +28,12 @@ pub struct Args {
     /// Address to reach gateway's control plane at
     #[clap(long, default_value = "http://gateway:8001")]
     pub gateway_uri: Uri,
+
+    /// Used to prefix names for all docker resources
+    #[clap(long, default_value = "shuttle_dev")]
+    pub prefix: String,
+
+    /// The overlay network name used for the user services
+    #[clap(long, default_value = "shared_user_net")]
+    pub network_name: String,
 }

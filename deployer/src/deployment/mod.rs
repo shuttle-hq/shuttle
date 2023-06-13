@@ -134,7 +134,7 @@ impl DeploymentManager {
         }
     }
 
-    #[instrument(skip(self), fields(id = %built.id, state = %State::Built))]
+    #[instrument(skip(self), fields(id = %built.deployment_id, state = %State::Built))]
     pub async fn run_push(&self, built: Built) {
         self.run_send.send(built).await.unwrap();
     }

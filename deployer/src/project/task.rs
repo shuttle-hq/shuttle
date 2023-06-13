@@ -440,7 +440,7 @@ pub struct ServiceTaskContext {
 pub type BoxedTask<Ctx = (), O = ()> = Box<dyn Task<Ctx, Output = O, Error = Error>>;
 
 #[async_trait]
-impl<T, D: Dal + Send + Sync + 'static> Task<()> for ServiceTask<T, D>
+impl<T, D: Dal + Sync + 'static> Task<()> for ServiceTask<T, D>
 where
     T: Task<ServiceTaskContext, Output = ServiceState, Error = Error>,
 {
@@ -454,10 +454,7 @@ where
         }
 
         let service = match self.dal.service(&self.service_id).await {
-            Ok(service) => match service {
-                Some(inner) => inner,
-                None => return TaskResult::Err(Error::TaskInternal),
-            },
+            Ok(inner) => inner,
             Err(err) => return TaskResult::Err(Error::Dal(err)),
         };
 

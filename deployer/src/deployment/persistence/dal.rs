@@ -24,6 +24,7 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 pub enum DalError {
     Sqlx(#[from] sqlx::Error),
     ServiceNotFound,
+    Decode(ulid::DecodeError),
 }
 
 // We are not using the `thiserror`'s `#[error]` syntax to prevent sensitive details from bubbling up to the users.
@@ -37,6 +38,7 @@ impl fmt::Display for DalError {
                 "failed to interact with recorder"
             }
             DalError::ServiceNotFound => "service not found",
+            DalError::Decode(_) => "service id couldn't be decoded to Ulid",
         };
 
         write!(f, "{msg}")
@@ -49,7 +51,7 @@ pub trait Dal: Send + Clone {
     async fn insert_log(&self, log: Log) -> Result<(), DalError>;
 
     // Get a service by id
-    async fn service(&self, id: &Ulid) -> Result<Option<Service>, DalError>;
+    async fn service(&self, id: &Ulid) -> Result<Service, DalError>;
 
     // Insert a service if absent
     async fn insert_service_if_absent(&self, service: Service) -> Result<bool, DalError>;
@@ -57,12 +59,13 @@ pub trait Dal: Send + Clone {
     // Insert a new deployment
     async fn insert_deployment(&self, deployment: Deployment) -> Result<(), DalError>;
 
-    // Update all invalid states inside persistence to `Stopped`.
+    // Update all deployment invalid states inside persistence to `Stopped`.
     async fn update_invalid_states_to_stopped(&self) -> Result<(), DalError>;
 
-    // Get runnable deployments
-    async fn runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>, DalError>;
+    // Get runnning or runnable deployments
+    async fn running_deployments(&self) -> Result<Vec<DeploymentRunnable>, DalError>;
 
+    // Get the service state
     async fn service_state(&self, service_id: &Ulid) -> Result<Option<ServiceState>, DalError>;
 
     // Update a deployment state
@@ -75,8 +78,11 @@ pub trait Dal: Send + Clone {
         state: ServiceState,
     ) -> Result<(), DalError>;
 
-    // Get active deployments
-    async fn active_deployments(&self, service_id: &Ulid) -> Result<Vec<Ulid>, DalError>;
+    // Get service running deployments
+    async fn service_running_deployments(&self, service_id: &Ulid) -> Result<Vec<Ulid>, DalError>;
+
+    // Get services
+    async fn services(&self) -> Result<Vec<Service>, DalError>;
 
     // Set the deployment address
     async fn set_address(&self, id: &Ulid, address: &SocketAddr) -> Result<(), DalError>;
@@ -153,16 +159,14 @@ impl Dal for Sqlite {
         .map(|row| row.map(|inner| inner.get::<SqlxJson<ServiceState>, _>("state").0))
     }
 
-    async fn service(&self, id: &Ulid) -> Result<Option<Service>, DalError> {
+    async fn service(&self, id: &Ulid) -> Result<Service, DalError> {
         let row = sqlx::query("SELECT * FROM services WHERE id = ?")
             .bind(id.to_string())
             .fetch_optional(&self.pool)
             .await
             .map_err(DalError::from)?
             .ok_or(DalError::ServiceNotFound)?;
-        Service::from_row(&row)
-            .map(|service| Some(service))
-            .map_err(DalError::Sqlx)
+        Service::from_row(&row).map_err(DalError::Sqlx)
     }
 
     async fn insert_service_if_absent(&self, service: Service) -> Result<bool, DalError> {
@@ -173,7 +177,7 @@ impl Dal for Sqlite {
             state,
         } = service;
 
-        if self.service(&id).await?.is_some() {
+        if self.service(&id).await.is_ok() {
             return Ok(false);
         }
 
@@ -210,7 +214,6 @@ impl Dal for Sqlite {
     async fn update_invalid_states_to_stopped(&self) -> Result<(), DalError> {
         sqlx::query("UPDATE deployments SET state = ? WHERE state IN(?, ?, ?, ?)")
             .bind(State::Stopped)
-            .bind(State::Queued)
             .bind(State::Built)
             .bind(State::Building)
             .bind(State::Loading)
@@ -220,7 +223,7 @@ impl Dal for Sqlite {
         Ok(())
     }
 
-    async fn runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>, DalError> {
+    async fn running_deployments(&self) -> Result<Vec<DeploymentRunnable>, DalError> {
         sqlx::query_as(
             r#"SELECT d.id as id, service_id, s.name AS service_name, d.is_next as is_next
                     FROM deployments AS d
@@ -260,8 +263,8 @@ impl Dal for Sqlite {
         Ok(())
     }
 
-    async fn active_deployments(&self, service_id: &Ulid) -> Result<Vec<Ulid>, DalError> {
-        let ids: Vec<_> = sqlx::query_as::<_, Deployment>(
+    async fn service_running_deployments(&self, service_id: &Ulid) -> Result<Vec<Ulid>, DalError> {
+        let ids = sqlx::query_as::<_, Deployment>(
             "SELECT * FROM deployments WHERE service_id = ? AND state = ?",
         )
         .bind(service_id.to_string())
@@ -294,5 +297,17 @@ impl Dal for Sqlite {
             .await
             .map(|_| ())
             .map_err(|err| DalError::Sqlx(err))
+    }
+
+    // Get services
+    async fn services(&self) -> Result<Vec<Service>, DalError> {
+        let services: Result<Vec<Service>, DalError> = query("SELECT & FROM services")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(DalError::Sqlx)?
+            .iter()
+            .map(|row| Service::from_row(row).map_err(DalError::Sqlx))
+            .collect();
+        services
     }
 }

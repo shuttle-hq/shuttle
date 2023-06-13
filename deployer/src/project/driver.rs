@@ -24,10 +24,7 @@ use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrumen
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 
-use crate::{
-    deployment::{persistence::dal::Dal, DeploymentUpdater},
-    runtime_manager::RuntimeManager,
-};
+use crate::{deployment::persistence::dal::Dal, runtime_manager::RuntimeManager};
 
 use super::error::{Error, Result};
 
@@ -46,14 +43,14 @@ pub async fn task<D: Dal + Sync + 'static>(
     info!("Run task started");
 
     while let Some(built) = recv.recv().await {
-        let deployment_id = built.id.clone();
+        let deployment_id = built.deployment_id.clone();
         let dal_cloned = dal.clone();
         info!("Built deployment at the front of run queue: {deployment_id}");
 
         let storage_manager = storage_manager.clone();
         let old_deployments_killer = kill_old_deployments(
             built.service_id.clone(),
-            built.id.clone(),
+            built.deployment_id.clone(),
             dal_cloned,
             runtime_manager.clone(),
         );
@@ -87,7 +84,7 @@ pub async fn task<D: Dal + Sync + 'static>(
             });
             let span = debug_span!("runner");
             span.set_parent(parent_cx);
-            let deployment_id = built.id.clone();
+            let deployment_id = built.deployment_id.clone();
             let dal_cloned_cloned = dal_cloned.clone();
             let claim_cloned = claim_cloned;
             async move {
@@ -114,7 +111,7 @@ pub async fn task<D: Dal + Sync + 'static>(
 }
 
 #[instrument(skip(dal, runtime_manager))]
-async fn kill_old_deployments<D: Dal + Sync + 'static>(
+pub async fn kill_old_deployments<D: Dal + Sync + 'static>(
     service_id: Ulid,
     deployment_id: Ulid,
     dal: D,
@@ -123,7 +120,7 @@ async fn kill_old_deployments<D: Dal + Sync + 'static>(
     let mut guard = runtime_manager.lock().await;
 
     for old_id in dal
-        .active_deployments(&service_id)
+        .service_running_deployments(&service_id)
         .await
         .map_err(|e| Error::Dal(e))?
         .into_iter()
@@ -177,15 +174,16 @@ pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
 
 #[derive(Clone, Debug)]
 pub struct Built {
-    pub id: Ulid,
+    pub deployment_id: Ulid,
     pub service_name: String,
     pub service_id: Ulid,
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
+    pub claim: Option<Claim>,
 }
 
 impl Built {
-    #[instrument(skip(self, storage_manager, runtime_manager, dal, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(skip(self, storage_manager, runtime_manager, dal, kill_old_deployments, cleanup), fields(id = %self.deployment_id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle<D: Dal + Sync + 'static>(
         self,
@@ -200,7 +198,7 @@ impl Built {
         // For shuttle-next this is the path to the compiled .wasm file, which will be
         // used in the load request.
         let executable_path = storage_manager
-            .deployment_executable_path(&self.id)
+            .deployment_executable_path(&self.deployment_id)
             .map_err(Error::IoError)?;
 
         let port = match pick_unused_port() {
@@ -224,7 +222,7 @@ impl Built {
         let runtime_client = runtime_manager
             .lock()
             .await
-            .runtime_client(self.id, alpha_runtime_path.clone())
+            .runtime_client(self.deployment_id, alpha_runtime_path.clone())
             .await
             .map_err(Error::Runtime)?;
 
@@ -241,7 +239,7 @@ impl Built {
         .await?;
 
         tokio::spawn(run(
-            self.id,
+            self.deployment_id,
             self.service_name,
             runtime_client,
             address,

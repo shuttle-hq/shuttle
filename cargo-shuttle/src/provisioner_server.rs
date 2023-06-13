@@ -17,7 +17,7 @@ use futures::StreamExt;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     database::{AwsRdsEngine, SharedEngine},
-    delete_dynamodb_tables_by_prefix, DynamoDbReadyInfo,
+    DynamoDbReadyInfo,
 };
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
@@ -283,50 +283,6 @@ impl LocalProvisioner {
         }
     }
 
-    async fn delete_dynamodb_tables_by_prefix_in_container(
-        &self,
-        prefix: &str,
-    ) -> Result<DynamoDbDeletionResponse, Status> {
-        let DynamoDbConfig {
-            container_name,
-            image: _,
-            port,
-            aws_access_key_id,
-            aws_secret_access_key,
-            aws_default_region,
-            is_ready_cmd: _,
-        } = dynamodb_config();
-
-        let container = match self.docker.inspect_container(&container_name, None).await {
-            Ok(container) => {
-                trace!("found DB container {container_name}");
-                container
-            }
-            Err(error) => {
-                error!("got unexpected error while inspecting docker container: {error}");
-                return Err(Status::internal(error.to_string()));
-            }
-        };
-
-        let port = self.get_container_host_port(container.clone(), &port);
-
-        std::env::set_var("AWS_ACCESS_KEY_ID", aws_access_key_id);
-        std::env::set_var("AWS_SECRET_ACCESS_KEY", aws_secret_access_key);
-        std::env::set_var("AWS_REGION", aws_default_region);
-
-        let endpoint = format!("http://localhost:{}", port);
-
-        let aws_config = aws_config::from_env().endpoint_url(endpoint).load().await;
-
-        let dynamodb_client = aws_sdk_dynamodb::Client::new(&aws_config);
-
-        delete_dynamodb_tables_by_prefix(&dynamodb_client, prefix)
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
-
-        Ok(DynamoDbDeletionResponse {})
-    }
-
     async fn pull_image(&self, image: &str) -> Result<(), String> {
         trace!("pulling latest image for '{image}'");
         let mut layers = Vec::new();
@@ -406,15 +362,9 @@ impl Provisioner for LocalProvisioner {
 
     async fn delete_dynamo_db(
         &self,
-        request: Request<DynamoDbRequest>,
+        _request: Request<DynamoDbRequest>,
     ) -> Result<Response<DynamoDbDeletionResponse>, Status> {
-        let DynamoDbRequest { project_name } = request.into_inner();
-
-        let res = self
-            .delete_dynamodb_tables_by_prefix_in_container(&project_name)
-            .await?;
-
-        Ok(Response::new(res))
+        unimplemented!()
     }
 }
 
@@ -583,6 +533,8 @@ mod tests {
     use aws_sdk_dynamodb::error::SdkError;
     use aws_sdk_dynamodb::operation::create_table::CreateTableError;
     use aws_sdk_dynamodb::operation::create_table::CreateTableOutput;
+    use aws_sdk_dynamodb::operation::delete_table::DeleteTableError;
+    use aws_sdk_dynamodb::operation::delete_table::DeleteTableOutput;
     use aws_sdk_dynamodb::operation::scan::ScanError;
     use aws_sdk_dynamodb::operation::scan::ScanOutput;
     use aws_sdk_dynamodb::types::AttributeDefinition;
@@ -630,6 +582,17 @@ mod tests {
         dynamodb_client.scan().table_name(table_name).send().await
     }
 
+    async fn delete_table(
+        dynamodb_client: &aws_sdk_dynamodb::Client,
+        table_name: &str,
+    ) -> Result<DeleteTableOutput, SdkError<DeleteTableError>> {
+        dynamodb_client
+            .delete_table()
+            .table_name(table_name)
+            .send()
+            .await
+    }
+
     #[tokio::test]
     async fn test_create_and_delete_dynamodb() {
         let provisioner = LocalProvisioner::new().unwrap();
@@ -667,11 +630,8 @@ mod tests {
 
         println!("{result:?}");
 
-        // delete dynamodb resource
-        provisioner
-            .delete_dynamodb_tables_by_prefix_in_container(&project_name)
-            .await
-            .unwrap();
+        // delete table
+        delete_table(&dynamodb_client, &table_name).await.unwrap();
 
         // select from table (should fail now that tables have been deleted)
         let result = select_from_table(&dynamodb_client, &table_name).await;

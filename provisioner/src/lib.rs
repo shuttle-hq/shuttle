@@ -16,7 +16,6 @@ use rand::Rng;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use shuttle_common::claims::{Claim, Scope};
-use shuttle_common::delete_dynamodb_tables_by_prefix;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
@@ -467,6 +466,46 @@ impl MyProvisioner {
     }
 }
 
+pub async fn delete_dynamodb_tables_by_prefix(
+    dynamodb_client: &aws_sdk_dynamodb::Client,
+    prefix: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut last_evaluated_table_name: Option<String> = Some(prefix.to_string());
+
+    'outer: while let Some(table_name) = last_evaluated_table_name {
+        let result = dynamodb_client
+            .list_tables()
+            .exclusive_start_table_name(table_name)
+            .send()
+            .await?;
+        last_evaluated_table_name = result.last_evaluated_table_name.clone();
+
+        if let Some(table_names) = result.table_names {
+            for table_name in table_names {
+                if !table_name.starts_with(prefix) {
+                    break 'outer;
+                } else {
+                    dynamodb_client
+                        .delete_table()
+                        .table_name(table_name)
+                        .send()
+                        .await?;
+                }
+            }
+        }
+    }
+
+    // edge case to include just the prefix table name (if the user put only prefix for table name)
+    // failure ok if no table found
+    let _ = dynamodb_client
+        .delete_table()
+        .table_name(prefix)
+        .send()
+        .await;
+
+    Ok(())
+}
+
 #[tonic::async_trait]
 impl Provisioner for MyProvisioner {
     #[tracing::instrument(skip(self))]
@@ -888,7 +927,7 @@ mod tests {
 
     use crate::{get_prefix, DynamoDBHandler, MyProvisioner};
 
-    use shuttle_common::delete_dynamodb_tables_by_prefix;
+    use super::delete_dynamodb_tables_by_prefix;
 
     async fn make_test_provisioner() -> MyProvisioner {
         let pg_uri = "postgres://postgres:password@localhost:5432".to_string();

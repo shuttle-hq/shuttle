@@ -32,8 +32,7 @@ features = ["backend", "tonic"]
 workspace = true
 
 [dev-dependencies]
-hyper = { workspace = true }
 portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
-tower = { workspace = true }
+shuttle-common-tests = { workspace = true }

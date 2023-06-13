@@ -5283,11 +5283,11 @@ dependencies = [
  "async-trait",
  "clap",
  "flate2",
- "hyper",
  "nbuild-core",
  "portpicker",
  "pretty_assertions",
  "shuttle-common",
+ "shuttle-common-tests",
  "shuttle-proto",
  "tar",
  "tempfile",
@@ -5295,7 +5295,6 @@ dependencies = [
  "tokio",
  "toml 0.5.11",
  "tonic",
- "tower",
  "tracing",
  "tracing-subscriber",
  "ulid",
@@ -5360,6 +5359,15 @@ dependencies = [
  "ttl_cache",
  "utoipa",
  "uuid",
+]
+
+[[package]]
+name = "shuttle-common-tests"
+version = "0.18.0"
+dependencies = [
+ "hyper",
+ "shuttle-common",
+ "tower",
 ]
 
 [[package]]
@@ -5519,19 +5527,18 @@ dependencies = [
  "async-trait",
  "chrono",
  "clap",
- "hyper",
  "portpicker",
  "pretty_assertions",
  "prost-types",
  "serde_json",
  "shuttle-common",
+ "shuttle-common-tests",
  "shuttle-proto",
  "sqlx",
  "strum",
  "thiserror",
  "tokio",
  "tonic",
- "tower",
  "tracing",
  "tracing-subscriber",
  "ulid",

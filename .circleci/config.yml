@@ -606,6 +606,7 @@ workflows:
                 - resources/persist
                 - resources/secrets
                 - resources/static-folder
+                - resources/turso
                 - services/shuttle-actix-web
                 - services/shuttle-axum
                 - services/shuttle-next

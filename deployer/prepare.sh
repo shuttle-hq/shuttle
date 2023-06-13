@@ -17,6 +17,7 @@ if [[ $PROD != "true" ]]; then
     shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
     shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
     shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }
+    shuttle-turso = { path = "/usr/src/shuttle/resources/turso" }
 
     shuttle-axum = { path = "/usr/src/shuttle/services/shuttle-axum" }
     shuttle-actix-web = { path = "/usr/src/shuttle/services/shuttle-actix-web" }

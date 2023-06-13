@@ -263,7 +263,7 @@ impl MyProvisioner {
                     debug!("creating new AWS RDS {instance_name}");
 
                     // The engine display impl is used for both the engine and the database name,
-                    // but for "mysql" the engine name is an invalid database name.
+                    // but for mysql the engine name is an invalid database name.
                     let db_name = if let aws_rds::Engine::Mysql(_) = engine {
                         "msql".to_string()
                     } else {

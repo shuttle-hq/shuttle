@@ -14,6 +14,7 @@ message DeployRequest {
   bool git_dirty = 6;
   bool is_next = 7;
   uint32 idle_minutes = 8;
+  string image_name = 9;
 }
 
 message DeployResponse {

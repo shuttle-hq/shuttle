@@ -9,6 +9,7 @@ members = [
   "common-tests",
   "deployer",
   "gateway",
+  "otlp-exporter",
   "proto",
   "provisioner",
   "resource-recorder",

@@ -79,7 +79,6 @@ impl ResourceBuilder<Client> for Turso {
             }
             shuttle_service::Environment::Local => {
                 // Default to a local db of the name of the service.
-                // XXX: should we check that the file doesn't exist before using that name ?
                 let default_db_path = factory
                     .get_build_path()?
                     .join(format!("{}.db", factory.get_service_name()));

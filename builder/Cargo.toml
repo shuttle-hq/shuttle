@@ -12,7 +12,8 @@ nbuild-core = "0.1.1"
 tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["io-util", "macros", "process", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["fs", "macros", "io-util", "process", "rt-multi-thread"] }
+toml = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }
 ulid = { workspace = true }
@@ -23,3 +24,9 @@ features = ["backend", "tonic"]
 
 [dependencies.shuttle-proto]
 workspace = true
+
+[dev-dependencies]
+hyper = { workspace = true }
+portpicker = { workspace = true }
+pretty_assertions = { workspace = true }
+tower = { workspace = true }

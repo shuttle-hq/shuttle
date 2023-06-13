@@ -1,5 +1,6 @@
 use std::{
-    fs,
+    collections::BTreeMap,
+    fs::{self, remove_file},
     io::Read,
     path::{Path, PathBuf},
     process::Stdio,
@@ -9,7 +10,9 @@ use async_trait::async_trait;
 use flate2::read::GzDecoder;
 use nbuild_core::models::{cargo, nix};
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
-use shuttle_proto::builder::{builder_server::Builder, BuildRequest, BuildResponse};
+use shuttle_proto::builder::{
+    build_response::Secret, builder_server::Builder, BuildRequest, BuildResponse,
+};
 use tar::Archive;
 use tempfile::tempdir;
 use thiserror::Error;
@@ -18,7 +21,7 @@ use tokio::{
     process::Command,
 };
 use tonic::{Request, Response, Status};
-use tracing::{error, instrument};
+use tracing::{debug, error, info, instrument};
 
 /// A wrapper to capture any error possible with this service
 #[derive(Debug, Error)]
@@ -28,6 +31,9 @@ pub enum Error {
 
     #[error("build error: {0}")]
     Build(#[from] nbuild_core::Error),
+
+    #[error("error reading secrets: {0}")]
+    Secrets(#[from] toml::de::Error),
 }
 
 pub struct Service;
@@ -38,15 +44,31 @@ impl Service {
     }
 
     #[instrument(skip(self, archive))]
-    async fn build(&self, deployment_id: String, archive: Vec<u8>) -> Result<Vec<u8>, Error> {
+    async fn build(
+        &self,
+        deployment_id: String,
+        archive: Vec<u8>,
+    ) -> Result<(Vec<u8>, BTreeMap<String, String>), Error> {
         let tmp_dir = tempdir()?;
+        let path = tmp_dir.path();
 
-        extract_tar_gz_data(archive.as_slice(), tmp_dir.path()).await?;
-        build_flake_file(tmp_dir.path())?;
+        extract_tar_gz_data(archive.as_slice(), path).await?;
+        let secrets = get_secrets(path).await?;
+        build_flake_file(path)?;
 
         let mut cmd = Command::new("nix");
-        cmd.args(["build", tmp_dir.path().to_str().unwrap()])
-            .stdout(Stdio::piped());
+        let output_path = tmp_dir.path().join("_archive");
+        cmd.args([
+            "build",
+            "--no-write-lock-file",
+            "--impure",
+            "--log-format",
+            "bar-with-logs",
+            "--out-link",
+            output_path.to_str().unwrap(),
+            path.to_str().unwrap(),
+        ])
+        .stdout(Stdio::piped());
 
         let mut child = cmd.spawn()?;
         let stdout = child.stdout.take().expect("to get handle on stdout");
@@ -55,15 +77,17 @@ impl Service {
 
         tokio::spawn(async move {
             while let Some(line) = reader.next_line().await.expect("to get line") {
-                println!("{line}");
+                info!("{line}");
             }
         });
 
         let status = child.wait().await.expect("build to finish");
 
-        println!("status: {status}");
+        debug!("{status}");
 
-        Ok(Default::default())
+        let archive = fs::read(output_path)?;
+
+        Ok((archive, secrets))
     }
 }
 
@@ -79,8 +103,8 @@ impl Builder for Service {
             deployment_id,
             archive,
         } = request.into_inner();
-        let image = match self.build(deployment_id, archive).await {
-            Ok(image) => image,
+        let (image, secrets) = match self.build(deployment_id, archive).await {
+            Ok(results) => results,
             Err(error) => {
                 error!(
                     error = &error as &dyn std::error::Error,
@@ -90,10 +114,16 @@ impl Builder for Service {
                 return Err(Status::from_error(Box::new(error)));
             }
         };
+
+        let secrets = secrets
+            .into_iter()
+            .map(|(key, value)| Secret { key, value })
+            .collect();
+
         let result = BuildResponse {
             image,
             is_wasm: false,
-            secrets: Default::default(),
+            secrets,
         };
 
         Ok(Response::new(result))
@@ -156,4 +186,21 @@ fn build_flake_file(path: &Path) -> Result<(), Error> {
     fs::write(path.join("flake.nix"), flake)?;
 
     Ok(())
+}
+
+/// Get secrets from `Secrets.toml`
+async fn get_secrets(path: &Path) -> Result<BTreeMap<String, String>, Error> {
+    let secrets_file = path.join("Secrets.toml");
+
+    if secrets_file.exists() && secrets_file.is_file() {
+        let secrets_str = tokio::fs::read_to_string(secrets_file.clone()).await?;
+
+        let secrets: BTreeMap<String, String> = secrets_str.parse::<toml::Value>()?.try_into()?;
+
+        remove_file(secrets_file)?;
+
+        Ok(secrets)
+    } else {
+        Ok(Default::default())
+    }
 }

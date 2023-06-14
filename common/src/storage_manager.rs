@@ -1,7 +1,6 @@
 use std::{fs, io, path::PathBuf};
 
 use ulid::Ulid;
-use uuid::Uuid;
 
 pub trait StorageManager: Sync + Send {
     /// Path for a specific service build files

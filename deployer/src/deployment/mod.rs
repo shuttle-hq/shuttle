@@ -17,7 +17,6 @@ use tracing::error;
 
 use self::{deploy_layer::LogRecorder, persistence::dal::Dal};
 
-const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 
 pub struct DeploymentManagerBuilder<LR, D: Dal + Sync + 'static> {
@@ -66,22 +65,17 @@ where
     /// channels are also created which are for moving on-going service
     /// deployments between the aforementioned tasks.
     pub fn build(self) -> DeploymentManager {
-        let build_log_recorder = self
-            .build_log_recorder
-            .expect("a build log recorder to be set");
         let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
         let runtime_manager = self.runtime_manager.expect("a runtime manager to be set");
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
         let storage_manager = ArtifactsStorageManager::new(artifacts_path);
         let dal = self.dal.expect("a DAL is required");
 
-        let run_send_clone = run_send.clone();
-
         tokio::spawn(crate::project::driver::task(
             run_recv,
             runtime_manager.clone(),
             storage_manager.clone(),
-            dal.clone(),
+            dal,
             self.claim,
         ));
 
@@ -138,7 +132,6 @@ impl DeploymentManager {
 }
 
 type RunSender = mpsc::Sender<Run>;
-type RunReceiver = mpsc::Receiver<Run>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Deployment {

@@ -1,14 +1,9 @@
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
-use error::{Error, Result};
-use sqlx::QueryBuilder;
-
 use serde_json::json;
 use shuttle_common::STATE_MESSAGE;
 use sqlx::migrate::Migrator;
-use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 use tracing::{error, trace};
-use uuid::Uuid;
 
 use self::dal::Dal;
 pub use self::error::Error as PersistenceError;
@@ -16,8 +11,6 @@ pub use self::log::{Level as LogLevel, Log};
 pub use self::service::Service;
 pub use self::state::State;
 pub use self::user::User;
-
-use super::Deployment;
 
 pub mod dal;
 mod error;
@@ -32,16 +25,12 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 pub struct Persistence<D: Dal + 'static> {
     dal: D,
     log_send: crossbeam_channel::Sender<deploy_layer::Log>,
-    stream_log_send: Sender<deploy_layer::Log>,
 }
 
 impl<D: Dal + Send + Sync + 'static> Persistence<D> {
     pub async fn from_dal(dal: D) -> (Self, JoinHandle<()>) {
         let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
             crossbeam_channel::bounded(0);
-
-        let (stream_log_send, _) = broadcast::channel(1);
-        let stream_log_send_clone = stream_log_send.clone();
 
         let dal_cloned = dal.clone();
 
@@ -92,28 +81,10 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
                             });
                     }
                 };
-
-                let receiver_count = stream_log_send_clone.receiver_count();
-                trace!(?log, receiver_count, "sending log to broadcast stream");
-
-                if receiver_count > 0 {
-                    stream_log_send_clone.send(log).unwrap_or_else(|error| {
-                        error!(
-                            error = &error as &dyn std::error::Error,
-                            "failed to broadcast log"
-                        );
-
-                        0
-                    });
-                }
             }
         });
 
-        let persistence = Self {
-            dal,
-            log_send,
-            stream_log_send,
-        };
+        let persistence = Self { dal, log_send };
 
         (persistence, handle)
     }

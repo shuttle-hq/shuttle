@@ -7,5 +7,3 @@ pub enum Error {
     #[error("Ulid error: {0}")]
     Ulid(#[from] DecodeError),
 }
-
-pub type Result<T> = std::result::Result<T, Error>;

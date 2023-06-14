@@ -19,7 +19,6 @@ use project::service::ServiceState;
 use project::task::{BoxedTask, Task, TaskBuilder};
 use runtime_manager::RuntimeManager;
 use shuttle_common::backends::auth::VerifyClaim;
-use shuttle_common::claims::Claim;
 use shuttle_common::{
     backends::{
         auth::{AuthPublicKey, JwtAuthenticationLayer},
@@ -61,7 +60,6 @@ pub struct DeployerService<D: Dal + Send + Sync + 'static> {
     prefix: String,
     sender:
         tokio::sync::mpsc::Sender<Box<dyn Task<(), Output = (), Error = project::error::Error>>>,
-    worker_handle: tokio::task::JoinHandle<std::result::Result<(), ()>>,
 }
 
 impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
@@ -88,7 +86,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         let sender: tokio::sync::mpsc::Sender<
             Box<dyn Task<(), Output = (), Error = project::error::Error>>,
         > = worker.sender();
-        let worker_handle: tokio::task::JoinHandle<std::result::Result<(), ()>> = tokio::spawn(
+        tokio::spawn(
             worker
                 .start()
                 .map_ok(|_| info!("worker terminated successfully"))
@@ -107,7 +105,6 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             auth_uri,
             network_name,
             prefix,
-            worker_handle,
             sender,
         }
     }
@@ -158,7 +155,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 .await;
             TaskBuilder::new(self.persistence.dal().clone())
                 .task_router(self.task_router.clone())
-                .service_id(service.id.clone())
+                .service_id(service.id)
                 .service_context(ServiceDockerContext::new(
                     self.docker.clone(),
                     cs,
@@ -225,7 +222,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 self.auth_uri.clone(),
             )))
             .layer(ExtractPropagationLayer);
-        let bind_address = self.bind_address.clone();
+        let bind_address = self.bind_address;
         let svc = DeployerServer::new(self);
         let router = server_builder.add_service(svc);
 
@@ -236,17 +233,11 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         Ok(())
     }
 
-    pub async fn push_deployment(
-        &self,
-        req: DeployRequest,
-        state: ServiceState,
-        claim: Option<Claim>,
-    ) -> Result<String> {
+    pub async fn push_deployment(&self, req: DeployRequest, state: ServiceState) -> Result<String> {
         // Insert the service if not present.
-        let service_id =
-            Ulid::from_string(req.service_id.as_str()).map_err(|err| Error::UlidDecode(err))?;
+        let service_id = Ulid::from_string(req.service_id.as_str()).map_err(Error::UlidDecode)?;
         let service = Service {
-            id: service_id.clone(),
+            id: service_id,
             name: req.service_name.clone(),
             state_variant: state.to_string(),
             state,
@@ -285,7 +276,6 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
         request: tonic::Request<DeployRequest>,
     ) -> TonicResult<tonic::Response<DeployResponse>, tonic::Status> {
         request.verify(Scope::DeploymentPush)?;
-        let claim = request.extensions().get::<Claim>().map(Clone::clone);
         let request = request.into_inner();
         let service_id: Ulid = Ulid::from_string(request.service_id.as_str())
             .map_err(|_| tonic::Status::invalid_argument("invalid service id"))?;
@@ -297,7 +287,7 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
             .service_running_deployments(&service_id)
             .await
             .map_err(|_| tonic::Status::new(tonic::Code::Internal, "error triggered while checking the existing running deployments for the service"))?;
-        if service_running_deployments.len() > 0 {
+        if !service_running_deployments.is_empty() {
             return Err(tonic::Status::internal(
                 "can not deploy due to existing running deployments",
             ));
@@ -311,7 +301,7 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
             u64::from(request.idle_minutes),
         ));
         let deployment_id = self
-            .push_deployment(request.clone(), state.clone(), claim)
+            .push_deployment(request.clone(), state.clone())
             .await
             .map_err(|err| tonic::Status::new(tonic::Code::Internal, err.to_string()))?;
 

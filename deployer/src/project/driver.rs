@@ -5,7 +5,6 @@ use std::{
     sync::Arc,
 };
 
-use async_trait::async_trait;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
@@ -15,8 +14,8 @@ use shuttle_common::{
 };
 
 use shuttle_proto::runtime::{
-    runtime_client::{self, RuntimeClient},
-    LoadRequest, StartRequest, StopReason, SubscribeStopRequest, SubscribeStopResponse,
+    runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
+    SubscribeStopResponse,
 };
 use tokio::sync::{mpsc, Mutex};
 use tonic::{transport::Channel, Code};
@@ -28,7 +27,6 @@ use crate::{deployment::persistence::dal::Dal, runtime_manager::RuntimeManager};
 
 use super::error::{Error, Result};
 
-type RunSender = mpsc::Sender<Run>;
 type RunReceiver = mpsc::Receiver<Run>;
 
 /// Run a task which takes runnable deploys from a channel and starts them up on our runtime
@@ -43,14 +41,16 @@ pub async fn task<D: Dal + Sync + 'static>(
     info!("Run task started");
 
     while let Some(run) = recv.recv().await {
-        let deployment_id = run.deployment_id.clone();
         let dal_cloned = dal.clone();
-        info!("Built deployment at the front of run queue: {deployment_id}");
+        info!(
+            "Built deployment at the front of run queue: {}",
+            run.deployment_id
+        );
 
         let storage_manager = storage_manager.clone();
         let old_deployments_killer = kill_old_deployments(
-            run.service_id.clone(),
-            run.deployment_id.clone(),
+            run.service_id,
+            run.deployment_id,
             dal_cloned,
             runtime_manager.clone(),
         );
@@ -59,16 +59,16 @@ pub async fn task<D: Dal + Sync + 'static>(
 
             if let Some(response) = response {
                 match StopReason::from_i32(response.reason).unwrap_or_default() {
-                    StopReason::Request => stopped_cleanup(&deployment_id),
-                    StopReason::End => completed_cleanup(&deployment_id),
+                    StopReason::Request => stopped_cleanup(&run.deployment_id),
+                    StopReason::End => completed_cleanup(&run.deployment_id),
                     StopReason::Crash => crashed_cleanup(
-                        &deployment_id,
-                        Error::Run(anyhow::Error::msg(response.message).into()),
+                        &run.deployment_id,
+                        Error::Run(anyhow::Error::msg(response.message)),
                     ),
                 }
             } else {
                 crashed_cleanup(
-                    &deployment_id,
+                    &run.deployment_id,
                     Error::Runtime(anyhow::anyhow!(
                         "stop subscribe channel stopped unexpectedly"
                     )),
@@ -76,7 +76,7 @@ pub async fn task<D: Dal + Sync + 'static>(
             }
         };
 
-        let mut runtime_client = runtime_manager
+        let runtime_client = runtime_manager
             .lock()
             .await
             .runtime_client(run.service_id, run.target_ip)
@@ -90,8 +90,7 @@ pub async fn task<D: Dal + Sync + 'static>(
             });
             let span = debug_span!("runner");
             span.set_parent(parent_cx);
-            let deployment_id = run.deployment_id.clone();
-            let dal_cloned_cloned = dal_cloned.clone();
+            let deployment_id = run.deployment_id;
             let claim_cloned = claim_cloned;
             async move {
                 if let Err(err) = run
@@ -126,7 +125,7 @@ pub async fn kill_old_deployments<D: Dal + Sync + 'static>(
     for old_id in dal
         .service_running_deployments(&service_id)
         .await
-        .map_err(|e| Error::Dal(e))?
+        .map_err(Error::Dal)?
         .into_iter()
         .filter(|old_id| old_id != &deployment_id)
     {
@@ -183,7 +182,7 @@ impl Run {
     async fn handle<D: Dal + Sync + 'static>(
         self,
         storage_manager: ArtifactsStorageManager,
-        mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+        runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         dal: D,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
@@ -205,21 +204,13 @@ impl Run {
             }
         };
 
-        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-
-        let alpha_runtime_path = if self.is_next {
-            // The runtime client for next is the installed shuttle-next bin
-            None
-        } else {
-            Some(executable_path.clone())
-        };
+        let address = SocketAddr::new(IpAddr::V4(self.target_ip), port);
 
         kill_old_deployments.await?;
 
         // Execute loaded service
         load(
             self.service_name.clone(),
-            self.service_id,
             executable_path.clone(),
             runtime_client.clone(),
             claim,
@@ -241,7 +232,6 @@ impl Run {
 
 async fn load(
     service_name: String,
-    service_id: Ulid,
     executable_path: PathBuf,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Option<Claim>,

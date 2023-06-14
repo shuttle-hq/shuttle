@@ -1,10 +1,5 @@
-use std::time::Duration;
-
 use clap::Parser;
-use shuttle_common::backends::{
-    auth::{AuthPublicKey, JwtAuthenticationLayer},
-    tracing::{setup_tracing, ExtractPropagationLayer},
-};
+use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_deployer::{
     args::Args,
     deployment::{
@@ -14,13 +9,13 @@ use shuttle_deployer::{
     runtime_manager::RuntimeManager,
     DeployerService,
 };
-use tracing::trace;
+use tracing::{error, trace};
 use tracing_subscriber::layer::SubscriberExt;
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-
+    setup_tracing(tracing_subscriber::registry(), "deployer");
     let (persistence, _) = Persistence::from_dal(Sqlite::new(&args.state).await).await;
     setup_tracing(
         tracing_subscriber::registry().with(DeployLayer::new(persistence.clone())),
@@ -41,4 +36,11 @@ async fn main() {
         args.prefix,
     )
     .await;
+    match svc.start().await {
+        Ok(_) => (),
+        Err(err) => error!(
+            "error triggered when starting the deployer server {}",
+            err.to_string()
+        ),
+    }
 }

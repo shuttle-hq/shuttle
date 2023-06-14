@@ -121,7 +121,7 @@ impl TaskRouter<BoxedTask> {
 
             let res = sender.send(task).await;
 
-            table.insert(service_id.clone(), sender);
+            table.insert(*service_id, sender);
 
             res
         }

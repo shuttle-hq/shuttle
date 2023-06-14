@@ -228,7 +228,7 @@ impl<D: Dal + Send + Sync + 'static> TaskBuilder<D> {
     }
 
     pub async fn send(self, sender: &Sender<BoxedTask>) -> Result<TaskHandle, Error> {
-        let service_id = self.service_id.clone().expect("service id is required");
+        let service_id = self.service_id.expect("service id is required");
         let task_router = self.task_router.clone().expect("task router is required");
         let (task, handle) = AndThenNotify::after(self.build());
         let task = Route::<BoxedTask>::to(service_id, Box::new(task), task_router);
@@ -463,7 +463,7 @@ where
         };
 
         let service_task_ctx = ServiceTaskContext {
-            service_id: self.service_id.clone(),
+            service_id: self.service_id,
             state: service.state,
             docker_context: self.docker_context.clone(),
         };
@@ -496,7 +496,7 @@ where
             trace!(new_state = ?update.state(), "new state");
             match self
                 .dal
-                .update_service_state(self.service_id.clone(), update.clone())
+                .update_service_state(self.service_id, update.clone())
                 .await
             {
                 Ok(_) => trace!(new_state = ?update.state(), "successfully updated project state"),

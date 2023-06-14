@@ -7,7 +7,6 @@ use bollard::{
 };
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
-use shuttle_proto::runtime::Ping;
 use tracing::{debug, instrument, trace};
 use ulid::Ulid;
 
@@ -58,13 +57,13 @@ where
             mut stats,
         } = self;
         let container = container.refresh(ctx).await?;
-        let mut service = match service {
+        let service = match service {
             Some(service) => service,
             None => Service::from_container(container.clone())?,
         };
 
         let service_id = Ulid::from_string(service.id.as_str())
-            .map_err(|err| ServiceErrored::internal("failed to get the service id"))?;
+            .map_err(|_| ServiceErrored::internal("failed to get the service id"))?;
 
         if ctx
             .runtime_manager()

@@ -1,6 +1,6 @@
 use std::fmt;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use axum::async_trait;
@@ -121,9 +121,23 @@ impl Sqlite {
         //
         // If you want to activate a faster synchronous mode, then also do proper testing to confirm this bug is no
         // longer present.
-        let sqlite_options = SqliteConnectOptions::from_str(path_as_str)
-            .unwrap()
-            .journal_mode(SqliteJournalMode::Wal);
+        info!(
+            "path {}",
+            std::fs::canonicalize(path)
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+                .as_str()
+        );
+        let sqlite_options = SqliteConnectOptions::from_str(
+            std::fs::canonicalize(path)
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+                .as_str(),
+        )
+        .unwrap()
+        .journal_mode(SqliteJournalMode::Wal);
 
         let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
 
@@ -145,7 +159,7 @@ impl Sqlite {
 
 #[async_trait]
 impl Dal for Sqlite {
-    async fn insert_log(&self, log: Log) -> Result<(), DalError> {
+    async fn insert_log(&self, _log: Log) -> Result<(), DalError> {
         Ok(())
     }
 
@@ -224,8 +238,8 @@ impl Dal for Sqlite {
             .bind(State::Loading)
             .execute(&self.pool)
             .await
-            .map_err(DalError::from);
-        Ok(())
+            .map_err(DalError::from)
+            .map(|_| ())
     }
 
     async fn running_deployments(&self) -> Result<Vec<DeploymentRunnable>, DalError> {
@@ -250,7 +264,7 @@ impl Dal for Sqlite {
             .execute(&self.pool)
             .await
             .map(|_| ())
-            .map_err(|e| DalError::from(e))
+            .map_err(DalError::from)
     }
 
     async fn update_service_state(
@@ -258,14 +272,13 @@ impl Dal for Sqlite {
         service_id: Ulid,
         state: ServiceState,
     ) -> Result<(), DalError> {
-        let query = query("UPDATE services SET state = ?1 WHERE service_id = ?2")
+        query("UPDATE services SET state = ?1 WHERE service_id = ?2")
             .bind(SqlxJson(state))
             .bind(service_id.to_string())
             .execute(&self.pool)
             .await
-            .map_err(|err| DalError::Sqlx(err))?;
-
-        Ok(())
+            .map_err(DalError::from)
+            .map(|_| ())
     }
 
     async fn service_running_deployments(&self, service_id: &Ulid) -> Result<Vec<Ulid>, DalError> {
@@ -276,7 +289,7 @@ impl Dal for Sqlite {
         .bind(State::Running)
         .fetch_all(&self.pool)
         .await
-        .map_err(|err| DalError::Sqlx(err))?
+        .map_err(DalError::from)?
         .into_iter()
         .map(|deployment| deployment.id)
         .collect();
@@ -291,7 +304,7 @@ impl Dal for Sqlite {
             .execute(&self.pool)
             .await
             .map(|_| ())
-            .map_err(|err| DalError::Sqlx(err))
+            .map_err(DalError::from)
     }
 
     async fn set_is_next(&self, service_id: &Ulid, is_next: bool) -> Result<(), DalError> {
@@ -301,7 +314,7 @@ impl Dal for Sqlite {
             .execute(&self.pool)
             .await
             .map(|_| ())
-            .map_err(|err| DalError::Sqlx(err))
+            .map_err(DalError::from)
     }
 
     // Get services

@@ -2,14 +2,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use bollard::{errors::Error as DockerError, service::ContainerInspectResponse, Docker};
-use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::project::IDLE_MINUTES;
-use shuttle_proto::runtime::runtime_client::RuntimeClient;
 use tokio::sync::Mutex;
-use tonic::transport::Channel;
 use ulid::Ulid;
 
-use crate::deployment::DeploymentUpdater;
 use crate::runtime_manager::RuntimeManager;
 use crate::safe_unwrap;
 

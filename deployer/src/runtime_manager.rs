@@ -14,8 +14,6 @@ use ulid::Ulid;
 
 use crate::{deployment::deploy_layer, project::service::RUNTIME_API_PORT};
 
-const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
-
 type Runtimes =
     Arc<tokio::sync::Mutex<HashMap<Ulid, RuntimeClient<ClaimService<InjectPropagation<Channel>>>>>>;
 
@@ -95,8 +93,7 @@ impl RuntimeManager {
 
             trace!(?response, "stop deployment response");
 
-            let result = response.into_inner().success;
-            result
+            response.into_inner().success
         } else {
             trace!("no client running");
             true
@@ -112,7 +109,7 @@ impl RuntimeManager {
             let ping = tonic::Request::new(Ping {});
             let response = runtime_client.health_check(ping).await;
             match response {
-                Ok(inner) => {
+                Ok(_) => {
                     trace!("runtime responded with pong");
                     true
                 }

@@ -1,14 +1,9 @@
-use std::{
-    collections::VecDeque,
-    net::{IpAddr, Ipv4Addr},
-    sync::Arc,
-};
+use std::{collections::VecDeque, net::Ipv4Addr, sync::Arc};
 
 use async_trait::async_trait;
 use bollard::{container::Stats, service::ContainerInspectResponse};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use tonic::transport::Channel;
 use tracing::instrument;
 
 use super::machine::State;
@@ -43,8 +38,8 @@ where
 }
 
 impl ServiceReady {
-    pub fn target_ip(&self) -> &Ipv4Addr {
-        &self.service.target
+    pub fn target_ip(&self) -> Ipv4Addr {
+        self.service.target
     }
 
     pub async fn is_healthy(

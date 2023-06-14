@@ -4,17 +4,13 @@ use std::{
     fmt::Display,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
-    time::Duration,
 };
 
 use async_trait::async_trait;
 use bollard::errors::Error as DockerError;
 use bollard::service::{ContainerInspectResponse, ContainerStateStatusEnum};
 use serde::{Deserialize, Serialize};
-use shuttle_common::claims::{ClaimService, InjectPropagation};
-use shuttle_proto::runtime::{runtime_client::RuntimeClient, Ping};
 use tokio::sync::Mutex;
-use tonic::transport::Channel;
 use tracing::{debug, error, instrument};
 use ulid::Ulid;
 
@@ -40,17 +36,12 @@ use self::{
     },
 };
 
-use super::{
-    docker::{ContainerInspectResponseExt, DockerContext},
-    task::run,
-};
+use super::docker::{ContainerInspectResponseExt, DockerContext};
 use state::machine::{EndState, IntoTryState, Refresh, State, TryState};
 
 pub mod error;
 pub mod state;
 
-// Health check must succeed within 10 seconds
-static IS_HEALTHY_TIMEOUT: Duration = Duration::from_secs(10);
 // shuttle-runtime default port
 pub const RUNTIME_API_PORT: u16 = 8001;
 
@@ -203,7 +194,7 @@ impl ServiceState {
 
     pub fn target_ip(&self) -> Result<Option<Ipv4Addr>, Error> {
         match self.clone() {
-            Self::Ready(project_ready) => Ok(Some(project_ready.target_ip().clone())),
+            Self::Ready(project_ready) => Ok(Some(project_ready.target_ip())),
             _ => Ok(None), // not ready
         }
     }

@@ -1,5 +1,4 @@
 pub mod deploy_layer;
-pub mod gateway_client;
 pub mod persistence;
 
 use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
@@ -11,29 +10,27 @@ use sqlx::{sqlite::SqliteRow, FromRow, Row};
 use tracing::instrument;
 use ulid::Ulid;
 
-use crate::{project::driver::Built, runtime_manager::RuntimeManager};
+use crate::{project::driver::Run, runtime_manager::RuntimeManager};
 use persistence::State;
 use tokio::sync::{mpsc, Mutex};
 use tracing::error;
 
-use self::{deploy_layer::LogRecorder, gateway_client::BuildQueueClient, persistence::dal::Dal};
+use self::{deploy_layer::LogRecorder, persistence::dal::Dal};
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 
-pub struct DeploymentManagerBuilder<LR, QC, D: Dal + Sync + 'static> {
+pub struct DeploymentManagerBuilder<LR, D: Dal + Sync + 'static> {
     build_log_recorder: Option<LR>,
     artifacts_path: Option<PathBuf>,
     runtime_manager: Option<Arc<Mutex<RuntimeManager>>>,
-    queue_client: Option<QC>,
     dal: Option<D>,
     claim: Option<Claim>,
 }
 
-impl<LR, QC, D: Dal + Send + Sync + 'static> DeploymentManagerBuilder<LR, QC, D>
+impl<LR, D: Dal + Send + Sync + 'static> DeploymentManagerBuilder<LR, D>
 where
     LR: LogRecorder,
-    QC: BuildQueueClient,
 {
     pub fn build_log_recorder(mut self, build_log_recorder: LR) -> Self {
         self.build_log_recorder = Some(build_log_recorder);
@@ -49,12 +46,6 @@ where
 
     pub fn artifacts_path(mut self, artifacts_path: PathBuf) -> Self {
         self.artifacts_path = Some(artifacts_path);
-
-        self
-    }
-
-    pub fn queue_client(mut self, queue_client: QC) -> Self {
-        self.queue_client = Some(queue_client);
 
         self
     }
@@ -79,7 +70,6 @@ where
             .build_log_recorder
             .expect("a build log recorder to be set");
         let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
-        let queue_client = self.queue_client.expect("a queue client to be set");
         let runtime_manager = self.runtime_manager.expect("a runtime manager to be set");
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
         let storage_manager = ArtifactsStorageManager::new(artifacts_path);
@@ -123,19 +113,18 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<LR, QC, D: Dal + Sync + 'static>() -> DeploymentManagerBuilder<LR, QC, D> {
+    pub fn builder<LR, D: Dal + Sync + 'static>() -> DeploymentManagerBuilder<LR, D> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
             artifacts_path: None,
             runtime_manager: None,
-            queue_client: None,
             dal: None,
             claim: None,
         }
     }
 
     #[instrument(skip(self), fields(id = %built.deployment_id, state = %State::Built))]
-    pub async fn run_push(&self, built: Built) {
+    pub async fn run_push(&self, built: Run) {
         self.run_send.send(built).await.unwrap();
     }
 
@@ -148,8 +137,8 @@ impl DeploymentManager {
     }
 }
 
-type RunSender = mpsc::Sender<Built>;
-type RunReceiver = mpsc::Receiver<Built>;
+type RunSender = mpsc::Sender<Run>;
+type RunReceiver = mpsc::Receiver<Run>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Deployment {

@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    net::{Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
     sync::Arc,
 };
@@ -15,8 +15,8 @@ use shuttle_common::{
 };
 
 use shuttle_proto::runtime::{
-    runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
-    SubscribeStopResponse,
+    runtime_client::{self, RuntimeClient},
+    LoadRequest, StartRequest, StopReason, SubscribeStopRequest, SubscribeStopResponse,
 };
 use tokio::sync::{mpsc, Mutex};
 use tonic::{transport::Channel, Code};
@@ -28,8 +28,8 @@ use crate::{deployment::persistence::dal::Dal, runtime_manager::RuntimeManager};
 
 use super::error::{Error, Result};
 
-type RunSender = mpsc::Sender<Built>;
-type RunReceiver = mpsc::Receiver<Built>;
+type RunSender = mpsc::Sender<Run>;
+type RunReceiver = mpsc::Receiver<Run>;
 
 /// Run a task which takes runnable deploys from a channel and starts them up on our runtime
 /// A deploy is killed when it receives a signal from the kill channel
@@ -42,15 +42,15 @@ pub async fn task<D: Dal + Sync + 'static>(
 ) {
     info!("Run task started");
 
-    while let Some(built) = recv.recv().await {
-        let deployment_id = built.deployment_id.clone();
+    while let Some(run) = recv.recv().await {
+        let deployment_id = run.deployment_id.clone();
         let dal_cloned = dal.clone();
         info!("Built deployment at the front of run queue: {deployment_id}");
 
         let storage_manager = storage_manager.clone();
         let old_deployments_killer = kill_old_deployments(
-            built.service_id.clone(),
-            built.deployment_id.clone(),
+            run.service_id.clone(),
+            run.deployment_id.clone(),
             dal_cloned,
             runtime_manager.clone(),
         );
@@ -75,23 +75,29 @@ pub async fn task<D: Dal + Sync + 'static>(
                 )
             }
         };
-        let runtime_manager = runtime_manager.clone();
+
+        let mut runtime_client = runtime_manager
+            .lock()
+            .await
+            .runtime_client(run.service_id, run.target_ip)
+            .await
+            .expect("to set up a runtime client against a ready deployment");
         let dal_cloned = dal.clone();
         let claim_cloned = claim.clone();
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
-                propagator.extract(&built.tracing_context)
+                propagator.extract(&run.tracing_context)
             });
             let span = debug_span!("runner");
             span.set_parent(parent_cx);
-            let deployment_id = built.deployment_id.clone();
+            let deployment_id = run.deployment_id.clone();
             let dal_cloned_cloned = dal_cloned.clone();
             let claim_cloned = claim_cloned;
             async move {
-                if let Err(err) = built
+                if let Err(err) = run
                     .handle(
                         storage_manager,
-                        runtime_manager,
+                        runtime_client,
                         dal_cloned,
                         old_deployments_killer,
                         cleanup,
@@ -117,8 +123,6 @@ pub async fn kill_old_deployments<D: Dal + Sync + 'static>(
     dal: D,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
 ) -> Result<()> {
-    let mut guard = runtime_manager.lock().await;
-
     for old_id in dal
         .service_running_deployments(&service_id)
         .await
@@ -128,7 +132,7 @@ pub async fn kill_old_deployments<D: Dal + Sync + 'static>(
     {
         trace!(%old_id, "stopping old deployment");
 
-        if !guard.kill(&old_id).await {
+        if !runtime_manager.lock().await.kill(&old_id).await {
             warn!(id = %old_id, "failed to kill old deployment");
         }
     }
@@ -162,33 +166,24 @@ fn start_crashed_cleanup(_id: &Ulid, error: impl std::error::Error + 'static) {
     );
 }
 
-#[async_trait]
-pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
-    type Err: std::error::Error + Send;
-
-    async fn get_active_deployments(
-        &self,
-        service_id: &Ulid,
-    ) -> std::result::Result<Vec<Ulid>, Self::Err>;
-}
-
 #[derive(Clone, Debug)]
-pub struct Built {
+pub struct Run {
     pub deployment_id: Ulid,
     pub service_name: String,
     pub service_id: Ulid,
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
     pub claim: Option<Claim>,
+    pub target_ip: Ipv4Addr,
 }
 
-impl Built {
-    #[instrument(skip(self, storage_manager, runtime_manager, dal, kill_old_deployments, cleanup), fields(id = %self.deployment_id, state = %State::Loading))]
+impl Run {
+    #[instrument(skip(self, storage_manager, runtime_client, dal, kill_old_deployments, cleanup, claim), fields(id = %self.deployment_id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle<D: Dal + Sync + 'static>(
         self,
         storage_manager: ArtifactsStorageManager,
-        runtime_manager: Arc<Mutex<RuntimeManager>>,
+        mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         dal: D,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
@@ -218,13 +213,6 @@ impl Built {
         } else {
             Some(executable_path.clone())
         };
-
-        let runtime_client = runtime_manager
-            .lock()
-            .await
-            .runtime_client(self.deployment_id, alpha_runtime_path.clone())
-            .await
-            .map_err(Error::Runtime)?;
 
         kill_old_deployments.await?;
 

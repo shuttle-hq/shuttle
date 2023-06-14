@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info, instrument};
 
 use super::{
-    errored::ServiceErrored,
+    c_starting::ServiceStarting,
+    m_errored::ServiceErrored,
     machine::{Refresh, State},
-    starting::ServiceStarting,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

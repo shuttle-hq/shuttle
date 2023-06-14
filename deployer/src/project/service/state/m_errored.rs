@@ -18,7 +18,7 @@ pub enum ServiceErroredKind {
 /// A runtime error coming from inside a project
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceErrored {
-    kind: ServiceErroredKind,
+    pub kind: ServiceErroredKind,
     message: String,
     pub ctx: Option<Box<ServiceState>>,
 }

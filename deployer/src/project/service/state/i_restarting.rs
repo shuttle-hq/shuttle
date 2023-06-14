@@ -7,11 +7,11 @@ use tokio::time::sleep;
 use tracing::{debug, instrument};
 
 use crate::{
-    project::{docker::DockerContext, service::state::starting::ServiceStarting},
+    project::{docker::DockerContext, service::state::c_starting::ServiceStarting},
     safe_unwrap,
 };
 
-use super::errored::ServiceErrored;
+use super::m_errored::ServiceErrored;
 use super::machine::State;
 
 const MAX_RESTARTS: usize = 5;

@@ -12,7 +12,7 @@ use ulid::Ulid;
 
 use crate::deployment::persistence::dal::Dal;
 
-use super::docker::ServiceDockerContext;
+use super::docker::{DockerContext, ServiceDockerContext};
 use super::error::Error;
 use super::service::state::machine::{EndState, Refresh, State};
 use super::service::ServiceState;
@@ -142,7 +142,11 @@ pub fn check_health() -> impl Task<ServiceTaskContext, Output = ServiceState, Er
     run(|ctx| async move {
         match ctx.state.refresh(&ctx.docker_context).await {
             Ok(ServiceState::Ready(mut ready)) => {
-                if ready.is_healthy().await {
+                if ready
+                    .is_healthy(ctx.docker_context.runtime_manager())
+                    .await
+                    .is_ok()
+                {
                     TaskResult::Done(ServiceState::Ready(ready))
                 } else {
                     TaskResult::Done(ServiceState::Ready(ready).reboot().unwrap())
@@ -461,7 +465,7 @@ where
         let service_task_ctx = ServiceTaskContext {
             service_id: self.service_id.clone(),
             state: service.state,
-            docker_context: self.docker_context,
+            docker_context: self.docker_context.clone(),
         };
 
         let span = info_span!(

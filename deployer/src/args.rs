@@ -36,4 +36,8 @@ pub struct Args {
     /// The overlay network name used for the user services
     #[clap(long, default_value = "shared_user_net")]
     pub network_name: String,
+
+    /// The path to the docker daemon socket
+    #[arg(long, default_value = "/var/run/docker.sock")]
+    pub docker_host: String,
 }

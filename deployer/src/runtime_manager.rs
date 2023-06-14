@@ -1,54 +1,36 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, net::Ipv4Addr, sync::Arc, time::Duration};
 
 use anyhow::Context;
-use shuttle_common::claims::{ClaimService, InjectPropagation};
+use shuttle_common::claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer};
 use shuttle_proto::runtime::{
-    self, runtime_client::RuntimeClient, StopRequest, SubscribeLogsRequest,
+    runtime_client::{self, RuntimeClient},
+    Ping, StopRequest, SubscribeLogsRequest,
 };
-use tokio::{process, sync::Mutex};
-use tonic::transport::Channel;
-use tracing::{debug, info, trace};
+use tokio::sync::Mutex;
+use tonic::transport::{Channel, Endpoint};
+use tower::ServiceBuilder;
+use tracing::trace;
 use ulid::Ulid;
 
-use crate::deployment::deploy_layer;
+use crate::{deployment::deploy_layer, project::service::RUNTIME_API_PORT};
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
-type Runtimes = Arc<
-    std::sync::Mutex<
-        HashMap<
-            Ulid,
-            (
-                process::Child,
-                RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
-            ),
-        >,
-    >,
->;
+type Runtimes =
+    Arc<tokio::sync::Mutex<HashMap<Ulid, RuntimeClient<ClaimService<InjectPropagation<Channel>>>>>>;
 
 /// Manager that can start up mutliple runtimes. This is needed so that two runtimes can be up when a new deployment is made:
 /// One runtime for the new deployment being loaded; another for the currently active deployment
 #[derive(Clone)]
 pub struct RuntimeManager {
     runtimes: Runtimes,
-    artifacts_path: PathBuf,
-    provisioner_address: String,
-    auth_uri: Option<String>,
     log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
 }
 
 impl RuntimeManager {
-    pub fn new(
-        artifacts_path: PathBuf,
-        provisioner_address: String,
-        auth_uri: Option<String>,
-        log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
-    ) -> Arc<Mutex<Self>> {
+    pub fn new(log_sender: crossbeam_channel::Sender<deploy_layer::Log>) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             runtimes: Default::default(),
-            artifacts_path,
-            provisioner_address,
-            auth_uri,
             log_sender,
         }))
     }
@@ -56,68 +38,26 @@ impl RuntimeManager {
     pub async fn runtime_client(
         &mut self,
         id: Ulid,
-        alpha_runtime_path: Option<PathBuf>,
+        target_ip: Ipv4Addr,
     ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
         trace!("making new client");
+        let guard = self.runtimes.lock().await;
 
-        let port = portpicker::pick_unused_port().context("failed to find available port")?;
-        let is_next = alpha_runtime_path.is_none();
+        if let Some(runtime_client) = guard.get(&id) {
+            return Ok(runtime_client.clone());
+        }
 
-        let get_runtime_executable = || {
-            if let Some(alpha_runtime) = alpha_runtime_path {
-                debug!(
-                    "Starting alpha runtime at: {}",
-                    alpha_runtime
-                        .clone()
-                        .into_os_string()
-                        .into_string()
-                        .unwrap_or_default()
-                );
-                alpha_runtime
-            } else {
-                if cfg!(debug_assertions) {
-                    debug!("Installing shuttle-next runtime in debug mode from local source");
-                    // If we're running deployer natively, install shuttle-runtime using the
-                    // version of runtime from the calling repo.
-                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"));
+        // Connection to the docker container where the shuttle-runtime lives.
+        let conn = Endpoint::new(format!("http://{target_ip}:{RUNTIME_API_PORT}"))
+            .context("creating runtime client endpoint")?
+            .connect_timeout(Duration::from_secs(5));
 
-                    // The path will not be valid if we are in a deployer container, in which
-                    // case we don't try to install and use the one installed in deploy.sh.
-                    if let Ok(path) = path {
-                        std::process::Command::new("cargo")
-                            .arg("install")
-                            .arg("shuttle-runtime")
-                            .arg("--path")
-                            .arg(path)
-                            .arg("--bin")
-                            .arg("shuttle-next")
-                            .arg("--features")
-                            .arg("next")
-                            .output()
-                            .expect("failed to install the local version of shuttle-runtime");
-                    }
-                }
-
-                debug!("Returning path to shuttle-next runtime",);
-                // If we're in a deployer built with the containerfile, the runtime will have
-                // been installed in deploy.sh.
-                home::cargo_home()
-                    .expect("failed to find path to cargo home")
-                    .join("bin/shuttle-next")
-            }
-        };
-
-        let (process, runtime_client) = runtime::start(
-            is_next,
-            runtime::StorageManagerType::Artifacts(self.artifacts_path.clone()),
-            &self.provisioner_address,
-            self.auth_uri.as_ref(),
-            port,
-            get_runtime_executable,
-        )
-        .await
-        .context("failed to start shuttle runtime")?;
-
+        let channel = conn.connect().await.context("connecting runtime client")?;
+        let channel = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
+        let runtime_client = runtime_client::RuntimeClient::new(channel);
         let sender = self.log_sender.clone();
         let mut stream = runtime_client
             .clone()
@@ -130,7 +70,6 @@ impl RuntimeManager {
             while let Ok(Some(log)) = stream.message().await {
                 if let Ok(mut log) = deploy_layer::Log::try_from(log) {
                     log.id = id;
-
                     sender.send(log).expect("to send log to persistence");
                 }
             }
@@ -138,17 +77,17 @@ impl RuntimeManager {
 
         self.runtimes
             .lock()
-            .unwrap()
-            .insert(id, (process, runtime_client.clone()));
+            .await
+            .insert(id, runtime_client.clone());
 
         Ok(runtime_client)
     }
 
     /// Send a kill / stop signal for a deployment to its running runtime
     pub async fn kill(&mut self, id: &Ulid) -> bool {
-        let value = self.runtimes.lock().unwrap().remove(id);
+        let value = self.runtimes.lock().await.remove(id);
 
-        if let Some((mut process, mut runtime_client)) = value {
+        if let Some(mut runtime_client) = value {
             trace!(%id, "sending stop signal for deployment");
 
             let stop_request = tonic::Request::new(StopRequest {});
@@ -157,8 +96,6 @@ impl RuntimeManager {
             trace!(?response, "stop deployment response");
 
             let result = response.into_inner().success;
-            let _ = process.start_kill();
-
             result
         } else {
             trace!("no client running");
@@ -166,17 +103,27 @@ impl RuntimeManager {
         }
     }
 
-    pub fn artifacts_path(&self) -> &PathBuf {
-        &self.artifacts_path
-    }
-}
+    pub async fn is_healthy(&self, id: &Ulid) -> bool {
+        let mut guard = self.runtimes.lock().await;
 
-impl Drop for RuntimeManager {
-    fn drop(&mut self) {
-        info!("runtime manager shutting down");
+        if let Some(runtime_client) = guard.get_mut(id) {
+            trace!(%id, "sending ping to the runtime");
 
-        for (process, _runtime_client) in self.runtimes.lock().unwrap().values_mut() {
-            let _ = process.start_kill();
+            let ping = tonic::Request::new(Ping {});
+            let response = runtime_client.health_check(ping).await;
+            match response {
+                Ok(inner) => {
+                    trace!("runtime responded with pong");
+                    true
+                }
+                Err(status) => {
+                    trace!(?status, "health check failed");
+                    false
+                }
+            }
+        } else {
+            trace!("no client running");
+            false
         }
     }
 }

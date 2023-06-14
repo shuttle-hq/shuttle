@@ -1,22 +1,31 @@
-use std::{collections::VecDeque, net::IpAddr};
+use std::{
+    collections::VecDeque,
+    net::{IpAddr, Ipv4Addr},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use bollard::{container::Stats, service::ContainerInspectResponse};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
+use tonic::transport::Channel;
 use tracing::instrument;
 
 use super::machine::State;
-use crate::project::{docker::DockerContext, service::Service};
+use crate::{
+    project::{docker::DockerContext, service::Service},
+    runtime_manager::RuntimeManager,
+};
 
-use super::errored::ServiceErrored;
+use super::m_errored::ServiceErrored;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceReady {
-    container: ContainerInspectResponse,
-    service: Service,
+    pub container: ContainerInspectResponse,
+    pub service: Service,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default)]
-    stats: VecDeque<Stats>,
+    pub stats: VecDeque<Stats>,
 }
 
 #[async_trait]
@@ -34,11 +43,14 @@ where
 }
 
 impl ServiceReady {
-    pub fn target_ip(&self) -> &IpAddr {
+    pub fn target_ip(&self) -> &Ipv4Addr {
         &self.service.target
     }
 
-    pub async fn is_healthy(&mut self) -> bool {
-        self.service.is_healthy().await
+    pub async fn is_healthy(
+        &mut self,
+        runtime_manager: Arc<Mutex<RuntimeManager>>,
+    ) -> Result<bool, super::super::error::Error> {
+        self.service.is_healthy(runtime_manager).await
     }
 }

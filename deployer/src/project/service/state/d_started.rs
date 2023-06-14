@@ -7,27 +7,29 @@ use bollard::{
 };
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, instrument};
+use shuttle_proto::runtime::Ping;
+use tracing::{debug, instrument, trace};
+use ulid::Ulid;
 
 use crate::{
     project::{
         docker::{ContainerInspectResponseExt, DockerContext},
-        service::state::stopping::ServiceStopping,
+        service::state::k_stopping::ServiceStopping,
         service::Service,
     },
     safe_unwrap,
 };
 
 use super::machine::{Refresh, State};
-use super::{errored::ServiceErrored, ready::ServiceReady, readying::ServiceReadying};
+use super::{e_readying::ServiceReadying, f_ready::ServiceReady, m_errored::ServiceErrored};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceStarted {
-    container: ContainerInspectResponse,
+    pub container: ContainerInspectResponse,
     service: Option<Service>,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default)]
-    stats: VecDeque<Stats>,
+    pub stats: VecDeque<Stats>,
 }
 
 impl ServiceStarted {
@@ -61,7 +63,17 @@ where
             None => Service::from_container(container.clone())?,
         };
 
-        if service.is_healthy().await {
+        let service_id = Ulid::from_string(service.id.as_str())
+            .map_err(|err| ServiceErrored::internal("failed to get the service id"))?;
+
+        if ctx
+            .runtime_manager()
+            .lock()
+            .await
+            .is_healthy(&service_id)
+            .await
+        {
+            trace!("the service runtime responded to health check");
             let idle_minutes = container.idle_minutes();
 
             // Idle minutes of `0` means it is disabled and the project will always stay up
@@ -133,6 +145,7 @@ where
                 }
             }
         } else {
+            trace!("the service runtime didn't respond to health check");
             let started_at =
                 chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
                     .map_err(|_err| {

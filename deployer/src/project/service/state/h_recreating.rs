@@ -1,33 +1,44 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
 use bollard::{
     container::{RemoveContainerOptions, StopContainerOptions},
     service::ContainerInspectResponse,
 };
 use serde::{Deserialize, Serialize};
+use tokio::time::sleep;
 use tracing::instrument;
 
 use super::machine::State;
 use crate::{project::docker::DockerContext, safe_unwrap};
 
-use super::{destroyed::ServiceDestroyed, errored::ServiceErrored};
+use super::{a_creating::ServiceCreating, m_errored::ServiceErrored};
 
+const MAX_RECREATES: usize = 5;
+
+// Special state to try and recreate a container if it failed to be created
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ServiceDestroying {
-    container: ContainerInspectResponse,
+pub struct ServiceRecreating {
+    pub container: ContainerInspectResponse,
+    pub recreate_count: usize,
 }
 
 #[async_trait]
-impl<Ctx> State<Ctx> for ServiceDestroying
+impl<Ctx> State<Ctx> for ServiceRecreating
 where
     Ctx: DockerContext,
 {
-    type Next = ServiceDestroyed;
+    type Next = ServiceCreating;
     type Error = ServiceErrored;
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let Self { container } = self;
+        let Self {
+            container,
+            recreate_count,
+        } = self;
         let container_id = safe_unwrap!(container.id);
+
         ctx.docker()
             .stop_container(container_id, Some(StopContainerOptions { t: 1 }))
             .await
@@ -42,8 +53,15 @@ where
             )
             .await
             .unwrap_or(());
-        Ok(Self::Next {
-            destroyed: Some(container),
-        })
+
+        if recreate_count < MAX_RECREATES {
+            sleep(Duration::from_secs(5)).await;
+            Ok(ServiceCreating::from_container(
+                container,
+                recreate_count + 1,
+            )?)
+        } else {
+            Err(ServiceErrored::internal("too many recreates"))
+        }
     }
 }

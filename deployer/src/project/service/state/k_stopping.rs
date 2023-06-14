@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use super::machine::{Refresh, State};
-use super::{errored::ServiceErrored, stopped::ServiceStopped};
+use super::{j_stopped::ServiceStopped, m_errored::ServiceErrored};
 use crate::{project::docker::DockerContext, safe_unwrap};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceStopping {
-    container: ContainerInspectResponse,
+    pub container: ContainerInspectResponse,
 }
 
 #[async_trait]

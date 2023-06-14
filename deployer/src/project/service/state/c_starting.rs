@@ -8,7 +8,7 @@ use tracing::instrument;
 use crate::{project::docker::DockerContext, safe_unwrap};
 
 use super::machine::{Refresh, State};
-use super::{errored::ServiceErrored, started::ServiceStarted};
+use super::{d_started::ServiceStarted, m_errored::ServiceErrored};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceStarting {

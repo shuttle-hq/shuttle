@@ -6,19 +6,19 @@ use tracing::instrument;
 use super::machine::State;
 use crate::project::docker::DockerContext;
 
-use super::errored::ServiceErrored;
+use super::m_errored::ServiceErrored;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ServiceStopped {
-    container: ContainerInspectResponse,
+pub struct ServiceDestroyed {
+    pub destroyed: Option<ContainerInspectResponse>,
 }
 
 #[async_trait]
-impl<Ctx> State<Ctx> for ServiceStopped
+impl<Ctx> State<Ctx> for ServiceDestroyed
 where
     Ctx: DockerContext,
 {
-    type Next = ServiceStopped;
+    type Next = ServiceDestroyed;
     type Error = ServiceErrored;
 
     #[instrument(skip_all)]

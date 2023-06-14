@@ -122,6 +122,11 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
         &self.dal
     }
 
+    /// Returns a sender for sending logs to persistence storage
+    pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
+        self.log_send.clone()
+    }
+
     // pub async fn insert_deployment(&self, deployment: impl Into<Deployment>) -> Result<()> {
     //     let deployment = deployment.into();
 
@@ -256,11 +261,6 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
     // /// Get a broadcast channel for listening to logs that are being stored into persistence
     // pub fn get_log_subscriber(&self) -> Receiver<deploy_layer::Log> {
     //     self.stream_log_send.subscribe()
-    // }
-
-    // /// Returns a sender for sending logs to persistence storage
-    // pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
-    //     self.log_send.clone()
     // }
 }
 

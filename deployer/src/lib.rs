@@ -1,10 +1,10 @@
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bollard::{service, Docker, API_DEFAULT_VERSION};
+use bollard::{Docker, API_DEFAULT_VERSION};
 use chrono::Utc;
 use deployment::persistence::{dal::Dal, Service};
 use deployment::persistence::{Persistence, State};
@@ -13,15 +13,16 @@ use error::{Error, Result};
 use futures::TryFutureExt;
 use http::Uri;
 use project::docker::{ContainerSettings, ServiceDockerContext};
-use project::driver::Built;
-use project::service::state::creating::ServiceCreating;
+use project::driver::Run;
+use project::service::state::a_creating::ServiceCreating;
 use project::service::ServiceState;
 use project::task::{BoxedTask, Task, TaskBuilder};
 use runtime_manager::RuntimeManager;
+use shuttle_common::backends::auth::VerifyClaim;
 use shuttle_common::claims::Claim;
 use shuttle_common::{
     backends::{
-        auth::{AuthPublicKey, JwtAuthenticationLayer, VerifyClaim},
+        auth::{AuthPublicKey, JwtAuthenticationLayer},
         tracing::ExtractPropagationLayer,
     },
     claims::Scope,
@@ -31,15 +32,15 @@ use shuttle_proto::deployer::{
     DeployRequest, DeployResponse,
 };
 use tokio::sync::Mutex;
+use tonic::transport::Endpoint;
 use tonic::{transport::Server, Response, Result as TonicResult};
 use tracing::{error, info};
 use ulid::Ulid;
 
-use crate::deployment::{gateway_client::GatewayClient, DeploymentManager};
+use crate::deployment::DeploymentManager;
 use crate::project::task;
 use crate::project::worker::{TaskRouter, Worker};
 
-pub mod account;
 pub mod args;
 pub mod deployment;
 pub mod error;
@@ -54,7 +55,7 @@ pub struct DeployerService<D: Dal + Send + Sync + 'static> {
     bind_address: SocketAddr,
     docker: Docker,
     task_router: TaskRouter<BoxedTask>,
-    provisioner_uri: Uri,
+    provisioner_host: Endpoint,
     auth_uri: Uri,
     network_name: String,
     prefix: String,
@@ -69,9 +70,8 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         persistence: Persistence<D>,
         artifacts_path: PathBuf,
         bind_address: SocketAddr,
-        gateway_uri: Uri,
         docker_host: &str,
-        provisioner_uri: Uri,
+        provisioner_uri: Endpoint,
         auth_uri: Uri,
         network_name: String,
         prefix: String,
@@ -80,7 +80,6 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             .build_log_recorder(persistence.clone())
             .artifacts_path(artifacts_path)
             .runtime(runtime_manager.clone())
-            .queue_client(GatewayClient::new(gateway_uri.clone()))
             .dal(persistence.dal().clone())
             .build();
 
@@ -104,7 +103,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             deployment_manager,
             bind_address,
             task_router: TaskRouter::default(),
-            provisioner_uri,
+            provisioner_host: provisioner_uri,
             auth_uri,
             network_name,
             prefix,
@@ -119,24 +118,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             .dal()
             .update_invalid_states_to_stopped()
             .await
-            .unwrap();
-
-        // We refresh all the existing services.
-        for service in self
-            .persistence
-            .dal()
-            .services()
-            .await
-            .expect("could not list the services")
-        {
-            TaskBuilder::new(self.persistence.dal().clone())
-                .task_router(self.task_router.clone())
-                .service_id(service.id.clone())
-                .and_then(task::refresh())
-                .send(&self.sender)
-                .await
-                .expect("to refresh old projects");
-        }
+            .expect("to have the invalid states stopped");
 
         // The deployments which are in the `Running` state are considered runnable and they are started again. Running the
         // deployments means we're loading and starting their associated entrypoints (the services are sandboxed in containers
@@ -144,7 +126,87 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         let runnable_deployments = self.persistence.dal().running_deployments().await.unwrap();
         info!(count = %runnable_deployments.len(), "enqueuing runnable deployments");
         for existing_deployment in runnable_deployments {
-            let built = Built {
+            // We want to restart the corresponding deployment service container.
+            let service = self
+                .persistence
+                .dal()
+                .service(&existing_deployment.id)
+                .await?;
+            let image = match service.state.container() {
+                Some(inner) => match inner.image {
+                    Some(img) => img,
+                    None => {
+                        error!("can not get the container information because it's missing from the state");
+                        continue;
+                    }
+                },
+                None => {
+                    error!(
+                        "can not get the container information because it's missing from the state"
+                    );
+                    continue;
+                }
+            };
+
+            let cs = ContainerSettings::builder()
+                .image(image)
+                .provisioner_host(self.provisioner_host.uri().to_string())
+                .auth_uri(self.auth_uri.to_string())
+                .network_name(self.network_name.to_string())
+                .prefix(self.prefix.to_string())
+                .build()
+                .await;
+            TaskBuilder::new(self.persistence.dal().clone())
+                .task_router(self.task_router.clone())
+                .service_id(service.id.clone())
+                .service_context(ServiceDockerContext::new(
+                    self.docker.clone(),
+                    cs,
+                    self.runtime_manager.clone(),
+                ))
+                .and_then(task::refresh())
+                .and_then(task::run_until_done())
+                .and_then(task::check_health())
+                .send(&self.sender)
+                .await
+                .expect("to refresh old projects");
+
+            let target_ip = match self
+                .persistence
+                .dal()
+                .service(&service.id)
+                .await?
+                .state
+                .container()
+            {
+                Some(inner) => match inner.network_settings {
+                    Some(network) => match network.ip_address {
+                        Some(ip) => ip
+                            .parse::<Ipv4Addr>()
+                            .expect("to have a valid IPv4 address"),
+                        None => {
+                            error!("ip address not found on the network setting of the service {} container", service.id);
+                            continue;
+                        }
+                    },
+                    None => {
+                        error!(
+                            "missing network settings on the service {} container",
+                            service.id
+                        );
+                        continue;
+                    }
+                },
+                None => {
+                    error!(
+                        "missing container inspect information for service {}",
+                        service.id
+                    );
+                    continue;
+                }
+            };
+
+            let built = Run {
                 deployment_id: existing_deployment.id,
                 service_name: existing_deployment.service_name,
                 service_id: existing_deployment.service_id,
@@ -152,6 +214,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 is_next: existing_deployment.is_next,
                 // We don't need a claim to be set to start existing running deployments.
                 claim: None,
+                target_ip,
             };
             self.deployment_manager.run_push(built).await;
         }
@@ -211,19 +274,6 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             .insert_deployment(deployment.clone())
             .await?;
 
-        // TODO: We assume the deploy request refers to a service which is already built. We will
-        // confront this assumption later on in the stack by downloading an image from ECR. It
-        // would've been best to have a fail fast mechanism called in this scope.
-        let built = Built {
-            deployment_id: deployment.id,
-            service_name: req.service_name,
-            service_id,
-            tracing_context: Default::default(),
-            is_next: req.is_next,
-            claim,
-        };
-        self.deployment_manager.run_push(built).await;
-
         Ok(deployment.id.to_string())
     }
 }
@@ -257,16 +307,18 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
         // We're protected from bubling up sensitive info because the error thrown is a DalError
         // which is `Display` controlled.
         let state = ServiceState::Creating(ServiceCreating::new(
-            request.service_id,
+            request.service_id.clone(),
             u64::from(request.idle_minutes),
         ));
         let deployment_id = self
-            .push_deployment(request, state.clone(), claim)
+            .push_deployment(request.clone(), state.clone(), claim)
             .await
             .map_err(|err| tonic::Status::new(tonic::Code::Internal, err.to_string()))?;
 
-        let mut creating =
-            ServiceCreating::new(request.service_name, u64::from(request.idle_minutes));
+        let creating = ServiceCreating::new(
+            request.service_name.clone(),
+            u64::from(request.idle_minutes),
+        );
         let service_state = ServiceState::Creating(creating);
 
         // If the service already lives in the persistence.
@@ -307,21 +359,27 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
                     tonic::Status::internal(
                         "failed because the service already exists or persisting it errored",
                     )
-                });
+                })?;
         }
 
         let cs = ContainerSettings::builder()
             .image(request.image_name)
-            .provisioner_host(self.provisioner_uri.to_string())
+            .provisioner_host(self.provisioner_host.uri().to_string())
             .auth_uri(self.auth_uri.to_string())
             .network_name(self.network_name.to_string())
             .prefix(self.prefix.to_string())
             .build()
             .await;
 
-        let task_handle = TaskBuilder::new(self.persistence.dal().clone())
+        TaskBuilder::new(self.persistence.dal().clone())
             .service_id(service_id)
-            .service_context(ServiceDockerContext::new(self.docker.clone(), cs))
+            .service_context(ServiceDockerContext::new(
+                self.docker.clone(),
+                cs,
+                self.runtime_manager.clone(),
+            ))
+            .and_then(task::run_until_done())
+            .and_then(task::check_health())
             .send(&self.sender)
             .await
             .map_err(|err| tonic::Status::internal(err.to_string()))?;

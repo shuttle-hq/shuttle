@@ -1,19 +1,28 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use bollard::{errors::Error as DockerError, service::ContainerInspectResponse, Docker};
+use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::project::IDLE_MINUTES;
+use shuttle_proto::runtime::runtime_client::RuntimeClient;
+use tokio::sync::Mutex;
+use tonic::transport::Channel;
 use ulid::Ulid;
 
+use crate::deployment::DeploymentUpdater;
+use crate::runtime_manager::RuntimeManager;
 use crate::safe_unwrap;
 
-use super::service::state::errored::ServiceErrored;
+use super::service::state::m_errored::ServiceErrored;
 use super::service::state::machine::Refresh;
 
 pub struct ContainerSettingsBuilder {
     prefix: Option<String>,
-    image: Option<String>,
+    image_name: Option<String>,
     provisioner: Option<String>,
     auth_uri: Option<String>,
     network_name: Option<String>,
+    is_next: bool,
 }
 
 impl Default for ContainerSettingsBuilder {
@@ -26,10 +35,11 @@ impl ContainerSettingsBuilder {
     pub fn new() -> Self {
         Self {
             prefix: None,
-            image: None,
+            image_name: None,
             provisioner: None,
             auth_uri: None,
             network_name: None,
+            is_next: false,
         }
     }
 
@@ -39,7 +49,7 @@ impl ContainerSettingsBuilder {
     }
 
     pub fn image<S: ToString>(mut self, image: S) -> Self {
-        self.image = Some(image.to_string());
+        self.image_name = Some(image.to_string());
         self
     }
 
@@ -58,12 +68,32 @@ impl ContainerSettingsBuilder {
         self
     }
 
+    pub fn is_next(mut self, is_next: bool) -> Self {
+        self.is_next = is_next;
+        self
+    }
+
     pub async fn build(mut self) -> ContainerSettings {
-        let prefix = self.prefix.take().unwrap();
-        let image = self.image.take().unwrap();
-        let provisioner_host = self.provisioner.take().unwrap();
-        let auth_uri = self.auth_uri.take().unwrap();
-        let network_name = self.network_name.take().unwrap();
+        let prefix = self
+            .prefix
+            .take()
+            .expect("to provide a prefix for the container settings");
+        let image = self
+            .image_name
+            .take()
+            .expect("to provide an image name to the container settings");
+        let provisioner_host = self
+            .provisioner
+            .take()
+            .expect("to provide a provisioner uri to the container settings");
+        let auth_uri = self
+            .auth_uri
+            .take()
+            .expect("to provide an auth uri to the container settings");
+        let network_name = self
+            .network_name
+            .take()
+            .expect("to provide a network name to the container settings");
 
         ContainerSettings {
             prefix,
@@ -71,6 +101,7 @@ impl ContainerSettingsBuilder {
             provisioner_host,
             auth_uri,
             network_name,
+            is_next: self.is_next,
         }
     }
 }
@@ -82,6 +113,7 @@ pub struct ContainerSettings {
     pub provisioner_host: String,
     pub auth_uri: String,
     pub network_name: String,
+    pub is_next: bool,
 }
 
 impl ContainerSettings {
@@ -94,13 +126,19 @@ impl ContainerSettings {
 pub struct ServiceDockerContext {
     docker: Docker,
     settings: ContainerSettings,
+    runtime_manager: Arc<Mutex<RuntimeManager>>,
 }
 
 impl ServiceDockerContext {
-    pub fn new(docker: Docker, cs: ContainerSettings) -> Self {
+    pub fn new(
+        docker: Docker,
+        cs: ContainerSettings,
+        runtime_manager: Arc<Mutex<RuntimeManager>>,
+    ) -> Self {
         Self {
             docker,
             settings: cs,
+            runtime_manager,
         }
     }
 }
@@ -113,12 +151,18 @@ impl DockerContext for ServiceDockerContext {
     fn container_settings(&self) -> &ContainerSettings {
         &self.settings
     }
+
+    fn runtime_manager(&self) -> Arc<Mutex<RuntimeManager>> {
+        self.runtime_manager.clone()
+    }
 }
 
 pub trait DockerContext: Send + Sync {
     fn docker(&self) -> &Docker;
 
     fn container_settings(&self) -> &ContainerSettings;
+
+    fn runtime_manager(&self) -> Arc<Mutex<RuntimeManager>>;
 }
 
 #[async_trait]

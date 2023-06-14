@@ -2,7 +2,7 @@ use tracing::error;
 
 use bollard::errors::Error as DockerError;
 
-use super::state::errored::ServiceErrored;
+use super::state::m_errored::ServiceErrored;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -18,6 +18,8 @@ pub enum Error {
     Internal(String),
     #[error("Service error: {0}")]
     Service(ServiceErrored),
+    #[error("Ulid decode error: {0}")]
+    Decode(ulid::DecodeError),
 }
 
 impl From<ServiceErrored> for Error {

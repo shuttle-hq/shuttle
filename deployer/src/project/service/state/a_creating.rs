@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use async_trait::async_trait;
 use bollard::{
     container::{Config, CreateContainerOptions},
@@ -7,7 +5,6 @@ use bollard::{
     service::ContainerInspectResponse,
 };
 use futures::TryFutureExt;
-use portpicker::pick_unused_port;
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::project::idle_minutes;
 use tracing::{debug, instrument};
@@ -21,7 +18,7 @@ use crate::{
     },
 };
 
-use super::{attaching::ServiceAttaching, errored::ServiceErrored};
+use super::{b_attaching::ServiceAttaching, m_errored::ServiceErrored};
 
 // TODO: We need to send down the runtime_manager from the deployer-alpha
 // Add the fields that are present in Built to the `ServiceCreating` (they will be persisted, maybe not all of them should be passed)
@@ -36,7 +33,7 @@ pub struct ServiceCreating {
     from: Option<ContainerInspectResponse>,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default)]
-    recreate_count: usize,
+    pub recreate_count: usize,
     /// Label set on container as to how many minutes to wait before a project is considered idle
     #[serde(default = "idle_minutes")]
     idle_minutes: u64,
@@ -98,8 +95,7 @@ impl ServiceCreating {
         let ContainerSettings {
             image: default_image,
             prefix,
-            provisioner_host,
-            auth_uri,
+            is_next,
             ..
         } = ctx.container_settings();
 
@@ -115,13 +111,14 @@ impl ServiceCreating {
             platform: None,
         };
 
-        let port = match pick_unused_port() {
-            Some(port) => port,
-            None => {
-                return Err(Error::RuntimePrepare(
-                    "could not find a free port to deploy the service on".to_string(),
-                ))
-            }
+        let mut cmd = vec!["--port", "8001"];
+        if !*is_next {
+            cmd.extend([
+                "--storage-manager-type",
+                "artifacts",
+                "--storage-manager-path",
+                "/opt/shuttle",
+            ]);
         };
 
         let container_config = self
@@ -133,18 +130,10 @@ impl ServiceCreating {
                     "Image": image.as_ref().unwrap_or(default_image),
                     "Hostname": format!("{prefix}{service_id}"), // TODO: add volumes migration APIs
                     "Labels": {
-                        "shuttle.prefix": prefix,
                         "shuttle.service_id": service_id,
                         "shuttle.idle_minutes": format!("{idle_minutes}"),
                     },
-                    "Cmd": [
-                        "--port",
-                        port,
-                        "--storage-manager-type",
-                        storage_manager_type,
-                        "--storage-manager-path",
-                        storage_manager_path
-                    ],
+                    "Cmd": cmd[..],
                     "Env": [
                         "RUST_LOG=debug,shuttle=trace,h2=warn",
                     ]

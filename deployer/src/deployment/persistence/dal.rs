@@ -1,6 +1,6 @@
 use std::fmt;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use axum::async_trait;
@@ -98,9 +98,14 @@ pub struct Sqlite {
 
 impl Sqlite {
     /// This function creates all necessary tables and sets up a database connection pool.
-    pub async fn new(path: &str) -> Self {
-        if !Path::new(path).exists() {
-            sqlx::Sqlite::create_database(path).await.unwrap();
+    pub async fn new(path: &PathBuf) -> Self {
+        let path_as_str = path
+            .to_str()
+            .expect("to have a valid path for the sqlite db creation");
+        if !path.as_path().exists() {
+            sqlx::Sqlite::create_database(path_as_str)
+                .await
+                .expect("to create a Sqlite db");
         }
 
         info!(
@@ -116,7 +121,7 @@ impl Sqlite {
         //
         // If you want to activate a faster synchronous mode, then also do proper testing to confirm this bug is no
         // longer present.
-        let sqlite_options = SqliteConnectOptions::from_str(path)
+        let sqlite_options = SqliteConnectOptions::from_str(path_as_str)
             .unwrap()
             .journal_mode(SqliteJournalMode::Wal);
 

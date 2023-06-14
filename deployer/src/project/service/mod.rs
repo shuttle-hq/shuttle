@@ -2,7 +2,8 @@ use std::{
     collections::VecDeque,
     convert::Infallible,
     fmt::Display,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
     time::Duration,
 };
 
@@ -10,29 +11,39 @@ use async_trait::async_trait;
 use bollard::errors::Error as DockerError;
 use bollard::service::{ContainerInspectResponse, ContainerStateStatusEnum};
 use serde::{Deserialize, Serialize};
+use shuttle_common::claims::{ClaimService, InjectPropagation};
+use shuttle_proto::runtime::{runtime_client::RuntimeClient, Ping};
+use tokio::sync::Mutex;
+use tonic::transport::Channel;
 use tracing::{debug, error, instrument};
+use ulid::Ulid;
+
+use crate::runtime_manager::RuntimeManager;
 
 use self::{
     error::Error,
     state::{
-        attaching::ServiceAttaching,
-        creating::ServiceCreating,
-        destroyed::ServiceDestroyed,
-        destroying::ServiceDestroying,
-        errored::{ServiceErrored, ServiceErroredKind},
-        ready::ServiceReady,
-        readying::ServiceReadying,
-        rebooting::ServiceRebooting,
-        recreating::ServiceRecreating,
-        restarting::ServiceRestarting,
-        started::ServiceStarted,
-        starting::ServiceStarting,
-        stopped::ServiceStopped,
-        stopping::ServiceStopping,
+        a_creating::ServiceCreating,
+        b_attaching::ServiceAttaching,
+        c_starting::ServiceStarting,
+        d_started::ServiceStarted,
+        e_readying::ServiceReadying,
+        f_ready::ServiceReady,
+        g_rebooting::ServiceRebooting,
+        h_recreating::ServiceRecreating,
+        i_restarting::ServiceRestarting,
+        j_stopped::ServiceStopped,
+        k_stopping::ServiceStopping,
+        l_destroying::ServiceDestroying,
+        m_destroyed::ServiceDestroyed,
+        m_errored::{ServiceErrored, ServiceErroredKind},
     },
 };
 
-use super::docker::{ContainerInspectResponseExt, DockerContext};
+use super::{
+    docker::{ContainerInspectResponseExt, DockerContext},
+    task::run,
+};
 use state::machine::{EndState, IntoTryState, Refresh, State, TryState};
 
 pub mod error;
@@ -40,6 +51,8 @@ pub mod state;
 
 // Health check must succeed within 10 seconds
 static IS_HEALTHY_TIMEOUT: Duration = Duration::from_secs(10);
+// shuttle-runtime default port
+pub const RUNTIME_API_PORT: u16 = 8001;
 
 #[macro_export]
 macro_rules! safe_unwrap {
@@ -188,18 +201,17 @@ impl ServiceState {
         matches!(self, Self::Stopped(_))
     }
 
-    pub fn target_ip(&self) -> Result<Option<IpAddr>, Error> {
+    pub fn target_ip(&self) -> Result<Option<Ipv4Addr>, Error> {
         match self.clone() {
-            Self::Ready(project_ready) => Ok(Some(*project_ready.target_ip())),
+            Self::Ready(project_ready) => Ok(Some(project_ready.target_ip().clone())),
             _ => Ok(None), // not ready
         }
     }
 
-    // TODO: pass the shuttle-runtime port
     pub fn target_addr(&self) -> Result<Option<SocketAddr>, Error> {
         Ok(self
             .target_ip()?
-            .map(|target_ip| SocketAddr::new(target_ip, RUNTIME_API_PORT)))
+            .map(|target_ip| SocketAddr::new(IpAddr::V4(target_ip), RUNTIME_API_PORT)))
     }
 
     pub fn state(&self) -> String {
@@ -486,7 +498,7 @@ impl HealthCheckRecord {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Service {
     id: String,
-    target: IpAddr,
+    target: Ipv4Addr,
     last_check: Option<HealthCheckRecord>,
 }
 
@@ -510,19 +522,13 @@ impl Service {
         })
     }
 
-    // TODO: implement the health-check directed to the shuttle-runtime
-    pub fn uri<S: AsRef<str>>(&self, path: S) -> Result<Uri, ProjectError> {
-        format!("http://{}:8001{}", self.target, path.as_ref())
-            .parse::<Uri>()
-            .map_err(|err| err.into())
-    }
-
-    // TODO: implement the is_healthy check directed to the shuttle-runtime
-    pub async fn is_healthy(&mut self) -> bool {
-        let uri = self.uri(format!("/projects/{}/status", self.name)).unwrap();
-        let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.get(uri)).await;
-        let is_healthy = matches!(resp, Ok(Ok(res)) if res.status().is_success());
+    pub async fn is_healthy(
+        &mut self,
+        runtime_manager: Arc<Mutex<RuntimeManager>>,
+    ) -> Result<bool, error::Error> {
+        let service_id = Ulid::from_string(self.id.as_str()).map_err(error::Error::Decode)?;
+        let is_healthy = runtime_manager.lock().await.is_healthy(&service_id).await;
         self.last_check = Some(HealthCheckRecord::new(is_healthy));
-        is_healthy
+        Ok(is_healthy)
     }
 }

@@ -10,18 +10,15 @@ use indoc::indoc;
 use shuttle_common::project::ProjectName;
 use toml_edit::{value, Document};
 
-pub fn cargo_generate(
-    path: PathBuf,
-    name: &ProjectName,
-    git: String,
-    git_path: Option<String>,
-) -> Result<()> {
+use crate::args::GitTemplate;
+
+pub fn cargo_generate(path: PathBuf, name: &ProjectName, git_template: GitTemplate) -> Result<()> {
     println!(r#"    Creating project "{name}" in {path:?}"#);
     let generate_args = GenerateArgs {
         init: true,
         template_path: TemplatePath {
-            git: Some(git),
-            auto_path: git_path,
+            git: Some(git_template.repo),
+            auto_path: git_template.repo_path,
             ..Default::default()
         },
         name: Some(name.to_string()), // appears to do nothing...

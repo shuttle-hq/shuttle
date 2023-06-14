@@ -271,10 +271,10 @@ pub enum InitTemplateArg {
     Salvo,
     /// Serenity Discord framework
     Serenity,
-    /// Tide web framework
-    Tide,
     /// Thruster web framework
     Thruster,
+    /// Tide web framework
+    Tide,
     /// Tower web framework
     Tower,
     /// Warp web framework
@@ -283,44 +283,73 @@ pub enum InitTemplateArg {
     None,
 }
 
-/// git repo and path for chosen template or given URL+path
-pub type GitTemplate = Option<(String, Option<String>)>;
+pub const EXAMPLES_REPO: &str = "https://github.com/shuttle-hq/shuttle-examples";
 
-const EXAMPLES_REPO: &str = "https://github.com/shuttle-hq/shuttle-examples.git";
+#[derive(Clone, Debug, PartialEq)]
+pub struct GitTemplate {
+    pub repo: String,
+    pub repo_path: Option<String>,
+}
 
-impl From<&InitArgs> for GitTemplate {
-    fn from(value: &InitArgs) -> Self {
-        if let Some(git) = value.git.clone() {
-            Some((git, value.git_path.clone()))
+impl InitArgs {
+    pub fn git_templates(&self) -> Option<Vec<GitTemplate>> {
+        if let Some(repo) = self.git.clone() {
+            Some(vec![GitTemplate {
+                repo,
+                repo_path: self.git_path.clone(),
+            }])
         } else {
-            value.template.as_ref().and_then(|t| t.into())
+            self.template.as_ref().map(|t| GitTemplate::templates(t))
         }
     }
 }
 
-impl From<&InitTemplateArg> for GitTemplate {
-    fn from(value: &InitTemplateArg) -> Self {
+impl GitTemplate {
+    pub fn templates(value: &InitTemplateArg) -> Vec<Self> {
         use InitTemplateArg::*;
-        Some((
-            EXAMPLES_REPO.into(),
-            Some(
-                match value {
-                    ActixWeb => "actix-web/hello-world",
-                    Axum => "axum/hello-world",
-                    Poem => "poem/hello-world",
-                    Poise => "poise/hello-world",
-                    Rocket => "rocket/hello-world",
-                    Salvo => "salvo/hello-world",
-                    Serenity => "serenity/hello-world",
-                    Tide => "tide/hello-world",
-                    Thruster => "thruster/hello-world",
-                    Tower => "tower/hello-world",
-                    Warp => "warp/hello-world",
-                    None => "custom/none",
-                }
-                .into(),
-            ),
-        ))
+        let paths = match value {
+            // first entry should be the default for
+            // that choice of framework (usually hello-world)
+            ActixWeb => vec![
+                "actix-web/hello-world",
+                "actix-web/postgres",
+                "actix-web/websocket-actorless",
+            ],
+            Axum => vec![
+                "axum/hello-world",
+                "axum/static-files",
+                "axum/static-next-server",
+                "axum/websocket",
+                "axum/with-state",
+            ],
+            Poem => vec!["poem/hello-world", "poem/mongodb", "poem/postgres"],
+            Poise => vec!["poise/hello-world"],
+            Rocket => vec![
+                "rocket/hello-world",
+                "rocket/authentication",
+                "rocket/dyn_template_hbs",
+                "rocket/persist",
+                "rocket/postgres",
+                "rocket/secrets",
+                "rocket/url-shortener",
+                "rocket/workspace",
+            ],
+            Salvo => vec!["salvo/hello-world"],
+            Serenity => vec!["serenity/hello-world", "serenity/postgres"],
+            Thruster => vec!["thruster/hello-world", "thruster/postgres"],
+            Tide => vec!["tide/hello-world", "tide/postgres"],
+            Tower => vec!["tower/hello-world"],
+            Warp => vec!["warp/hello-world"],
+            None => vec!["custom/none"],
+        };
+
+        paths
+            .iter()
+            .map(|path| Self {
+                repo: EXAMPLES_REPO.into(),
+                repo_path: Some(path.to_string()),
+            })
+            .collect()
     }
 }
 
@@ -360,11 +389,14 @@ mod tests {
             path: PathBuf::new(),
         };
         assert_eq!(
-            GitTemplate::from(&init_args),
-            Some((EXAMPLES_REPO.into(), Some("axum/hello-world".into())))
+            init_args.git_templates(),
+            Some(vec![GitTemplate {
+                repo: EXAMPLES_REPO.into(),
+                repo_path: Some("axum/hello-world".into())
+            }])
         );
 
-        // predefined "none" template
+        // pre-defined "none" template
         let init_args = InitArgs {
             template: Some(InitTemplateArg::None),
             git: None,
@@ -374,8 +406,11 @@ mod tests {
             path: PathBuf::new(),
         };
         assert_eq!(
-            GitTemplate::from(&init_args),
-            Some((EXAMPLES_REPO.into(), Some("custom/none".into())))
+            init_args.git_templates(),
+            Some(vec![GitTemplate {
+                repo: EXAMPLES_REPO.into(),
+                repo_path: Some("custom/none".into())
+            }])
         );
 
         // git template with path
@@ -388,11 +423,11 @@ mod tests {
             path: PathBuf::new(),
         };
         assert_eq!(
-            GitTemplate::from(&init_args),
-            Some((
-                "https://github.com/some/repo".into(),
-                Some("some/path".into())
-            ))
+            init_args.git_templates(),
+            Some(vec![GitTemplate {
+                repo: "https://github.com/some/repo".into(),
+                repo_path: Some("some/path".into())
+            }])
         );
 
         // No template or repo chosen
@@ -404,7 +439,7 @@ mod tests {
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
-        assert_eq!(GitTemplate::from(&init_args), None);
+        assert_eq!(init_args.git_templates(), None);
     }
 
     #[test]

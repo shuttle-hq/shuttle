@@ -56,6 +56,7 @@ use uuid::Uuid;
 
 use crate::args::{
     DeploymentCommand, GitTemplate, ProjectCommand, ProjectStartArgs, ResourceCommand,
+    EXAMPLES_REPO,
 };
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
@@ -155,8 +156,10 @@ impl Shuttle {
     /// If both a project name and framework are passed as arguments, it will run without any extra
     /// interaction.
     async fn init(&mut self, args: InitArgs, mut project_args: ProjectArgs) -> Result<()> {
-        let git_template = GitTemplate::from(&args);
-        let interactive = project_args.name.is_none() || git_template.is_none();
+        // Turns the template or git args (if present) to a vec of repo folders that match.
+        // If an explicit git arg is given, or a framework only has one template, the vec length will be 1.
+        let git_templates = args.git_templates();
+        let interactive = project_args.name.is_none() || git_templates.is_none();
 
         let theme = ColorfulTheme::default();
 
@@ -205,19 +208,61 @@ impl Shuttle {
         };
 
         // 4. Ask for the framework
-        let (git, git_path) = match git_template {
-            Some(git_template) => git_template,
-            None => {
-                println!(
-                    "Shuttle works with a range of web frameworks. Which one do you want to use?"
-                );
-                let frameworks = args::InitTemplateArg::iter().collect::<Vec<_>>();
+        let template = {
+            let templates = match git_templates {
+                Some(git_templates) => git_templates,
+                None => {
+                    println!(
+                        "Shuttle works with a range of web frameworks. Which one do you want to use?"
+                    );
+                    println!(
+                        "Hint: Check the shuttle-examples repo for a full list of templates: {}",
+                        EXAMPLES_REPO
+                    );
+                    let frameworks = args::InitTemplateArg::iter().collect::<Vec<_>>();
+                    let index = FuzzySelect::with_theme(&theme)
+                        .with_prompt("Framework")
+                        .items(&frameworks)
+                        .default(0)
+                        .interact()?;
+                    println!();
+                    GitTemplate::templates(&frameworks[index])
+                }
+            };
+
+            if templates.is_empty() {
+                bail!("Developer error. List of templates for that framework was empty.")
+            } else if !interactive || templates.len() == 1
+                || !Confirm::with_theme(&theme)
+                    .with_prompt(format!(
+                        "Use a different template than \"{}\"? ({} available)",
+                        templates[0]
+                            .repo_path
+                            .as_ref()
+                            .expect("Pre-defined templates from examples repo should always have a git path"),
+                        templates.len() - 1
+                    ))
+                    .default(false)
+                    .interact()?
+            {
+                // first entry should be hello-world (the default for that choice of framework)
+                templates[0].clone()
+            } else {
+                let framework_templates = templates
+                    .iter()
+                    .map(|t|
+                        t.repo_path
+                            .as_ref()
+                            .expect("Pre-defined templates from examples repo should always have a git path")
+                    )
+                    .collect::<Vec<_>>();
                 let index = FuzzySelect::with_theme(&theme)
-                    .items(&frameworks)
+                    .with_prompt("Template")
+                    .items(&framework_templates)
                     .default(0)
                     .interact()?;
                 println!();
-                GitTemplate::from(&frameworks[index]).unwrap()
+                templates[index].clone()
             }
         };
 
@@ -228,8 +273,7 @@ impl Shuttle {
                 .name
                 .as_ref()
                 .expect("to have a project name provided"),
-            git,
-            git_path,
+            template,
         )?;
         println!();
 
@@ -243,7 +287,6 @@ impl Shuttle {
                 .with_prompt("Do you want to create the project environment on Shuttle?")
                 .default(true)
                 .interact()?;
-
             println!();
             should_create
         };
@@ -256,6 +299,7 @@ impl Shuttle {
             self.load_project(&mut project_args)?;
             self.project_create(&self.client()?, IDLE_MINUTES).await?;
         } else {
+            println!("Run `cargo shuttle run` to run the app locally.");
             println!(
                 "Run `cargo shuttle project start` to create a project environment on Shuttle."
             );

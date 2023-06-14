@@ -51,6 +51,15 @@ pub struct PublicKeyResponse {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PublicKeyRequest {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Request {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConvertCookieRequest {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LogoutRequest {}
 /// Generated client implementations.
 pub mod auth_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
@@ -120,6 +129,42 @@ pub mod auth_client {
             self.inner = self.inner.accept_compressed(encoding);
             self
         }
+        /// Send a request to convert an API key to a JWT
+        pub async fn convert_api_key(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ApiKeyRequest>,
+        ) -> Result<tonic::Response<super::TokenResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/auth.Auth/ConvertApiKey");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        /// Send a request to convert a cookie to a JWT
+        pub async fn convert_cookie(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ConvertCookieRequest>,
+        ) -> Result<tonic::Response<super::TokenResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/auth.Auth/ConvertCookie");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
         /// Get a user by their account name
         pub async fn get_user_request(
             &mut self,
@@ -136,6 +181,42 @@ pub mod auth_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/auth.Auth/GetUserRequest");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        /// Login a user by their account name
+        pub async fn login(
+            &mut self,
+            request: impl tonic::IntoRequest<super::UserRequest>,
+        ) -> Result<tonic::Response<super::UserResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/auth.Auth/Login");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        /// Logout a user by their account name
+        pub async fn logout(
+            &mut self,
+            request: impl tonic::IntoRequest<super::LogoutRequest>,
+        ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/auth.Auth/Logout");
             self.inner.unary(request.into_request(), path, codec).await
         }
         /// Send a request to create a new user
@@ -156,24 +237,6 @@ pub mod auth_client {
             let path = http::uri::PathAndQuery::from_static(
                 "/auth.Auth/PostUserRequest",
             );
-            self.inner.unary(request.into_request(), path, codec).await
-        }
-        /// Send a request to convert an API key to a JWT
-        pub async fn convert_api_key(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ApiKeyRequest>,
-        ) -> Result<tonic::Response<super::TokenResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/auth.Auth/ConvertApiKey");
             self.inner.unary(request.into_request(), path, codec).await
         }
         /// Send a request to reset a users API key
@@ -221,21 +284,36 @@ pub mod auth_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AuthServer.
     #[async_trait]
     pub trait Auth: Send + Sync + 'static {
-        /// Get a user by their account name
-        async fn get_user_request(
-            &self,
-            request: tonic::Request<super::UserRequest>,
-        ) -> Result<tonic::Response<super::UserResponse>, tonic::Status>;
-        /// Send a request to create a new user
-        async fn post_user_request(
-            &self,
-            request: tonic::Request<super::NewUser>,
-        ) -> Result<tonic::Response<super::UserResponse>, tonic::Status>;
         /// Send a request to convert an API key to a JWT
         async fn convert_api_key(
             &self,
             request: tonic::Request<super::ApiKeyRequest>,
         ) -> Result<tonic::Response<super::TokenResponse>, tonic::Status>;
+        /// Send a request to convert a cookie to a JWT
+        async fn convert_cookie(
+            &self,
+            request: tonic::Request<super::ConvertCookieRequest>,
+        ) -> Result<tonic::Response<super::TokenResponse>, tonic::Status>;
+        /// Get a user by their account name
+        async fn get_user_request(
+            &self,
+            request: tonic::Request<super::UserRequest>,
+        ) -> Result<tonic::Response<super::UserResponse>, tonic::Status>;
+        /// Login a user by their account name
+        async fn login(
+            &self,
+            request: tonic::Request<super::UserRequest>,
+        ) -> Result<tonic::Response<super::UserResponse>, tonic::Status>;
+        /// Logout a user by their account name
+        async fn logout(
+            &self,
+            request: tonic::Request<super::LogoutRequest>,
+        ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status>;
+        /// Send a request to create a new user
+        async fn post_user_request(
+            &self,
+            request: tonic::Request<super::NewUser>,
+        ) -> Result<tonic::Response<super::UserResponse>, tonic::Status>;
         /// Send a request to reset a users API key
         async fn reset_api_key(
             &self,
@@ -306,6 +384,84 @@ pub mod auth_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
+                "/auth.Auth/ConvertApiKey" => {
+                    #[allow(non_camel_case_types)]
+                    struct ConvertApiKeySvc<T: Auth>(pub Arc<T>);
+                    impl<T: Auth> tonic::server::UnaryService<super::ApiKeyRequest>
+                    for ConvertApiKeySvc<T> {
+                        type Response = super::TokenResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ApiKeyRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).convert_api_key(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = ConvertApiKeySvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/auth.Auth/ConvertCookie" => {
+                    #[allow(non_camel_case_types)]
+                    struct ConvertCookieSvc<T: Auth>(pub Arc<T>);
+                    impl<
+                        T: Auth,
+                    > tonic::server::UnaryService<super::ConvertCookieRequest>
+                    for ConvertCookieSvc<T> {
+                        type Response = super::TokenResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ConvertCookieRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).convert_cookie(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = ConvertCookieSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/auth.Auth/GetUserRequest" => {
                     #[allow(non_camel_case_types)]
                     struct GetUserRequestSvc<T: Auth>(pub Arc<T>);
@@ -344,6 +500,78 @@ pub mod auth_server {
                     };
                     Box::pin(fut)
                 }
+                "/auth.Auth/Login" => {
+                    #[allow(non_camel_case_types)]
+                    struct LoginSvc<T: Auth>(pub Arc<T>);
+                    impl<T: Auth> tonic::server::UnaryService<super::UserRequest>
+                    for LoginSvc<T> {
+                        type Response = super::UserResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::UserRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).login(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = LoginSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/auth.Auth/Logout" => {
+                    #[allow(non_camel_case_types)]
+                    struct LogoutSvc<T: Auth>(pub Arc<T>);
+                    impl<T: Auth> tonic::server::UnaryService<super::LogoutRequest>
+                    for LogoutSvc<T> {
+                        type Response = super::ResultResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::LogoutRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).logout(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = LogoutSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/auth.Auth/PostUserRequest" => {
                     #[allow(non_camel_case_types)]
                     struct PostUserRequestSvc<T: Auth>(pub Arc<T>);
@@ -371,44 +599,6 @@ pub mod auth_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = PostUserRequestSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/auth.Auth/ConvertApiKey" => {
-                    #[allow(non_camel_case_types)]
-                    struct ConvertApiKeySvc<T: Auth>(pub Arc<T>);
-                    impl<T: Auth> tonic::server::UnaryService<super::ApiKeyRequest>
-                    for ConvertApiKeySvc<T> {
-                        type Response = super::TokenResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ApiKeyRequest>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move {
-                                (*inner).convert_api_key(request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = ConvertApiKeySvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

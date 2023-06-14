@@ -56,13 +56,13 @@ pub(crate) struct SessionUser {
 /// This state will be available as an extension on requests that have a valid cookie,
 /// it can then be accessed in handlers to verify a user is logged in and get user data.
 #[derive(Clone)]
-pub(crate) struct AuthState<D: Dal + Send + Sync + 'static> {
+pub(crate) struct SessionState<D: Dal + Send + Sync + 'static> {
     cached_user: Option<SessionUser>,
     session_store: D,
     token: SessionToken,
 }
 
-impl<D> AuthState<D>
+impl<D> SessionState<D>
 where
     D: Dal + Send + Sync + 'static,
 {
@@ -176,7 +176,7 @@ where
             .and_then(|cookie_value| cookie_value.parse::<SessionToken>().ok());
 
         if let Some(token) = session_token {
-            req.extensions_mut().insert(AuthState {
+            req.extensions_mut().insert(SessionState {
                 cached_user: None,
                 session_store,
                 token,

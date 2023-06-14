@@ -10,7 +10,7 @@ use cookie::{Cookie, SameSite};
 use http::header::SET_COOKIE;
 use ring::rand::SystemRandom;
 use secrets::KeyManager;
-use session::{AuthState, SessionToken, SessionUser, COOKIE_EXPIRATION, COOKIE_NAME};
+use session::{SessionState, SessionToken, SessionUser, COOKIE_EXPIRATION, COOKIE_NAME};
 use shuttle_common::claims::Claim;
 use shuttle_common::ApiKey;
 use shuttle_proto::auth::auth_server::Auth;
@@ -130,13 +130,13 @@ where
         Ok(token)
     }
 
-    /// Convert a valid API-key bearer token to a JWT.
+    /// Convert a cookie to a JWT.
     async fn convert_cookie(&self, extensions: &mut Extensions) -> Result<String, Error> {
         let SessionUser {
             account_name,
             account_tier,
         } = extensions
-            .get_mut::<AuthState<D>>()
+            .get_mut::<SessionState<D>>()
             .ok_or(Error::Unauthorized)?
             .user()
             .await
@@ -170,7 +170,7 @@ where
     // Destroy callers session.
     async fn destroy_session(&self, extensions: &mut Extensions) -> Result<(), Error> {
         let token = extensions
-            .get_mut::<AuthState<D>>()
+            .get_mut::<SessionState<D>>()
             .ok_or(Error::Unauthorized)?
             .token();
 

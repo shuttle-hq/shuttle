@@ -1268,6 +1268,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
 
 [[package]]
+name = "cookie"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7efb37c3e1ccb1ff97164ad95ac1606e8ccd35b3fa0a7d99a304c7f4a428cc24"
+dependencies = [
+ "time",
+ "version_check",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5217,11 +5227,12 @@ dependencies = [
  "anyhow",
  "async-trait",
  "clap",
+ "cookie",
+ "http",
  "jsonwebtoken",
  "opentelemetry",
  "portpicker",
  "pretty_assertions",
- "rand",
  "ring",
  "shuttle-common",
  "shuttle-proto",
@@ -5230,6 +5241,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tonic",
+ "tower",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
@@ -7743,3 +7755,71 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "shuttle-actix-web"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-aws-rds"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-axum"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-next"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-persist"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-poem"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-poise"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-rocket"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-salvo"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-secrets"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-serenity"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-shared-db"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-static-folder"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-thruster"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-tide"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-tower"
+version = "0.18.0"
+
+[[patch.unused]]
+name = "shuttle-warp"
+version = "0.18.0"

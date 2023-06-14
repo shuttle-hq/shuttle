@@ -117,4 +117,6 @@ async fn test_reset_key() {
     let response = app.get_user("basic-user").await.unwrap().into_inner();
 
     assert_ne!(key, response.key);
+
+    // TODO: test reset-key with cookie
 }

@@ -1,6 +1,7 @@
 use std::{fmt, path::Path, str::FromStr};
 
 use crate::{
+    session::SessionToken,
     user::{AccountName, AccountTier, User},
     Error,
 };
@@ -28,7 +29,6 @@ impl fmt::Display for DalError {
         let msg = match self {
             DalError::Sqlx(error) => {
                 error!(error = error.to_string(), "database request failed");
-
                 "failed to interact with auth database"
             }
             DalError::UserNotFound => "user not found",
@@ -48,6 +48,9 @@ pub trait Dal {
         tier: AccountTier,
     ) -> Result<User, DalError>;
 
+    /// Delete a session by the session token.
+    async fn delete_session(&self, session_token: &[u8]) -> Result<(), DalError>;
+
     /// Get an account by [AccountName]
     async fn get_user_by_name(&self, name: AccountName) -> Result<User, DalError>;
 
@@ -56,8 +59,19 @@ pub trait Dal {
 
     /// Reset an account's [ApiKey]
     async fn update_api_key(&self, name: AccountName, new_key: ApiKey) -> Result<(), DalError>;
+
+    /// Insert a new session.
+    async fn insert_session(
+        &self,
+        name: &AccountName,
+        session_token: SessionToken,
+    ) -> Result<(), DalError>;
+
+    /// Get a user by session token.
+    async fn get_user_by_session_token(&self, session_token: &[u8]) -> Result<User, DalError>;
 }
 
+#[derive(Clone)]
 pub struct Sqlite {
     pool: SqlitePool,
 }
@@ -170,5 +184,52 @@ impl Dal for Sqlite {
         } else {
             Err(DalError::UserNotFound)
         }
+    }
+
+    async fn insert_session(
+        &self,
+        name: &AccountName,
+        session_token: SessionToken,
+    ) -> Result<(), DalError> {
+        sqlx::query("INSERT INTO sessions (session_token, account_name) VALUES (?1, ?2)")
+            .bind(&session_token.into_database_value())
+            .bind(name)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn get_user_by_session_token(&self, token: &[u8]) -> Result<User, DalError> {
+        sqlx::query(
+            r#"
+            SELECT users.account_name, key, account_tier 
+            FROM users 
+            JOIN sessions ON sessions.account_name = users.account_name 
+            WHERE session_token = ?1
+        "#,
+        )
+        .bind(token)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|row| User {
+            name: row
+                .try_get("account_name")
+                .expect("a user should always have an account name"),
+            key: row.try_get("key").expect("a user should always have a key"),
+            account_tier: row
+                .try_get("account_tier")
+                .expect("a user should always have an account tier"),
+        })
+        .ok_or(DalError::UserNotFound)
+    }
+
+    async fn delete_session(&self, token: &[u8]) -> Result<(), DalError> {
+        sqlx::query("DELETE FROM sessions WHERE session_token = ?1")
+            .bind(token)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
     }
 }

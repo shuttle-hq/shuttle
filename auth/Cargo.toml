@@ -9,9 +9,10 @@ repository.workspace = true
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
+cookie = "0.17.0"
+http = { workspace = true }
 jsonwebtoken = { workspace = true }
 opentelemetry = { workspace = true }
-rand = { workspace = true }
 ring = { workspace = true }
 sqlx = { workspace = true, features = [
     "sqlite",
@@ -23,6 +24,7 @@ strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tonic = { workspace = true }
+tower = { workspace = true }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }

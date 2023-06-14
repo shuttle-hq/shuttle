@@ -20,7 +20,6 @@ use crate::init::Template;
 #[derive(Parser)]
 #[command(
     version,
-    about,
     // Cargo passes in the subcommand name to the invoked executable. Use a
     // hidden, optional positional argument to deal with it.
     arg(clap::Arg::new("dummy")

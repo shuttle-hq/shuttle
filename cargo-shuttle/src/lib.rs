@@ -159,6 +159,9 @@ impl Shuttle {
         // Turns the template or git args (if present) to a vec of repo folders that match.
         // If an explicit git arg is given, or a framework only has one template, the vec length will be 1.
         let git_templates = args.git_templates();
+
+        // Caveat: No way of telling if args.path was given or default
+        // Ideally that would be checked here (go interactive if not given)
         let interactive = project_args.name.is_none() || git_templates.is_none();
 
         let theme = ColorfulTheme::default();
@@ -294,12 +297,17 @@ impl Shuttle {
         if should_create_environment {
             // Set the project working directory path to the init path,
             // so `load_project` is ran with the correct project path
-            project_args.working_directory = path;
+            project_args.working_directory = path.clone();
 
             self.load_project(&mut project_args)?;
             self.project_create(&self.client()?, IDLE_MINUTES).await?;
-        } else {
-            println!("Run `cargo shuttle run` to run the app locally.");
+        }
+
+        if std::env::current_dir().is_ok_and(|d| d != path) {
+            println!("You can `cd` to the directory, then:");
+        }
+        println!("Run `cargo shuttle run` to run the app locally.");
+        if !should_create_environment {
             println!(
                 "Run `cargo shuttle project start` to create a project environment on Shuttle."
             );

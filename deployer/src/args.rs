@@ -10,7 +10,7 @@ pub struct Args {
     pub address: SocketAddr,
 
     /// Where to store resources state
-    #[arg(long, default_value = "./")]
+    #[arg(long, default_value = "./deployer.sqlite")]
     pub state: PathBuf,
 
     /// Address to reach the authentication service at

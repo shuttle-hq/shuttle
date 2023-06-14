@@ -7,6 +7,8 @@ pub enum Error {
     Dal(#[from] DalError),
     #[error("Ulid decode error")]
     UlidDecode(ulid::DecodeError),
+    #[error("Service already exists")]
+    ServiceAlreadyExists,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

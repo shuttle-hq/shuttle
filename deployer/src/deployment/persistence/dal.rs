@@ -121,23 +121,9 @@ impl Sqlite {
         //
         // If you want to activate a faster synchronous mode, then also do proper testing to confirm this bug is no
         // longer present.
-        info!(
-            "path {}",
-            std::fs::canonicalize(path)
-                .unwrap()
-                .to_string_lossy()
-                .to_string()
-                .as_str()
-        );
-        let sqlite_options = SqliteConnectOptions::from_str(
-            std::fs::canonicalize(path)
-                .unwrap()
-                .to_string_lossy()
-                .to_string()
-                .as_str(),
-        )
-        .unwrap()
-        .journal_mode(SqliteJournalMode::Wal);
+        let sqlite_options = SqliteConnectOptions::from_str(path_as_str)
+            .unwrap()
+            .journal_mode(SqliteJournalMode::Wal);
 
         let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
 
@@ -272,7 +258,7 @@ impl Dal for Sqlite {
         service_id: Ulid,
         state: ServiceState,
     ) -> Result<(), DalError> {
-        query("UPDATE services SET state = ?1 WHERE service_id = ?2")
+        query("UPDATE services SET state = ?1 WHERE id = ?2")
             .bind(SqlxJson(state))
             .bind(service_id.to_string())
             .execute(&self.pool)

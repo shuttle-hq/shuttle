@@ -234,23 +234,48 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     }
 
     pub async fn push_deployment(&self, req: DeployRequest, state: ServiceState) -> Result<String> {
-        // Insert the service if not present.
-        let service_id = Ulid::from_string(req.service_id.as_str()).map_err(Error::UlidDecode)?;
-        let service = Service {
-            id: service_id,
-            name: req.service_name.clone(),
-            state_variant: state.to_string(),
-            state,
-        };
-        self.persistence
+        let service_id: Ulid =
+            Ulid::from_string(req.service_id.as_str()).map_err(Error::UlidDecode)?;
+        // If the service already lives in the persistence.
+        if let Some(state) = self
+            .persistence
             .dal()
-            .insert_service_if_absent(service.clone())
-            .await?;
+            .service_state(&service_id)
+            .await
+            .map_err(Error::Dal)?
+        {
+            // But is in the destroyed state.
+            info!("{}", state);
+            if state.is_destroyed() {
+                // Recreate it.
+                self.persistence
+                    .dal()
+                    .update_service_state(service_id, state)
+                    .await
+                    .map_err(Error::Dal)?;
+            } else {
+                // Otherwise it already exists
+                return Err(Error::ServiceAlreadyExists);
+            }
+        } else {
+            // Insert the service.
+            let service = Service {
+                id: service_id,
+                name: req.service_name,
+                state_variant: state.to_string(),
+                state,
+            };
+            self.persistence
+                .dal()
+                .insert_service_if_absent(service)
+                .await
+                .map_err(Error::Dal)?;
+        }
 
         // Insert the new deployment.
         let deployment = Deployment {
             id: Ulid::new(),
-            service_id: service.id,
+            service_id,
             state: State::Built,
             last_update: Utc::now(),
             address: None,
@@ -275,12 +300,16 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
         &self,
         request: tonic::Request<DeployRequest>,
     ) -> TonicResult<tonic::Response<DeployResponse>, tonic::Status> {
+        // Authorize the request.
         request.verify(Scope::DeploymentPush)?;
         let request = request.into_inner();
         let service_id: Ulid = Ulid::from_string(request.service_id.as_str())
             .map_err(|_| tonic::Status::invalid_argument("invalid service id"))?;
 
         // Check if there are running deployments for the service.
+        // TODO: we might need to not check running deployments because we
+        // should be able to support on runtime that is loaded and one runtime
+        // the runs.
         let service_running_deployments = self
             .persistence
             .dal()
@@ -293,9 +322,7 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
             ));
         }
 
-        // Propagate the failure as an internal error, with the message being the displayed error.
-        // We're protected from bubling up sensitive info because the error thrown is a DalError
-        // which is `Display` controlled.
+        // Create a new deployment for the service and update the service state.
         let state = ServiceState::Creating(ServiceCreating::new(
             request.service_id.clone(),
             u64::from(request.idle_minutes),
@@ -305,53 +332,7 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
             .await
             .map_err(|err| tonic::Status::new(tonic::Code::Internal, err.to_string()))?;
 
-        let creating = ServiceCreating::new(
-            request.service_name.clone(),
-            u64::from(request.idle_minutes),
-        );
-        let service_state = ServiceState::Creating(creating);
-
-        // If the service already lives in the persistence.
-        if let Some(state) = self
-            .persistence
-            .dal()
-            .service_state(&service_id)
-            .await
-            .map_err(|_| tonic::Status::not_found("service not found"))?
-        {
-            // But is in the destroyed state.
-            if state.is_destroyed() {
-                // Recreate it.
-                self.persistence
-                    .dal()
-                    .update_service_state(service_id, service_state)
-                    .await
-                    .map_err(|_| tonic::Status::invalid_argument("invalid service id"))?;
-            } else {
-                // Otherwise it already exists
-                return Err(tonic::Status::already_exists(
-                    "The service already exists in deployer persistence, skipping its creation.",
-                ));
-            }
-        } else {
-            // Insert the service.
-            let service = Service {
-                id: service_id,
-                name: request.service_name,
-                state_variant: state.to_string(),
-                state,
-            };
-            self.persistence
-                .dal()
-                .insert_service_if_absent(service)
-                .await
-                .map_err(|_| {
-                    tonic::Status::internal(
-                        "failed because the service already exists or persisting it errored",
-                    )
-                })?;
-        }
-
+        // Build the container settings.
         let cs = ContainerSettings::builder()
             .image(request.image_name)
             .provisioner_host(self.provisioner_host.uri().to_string())
@@ -361,6 +342,8 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
             .build()
             .await;
 
+        // Start a task that assures that the reached containter state is
+        // done and then does a health-check.
         TaskBuilder::new(self.persistence.dal().clone())
             .service_id(service_id)
             .service_context(ServiceDockerContext::new(
@@ -368,6 +351,7 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
                 cs,
                 self.runtime_manager.clone(),
             ))
+            .task_router(self.task_router.clone())
             .and_then(task::run_until_done())
             .and_then(task::check_health())
             .send(&self.sender)

@@ -2,20 +2,15 @@ use clap::Parser;
 use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_deployer::{
     args::Args,
-    deployment::{
-        deploy_layer::DeployLayer,
-        persistence::{dal::Sqlite, Persistence},
-    },
+    deployment::persistence::{dal::Sqlite, Persistence},
     runtime_manager::RuntimeManager,
     DeployerService,
 };
 use tracing::{error, trace};
-use tracing_subscriber::layer::SubscriberExt;
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    setup_tracing(tracing_subscriber::registry(), "deployer");
     let (persistence, _) = Persistence::from_dal(Sqlite::new(&args.state).await).await;
     setup_tracing(
         tracing_subscriber::registry().with(DeployLayer::new(persistence.clone())),

@@ -32,7 +32,7 @@ sqlx = { workspace = true, features = [
     "migrate",
     "runtime-tokio-native-tls",
     "sqlite",
-    "json"
+    "json",
 ] }
 strum = { workspace = true }
 thiserror = { workspace = true }

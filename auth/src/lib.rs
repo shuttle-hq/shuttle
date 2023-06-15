@@ -57,7 +57,6 @@ pub struct Service<D, K> {
     dal: D,
     key_manager: K,
     random: SystemRandom,
-    cookie_secret: cookie::Key,
 }
 
 impl<D, K> Service<D, K>
@@ -65,12 +64,11 @@ where
     D: Dal + Send + Sync + 'static,
     K: KeyManager + Send + Sync + 'static,
 {
-    pub fn new(dal: D, key_manager: K, random: SystemRandom, cookie_secret: cookie::Key) -> Self {
+    pub fn new(dal: D, key_manager: K, random: SystemRandom) -> Self {
         Self {
             dal,
             key_manager,
             random,
-            cookie_secret,
         }
     }
 
@@ -288,7 +286,7 @@ where
             ))
             .finish();
 
-        sign_cookie(&self.cookie_secret, &mut cookie);
+        sign_cookie(self.key_manager.cookie_secret(), &mut cookie);
 
         response.metadata_mut().insert(
             SET_COOKIE.as_str(),
@@ -314,7 +312,7 @@ where
 
         cookie.make_removal();
 
-        sign_cookie(&self.cookie_secret, &mut cookie);
+        sign_cookie(self.key_manager.cookie_secret(), &mut cookie);
 
         let mut response = Response::new(ResultResponse {
             success: true,

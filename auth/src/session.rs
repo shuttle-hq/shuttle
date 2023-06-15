@@ -13,7 +13,7 @@ use tonic::body::BoxBody;
 use tower::{Layer, Service};
 use tracing::error;
 
-use crate::{user::AccountName, AccountTier, Dal};
+use crate::{secrets::KeyManager, user::AccountName, AccountTier, Dal};
 
 pub const COOKIE_NAME: &str = "shuttle.sid";
 pub const COOKIE_EXPIRATION: i64 = 60 * 60 * 24; // One day
@@ -69,7 +69,7 @@ pub fn sign_cookie(key: &cookie::Key, cookie: &mut Cookie<'_>) {
 /// Given a signed value `str` where the signature is prepended to `value`,
 /// verifies the signed value and returns it. If there's a problem, returns
 /// an `Err` with a string describing the issue.
-pub fn verify_signature(key: cookie::Key, cookie_value: &str) -> Result<String, &'static str> {
+pub fn verify_signature(key: &cookie::Key, cookie_value: &str) -> Result<String, &'static str> {
     if cookie_value.len() < BASE64_DIGEST_LEN {
         return Err("length of value is <= BASE64_DIGEST_LEN");
     }
@@ -140,32 +140,38 @@ where
 }
 
 #[derive(Clone)]
-pub struct SessionLayer<D: Dal + Send + 'static> {
-    cookie_secret: cookie::Key,
+pub struct SessionLayer<D, K>
+where
+    D: Dal + Send + Clone + 'static,
+    K: KeyManager + Send + Sync + 'static,
+{
+    key_manager: K,
     session_store: D,
 }
 
-impl<D> SessionLayer<D>
+impl<D, K> SessionLayer<D, K>
 where
     D: Dal + Send + Clone + 'static,
+    K: KeyManager + Send + Sync + 'static,
 {
-    pub fn new(cookie_secret: cookie::Key, dal: D) -> Self {
+    pub fn new(dal: D, key_manager: K) -> Self {
         Self {
-            cookie_secret,
+            key_manager,
             session_store: dal,
         }
     }
 }
 
-impl<S, D> Layer<S> for SessionLayer<D>
+impl<S, D, K> Layer<S> for SessionLayer<D, K>
 where
     D: Dal + Send + Clone + 'static,
+    K: KeyManager + Send + Sync + Clone + 'static,
 {
-    type Service = Session<S, D>;
+    type Service = Session<S, D, K>;
 
     fn layer(&self, service: S) -> Self::Service {
         Session {
-            cookie_secret: self.cookie_secret.clone(),
+            key_manager: self.key_manager.clone(),
             inner: service,
             session_store: self.session_store.clone(),
         }
@@ -173,20 +179,22 @@ where
 }
 
 #[derive(Clone)]
-pub struct Session<S, D>
+pub struct Session<S, D, K>
 where
     D: Dal + Send + 'static,
+    K: KeyManager + Send + Sync + 'static,
 {
-    cookie_secret: cookie::Key,
+    key_manager: K,
     inner: S,
     session_store: D,
 }
 
-impl<S, Body, D> Service<http::Request<Body>> for Session<S, D>
+impl<S, Body, D, K> Service<http::Request<Body>> for Session<S, D, K>
 where
     S: Service<http::Request<Body>, Response = http::Response<BoxBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     D: Dal + Send + Sync + Clone + 'static,
+    K: KeyManager + Send + Sync + Clone + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -206,8 +214,8 @@ where
         let clone = self.session_store.clone();
         let session_store = std::mem::replace(&mut self.session_store, clone);
 
-        let clone = self.cookie_secret.clone();
-        let cookie_secret = std::mem::replace(&mut self.cookie_secret, clone);
+        let clone = self.key_manager.clone();
+        let key_manager = std::mem::replace(&mut self.key_manager, clone);
 
         let session_token = req
             .headers()
@@ -220,7 +228,7 @@ where
                     .and_then(|cookie| cookie.parse::<cookie::Cookie>().ok())
             })
             .filter(|cookie| cookie.name() == COOKIE_NAME)
-            .find_map(|cookie| verify_signature(cookie_secret.clone(), cookie.value()).ok())
+            .find_map(|cookie| verify_signature(key_manager.cookie_secret(), cookie.value()).ok())
             .and_then(|cookie_value| cookie_value.parse::<SessionToken>().ok());
 
         if let Some(token) = session_token {

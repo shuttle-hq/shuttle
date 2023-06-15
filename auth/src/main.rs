@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use clap::Parser;
-use ring::rand::SecureRandom;
 use shuttle_common::{
     backends::tracing::{setup_tracing, ExtractPropagationLayer},
     ApiKey,
@@ -26,23 +25,15 @@ async fn main() {
 
     match args.command {
         Commands::Start(args) => {
-            let key_manager = EdDsaManager::default();
             let random = ring::rand::SystemRandom::new();
-
-            let mut secret = [0u8; 64];
-
-            random
-                .fill(&mut secret)
-                .expect("random should fill 64 bytes buf");
-
-            let cookie_secret = cookie::Key::from(&secret);
+            let key_manager = EdDsaManager::new(random.clone());
 
             let mut server_builder = Server::builder()
                 .http2_keepalive_interval(Some(Duration::from_secs(60)))
-                .layer(SessionLayer::new(cookie_secret.clone(), sqlite.clone()))
+                .layer(SessionLayer::new(sqlite.clone(), key_manager.clone()))
                 .layer(ExtractPropagationLayer);
 
-            let svc = Service::new(sqlite, key_manager, random, cookie_secret);
+            let svc = Service::new(sqlite, key_manager, random);
             let svc = AuthServer::new(svc);
             let router = server_builder.add_service(svc);
 

@@ -4,7 +4,6 @@ use std::{
 };
 
 use portpicker::pick_unused_port;
-use ring::rand::SecureRandom;
 use shuttle_auth::{AccountTier, Dal, EdDsaManager, Service, SessionLayer, Sqlite};
 use shuttle_common::ApiKey;
 use shuttle_proto::auth::{
@@ -39,23 +38,14 @@ pub(crate) async fn spawn_app() -> TestApp {
         .await
         .unwrap();
 
-    let key_manager = EdDsaManager::default();
-
     let random = ring::rand::SystemRandom::new();
-
-    let mut secret = [0u8; 64];
-
-    random
-        .fill(&mut secret)
-        .expect("random should fill 64 bytes buf");
-
-    let cookie_secret = cookie::Key::from(&secret);
+    let key_manager = EdDsaManager::new(random.clone());
 
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
-        .layer(SessionLayer::new(cookie_secret.clone(), sqlite.clone()));
+        .layer(SessionLayer::new(sqlite.clone(), key_manager.clone()));
 
-    let svc = Service::new(sqlite, key_manager, random, cookie_secret);
+    let svc = Service::new(sqlite, key_manager, random);
     let svc = AuthServer::new(svc);
     let router = server_builder.add_service(svc);
 

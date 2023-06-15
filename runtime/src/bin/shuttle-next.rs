@@ -11,6 +11,13 @@ use tracing::trace;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
+    for arg in std::env::args() {
+        if arg == "--version" {
+            print_version();
+            return;
+        }
+    }
+
     let args = NextArgs::parse().unwrap();
 
     setup_tracing(tracing_subscriber::registry(), "shuttle-next");
@@ -28,4 +35,12 @@ async fn main() {
     let router = server_builder.add_service(svc);
 
     router.serve(addr).await.unwrap();
+}
+
+fn print_version() {
+    // same way `clap` gets these
+    let name = env!("CARGO_PKG_NAME");
+    let version = env!("CARGO_PKG_VERSION");
+
+    println!("{name} {version}");
 }

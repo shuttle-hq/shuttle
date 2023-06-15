@@ -1,7 +1,6 @@
 use std::{
     str::FromStr,
     task::{Context, Poll},
-    time::Duration,
 };
 
 use cookie::Cookie;
@@ -17,7 +16,7 @@ use tracing::error;
 use crate::{user::AccountName, AccountTier, Dal};
 
 pub const COOKIE_NAME: &str = "shuttle.sid";
-pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // One day
+pub const COOKIE_EXPIRATION: i64 = 60 * 60 * 24; // One day
 const BASE64_DIGEST_LEN: usize = 44;
 
 #[derive(Clone, Copy, Debug)]

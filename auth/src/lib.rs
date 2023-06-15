@@ -4,6 +4,8 @@ mod secrets;
 mod session;
 mod user;
 
+use std::ops::Add;
+
 use anyhow::anyhow;
 use async_trait::async_trait;
 use cookie::{Cookie, SameSite};
@@ -161,14 +163,19 @@ where
     }
 
     /// Login user
-    async fn login(&self, account_name: String) -> Result<(User, SessionToken), Error> {
+    async fn login(&self, account_name: String) -> Result<(User, SessionToken, i64), Error> {
         let user = self.dal.get_user_by_name(account_name.into()).await?;
 
         let session_token = SessionToken::generate(&self.random);
+        let expiration = cookie::time::OffsetDateTime::now_utc()
+            .unix_timestamp()
+            .add(COOKIE_EXPIRATION);
 
-        self.dal.insert_session(&user.name, session_token).await?;
+        self.dal
+            .insert_session(expiration, &user.name, session_token)
+            .await?;
 
-        Ok((user, session_token))
+        Ok((user, session_token, expiration))
     }
 
     // Destroy callers session.
@@ -259,6 +266,7 @@ where
                 name,
             },
             token,
+            expiration,
         ) = self
             .login(request.account_name)
             .await
@@ -276,7 +284,7 @@ where
             .same_site(SameSite::Strict)
             .path("/")
             .expires(Some(
-                (std::time::SystemTime::now() + COOKIE_EXPIRATION).into(),
+                cookie::time::OffsetDateTime::from_unix_timestamp(expiration).unwrap(),
             ))
             .finish();
 

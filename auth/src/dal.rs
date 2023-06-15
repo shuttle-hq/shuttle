@@ -63,6 +63,7 @@ pub trait Dal {
     /// Insert a new session.
     async fn insert_session(
         &self,
+        expiration: i64,
         name: &AccountName,
         session_token: SessionToken,
     ) -> Result<(), DalError>;
@@ -188,28 +189,36 @@ impl Dal for Sqlite {
 
     async fn insert_session(
         &self,
+        expiration: i64,
         name: &AccountName,
         session_token: SessionToken,
     ) -> Result<(), DalError> {
-        sqlx::query("INSERT INTO sessions (session_token, account_name) VALUES (?1, ?2)")
-            .bind(&session_token.into_database_value())
-            .bind(name)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "INSERT INTO sessions (session_token, account_name, expiration) VALUES (?1, ?2, ?3)",
+        )
+        .bind(&session_token.into_database_value())
+        .bind(name)
+        .bind(expiration)
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }
 
+    /// Get user by session token if the session has not expired.
     async fn get_user_by_session_token(&self, token: &[u8]) -> Result<User, DalError> {
+        let now = cookie::time::OffsetDateTime::now_utc().unix_timestamp();
+
         sqlx::query(
             r#"
             SELECT users.account_name, key, account_tier 
             FROM users 
             JOIN sessions ON sessions.account_name = users.account_name 
-            WHERE session_token = ?1
+            WHERE session_token = ?1 AND expiration > ?2
         "#,
         )
         .bind(token)
+        .bind(now)
         .fetch_optional(&self.pool)
         .await?
         .map(|row| User {

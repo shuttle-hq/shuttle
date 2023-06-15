@@ -268,6 +268,12 @@ impl Shuttle {
             }
         };
 
+        // Covers the official examples at least...
+        let serenity_idle_hint = template
+            .subfolder
+            .as_ref()
+            .is_some_and(|s| s.contains("serenity") || s.contains("poise"));
+
         // 5. Initialize locally
         init::cargo_generate(
             path.clone(),
@@ -310,6 +316,11 @@ impl Shuttle {
             println!(
                 "Run `cargo shuttle project start` to create a project environment on Shuttle."
             );
+            if serenity_idle_hint {
+                println!(
+                    "Hint: Discord bots might want to use `--idle-minutes 0` when starting the project so that they don't go offline."
+                );
+            }
         }
 
         Ok(())

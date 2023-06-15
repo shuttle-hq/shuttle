@@ -35,7 +35,7 @@ impl Client {
 
     pub async fn deploy(
         &self,
-        project: &ProjectName,
+        project: &RawProjectName,
         deployment_req: DeploymentRequest,
     ) -> Result<deployment::Response> {
         let path = format!(

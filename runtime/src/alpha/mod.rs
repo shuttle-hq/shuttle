@@ -50,7 +50,7 @@ mod args;
 
 pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let args = Args::parse().expect("could not parse arguments");
-    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
+    let addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), args.port);
 
     let auth_client = shuttle_proto::auth::client(&args.auth_uri)
         .await

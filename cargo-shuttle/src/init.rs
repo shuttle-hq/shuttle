@@ -32,9 +32,9 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocat
         // (not intended with Shuttle templates)
         name: Some(name.to_string()),
         destination: Some(path.clone()),
-        init: true,
+        init: true, // don't create a folder to place the template in
         vcs: Some(Vcs::Git),
-        force_git_init: true,
+        force_git_init: true, // git init after cloning
         ..Default::default()
     };
     cargo_generate::generate(generate_args)

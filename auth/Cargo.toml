@@ -8,12 +8,15 @@ repository.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+base64 = { workspace = true }
 clap = { workspace = true }
-cookie = "0.17.0"
+cookie = { version = "0.17.0", features = ["signed"] }
+hmac = "0.12.1"
 http = { workspace = true }
 jsonwebtoken = { workspace = true }
 opentelemetry = { workspace = true }
 ring = { workspace = true }
+sha2 = "0.10.2"
 sqlx = { workspace = true, features = [
     "sqlite",
     "json",

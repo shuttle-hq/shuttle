@@ -10,7 +10,9 @@ use cookie::{Cookie, SameSite};
 use http::header::SET_COOKIE;
 use ring::rand::SystemRandom;
 use secrets::KeyManager;
-use session::{SessionState, SessionToken, SessionUser, COOKIE_EXPIRATION, COOKIE_NAME};
+use session::{
+    sign_cookie, SessionState, SessionToken, SessionUser, COOKIE_EXPIRATION, COOKIE_NAME,
+};
 use shuttle_common::claims::Claim;
 use shuttle_common::ApiKey;
 use shuttle_proto::auth::auth_server::Auth;
@@ -53,6 +55,7 @@ pub struct Service<D, K> {
     dal: D,
     key_manager: K,
     random: SystemRandom,
+    cookie_secret: cookie::Key,
 }
 
 impl<D, K> Service<D, K>
@@ -60,11 +63,12 @@ where
     D: Dal + Send + Sync + 'static,
     K: KeyManager + Send + Sync + 'static,
 {
-    pub fn new(dal: D, key_manager: K, random: SystemRandom) -> Self {
+    pub fn new(dal: D, key_manager: K, random: SystemRandom, cookie_secret: cookie::Key) -> Self {
         Self {
             dal,
             key_manager,
             random,
+            cookie_secret,
         }
     }
 
@@ -260,13 +264,14 @@ where
             .await
             .map_err(|err| Status::internal(err.to_string()))?;
 
+        println!("token pre-sign: {}", &token.into_cookie_value());
         let mut response = Response::new(UserResponse {
             account_name: name.to_string(),
             key: key.to_string(),
             account_tier: account_tier.to_string(),
         });
 
-        let cookie = Cookie::build(COOKIE_NAME, token.into_cookie_value())
+        let mut cookie = Cookie::build(COOKIE_NAME, token.into_cookie_value())
             .secure(true)
             .http_only(true)
             .same_site(SameSite::Strict)
@@ -275,6 +280,8 @@ where
                 (std::time::SystemTime::now() + COOKIE_EXPIRATION).into(),
             ))
             .finish();
+
+        sign_cookie(&self.cookie_secret, &mut cookie);
 
         response.metadata_mut().insert(
             SET_COOKIE.as_str(),
@@ -299,6 +306,8 @@ where
             .finish();
 
         cookie.make_removal();
+
+        sign_cookie(&self.cookie_secret, &mut cookie);
 
         let mut response = Response::new(ResultResponse {
             success: true,

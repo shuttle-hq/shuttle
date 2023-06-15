@@ -1273,6 +1273,11 @@ version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7efb37c3e1ccb1ff97164ad95ac1606e8ccd35b3fa0a7d99a304c7f4a428cc24"
 dependencies = [
+ "base64 0.21.1",
+ "hmac",
+ "rand",
+ "sha2",
+ "subtle",
  "time",
  "version_check",
 ]
@@ -5226,14 +5231,17 @@ version = "0.18.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.13.1",
  "clap",
  "cookie",
+ "hmac",
  "http",
  "jsonwebtoken",
  "opentelemetry",
  "portpicker",
  "pretty_assertions",
  "ring",
+ "sha2",
  "shuttle-common",
  "shuttle-proto",
  "sqlx",

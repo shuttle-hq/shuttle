@@ -73,11 +73,21 @@ async fn session_flow() {
         MetadataValue::try_from(&cookie.to_string()).unwrap(),
     );
 
-    let response = app.client.logout(request).await;
+    let response = app.client.logout(request).await.unwrap();
 
-    assert!(response.is_ok());
+    let logout_cookie = response
+        .metadata()
+        .get("set-cookie")
+        .unwrap()
+        .to_str()
+        .unwrap();
 
-    // Try to convert the previous cookie to JWT again.
+    let logout_cookie = Cookie::parse(logout_cookie).unwrap();
+
+    assert_eq!(logout_cookie.http_only(), Some(true));
+    assert!(logout_cookie.max_age().unwrap().is_zero());
+
+    // Try to convert the original cookie to JWT again.
     let mut request = Request::new(ConvertCookieRequest {});
 
     request.metadata_mut().insert(

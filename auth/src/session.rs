@@ -4,8 +4,11 @@ use std::{
     time::Duration,
 };
 
+use cookie::Cookie;
+use hmac::{Hmac, Mac};
 use http::header::COOKIE;
 use ring::rand::{SecureRandom, SystemRandom};
+use sha2::Sha256;
 use shuttle_common::claims::ResponseFuture;
 use tonic::body::BoxBody;
 use tower::{Layer, Service};
@@ -15,6 +18,7 @@ use crate::{user::AccountName, AccountTier, Dal};
 
 pub const COOKIE_NAME: &str = "shuttle.sid";
 pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // One day
+const BASE64_DIGEST_LEN: usize = 44;
 
 #[derive(Clone, Copy, Debug)]
 pub struct SessionToken(u128);
@@ -45,6 +49,43 @@ impl SessionToken {
     pub fn into_database_value(self) -> Vec<u8> {
         self.0.to_le_bytes().to_vec()
     }
+}
+
+// the following is reused verbatim from
+// https://github.com/SergioBenitez/cookie-rs/blob/master/src/secure/signed.rs#L33-L43
+/// Signs the cookie's value providing integrity and authenticity.
+pub fn sign_cookie(key: &cookie::Key, cookie: &mut Cookie<'_>) {
+    // Compute HMAC-SHA256 of the cookie's value.
+    let mut mac = Hmac::<Sha256>::new_from_slice(key.signing()).expect("good key");
+    mac.update(cookie.value().as_bytes());
+
+    // Cookie's new value is [MAC | original-value].
+    let mut new_value = base64::encode(mac.finalize().into_bytes());
+    new_value.push_str(cookie.value());
+    cookie.set_value(new_value);
+}
+
+// the following is reused verbatim from
+// https://github.com/SergioBenitez/cookie-rs/blob/master/src/secure/signed.rs#L45-L63
+/// Given a signed value `str` where the signature is prepended to `value`,
+/// verifies the signed value and returns it. If there's a problem, returns
+/// an `Err` with a string describing the issue.
+pub fn verify_signature(key: cookie::Key, cookie_value: &str) -> Result<String, &'static str> {
+    if cookie_value.len() < BASE64_DIGEST_LEN {
+        return Err("length of value is <= BASE64_DIGEST_LEN");
+    }
+
+    // Split [MAC | original-value] into its two parts.
+    let (digest_str, value) = cookie_value.split_at(BASE64_DIGEST_LEN);
+    let digest = base64::decode(digest_str).map_err(|_| "bad base64 digest")?;
+
+    // Perform the verification.
+    let mut mac = Hmac::<Sha256>::new_from_slice(key.signing()).expect("good key");
+
+    mac.update(value.as_bytes());
+    mac.verify_slice(&digest)
+        .map(|_| value.to_string())
+        .map_err(|_| "value did not verify")
 }
 
 #[derive(Clone)]
@@ -101,6 +142,7 @@ where
 
 #[derive(Clone)]
 pub struct SessionLayer<D: Dal + Send + 'static> {
+    cookie_secret: cookie::Key,
     session_store: D,
 }
 
@@ -108,8 +150,11 @@ impl<D> SessionLayer<D>
 where
     D: Dal + Send + Clone + 'static,
 {
-    pub fn new(dal: D) -> Self {
-        Self { session_store: dal }
+    pub fn new(cookie_secret: cookie::Key, dal: D) -> Self {
+        Self {
+            cookie_secret,
+            session_store: dal,
+        }
     }
 }
 
@@ -121,17 +166,19 @@ where
 
     fn layer(&self, service: S) -> Self::Service {
         Session {
+            cookie_secret: self.cookie_secret.clone(),
             inner: service,
             session_store: self.session_store.clone(),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Session<S, D>
 where
     D: Dal + Send + 'static,
 {
+    cookie_secret: cookie::Key,
     inner: S,
     session_store: D,
 }
@@ -160,6 +207,9 @@ where
         let clone = self.session_store.clone();
         let session_store = std::mem::replace(&mut self.session_store, clone);
 
+        let clone = self.cookie_secret.clone();
+        let cookie_secret = std::mem::replace(&mut self.cookie_secret, clone);
+
         let session_token = req
             .headers()
             .get_all(COOKIE)
@@ -170,9 +220,8 @@ where
                     .ok()
                     .and_then(|cookie| cookie.parse::<cookie::Cookie>().ok())
             })
-            .find_map(|cookie| {
-                (cookie.name() == COOKIE_NAME).then(move || cookie.value().to_owned())
-            })
+            .filter(|cookie| cookie.name() == COOKIE_NAME)
+            .find_map(|cookie| verify_signature(cookie_secret.clone(), cookie.value()).ok())
             .and_then(|cookie_value| cookie_value.parse::<SessionToken>().ok());
 
         if let Some(token) = session_token {

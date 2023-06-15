@@ -76,6 +76,150 @@ async fn non_interactive_rocket_init() {
     drop(temp_dir);
 }
 
+#[tokio::test]
+async fn non_interactive_init_with_from_url() {
+    let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    let temp_dir_path = temp_dir.path().to_owned();
+
+    let args = ShuttleArgs::parse_from([
+        "cargo-shuttle",
+        "--api-url",
+        "http://shuttle.invalid:80",
+        "init",
+        "--api-key",
+        "dh9z58jttoes3qvt",
+        "--name",
+        "my-project",
+        "--from",
+        "https://github.com/shuttle-hq/shuttle-examples",
+        "--subfolder",
+        "tower/hello-world",
+        temp_dir_path.to_str().unwrap(),
+    ]);
+    Shuttle::new().unwrap().run(args).await.unwrap();
+
+    let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
+    assert!(cargo_toml.contains("name = \"my-project\""));
+    assert!(cargo_toml.contains("shuttle-tower ="));
+
+    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
+    // attempts to enter the original (temp) working directory again.
+    // If both are dropped at the same time, the test can sometimes crash.
+    // Added sleep here to prevent.
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    drop(temp_dir);
+}
+
+#[tokio::test]
+async fn non_interactive_init_with_from_gh() {
+    let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    let temp_dir_path = temp_dir.path().to_owned();
+
+    let args = ShuttleArgs::parse_from([
+        "cargo-shuttle",
+        "--api-url",
+        "http://shuttle.invalid:80",
+        "init",
+        "--api-key",
+        "dh9z58jttoes3qvt",
+        "--name",
+        "my-project",
+        "--from",
+        "gh:shuttle-hq/shuttle-examples",
+        "--subfolder",
+        "tower/hello-world",
+        temp_dir_path.to_str().unwrap(),
+    ]);
+    Shuttle::new().unwrap().run(args).await.unwrap();
+
+    let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
+    assert!(cargo_toml.contains("name = \"my-project\""));
+    assert!(cargo_toml.contains("shuttle-tower ="));
+
+    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
+    // attempts to enter the original (temp) working directory again.
+    // If both are dropped at the same time, the test can sometimes crash.
+    // Added sleep here to prevent.
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    drop(temp_dir);
+}
+
+#[tokio::test]
+async fn non_interactive_init_with_from_repo_name() {
+    let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    let temp_dir_path = temp_dir.path().to_owned();
+
+    let args = ShuttleArgs::parse_from([
+        "cargo-shuttle",
+        "--api-url",
+        "http://shuttle.invalid:80",
+        "init",
+        "--api-key",
+        "dh9z58jttoes3qvt",
+        "--name",
+        "my-project",
+        "--from",
+        "shuttle-hq/shuttle-examples",
+        "--subfolder",
+        "tower/hello-world",
+        temp_dir_path.to_str().unwrap(),
+    ]);
+    Shuttle::new().unwrap().run(args).await.unwrap();
+
+    let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
+    assert!(cargo_toml.contains("name = \"my-project\""));
+    assert!(cargo_toml.contains("shuttle-tower ="));
+
+    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
+    // attempts to enter the original (temp) working directory again.
+    // If both are dropped at the same time, the test can sometimes crash.
+    // Added sleep here to prevent.
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    drop(temp_dir);
+}
+
+#[tokio::test]
+async fn non_interactive_init_with_from_local_path() {
+    let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    let temp_dir_path = temp_dir.path().to_owned();
+
+    let args = ShuttleArgs::parse_from([
+        "cargo-shuttle",
+        "--api-url",
+        "http://shuttle.invalid:80",
+        "init",
+        "--api-key",
+        "dh9z58jttoes3qvt",
+        "--name",
+        "my-project",
+        "--from",
+        "../examples", // for some reason, cargo runs the test from the cargo-shuttle folder.
+        "--subfolder",
+        "tower/hello-world",
+        temp_dir_path.to_str().unwrap(),
+    ]);
+    Shuttle::new().unwrap().run(args).await.unwrap();
+
+    let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
+    assert!(cargo_toml.contains("name = \"my-project\""));
+    assert!(cargo_toml.contains("shuttle-tower ="));
+
+    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
+    // attempts to enter the original (temp) working directory again.
+    // If both are dropped at the same time, the test can sometimes crash.
+    // Added sleep here to prevent.
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    drop(temp_dir);
+}
+
 #[test]
 fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
@@ -105,12 +249,73 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     session.exp_string(
         "Shuttle works with a range of web frameworks. Which one do you want to use?",
     )?;
+    session.exp_string(
+        "Hint: Check the shuttle-examples repo for a full list of templates: https://github.com/shuttle-hq/shuttle-examples",
+    )?;
+    session.exp_string("Framework")?;
     // Partial input should be enough to match "rocket"
     session.send_line("roc")?;
+    session.exp_string("Use a different template than \"rocket/hello-world\"?")?;
+    session.exp_string("available)")?;
+    session.send("n")?;
+    session.flush()?;
+    session.exp_string("no")?;
     session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.send("n")?;
+    session.flush()?;
+    session.exp_string("no")?;
+
+    assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
+
+    Ok(())
+}
+
+#[test]
+fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let temp_dir_path = temp_dir.path().to_owned();
+
+    let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
+    let mut command = Command::new(bin_path);
+    command.args([
+        "--api-url",
+        "http://shuttle.invalid:80",
+        "init",
+        "--api-key",
+        "dh9z58jttoes3qvt",
+    ]);
+    let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
+
+    session.exp_string(
+        "How do you want to name your project? It will be hosted at ${project_name}.shuttleapp.rs.",
+    )?;
+    session.exp_string("Project name")?;
+    session.send_line("my-project")?;
+    session.exp_string("Where should we create this project?")?;
+    session.exp_string("Directory")?;
+    session.send_line(temp_dir_path.to_str().unwrap())?;
+    session.exp_string(
+        "Shuttle works with a range of web frameworks. Which one do you want to use?",
+    )?;
+    session.exp_string(
+        "Hint: Check the shuttle-examples repo for a full list of templates: https://github.com/shuttle-hq/shuttle-examples",
+    )?;
+    session.exp_string("Framework")?;
+    // Partial input should be enough to match "rocket"
+    session.send_line("roc")?;
+    session.exp_string("Use a different template than \"rocket/hello-world\"?")?;
+    session.exp_string("available)")?;
     session.send("y")?;
     session.flush()?;
     session.exp_string("yes")?;
+    // Partial input should be enough to match "rocket/hello-world"
+    session.send_line("world")?;
+    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.send("n")?;
+    session.flush()?;
+    session.exp_string("no")?;
 
     assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
 
@@ -145,10 +350,15 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
     session.send_line(temp_dir_path.to_str().unwrap())?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
-    session.send("y")?;
+    session.exp_string("Use a different template than \"rocket/hello-world\"?")?;
+    session.exp_string("available)")?;
+    session.send("n")?;
     session.flush()?;
-    session.exp_string("yes")?;
+    session.exp_string("no")?;
+    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.send("n")?;
+    session.flush()?;
+    session.exp_string("no")?;
 
     assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
 
@@ -181,12 +391,21 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     session.exp_string(
         "Shuttle works with a range of web frameworks. Which one do you want to use?",
     )?;
+    session.exp_string(
+        "Hint: Check the shuttle-examples repo for a full list of templates: https://github.com/shuttle-hq/shuttle-examples",
+    )?;
+    session.exp_string("Framework")?;
     // Partial input should be enough to match "rocket"
     session.send_line("roc")?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
-    session.send("y")?;
+    session.exp_string("Use a different template than \"rocket/hello-world\"?")?;
+    session.exp_string("available)")?;
+    session.send("n")?;
     session.flush()?;
-    session.exp_string("yes")?;
+    session.exp_string("no")?;
+    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.send("n")?;
+    session.flush()?;
+    session.exp_string("no")?;
 
     assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
 
@@ -218,40 +437,4 @@ fn assert_valid_rocket_project(path: &Path, name: &str) {
     "#};
 
     assert_eq!(main_file, expected);
-}
-
-#[tokio::test]
-async fn non_interactive_git_init() {
-    let temp_dir = Builder::new().prefix("basic-git-init").tempdir().unwrap();
-    // Sleep to give time for the directory to finish creating
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-    let temp_dir_path = temp_dir.path().to_owned();
-
-    let args = ShuttleArgs::parse_from([
-        "cargo-shuttle",
-        "--api-url",
-        "http://shuttle.invalid:80",
-        "init",
-        "--api-key",
-        "dh9z58jttoes3qvt",
-        "--name",
-        "my-project",
-        "--git",
-        "https://github.com/shuttle-hq/shuttle-examples",
-        "--git-path",
-        "tower/hello-world",
-        temp_dir_path.to_str().unwrap(),
-    ]);
-    Shuttle::new().unwrap().run(args).await.unwrap();
-
-    let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
-    assert!(cargo_toml.contains("name = \"my-project\""));
-    assert!(cargo_toml.contains("shuttle-tower ="));
-
-    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
-    // attempts to enter the original (temp) working directory again.
-    // If both are dropped at the same time, the test can sometimes crash.
-    // Added sleep here to prevent.
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-    drop(temp_dir);
 }

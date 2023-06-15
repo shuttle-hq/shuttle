@@ -10,18 +10,28 @@ use indoc::indoc;
 use shuttle_common::project::ProjectName;
 use toml_edit::{value, Document};
 
-use crate::args::GitTemplate;
+use crate::args::TemplateLocation;
 
-pub fn cargo_generate(path: PathBuf, name: &ProjectName, git_template: GitTemplate) -> Result<()> {
+/// More about how this works: https://cargo-generate.github.io/cargo-generate/
+pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocation) -> Result<()> {
     println!(r#"    Creating project "{name}" in {path:?}"#);
     let generate_args = GenerateArgs {
         init: true,
         template_path: TemplatePath {
-            git: Some(git_template.repo),
-            auto_path: git_template.repo_path,
+            // Automatically guess location from:
+            // - cargo-generate "favorites", see their docs
+            // - git hosts (gh:, gl: etc.)
+            // - local path (check if exists)
+            // - github username+repo (shuttle-hq/shuttle-examples)
+            auto_path: Some(temp_loc.auto_path.clone()),
+            // subfolder in the source folder that was found
+            subfolder: temp_loc.subfolder,
             ..Default::default()
         },
-        name: Some(name.to_string()), // appears to do nothing...
+        // setting this prevents cargo-generate from prompting the user.
+        // it will then be used to try and replace a "{{project-name}}" placeholder in the cloned folder.
+        // (not intended with Shuttle templates)
+        name: Some(name.to_string()),
         destination: Some(path.clone()),
         vcs: Some(Vcs::Git),
         ..Default::default()
@@ -29,7 +39,8 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, git_template: GitTempla
     cargo_generate::generate(generate_args)
         .with_context(|| "Failed to initialize with cargo generate.")?;
 
-    set_crate_name(&path, name.as_str()).with_context(|| "Failed to set crate name.")?;
+    set_crate_name(&path, name.as_str())
+        .with_context(|| "Failed to set crate name. No Cargo.toml in template?")?;
     remove_shuttle_toml(&path);
     create_gitignore_file(&path).with_context(|| "Failed to create .gitignore file.")?;
 

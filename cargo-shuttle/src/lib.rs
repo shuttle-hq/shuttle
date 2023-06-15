@@ -55,8 +55,7 @@ use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
 use crate::args::{
-    DeploymentCommand, GitTemplate, ProjectCommand, ProjectStartArgs, ResourceCommand,
-    EXAMPLES_REPO,
+    DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand, EXAMPLES_REPO,
 };
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
@@ -229,7 +228,7 @@ impl Shuttle {
                         .default(0)
                         .interact()?;
                     println!();
-                    GitTemplate::templates(&frameworks[index])
+                    frameworks[index].templates()
                 }
             };
 
@@ -240,7 +239,7 @@ impl Shuttle {
                     .with_prompt(format!(
                         "Use a different template than \"{}\"? ({} available)",
                         templates[0]
-                            .repo_path
+                            .subfolder
                             .as_ref()
                             .expect("Pre-defined templates from examples repo should always have a git path"),
                         templates.len() - 1
@@ -254,7 +253,7 @@ impl Shuttle {
                 let framework_templates = templates
                     .iter()
                     .map(|t|
-                        t.repo_path
+                        t.subfolder
                             .as_ref()
                             .expect("Pre-defined templates from examples repo should always have a git path")
                     )

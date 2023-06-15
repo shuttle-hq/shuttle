@@ -233,17 +233,17 @@ pub struct RunArgs {
 
 #[derive(Parser, Clone, Debug)]
 pub struct InitArgs {
-    /// Initialize the project with a starter template
-    #[arg(long, short, value_enum, conflicts_with_all = &["git", "git_path"])]
+    /// Clone a starter template from shuttle's official examples
+    #[arg(long, short, value_enum, conflicts_with_all = &["from", "subfolder"])]
     pub template: Option<InitTemplateArg>,
-    /// Initialize the project from a git repository
-    #[arg(long, short)]
-    pub git: Option<String>,
-    /// Path to the folder in the repository (used with --git)
-    #[arg(long, requires = "git")]
-    pub git_path: Option<String>,
+    /// Clone a template from a git repository or local path using cargo-generate
+    #[arg(long)]
+    pub from: Option<String>,
+    /// Path to the template in the source (used with --from)
+    #[arg(long, requires = "from")]
+    pub subfolder: Option<String>,
 
-    /// Path to initialize a new shuttle project
+    /// Path where to place the new shuttle project
     #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub path: PathBuf,
 
@@ -286,28 +286,28 @@ pub enum InitTemplateArg {
 pub const EXAMPLES_REPO: &str = "https://github.com/shuttle-hq/shuttle-examples";
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct GitTemplate {
-    pub repo: String,
-    pub repo_path: Option<String>,
+pub struct TemplateLocation {
+    pub auto_path: String,
+    pub subfolder: Option<String>,
 }
 
 impl InitArgs {
-    pub fn git_templates(&self) -> Option<Vec<GitTemplate>> {
-        if let Some(repo) = self.git.clone() {
-            Some(vec![GitTemplate {
-                repo,
-                repo_path: self.git_path.clone(),
+    pub fn git_templates(&self) -> Option<Vec<TemplateLocation>> {
+        if let Some(from) = self.from.clone() {
+            Some(vec![TemplateLocation {
+                auto_path: from,
+                subfolder: self.subfolder.clone(),
             }])
         } else {
-            self.template.as_ref().map(|t| GitTemplate::templates(t))
+            self.template.as_ref().map(|t| t.templates())
         }
     }
 }
 
-impl GitTemplate {
-    pub fn templates(value: &InitTemplateArg) -> Vec<Self> {
+impl InitTemplateArg {
+    pub fn templates(&self) -> Vec<TemplateLocation> {
         use InitTemplateArg::*;
-        let paths = match value {
+        let paths = match self {
             // first entry should be the default for
             // that choice of framework (usually hello-world)
             ActixWeb => vec![
@@ -345,9 +345,9 @@ impl GitTemplate {
 
         paths
             .iter()
-            .map(|path| Self {
-                repo: EXAMPLES_REPO.into(),
-                repo_path: Some(path.to_string()),
+            .map(|path| TemplateLocation {
+                auto_path: EXAMPLES_REPO.into(),
+                subfolder: Some(path.to_string()),
             })
             .collect()
     }
@@ -379,62 +379,80 @@ mod tests {
 
     #[test]
     fn test_init_args_framework() {
-        // pre-defined template
+        // pre-defined template (only hello world)
         let init_args = InitArgs {
-            template: Some(InitTemplateArg::Axum),
-            git: None,
-            git_path: None,
+            template: Some(InitTemplateArg::Tower),
+            from: None,
+            subfolder: None,
             create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
         assert_eq!(
             init_args.git_templates(),
-            Some(vec![GitTemplate {
-                repo: EXAMPLES_REPO.into(),
-                repo_path: Some("axum/hello-world".into())
+            Some(vec![TemplateLocation {
+                auto_path: EXAMPLES_REPO.into(),
+                subfolder: Some("tower/hello-world".into())
             }])
         );
+
+        // pre-defined template (multiple)
+        let init_args = InitArgs {
+            template: Some(InitTemplateArg::Axum),
+            from: None,
+            subfolder: None,
+            create_env: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+        assert_eq!(
+            init_args.git_templates().unwrap()[0],
+            TemplateLocation {
+                auto_path: EXAMPLES_REPO.into(),
+                subfolder: Some("axum/hello-world".into())
+            }
+        );
+        assert!(init_args.git_templates().unwrap().len() > 1);
 
         // pre-defined "none" template
         let init_args = InitArgs {
             template: Some(InitTemplateArg::None),
-            git: None,
-            git_path: None,
+            from: None,
+            subfolder: None,
             create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
         assert_eq!(
             init_args.git_templates(),
-            Some(vec![GitTemplate {
-                repo: EXAMPLES_REPO.into(),
-                repo_path: Some("custom/none".into())
+            Some(vec![TemplateLocation {
+                auto_path: EXAMPLES_REPO.into(),
+                subfolder: Some("custom/none".into())
             }])
         );
 
         // git template with path
         let init_args = InitArgs {
             template: None,
-            git: Some("https://github.com/some/repo".into()),
-            git_path: Some("some/path".into()),
+            from: Some("https://github.com/some/repo".into()),
+            subfolder: Some("some/path".into()),
             create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
         assert_eq!(
             init_args.git_templates(),
-            Some(vec![GitTemplate {
-                repo: "https://github.com/some/repo".into(),
-                repo_path: Some("some/path".into())
+            Some(vec![TemplateLocation {
+                auto_path: "https://github.com/some/repo".into(),
+                subfolder: Some("some/path".into())
             }])
         );
 
         // No template or repo chosen
         let init_args = InitArgs {
             template: None,
-            git: None,
-            git_path: None,
+            from: None,
+            subfolder: None,
             create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),

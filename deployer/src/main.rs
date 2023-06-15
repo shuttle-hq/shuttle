@@ -4,7 +4,7 @@ use shuttle_deployer::{
     args::Args,
     deployment::persistence::{dal::Sqlite, Persistence},
     runtime_manager::RuntimeManager,
-    DeployerService,
+    DeployerService, DeployerServiceConfig, DeployerServiceConfigBuilder,
 };
 use tracing::{error, trace};
 
@@ -17,20 +17,20 @@ async fn main() {
         "deployer",
     );
     trace!(args = ?args, "parsed args");
+    let config: DeployerServiceConfig = DeployerServiceConfigBuilder::default()
+        .artifacts_path(args.artifacts_path)
+        .auth_uri(args.auth_uri)
+        .provisioner_uri(args.provisioner_uri)
+        .bind_address(args.address)
+        .docker_host(args.docker_host)
+        .network_name(args.network_name)
+        .prefix(args.prefix)
+        .build()
+        .expect("to build the deployer service configuration");
 
     let runtime_manager = RuntimeManager::new(persistence.get_log_sender());
-    let svc = DeployerService::new(
-        runtime_manager,
-        persistence,
-        args.artifacts_path,
-        args.address,
-        args.docker_host.as_str(),
-        args.provisioner_uri,
-        args.auth_uri,
-        args.network_name,
-        args.prefix,
-    )
-    .await;
+    let svc = DeployerService::new(runtime_manager, persistence, config).await;
+
     match svc.start().await {
         Ok(_) => (),
         Err(err) => error!(

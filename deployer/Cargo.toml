@@ -14,6 +14,7 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 crossbeam-channel = { workspace = true }
+derive_builder = "0.12.0"
 fqdn = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }

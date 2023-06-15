@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
-use tonic::transport::{Endpoint, Uri};
+use tonic::transport::Uri;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -19,7 +19,7 @@ pub struct Args {
 
     /// Address to connect to the provisioning service
     #[clap(long, default_value = "http://provisioner:5000")]
-    pub provisioner_uri: Endpoint,
+    pub provisioner_uri: Uri,
 
     /// Uri to folder to store all artifacts
     #[clap(long, default_value = "/tmp")]
@@ -39,5 +39,5 @@ pub struct Args {
 
     /// The path to the docker daemon socket
     #[arg(long, default_value = "/var/run/docker.sock")]
-    pub docker_host: String,
+    pub docker_host: PathBuf,
 }

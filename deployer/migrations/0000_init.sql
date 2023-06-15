@@ -7,11 +7,10 @@ CREATE TABLE IF NOT EXISTS services (
 
 CREATE TABLE IF NOT EXISTS deployments (
   id TEXT PRIMARY KEY,
-  service_id TEXT,
+  service_id TEXT NOT NULL,
   state TEXT NOT NULL,
-  address TEXT,
-  last_update INTEGER,
-  is_next BOOLEAN,
+  last_update INTEGER NOT NULL,
+  is_next BOOLEAN NOT NULL,
   git_commit_hash TEXT,
   git_commit_message TEXT,
   git_branch TEXT,

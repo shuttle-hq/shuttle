@@ -198,13 +198,12 @@ impl Dal for Sqlite {
 
     async fn insert_deployment(&self, deployment: Deployment) -> Result<(), DalError> {
         sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update, address, is_next, git_commit_hash, git_commit_message, git_branch, git_dirty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO deployments (id, service_id, state, last_update, is_next, git_commit_hash, git_commit_message, git_branch, git_dirty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(deployment.id.to_string())
         .bind(deployment.service_id.to_string())
         .bind(deployment.state)
-        .bind(deployment.last_update)
-        .bind(deployment.address.map(|socket| socket.to_string()))
+        .bind(deployment.last_update.timestamp())
         .bind(deployment.is_next)
         .bind(deployment.git_commit_hash)
         .bind(deployment.git_commit_message)

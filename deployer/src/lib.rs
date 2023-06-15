@@ -9,6 +9,7 @@ use chrono::Utc;
 use deployment::persistence::{dal::Dal, Service};
 use deployment::persistence::{Persistence, State};
 use deployment::Deployment;
+use derive_builder::Builder;
 use error::{Error, Result};
 use futures::TryFutureExt;
 use http::Uri;
@@ -31,7 +32,6 @@ use shuttle_proto::deployer::{
     DeployRequest, DeployResponse,
 };
 use tokio::sync::Mutex;
-use tonic::transport::Endpoint;
 use tonic::{transport::Server, Response, Result as TonicResult};
 use tracing::{error, info};
 use ulid::Ulid;
@@ -44,39 +44,39 @@ pub mod args;
 pub mod deployment;
 pub mod error;
 pub mod project;
-pub mod proxy;
 pub mod runtime_manager;
 
-pub struct DeployerService<D: Dal + Send + Sync + 'static> {
-    runtime_manager: Arc<Mutex<RuntimeManager>>,
-    persistence: Persistence<D>,
-    deployment_manager: DeploymentManager,
+#[derive(Builder)]
+pub struct DeployerServiceConfig {
     bind_address: SocketAddr,
-    docker: Docker,
-    task_router: TaskRouter<BoxedTask>,
-    provisioner_host: Endpoint,
+    docker_host: PathBuf,
+    provisioner_uri: Uri,
     auth_uri: Uri,
     network_name: String,
     prefix: String,
+    artifacts_path: PathBuf,
+}
+
+pub struct DeployerService<D: Dal + Send + Sync + 'static> {
+    deployment_manager: DeploymentManager,
+    runtime_manager: Arc<Mutex<RuntimeManager>>,
+    docker: Docker,
+    persistence: Persistence<D>,
+    task_router: TaskRouter<BoxedTask>,
     sender:
         tokio::sync::mpsc::Sender<Box<dyn Task<(), Output = (), Error = project::error::Error>>>,
+    config: DeployerServiceConfig,
 }
 
 impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     pub async fn new(
         runtime_manager: Arc<Mutex<RuntimeManager>>,
         persistence: Persistence<D>,
-        artifacts_path: PathBuf,
-        bind_address: SocketAddr,
-        docker_host: &str,
-        provisioner_uri: Endpoint,
-        auth_uri: Uri,
-        network_name: String,
-        prefix: String,
+        config: DeployerServiceConfig,
     ) -> Self {
         let deployment_manager = DeploymentManager::builder()
             .build_log_recorder(persistence.clone())
-            .artifacts_path(artifacts_path)
+            .artifacts_path(config.artifacts_path.clone())
             .runtime(runtime_manager.clone())
             .dal(persistence.dal().clone())
             .build();
@@ -94,18 +94,21 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         );
 
         Self {
-            docker: Docker::connect_with_unix(docker_host, 60, API_DEFAULT_VERSION)
-                .expect("to initialize docker connection the installed docker daemon"),
+            docker: Docker::connect_with_unix(
+                config
+                    .docker_host
+                    .to_str()
+                    .expect("docker host path to be a valid filesystem path"),
+                60,
+                API_DEFAULT_VERSION,
+            )
+            .expect("to initialize docker connection the installed docker daemon"),
             runtime_manager,
             persistence,
             deployment_manager,
-            bind_address,
             task_router: TaskRouter::default(),
-            provisioner_host: provisioner_uri,
-            auth_uri,
-            network_name,
-            prefix,
             sender,
+            config,
         }
     }
 
@@ -145,12 +148,13 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 }
             };
 
+            // Refresh the docker containers of the old deployments.
             let cs = ContainerSettings::builder()
                 .image(image)
-                .provisioner_host(self.provisioner_host.uri().to_string())
-                .auth_uri(self.auth_uri.to_string())
-                .network_name(self.network_name.to_string())
-                .prefix(self.prefix.to_string())
+                .provisioner_host(self.config.provisioner_uri.to_string())
+                .auth_uri(self.config.auth_uri.to_string())
+                .network_name(self.config.network_name.to_string())
+                .prefix(self.config.prefix.to_string())
                 .build()
                 .await;
             TaskBuilder::new(self.persistence.dal().clone())
@@ -168,6 +172,9 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 .await
                 .expect("to refresh old projects");
 
+            // Get the container IP from persistence after it's successfully started. To get a
+            // service IP address, or a deployment service IP address, we need to go through a
+            // query to the `services` table, looking at the persisted service state.
             let target_ip = match self
                 .persistence
                 .dal()
@@ -219,10 +226,10 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         let mut server_builder = Server::builder()
             .http2_keepalive_interval(Some(Duration::from_secs(60)))
             .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
-                self.auth_uri.clone(),
+                self.config.auth_uri.clone(),
             )))
             .layer(ExtractPropagationLayer);
-        let bind_address = self.bind_address;
+        let bind_address = self.config.bind_address;
         let svc = DeployerServer::new(self);
         let router = server_builder.add_service(svc);
 
@@ -278,7 +285,6 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             service_id,
             state: State::Built,
             last_update: Utc::now(),
-            address: None,
             is_next: req.is_next,
             git_branch: Some(req.git_branch),
             git_commit_hash: Some(req.git_commit_hash),
@@ -301,14 +307,14 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
         request: tonic::Request<DeployRequest>,
     ) -> TonicResult<tonic::Response<DeployResponse>, tonic::Status> {
         // Authorize the request.
-        request.verify(Scope::DeploymentPush)?;
+        // request.verify(Scope::DeploymentPush)?;
         let request = request.into_inner();
         let service_id: Ulid = Ulid::from_string(request.service_id.as_str())
             .map_err(|_| tonic::Status::invalid_argument("invalid service id"))?;
 
         // Check if there are running deployments for the service.
         // TODO: we might need to not check running deployments because we
-        // should be able to support on runtime that is loaded and one runtime
+        // should be able to support one runtime that is loaded and one runtime
         // the runs.
         let service_running_deployments = self
             .persistence
@@ -335,10 +341,10 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
         // Build the container settings.
         let cs = ContainerSettings::builder()
             .image(request.image_name)
-            .provisioner_host(self.provisioner_host.uri().to_string())
-            .auth_uri(self.auth_uri.to_string())
-            .network_name(self.network_name.to_string())
-            .prefix(self.prefix.to_string())
+            .provisioner_host(self.config.provisioner_uri.to_string())
+            .auth_uri(self.config.auth_uri.to_string())
+            .network_name(self.config.network_name.to_string())
+            .prefix(self.config.prefix.to_string())
             .build()
             .await;
 

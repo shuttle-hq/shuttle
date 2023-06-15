@@ -115,11 +115,7 @@ impl ServiceCreating {
         // use that to get the executable with the shuttle-runtime, because otherwise, when we're
         // creating the create container config we're overwriting the executable path and it can
         // not be found afterward.
-        let mut cmd = vec![
-            "/nix/store/810kwba9yrnihghsvmlj5vpigyblx2dw-rust_hello-world-0.1.0/bin/hello-world",
-            "--port",
-            "8001",
-        ];
+        let mut cmd = vec!["--port", "8001"];
         if !*is_next {
             cmd.extend([
                 "--storage-manager-type",

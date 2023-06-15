@@ -1,7 +1,7 @@
 pub mod deploy_layer;
 pub mod persistence;
 
-use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -13,7 +13,6 @@ use ulid::Ulid;
 use crate::{project::driver::Run, runtime_manager::RuntimeManager};
 use persistence::State;
 use tokio::sync::{mpsc, Mutex};
-use tracing::error;
 
 use self::{deploy_layer::LogRecorder, persistence::dal::Dal};
 
@@ -139,7 +138,6 @@ pub struct Deployment {
     pub service_id: Ulid,
     pub state: State,
     pub last_update: DateTime<Utc>,
-    pub address: Option<SocketAddr>,
     pub is_next: bool,
     pub git_commit_hash: Option<String>,
     pub git_commit_message: Option<String>,
@@ -149,18 +147,6 @@ pub struct Deployment {
 
 impl FromRow<'_, SqliteRow> for Deployment {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        let address = if let Some(address_str) = row.try_get::<Option<String>, _>("address")? {
-            match SocketAddr::from_str(&address_str) {
-                Ok(address) => Some(address),
-                Err(err) => {
-                    error!(error = %err, "failed to parse address from DB");
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
         Ok(Self {
             id: Ulid::from_string(row.try_get("id")?)
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
@@ -168,7 +154,6 @@ impl FromRow<'_, SqliteRow> for Deployment {
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
             state: row.try_get("state")?,
             last_update: row.try_get("last_update")?,
-            address,
             is_next: row.try_get("is_next")?,
             git_commit_hash: row.try_get("git_commit_hash")?,
             git_commit_message: row.try_get("git_commit_message")?,

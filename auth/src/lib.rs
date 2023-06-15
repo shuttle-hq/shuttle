@@ -264,7 +264,6 @@ where
             .await
             .map_err(|err| Status::internal(err.to_string()))?;
 
-        println!("token pre-sign: {}", &token.into_cookie_value());
         let mut response = Response::new(UserResponse {
             account_name: name.to_string(),
             key: key.to_string(),

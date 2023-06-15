@@ -23,7 +23,7 @@ use tokio::task::JoinHandle;
 use tonic::transport::Channel;
 use tonic::Status;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
 use std::io::stdout;
@@ -611,7 +611,7 @@ impl Shuttle {
             runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{provisioner_port}"),
             None,
-            run_args.port - (1 + i),
+            run_args.port - i - 1,
             runtime_path,
         )
         .await
@@ -1224,6 +1224,8 @@ impl Shuttle {
 
         // Make sure the target folder is excluded at all times
         let overrides = OverrideBuilder::new(working_directory)
+            .add("!.git/")
+            .context("add `!.git/` override")?
             .add("!target/")
             .context("add `!target/` override")?
             .build()
@@ -1231,7 +1233,7 @@ impl Shuttle {
 
         // Add all the entries to a map to avoid duplication of the Secrets.toml file
         // if it is in the root of the workspace.
-        let mut entries = HashMap::new();
+        let mut entries = BTreeMap::new();
 
         for dir_entry in WalkBuilder::new(working_directory)
             .hidden(false)
@@ -1277,6 +1279,7 @@ impl Shuttle {
 
         let encoder = tar.into_inner().context("get encoder from tar archive")?;
         let bytes = encoder.finish().context("finish up encoder")?;
+        debug!("Archive size: {} bytes", bytes.len());
 
         Ok(bytes)
     }

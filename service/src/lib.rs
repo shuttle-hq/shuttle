@@ -171,8 +171,7 @@ pub trait Factory: Send + Sync {
 /// #[shuttle_runtime::main]
 /// async fn my_service(
 ///     [custom_resource_crate::Builder(name = "John")] resource: custom_resource_crate::Resource
-/// )
-///     -> shuttle_axum::ShuttleAxum {}
+/// ) -> shuttle_axum::ShuttleAxum {}
 /// ```
 #[async_trait]
 pub trait ResourceBuilder<T> {

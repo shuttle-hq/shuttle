@@ -16,7 +16,6 @@ use crate::args::TemplateLocation;
 pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocation) -> Result<()> {
     println!(r#"    Creating project "{name}" in {path:?}"#);
     let generate_args = GenerateArgs {
-        init: true,
         template_path: TemplatePath {
             // Automatically guess location from:
             // - cargo-generate "favorites", see their docs
@@ -33,7 +32,9 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocat
         // (not intended with Shuttle templates)
         name: Some(name.to_string()),
         destination: Some(path.clone()),
+        init: true,
         vcs: Some(Vcs::Git),
+        force_git_init: true,
         ..Default::default()
     };
     cargo_generate::generate(generate_args)

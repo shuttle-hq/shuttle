@@ -6,6 +6,7 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 use cargo_generate::{GenerateArgs, TemplatePath, Vcs};
+use git2::Repository;
 use indoc::indoc;
 use shuttle_common::project::ProjectName;
 use toml_edit::{value, Document};
@@ -15,6 +16,9 @@ use crate::args::TemplateLocation;
 /// More about how this works: https://cargo-generate.github.io/cargo-generate/
 pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocation) -> Result<()> {
     println!(r#"    Creating project "{name}" in {path:?}"#);
+
+    let do_git_init = !Repository::discover(&path).is_ok();
+
     let generate_args = GenerateArgs {
         template_path: TemplatePath {
             // Automatically guess location from:
@@ -34,7 +38,7 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocat
         destination: Some(path.clone()),
         init: true, // don't create a folder to place the template in
         vcs: Some(Vcs::Git),
-        force_git_init: true, // git init after cloning
+        force_git_init: do_git_init, // git init after cloning
         ..Default::default()
     };
     cargo_generate::generate(generate_args)

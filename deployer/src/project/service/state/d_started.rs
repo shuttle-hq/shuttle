@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, net::Ipv4Addr, str::FromStr};
 
 use async_trait::async_trait;
 use bollard::{
@@ -7,6 +7,7 @@ use bollard::{
 };
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
+use shuttle_proto::runtime::Ping;
 use tracing::{debug, instrument, trace};
 use ulid::Ulid;
 
@@ -65,24 +66,26 @@ where
         let service_id = Ulid::from_string(service.id.as_str())
             .map_err(|_| ServiceErrored::internal("failed to get the service id"))?;
 
-        if ctx
+        let mut runtime_client = ctx
             .runtime_manager()
-            .lock()
+            .runtime_client(service_id, service.target)
             .await
-            .is_healthy(&service_id)
-            .await
-        {
-            trace!("the service runtime responded to health check");
+            .expect("to create a runtime client");
+        debug!("oare aici sta?");
+        if runtime_client.health_check(Ping {}).await.is_ok() {
+            debug!("the service runtime responded to health check");
             let idle_minutes = container.idle_minutes();
 
             // Idle minutes of `0` means it is disabled and the project will always stay up
             if idle_minutes < 1 {
+                debug!("idle minutes < 1");
                 Ok(Self::Next::Ready(ServiceReady {
                     container,
                     service,
                     stats,
                 }))
             } else {
+                debug!("new stats");
                 let new_stat = ctx
                     .docker()
                     .stats(
@@ -136,6 +139,7 @@ where
                         }))
                     }
                 } else {
+                    debug!("service ready down");
                     Ok(Self::Next::Ready(ServiceReady {
                         container,
                         service,
@@ -144,7 +148,7 @@ where
                 }
             }
         } else {
-            trace!("the service runtime didn't respond to health check");
+            debug!("the service runtime didn't respond to health check");
             let started_at =
                 chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
                     .map_err(|_err| {

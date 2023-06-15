@@ -26,11 +26,11 @@ pub struct RuntimeManager {
 }
 
 impl RuntimeManager {
-    pub fn new(log_sender: crossbeam_channel::Sender<deploy_layer::Log>) -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(Self {
+    pub fn new(log_sender: crossbeam_channel::Sender<deploy_layer::Log>) -> Self {
+        Self {
             runtimes: Default::default(),
             log_sender,
-        }))
+        }
     }
 
     pub async fn runtime_client(
@@ -39,7 +39,7 @@ impl RuntimeManager {
         target_ip: Ipv4Addr,
     ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
         trace!("making new client");
-        let guard = self.runtimes.lock().await;
+        let mut guard = self.runtimes.lock().await;
 
         if let Some(runtime_client) = guard.get(&id) {
             return Ok(runtime_client.clone());
@@ -73,10 +73,7 @@ impl RuntimeManager {
             }
         });
 
-        self.runtimes
-            .lock()
-            .await
-            .insert(id, runtime_client.clone());
+        guard.insert(id, runtime_client.clone());
 
         Ok(runtime_client)
     }

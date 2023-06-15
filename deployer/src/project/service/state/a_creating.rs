@@ -140,7 +140,10 @@ impl ServiceCreating {
                     "Cmd": cmd[..],
                     "Env": [
                         "RUST_LOG=debug,shuttle=trace,h2=warn",
-                    ]
+                    ],
+                    "ExposedPorts": {
+                        "8001/tcp": {}
+                    }
                 })
             });
 

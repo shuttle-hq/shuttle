@@ -9,6 +9,8 @@ pub enum Error {
     UlidDecode(ulid::DecodeError),
     #[error("Service already exists")]
     ServiceAlreadyExists,
+    #[error("Service is missing IPv4 address")]
+    MissingIpv4Address,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -21,7 +21,7 @@ const RUN_BUFFER_SIZE: usize = 100;
 pub struct DeploymentManagerBuilder<LR, D: Dal + Sync + 'static> {
     build_log_recorder: Option<LR>,
     artifacts_path: Option<PathBuf>,
-    runtime_manager: Option<Arc<Mutex<RuntimeManager>>>,
+    runtime_manager: Option<RuntimeManager>,
     dal: Option<D>,
     claim: Option<Claim>,
 }
@@ -53,7 +53,7 @@ where
         self
     }
 
-    pub fn runtime(mut self, runtime_manager: Arc<Mutex<RuntimeManager>>) -> Self {
+    pub fn runtime(mut self, runtime_manager: RuntimeManager) -> Self {
         self.runtime_manager = Some(runtime_manager);
 
         self
@@ -89,7 +89,7 @@ where
 #[derive(Clone)]
 pub struct DeploymentManager {
     run_send: RunSender,
-    runtime_manager: Arc<Mutex<RuntimeManager>>,
+    runtime_manager: RuntimeManager,
     storage_manager: ArtifactsStorageManager,
 }
 
@@ -121,8 +121,8 @@ impl DeploymentManager {
         self.run_send.send(built).await.unwrap();
     }
 
-    pub async fn kill(&self, id: Ulid) {
-        self.runtime_manager.lock().await.kill(&id).await;
+    pub async fn kill(&mut self, id: Ulid) {
+        self.runtime_manager.kill(&id).await;
     }
 
     pub fn storage_manager(&self) -> ArtifactsStorageManager {

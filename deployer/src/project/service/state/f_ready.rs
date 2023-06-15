@@ -44,7 +44,7 @@ impl ServiceReady {
 
     pub async fn is_healthy(
         &mut self,
-        runtime_manager: Arc<Mutex<RuntimeManager>>,
+        runtime_manager: RuntimeManager,
     ) -> Result<bool, super::super::error::Error> {
         self.service.is_healthy(runtime_manager).await
     }

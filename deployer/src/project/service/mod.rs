@@ -311,12 +311,24 @@ where
                 starting => starting.into_try_state(),
             },
             Self::Restarting(restarting) => restarting.next(ctx).await.into_try_state(),
-            Self::Started(started) => match started.next(ctx).await {
-                Ok(ServiceReadying::Ready(ready)) => Ok(ready.into()),
-                Ok(ServiceReadying::Started(started)) => Ok(started.into()),
-                Ok(ServiceReadying::Idle(stopping)) => Ok(stopping.into()),
-                Err(err) => Ok(Self::Errored(err)),
-            },
+            Self::Started(started) => {
+                debug!("blaaa");
+                match started.next(ctx).await {
+                    Ok(ServiceReadying::Ready(ready)) => {
+                        debug!("in readying??");
+                        Ok(ready.into())
+                    }
+                    Ok(ServiceReadying::Started(started)) => {
+                        debug!("din nou in started");
+                        Ok(started.into())
+                    }
+                    Ok(ServiceReadying::Idle(stopping)) => {
+                        debug!("in stopping??");
+                        Ok(stopping.into())
+                    }
+                    Err(err) => Ok(Self::Errored(err)),
+                }
+            }
             Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
             Self::Stopped(stopped) => stopped.next(ctx).await.into_try_state(),
             Self::Stopping(stopping) => stopping.next(ctx).await.into_try_state(),
@@ -515,10 +527,10 @@ impl Service {
 
     pub async fn is_healthy(
         &mut self,
-        runtime_manager: Arc<Mutex<RuntimeManager>>,
+        runtime_manager: RuntimeManager,
     ) -> Result<bool, error::Error> {
         let service_id = Ulid::from_string(self.id.as_str()).map_err(error::Error::Decode)?;
-        let is_healthy = runtime_manager.lock().await.is_healthy(&service_id).await;
+        let is_healthy = runtime_manager.is_healthy(&service_id).await;
         self.last_check = Some(HealthCheckRecord::new(is_healthy));
         Ok(is_healthy)
     }

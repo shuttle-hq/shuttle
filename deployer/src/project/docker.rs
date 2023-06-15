@@ -122,15 +122,11 @@ impl ContainerSettings {
 pub struct ServiceDockerContext {
     docker: Docker,
     settings: ContainerSettings,
-    runtime_manager: Arc<Mutex<RuntimeManager>>,
+    runtime_manager: RuntimeManager,
 }
 
 impl ServiceDockerContext {
-    pub fn new(
-        docker: Docker,
-        cs: ContainerSettings,
-        runtime_manager: Arc<Mutex<RuntimeManager>>,
-    ) -> Self {
+    pub fn new(docker: Docker, cs: ContainerSettings, runtime_manager: RuntimeManager) -> Self {
         Self {
             docker,
             settings: cs,
@@ -148,7 +144,7 @@ impl DockerContext for ServiceDockerContext {
         &self.settings
     }
 
-    fn runtime_manager(&self) -> Arc<Mutex<RuntimeManager>> {
+    fn runtime_manager(&self) -> RuntimeManager {
         self.runtime_manager.clone()
     }
 }
@@ -158,7 +154,7 @@ pub trait DockerContext: Send + Sync {
 
     fn container_settings(&self) -> &ContainerSettings;
 
-    fn runtime_manager(&self) -> Arc<Mutex<RuntimeManager>>;
+    fn runtime_manager(&self) -> RuntimeManager;
 }
 
 #[async_trait]

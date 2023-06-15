@@ -33,7 +33,7 @@ type RunReceiver = mpsc::Receiver<Run>;
 /// A deploy is killed when it receives a signal from the kill channel
 pub async fn task<D: Dal + Sync + 'static>(
     mut recv: RunReceiver,
-    runtime_manager: Arc<Mutex<RuntimeManager>>,
+    mut runtime_manager: RuntimeManager,
     storage_manager: ArtifactsStorageManager,
     dal: D,
     claim: Option<Claim>,
@@ -48,12 +48,9 @@ pub async fn task<D: Dal + Sync + 'static>(
         );
 
         let storage_manager = storage_manager.clone();
-        let old_deployments_killer = kill_old_deployments(
-            run.service_id,
-            run.deployment_id,
-            dal_cloned,
-            runtime_manager.clone(),
-        );
+        let rt_clone = runtime_manager.clone();
+        let old_deployments_killer =
+            kill_old_deployments(run.service_id, run.deployment_id, dal_cloned, rt_clone);
         let cleanup = move |response: Option<SubscribeStopResponse>| {
             debug!(response = ?response,  "stop client response: ");
 
@@ -77,8 +74,6 @@ pub async fn task<D: Dal + Sync + 'static>(
         };
 
         let runtime_client = runtime_manager
-            .lock()
-            .await
             .runtime_client(run.service_id, run.target_ip)
             .await
             .expect("to set up a runtime client against a ready deployment");
@@ -120,7 +115,7 @@ pub async fn kill_old_deployments<D: Dal + Sync + 'static>(
     service_id: Ulid,
     deployment_id: Ulid,
     dal: D,
-    runtime_manager: Arc<Mutex<RuntimeManager>>,
+    mut runtime_manager: RuntimeManager,
 ) -> Result<()> {
     for old_id in dal
         .service_running_deployments(&service_id)
@@ -131,7 +126,7 @@ pub async fn kill_old_deployments<D: Dal + Sync + 'static>(
     {
         trace!(%old_id, "stopping old deployment");
 
-        if !runtime_manager.lock().await.kill(&old_id).await {
+        if !runtime_manager.kill(&old_id).await {
             warn!(id = %old_id, "failed to kill old deployment");
         }
     }

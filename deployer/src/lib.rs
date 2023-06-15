@@ -59,7 +59,7 @@ pub struct DeployerServiceConfig {
 
 pub struct DeployerService<D: Dal + Send + Sync + 'static> {
     deployment_manager: DeploymentManager,
-    runtime_manager: Arc<Mutex<RuntimeManager>>,
+    runtime_manager: RuntimeManager,
     docker: Docker,
     persistence: Persistence<D>,
     task_router: TaskRouter<BoxedTask>,
@@ -70,7 +70,7 @@ pub struct DeployerService<D: Dal + Send + Sync + 'static> {
 
 impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     pub async fn new(
-        runtime_manager: Arc<Mutex<RuntimeManager>>,
+        runtime_manager: RuntimeManager,
         persistence: Persistence<D>,
         config: DeployerServiceConfig,
     ) -> Self {
@@ -172,45 +172,16 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 .await
                 .expect("to refresh old projects");
 
-            // Get the container IP from persistence after it's successfully started. To get a
-            // service IP address, or a deployment service IP address, we need to go through a
-            // query to the `services` table, looking at the persisted service state.
-            let target_ip = match self
+            // Refreshing the container should restart it and persist a new associated address to it.
+            let target_ip = self
                 .persistence
                 .dal()
                 .service(&service.id)
                 .await?
-                .state
-                .container()
-            {
-                Some(inner) => match inner.network_settings {
-                    Some(network) => match network.ip_address {
-                        Some(ip) => ip
-                            .parse::<Ipv4Addr>()
-                            .expect("to have a valid IPv4 address"),
-                        None => {
-                            error!("ip address not found on the network setting of the service {} container", service.id);
-                            continue;
-                        }
-                    },
-                    None => {
-                        error!(
-                            "missing network settings on the service {} container",
-                            service.id
-                        );
-                        continue;
-                    }
-                },
-                None => {
-                    error!(
-                        "missing container inspect information for service {}",
-                        service.id
-                    );
-                    continue;
-                }
-            };
+                .target_ip(&self.config.network_name)
+                .map_err(|_| Error::MissingIpv4Address)?;
 
-            let built = Run {
+            let run = Run {
                 deployment_id: existing_deployment.id,
                 service_name: existing_deployment.service_name,
                 service_id: existing_deployment.service_id,
@@ -220,7 +191,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 claim: None,
                 target_ip,
             };
-            self.deployment_manager.run_push(built).await;
+            self.deployment_manager.run_push(run).await;
         }
 
         let mut server_builder = Server::builder()
@@ -240,7 +211,11 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         Ok(())
     }
 
-    pub async fn push_deployment(&self, req: DeployRequest, state: ServiceState) -> Result<String> {
+    pub async fn push_deployment(
+        &self,
+        req: DeployRequest,
+        state: ServiceState,
+    ) -> Result<Deployment> {
         let service_id: Ulid =
             Ulid::from_string(req.service_id.as_str()).map_err(Error::UlidDecode)?;
         // If the service already lives in the persistence.
@@ -296,7 +271,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             .insert_deployment(deployment.clone())
             .await?;
 
-        Ok(deployment.id.to_string())
+        Ok(deployment)
     }
 }
 
@@ -333,7 +308,7 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
             request.service_id.clone(),
             u64::from(request.idle_minutes),
         ));
-        let deployment_id = self
+        let deployment = self
             .push_deployment(request.clone(), state.clone())
             .await
             .map_err(|err| tonic::Status::new(tonic::Code::Internal, err.to_string()))?;
@@ -360,10 +335,13 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
             .task_router(self.task_router.clone())
             .and_then(task::run_until_done())
             .and_then(task::check_health())
+            .and_then(task::exec_user_service())
             .send(&self.sender)
             .await
             .map_err(|err| tonic::Status::internal(err.to_string()))?;
 
-        Ok(Response::new(DeployResponse { deployment_id }))
+        Ok(Response::new(DeployResponse {
+            deployment_id: "".to_string(),
+        }))
     }
 }

@@ -211,12 +211,6 @@ where
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
-        let clone = self.session_store.clone();
-        let session_store = std::mem::replace(&mut self.session_store, clone);
-
-        let clone = self.key_manager.clone();
-        let key_manager = std::mem::replace(&mut self.key_manager, clone);
-
         let session_token = req
             .headers()
             .get_all(COOKIE)
@@ -228,10 +222,18 @@ where
                     .and_then(|cookie| cookie.parse::<cookie::Cookie>().ok())
             })
             .filter(|cookie| cookie.name() == COOKIE_NAME)
-            .find_map(|cookie| verify_signature(key_manager.cookie_secret(), cookie.value()).ok())
+            .find_map(|cookie| {
+                let clone = self.key_manager.clone();
+                let key_manager = std::mem::replace(&mut self.key_manager, clone);
+
+                verify_signature(key_manager.cookie_secret(), cookie.value()).ok()
+            })
             .and_then(|cookie_value| cookie_value.parse::<SessionToken>().ok());
 
         if let Some(token) = session_token {
+            let clone = self.session_store.clone();
+            let session_store = std::mem::replace(&mut self.session_store, clone);
+
             req.extensions_mut().insert(SessionState {
                 cached_user: None,
                 session_store,

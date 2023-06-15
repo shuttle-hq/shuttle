@@ -255,6 +255,7 @@ where
 
     /// Login a user
     async fn login(&self, request: Request<UserRequest>) -> Result<Response<UserResponse>, Status> {
+        verify_admin(request.metadata(), &self.dal).await?;
         let request = request.into_inner();
 
         let (

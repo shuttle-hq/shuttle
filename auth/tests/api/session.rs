@@ -6,7 +6,7 @@ use shuttle_proto::auth::{
 };
 use tonic::{metadata::MetadataValue, Code, Request};
 
-use crate::helpers::spawn_app;
+use crate::helpers::{spawn_app, ADMIN_KEY};
 
 #[tokio::test]
 async fn session_flow() {
@@ -20,9 +20,12 @@ async fn session_flow() {
         .into_inner();
 
     // Login test user.
-    let request = Request::new(UserRequest {
+    let mut request = Request::new(UserRequest {
         account_name: account_name.clone(),
     });
+
+    let bearer: MetadataValue<_> = format!("Bearer {ADMIN_KEY}").parse().unwrap();
+    request.metadata_mut().insert("authorization", bearer);
 
     let response = app.client.login(request).await.unwrap();
 

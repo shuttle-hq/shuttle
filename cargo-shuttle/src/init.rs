@@ -17,7 +17,7 @@ use crate::args::TemplateLocation;
 pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocation) -> Result<()> {
     println!(r#"    Creating project "{name}" in {path:?}"#);
 
-    let do_git_init = !Repository::discover(&path).is_ok();
+    let do_git_init = Repository::discover(&path).is_err();
 
     let generate_args = GenerateArgs {
         template_path: TemplatePath {

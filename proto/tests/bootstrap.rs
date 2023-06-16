@@ -7,11 +7,12 @@ use std::{path::PathBuf, process::Command};
 #[test]
 fn bootstrap() {
     let proto_files = &[
-        "provisioner.proto",
-        "runtime.proto",
-        "resource-recorder.proto",
         "auth.proto",
         "builder.proto",
+        "logger.proto",
+        "provisioner.proto",
+        "resource-recorder.proto",
+        "runtime.proto",
     ];
 
     let out_dir = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))

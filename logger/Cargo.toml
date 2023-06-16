@@ -1,16 +1,35 @@
 [package]
 name = "shuttle-logger"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
 opentelemetry-proto = { version = "0.2.0", features = ["gen-tonic", "logs"] }
+serde_json = { workspace = true }
+sqlx = { workspace = true, features = [
+    "chrono",
+    "migrate",
+    "runtime-tokio-rustls",
+    "sqlite",
+] }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default"] }
+ulid = { workspace = true }
 
 [dependencies.shuttle-common]
 workspace = true
 features = ["backend", "tonic"]
+
+[dependencies.shuttle-proto]
+workspace = true
+
+[dev-dependencies]
+portpicker = { workspace = true }
+pretty_assertions = { workspace = true }
+serde_json = { workspace = true }

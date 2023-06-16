@@ -1,0 +1,35 @@
+syntax = "proto3";
+package logger;
+
+import "google/protobuf/timestamp.proto";
+
+service Logger {
+  // Get stored logs
+  rpc GetLogs(LogsRequest) returns (LogsResponse);
+
+  // Get fresh logs as they are incoming
+  rpc GetLogsStream(LogsRequest) returns (stream LogItem);
+}
+
+message LogsRequest {
+  string deployment_id = 1;
+}
+
+message LogsResponse {
+  repeated LogItem log_items = 1;
+}
+
+message LogItem {
+  string service_name = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  LogLevel level = 3;
+  bytes fields = 4;
+}
+
+enum LogLevel {
+  Trace = 0;
+  Debug = 1;
+  Info = 2;
+  Warn = 3;
+  Error = 4;
+}

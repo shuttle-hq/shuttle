@@ -5485,15 +5485,22 @@ dependencies = [
 
 [[package]]
 name = "shuttle-logger"
-version = "0.1.0"
+version = "0.18.0"
 dependencies = [
  "async-trait",
  "opentelemetry-proto",
+ "portpicker",
+ "pretty_assertions",
+ "serde_json",
  "shuttle-common",
+ "shuttle-proto",
+ "sqlx",
  "tokio",
+ "tokio-stream",
  "tonic",
  "tracing",
  "tracing-subscriber",
+ "ulid",
 ]
 
 [[package]]

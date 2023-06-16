@@ -15,7 +15,7 @@ use secrets::KeyManager;
 use session::{
     sign_cookie, SessionState, SessionToken, SessionUser, COOKIE_EXPIRATION, COOKIE_NAME,
 };
-use shuttle_common::claims::Claim;
+use shuttle_common::claims::{AccountTier, Claim};
 use shuttle_common::ApiKey;
 use shuttle_proto::auth::auth_server::Auth;
 use shuttle_proto::auth::{
@@ -35,7 +35,6 @@ pub use args::{Args, Commands, InitArgs};
 pub use dal::{Dal, Sqlite};
 pub use secrets::EdDsaManager;
 pub use session::SessionLayer;
-pub use user::AccountTier;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -91,9 +90,12 @@ where
     ) -> Result<User, Error> {
         let key = ApiKey::generate();
 
+        let account_tier = AccountTier::try_from(account_tier.as_str())
+            .map_err(|err| Error::InvalidAccountTier(err.to_string()))?;
+
         let user = self
             .dal
-            .create_user(account_name.into(), key, account_tier.try_into()?)
+            .create_user(account_name.into(), key, account_tier)
             .await?;
 
         Ok(user)

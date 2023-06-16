@@ -2,11 +2,11 @@ use std::{fmt, path::Path, str::FromStr};
 
 use crate::{
     session::SessionToken,
-    user::{AccountName, AccountTier, User},
+    user::{AccountName, User},
     Error,
 };
 use async_trait::async_trait;
-use shuttle_common::ApiKey;
+use shuttle_common::{claims::AccountTier, ApiKey};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
     sqlite::{SqliteConnectOptions, SqliteJournalMode},

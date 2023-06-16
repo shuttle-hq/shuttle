@@ -3,13 +3,14 @@ use std::time::Duration;
 use clap::Parser;
 use shuttle_common::{
     backends::tracing::{setup_tracing, ExtractPropagationLayer},
+    claims::AccountTier,
     ApiKey,
 };
 use shuttle_proto::auth::auth_server::AuthServer;
 use tonic::transport::Server;
 use tracing::trace;
 
-use shuttle_auth::{AccountTier, Args, Commands, Dal, EdDsaManager, Service, SessionLayer, Sqlite};
+use shuttle_auth::{Args, Commands, Dal, EdDsaManager, Service, SessionLayer, Sqlite};
 
 #[tokio::main]
 async fn main() {

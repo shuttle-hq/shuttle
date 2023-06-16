@@ -134,6 +134,48 @@ impl Default for ScopeBuilder {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::Display, Deserialize)]
+#[cfg_attr(feature = "persist", derive(sqlx::Type))]
+#[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
+#[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+#[derive(Default)]
+pub enum AccountTier {
+    #[default]
+    Basic,
+    Pro,
+    Team,
+    Admin,
+}
+
+impl From<AccountTier> for Vec<Scope> {
+    fn from(tier: AccountTier) -> Self {
+        let mut builder = ScopeBuilder::new();
+
+        if tier == AccountTier::Admin {
+            builder = builder.with_admin()
+        }
+
+        builder.build()
+    }
+}
+
+impl TryFrom<&str> for AccountTier {
+    type Error = Box<dyn std::error::Error + Send + Sync>;
+
+    fn try_from(value: &str) -> Result<AccountTier, Self::Error> {
+        let tier = match value {
+            "basic" => AccountTier::Basic,
+            "pro" => AccountTier::Pro,
+            "team" => AccountTier::Team,
+            "admin" => AccountTier::Admin,
+            other => return Err(format!("{other} is not a valid account tier").into()),
+        };
+
+        Ok(tier)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).

@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
-    sync::Arc,
 };
 
 use opentelemetry::global;
@@ -17,7 +16,7 @@ use shuttle_proto::runtime::{
     runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
     SubscribeStopResponse,
 };
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tonic::{transport::Channel, Code};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -27,7 +26,7 @@ use crate::{deployment::persistence::dal::Dal, runtime_manager::RuntimeManager};
 
 use super::error::{Error, Result};
 
-type RunReceiver = mpsc::Receiver<Run>;
+type RunReceiver = mpsc::Receiver<DeploymentRun>;
 
 /// Run a task which takes runnable deploys from a channel and starts them up on our runtime
 /// A deploy is killed when it receives a signal from the kill channel
@@ -161,17 +160,16 @@ fn start_crashed_cleanup(_id: &Ulid, error: impl std::error::Error + 'static) {
 }
 
 #[derive(Clone, Debug)]
-pub struct Run {
+pub struct DeploymentRun {
     pub deployment_id: Ulid,
     pub service_name: String,
     pub service_id: Ulid,
     pub tracing_context: HashMap<String, String>,
-    pub is_next: bool,
     pub claim: Option<Claim>,
     pub target_ip: Ipv4Addr,
 }
 
-impl Run {
+impl DeploymentRun {
     #[instrument(skip(self, storage_manager, runtime_client, dal, kill_old_deployments, cleanup, claim), fields(id = %self.deployment_id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle<D: Dal + Sync + 'static>(
@@ -240,9 +238,6 @@ async fn load(
             .unwrap_or_default()
     );
 
-    // TODO: remove this part
-    let resources = Default::default();
-
     let mut load_request = tonic::Request::new(LoadRequest {
         path: executable_path
             .into_os_string()
@@ -250,7 +245,7 @@ async fn load(
             .unwrap_or_default(),
         service_name: service_name.clone(),
         // TODO: must remove the secrets for the load request
-        resources,
+        resources: Default::default(),
         // TODO: must remove the secrets for the load request
         secrets: HashMap::new(),
     });

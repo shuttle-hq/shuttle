@@ -1,11 +1,10 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use bollard::{errors::Error as DockerError, service::ContainerInspectResponse, Docker};
 use shuttle_common::models::project::IDLE_MINUTES;
-use tokio::sync::Mutex;
 use ulid::Ulid;
 
+use crate::deployment::persistence::dal::Dal;
+use crate::deployment::DeploymentManager;
 use crate::runtime_manager::RuntimeManager;
 use crate::safe_unwrap;
 

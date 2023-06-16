@@ -18,8 +18,10 @@ pub enum Error {
     Internal(String),
     #[error("Service error: {0}")]
     Service(ServiceErrored),
-    #[error("Ulid decode error: {0}")]
-    Decode(ulid::DecodeError),
+    #[error("Parsing error: {0}")]
+    Parse(String),
+    #[error("Missing container inspect info: {0}")]
+    MissingContainerInspectInfo(String),
 }
 
 impl From<ServiceErrored> for Error {

@@ -3,6 +3,7 @@ use std::{
     convert::Infallible,
     fmt::Display,
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    str::FromStr,
     sync::Arc,
 };
 
@@ -192,19 +193,6 @@ impl ServiceState {
         matches!(self, Self::Stopped(_))
     }
 
-    pub fn target_ip(&self) -> Result<Option<Ipv4Addr>, Error> {
-        match self.clone() {
-            Self::Ready(project_ready) => Ok(Some(project_ready.target_ip())),
-            _ => Ok(None), // not ready
-        }
-    }
-
-    pub fn target_addr(&self) -> Result<Option<SocketAddr>, Error> {
-        Ok(self
-            .target_ip()?
-            .map(|target_ip| SocketAddr::new(IpAddr::V4(target_ip), RUNTIME_API_PORT)))
-    }
-
     pub fn state(&self) -> String {
         match self {
             Self::Started(_) => "started".to_string(),
@@ -259,6 +247,54 @@ impl ServiceState {
             | Self::Destroying(ServiceDestroying { container }) => Some(container.clone()),
             Self::Errored(ServiceErrored { ctx: Some(ctx), .. }) => ctx.container(),
             Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) => None,
+        }
+    }
+
+    pub fn image(&self) -> Result<String, Error> {
+        match self.container() {
+            Some(inner) => match inner.image {
+                Some(img) => Ok(img),
+                None => Err(Error::Internal(
+                    "container image missing from the inspect response".to_string(),
+                )),
+            },
+            None => Err(Error::Internal(
+                "container inspect response missing, probabbly the container was destroyed"
+                    .to_string(),
+            )),
+        }
+    }
+
+    pub fn target_ip(&self, network_name: &str) -> Result<Ipv4Addr, Error> {
+        match self.container() {
+            Some(inner) => match inner.network_settings {
+                Some(network) => match network.networks.as_ref() {
+                    Some(net) => {
+                        let ip = net
+                            .get(network_name)
+                            .ok_or(Error::MissingContainerInspectInfo(format!(
+                                "network {} can not be found in the container inspect info",
+                                network_name
+                            )))?
+                            .ip_address
+                            .as_ref()
+                            .ok_or(Error::MissingContainerInspectInfo(format!(
+                                "can not find a container IP address in the network {}",
+                                network_name
+                            )))?;
+                        Ipv4Addr::from_str(ip.as_str()).map_err(|err| Error::Parse(err.to_string()))
+                    }
+                    None => Err(Error::MissingContainerInspectInfo(
+                        "the container is not attached to a network".to_string(),
+                    )),
+                },
+                None => Err(Error::MissingContainerInspectInfo(
+                    "network settings missing from container inspect info".to_string(),
+                )),
+            },
+            None => Err(Error::MissingContainerInspectInfo(
+                "container inspect info can not be fetched".to_string(),
+            )),
         }
     }
 
@@ -529,7 +565,8 @@ impl Service {
         &mut self,
         runtime_manager: RuntimeManager,
     ) -> Result<bool, error::Error> {
-        let service_id = Ulid::from_string(self.id.as_str()).map_err(error::Error::Decode)?;
+        let service_id = Ulid::from_string(self.id.as_str())
+            .map_err(|err| error::Error::Parse(err.to_string()))?;
         let is_healthy = runtime_manager.is_healthy(&service_id).await;
         self.last_check = Some(HealthCheckRecord::new(is_healthy));
         Ok(is_healthy)

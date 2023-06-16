@@ -1,18 +1,19 @@
 pub mod deploy_layer;
+pub mod error;
 pub mod persistence;
 
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
-use tracing::instrument;
+use tracing::{debug, instrument};
 use ulid::Ulid;
 
-use crate::{project::driver::Run, runtime_manager::RuntimeManager};
+use crate::{project::driver::DeploymentRun, runtime_manager::RuntimeManager};
 use persistence::State;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 
 use self::{deploy_layer::LogRecorder, persistence::dal::Dal};
 
@@ -63,7 +64,7 @@ where
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
     /// deployments between the aforementioned tasks.
-    pub fn build(self) -> DeploymentManager {
+    pub fn build(self) -> DeploymentManager<D> {
         let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
         let runtime_manager = self.runtime_manager.expect("a runtime manager to be set");
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -74,7 +75,7 @@ where
             run_recv,
             runtime_manager.clone(),
             storage_manager.clone(),
-            dal,
+            dal.clone(),
             self.claim,
         ));
 
@@ -82,15 +83,17 @@ where
             run_send,
             runtime_manager,
             storage_manager,
+            dal,
         }
     }
 }
 
 #[derive(Clone)]
-pub struct DeploymentManager {
+pub struct DeploymentManager<D: Dal + Sync + 'static> {
     run_send: RunSender,
     runtime_manager: RuntimeManager,
     storage_manager: ArtifactsStorageManager,
+    dal: D,
 }
 
 /// ```no-test
@@ -103,10 +106,10 @@ pub struct DeploymentManager {
 ///    run task     tasks enter the State::Running state and begin
 ///                 executing
 /// ```
-impl DeploymentManager {
+impl<D: Dal + Sync + 'static> DeploymentManager<D> {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<LR, D: Dal + Sync + 'static>() -> DeploymentManagerBuilder<LR, D> {
+    pub fn builder<LR>() -> DeploymentManagerBuilder<LR, D> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
             artifacts_path: None,
@@ -116,9 +119,42 @@ impl DeploymentManager {
         }
     }
 
-    #[instrument(skip(self), fields(id = %built.deployment_id, state = %State::Built))]
-    pub async fn run_push(&self, built: Run) {
-        self.run_send.send(built).await.unwrap();
+    async fn run_push(&self, run: DeploymentRun) -> Result<(), error::Error> {
+        self.run_send
+            .send(run)
+            .await
+            .map_err(|err| error::Error::Send(err.to_string()))
+    }
+
+    #[instrument(skip(self), fields(service_id = %service_id, state = %State::Built))]
+    pub async fn run_deployment(
+        &self,
+        service_id: Ulid,
+        deployment_id: Ulid,
+        network_name: &str,
+        claim: Option<Claim>,
+    ) -> Result<(), error::Error> {
+        // Refreshing the container should restart it and persist a new associated address to it.
+        let service = self
+            .dal
+            .service(&service_id)
+            .await
+            .map_err(|err| error::Error::Dal(err))?;
+
+        let run = DeploymentRun {
+            deployment_id,
+            service_name: service.name,
+            service_id: service.id,
+            tracing_context: Default::default(),
+            // We don't need a claim to be set to start existing running deployments.
+            claim,
+            target_ip: service
+                .state
+                .target_ip(network_name)
+                .map_err(|_| error::Error::MissingIpv4Address)?,
+        };
+
+        self.run_push(run).await
     }
 
     pub async fn kill(&mut self, id: Ulid) {
@@ -130,7 +166,7 @@ impl DeploymentManager {
     }
 }
 
-type RunSender = mpsc::Sender<Run>;
+type RunSender = mpsc::Sender<DeploymentRun>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Deployment {

@@ -11,6 +11,8 @@ pub enum Error {
     ServiceAlreadyExists,
     #[error("Service is missing IPv4 address")]
     MissingIpv4Address,
+    #[error("Internal error: {0}")]
+    Internal(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

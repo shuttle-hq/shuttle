@@ -1,8 +1,10 @@
+use cookie::Cookie;
+use http::header::COOKIE;
 use pretty_assertions::{assert_eq, assert_ne};
-use shuttle_proto::auth::{ApiKeyRequest, NewUser, UserRequest, UserResponse};
+use shuttle_proto::auth::{NewUser, ResetKeyRequest, UserRequest, UserResponse};
 use tonic::{metadata::MetadataValue, Code, Request};
 
-use crate::helpers::spawn_app;
+use crate::helpers::{spawn_app, ADMIN_KEY};
 
 #[tokio::test]
 async fn post_user() {
@@ -92,16 +94,20 @@ async fn get_user() {
 async fn test_reset_key() {
     let mut app = spawn_app().await;
 
+    const RESET_KEY_USER: &str = "basic-user";
+
     // First create a new user who's key we can reset.
-    let UserResponse { key, .. } = app
-        .post_user("basic-user", "basic")
+    let UserResponse {
+        key, account_name, ..
+    } = app
+        .post_user(RESET_KEY_USER, "basic")
         .await
         .unwrap()
         .into_inner();
 
     // Reset API key with api key from the user we created.
-    let request = Request::new(ApiKeyRequest {
-        api_key: key.clone(),
+    let request = Request::new(ResetKeyRequest {
+        api_key: Some(key.clone()),
     });
 
     let response = app
@@ -113,8 +119,63 @@ async fn test_reset_key() {
 
     assert!(response.success);
 
-    // GET the new user to verify it's api key changed.
-    let response = app.get_user("basic-user").await.unwrap().into_inner();
+    // Get the user again to verify it's api key changed.
+    let UserResponse { key: new_key, .. } =
+        app.get_user(RESET_KEY_USER).await.unwrap().into_inner();
 
-    assert_ne!(key, response.key);
+    assert_ne!(key, new_key);
+
+    // Test resetting a key with a cookie, first login our user.
+    let mut request = Request::new(UserRequest { account_name });
+
+    let bearer: MetadataValue<_> = format!("Bearer {ADMIN_KEY}").parse().unwrap();
+    request.metadata_mut().insert("authorization", bearer);
+
+    let response = app.client.login(request).await.unwrap();
+
+    let cookie = response
+        .metadata()
+        .get("set-cookie")
+        .unwrap()
+        .to_str()
+        .unwrap();
+
+    let cookie = Cookie::parse(cookie).unwrap();
+
+    // Then create our reset request and send it without the cookie or api-key.
+    let request = Request::new(ResetKeyRequest::default());
+
+    // Reset our api-key
+    let response = app
+        .client
+        .reset_api_key(request)
+        .await
+        .unwrap()
+        .into_inner();
+
+    assert!(!response.success);
+
+    // Repeat the above but now with the cookie inserted.
+    let mut request = Request::new(ResetKeyRequest::default());
+
+    request.metadata_mut().insert(
+        COOKIE.as_str(),
+        MetadataValue::try_from(&cookie.to_string())
+            .expect("cookie should not contain invalid metadata value characters"),
+    );
+
+    // Reset our api-key
+    let response = app
+        .client
+        .reset_api_key(request)
+        .await
+        .unwrap()
+        .into_inner();
+
+    assert!(response.success);
+
+    // Get the user again to verify it's api key changed.
+    let response = app.get_user(RESET_KEY_USER).await.unwrap().into_inner();
+
+    assert_ne!(new_key, response.key);
 }

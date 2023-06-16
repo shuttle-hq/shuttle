@@ -9,7 +9,7 @@ use shuttle_proto::auth::auth_server::AuthServer;
 use tonic::transport::Server;
 use tracing::trace;
 
-use shuttle_auth::{AccountTier, Args, Commands, Dal, EdDsaManager, Service, Sqlite};
+use shuttle_auth::{AccountTier, Args, Commands, Dal, EdDsaManager, Service, SessionLayer, Sqlite};
 
 #[tokio::main]
 async fn main() {
@@ -25,13 +25,15 @@ async fn main() {
 
     match args.command {
         Commands::Start(args) => {
+            let random = ring::rand::SystemRandom::new();
+            let key_manager = EdDsaManager::new(random.clone());
+
             let mut server_builder = Server::builder()
                 .http2_keepalive_interval(Some(Duration::from_secs(60)))
+                .layer(SessionLayer::new(sqlite.clone(), key_manager.clone()))
                 .layer(ExtractPropagationLayer);
 
-            let key_manager = EdDsaManager::default();
-
-            let svc = Service::new(sqlite, key_manager);
+            let svc = Service::new(sqlite, key_manager, random);
             let svc = AuthServer::new(svc);
             let router = server_builder.add_service(svc);
 

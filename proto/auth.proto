@@ -2,17 +2,26 @@ syntax = "proto3";
 package auth;
 
 service Auth {
+  // Send a request to convert an API key to a JWT
+  rpc ConvertApiKey(ApiKeyRequest) returns (TokenResponse);
+
+  // Send a request to convert a cookie to a JWT
+  rpc ConvertCookie(ConvertCookieRequest) returns (TokenResponse);
+
   // Get a user by their account name
   rpc GetUserRequest(UserRequest) returns (UserResponse);
   
+  // Login a user by their account name
+  rpc Login(UserRequest) returns (UserResponse);
+
+  // Logout a user by their account name
+  rpc Logout(LogoutRequest) returns (ResultResponse);
+  
   // Send a request to create a new user
   rpc PostUserRequest(NewUser) returns (UserResponse);
-
-  // Send a request to convert an API key to a JWT
-  rpc ConvertApiKey(ApiKeyRequest) returns (TokenResponse);
   
   // Send a request to reset a users API key
-  rpc ResetApiKey(ApiKeyRequest) returns (ResultResponse);
+  rpc ResetApiKey(ResetKeyRequest) returns (ResultResponse);
 
   // Get the auth service public key to decode tokens
   rpc PublicKey(PublicKeyRequest) returns (PublicKeyResponse);
@@ -51,3 +60,13 @@ message PublicKeyResponse {
 }
 
 message PublicKeyRequest {}
+
+message Request {}
+
+message ConvertCookieRequest {}
+
+message LogoutRequest {}
+
+message ResetKeyRequest {
+  optional string api_key = 1;
+}

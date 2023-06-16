@@ -15,9 +15,14 @@ use opentelemetry_http::HeaderExtractor;
 use opentelemetry_otlp::WithExportConfig;
 use pin_project::pin_project;
 use tower::{Layer, Service};
-use tracing::{debug_span, instrument::Instrumented, Instrument, Span, Subscriber};
+use tracing::{
+    debug_span, field::Visit, instrument::Instrumented, span, Instrument, Metadata, Span,
+    Subscriber,
+};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
+
+use crate::tracing::JsonVisitor;
 
 pub fn setup_tracing<S>(subscriber: S, service_name: &str)
 where
@@ -135,5 +140,174 @@ where
         let response_future = self.inner.call(req).instrument(span);
 
         ExtractPropagationFuture { response_future }
+    }
+}
+
+/// Record a log for a deployment task
+pub trait DeploymentLogRecorder {
+    fn record_log(&self, deployment_id: &str, visitor: JsonVisitor, metadata: &Metadata);
+}
+
+/// Tracing layer to capture logs that relate to a deployment task.
+///
+/// This causes any functions instrumented with the `deployment_id` attribute to have its logs accosiated with the
+/// deployment. Thus, the instrument span acts as the context for logs to capture.
+///
+/// # Example
+/// ```
+/// use shuttle_common::backends::tracing::{DeploymentLayer, DeploymentLogRecorder};
+/// use shuttle_common::tracing::JsonVisitor;
+/// use std::sync::{Arc, Mutex};
+/// use tracing::instrument;
+/// use tracing_subscriber::prelude::*;
+///
+/// #[derive(Default, Clone)]
+/// struct RecorderMock {
+///     lines: Arc<Mutex<Vec<String>>>,
+/// }
+///
+/// impl DeploymentLogRecorder for RecorderMock {
+///     fn record_log(&self, _deployment_id: &str, visitor: JsonVisitor, _metadata: &tracing::Metadata) {
+///         self.lines.lock().unwrap().push(
+///             visitor
+///                 .fields
+///                 .get("message")
+///                 .unwrap()
+///                 .as_str()
+///                 .unwrap()
+///                 .to_string(),
+///         );
+///     }
+/// }
+///
+/// #[tokio::main]
+/// async fn main() {
+///    let recorder = RecorderMock::default();
+///
+///    let subscriber = tracing_subscriber::registry().with(
+///        DeploymentLayer::new(recorder.clone())
+///    );
+///    let _guard = tracing::subscriber::set_default(subscriber);
+///
+///    start_deploy();
+///
+///    assert_eq!(
+///        recorder.lines.lock().unwrap().clone(),
+///        vec!["deploying", "inner"],
+///        "only logs from `deploy()` and `inner()` should be captured",
+///    );
+/// }
+///
+///
+/// #[instrument]
+/// fn start_deploy() {
+///     // This line should not be capture since it is not inside a deployment scope
+///     tracing::info!("Handling deploy");
+///     deploy("some_id");
+/// }
+///
+/// #[instrument]
+/// fn deploy(deployment_id: &str) {
+///     // This line and everthing called by this function should be captured by this layer
+///     tracing::info!("deploying");
+///     inner();
+/// }
+///
+/// #[instrument]
+/// fn inner() {
+///     // Since this function is called from `deploy()`, the following line should be captured
+///     tracing::debug!("inner");
+/// }
+/// ```
+pub struct DeploymentLayer<R> {
+    recorder: R,
+}
+
+impl<R> DeploymentLayer<R> {
+    pub fn new(recorder: R) -> Self {
+        Self { recorder }
+    }
+}
+
+impl<S, R> tracing_subscriber::Layer<S> for DeploymentLayer<R>
+where
+    S: Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
+    R: DeploymentLogRecorder + Send + Sync + 'static,
+{
+    fn on_event(&self, event: &tracing::Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
+        // We only care about events in some scope
+        let scope = if let Some(scope) = ctx.event_scope(event) {
+            scope
+        } else {
+            return;
+        };
+
+        // Find the first scope with the deployment details
+        for span in scope.from_root() {
+            let extensions = span.extensions();
+
+            if let Some(details) = extensions.get::<DeploymentDetails>() {
+                let mut visitor = JsonVisitor::default();
+
+                event.record(&mut visitor);
+                let metadata = event.metadata();
+
+                self.recorder.record_log(&details.id, visitor, metadata);
+                break;
+            }
+        }
+    }
+
+    fn on_new_span(
+        &self,
+        attrs: &span::Attributes<'_>,
+        id: &span::Id,
+        ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        // We only care about spans that start a deployment context / scope
+        if !DeploymentScopeVisitor::is_valid(attrs.metadata()) {
+            return;
+        }
+
+        let mut visitor = DeploymentScopeVisitor::default();
+
+        attrs.record(&mut visitor);
+
+        if let Some(deployment_id) = visitor.id {
+            // Safe to unwrap since this is the `on_new_span` method
+            let span = ctx.span(id).unwrap();
+            let mut extensions = span.extensions_mut();
+
+            extensions.insert(DeploymentDetails { id: deployment_id });
+        }
+    }
+}
+
+/// The details of a deployment task
+#[derive(Debug, Default)]
+struct DeploymentDetails {
+    id: String,
+}
+
+/// A visitor to extract the [DeploymentDetails] for any scope with a `deployment_id`
+#[derive(Default)]
+struct DeploymentScopeVisitor {
+    id: Option<String>,
+}
+
+impl DeploymentScopeVisitor {
+    /// Field containing the deployment identifier
+    const ID_IDENT: &'static str = "deployment_id";
+
+    fn is_valid(metadata: &Metadata) -> bool {
+        metadata.is_span() && metadata.fields().field(Self::ID_IDENT).is_some()
+    }
+}
+
+impl Visit for DeploymentScopeVisitor {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == Self::ID_IDENT {
+            self.id = Some(format!("{value:?}"));
+        }
     }
 }

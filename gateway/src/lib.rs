@@ -778,6 +778,7 @@ pub mod tests {
             .with_sender(log_out.clone())
             .with_default_routes()
             .with_auth_service(world.context().auth_uri)
+            .await
             .binding_to(world.args.control);
 
         let user = UserServiceBuilder::new()

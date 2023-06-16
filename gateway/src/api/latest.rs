@@ -899,7 +899,7 @@ async fn reset_api_key(
         error!(message = ?message, "failed to reset api key");
         Err(Error::from(ErrorKind::Internal))
     } else {
-        if !auth_cache.invalidate(&cache_key).is_some() {
+        if auth_cache.invalidate(&cache_key).is_none() {
             debug!("did not find cookie key to invalidate in auth cache for reset-key request");
         }
         Ok(())
@@ -1086,7 +1086,7 @@ impl ApiBuilder {
         self
     }
 
-    pub fn with_auth_service(mut self, auth_uri: Uri) -> Self {
+    pub async fn with_auth_service(mut self, auth_uri: Uri) -> Self {
         let auth_public_key = AuthPublicKey::new(auth_uri.clone());
 
         let jwt_cache_manager: Arc<Box<dyn CacheManagement<Value = String>>> =
@@ -1094,10 +1094,12 @@ impl ApiBuilder {
 
         self.auth_cache = Some(jwt_cache_manager.clone());
 
+        let auth_client = AuthClient::connect(auth_uri.clone()).await.unwrap();
+
         self.router = self
             .router
             .layer(JwtAuthenticationLayer::new(auth_public_key))
-            .layer(ShuttleAuthLayer::new(auth_uri, jwt_cache_manager));
+            .layer(ShuttleAuthLayer::new(jwt_cache_manager, auth_client));
 
         self
     }
@@ -1166,6 +1168,7 @@ pub mod tests {
             .with_sender(sender)
             .with_default_routes()
             .with_auth_service(world.context().auth_uri)
+            .await
             .into_router();
 
         let neo_key = world.create_user("neo");
@@ -1355,6 +1358,7 @@ pub mod tests {
             .with_sender(sender)
             .with_default_routes()
             .with_auth_service(world.context().auth_uri)
+            .await
             .into_router();
 
         let get_status = || {

@@ -25,7 +25,7 @@ pub struct Args {
     #[clap(long, default_value = "/tmp")]
     pub artifacts_path: PathBuf,
 
-    /// Address to reach gateway's control plane at
+    /// Address to reach gateway at
     #[clap(long, default_value = "http://gateway:8001")]
     pub gateway_uri: Uri,
 

@@ -347,24 +347,21 @@ where
                 starting => starting.into_try_state(),
             },
             Self::Restarting(restarting) => restarting.next(ctx).await.into_try_state(),
-            Self::Started(started) => {
-                debug!("blaaa");
-                match started.next(ctx).await {
-                    Ok(ServiceReadying::Ready(ready)) => {
-                        debug!("in readying??");
-                        Ok(ready.into())
-                    }
-                    Ok(ServiceReadying::Started(started)) => {
-                        debug!("din nou in started");
-                        Ok(started.into())
-                    }
-                    Ok(ServiceReadying::Idle(stopping)) => {
-                        debug!("in stopping??");
-                        Ok(stopping.into())
-                    }
-                    Err(err) => Ok(Self::Errored(err)),
+            Self::Started(started) => match started.next(ctx).await {
+                Ok(ServiceReadying::Ready(ready)) => {
+                    debug!("in readying??");
+                    Ok(ready.into())
                 }
-            }
+                Ok(ServiceReadying::Started(started)) => {
+                    debug!("din nou in started");
+                    Ok(started.into())
+                }
+                Ok(ServiceReadying::Idle(stopping)) => {
+                    debug!("in stopping??");
+                    Ok(stopping.into())
+                }
+                Err(err) => Ok(Self::Errored(err)),
+            },
             Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
             Self::Stopped(stopped) => stopped.next(ctx).await.into_try_state(),
             Self::Stopping(stopping) => stopping.next(ctx).await.into_try_state(),

@@ -124,6 +124,7 @@ impl ServiceCreating {
                 "/opt/shuttle",
             ]);
         };
+        cmd.extend(["--provisioner-address", "http://10.99.0.5:8000"]);
 
         let container_config = self
             .from

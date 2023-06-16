@@ -6,10 +6,9 @@ use shuttle_proto::runtime::{
     runtime_client::{self, RuntimeClient},
     Ping, StopRequest, SubscribeLogsRequest,
 };
-use tokio::sync::Mutex;
 use tonic::transport::{Channel, Endpoint};
 use tower::ServiceBuilder;
-use tracing::trace;
+use tracing::{debug, trace};
 use ulid::Ulid;
 
 use crate::{deployment::deploy_layer, project::service::RUNTIME_API_PORT};
@@ -45,6 +44,7 @@ impl RuntimeManager {
             return Ok(runtime_client.clone());
         }
 
+        debug!("target ip {}", target_ip);
         // Connection to the docker container where the shuttle-runtime lives.
         let conn = Endpoint::new(format!("http://{target_ip}:{RUNTIME_API_PORT}"))
             .context("creating runtime client endpoint")?

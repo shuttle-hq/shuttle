@@ -10,16 +10,15 @@ use deployment::persistence::{Persistence, State};
 use deployment::Deployment;
 use derive_builder::Builder;
 use error::{Error, Result};
-use futures::task::AtomicWaker;
 use futures::TryFutureExt;
 use http::Uri;
 use project::docker::{ContainerSettings, ServiceDockerContext};
-use project::driver::DeploymentRun;
 use project::service::state::a_creating::ServiceCreating;
 use project::service::ServiceState;
 use project::task::{BoxedTask, Task, TaskBuilder};
 use runtime_manager::RuntimeManager;
 use shuttle_common::backends::auth::VerifyClaim;
+use shuttle_common::claims::Claim;
 use shuttle_common::{
     backends::{
         auth::{AuthPublicKey, JwtAuthenticationLayer},
@@ -32,7 +31,7 @@ use shuttle_proto::deployer::{
     DeployRequest, DeployResponse,
 };
 use tonic::{transport::Server, Response, Result as TonicResult};
-use tracing::{error, info};
+use tracing::{error, info, instrument};
 use ulid::Ulid;
 
 use crate::deployment::DeploymentManager;
@@ -123,7 +122,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
 
         // The deployments which are in the `Running` state are considered runnable and they are started again. Running the
         // deployments happens after their associated services' sandboxes are healthy and we start them.
-        let runnable_deployments = self.persistence.dal().running_deployments().await.unwrap();
+        let runnable_deployments = self.persistence.dal().running_deployments().await?;
         info!(count = %runnable_deployments.len(), "enqueuing runnable deployments");
         for existing_deployment in runnable_deployments {
             // We want to restart the corresponding deployment service container.
@@ -136,51 +135,14 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 .image()
                 .map_err(|err| Error::Internal(err.to_string()))?;
 
-            // Start the sandbox and run the shuttle-runtime in a separate task.
-            // let start_sandbox = self.start_sandbox(image_name, existing_deployment.service_id);
-            let provisioner_uri = self.config.provisioner_uri.to_string();
-            let auth_uri = self.config.auth_uri.to_string();
-            let network_name = self.config.network_name.clone();
-            let prefix = self.config.prefix.clone();
-            let dal_clone = self.persistence.dal().clone();
-            let task_router_clone = self.task_router.clone();
-            let deployment_manager_clone = self.deployment_manager.clone();
-            let docker_clone = self.docker.clone();
-            let runtime_manager = self.runtime_manager.clone();
-            let sender_clone = self.sender.clone();
-            tokio::spawn(async move {
-                // Refresh the docker containers for the old running deployments. This doesn't start
-                // the services' runtimes yet.
-                let cs = ContainerSettings::builder()
-                    .image(image_name)
-                    .provisioner_host(provisioner_uri)
-                    .auth_uri(auth_uri)
-                    .network_name(network_name.clone())
-                    .prefix(prefix)
-                    .build()
-                    .await;
-
-                // Awaiting on the task handle waits for the check_health to pass.
-                TaskBuilder::new(dal_clone)
-                    .task_router(task_router_clone)
-                    .service_id(existing_deployment.service_id)
-                    .service_context(ServiceDockerContext::new(docker_clone, cs, runtime_manager))
-                    .and_then(task::refresh())
-                    .and_then(task::run_until_done())
-                    .and_then(task::check_health())
-                    .send(&sender_clone)
-                    .await
-                    .expect("to get a handle of the created task")
-                    .await;
-                deployment_manager_clone
-                    .run_deployment(
-                        existing_deployment.service_id,
-                        existing_deployment.id,
-                        network_name.as_str(),
-                        None,
-                    )
-                    .await
-            });
+            self.instate_deployment(
+                image_name,
+                existing_deployment.service_id,
+                existing_deployment.id,
+                // We don't need a claim to start again an existing running deployment.
+                None,
+            )
+            .await;
         }
 
         let mut server_builder = Server::builder()
@@ -262,24 +224,74 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
 
         Ok(deployment)
     }
+
+    // Establish a deployment based on the state found in persistence and based on
+    // the deployer configuration data.
+    async fn instate_deployment(
+        &self,
+        image_name: String,
+        service_id: Ulid,
+        deployment_id: Ulid,
+        claim: Option<Claim>,
+    ) {
+        // Start the sandbox and run the shuttle-runtime in a separate task.
+        let provisioner_uri = self.config.provisioner_uri.to_string();
+        let auth_uri = self.config.auth_uri.to_string();
+        let network_name = self.config.network_name.clone();
+        let prefix = self.config.prefix.clone();
+        let dal = self.persistence.dal().clone();
+        let task_router = self.task_router.clone();
+        let deployment_manager = self.deployment_manager.clone();
+        let docker = self.docker.clone();
+        let runtime_manager = self.runtime_manager.clone();
+        let sender = self.sender.clone();
+        tokio::spawn(async move {
+            // Refresh the docker containers for the old running deployments. This doesn't start
+            // the services' runtimes yet.
+            let cs = ContainerSettings::builder()
+                .image(image_name)
+                .provisioner_host(provisioner_uri)
+                .auth_uri(auth_uri)
+                .network_name(network_name.clone())
+                .prefix(prefix)
+                .build()
+                .await;
+
+            // Awaiting on the task handle waits for the check_health to pass.
+            TaskBuilder::new(dal)
+                .task_router(task_router)
+                .service_id(service_id)
+                .service_context(ServiceDockerContext::new(docker, cs, runtime_manager))
+                .and_then(task::refresh())
+                .and_then(task::run_until_done())
+                .and_then(task::check_health())
+                .send(&sender)
+                .await
+                .expect("to get a handle of the created task")
+                .await;
+            deployment_manager
+                .run_deployment(service_id, deployment_id, network_name.as_str(), claim)
+                .await
+        });
+    }
 }
 
 #[async_trait]
-impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
+impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
+    #[instrument(skip(self, request), fields(service_name = request.get_ref().service_name, service_id = request.get_ref().service_id))]
     async fn deploy(
         &self,
         request: tonic::Request<DeployRequest>,
     ) -> TonicResult<tonic::Response<DeployResponse>, tonic::Status> {
         // Authorize the request.
-        // request.verify(Scope::DeploymentPush)?;
+        request.verify(Scope::DeploymentPush)?;
+
+        let claim = request.extensions().get::<Claim>().cloned();
         let request = request.into_inner();
         let service_id: Ulid = Ulid::from_string(request.service_id.as_str())
             .map_err(|_| tonic::Status::invalid_argument("invalid service id"))?;
 
         // Check if there are running deployments for the service.
-        // TODO: we might need to not check running deployments because we
-        // should be able to support one runtime that is loaded and one runtime
-        // the runs.
         let service_running_deployments = self
             .persistence
             .dal()
@@ -301,51 +313,11 @@ impl<D: Dal + Send + Sync + 'static> Deployer for DeployerService<D> {
             .push_deployment(request.clone(), state.clone())
             .await
             .map_err(|err| tonic::Status::new(tonic::Code::Internal, err.to_string()))?;
-
-        // Start the sandbox and run the shuttle-runtime in a separate task.
-        // let start_sandbox = self.start_sandbox(image_name, existing_deployment.service_id);
-        let provisioner_uri = self.config.provisioner_uri.to_string();
-        let auth_uri = self.config.auth_uri.to_string();
-        let network_name = self.config.network_name.clone();
-        let prefix = self.config.prefix.clone();
-        let dal_clone = self.persistence.dal().clone();
-        let task_router_clone = self.task_router.clone();
-        let deployment_manager_clone = self.deployment_manager.clone();
-        let docker_clone = self.docker.clone();
-        let runtime_manager = self.runtime_manager.clone();
-        let sender_clone = self.sender.clone();
-        let deployment_id = Ulid::new();
-        tokio::spawn(async move {
-            // Refresh the docker containers for the old running deployments. This doesn't start
-            // the services' runtimes yet.
-            let cs = ContainerSettings::builder()
-                .image(request.image_name)
-                .provisioner_host(provisioner_uri)
-                .auth_uri(auth_uri)
-                .network_name(network_name.clone())
-                .prefix(prefix)
-                .build()
-                .await;
-
-            // Awaiting on the task handle waits for the check_health to pass.
-            TaskBuilder::new(dal_clone)
-                .task_router(task_router_clone)
-                .service_id(service_id)
-                .service_context(ServiceDockerContext::new(docker_clone, cs, runtime_manager))
-                .and_then(task::refresh())
-                .and_then(task::run_until_done())
-                .and_then(task::check_health())
-                .send(&sender_clone)
-                .await
-                .expect("to get a handle of the created task")
-                .await;
-            deployment_manager_clone
-                .run_deployment(service_id, deployment_id, network_name.as_str(), None)
-                .await
-        });
+        self.instate_deployment(request.image_name, service_id, deployment.id, claim)
+            .await;
 
         Ok(Response::new(DeployResponse {
-            deployment_id: deployment_id.to_string(),
+            deployment_id: deployment.id.to_string(),
         }))
     }
 }

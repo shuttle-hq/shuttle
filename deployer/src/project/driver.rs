@@ -296,9 +296,9 @@ async fn run<D: Dal + Sync + 'static>(
     dal: D,
     cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
 ) {
-    dal.set_address(&id, &address)
-        .await
-        .expect("to set deployment address");
+    // dal.set_address(&id, &address)
+    //     .await
+    //     .expect("to set deployment address");
 
     let start_request = tonic::Request::new(StartRequest {
         ip: address.to_string(),

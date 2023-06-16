@@ -33,8 +33,10 @@ impl std::error::Error for ApiError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
 pub enum ErrorKind {
     KeyMissing,
+    CookieMissing,
     BadHost,
     KeyMalformed,
+    CookieMalformed,
     Unauthorized,
     Forbidden,
     UserNotFound,
@@ -102,6 +104,10 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),
+            ErrorKind::CookieMissing => (StatusCode::UNAUTHORIZED, "request is missing a cookie"),
+            ErrorKind::CookieMalformed => {
+                (StatusCode::UNAUTHORIZED, "request has an invalid cookie")
+            }
         };
         Self {
             message: error_message.to_string(),

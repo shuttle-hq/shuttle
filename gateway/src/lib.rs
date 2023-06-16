@@ -201,6 +201,11 @@ impl<'de> Deserialize<'de> for AccountName {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct LoginRequest {
+    account_name: AccountName,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectDetails {
     pub project_name: ProjectName,

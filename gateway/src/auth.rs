@@ -2,10 +2,14 @@ use std::fmt::Debug;
 use std::str::FromStr;
 
 use axum::extract::{FromRef, FromRequestParts, Path};
+use axum::headers::authorization::Bearer;
+use axum::headers::Authorization;
 use axum::http::request::Parts;
+use axum::TypedHeader;
 use serde::{Deserialize, Serialize};
 use shuttle_common::claims::{Claim, Scope};
-use tracing::{trace, Span};
+use shuttle_common::ApiKey;
+use tracing::{debug, trace, Span};
 
 use crate::api::latest::RouterState;
 use crate::{AccountName, Error, ErrorKind, ProjectName};
@@ -86,5 +90,39 @@ where
         } else {
             Err(Error::from(ErrorKind::ProjectNotFound))
         }
+    }
+}
+
+/// A wrapper around [ApiKey] so we can implement [FromRequestParts] for it.
+pub struct Key(ApiKey);
+
+impl From<Key> for ApiKey {
+    fn from(key: Key) -> Self {
+        key.0
+    }
+}
+
+#[async_trait]
+impl<S> FromRequestParts<S> for Key
+where
+    S: Send + Sync,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let key = TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
+            .await
+            .map_err(|_| Error::from(ErrorKind::KeyMissing))
+            .and_then(|TypedHeader(Authorization(bearer))| {
+                let bearer = bearer.token().trim();
+                ApiKey::parse(bearer).map_err(|error| {
+                    debug!(error = ?error, "received a malformed api-key");
+                    Self::Rejection::from(ErrorKind::KeyMalformed)
+                })
+            })?;
+
+        trace!("got bearer key");
+
+        Ok(Key(key))
     }
 }

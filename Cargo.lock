@@ -675,6 +675,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-extra"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "febf23ab04509bd7672e6abe76bd8277af31b679e89fa5ffc6087dc289a448a3"
+dependencies = [
+ "axum",
+ "axum-core",
+ "bytes",
+ "cookie",
+ "futures-util",
+ "http",
+ "http-body",
+ "mime",
+ "pin-project-lite",
+ "serde",
+ "tokio",
+ "tower",
+ "tower-http 0.4.0",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
 name = "axum-server"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1275,6 +1298,7 @@ checksum = "7efb37c3e1ccb1ff97164ad95ac1606e8ccd35b3fa0a7d99a304c7f4a428cc24"
 dependencies = [
  "base64 0.21.1",
  "hmac",
+ "percent-encoding",
  "rand",
  "sha2",
  "subtle",
@@ -5360,6 +5384,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "axum-extra",
  "axum-server",
  "base64 0.13.1",
  "bollard",
@@ -5389,11 +5414,13 @@ dependencies = [
  "serde",
  "serde_json",
  "shuttle-common",
+ "shuttle-proto",
  "snailquote",
  "sqlx",
  "strum",
  "tempfile",
  "tokio",
+ "tonic",
  "tower",
  "tower-http 0.4.0",
  "tower-sanitize-path",

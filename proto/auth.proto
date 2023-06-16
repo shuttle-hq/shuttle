@@ -21,7 +21,7 @@ service Auth {
   rpc PostUserRequest(NewUser) returns (UserResponse);
   
   // Send a request to reset a users API key
-  rpc ResetApiKey(ApiKeyRequest) returns (ResultResponse);
+  rpc ResetApiKey(ResetKeyRequest) returns (ResultResponse);
 
   // Get the auth service public key to decode tokens
   rpc PublicKey(PublicKeyRequest) returns (PublicKeyResponse);
@@ -66,3 +66,7 @@ message Request {}
 message ConvertCookieRequest {}
 
 message LogoutRequest {}
+
+message ResetKeyRequest {
+  optional string api_key = 1;
+}

@@ -60,6 +60,12 @@ pub struct ConvertCookieRequest {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogoutRequest {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResetKeyRequest {
+    #[prost(string, optional, tag = "1")]
+    pub api_key: ::core::option::Option<::prost::alloc::string::String>,
+}
 /// Generated client implementations.
 pub mod auth_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
@@ -242,7 +248,7 @@ pub mod auth_client {
         /// Send a request to reset a users API key
         pub async fn reset_api_key(
             &mut self,
-            request: impl tonic::IntoRequest<super::ApiKeyRequest>,
+            request: impl tonic::IntoRequest<super::ResetKeyRequest>,
         ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status> {
             self.inner
                 .ready()
@@ -317,7 +323,7 @@ pub mod auth_server {
         /// Send a request to reset a users API key
         async fn reset_api_key(
             &self,
-            request: tonic::Request<super::ApiKeyRequest>,
+            request: tonic::Request<super::ResetKeyRequest>,
         ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status>;
         /// Get the auth service public key to decode tokens
         async fn public_key(
@@ -613,7 +619,7 @@ pub mod auth_server {
                 "/auth.Auth/ResetApiKey" => {
                     #[allow(non_camel_case_types)]
                     struct ResetApiKeySvc<T: Auth>(pub Arc<T>);
-                    impl<T: Auth> tonic::server::UnaryService<super::ApiKeyRequest>
+                    impl<T: Auth> tonic::server::UnaryService<super::ResetKeyRequest>
                     for ResetApiKeySvc<T> {
                         type Response = super::ResultResponse;
                         type Future = BoxFuture<
@@ -622,7 +628,7 @@ pub mod auth_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::ApiKeyRequest>,
+                            request: tonic::Request<super::ResetKeyRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move {

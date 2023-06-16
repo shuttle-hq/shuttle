@@ -20,7 +20,7 @@ use shuttle_common::ApiKey;
 use shuttle_proto::auth::auth_server::Auth;
 use shuttle_proto::auth::{
     ApiKeyRequest, ConvertCookieRequest, LogoutRequest, NewUser, PublicKeyRequest,
-    PublicKeyResponse, ResultResponse, TokenResponse, UserRequest, UserResponse,
+    PublicKeyResponse, ResetKeyRequest, ResultResponse, TokenResponse, UserRequest, UserResponse,
 };
 use sqlx::migrate::Migrator;
 use thiserror::Error;
@@ -101,10 +101,35 @@ where
 
     /// Reset a users API-key, returning nothing on success. To get the new key the
     /// user will need to login on the website.
-    async fn reset_key(&self, request: ApiKeyRequest) -> Result<(), Error> {
-        let key = ApiKey::parse(&request.api_key)?;
+    async fn reset_key(&self, request: ResetKeyRequest) -> Result<(), Error> {
+        let Some(key) = request.api_key else {
+            return Err(Error::Unauthorized);
+        };
+
+        let key = ApiKey::parse(&key)?;
 
         let account_name = self.dal.get_user_by_key(key).await?.name;
+
+        let new_key = ApiKey::generate();
+
+        self.dal.update_api_key(&account_name, new_key).await?;
+
+        Ok(())
+    }
+
+    /// Reset a logged in users API-key, returning nothing on success. To get the new key the
+    /// user will need to login on the website.
+    async fn reset_key_with_cookie(
+        &self,
+        request: &mut Request<ResetKeyRequest>,
+    ) -> Result<(), Error> {
+        let SessionUser { account_name, .. } = request
+            .extensions_mut()
+            .get_mut::<SessionState<D>>()
+            .ok_or(Error::Unauthorized)?
+            .user()
+            .await
+            .ok_or(Error::Unauthorized)?;
 
         let new_key = ApiKey::generate();
 
@@ -360,11 +385,17 @@ where
     /// Reset a users API key
     async fn reset_api_key(
         &self,
-        request: Request<ApiKeyRequest>,
+        mut request: Request<ResetKeyRequest>,
     ) -> Result<Response<ResultResponse>, Status> {
-        let request = request.into_inner();
+        let result = if request.extensions().get::<SessionState<D>>().is_some() {
+            self.reset_key_with_cookie(&mut request).await
+        } else {
+            let request = request.into_inner();
 
-        let result = match self.reset_key(request).await {
+            self.reset_key(request).await
+        };
+
+        let result = match result {
             Ok(()) => ResultResponse {
                 success: true,
                 message: Default::default(),

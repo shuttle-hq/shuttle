@@ -142,7 +142,20 @@ async fn test_reset_key() {
 
     let cookie = Cookie::parse(cookie).unwrap();
 
-    // Then create our reset request and insert the cookie from login.
+    // Then create our reset request and send it without the cookie or api-key.
+    let request = Request::new(ResetKeyRequest::default());
+
+    // Reset our api-key
+    let response = app
+        .client
+        .reset_api_key(request)
+        .await
+        .unwrap()
+        .into_inner();
+
+    assert!(!response.success);
+
+    // Repeat the above but now with the cookie inserted.
     let mut request = Request::new(ResetKeyRequest::default());
 
     request.metadata_mut().insert(

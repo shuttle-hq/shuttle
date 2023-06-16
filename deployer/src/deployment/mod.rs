@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
-use tracing::{debug, instrument};
+use tracing::instrument;
 use ulid::Ulid;
 
 use crate::{project::driver::DeploymentRun, runtime_manager::RuntimeManager};

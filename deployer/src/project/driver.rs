@@ -76,7 +76,6 @@ pub async fn task<D: Dal + Sync + 'static>(
             .runtime_client(run.service_id, run.target_ip)
             .await
             .expect("to set up a runtime client against a ready deployment");
-        let dal_cloned = dal.clone();
         let claim_cloned = claim.clone();
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -91,7 +90,6 @@ pub async fn task<D: Dal + Sync + 'static>(
                     .handle(
                         storage_manager,
                         runtime_client,
-                        dal_cloned,
                         old_deployments_killer,
                         cleanup,
                         claim_cloned,
@@ -170,13 +168,12 @@ pub struct DeploymentRun {
 }
 
 impl DeploymentRun {
-    #[instrument(skip(self, storage_manager, runtime_client, dal, kill_old_deployments, cleanup, claim), fields(id = %self.deployment_id, state = %State::Loading))]
+    #[instrument(skip(self, storage_manager, runtime_client, kill_old_deployments, cleanup, claim), fields(id = %self.deployment_id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
-    async fn handle<D: Dal + Sync + 'static>(
+    async fn handle(
         self,
         storage_manager: ArtifactsStorageManager,
         runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
-        dal: D,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
         claim: Option<Claim>,
@@ -215,7 +212,6 @@ impl DeploymentRun {
             self.service_name,
             runtime_client,
             address,
-            dal,
             cleanup,
         ));
 
@@ -261,17 +257,7 @@ async fn load(
         Ok(response) => {
             let response = response.into_inner();
 
-            // Make sure to not log the entire response, the resources field is likely to contain
-            // secrets.
             info!(success = %response.success, "loading response");
-
-            for _resource in response.resources {
-                // TODO: restore in new deployer after loading runtime
-                // resource_manager
-                //     .insert_resource(&resource)
-                //     .await
-                //     .expect("to add resource to persistence");
-            }
 
             if response.success {
                 Ok(())
@@ -287,19 +273,14 @@ async fn load(
     }
 }
 
-#[instrument(skip(runtime_client, dal, cleanup), fields(state = %State::Running))]
-async fn run<D: Dal + Sync + 'static>(
+#[instrument(skip(runtime_client, cleanup), fields(state = %State::Running))]
+async fn run(
     id: Ulid,
     service_name: String,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     address: SocketAddr,
-    dal: D,
     cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
 ) {
-    // dal.set_address(&id, &address)
-    //     .await
-    //     .expect("to set deployment address");
-
     let start_request = tonic::Request::new(StartRequest {
         ip: address.to_string(),
     });

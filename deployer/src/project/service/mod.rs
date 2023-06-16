@@ -1,17 +1,9 @@
-use std::{
-    collections::VecDeque,
-    convert::Infallible,
-    fmt::Display,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    str::FromStr,
-    sync::Arc,
-};
+use std::{collections::VecDeque, convert::Infallible, fmt::Display, net::Ipv4Addr, str::FromStr};
 
 use async_trait::async_trait;
 use bollard::errors::Error as DockerError;
 use bollard::service::{ContainerInspectResponse, ContainerStateStatusEnum};
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
 use tracing::{debug, error, instrument};
 use ulid::Ulid;
 

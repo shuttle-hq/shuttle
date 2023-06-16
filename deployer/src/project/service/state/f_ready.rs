@@ -1,9 +1,8 @@
-use std::{collections::VecDeque, net::Ipv4Addr, sync::Arc};
+use std::{collections::VecDeque, net::Ipv4Addr};
 
 use async_trait::async_trait;
 use bollard::{container::Stats, service::ContainerInspectResponse};
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
 use tracing::instrument;
 
 use super::machine::State;

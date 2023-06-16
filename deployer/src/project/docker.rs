@@ -3,8 +3,6 @@ use bollard::{errors::Error as DockerError, service::ContainerInspectResponse, D
 use shuttle_common::models::project::IDLE_MINUTES;
 use ulid::Ulid;
 
-use crate::deployment::persistence::dal::Dal;
-use crate::deployment::DeploymentManager;
 use crate::runtime_manager::RuntimeManager;
 use crate::safe_unwrap;
 

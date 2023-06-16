@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, net::Ipv4Addr, str::FromStr};
+use std::collections::VecDeque;
 
 use async_trait::async_trait;
 use bollard::{
@@ -8,7 +8,7 @@ use bollard::{
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use shuttle_proto::runtime::Ping;
-use tracing::{debug, instrument, trace};
+use tracing::{debug, instrument};
 use ulid::Ulid;
 
 use crate::{

@@ -1,13 +1,8 @@
-use std::net::Ipv4Addr;
-use std::str::FromStr;
-
 use sqlx::types::Json as SqlxJson;
 use sqlx::Row;
 use sqlx::{sqlite::SqliteRow, FromRow};
-use tracing::error;
 use ulid::Ulid;
 
-use super::error::Error;
 use crate::project::service::ServiceState;
 
 // User service model from persistence.

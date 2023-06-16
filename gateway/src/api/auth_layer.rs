@@ -105,16 +105,14 @@ where
             });
         }
 
-        // Enrich the current key | session
-
         // TODO: read this page to get rid of this clone
         // https://github.com/tower-rs/tower/blob/master/guides/building-a-middleware-from-scratch.md
         let mut this = self.clone();
 
+        // Enrich the current key | session
         Box::pin(async move {
             // Only if there is something to upgrade
             if let Some((cache_key, token_request)) = cache_key_and_token_req(req.headers()) {
-                // let target_url = this.auth_uri.to_string();
                 // Check if the token is cached.
                 if let Some(token) = this.cache_manager.get(&cache_key) {
                     trace!("JWT cache hit, setting token from cache on request");

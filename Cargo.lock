@@ -5356,6 +5356,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-otlp",
+ "opentelemetry-proto",
  "pin-project",
  "proptest",
  "prost-types",

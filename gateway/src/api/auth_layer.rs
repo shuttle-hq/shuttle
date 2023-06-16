@@ -10,7 +10,7 @@ use futures::future::BoxFuture;
 use http::{header::COOKIE, HeaderMap, Request, StatusCode};
 use hyper::Body;
 use opentelemetry::{global, propagation::Injector};
-use shuttle_common::backends::cache::CacheManagement;
+use shuttle_common::backends::{auth::COOKIE_NAME, cache::CacheManagement};
 use shuttle_proto::auth::{auth_client::AuthClient, ApiKeyRequest, ConvertCookieRequest};
 use tonic::{metadata::MetadataKey, Request as TonicRequest};
 use tonic::{metadata::MetadataValue, transport::Channel};
@@ -188,7 +188,7 @@ enum ConvertRequestType {
 fn convert_cookie_request(headers: &HeaderMap) -> Option<(String, ConvertRequestType)> {
     let jar = CookieJar::from_headers(headers);
 
-    let Some(cookie) = jar.get("shuttle.sid") else {
+    let Some(cookie) = jar.get(COOKIE_NAME) else {
         return None;
     };
 

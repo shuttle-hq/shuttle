@@ -12,9 +12,8 @@ use cookie::{Cookie, SameSite};
 use http::header::SET_COOKIE;
 use ring::rand::SystemRandom;
 use secrets::KeyManager;
-use session::{
-    sign_cookie, SessionState, SessionToken, SessionUser, COOKIE_EXPIRATION, COOKIE_NAME,
-};
+use session::{sign_cookie, SessionState, SessionToken, SessionUser, COOKIE_EXPIRATION};
+use shuttle_common::backends::auth::COOKIE_NAME;
 use shuttle_common::claims::{AccountTier, Claim};
 use shuttle_common::ApiKey;
 use shuttle_proto::auth::auth_server::Auth;

@@ -20,7 +20,9 @@ use http::header::COOKIE;
 use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
-use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
+use shuttle_common::backends::auth::{
+    AuthPublicKey, JwtAuthenticationLayer, ScopedLayer, COOKIE_NAME,
+};
 use shuttle_common::backends::cache::{CacheManagement, CacheManager};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{AccountTier, Scope, EXP_MINUTES};
@@ -725,7 +727,7 @@ async fn logout(
     let mut request = TonicRequest::new(LogoutRequest::default());
 
     let cookie = jar
-        .get("shuttle.sid")
+        .get(COOKIE_NAME)
         .ok_or(Error::from_kind(ErrorKind::CookieMissing))?;
 
     // This is the value in `shuttle.sid=<value>`.
@@ -734,7 +736,7 @@ async fn logout(
     request.metadata_mut().insert(
         COOKIE.as_str(),
         MetadataValue::try_from(&cookie.to_string()).map_err(|error| {
-            error!(error = ?error, "received malformed shuttle.sid cookie");
+            error!(error = ?error, "received malformed {COOKIE_NAME} cookie");
 
             Error::from_kind(ErrorKind::CookieMalformed)
         })?,
@@ -858,7 +860,7 @@ async fn reset_api_key(
     key: Option<Key>,
     jar: CookieJar,
 ) -> Result<(), Error> {
-    let request_data = if let Some(cookie) = jar.get("shuttle.sid") {
+    let request_data = if let Some(cookie) = jar.get(COOKIE_NAME) {
         let mut request = TonicRequest::new(ResetKeyRequest::default());
 
         // This is the value in `shuttle.sid=<value>`.
@@ -867,7 +869,7 @@ async fn reset_api_key(
         request.metadata_mut().insert(
             COOKIE.as_str(),
             MetadataValue::try_from(&cookie.to_string()).map_err(|error| {
-                error!(error = ?error, "received malformed shuttle.sid cookie");
+                error!(error = ?error, "received malformed {COOKIE_NAME} cookie");
 
                 Error::from_kind(ErrorKind::CookieMalformed)
             })?,

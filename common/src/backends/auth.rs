@@ -24,6 +24,7 @@ use super::{
 };
 
 const PUBLIC_KEY_CACHE_KEY: &str = "shuttle.public-key";
+pub const COOKIE_NAME: &str = "shuttle.sid";
 
 /// Layer to check the admin secret set by deployer is correct
 #[derive(Clone)]

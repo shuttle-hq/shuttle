@@ -96,6 +96,8 @@ impl ServiceCreating {
             image: default_image,
             prefix,
             is_next,
+            provisioner_host,
+            auth_uri,
             ..
         } = ctx.container_settings();
 
@@ -116,15 +118,20 @@ impl ServiceCreating {
         // creating the create container config we're overwriting the executable path and it can
         // not be found afterward.
         let mut cmd = vec!["--port", "8001"];
+        // Currently, shuttle-next doesn't support a significant amount of Shuttle resources, so
+        // we're completting the args here only for the alpha runtime.
         if !*is_next {
             cmd.extend([
                 "--storage-manager-type",
                 "artifacts",
                 "--storage-manager-path",
                 "/opt/shuttle",
+                "--provisioner-address",
+                provisioner_host.as_str(),
+                "--auth-uri",
+                auth_uri.as_str(),
             ]);
         };
-        cmd.extend(["--provisioner-address", "http://10.99.0.5:8000"]);
 
         let container_config = self
             .from

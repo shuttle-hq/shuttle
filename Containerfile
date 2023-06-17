@@ -1,9 +1,9 @@
 #syntax=docker/dockerfile-upstream:1.4
 
 
-# Base image
+# Base image for builds and cache
 ARG RUSTUP_TOOLCHAIN
-FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-build
+FROM rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-build
 RUN apt update && apt install -y curl
 RUN cargo install cargo-chef --locked
 WORKDIR /build
@@ -27,7 +27,7 @@ COPY --from=cache /build .
 RUN cargo chef prepare --recipe-path recipe.json
 
 
-# Stores cargo chef recipe
+# Builds crate according to cargo chef recipe
 FROM shuttle-build AS builder
 ARG CARGO_PROFILE
 ARG folder
@@ -41,15 +41,9 @@ RUN cargo build --bin shuttle-${folder} \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi)
 
 
-# Middle step
+# The final image for this "shuttle-..." crate
 ARG RUSTUP_TOOLCHAIN
-FROM rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-common
-RUN rustup component add rust-src
-COPY --from=cache /build /usr/src/shuttle/
-
-
-# The final image for this shuttle-* crate
-FROM shuttle-common as shuttle-crate
+FROM rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-crate
 ARG folder
 ARG prepare_args
 # used as env variable in prepare script
@@ -57,7 +51,10 @@ ARG PROD
 ARG CARGO_PROFILE
 ARG RUSTUP_TOOLCHAIN
 ENV RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN}
+
 COPY ${folder}/prepare.sh /prepare.sh
 RUN /prepare.sh "${prepare_args}"
+
+COPY --from=cache /build /usr/src/shuttle/
 COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-${folder} /usr/local/bin/service
 ENTRYPOINT ["/usr/local/bin/service"]

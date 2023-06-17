@@ -21,7 +21,7 @@ pub enum Commands {
 #[derive(clap::Args, Debug, Clone)]
 pub struct StartArgs {
     /// Address to bind to
-    #[arg(long, default_value = "127.0.0.1:8000")]
+    #[arg(long, default_value = "127.0.0.1:8008")]
     pub address: SocketAddr,
 }
 

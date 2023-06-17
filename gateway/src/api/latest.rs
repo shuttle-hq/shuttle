@@ -42,7 +42,7 @@ use tracing::{debug, error, field, instrument, trace};
 use ttl_cache::TtlCache;
 use utoipa::IntoParams;
 
-use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
@@ -58,7 +58,7 @@ use crate::service::GatewayService;
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{AccountName, Error, LoginRequest, ProjectName};
+use crate::{AccountName, Error, ProjectName};
 
 use super::auth_layer::ShuttleAuthLayer;
 
@@ -636,28 +636,33 @@ async fn get_projects(
     Ok(AxumJson(projects))
 }
 
-// #[instrument(skip(service))]
-// #[utoipa::path(
-//     post,
-//     path = "/login",
-//     responses(
-//         (status = 200, description = "Successfully logged in.", body = shuttle_common::models::project::Response),
-//         (status = 500, description = "Server internal error.")
-//     ),
-//     params(
-//         ("project_name" = String, Path, description = "The name of the project."),
-//     )
-// )]
+#[instrument(skip_all, fields(%account_name))]
+#[utoipa::path(
+    post,
+    path = "/login",
+    responses(
+        (status = 200, description = "Successfully logged in user and returned cookie."),
+        (status = 401, description = "Unauthorized to due to missing or invalid admin api-key."),
+        (status = 500, description = "Server internal error."),
+        (status = 503, description = "Server not reachable.")
+    ),
+    params(
+        ("account_name" = AccountName, Path, description = "The account name of the user to log in."),
+    ),
+    security(
+        ("api_key" = [])
+    )
+)]
 async fn login(
     jar: CookieJar,
     State(RouterState {
         mut auth_client, ..
     }): State<RouterState>,
     key: Key,
-    AxumJson(request): AxumJson<LoginRequest>,
+    Path(account_name): Path<AccountName>,
 ) -> Result<(CookieJar, AxumJson<shuttle_common::models::user::Response>), Error> {
     let mut request = TonicRequest::new(UserRequest {
-        account_name: request.account_name.to_string(),
+        account_name: account_name.to_string(),
     });
 
     // This endpoint expects the api-key of an admin user in it's bearer token.
@@ -907,8 +912,15 @@ impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         if let Some(components) = openapi.components.as_mut() {
             components.add_security_scheme(
-                "Gateway API Key",
-                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("Bearer"))),
+                "api_key",
+                SecurityScheme::Http(
+                    HttpBuilder::new()
+                        .scheme(HttpAuthScheme::Bearer)
+                        .description(Some(
+                            "Api-key bearer token used to authorize requests that call the auth service.",
+                        ))
+                        .build(),
+                ),
             )
         }
     }
@@ -932,7 +944,8 @@ impl Modify for SecurityAddon {
         revive_projects,
         destroy_projects,
         get_load_admin,
-        delete_load_admin
+        delete_load_admin,
+        login
     ),
     modifiers(&SecurityAddon),
     components(schemas(
@@ -1090,6 +1103,8 @@ impl ApiBuilder {
         self.auth_cache = Some(jwt_cache_manager.clone());
 
         let auth_client = AuthClient::connect(auth_uri.clone()).await.unwrap();
+
+        self.auth_client = Some(auth_client.clone());
 
         self.router = self
             .router

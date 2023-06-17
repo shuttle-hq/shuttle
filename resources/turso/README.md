@@ -9,19 +9,23 @@ This plugin allows services to connect to a Turso database. Turso is an edge-hos
 Add `shuttle-turso` to the dependencies for your service.
 This resource will be provided by adding the `shuttle_turso::Turso` attribute to your Shuttle `main` decorated function.
 
-It returns a `libsql_client::Client`. When running locally it will instantiate a local SQLite database of the name of your service instead of connecting to your edge database.
+It returns a `libsql_client::Client`. When running in production, the token used to connect to your database will be read from `TURSO_DB_TOKEN` in your `Secrets.toml` file. This can be overridden with the `token_secret` parameter. When running locally it will instantiate a local SQLite database of the name of your service instead of connecting to your edge database.
+
+If you want to connect to a remote database when running locally, you can specify the `local_addr` parameter. In that case, the token will be read from your `Secrets.dev.toml` file.
 
 ### Example
 
 ```rust
+use libsql_client::client::Client;
+
 #[shuttle_runtime::main]
-async fn app(#[shuttle_turso::Turso(addr="advanced-lightspeed.turso.io", auth_token=Some("token")] client: Client) -> __ { }
+async fn app(#[shuttle_turso::Turso(addr="libsql://advanced-lightspeed.turso.io")] client: Client) -> __ { }
 ```
 
 ### Parameters
 
-| Parameter  | Type        | Default | Description                                                                                                                   |
-| ---------- | ----------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| addr       | str         | `""`    | URL of the database to connect to, without the `libsql://` part at the beginning.                                             |
-| token      | str         | `""`    | The auth token created with the CLI to connect to the database.                                                               |
-| local_addr | Option<str> | `None`  | The URL to use when running your service locally. If not provided, this will default to a local file name `<service name>.db` |
+| Parameter    | Type        | Default          | Description                                                                                                                   |
+| ------------ | ----------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| addr         | str         | `""`             | URL of the database to connect to. If `libsql://` is missing at the beginning, it will be automatically added.                |
+| token_secret | str         | `TURSO_DB_TOKEN` | The name of the secret to read to get token created with the CLI to connect to the database.                                  |
+| local_addr   | Option<str> | `None`           | The URL to use when running your service locally. If not provided, this will default to a local file name `<service name>.db` |

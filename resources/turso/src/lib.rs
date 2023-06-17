@@ -7,10 +7,10 @@ use shuttle_service::{
 };
 use url::Url;
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize)]
 pub struct Turso {
     addr: String,
-    token: String,
+    token_secret: String,
     local_addr: Option<String>,
 }
 
@@ -21,6 +21,16 @@ pub struct TursoOutput {
 }
 
 impl Turso {
+    pub fn addr(mut self, addr: &str) -> Self {
+        self.addr = addr.to_string();
+        self
+    }
+
+    pub fn token_secret(mut self, token_secret: &str) -> Self {
+        self.token_secret = token_secret.to_string();
+        self
+    }
+
     pub fn local_addr(mut self, local_addr: &str) -> Self {
         self.local_addr = Some(local_addr.to_string());
         self
@@ -41,6 +51,30 @@ impl From<Error> for shuttle_service::Error {
     }
 }
 
+impl Turso {
+    async fn output_from_addr(
+        &self,
+        factory: &mut dyn Factory,
+        addr: &str,
+    ) -> Result<<Turso as ResourceBuilder<Client>>::Output, shuttle_service::Error> {
+        match factory
+            .get_secrets()
+            .await
+            .expect("secrets should be available")
+            .get(&self.token_secret)
+        {
+            Some(token) => Ok(TursoOutput {
+                conn_url: Url::parse(&addr).map_err(Error::UrlParseError)?,
+                token: Some(token.to_string()),
+            }),
+            None => Err(ShuttleError::Custom(CustomError::msg(format!(
+                "could't find secret {}",
+                self.token_secret
+            )))),
+        }
+    }
+}
+
 #[async_trait]
 impl ResourceBuilder<Client> for Turso {
     const TYPE: Type = Type::Turso;
@@ -49,7 +83,11 @@ impl ResourceBuilder<Client> for Turso {
     type Output = TursoOutput;
 
     fn new() -> Self {
-        Self::default()
+        Self {
+            addr: "".to_string(),
+            token_secret: "TURSO_DB_TOKEN".to_string(),
+            local_addr: None,
+        }
     }
 
     fn config(&self) -> &Self::Config {
@@ -65,14 +103,12 @@ impl ResourceBuilder<Client> for Turso {
                 if self.addr.is_empty() {
                     Err(ShuttleError::Custom(CustomError::msg("missing addr")))
                 } else {
-                    Ok(TursoOutput {
-                        // XXX: should we allow for other kind of connection string ? Not having libsql at
-                        // the start of the url even though the Turso CLI is printing it might be confusing
-                        // instead of just giving the responsability to the user.
-                        conn_url: Url::parse(&format!("libsql://{}", self.addr))
-                            .map_err(Error::UrlParseError)?,
-                        token: Some(self.token),
-                    })
+                    let addr = if self.addr.starts_with("libsql://") {
+                        self.addr.to_string()
+                    } else {
+                        format!("libsql://{}", self.addr)
+                    };
+                    self.output_from_addr(factory, &addr).await
                 }
             }
             shuttle_service::Environment::Local => {
@@ -81,16 +117,24 @@ impl ResourceBuilder<Client> for Turso {
                     .get_build_path()?
                     .join(format!("{}.db", factory.get_service_name()));
 
-                let conn_url = self.local_addr.unwrap_or(format!(
-                    "file://{}",
-                    default_db_path
-                        .to_str()
-                        .expect("local db should be a valid unicode string")
-                ));
-                Ok(TursoOutput {
-                    conn_url: Url::parse(&conn_url).map_err(Error::UrlParseError)?,
-                    token: None,
-                })
+                match self.local_addr {
+                    Some(ref local_addr) => {
+                        // Read the secret the same way we would for production
+                        self.output_from_addr(factory, local_addr).await
+                    }
+                    None => {
+                        let conn_url = format!(
+                            "file://{}",
+                            default_db_path
+                                .to_str()
+                                .expect("local db should be a valid unicode string")
+                        );
+                        Ok(TursoOutput {
+                            conn_url: Url::parse(&conn_url).map_err(Error::UrlParseError)?,
+                            token: None,
+                        })
+                    }
+                }
             }
         }
     }
@@ -108,6 +152,7 @@ impl ResourceBuilder<Client> for Turso {
 #[cfg(test)]
 mod test {
 
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
     use std::{fs, str::FromStr};
 
@@ -122,6 +167,7 @@ mod test {
         temp_dir: TempDir,
         pub service_name: String,
         pub environment: Environment,
+        pub token_value: Option<String>,
     }
 
     impl MockFactory {
@@ -130,6 +176,7 @@ mod test {
                 temp_dir: Builder::new().prefix("shuttle-turso").tempdir().unwrap(),
                 service_name: "shuttle-turso".to_string(),
                 environment: Environment::Local,
+                token_value: None,
             }
         }
 
@@ -160,7 +207,11 @@ mod test {
         async fn get_secrets(
             &mut self,
         ) -> Result<std::collections::BTreeMap<String, String>, shuttle_service::Error> {
-            panic!("no turso test should try to get secrets")
+            let mut secrets = BTreeMap::new();
+            if let Some(token_value) = &self.token_value {
+                secrets.insert("TURSO_DB_TOKEN".to_string(), token_value.to_string());
+            }
+            Ok(secrets)
         }
 
         fn get_service_name(&self) -> shuttle_service::ServiceName {
@@ -202,6 +253,7 @@ mod test {
     #[tokio::test]
     async fn local_database_user_supplied() {
         let mut factory = MockFactory::new();
+        factory.token_value = Some("token".to_string());
 
         let mut turso = Turso::new();
         let local_addr = "libsql://test-addr.turso.io";
@@ -212,7 +264,7 @@ mod test {
             output,
             TursoOutput {
                 conn_url: Url::parse(local_addr).unwrap(),
-                token: None
+                token: Some("token".to_string())
             }
         )
     }
@@ -231,6 +283,7 @@ mod test {
     async fn remote_database() {
         let mut factory = MockFactory::new();
         factory.environment = Environment::Production;
+        factory.token_value = Some("token".to_string());
 
         let mut turso = Turso::new();
         let addr = "my-turso-addr.turso.io".to_string();
@@ -241,7 +294,7 @@ mod test {
             output,
             TursoOutput {
                 conn_url: Url::parse(&format!("libsql://{}", addr)).unwrap(),
-                token: Some("".to_string())
+                token: Some("token".to_string())
             }
         )
     }

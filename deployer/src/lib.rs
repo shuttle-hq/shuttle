@@ -30,6 +30,7 @@ use shuttle_proto::deployer::{
     deployer_server::{Deployer, DeployerServer},
     DeployRequest, DeployResponse,
 };
+use shuttle_proto::deployer::{RestartDeploymentRequest, RestartDeploymentResponse};
 use tonic::{transport::Server, Response, Result as TonicResult};
 use tracing::{error, info, instrument};
 use ulid::Ulid;
@@ -141,6 +142,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 existing_deployment.id,
                 // We don't need a claim to start again an existing running deployment.
                 None,
+                existing_deployment.is_next,
             )
             .await;
         }
@@ -162,7 +164,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         Ok(())
     }
 
-    pub async fn push_deployment(
+    pub async fn create_deployment(
         &self,
         req: DeployRequest,
         state: ServiceState,
@@ -233,8 +235,9 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         service_id: Ulid,
         deployment_id: Ulid,
         claim: Option<Claim>,
+        is_next: bool,
     ) {
-        // Start the sandbox and run the shuttle-runtime in a separate task.
+        // Start the deplyoment sandbox and run the shuttle-runtime in a separate task.
         let provisioner_uri = self.config.provisioner_uri.to_string();
         let auth_uri = self.config.auth_uri.to_string();
         let network_name = self.config.network_name.clone();
@@ -270,7 +273,13 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 .expect("to get a handle of the created task")
                 .await;
             deployment_manager
-                .run_deployment(service_id, deployment_id, network_name.as_str(), claim)
+                .run_deployment(
+                    service_id,
+                    deployment_id,
+                    network_name.as_str(),
+                    claim,
+                    is_next,
+                )
                 .await
         });
     }
@@ -284,9 +293,9 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         request: tonic::Request<DeployRequest>,
     ) -> TonicResult<tonic::Response<DeployResponse>, tonic::Status> {
         // Authorize the request.
-        request.verify(Scope::DeploymentPush)?;
+        // request.verify(Scope::DeploymentPush)?;
 
-        let claim = request.extensions().get::<Claim>().cloned();
+        // let claim = request.extensions().get::<Claim>().cloned();
         let request = request.into_inner();
         let service_id: Ulid = Ulid::from_string(request.service_id.as_str())
             .map_err(|_| tonic::Status::invalid_argument("invalid service id"))?;
@@ -310,11 +319,70 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
             u64::from(request.idle_minutes),
         ));
         let deployment = self
-            .push_deployment(request.clone(), state.clone())
+            .create_deployment(request.clone(), state.clone())
             .await
             .map_err(|err| tonic::Status::new(tonic::Code::Internal, err.to_string()))?;
-        self.instate_deployment(request.image_name, service_id, deployment.id, claim)
-            .await;
+        // self.instate_deployment(request.image_name, service_id, deployment.id, claim)
+        // .await;
+        self.instate_deployment(
+            request.image_name,
+            service_id,
+            deployment.id,
+            None,
+            request.is_next,
+        )
+        .await;
+
+        Ok(Response::new(DeployResponse {
+            deployment_id: deployment.id.to_string(),
+        }))
+    }
+
+    #[instrument(skip(self, request), fields(service_name = request.get_ref().service_name, service_id = request.get_ref().service_id))]
+    async fn stop_service(
+        &self,
+        request: tonic::Request<RestartDeploymentRequest>,
+    ) -> TonicResult<tonic::Response<RestartDeploymentResponse>, tonic::Status> {
+        // Authorize the request.
+        request.verify(Scope::DeploymentDestroy)?;
+
+        // let claim = request.extensions().get::<Claim>().cloned();
+        let request = request.into_inner();
+        let service_id: Ulid = Ulid::from_string(request.service_id.as_str())
+            .map_err(|_| tonic::Status::invalid_argument("invalid service id"))?;
+
+        // Check if there are running deployments for the service.
+        let service_running_deployments = self
+            .persistence
+            .dal()
+            .service_running_deployments(&service_id)
+            .await
+            .map_err(|_| tonic::Status::new(tonic::Code::Internal, "error triggered while checking the existing running deployments for the service"))?;
+        if !service_running_deployments.is_empty() {
+            return Err(tonic::Status::internal(
+                "can not deploy due to existing running deployments",
+            ));
+        }
+
+        // Create a new deployment for the service and update the service state.
+        let state = ServiceState::Creating(ServiceCreating::new(
+            request.service_id.clone(),
+            u64::from(request.idle_minutes),
+        ));
+        let deployment = self
+            .create_deployment(request.clone(), state.clone())
+            .await
+            .map_err(|err| tonic::Status::new(tonic::Code::Internal, err.to_string()))?;
+        // self.instate_deployment(request.image_name, service_id, deployment.id, claim)
+        // .await;
+        self.instate_deployment(
+            request.image_name,
+            service_id,
+            deployment.id,
+            None,
+            request.is_next,
+        )
+        .await;
 
         Ok(Response::new(DeployResponse {
             deployment_id: deployment.id.to_string(),

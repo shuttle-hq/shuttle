@@ -2,7 +2,7 @@ pub mod deploy_layer;
 pub mod error;
 pub mod persistence;
 
-use std::{net::SocketAddr, path::PathBuf};
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -133,25 +133,26 @@ impl<D: Dal + Sync + 'static> DeploymentManager<D> {
         deployment_id: Ulid,
         network_name: &str,
         claim: Option<Claim>,
+        is_next: bool,
     ) -> Result<(), error::Error> {
         // Refreshing the container should restart it and persist a new associated address to it.
         let service = self
             .dal
             .service(&service_id)
             .await
-            .map_err(|err| error::Error::Dal(err))?;
+            .map_err(error::Error::Dal)?;
 
         let run = DeploymentRun {
             deployment_id,
             service_name: service.name,
             service_id: service.id,
             tracing_context: Default::default(),
-            // We don't need a claim to be set to start existing running deployments.
             claim,
             target_ip: service
                 .state
                 .target_ip(network_name)
                 .map_err(|_| error::Error::MissingIpv4Address)?,
+            is_next,
         };
 
         self.run_push(run).await
@@ -197,18 +198,6 @@ impl FromRow<'_, SqliteRow> for Deployment {
             git_dirty: row.try_get("git_dirty")?,
         })
     }
-}
-
-/// Update the details of a deployment
-#[async_trait]
-pub trait DeploymentUpdater: Clone + Send + Sync + 'static {
-    type Err: std::error::Error + Send;
-
-    /// Set the address for a deployment
-    async fn set_address(&self, id: &Ulid, address: &SocketAddr) -> Result<(), Self::Err>;
-
-    /// Set if a deployment is build on shuttle-next
-    async fn set_is_next(&self, id: &Ulid, is_next: bool) -> Result<(), Self::Err>;
 }
 
 #[derive(Debug, PartialEq, Eq)]

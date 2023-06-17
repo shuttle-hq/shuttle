@@ -3,12 +3,6 @@ use strum::{Display, EnumString};
 /// States a deployment can be in
 #[derive(sqlx::Type, Debug, Display, Clone, Copy, EnumString, PartialEq, Eq)]
 pub enum State {
-    /// Deployment is queued to be build
-    Queued,
-
-    /// Deployment is building, but is not done yet
-    Building,
-
     /// Deployment is built, but has not been started yet
     Built,
 

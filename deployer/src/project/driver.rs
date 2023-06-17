@@ -4,11 +4,11 @@ use std::{
     path::PathBuf,
 };
 
+use chrono::Utc;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
-    deployment::State,
     storage_manager::ArtifactsStorageManager,
 };
 
@@ -22,7 +22,13 @@ use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrumen
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 
-use crate::{deployment::persistence::dal::Dal, runtime_manager::RuntimeManager};
+use crate::{
+    deployment::{
+        persistence::{dal::Dal, State},
+        DeploymentState,
+    },
+    runtime_manager::RuntimeManager,
+};
 
 use super::error::{Error, Result};
 
@@ -40,16 +46,15 @@ pub async fn task<D: Dal + Sync + 'static>(
     info!("Run task started");
 
     while let Some(run) = recv.recv().await {
-        let dal_cloned = dal.clone();
-        info!(
-            "Built deployment at the front of run queue: {}",
-            run.deployment_id
-        );
+        info!("Deployment to be run: {}", run.deployment_id);
 
-        let storage_manager = storage_manager.clone();
-        let rt_clone = runtime_manager.clone();
-        let old_deployments_killer =
-            kill_old_deployments(run.service_id, run.deployment_id, dal_cloned, rt_clone);
+        let dal_clone = dal.clone();
+        let old_deployments_killer = kill_old_deployments(
+            run.service_id,
+            run.deployment_id,
+            dal_clone,
+            runtime_manager.clone(),
+        );
         let cleanup = move |response: Option<SubscribeStopResponse>| {
             debug!(response = ?response,  "stop client response: ");
 
@@ -76,7 +81,8 @@ pub async fn task<D: Dal + Sync + 'static>(
             .runtime_client(run.service_id, run.target_ip)
             .await
             .expect("to set up a runtime client against a ready deployment");
-        let claim_cloned = claim.clone();
+        let claim = claim.clone();
+        let storage_manager = storage_manager.clone();
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
                 propagator.extract(&run.tracing_context)
@@ -84,7 +90,6 @@ pub async fn task<D: Dal + Sync + 'static>(
             let span = debug_span!("runner");
             span.set_parent(parent_cx);
             let deployment_id = run.deployment_id;
-            let claim_cloned = claim_cloned;
             async move {
                 if let Err(err) = run
                     .handle(
@@ -92,7 +97,7 @@ pub async fn task<D: Dal + Sync + 'static>(
                         runtime_client,
                         old_deployments_killer,
                         cleanup,
-                        claim_cloned,
+                        claim,
                     )
                     .await
                 {
@@ -165,6 +170,7 @@ pub struct DeploymentRun {
     pub tracing_context: HashMap<String, String>,
     pub claim: Option<Claim>,
     pub target_ip: Ipv4Addr,
+    pub is_next: bool,
 }
 
 impl DeploymentRun {
@@ -207,13 +213,7 @@ impl DeploymentRun {
         )
         .await?;
 
-        tokio::spawn(run(
-            self.deployment_id,
-            self.service_name,
-            runtime_client,
-            address,
-            cleanup,
-        ));
+        tokio::spawn(run(self.deployment_id, runtime_client, address, cleanup));
 
         Ok(())
     }
@@ -239,11 +239,7 @@ async fn load(
             .into_os_string()
             .into_string()
             .unwrap_or_default(),
-        service_name: service_name.clone(),
-        // TODO: must remove the secrets for the load request
-        resources: Default::default(),
-        // TODO: must remove the secrets for the load request
-        secrets: HashMap::new(),
+        service_name,
     });
 
     if let Some(claim) = claim {
@@ -273,10 +269,9 @@ async fn load(
     }
 }
 
-#[instrument(skip(runtime_client, cleanup), fields(state = %State::Running))]
+#[instrument(skip(runtime_client, cleanup), fields(id=%id, state = %State::Running))]
 async fn run(
     id: Ulid,
-    service_name: String,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     address: SocketAddr,
     cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,

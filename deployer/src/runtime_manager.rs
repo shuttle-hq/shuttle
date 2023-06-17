@@ -44,7 +44,6 @@ impl RuntimeManager {
             return Ok(runtime_client.clone());
         }
 
-        debug!("target ip {}", target_ip);
         // Connection to the docker container where the shuttle-runtime lives.
         let conn = Endpoint::new(format!("http://{target_ip}:{RUNTIME_API_PORT}"))
             .context("creating runtime client endpoint")?

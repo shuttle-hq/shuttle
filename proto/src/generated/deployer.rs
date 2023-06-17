@@ -26,6 +26,30 @@ pub struct DeployResponse {
     #[prost(string, tag = "1")]
     pub deployment_id: ::prost::alloc::string::String,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StopDeploymentRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StopDeploymentResponse {
+    #[prost(bool, tag = "1")]
+    pub success: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RestartDeploymentRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RestartDeploymentResponse {
+    #[prost(bool, tag = "1")]
+    pub success: bool,
+}
 /// Generated client implementations.
 pub mod deployer_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]

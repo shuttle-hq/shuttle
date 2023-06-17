@@ -5,7 +5,7 @@ service Deployer {
   rpc Deploy(DeployRequest) returns (DeployResponse);
 }
 
-message DeployRequest {
+message Deployment {
   string service_id = 1;
   string service_name = 2;
   string git_commit_message = 3;
@@ -17,6 +17,42 @@ message DeployRequest {
   string image_name = 9;
 }
 
+message DeployRequest {
+  Deployment deployment = 1;
+}
+
 message DeployResponse {
   string deployment_id = 1;
+}
+
+message StopDeploymentRequest {
+  string deployment_id = 1;
+}
+
+message StopDeploymentResponse {
+  bool success = 1;
+}
+
+message RestartDeploymentRequest {
+  string deployment_id = 1;
+}
+
+message RestartDeploymentResponse {
+  bool success = 1;
+}
+
+message GetDeploymentRequest {
+  string deployment_id = 1;
+}
+
+message GetDeploymentResponse {
+  Deployment deployment = 1;
+}
+
+message GetDeploymentsRequest {
+  string deployment_id = 1;
+}
+
+message GetDeploymentsResponse {
+  Deployment deployment = 1;
 }

@@ -219,7 +219,6 @@ impl Dal for Sqlite {
         sqlx::query("UPDATE deployments SET state = ? WHERE state IN(?, ?, ?, ?)")
             .bind(State::Stopped)
             .bind(State::Built)
-            .bind(State::Building)
             .bind(State::Loading)
             .execute(&self.pool)
             .await

@@ -37,16 +37,6 @@ fi
 # Add the wasm32-wasi target
 rustup target add wasm32-wasi
 
-# Set up sccache for build caching
-export SCCACHE_VERSION='v0.5.3'
-curl -L https://github.com/mozilla/sccache/releases/download/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz \
-  | tar -xOz sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache \
-  > /usr/local/cargo/bin/sccache \
-  && chmod +x /usr/local/cargo/bin/sccache
-echo '
-[build]
-rustc-wrapper = "/usr/local/cargo/bin/sccache"' >> $CARGO_HOME/config.toml
-
 while getopts "p," o; do
     case $o in
         "p") # if panamax is used, the '-p' parameter is passed
@@ -63,7 +53,6 @@ replace-with = "shuttle-crates-io-mirror"' >> $CARGO_HOME/config.toml
 done
 
 # Install the shuttle runtime
-# This also warms the sccache with shuttle crates and deps
 cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" --bin shuttle-next --features next
 
 # Install common build tools for external crates

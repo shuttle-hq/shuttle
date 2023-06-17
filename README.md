@@ -76,7 +76,7 @@ Although a bit slower, you can also install directly with cargo:
 cargo install cargo-shuttle
 ```
 
-*If installing binstall or cargo-shuttle fails, try adding `--locked`.*
+*If installing binstall or cargo-shuttle fails, try adding `--locked` to the install command.*
 
 After installing, log in with:
 

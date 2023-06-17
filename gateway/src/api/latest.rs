@@ -647,7 +647,7 @@ async fn get_projects(
         (status = 503, description = "Server not reachable.")
     ),
     params(
-        ("account_name" = AccountName, Path, description = "The account name of the user to log in."),
+        ("account_name" = String, Path, description = "The account name of the user to log in."),
     ),
     security(
         ("api_key" = [])

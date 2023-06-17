@@ -52,7 +52,7 @@ use x509_parser::pem::parse_x509_pem;
 use x509_parser::time::ASN1Time;
 
 use crate::acme::{AcmeClient, CustomDomain};
-use crate::auth::{Key, ScopedUser, User};
+use crate::auth::{extract_metadata_cookie, insert_metadata_bearer_token, Key, ScopedUser, User};
 use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
 use crate::service::GatewayService;
 use crate::task::{self, BoxedTask, TaskResult};
@@ -660,32 +660,20 @@ async fn login(
         account_name: request.account_name.to_string(),
     });
 
-    // Insert bearer token in request metadata, this endpoint expects an admin token.
-    let bearer: MetadataValue<_> = format!("Bearer {}", shuttle_common::ApiKey::from(key).as_ref())
-        .parse()
-        .map_err(|error| {
-            // This should be impossible since an ApiKey can only contain valid valid characters.
-            error!(error = ?error, "api-key contains invalid metadata characters");
+    // This endpoint expects the api-key of an admin user in it's bearer token.
+    insert_metadata_bearer_token(request.metadata_mut(), key)?;
 
-            Error::from_kind(ErrorKind::Internal)
-        })?;
+    let response = auth_client.login(request).await.map_err(|error| {
+        debug!(error = ?error, "failed to login user");
+        Error::from_kind(ErrorKind::Unauthorized)
+    })?;
 
-    request.metadata_mut().insert("authorization", bearer);
+    let cookie = extract_metadata_cookie(response.metadata(), "login")?;
 
-    // TODO: error handling
-    let response = auth_client.login(request).await.unwrap();
-
-    // TODO: error handling
-    let cookie = response
-        .metadata()
-        .get("set-cookie")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-
-    // TODO: error handling
-    let cookie = Cookie::parse(cookie).unwrap();
+    let cookie = Cookie::parse(cookie.to_string()).map_err(|error| {
+        debug!(error = ?error, "failed to parse set-cookie cookie from login request");
+        Error::from_kind(ErrorKind::Internal)
+    })?;
 
     let jar = jar.add(cookie);
 
@@ -723,7 +711,7 @@ async fn logout(
         mut auth_client,
         ..
     }): State<RouterState>,
-) -> Result<(), Error> {
+) -> Result<CookieJar, Error> {
     let mut request = TonicRequest::new(LogoutRequest::default());
 
     let cookie = jar
@@ -742,16 +730,24 @@ async fn logout(
         })?,
     );
 
-    // TODO: error handling
-    // TODO: extract and add logout cookie to jar, return the jar
-    auth_client.logout(request).await.unwrap();
+    let response = auth_client
+        .logout(request)
+        .await
+        .map_err(|_| Error::from_kind(ErrorKind::Internal))?;
+
+    let logout_cookie = extract_metadata_cookie(response.metadata(), "logout")?;
+
+    let logout_cookie = Cookie::parse(logout_cookie.to_string()).map_err(|error| {
+        debug!(error = ?error, "failed to parse set-cookie cookie from logout request");
+        Error::from_kind(ErrorKind::Internal)
+    })?;
 
     // TODO: verify this is the correct key
     if auth_cache.invalidate(cache_key).is_none() {
         debug!("did not find cookie key to invalidate in auth cache for logout request");
     }
 
-    Ok(())
+    Ok(jar.add(logout_cookie))
 }
 
 /// Fetch a user from the auth service state, this requires the api-key of a user with the
@@ -770,19 +766,9 @@ async fn get_user(
         account_name: account_name.to_string(),
     });
 
-    // Insert bearer token in request metadata.
-    let bearer: MetadataValue<_> = format!("Bearer {}", shuttle_common::ApiKey::from(key).as_ref())
-        .parse()
-        .map_err(|error| {
-            // This should be impossible since an ApiKey can only contain valid valid characters.
-            error!(error = ?error, "api-key contains invalid metadata characters");
+    // This endpoint expects the api-key of an admin user in it's bearer token.
+    insert_metadata_bearer_token(request.metadata_mut(), key)?;
 
-            Error::from_kind(ErrorKind::Internal)
-        })?;
-
-    request.metadata_mut().insert("authorization", bearer);
-
-    // TODO: error handling
     let UserResponse {
         account_name,
         account_tier,
@@ -790,7 +776,13 @@ async fn get_user(
     } = auth_client
         .get_user_request(request)
         .await
-        .unwrap()
+        .map_err(|error| match error.code() {
+            // This is an admin guarded route, if it progresses to querying a user even if it doesn't succeed
+            // it is authorized. For any other failure return 401 Unauthorized.
+            // TODO: should we also make the get_user_request able to return a 500 on DB error?
+            tonic::Code::NotFound => Error::from_kind(ErrorKind::UserNotFound),
+            _ => Error::from_kind(ErrorKind::Unauthorized),
+        })?
         .into_inner();
 
     let response = shuttle_common::models::user::Response {
@@ -819,19 +811,9 @@ async fn post_user(
         account_tier: account_tier.to_string(),
     });
 
-    // Insert bearer token in request metadata.
-    let bearer: MetadataValue<_> = format!("Bearer {}", shuttle_common::ApiKey::from(key).as_ref())
-        .parse()
-        .map_err(|error| {
-            // This should be impossible since an ApiKey can only contain valid valid characters.
-            error!(error = ?error, "api-key contains invalid metadata characters");
+    // This endpoint expects the api-key of an admin user in it's bearer token.
+    insert_metadata_bearer_token(request.metadata_mut(), key)?;
 
-            Error::from_kind(ErrorKind::Internal)
-        })?;
-
-    request.metadata_mut().insert("authorization", bearer);
-
-    // TODO: error handling
     let UserResponse {
         account_name,
         account_tier,
@@ -839,7 +821,14 @@ async fn post_user(
     } = auth_client
         .post_user_request(request)
         .await
-        .unwrap()
+        .map_err(|error| match error.code() {
+            tonic::Code::Internal => {
+                debug!(error = ?error, "failed to create new user");
+
+                Error::from_kind(ErrorKind::Internal)
+            }
+            _ => Error::from_kind(ErrorKind::Unauthorized),
+        })?
         .into_inner();
 
     let response = shuttle_common::models::user::Response {
@@ -861,6 +850,8 @@ async fn reset_api_key(
     jar: CookieJar,
 ) -> Result<(), Error> {
     let request_data = if let Some(cookie) = jar.get(COOKIE_NAME) {
+        // Received request with cookie, insert it into our reset-key request and
+        // use it to authorize the call.
         let mut request = TonicRequest::new(ResetKeyRequest::default());
 
         // This is the value in `shuttle.sid=<value>`.
@@ -877,6 +868,8 @@ async fn reset_api_key(
 
         Some((request, cache_key.to_string()))
     } else if let Some(key) = key {
+        // Received request with api-key bearer token, insert it into our reset-key request and
+        // use it to authorize the call.
         let key = shuttle_common::ApiKey::from(key).as_ref().to_string();
         let cache_key = key.clone();
 

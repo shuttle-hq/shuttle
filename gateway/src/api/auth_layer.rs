@@ -6,17 +6,20 @@ use axum::{
     response::Response,
 };
 use axum_extra::extract::CookieJar;
-use futures::future::BoxFuture;
+use futures::{
+    future::{BoxFuture, Either},
+    Future,
+};
 use http::{header::COOKIE, HeaderMap, Request, StatusCode};
 use hyper::Body;
-use opentelemetry::{global, propagation::Injector};
-use shuttle_common::backends::{auth::COOKIE_NAME, cache::CacheManagement};
-use shuttle_proto::auth::{auth_client::AuthClient, ApiKeyRequest, ConvertCookieRequest};
-use tonic::{metadata::MetadataKey, Request as TonicRequest};
+use shuttle_common::{backends::{auth::COOKIE_NAME, cache::CacheManagement}, claims::InjectPropagation};
+use shuttle_proto::auth::{
+    auth_client::AuthClient, ApiKeyRequest, ConvertCookieRequest, TokenResponse,
+};
+use tonic::{Request as TonicRequest, Status};
 use tonic::{metadata::MetadataValue, transport::Channel};
 use tower::{Layer, Service};
-use tracing::{error, trace, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing::{error, trace};
 
 /// Time to cache tokens for. Currently tokens take 15 minutes to expire (see [EXP_MINUTES]) which leaves a 10 minutes
 /// buffer (EXP_MINUTES - CACHE_MINUTES). We want the buffer to be atleast as long as the longest builds which has
@@ -31,13 +34,13 @@ const CACHE_MINUTES: u64 = 5;
 #[derive(Clone)]
 pub struct ShuttleAuthLayer {
     cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
-    auth_client: AuthClient<Channel>,
+    auth_client: AuthClient<InjectPropagation<Channel>>,
 }
 
 impl ShuttleAuthLayer {
     pub fn new(
         cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
-        auth_client: AuthClient<Channel>,
+        auth_client: AuthClient<InjectPropagation<Channel>>,
     ) -> Self {
         Self {
             cache_manager,
@@ -62,7 +65,7 @@ impl<S> Layer<S> for ShuttleAuthLayer {
 pub struct ShuttleAuthService<S> {
     inner: S,
     cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
-    auth_client: AuthClient<Channel>,
+    auth_client: AuthClient<InjectPropagation<Channel>>,
 }
 
 impl<S> Service<Request<Body>> for ShuttleAuthService<S>
@@ -112,7 +115,9 @@ where
         // Enrich the current key | session
         Box::pin(async move {
             // Only if there is something to upgrade
-            if let Some((cache_key, token_request)) = cache_key_and_token_req(req.headers()) {
+            if let Some((cache_key, token_request)) =
+                cache_key_and_token_req(req.headers(), &mut this.auth_client)
+            {
                 // Check if the token is cached.
                 if let Some(token) = this.cache_manager.get(&cache_key) {
                     trace!("JWT cache hit, setting token from cache on request");
@@ -123,17 +128,9 @@ where
                 } else {
                     trace!("JWT cache missed, sending convert token request");
 
-                    // Token is not in the cache, send a convert request.
-                    let result = match token_request {
-                        ConvertRequestType::Cookie(cookie_request) => {
-                            this.auth_client.convert_cookie(cookie_request).await
-                        }
-                        ConvertRequestType::Bearer(bearer_request) => {
-                            this.auth_client.convert_api_key(bearer_request).await
-                        }
-                    };
-
-                    let token_response = match result {
+                    // Token is not in the cache, send a convert request with either a cookie
+                    // or an api-key bearer token from the request headers.
+                    let token_response = match token_request.await {
                         Ok(res) => res,
                         Err(error) => {
                             error!(?error, "failed to call authentication service");
@@ -175,9 +172,37 @@ where
     }
 }
 
-/// Return a [ConvertCookieRequest] or a [ApiKeyRequest] depending on the request headers.
-fn cache_key_and_token_req(headers: &HeaderMap) -> Option<(String, ConvertRequestType)> {
-    convert_cookie_request(headers).or_else(|| convert_api_key_request(headers))
+/// Return a [ConvertCookieRequest] or a [ApiKeyRequest] depending on the request headers,
+/// and return a future that we can .await if the cache is missed.
+fn cache_key_and_token_req<'a>(
+    headers: &HeaderMap,
+    auth_client: &'a mut AuthClient<InjectPropagation<Channel>>,
+) -> Option<(
+    String,
+    Either<
+        impl Future<Output = Result<tonic::Response<TokenResponse>, Status>> + 'a,
+        impl Future<Output = Result<tonic::Response<TokenResponse>, Status>> + 'a,
+    >,
+)> {
+    let Some((cache_key, request)) = 
+        convert_cookie_request(headers).or_else(|| convert_api_key_request(headers)) else {
+        
+        // The headers contain neither a bearer token nor a cookie.
+        return None;
+    };
+
+    // While the futures resolve to the same output, they are anonymous types, so we
+    // use Either to combine them into a single type.
+    let future = match request {
+        ConvertRequestType::Cookie(cookie_request) => {
+            Either::Left(auth_client.convert_cookie(cookie_request))
+        }
+        ConvertRequestType::Bearer(bearer_request) => {
+            Either::Right(auth_client.convert_api_key(bearer_request))
+        }
+    };
+
+    Some((cache_key, future))
 }
 
 enum ConvertRequestType {
@@ -200,16 +225,9 @@ fn convert_cookie_request(headers: &HeaderMap) -> Option<(String, ConvertRequest
 
     let cache_key = cookie.value().to_string();
 
-    // TODO: deduplicate this.
     request
         .metadata_mut()
         .insert(COOKIE.as_str(), metadata_value);
-
-    let cx = Span::current().context();
-
-    global::get_text_map_propagator(|propagator| {
-        propagator.inject_context(&cx, &mut GrpcHeaderInjector(request.metadata_mut()))
-    });
 
     Some((cache_key, ConvertRequestType::Cookie(request)))
 }
@@ -221,30 +239,10 @@ fn convert_api_key_request(headers: &HeaderMap) -> Option<(String, ConvertReques
             return None;
         };
 
-    let mut request = TonicRequest::new(ApiKeyRequest {
+    let request = TonicRequest::new(ApiKeyRequest {
         api_key: bearer.clone(),
-    });
-
-    // TODO: deduplicate this.
-    let cx = Span::current().context();
-
-    global::get_text_map_propagator(|propagator| {
-        propagator.inject_context(&cx, &mut GrpcHeaderInjector(request.metadata_mut()))
     });
 
     Some((bearer, ConvertRequestType::Bearer(request)))
 }
 
-struct GrpcHeaderInjector<'a>(pub &'a mut tonic::metadata::MetadataMap);
-
-// TODO: test this.
-impl<'a> Injector for GrpcHeaderInjector<'a> {
-    /// Set a key and value in the MetadataMap.  Does nothing if the key or value are not valid inputs.
-    fn set(&mut self, key: &str, value: String) {
-        if let Ok(name) = MetadataKey::from_bytes(key.as_bytes()) {
-            if let Ok(val) = MetadataValue::try_from(&value) {
-                self.0.insert(name, val);
-            }
-        }
-    }
-}

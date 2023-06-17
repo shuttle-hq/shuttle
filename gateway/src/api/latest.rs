@@ -25,19 +25,20 @@ use shuttle_common::backends::auth::{
 };
 use shuttle_common::backends::cache::{CacheManagement, CacheManager};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
-use shuttle_common::claims::{AccountTier, Scope, EXP_MINUTES};
+use shuttle_common::claims::{
+    AccountTier, InjectPropagation, InjectPropagationLayer, Scope, EXP_MINUTES,
+};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
 use shuttle_common::request_span;
 use shuttle_proto::auth::auth_client::AuthClient;
-use shuttle_proto::auth::{
-    LogoutRequest, NewUser, ResetKeyRequest, ResultResponse, UserRequest, UserResponse,
-};
+use shuttle_proto::auth::{LogoutRequest, NewUser, ResetKeyRequest, ResultResponse, UserRequest};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tonic::metadata::MetadataValue;
-use tonic::transport::Channel;
+use tonic::transport::{Channel, Endpoint};
 use tonic::Request as TonicRequest;
+use tower::ServiceBuilder;
 use tracing::{debug, error, field, instrument, trace};
 use ttl_cache::TtlCache;
 use utoipa::IntoParams;
@@ -682,19 +683,9 @@ async fn login(
 
     let jar = jar.add(cookie);
 
-    let UserResponse {
-        account_name,
-        account_tier,
-        key,
-    } = response.into_inner();
+    let response = response.into_inner();
 
-    let response = shuttle_common::models::user::Response {
-        account_tier,
-        key,
-        name: account_name,
-    };
-
-    Ok((jar, AxumJson(response)))
+    Ok((jar, AxumJson(response.into())))
 }
 
 // #[instrument(skip(service))]
@@ -774,11 +765,7 @@ async fn get_user(
     // This endpoint expects the api-key of an admin user in it's bearer token.
     insert_metadata_bearer_token(request.metadata_mut(), key)?;
 
-    let UserResponse {
-        account_name,
-        account_tier,
-        key,
-    } = auth_client
+    let response = auth_client
         .get_user_request(request)
         .await
         .map_err(|error| match error.code() {
@@ -790,13 +777,7 @@ async fn get_user(
         })?
         .into_inner();
 
-    let response = shuttle_common::models::user::Response {
-        account_tier,
-        key,
-        name: account_name,
-    };
-
-    Ok(AxumJson(response))
+    Ok(AxumJson(response.into()))
 }
 
 /// Insert a new user in the auth service state, which requires the api-key of a user with the
@@ -819,11 +800,7 @@ async fn post_user(
     // This endpoint expects the api-key of an admin user in it's bearer token.
     insert_metadata_bearer_token(request.metadata_mut(), key)?;
 
-    let UserResponse {
-        account_name,
-        account_tier,
-        key,
-    } = auth_client
+    let response = auth_client
         .post_user_request(request)
         .await
         .map_err(|error| match error.code() {
@@ -836,13 +813,7 @@ async fn post_user(
         })?
         .into_inner();
 
-    let response = shuttle_common::models::user::Response {
-        account_tier,
-        key,
-        name: account_name,
-    };
-
-    Ok(AxumJson(response))
+    Ok(AxumJson(response.into()))
 }
 
 async fn reset_api_key(
@@ -960,7 +931,7 @@ pub struct ApiDoc;
 
 #[derive(Clone)]
 pub(crate) struct RouterState {
-    pub auth_client: AuthClient<Channel>,
+    pub auth_client: AuthClient<InjectPropagation<Channel>>,
     pub auth_cache: Arc<Box<dyn CacheManagement<Value = String>>>,
     pub service: Arc<GatewayService>,
     pub sender: Sender<BoxedTask>,
@@ -968,7 +939,7 @@ pub(crate) struct RouterState {
 }
 
 pub struct ApiBuilder {
-    pub auth_client: Option<AuthClient<Channel>>,
+    pub auth_client: Option<AuthClient<InjectPropagation<Channel>>>,
     auth_cache: Option<Arc<Box<dyn CacheManagement<Value = String>>>>,
     router: Router<RouterState>,
     service: Option<Arc<GatewayService>>,
@@ -1102,7 +1073,20 @@ impl ApiBuilder {
 
         self.auth_cache = Some(jwt_cache_manager.clone());
 
-        let auth_client = AuthClient::connect(auth_uri.clone()).await.unwrap();
+        let conn = Endpoint::new(auth_uri.clone())
+            .expect("auth uri should be valid endpoint")
+            .connect_timeout(Duration::from_secs(5));
+
+        let channel = conn
+            .connect()
+            .await
+            .expect("auth service should be reachable");
+
+        let channel = ServiceBuilder::new()
+            .layer(InjectPropagationLayer)
+            .service(channel);
+
+        let auth_client = AuthClient::new(channel);
 
         self.auth_client = Some(auth_client.clone());
 

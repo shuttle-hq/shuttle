@@ -278,5 +278,17 @@ pub mod resource_recorder {
 }
 
 pub mod auth {
+    use shuttle_common::models::user::Response;
+
     include!("generated/auth.rs");
+
+    impl From<UserResponse> for Response {
+        fn from(value: UserResponse) -> Self {
+            Response {
+                name: value.account_name,
+                key: value.key,
+                account_tier: value.account_tier,
+            }
+        }
+    }
 }

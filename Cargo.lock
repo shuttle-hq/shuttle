@@ -5488,13 +5488,16 @@ name = "shuttle-logger"
 version = "0.18.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "opentelemetry-proto",
  "portpicker",
  "pretty_assertions",
+ "prost-types",
  "serde_json",
  "shuttle-common",
  "shuttle-proto",
  "sqlx",
+ "thiserror",
  "tokio",
  "tokio-stream",
  "tonic",

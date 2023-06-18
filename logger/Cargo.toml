@@ -7,14 +7,18 @@ repository.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
+chrono = { workspace = true }
 opentelemetry-proto = { version = "0.2.0", features = ["gen-tonic", "logs"] }
+prost-types = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = [
     "chrono",
+    "json",
     "migrate",
     "runtime-tokio-rustls",
     "sqlite",
 ] }
+thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }

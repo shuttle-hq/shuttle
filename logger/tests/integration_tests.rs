@@ -1,16 +1,17 @@
 use std::net::{Ipv4Addr, SocketAddr};
 
+use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsServiceServer;
 use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
 use serde_json::{json, Value};
 use shuttle_common::backends::tracing::{DeploymentLayer, OtlpDeploymentLogRecorder};
-use shuttle_logger::{dal::Sqlite, Service};
+use shuttle_logger::{dal::Sqlite, Service, ShuttleLogsOtlp};
 use shuttle_proto::logger::{
     logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogLevel, LogsRequest,
 };
 use tokio::select;
 use tonic::{transport::Server, Request};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 use tracing_subscriber::prelude::*;
 use ulid::Ulid;
 
@@ -20,11 +21,14 @@ async fn logger() {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
     let server_future = async {
+        let sqlite = Sqlite::new_in_memory().await;
+
         Server::builder()
             // .layer(JwtScopesLayer::new(vec![Scope::Resources]))
-            .add_service(LoggerServer::new(Service::new(
-                Sqlite::new_in_memory().await,
+            .add_service(LogsServiceServer::new(ShuttleLogsOtlp::new(
+                sqlite.get_sender(),
             )))
+            .add_service(LoggerServer::new(Service::new(sqlite)))
             .serve(addr)
             .await
             .unwrap()
@@ -47,6 +51,8 @@ async fn logger() {
 
         // Generate some logs
         deploy(deployment_id);
+
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
         // Get the generated logs
         let response = client
@@ -96,6 +102,7 @@ async fn logger() {
     }
 }
 
+#[instrument(fields(%deployment_id))]
 fn deploy(deployment_id: Ulid) {
     error!("error");
     warn!("warn");
@@ -114,9 +121,27 @@ impl From<LogItem> for MinLogItem {
     fn from(log: LogItem) -> Self {
         assert_eq!(log.service_name, "test");
 
+        let fields = if log.fields.is_empty() {
+            Value::Null
+        } else {
+            let mut fields: Value = serde_json::from_slice(&log.fields).unwrap();
+
+            let map = fields.as_object_mut().unwrap();
+            let target = map.remove("target").unwrap();
+            let filepath = map.remove("code.filepath").unwrap();
+
+            assert_eq!(target, "integration_tests");
+            assert_eq!(filepath, "logger/tests/integration_tests.rs");
+
+            map.remove("code.lineno").unwrap();
+            map.remove("code.namespace").unwrap();
+
+            fields
+        };
+
         Self {
             level: log.level(),
-            fields: serde_json::from_slice(&log.fields).unwrap(),
+            fields,
         }
     }
 }

@@ -21,7 +21,8 @@ use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{
-    AuthPublicKey, JwtAuthenticationLayer, ScopedLayer, COOKIE_NAME,
+    JwtAuthenticationLayer, PublicKeyFn, PublicKeyFnError, ScopedLayer, COOKIE_NAME,
+    PUBLIC_KEY_CACHE_KEY,
 };
 use shuttle_common::backends::cache::{CacheManagement, CacheManager};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
@@ -32,7 +33,9 @@ use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
 use shuttle_common::request_span;
 use shuttle_proto::auth::auth_client::AuthClient;
-use shuttle_proto::auth::{LogoutRequest, NewUser, ResetKeyRequest, ResultResponse, UserRequest};
+use shuttle_proto::auth::{
+    LogoutRequest, NewUser, PublicKeyRequest, ResetKeyRequest, ResultResponse, UserRequest,
+};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tonic::metadata::MetadataValue;
@@ -346,6 +349,9 @@ async fn delete_load(
     responses(
         (status = 200, description = "Successfully gets the build queue load as an admin.", body = shuttle_common::models::stats::LoadResponse),
         (status = 500, description = "Server internal error.")
+    ),
+    security(
+        ("api_key" = [])
     )
 )]
 async fn get_load_admin(
@@ -365,6 +371,9 @@ async fn get_load_admin(
     responses(
         (status = 200, description = "Successfully clears the build queue.", body = shuttle_common::models::stats::LoadResponse),
         (status = 500, description = "Server internal error.")
+    ),
+    security(
+        ("api_key" = [])
     )
 )]
 async fn delete_load_admin(
@@ -396,6 +405,9 @@ fn calculate_capacity(running_builds: &mut MutexGuard<TtlCache<Uuid, ()>>) -> st
     responses(
         (status = 200, description = "Successfully revived stopped or errored projects."),
         (status = 500, description = "Server internal error.")
+    ),
+    security(
+        ("api_key" = [])
     )
 )]
 async fn revive_projects(
@@ -415,6 +427,9 @@ async fn revive_projects(
     responses(
         (status = 200, description = "Successfully destroyed the projects."),
         (status = 500, description = "Server internal error.")
+    ),
+    security(
+        ("api_key" = [])
     )
 )]
 async fn destroy_projects(
@@ -618,11 +633,14 @@ async fn renew_gateway_acme_certificate(
 }
 
 #[utoipa::path(
-    post,
+    get,
     path = "/admin/projects",
     responses(
         (status = 200, description = "Successfully fetched the projects list.", body = shuttle_common::models::project::AdminResponse),
         (status = 500, description = "Server internal error.")
+    ),
+    security(
+        ("api_key" = [])
     )
 )]
 async fn get_projects(
@@ -637,10 +655,12 @@ async fn get_projects(
     Ok(AxumJson(projects))
 }
 
+/// Login a user by their account name and return a shuttle.sid cookie, this endpoint expects the
+/// api-key of an admin user as a Bearer token.
 #[instrument(skip_all, fields(%account_name))]
 #[utoipa::path(
     post,
-    path = "/login",
+    path = "/login/{account_name}",
     responses(
         (status = 200, description = "Successfully logged in user and returned cookie."),
         (status = 401, description = "Unauthorized to due to missing or invalid admin api-key."),
@@ -648,7 +668,7 @@ async fn get_projects(
         (status = 503, description = "Server not reachable.")
     ),
     params(
-        ("account_name" = String, Path, description = "The account name of the user to log in."),
+        ("account_name" = AccountName, Path, description = "The account name of the user to log in."),
     ),
     security(
         ("api_key" = [])
@@ -688,18 +708,19 @@ async fn login(
     Ok((jar, AxumJson(response.into())))
 }
 
-// #[instrument(skip(service))]
-// #[utoipa::path(
-//     get,
-//     path = "/logout",
-//     responses(
-//         (status = 200, description = "Successfully got a specific project information.", body = shuttle_common::models::project::Response),
-//         (status = 500, description = "Server internal error.")
-//     ),
-//     params(
-//         ("project_name" = String, Path, description = "The name of the project."),
-//     )
-// )]
+/// Logout a user and return a shuttle.sid removal cookie. This endpoint expects a shuttle.sid
+/// cookie.
+#[instrument(skip_all)]
+#[utoipa::path(
+    post,
+    path = "/logout",
+    responses(
+        (status = 200, description = "Successfully logged out user and returned logout cookie."),
+        (status = 401, description = "Unauthorized to due to missing or invalid shuttle.sid cookie."),
+        (status = 500, description = "Server internal error."),
+        (status = 503, description = "Server not reachable.")
+    )
+)]
 async fn logout(
     jar: CookieJar,
     State(RouterState {
@@ -708,14 +729,14 @@ async fn logout(
         ..
     }): State<RouterState>,
 ) -> Result<CookieJar, Error> {
-    let mut request = TonicRequest::new(LogoutRequest::default());
-
     let cookie = jar
         .get(COOKIE_NAME)
         .ok_or(Error::from_kind(ErrorKind::CookieMissing))?;
 
     // This is the value in `shuttle.sid=<value>`.
     let cache_key = cookie.value();
+
+    let mut request = TonicRequest::new(LogoutRequest::default());
 
     request.metadata_mut().insert(
         COOKIE.as_str(),
@@ -746,11 +767,26 @@ async fn logout(
     Ok(jar.add(logout_cookie))
 }
 
-/// Fetch a user from the auth service state, this requires the api-key of a user with the
-/// admin account tier. The api-key should be set as a bearer token in the [TonicRequest]
-/// metadata with the following format:
-///
-/// `authorization Bearer <api-key>`
+/// Fetch a user from the auth service state, this endpoint expects the api-key of an admin user as
+/// a Bearer token.
+#[instrument(skip_all, fields(%account_name))]
+#[utoipa::path(
+    get,
+    path = "/users/{account_name}",
+    responses(
+        (status = 200, description = "Successfully retrieved user."),
+        (status = 401, description = "Unauthorized to due to missing or invalid admin api-key."),
+        (status = 404, description = "User not found."),
+        (status = 500, description = "Server internal error."),
+        (status = 503, description = "Server not reachable.")
+    ),
+    params(
+        ("account_name" = AccountName, Path, description = "The account name of the user to get."),
+    ),
+    security(
+        ("api_key" = [])
+    )
+)]
 async fn get_user(
     State(RouterState {
         mut auth_client, ..
@@ -780,11 +816,27 @@ async fn get_user(
     Ok(AxumJson(response.into()))
 }
 
-/// Insert a new user in the auth service state, which requires the api-key of a user with the
-/// admin account tier. The api-key should be set as a bearer token in the [TonicRequest]
-/// metadata with the following format:
-///
-/// `authorization Bearer <api-key>`
+/// Insert a new user in the auth service state, this endpoint expects the api-key of an admin user as
+/// a Bearer token.
+#[instrument(skip_all, fields(%account_name, %account_tier))]
+#[utoipa::path(
+    post,
+    path = "/users/{account_name}/{account_tier}",
+    responses(
+        (status = 200, description = "Successfully logged in user and returned cookie."),
+        (status = 401, description = "Unauthorized to due to missing or invalid admin api-key."),
+        (status = 404, description = "User not found."),
+        (status = 500, description = "Server internal error."),
+        (status = 503, description = "Server not reachable.")
+    ),
+    params(
+        ("account_name" = AccountName, Path, description = "The account name of the new user."),
+        ("account_tier" = AccountTier, Path, description = "The account tier of the new user."),
+    ),
+    security(
+        ("api_key" = [])
+    )
+)]
 async fn post_user(
     State(RouterState {
         mut auth_client, ..
@@ -816,6 +868,22 @@ async fn post_user(
     Ok(AxumJson(response.into()))
 }
 
+/// Reset the api-key of a user, this endpoint expects a shuttle.sid cookie or the api-key of the
+/// user as a Bearer token.
+#[instrument(skip_all)]
+#[utoipa::path(
+    put,
+    path = "/users/reset-api-key",
+    responses(
+        (status = 200, description = "Successfully reset the users api-key."),
+        (status = 401, description = "Unauthorized to due to missing or invalid api-key or shuttle.sid cookie."),
+        (status = 500, description = "Server internal error."),
+        (status = 503, description = "Server not reachable.")
+    ),
+    security(
+        ("api_key" = [])
+    )
+)]
 async fn reset_api_key(
     State(RouterState {
         mut auth_client,
@@ -1055,19 +1123,13 @@ impl ApiBuilder {
             )
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
-            .route("/login", post(login))
             .route("/logout", post(logout))
-            .route("/users/reset-api-key", put(reset_api_key))
-            .route("/users/:account_name", get(get_user))
-            .route("/users/:account_name/:account_tier", post(post_user))
             .nest("/admin", admin_routes);
 
         self
     }
 
     pub async fn with_auth_service(mut self, auth_uri: Uri) -> Self {
-        let auth_public_key = AuthPublicKey::new(auth_uri.clone());
-
         let jwt_cache_manager: Arc<Box<dyn CacheManagement<Value = String>>> =
             Arc::new(Box::new(CacheManager::new(1000)));
 
@@ -1088,12 +1150,20 @@ impl ApiBuilder {
 
         let auth_client = AuthClient::new(channel);
 
+        let auth_public_key = AuthPublicKey::new(auth_client.clone());
+
         self.auth_client = Some(auth_client.clone());
 
         self.router = self
             .router
             .layer(JwtAuthenticationLayer::new(auth_public_key))
-            .layer(ShuttleAuthLayer::new(jwt_cache_manager, auth_client));
+            .layer(ShuttleAuthLayer::new(jwt_cache_manager, auth_client))
+            // These routes expect an api-key bearer token, which would be converted to a JWT if
+            // it was passed through the auth layer.
+            .route("/login/:account_name", post(login))
+            .route("/users/:account_name", get(get_user))
+            .route("/users/:account_name/:account_tier", post(post_user))
+            .route("/users/reset-api-key", put(reset_api_key));
 
         self
     }
@@ -1125,6 +1195,51 @@ impl ApiBuilder {
         let bind = self.bind.expect("a socket address to bind to is required");
         let router = self.into_router();
         axum::Server::bind(&bind).serve(router.into_make_service())
+    }
+}
+
+// TODO: try to handle this in a generic way where we can keep this in shuttle-common.
+#[derive(Clone)]
+pub struct AuthPublicKey {
+    auth_client: AuthClient<InjectPropagation<Channel>>,
+    cache_manager: Arc<Box<dyn CacheManagement<Value = Vec<u8>>>>,
+}
+
+impl AuthPublicKey {
+    pub fn new(auth_client: AuthClient<InjectPropagation<Channel>>) -> Self {
+        let public_key_cache_manager = CacheManager::new(1);
+        Self {
+            auth_client,
+            cache_manager: Arc::new(Box::new(public_key_cache_manager)),
+        }
+    }
+}
+
+#[async_trait]
+impl PublicKeyFn for AuthPublicKey {
+    type Error = PublicKeyFnError;
+
+    async fn public_key(&self) -> Result<Vec<u8>, Self::Error> {
+        if let Some(public_key) = self.cache_manager.get(PUBLIC_KEY_CACHE_KEY) {
+            trace!("found public key in the cache, returning it");
+
+            Ok(public_key)
+        } else {
+            let request = TonicRequest::new(PublicKeyRequest::default());
+
+            let mut client = self.auth_client.clone();
+
+            let response = client.public_key(request).await.unwrap().into_inner();
+
+            trace!("inserting public key from auth service into cache");
+            self.cache_manager.insert(
+                PUBLIC_KEY_CACHE_KEY,
+                response.public_key.clone(),
+                std::time::Duration::from_secs(60),
+            );
+
+            Ok(response.public_key)
+        }
     }
 }
 

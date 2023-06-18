@@ -95,6 +95,8 @@ where
 }
 
 /// A wrapper around [ApiKey] so we can implement [FromRequestParts] for it.
+/// This extractor expects an [ApiKey], so if used after the ShuttleAuthLayer
+/// is applied it will fail, since the bearer token will become a JWT.
 pub struct Key(ApiKey);
 
 impl From<Key> for ApiKey {

@@ -299,7 +299,8 @@ where
 
         let mut response = Response::new(UserResponse {
             account_name: name.to_string(),
-            key: key.to_string(),
+            // TODO: change this to .expose() when #925 is merged.
+            key: key.as_ref().to_string(),
             account_tier: account_tier.to_string(),
         });
 

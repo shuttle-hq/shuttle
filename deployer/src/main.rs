@@ -14,7 +14,7 @@ async fn main() {
     setup_tracing(tracing_subscriber::registry(), "deployer");
 
     // Configure the deployer router.
-    let mut router_builder = RouterBuilder::new(&args.auth_uri);
+    let mut router_builder = RouterBuilder::new(&args.auth_uri).await;
     if args.local {
         router_builder = router_builder.with_local_admin_layer();
     }

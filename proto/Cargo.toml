@@ -7,6 +7,7 @@ description = "Library for all the gRPC definitions used by shuttle"
 
 [dependencies]
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 chrono = { workspace = true }
 home = { workspace = true }
 prost = { workspace = true }
@@ -18,7 +19,7 @@ tracing = { workspace = true }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["claims", "error", "service", "wasm", "models"]
+features = ["claims", "error", "service", "wasm", "models", "backend"]
 
 [dev-dependencies]
 tonic-build = { workspace = true }

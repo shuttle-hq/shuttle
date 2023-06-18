@@ -1,27 +1,20 @@
-use std::{convert::Infallible, future::Future, pin::Pin, sync::Arc, task::Poll};
+use std::{convert::Infallible, future::Future, pin::Pin, task::Poll};
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use headers::{authorization::Bearer, Authorization, HeaderMapExt};
-use http::{Request, Response, StatusCode, Uri};
+use http::{Request, Response, StatusCode};
 use http_body::combinators::UnsyncBoxBody;
-use hyper::{body, Body, Client};
-use opentelemetry::global;
-use opentelemetry_http::HeaderInjector;
+use hyper::Body;
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tower::{Layer, Service};
-use tracing::{error, trace, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing::error;
 
 use crate::claims::{Claim, Scope};
 
-use super::{
-    cache::{CacheManagement, CacheManager},
-    future::StatusCodeFuture,
-    headers::XShuttleAdminSecret,
-};
+use super::{future::StatusCodeFuture, headers::XShuttleAdminSecret};
 
 pub const PUBLIC_KEY_CACHE_KEY: &str = "shuttle.public-key";
 pub const COOKIE_NAME: &str = "shuttle.sid";
@@ -113,69 +106,10 @@ where
     }
 }
 
-#[derive(Clone)]
-pub struct AuthPublicKey {
-    auth_uri: Uri,
-    cache_manager: Arc<Box<dyn CacheManagement<Value = Vec<u8>>>>,
-}
-
-impl AuthPublicKey {
-    pub fn new(auth_uri: Uri) -> Self {
-        let public_key_cache_manager = CacheManager::new(1);
-        Self {
-            auth_uri,
-            cache_manager: Arc::new(Box::new(public_key_cache_manager)),
-        }
-    }
-}
-
-#[async_trait]
-impl PublicKeyFn for AuthPublicKey {
-    type Error = PublicKeyFnError;
-
-    async fn public_key(&self) -> Result<Vec<u8>, Self::Error> {
-        if let Some(public_key) = self.cache_manager.get(PUBLIC_KEY_CACHE_KEY) {
-            trace!("found public key in the cache, returning it");
-
-            Ok(public_key)
-        } else {
-            let client = Client::new();
-            let uri: Uri = format!("{}public-key", self.auth_uri).parse()?;
-            let mut request = Request::builder().uri(uri);
-
-            // Safe to unwrap since we just build it
-            let headers = request.headers_mut().unwrap();
-
-            let cx = Span::current().context();
-            global::get_text_map_propagator(|propagator| {
-                propagator.inject_context(&cx, &mut HeaderInjector(headers))
-            });
-
-            let res = client.request(request.body(Body::empty())?).await?;
-            let buf = body::to_bytes(res).await?;
-
-            trace!("inserting public key from auth service into cache");
-            self.cache_manager.insert(
-                PUBLIC_KEY_CACHE_KEY,
-                buf.to_vec(),
-                std::time::Duration::from_secs(60),
-            );
-
-            Ok(buf.to_vec())
-        }
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum PublicKeyFnError {
-    #[error("invalid uri: {0}")]
-    InvalidUri(#[from] http::uri::InvalidUri),
-
-    #[error("hyper error: {0}")]
-    Hyper(#[from] hyper::Error),
-
-    #[error("http error: {0}")]
-    Http(#[from] http::Error),
+    #[error(transparent)]
+    Internal(#[from] anyhow::Error),
 }
 
 /// Layer to validate JWT tokens with a public key. Valid claims are added to the request extension

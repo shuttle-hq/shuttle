@@ -6,9 +6,10 @@ use axum::middleware;
 use axum::routing::{post, Router};
 use http::Uri;
 use shuttle_common::{
-    backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
+    backends::auth::{JwtAuthenticationLayer, ScopedLayer},
     claims::Scope,
 };
+use shuttle_proto::auth::AuthPublicKey;
 use tracing::warn;
 
 use crate::builder::MockedBuilder;
@@ -23,7 +24,11 @@ pub struct RouterBuilder {
 }
 
 impl RouterBuilder {
-    pub fn new(auth_uri: &Uri) -> Self {
+    pub async fn new(auth_uri: &Uri) -> Self {
+        let auth_client = shuttle_proto::auth::client(auth_uri)
+            .await
+            .expect("auth service should be reachable");
+
         let router = Router::new()
             .route(
                 "/project/:project_name",
@@ -31,9 +36,7 @@ impl RouterBuilder {
                     super::api::deploy_project.layer(ScopedLayer::new(vec![Scope::DeploymentPush])),
                 ),
             )
-            .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
-                auth_uri.clone(),
-            )));
+            .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_client)));
 
         Self {
             router,

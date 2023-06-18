@@ -20,10 +20,7 @@ use http::header::COOKIE;
 use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
-use shuttle_common::backends::auth::{
-    JwtAuthenticationLayer, PublicKeyFn, PublicKeyFnError, ScopedLayer, COOKIE_NAME,
-    PUBLIC_KEY_CACHE_KEY,
-};
+use shuttle_common::backends::auth::{JwtAuthenticationLayer, ScopedLayer, COOKIE_NAME};
 use shuttle_common::backends::cache::{CacheManagement, CacheManager};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{AccountTier, InjectPropagation, Scope, EXP_MINUTES};
@@ -32,7 +29,7 @@ use shuttle_common::models::{project, stats};
 use shuttle_common::request_span;
 use shuttle_proto::auth::auth_client::AuthClient;
 use shuttle_proto::auth::{
-    LogoutRequest, NewUser, PublicKeyRequest, ResetKeyRequest, ResultResponse, UserRequest,
+    AuthPublicKey, LogoutRequest, NewUser, ResetKeyRequest, ResultResponse, UserRequest,
 };
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
@@ -1012,7 +1009,7 @@ pub(crate) struct RouterState {
 }
 
 pub struct ApiBuilder {
-    pub auth_client: Option<AuthClient<InjectPropagation<Channel>>>,
+    auth_client: Option<AuthClient<InjectPropagation<Channel>>>,
     auth_cache: Option<Arc<Box<dyn CacheManagement<Value = String>>>>,
     router: Router<RouterState>,
     service: Option<Arc<GatewayService>>,
@@ -1189,51 +1186,6 @@ impl ApiBuilder {
         let bind = self.bind.expect("a socket address to bind to is required");
         let router = self.into_router();
         axum::Server::bind(&bind).serve(router.into_make_service())
-    }
-}
-
-// TODO: try to handle this in a generic way where we can keep this in shuttle-common.
-#[derive(Clone)]
-pub struct AuthPublicKey {
-    auth_client: AuthClient<InjectPropagation<Channel>>,
-    cache_manager: Arc<Box<dyn CacheManagement<Value = Vec<u8>>>>,
-}
-
-impl AuthPublicKey {
-    pub fn new(auth_client: AuthClient<InjectPropagation<Channel>>) -> Self {
-        let public_key_cache_manager = CacheManager::new(1);
-        Self {
-            auth_client,
-            cache_manager: Arc::new(Box::new(public_key_cache_manager)),
-        }
-    }
-}
-
-#[async_trait]
-impl PublicKeyFn for AuthPublicKey {
-    type Error = PublicKeyFnError;
-
-    async fn public_key(&self) -> Result<Vec<u8>, Self::Error> {
-        if let Some(public_key) = self.cache_manager.get(PUBLIC_KEY_CACHE_KEY) {
-            trace!("found public key in the cache, returning it");
-
-            Ok(public_key)
-        } else {
-            let request = TonicRequest::new(PublicKeyRequest::default());
-
-            let mut client = self.auth_client.clone();
-
-            let response = client.public_key(request).await.unwrap().into_inner();
-
-            trace!("inserting public key from auth service into cache");
-            self.cache_manager.insert(
-                PUBLIC_KEY_CACHE_KEY,
-                response.public_key.clone(),
-                std::time::Duration::from_secs(60),
-            );
-
-            Ok(response.public_key)
-        }
     }
 }
 

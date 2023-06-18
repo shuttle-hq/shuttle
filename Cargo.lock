@@ -5365,6 +5365,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "shuttle-common",
+ "shuttle-proto",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -5455,6 +5456,7 @@ name = "shuttle-proto"
 version = "0.18.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "home",
  "prost",

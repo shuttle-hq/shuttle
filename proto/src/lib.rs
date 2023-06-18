@@ -278,15 +278,24 @@ pub mod resource_recorder {
 }
 
 pub mod auth {
-    use anyhow::Context;
-    use shuttle_common::models::user::Response;
+    use std::sync::Arc;
     use std::time::Duration;
+
+    use anyhow::Context;
+    use async_trait::async_trait;
+    use shuttle_common::backends::auth::{PublicKeyFn, PublicKeyFnError, PUBLIC_KEY_CACHE_KEY};
+    use shuttle_common::backends::cache::{CacheManagement, CacheManager};
+    use shuttle_common::claims::InjectPropagation;
+    use shuttle_common::claims::InjectPropagationLayer;
+    use shuttle_common::models::user::Response;
+    use tonic::transport::Channel;
+    use tonic::transport::Endpoint;
     use tonic::transport::Uri;
+    use tonic::Request;
+    use tower::ServiceBuilder;
+    use tracing::trace;
 
     use self::auth_client::AuthClient;
-    use shuttle_common::claims::{InjectPropagation, InjectPropagationLayer};
-    use tonic::transport::{Channel, Endpoint};
-    use tower::ServiceBuilder;
 
     include!("generated/auth.rs");
 
@@ -315,5 +324,53 @@ pub mod auth {
             .service(channel);
 
         Ok(AuthClient::new(channel))
+    }
+
+    #[derive(Clone)]
+    pub struct AuthPublicKey {
+        auth_client: AuthClient<InjectPropagation<Channel>>,
+        cache_manager: Arc<Box<dyn CacheManagement<Value = Vec<u8>>>>,
+    }
+
+    impl AuthPublicKey {
+        pub fn new(auth_client: AuthClient<InjectPropagation<Channel>>) -> Self {
+            let public_key_cache_manager = CacheManager::new(1);
+            Self {
+                auth_client,
+                cache_manager: Arc::new(Box::new(public_key_cache_manager)),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl PublicKeyFn for AuthPublicKey {
+        type Error = PublicKeyFnError;
+
+        async fn public_key(&self) -> Result<Vec<u8>, Self::Error> {
+            if let Some(public_key) = self.cache_manager.get(PUBLIC_KEY_CACHE_KEY) {
+                trace!("found public key in the cache, returning it");
+
+                Ok(public_key)
+            } else {
+                let request = Request::new(PublicKeyRequest::default());
+
+                let mut client = self.auth_client.clone();
+
+                let response = client
+                    .public_key(request)
+                    .await
+                    .context("failed to retrieve public key from auth service")?
+                    .into_inner();
+
+                trace!("inserting public key from auth service into cache");
+                self.cache_manager.insert(
+                    PUBLIC_KEY_CACHE_KEY,
+                    response.public_key.clone(),
+                    std::time::Duration::from_secs(60),
+                );
+
+                Ok(response.public_key)
+            }
+        }
     }
 }

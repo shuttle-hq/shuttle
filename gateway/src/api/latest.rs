@@ -169,6 +169,7 @@ async fn get_projects_list(
 #[utoipa::path(
     post,
     path = "/projects/{project_name}",
+    request_body = shuttle_common::models::project::Config,
     responses(
         (status = 200, description = "Successfully created a specific project.", body = shuttle_common::models::project::Response),
         (status = 500, description = "Server internal error.")
@@ -998,7 +999,8 @@ impl Modify for SecurityAddon {
         shuttle_common::models::stats::LoadResponse,
         shuttle_common::models::project::State,
         crate::AccountName,
-        shuttle_common::claims::AccountTier
+        shuttle_common::claims::AccountTier,
+        shuttle_common::models::project::Config
     ))
 )]
 pub struct ApiDoc;

@@ -119,11 +119,11 @@ impl Dal for Sqlite {
 
 #[derive(Clone, Debug, FromRow)]
 pub struct Log {
-    deployment_id: String,
-    shuttle_service_name: String,
-    timestamp: DateTime<Utc>,
-    level: LogLevel,
-    fields: Value,
+    pub(crate) deployment_id: String,
+    pub(crate) shuttle_service_name: String,
+    pub(crate) timestamp: DateTime<Utc>,
+    pub(crate) level: LogLevel,
+    pub(crate) fields: Value,
 }
 
 #[derive(Clone, Debug, sqlx::Type)]

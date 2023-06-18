@@ -9,7 +9,7 @@ use shuttle_logger::{dal::Sqlite, Service, ShuttleLogsOtlp};
 use shuttle_proto::logger::{
     logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogLevel, LogsRequest,
 };
-use tokio::select;
+use tokio::{select, time::timeout};
 use tonic::{transport::Server, Request};
 use tracing::{debug, error, info, instrument, trace, warn};
 use tracing_subscriber::prelude::*;
@@ -28,7 +28,7 @@ async fn logger() {
             .add_service(LogsServiceServer::new(ShuttleLogsOtlp::new(
                 sqlite.get_sender(),
             )))
-            .add_service(LoggerServer::new(Service::new(sqlite)))
+            .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)))
             .serve(addr)
             .await
             .unwrap()
@@ -36,7 +36,7 @@ async fn logger() {
 
     let test_future = async {
         // Make sure the server starts first
-        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
         let dst = format!("http://localhost:{port}");
 
@@ -102,6 +102,94 @@ async fn logger() {
     }
 }
 
+#[tokio::test]
+async fn logger_stream() {
+    let port = pick_unused_port().unwrap();
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+
+    let server_future = async {
+        let sqlite = Sqlite::new_in_memory().await;
+
+        Server::builder()
+            // .layer(JwtScopesLayer::new(vec![Scope::Resources]))
+            .add_service(LogsServiceServer::new(ShuttleLogsOtlp::new(
+                sqlite.get_sender(),
+            )))
+            .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)))
+            .serve(addr)
+            .await
+            .unwrap()
+    };
+
+    let test_future = async {
+        // Make sure the server starts first
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        let dst = format!("http://localhost:{port}");
+
+        let subscriber = tracing_subscriber::registry().with(DeploymentLayer::new(
+            OtlpDeploymentLogRecorder::new("test", &dst),
+        ));
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let mut client = LoggerClient::connect(dst).await.unwrap();
+
+        let deployment_id = Ulid::new();
+
+        // Generate some logs
+        foo(deployment_id);
+
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+        // Subscribe to stream
+        let mut response = client
+            .get_logs_stream(Request::new(LogsRequest {
+                deployment_id: deployment_id.to_string(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+
+        let log = timeout(std::time::Duration::from_millis(500), response.message())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            MinLogItem::from(log),
+            MinLogItem {
+                level: LogLevel::Trace,
+                fields: json!({"message": "foo"}),
+            },
+        );
+
+        // Generate some more logs
+        bar(deployment_id);
+
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+        let log = timeout(std::time::Duration::from_millis(500), response.message())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            MinLogItem::from(log),
+            MinLogItem {
+                level: LogLevel::Trace,
+                fields: json!({"message": "bar"}),
+            },
+        );
+    };
+
+    select! {
+        _ = server_future => panic!("server finished first"),
+        _ = test_future => {},
+    }
+}
+
 #[instrument(fields(%deployment_id))]
 fn deploy(deployment_id: Ulid) {
     error!("error");
@@ -109,6 +197,16 @@ fn deploy(deployment_id: Ulid) {
     info!(%deployment_id, "info");
     debug!("debug");
     trace!("trace");
+}
+
+#[instrument(fields(%deployment_id))]
+fn foo(deployment_id: Ulid) {
+    trace!("foo");
+}
+
+#[instrument(fields(%deployment_id))]
+fn bar(deployment_id: Ulid) {
+    trace!("bar");
 }
 
 #[derive(Debug, Eq, PartialEq)]

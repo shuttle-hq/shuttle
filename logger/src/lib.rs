@@ -64,14 +64,18 @@ impl LogsService for ShuttleLogsOtlp {
 
 pub struct Service<D> {
     dal: D,
+    logs_tx: broadcast::Sender<Vec<Log>>,
 }
 
 impl<D> Service<D>
 where
     D: Dal + Send + Sync + 'static,
 {
-    pub fn new(dal: D) -> Self {
-        Self { dal }
+    pub fn new(logs_rx: broadcast::Sender<Vec<Log>>, dal: D) -> Self {
+        Self {
+            dal,
+            logs_tx: logs_rx,
+        }
     }
 
     async fn get_logs(&self, deployment_id: String) -> Result<Vec<LogItem>, Error> {
@@ -103,9 +107,35 @@ where
 
     async fn get_logs_stream(
         &self,
-        _request: Request<LogsRequest>,
+        request: Request<LogsRequest>,
     ) -> Result<Response<Self::GetLogsStreamStream>, Status> {
-        let (_tx, rx) = mpsc::channel(1);
+        // request.verify(Scope::Logs)?;
+
+        // Subscribe as soon as possible
+        let mut logs_rx = self.logs_tx.subscribe();
+        let request = request.into_inner();
+        let (tx, rx) = mpsc::channel(1);
+        let logs = self.get_logs(request.deployment_id).await?;
+
+        tokio::spawn(async move {
+            let mut last = Default::default();
+
+            for log in logs {
+                last = log.timestamp.clone().unwrap_or_default();
+                tx.send(Ok(log)).await.unwrap();
+            }
+
+            while let Ok(logs) = logs_rx.recv().await {
+                for log in logs {
+                    let log: LogItem = log.into();
+                    let this_time = log.timestamp.clone().unwrap_or_default();
+
+                    if this_time.seconds >= last.seconds && this_time.nanos > last.nanos {
+                        tx.send(Ok(log)).await.unwrap();
+                    }
+                }
+            }
+        });
 
         Ok(Response::new(ReceiverStream::new(rx)))
     }

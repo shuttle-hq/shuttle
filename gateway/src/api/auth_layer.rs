@@ -12,12 +12,15 @@ use futures::{
 };
 use http::{header::COOKIE, HeaderMap, Request, StatusCode};
 use hyper::Body;
-use shuttle_common::{backends::{auth::COOKIE_NAME, cache::CacheManagement}, claims::InjectPropagation};
+use shuttle_common::{
+    backends::{auth::COOKIE_NAME, cache::CacheManagement},
+    claims::InjectPropagation,
+};
 use shuttle_proto::auth::{
     auth_client::AuthClient, ApiKeyRequest, ConvertCookieRequest, TokenResponse,
 };
-use tonic::{Request as TonicRequest, Status};
 use tonic::{metadata::MetadataValue, transport::Channel};
+use tonic::{Request as TonicRequest, Status};
 use tower::{Layer, Service};
 use tracing::{error, trace};
 
@@ -184,9 +187,7 @@ fn cache_key_and_token_req<'a>(
         impl Future<Output = Result<tonic::Response<TokenResponse>, Status>> + 'a,
     >,
 )> {
-    let Some((cache_key, request)) = 
-        convert_cookie_request(headers).or_else(|| convert_api_key_request(headers)) else {
-        
+    let Some((cache_key, request)) = convert_cookie_request(headers).or_else(|| convert_api_key_request(headers)) else {
         // The headers contain neither a bearer token nor a cookie.
         return None;
     };
@@ -245,4 +246,3 @@ fn convert_api_key_request(headers: &HeaderMap) -> Option<(String, ConvertReques
 
     Some((bearer, ConvertRequestType::Bearer(request)))
 }
-

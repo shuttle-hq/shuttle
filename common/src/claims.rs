@@ -19,6 +19,8 @@ use strum::EnumMessage;
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
 
 /// Minutes before a claim expires
 ///
@@ -135,6 +137,7 @@ impl Default for ScopeBuilder {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, strum::Display, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "persist", derive(sqlx::Type))]
 #[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
 #[strum(serialize_all = "lowercase")]

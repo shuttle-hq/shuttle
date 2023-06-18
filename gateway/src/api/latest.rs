@@ -984,7 +984,11 @@ impl Modify for SecurityAddon {
         destroy_projects,
         get_load_admin,
         delete_load_admin,
-        login
+        login,
+        logout,
+        get_user,
+        post_user,
+        reset_api_key
     ),
     modifiers(&SecurityAddon),
     components(schemas(
@@ -992,7 +996,9 @@ impl Modify for SecurityAddon {
         shuttle_common::models::stats::LoadResponse,
         shuttle_common::models::project::AdminResponse,
         shuttle_common::models::stats::LoadResponse,
-        shuttle_common::models::project::State
+        shuttle_common::models::project::State,
+        crate::AccountName,
+        shuttle_common::claims::AccountTier
     ))
 )]
 pub struct ApiDoc;

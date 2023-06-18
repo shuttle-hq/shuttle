@@ -18,6 +18,7 @@ use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
+use utoipa::ToSchema;
 
 pub mod acme;
 pub mod api;
@@ -172,7 +173,7 @@ impl std::fmt::Display for ProjectName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize, ToSchema)]
 #[sqlx(transparent)]
 pub struct AccountName(String);
 

@@ -11,7 +11,10 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use ulid::DecodeError;
 
-pub mod dal;
+pub mod args;
+mod dal;
+
+pub use dal::Sqlite;
 
 /// A wrapper to capture any error possible with this service
 #[derive(Error, Debug)]
@@ -94,7 +97,7 @@ where
         &self,
         request: Request<LogsRequest>,
     ) -> Result<Response<LogsResponse>, Status> {
-        // request.verify(Scope::Logs)?;
+        request.verify(Scope::Logs)?;
 
         let request = request.into_inner();
         let log_items = self.get_logs(request.deployment_id).await?;
@@ -109,7 +112,7 @@ where
         &self,
         request: Request<LogsRequest>,
     ) -> Result<Response<Self::GetLogsStreamStream>, Status> {
-        // request.verify(Scope::Logs)?;
+        request.verify(Scope::Logs)?;
 
         // Subscribe as soon as possible
         let mut logs_rx = self.logs_tx.subscribe();

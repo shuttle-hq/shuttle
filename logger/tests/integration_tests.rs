@@ -5,7 +5,7 @@ use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
 use serde_json::{json, Value};
 use shuttle_common::backends::tracing::{DeploymentLayer, OtlpDeploymentLogRecorder};
-use shuttle_logger::{dal::Sqlite, Service, ShuttleLogsOtlp};
+use shuttle_logger::{Service, ShuttleLogsOtlp, Sqlite};
 use shuttle_proto::logger::{
     logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogLevel, LogsRequest,
 };

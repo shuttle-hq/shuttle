@@ -5489,6 +5489,7 @@ version = "0.18.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "clap",
  "opentelemetry-proto",
  "portpicker",
  "pretty_assertions",

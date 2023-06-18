@@ -1,39 +1,37 @@
-use std::{
-    net::{Ipv4Addr, SocketAddr},
-    time::Duration,
-};
+use std::time::Duration;
 
-// use clap::Parser;
+use clap::Parser;
 use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsServiceServer;
 use shuttle_common::backends::{
     auth::{AuthPublicKey, JwtAuthenticationLayer},
     tracing::{setup_tracing, ExtractPropagationLayer},
 };
-use shuttle_logger::{dal::Sqlite, ShuttleLogsOtlp};
+use shuttle_logger::{args::Args, Service, ShuttleLogsOtlp, Sqlite};
+use shuttle_proto::logger::logger_server::LoggerServer;
 use tonic::transport::Server;
-// use tracing::trace;
+use tracing::trace;
 
 #[tokio::main]
 async fn main() {
-    // let args = Args::parse();
-    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 4317);
+    let args = Args::parse();
 
     setup_tracing(tracing_subscriber::registry(), "logger");
 
-    // trace!(args = ?args, "parsed args");
+    trace!(args = ?args, "parsed args");
 
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
-        // .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
-        //     args.auth_uri,
-        // )))
+        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
+            args.auth_uri,
+        )))
         .layer(ExtractPropagationLayer);
 
-    let sqlite = Sqlite::new_in_memory().await;
+    let sqlite = Sqlite::new(&args.state.display().to_string()).await;
     let svc = ShuttleLogsOtlp::new(sqlite.get_sender());
     let svc = LogsServiceServer::new(svc);
-    let router = server_builder.add_service(svc);
+    let router = server_builder
+        .add_service(svc)
+        .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)));
 
-    // router.serve(args.address).await.unwrap();
-    router.serve(addr).await.unwrap();
+    router.serve(args.address).await.unwrap();
 }

@@ -278,7 +278,15 @@ pub mod resource_recorder {
 }
 
 pub mod auth {
+    use anyhow::Context;
     use shuttle_common::models::user::Response;
+    use std::time::Duration;
+    use tonic::transport::Uri;
+
+    use self::auth_client::AuthClient;
+    use shuttle_common::claims::{InjectPropagation, InjectPropagationLayer};
+    use tonic::transport::{Channel, Endpoint};
+    use tower::ServiceBuilder;
 
     include!("generated/auth.rs");
 
@@ -290,5 +298,22 @@ pub mod auth {
                 account_tier: value.account_tier,
             }
         }
+    }
+
+    pub async fn client(auth_uri: &Uri) -> anyhow::Result<AuthClient<InjectPropagation<Channel>>> {
+        let conn = Endpoint::new(auth_uri.clone())
+            .context("auth uri should be valid endpoint")?
+            .connect_timeout(Duration::from_secs(5));
+
+        let channel = conn
+            .connect()
+            .await
+            .context("auth service should be reachable")?;
+
+        let channel = ServiceBuilder::new()
+            .layer(InjectPropagationLayer)
+            .service(channel);
+
+        Ok(AuthClient::new(channel))
     }
 }

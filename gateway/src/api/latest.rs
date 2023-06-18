@@ -26,9 +26,7 @@ use shuttle_common::backends::auth::{
 };
 use shuttle_common::backends::cache::{CacheManagement, CacheManager};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
-use shuttle_common::claims::{
-    AccountTier, InjectPropagation, InjectPropagationLayer, Scope, EXP_MINUTES,
-};
+use shuttle_common::claims::{AccountTier, InjectPropagation, Scope, EXP_MINUTES};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
 use shuttle_common::request_span;
@@ -39,9 +37,8 @@ use shuttle_proto::auth::{
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tonic::metadata::MetadataValue;
-use tonic::transport::{Channel, Endpoint};
+use tonic::transport::Channel;
 use tonic::Request as TonicRequest;
-use tower::ServiceBuilder;
 use tracing::{debug, error, field, instrument, trace};
 use ttl_cache::TtlCache;
 use utoipa::IntoParams;
@@ -1137,26 +1134,15 @@ impl ApiBuilder {
         self
     }
 
-    pub async fn with_auth_service(mut self, auth_uri: Uri) -> Self {
+    pub async fn with_auth_service(mut self, auth_uri: &Uri) -> Self {
         let jwt_cache_manager: Arc<Box<dyn CacheManagement<Value = String>>> =
             Arc::new(Box::new(CacheManager::new(1000)));
 
         self.auth_cache = Some(jwt_cache_manager.clone());
 
-        let conn = Endpoint::new(auth_uri.clone())
-            .expect("auth uri should be valid endpoint")
-            .connect_timeout(Duration::from_secs(5));
-
-        let channel = conn
-            .connect()
+        let auth_client = shuttle_proto::auth::client(auth_uri)
             .await
             .expect("auth service should be reachable");
-
-        let channel = ServiceBuilder::new()
-            .layer(InjectPropagationLayer)
-            .service(channel);
-
-        let auth_client = AuthClient::new(channel);
 
         let auth_public_key = AuthPublicKey::new(auth_client.clone());
 
@@ -1284,7 +1270,7 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
-            .with_auth_service(world.context().auth_uri)
+            .with_auth_service(&world.context().auth_uri)
             .await
             .into_router();
 
@@ -1474,7 +1460,7 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
-            .with_auth_service(world.context().auth_uri)
+            .with_auth_service(&world.context().auth_uri)
             .await
             .into_router();
 

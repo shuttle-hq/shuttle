@@ -1,17 +1,19 @@
 pub mod deploy_layer;
+pub mod driver;
 pub mod error;
 pub mod persistence;
 
-use std::path::PathBuf;
-
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
+use sqlx::types::Json as SqlxJson;
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
+use std::path::PathBuf;
 use tracing::instrument;
 use ulid::Ulid;
 
-use crate::{project::driver::DeploymentRun, runtime_manager::RuntimeManager};
+use crate::project::docker::ContainerInspectResponseExt;
+use crate::{project::service::ServiceState, runtime_manager::RuntimeManager};
+use driver::DeploymentRunnable;
 use persistence::State;
 use tokio::sync::mpsc;
 
@@ -71,11 +73,10 @@ where
         let storage_manager = ArtifactsStorageManager::new(artifacts_path);
         let dal = self.dal.expect("a DAL is required");
 
-        tokio::spawn(crate::project::driver::task(
+        tokio::spawn(driver::task(
             run_recv,
             runtime_manager.clone(),
             storage_manager.clone(),
-            dal.clone(),
             self.claim,
         ));
 
@@ -119,7 +120,7 @@ impl<D: Dal + Sync + 'static> DeploymentManager<D> {
         }
     }
 
-    async fn run_push(&self, run: DeploymentRun) -> Result<(), error::Error> {
+    async fn run_push(&self, run: DeploymentRunnable) -> Result<(), error::Error> {
         self.run_send
             .send(run)
             .await
@@ -142,7 +143,7 @@ impl<D: Dal + Sync + 'static> DeploymentManager<D> {
             .await
             .map_err(error::Error::Dal)?;
 
-        let run = DeploymentRun {
+        let run = DeploymentRunnable {
             deployment_id,
             service_name: service.name,
             service_id: service.id,
@@ -167,7 +168,7 @@ impl<D: Dal + Sync + 'static> DeploymentManager<D> {
     }
 }
 
-type RunSender = mpsc::Sender<DeploymentRun>;
+type RunSender = mpsc::Sender<DeploymentRunnable>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Deployment {
@@ -208,14 +209,15 @@ pub struct DeploymentState {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct DeploymentRunnable {
+pub struct RunningDeployment {
     pub id: Ulid,
     pub service_name: String,
     pub service_id: Ulid,
     pub is_next: bool,
+    pub idle_minutes: u64,
 }
 
-impl FromRow<'_, SqliteRow> for DeploymentRunnable {
+impl FromRow<'_, SqliteRow> for RunningDeployment {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
         Ok(Self {
             id: Ulid::from_string(row.try_get("id")?)
@@ -224,6 +226,12 @@ impl FromRow<'_, SqliteRow> for DeploymentRunnable {
             service_id: Ulid::from_string(row.try_get("service_id")?)
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
             is_next: row.try_get("is_next")?,
+            idle_minutes: row
+                .try_get::<SqlxJson<ServiceState>, _>("service_state")?
+                .0
+                .container()
+                .map(|c| c.idle_minutes())
+                .expect("to extract idle minutes from the service state"),
         })
     }
 }

@@ -4,7 +4,6 @@ use std::{
     path::PathBuf,
 };
 
-use chrono::Utc;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
@@ -18,58 +17,43 @@ use shuttle_proto::runtime::{
 };
 use tokio::sync::mpsc;
 use tonic::{transport::Channel, Code};
-use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
+use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 
-use crate::{
-    deployment::{
-        persistence::{dal::Dal, State},
-        DeploymentState,
-    },
-    runtime_manager::RuntimeManager,
-};
+use crate::{deployment::persistence::State, runtime_manager::RuntimeManager};
 
 use super::error::{Error, Result};
 
-type RunReceiver = mpsc::Receiver<DeploymentRun>;
+type RunReceiver = mpsc::Receiver<DeploymentRunnable>;
 
 /// Run a task which takes runnable deploys from a channel and starts them up on our runtime
 /// A deploy is killed when it receives a signal from the kill channel
-pub async fn task<D: Dal + Sync + 'static>(
+pub async fn task(
     mut recv: RunReceiver,
     mut runtime_manager: RuntimeManager,
     storage_manager: ArtifactsStorageManager,
-    dal: D,
     claim: Option<Claim>,
 ) {
     info!("Run task started");
 
-    while let Some(run) = recv.recv().await {
-        info!("Deployment to be run: {}", run.deployment_id);
-
-        let dal_clone = dal.clone();
-        let old_deployments_killer = kill_old_deployments(
-            run.service_id,
-            run.deployment_id,
-            dal_clone,
-            runtime_manager.clone(),
-        );
+    while let Some(runnable) = recv.recv().await {
+        info!("Deployment to be run: {}", runnable.deployment_id);
         let cleanup = move |response: Option<SubscribeStopResponse>| {
             debug!(response = ?response,  "stop client response: ");
 
             if let Some(response) = response {
                 match StopReason::from_i32(response.reason).unwrap_or_default() {
-                    StopReason::Request => stopped_cleanup(&run.deployment_id),
-                    StopReason::End => completed_cleanup(&run.deployment_id),
+                    StopReason::Request => stopped_cleanup(&runnable.deployment_id),
+                    StopReason::End => completed_cleanup(&runnable.deployment_id),
                     StopReason::Crash => crashed_cleanup(
-                        &run.deployment_id,
-                        Error::Run(anyhow::Error::msg(response.message)),
+                        &runnable.deployment_id,
+                        Error::Runtime(anyhow::Error::msg(response.message)),
                     ),
                 }
             } else {
                 crashed_cleanup(
-                    &run.deployment_id,
+                    &runnable.deployment_id,
                     Error::Runtime(anyhow::anyhow!(
                         "stop subscribe channel stopped unexpectedly"
                     )),
@@ -78,27 +62,33 @@ pub async fn task<D: Dal + Sync + 'static>(
         };
 
         let runtime_client = runtime_manager
-            .runtime_client(run.service_id, run.target_ip)
+            .runtime_client(runnable.service_id, runnable.target_ip)
             .await
             .expect("to set up a runtime client against a ready deployment");
         let claim = claim.clone();
         let storage_manager = storage_manager.clone();
+        let runtime_manager = runtime_manager.clone();
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
-                propagator.extract(&run.tracing_context)
+                propagator.extract(&runnable.tracing_context)
             });
             let span = debug_span!("runner");
             span.set_parent(parent_cx);
-            let deployment_id = run.deployment_id;
+
+            let deployment_id = runnable.deployment_id;
+
+            // We are subscribing to the runtime logs emitted during the load phase here.
+            if let Err(err) = runtime_manager
+                .logs_subscribe(&deployment_id)
+                .await
+                .map_err(|err| Error::PrepareRun(err.to_string()))
+            {
+                start_crashed_cleanup(&deployment_id, err);
+            }
+
             async move {
-                if let Err(err) = run
-                    .handle(
-                        storage_manager,
-                        runtime_client,
-                        old_deployments_killer,
-                        cleanup,
-                        claim,
-                    )
+                if let Err(err) = runnable
+                    .load_and_run(storage_manager, runtime_client, cleanup, claim)
                     .await
                 {
                     start_crashed_cleanup(&deployment_id, err)
@@ -110,30 +100,6 @@ pub async fn task<D: Dal + Sync + 'static>(
             .await
         });
     }
-}
-
-#[instrument(skip(dal, runtime_manager))]
-pub async fn kill_old_deployments<D: Dal + Sync + 'static>(
-    service_id: Ulid,
-    deployment_id: Ulid,
-    dal: D,
-    mut runtime_manager: RuntimeManager,
-) -> Result<()> {
-    for old_id in dal
-        .service_running_deployments(&service_id)
-        .await
-        .map_err(Error::Dal)?
-        .into_iter()
-        .filter(|old_id| old_id != &deployment_id)
-    {
-        trace!(%old_id, "stopping old deployment");
-
-        if !runtime_manager.kill(&old_id).await {
-            warn!(id = %old_id, "failed to kill old deployment");
-        }
-    }
-
-    Ok(())
 }
 
 #[instrument(skip(_id), fields(id = %_id, state = %State::Completed))]
@@ -163,7 +129,7 @@ fn start_crashed_cleanup(_id: &Ulid, error: impl std::error::Error + 'static) {
 }
 
 #[derive(Clone, Debug)]
-pub struct DeploymentRun {
+pub struct DeploymentRunnable {
     pub deployment_id: Ulid,
     pub service_name: String,
     pub service_id: Ulid,
@@ -173,14 +139,13 @@ pub struct DeploymentRun {
     pub is_next: bool,
 }
 
-impl DeploymentRun {
-    #[instrument(skip(self, storage_manager, runtime_client, kill_old_deployments, cleanup, claim), fields(id = %self.deployment_id, state = %State::Loading))]
+impl DeploymentRunnable {
+    #[instrument(skip(self, storage_manager, runtime_client, cleanup, claim), fields(id = %self.deployment_id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
-    async fn handle(
+    async fn load_and_run(
         self,
         storage_manager: ArtifactsStorageManager,
         runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
-        kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
         claim: Option<Claim>,
     ) -> Result<()> {
@@ -201,8 +166,6 @@ impl DeploymentRun {
         };
 
         let address = SocketAddr::new(IpAddr::V4(self.target_ip), port);
-
-        kill_old_deployments.await?;
 
         // Execute loaded service
         load(
@@ -240,6 +203,8 @@ async fn load(
             .into_string()
             .unwrap_or_default(),
         service_name,
+        resources: Vec::new(),
+        secrets: HashMap::new(),
     });
 
     if let Some(claim) = claim {

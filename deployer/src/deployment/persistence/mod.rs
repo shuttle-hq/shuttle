@@ -54,7 +54,7 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
                     LogType::State => {
                         dal_cloned
                             .insert_log(Log {
-                                id: log.id,
+                                id: log.deployment_id,
                                 timestamp: log.timestamp,
                                 state: log.state,
                                 level: log.level.clone(),

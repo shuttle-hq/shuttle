@@ -1,24 +1,30 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DeployRequest {
+pub struct Deployment {
     #[prost(string, tag = "1")]
     pub service_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub service_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub git_commit_message: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub git_commit_hash: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub git_branch: ::prost::alloc::string::String,
-    #[prost(bool, tag = "6")]
-    pub git_dirty: bool,
-    #[prost(bool, tag = "7")]
+    #[prost(bool, tag = "3")]
     pub is_next: bool,
-    #[prost(uint32, tag = "8")]
+    #[prost(uint32, tag = "4")]
     pub idle_minutes: u32,
-    #[prost(string, tag = "9")]
+    #[prost(string, tag = "5")]
     pub image_name: ::prost::alloc::string::String,
+    #[prost(string, optional, tag = "6")]
+    pub git_commit_message: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "7")]
+    pub git_commit_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "8")]
+    pub git_branch: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(bool, optional, tag = "9")]
+    pub git_dirty: ::core::option::Option<bool>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeployRequest {
+    #[prost(message, optional, tag = "1")]
+    pub deployment: ::core::option::Option<Deployment>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -49,6 +55,30 @@ pub struct RestartDeploymentRequest {
 pub struct RestartDeploymentResponse {
     #[prost(bool, tag = "1")]
     pub success: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetDeploymentRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetDeploymentResponse {
+    #[prost(message, optional, tag = "1")]
+    pub deployment: ::core::option::Option<Deployment>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetDeploymentsRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetDeploymentsResponse {
+    #[prost(message, optional, tag = "1")]
+    pub deployment: ::core::option::Option<Deployment>,
 }
 /// Generated client implementations.
 pub mod deployer_client {

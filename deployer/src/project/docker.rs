@@ -71,10 +71,6 @@ impl ContainerSettingsBuilder {
             .prefix
             .take()
             .expect("to provide a prefix for the container settings");
-        let image = self
-            .image_name
-            .take()
-            .expect("to provide an image name to the container settings");
         let provisioner_host = self
             .provisioner
             .take()
@@ -90,7 +86,6 @@ impl ContainerSettingsBuilder {
 
         ContainerSettings {
             prefix,
-            image,
             provisioner_host,
             auth_uri,
             network_name,
@@ -99,10 +94,9 @@ impl ContainerSettingsBuilder {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ContainerSettings {
     pub prefix: String,
-    pub image: String,
     pub provisioner_host: String,
     pub auth_uri: String,
     pub network_name: String,

@@ -13,7 +13,7 @@ use thiserror::Error;
 use tracing::{error, info};
 use ulid::Ulid;
 
-use crate::deployment::{Deployment, DeploymentRunnable, DeploymentState};
+use crate::deployment::{Deployment, DeploymentState, RunningDeployment};
 use crate::project::service::ServiceState;
 
 use super::{Log, Service, State};
@@ -63,7 +63,7 @@ pub trait Dal: Send + Clone {
     async fn update_invalid_states_to_stopped(&self) -> Result<(), DalError>;
 
     // Get runnning or runnable deployments
-    async fn running_deployments(&self) -> Result<Vec<DeploymentRunnable>, DalError>;
+    async fn running_deployments(&self) -> Result<Vec<RunningDeployment>, DalError>;
 
     // Get the service state
     async fn service_state(&self, service_id: &Ulid) -> Result<Option<ServiceState>, DalError>;
@@ -226,9 +226,9 @@ impl Dal for Sqlite {
             .map(|_| ())
     }
 
-    async fn running_deployments(&self) -> Result<Vec<DeploymentRunnable>, DalError> {
+    async fn running_deployments(&self) -> Result<Vec<RunningDeployment>, DalError> {
         sqlx::query_as(
-            r#"SELECT d.id as id, service_id, s.name AS service_name, d.is_next as is_next
+            r#"SELECT d.id as id, s.name AS service_name, service_id, d.is_next as is_next, s.state as service_state
                     FROM deployments AS d
                     JOIN services AS s ON s.id = d.service_id
                     WHERE d.state = ?
@@ -256,8 +256,10 @@ impl Dal for Sqlite {
         service_id: Ulid,
         state: ServiceState,
     ) -> Result<(), DalError> {
-        query("UPDATE services SET state = ?1 WHERE id = ?2")
-            .bind(SqlxJson(state))
+        let state_variant = state.to_string();
+        query("UPDATE services SET state = ?1, state_variant = ?2 WHERE id = ?3")
+            .bind(SqlxJson(state.clone()))
+            .bind(state_variant)
             .bind(service_id.to_string())
             .execute(&self.pool)
             .await

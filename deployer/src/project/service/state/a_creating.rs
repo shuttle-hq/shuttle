@@ -26,8 +26,8 @@ use super::{b_attaching::ServiceAttaching, m_errored::ServiceErrored};
 pub struct ServiceCreating {
     /// The service Ulid
     service_id: String,
-    /// Override the default image (specified in the args to this gateway)
-    image: Option<String>,
+    /// Image used to create the container from
+    image: String,
     /// Configuration will be extracted from there if specified (will
     /// take precedence over other overrides)
     from: Option<ContainerInspectResponse>,
@@ -40,10 +40,10 @@ pub struct ServiceCreating {
 }
 
 impl ServiceCreating {
-    pub fn new(service_id: String, idle_minutes: u64) -> Self {
+    pub fn new(service_id: String, image_name: String, idle_minutes: u64) -> Self {
         Self {
             service_id,
-            image: None,
+            image: image_name,
             from: None,
             recreate_count: 0,
             idle_minutes,
@@ -59,7 +59,9 @@ impl ServiceCreating {
 
         Ok(Self {
             service_id: service_id.to_string(),
-            image: None,
+            image: container.image.clone().ok_or(ServiceErrored::internal(
+                "container inspect response misses the image name",
+            ))?,
             from: Some(container),
             recreate_count,
             idle_minutes,
@@ -68,11 +70,6 @@ impl ServiceCreating {
 
     pub fn from(mut self, from: ContainerInspectResponse) -> Self {
         self.from = Some(from);
-        self
-    }
-
-    pub fn with_image(mut self, image: String) -> Self {
-        self.image = Some(image);
         self
     }
 
@@ -93,7 +90,6 @@ impl ServiceCreating {
         ctx: &C,
     ) -> Result<(CreateContainerOptions<String>, Config<String>), Error> {
         let ContainerSettings {
-            image: default_image,
             prefix,
             is_next,
             provisioner_host,
@@ -139,7 +135,7 @@ impl ServiceCreating {
             .and_then(|container| container.config.clone())
             .unwrap_or_else(|| {
                 deserialize_json!({
-                    "Image": image.as_ref().unwrap_or(default_image),
+                    "Image": image,
                     "Hostname": format!("{prefix}{service_id}"), // TODO: add volumes migration APIs
                     "Labels": {
                         "shuttle.service_id": service_id,

@@ -26,7 +26,7 @@ use super::{e_readying::ServiceReadying, f_ready::ServiceReady, m_errored::Servi
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceStarted {
     pub container: ContainerInspectResponse,
-    service: Option<Service>,
+    pub service: Option<Service>,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default)]
     pub stats: VecDeque<Stats>,
@@ -71,21 +71,18 @@ where
             .runtime_client(service_id, service.target)
             .await
             .expect("to create a runtime client");
-        debug!("oare aici sta?");
         if runtime_client.health_check(Ping {}).await.is_ok() {
             debug!("the service runtime responded to health check");
             let idle_minutes = container.idle_minutes();
 
             // Idle minutes of `0` means it is disabled and the project will always stay up
             if idle_minutes < 1 {
-                debug!("idle minutes < 1");
                 Ok(Self::Next::Ready(ServiceReady {
                     container,
                     service,
                     stats,
                 }))
             } else {
-                debug!("new stats");
                 let new_stat = ctx
                     .docker()
                     .stats(

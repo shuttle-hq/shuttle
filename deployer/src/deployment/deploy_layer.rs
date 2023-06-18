@@ -42,7 +42,7 @@ pub trait LogRecorder: Clone + Send + 'static {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Log {
     /// Deployment id
-    pub id: Ulid,
+    pub deployment_id: Ulid,
 
     /// Current state of the deployment
     pub state: State,
@@ -78,7 +78,7 @@ impl From<Log> for persistence::Log {
         };
 
         Self {
-            id: log.id,
+            id: log.deployment_id,
             timestamp: log.timestamp,
             state: log.state,
             level: log.level,
@@ -93,7 +93,7 @@ impl From<Log> for persistence::Log {
 impl From<Log> for DeploymentState {
     fn from(log: Log) -> Self {
         Self {
-            id: log.id,
+            id: log.deployment_id,
             state: log.state,
             last_update: log.timestamp,
         }
@@ -105,7 +105,7 @@ impl TryFrom<runtime::LogItem> for Log {
 
     fn try_from(log: runtime::LogItem) -> Result<Self, Self::Error> {
         Ok(Self {
-            id: Default::default(),
+            deployment_id: Default::default(),
             state: State::Running,
             level: runtime::LogLevel::from_i32(log.level)
                 .unwrap_or_default()
@@ -179,7 +179,7 @@ where
                 let metadata = event.metadata();
 
                 self.recorder.record(Log {
-                    id: details.id,
+                    deployment_id: details.id,
                     state: details.state,
                     level: metadata.level().into(),
                     timestamp: Utc::now(),
@@ -224,7 +224,7 @@ where
         let metadata = span.metadata();
 
         self.recorder.record(Log {
-            id: details.id,
+            deployment_id: details.id,
             state: details.state,
             level: metadata.level().into(),
             timestamp: Utc::now(),

@@ -8,7 +8,7 @@ use shuttle_proto::runtime::{
 };
 use tonic::transport::{Channel, Endpoint};
 use tower::ServiceBuilder;
-use tracing::{debug, trace};
+use tracing::trace;
 use ulid::Ulid;
 
 use crate::{deployment::deploy_layer, project::service::RUNTIME_API_PORT};
@@ -34,13 +34,13 @@ impl RuntimeManager {
 
     pub async fn runtime_client(
         &mut self,
-        id: Ulid,
+        deployment_id: Ulid,
         target_ip: Ipv4Addr,
     ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
         trace!("making new client");
         let mut guard = self.runtimes.lock().await;
 
-        if let Some(runtime_client) = guard.get(&id) {
+        if let Some(runtime_client) = guard.get(&deployment_id) {
             return Ok(runtime_client.clone());
         }
 
@@ -55,24 +55,7 @@ impl RuntimeManager {
             .layer(InjectPropagationLayer)
             .service(channel);
         let runtime_client = runtime_client::RuntimeClient::new(channel);
-        let sender = self.log_sender.clone();
-        let mut stream = runtime_client
-            .clone()
-            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
-            .await
-            .context("subscribing to runtime logs stream")?
-            .into_inner();
-
-        tokio::spawn(async move {
-            while let Ok(Some(log)) = stream.message().await {
-                if let Ok(mut log) = deploy_layer::Log::try_from(log) {
-                    log.id = id;
-                    sender.send(log).expect("to send log to persistence");
-                }
-            }
-        });
-
-        guard.insert(id, runtime_client.clone());
+        guard.insert(deployment_id, runtime_client.clone());
 
         Ok(runtime_client)
     }
@@ -118,5 +101,30 @@ impl RuntimeManager {
             trace!("no client running");
             false
         }
+    }
+
+    pub async fn logs_subscribe(&self, deployment_id: &Ulid) -> anyhow::Result<()> {
+        let sender = self.log_sender.clone();
+        let mut stream = self
+            .runtimes
+            .lock()
+            .await
+            .get_mut(deployment_id)
+            .context(format!("No runtime client for deployment {deployment_id}"))?
+            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
+            .await
+            .context("subscribing to runtime logs stream")?
+            .into_inner();
+        let deployment_id = *deployment_id;
+        tokio::spawn(async move {
+            while let Ok(Some(log)) = stream.message().await {
+                if let Ok(mut log) = deploy_layer::Log::try_from(log) {
+                    log.deployment_id = deployment_id;
+                    sender.send(log).expect("to send log to persistence");
+                }
+            }
+        });
+
+        Ok(())
     }
 }

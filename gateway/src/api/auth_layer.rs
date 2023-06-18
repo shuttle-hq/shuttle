@@ -175,8 +175,9 @@ where
     }
 }
 
-/// Return a [ConvertCookieRequest] or a [ApiKeyRequest] depending on the request headers,
-/// and return a future that we can .await if the cache is missed.
+/// If the request headers contain a cookie or a bearer token, return a cache key as well as a future
+/// that we can .await if the cache is missed. The future will send a convert request to the auth
+/// service and resolve to a [TokenResponse] containing our JWT.
 fn cache_key_and_token_req<'a>(
     headers: &HeaderMap,
     auth_client: &'a mut AuthClient<InjectPropagation<Channel>>,

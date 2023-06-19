@@ -156,9 +156,8 @@ impl Shuttle {
     /// If both a project name and framework are passed as arguments, it will run without any extra
     /// interaction.
     async fn init(&mut self, args: InitArgs, mut project_args: ProjectArgs) -> Result<()> {
-        // Turns the template or git args (if present) to a vec of repo folders that match.
-        // If an explicit git arg is given, or a framework only has one template, the vec length will be 1.
-        let git_templates = args.git_template();
+        // Turns the template or git args (if present) to a repo+folder.
+        let git_templates = args.git_template()?;
 
         // Caveat: No way of telling if args.path was given or default
         // Ideally that would be checked here (go interactive if not given)
@@ -294,8 +293,8 @@ impl Shuttle {
             if serenity_idle_hint {
                 printdoc!(
                     "
-                    Hint: Discord bots might want to use `--idle-minutes 0` when
-                          starting the project so that they don't go offline.
+                    Hint: Discord bots might want to use `--idle-minutes 0` when starting the
+                    project so that they don't go offline: https://docs.shuttle.rs/introduction/idle-projects
                     "
                 );
             }

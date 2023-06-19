@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use cargo_metadata::MetadataCommand;
 use clap::{
     builder::{OsStringValueParser, PossibleValue, TypedValueParser},
@@ -292,15 +292,18 @@ pub struct TemplateLocation {
 }
 
 impl InitArgs {
-    pub fn git_template(&self) -> Option<TemplateLocation> {
-        if let Some(from) = self.from.clone() {
+    pub fn git_template(&self) -> anyhow::Result<Option<TemplateLocation>> {
+        if self.from.is_some() && self.template.is_some() {
+            bail!("Template and From args can not be set at the same time.");
+        }
+        Ok(if let Some(from) = self.from.clone() {
             Some(TemplateLocation {
                 auto_path: from,
                 subfolder: self.subfolder.clone(),
             })
         } else {
             self.template.as_ref().map(|t| t.template())
-        }
+        })
     }
 }
 
@@ -308,8 +311,6 @@ impl InitTemplateArg {
     pub fn template(&self) -> TemplateLocation {
         use InitTemplateArg::*;
         let path = match self {
-            // first entry should be the default for
-            // that choice of framework (usually hello-world)
             ActixWeb => "actix-web/hello-world",
             Axum => "axum/hello-world",
             Poem => "poem/hello-world",
@@ -367,7 +368,7 @@ mod tests {
             path: PathBuf::new(),
         };
         assert_eq!(
-            init_args.git_template(),
+            init_args.git_template().unwrap(),
             Some(TemplateLocation {
                 auto_path: EXAMPLES_REPO.into(),
                 subfolder: Some("tower/hello-world".into())
@@ -384,7 +385,7 @@ mod tests {
             path: PathBuf::new(),
         };
         assert_eq!(
-            init_args.git_template(),
+            init_args.git_template().unwrap(),
             Some(TemplateLocation {
                 auto_path: EXAMPLES_REPO.into(),
                 subfolder: Some("axum/hello-world".into())
@@ -401,7 +402,7 @@ mod tests {
             path: PathBuf::new(),
         };
         assert_eq!(
-            init_args.git_template(),
+            init_args.git_template().unwrap(),
             Some(TemplateLocation {
                 auto_path: EXAMPLES_REPO.into(),
                 subfolder: Some("custom/none".into())
@@ -418,7 +419,7 @@ mod tests {
             path: PathBuf::new(),
         };
         assert_eq!(
-            init_args.git_template(),
+            init_args.git_template().unwrap(),
             Some(TemplateLocation {
                 auto_path: "https://github.com/some/repo".into(),
                 subfolder: Some("some/path".into())
@@ -434,7 +435,7 @@ mod tests {
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
-        assert_eq!(init_args.git_template(), None);
+        assert_eq!(init_args.git_template().unwrap(), None);
     }
 
     #[test]

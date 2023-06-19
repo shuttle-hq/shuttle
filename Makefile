@@ -1,4 +1,4 @@
-SRC_CRATES=deployer common codegen cargo-shuttle proto provisioner service
+SRC_CRATES=auth builder cargo-shuttle codegen common deployer gateway logger proto provisioner service
 SRC=$(shell find $(SRC_CRATES) -name "*.rs" -type f -not -path "**/target/*")
 
 COMMIT_SHA ?= $(shell git rev-parse --short HEAD)

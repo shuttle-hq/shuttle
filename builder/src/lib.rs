@@ -177,7 +177,7 @@ fn build_flake_file(path: &Path) -> Result<(), Error> {
           runtime = (import ./.nbuild.nix {{ inherit pkgs; }});
           default = pkgs.dockerTools.buildLayeredImage {{
             name = "{name}-runtime";
-            config = {{ Cmd = [ "${{runtime}}/bin/{name}" ]; }};
+            config = {{ Entrypoint = [ "${{runtime}}/bin/{name}" ]; }};
           }};
         }};
       }}

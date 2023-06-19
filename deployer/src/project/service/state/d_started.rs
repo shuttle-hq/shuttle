@@ -20,8 +20,11 @@ use crate::{
     safe_unwrap,
 };
 
-use super::machine::{Refresh, State};
-use super::{e_readying::ServiceReadying, f_ready::ServiceReady, m_errored::ServiceErrored};
+use super::{e_readying::ServiceReadying, f_running::ServiceRunning, m_errored::ServiceErrored};
+use super::{
+    machine::{Refresh, State},
+    StateVariant,
+};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceStarted {
@@ -39,6 +42,16 @@ impl ServiceStarted {
             service: None,
             stats,
         }
+    }
+}
+
+impl StateVariant for ServiceStarted {
+    fn name() -> String {
+        "Started".to_string()
+    }
+
+    fn as_state_variant(&self) -> String {
+        Self::name()
     }
 }
 
@@ -77,7 +90,7 @@ where
 
             // Idle minutes of `0` means it is disabled and the project will always stay up
             if idle_minutes < 1 {
-                Ok(Self::Next::Ready(ServiceReady {
+                Ok(Self::Next::Ready(ServiceRunning {
                     container,
                     service,
                     stats,
@@ -129,7 +142,7 @@ where
                     if cpu_per_minute < 100_000_000 {
                         Ok(Self::Next::Idle(ServiceStopping { container }))
                     } else {
-                        Ok(Self::Next::Ready(ServiceReady {
+                        Ok(Self::Next::Ready(ServiceRunning {
                             container,
                             service,
                             stats,
@@ -137,7 +150,7 @@ where
                     }
                 } else {
                     debug!("service ready down");
-                    Ok(Self::Next::Ready(ServiceReady {
+                    Ok(Self::Next::Ready(ServiceRunning {
                         container,
                         service,
                         stats,

@@ -8,8 +8,9 @@ use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::project::idle_minutes;
 use tracing::{debug, instrument};
+use ulid::Ulid;
 
-use super::machine::State;
+use super::{machine::State, StateVariant};
 use crate::{
     deserialize_json,
     project::{
@@ -26,6 +27,8 @@ use super::{b_attaching::ServiceAttaching, m_errored::ServiceErrored};
 pub struct ServiceCreating {
     /// The service Ulid
     service_id: String,
+    /// The deployment Ulid
+    deployment_id: String,
     /// Image used to create the container from
     image: String,
     /// Configuration will be extracted from there if specified (will
@@ -40,9 +43,15 @@ pub struct ServiceCreating {
 }
 
 impl ServiceCreating {
-    pub fn new(service_id: String, image_name: String, idle_minutes: u64) -> Self {
+    pub fn new(
+        service_id: Ulid,
+        deployment_id: Ulid,
+        image_name: String,
+        idle_minutes: u64,
+    ) -> Self {
         Self {
-            service_id,
+            service_id: service_id.to_string(),
+            deployment_id: deployment_id.to_string(),
             image: image_name,
             from: None,
             recreate_count: 0,
@@ -56,9 +65,11 @@ impl ServiceCreating {
     ) -> Result<Self, ServiceErrored> {
         let service_id = container.service_id()?;
         let idle_minutes = container.idle_minutes();
+        let deployment_id = container.deployment_id()?;
 
         Ok(Self {
             service_id: service_id.to_string(),
+            deployment_id: deployment_id.to_string(),
             image: container.image.clone().ok_or(ServiceErrored::internal(
                 "container inspect response misses the image name",
             ))?,
@@ -77,12 +88,12 @@ impl ServiceCreating {
         &self.service_id
     }
 
-    fn container_name<C: DockerContext>(&self, ctx: &C) -> String {
-        let prefix = &ctx.container_settings().prefix;
-
-        let Self { service_id, .. } = &self;
-
-        format!("{prefix}{service_id}_run")
+    fn container_name<C: DockerContext>(&self, ctx: &C) -> Option<String> {
+        ctx.container_settings().map(|cs| {
+            let Self { service_id, .. } = &self;
+            let prefix = cs.prefix.as_str();
+            format!("{prefix}{service_id}_run")
+        })
     }
 
     fn generate_container_config<C: DockerContext>(
@@ -95,17 +106,22 @@ impl ServiceCreating {
             provisioner_host,
             auth_uri,
             ..
-        } = ctx.container_settings();
+        } = ctx.container_settings().ok_or(Error::Internal(
+            "missing container settings required by the creating step".to_string(),
+        ))?;
 
         let Self {
             service_id,
             image,
             idle_minutes,
+            deployment_id,
             ..
         } = &self;
 
         let create_container_options = CreateContainerOptions {
-            name: self.container_name(ctx),
+            name: self.container_name(ctx).ok_or(Error::Internal(
+                "missing container settings required by the creating step".to_string(),
+            ))?,
             platform: None,
         };
 
@@ -140,6 +156,7 @@ impl ServiceCreating {
                     "Labels": {
                         "shuttle.service_id": service_id,
                         "shuttle.idle_minutes": format!("{idle_minutes}"),
+                        "shuttle.deployment_id": deployment_id
                     },
                     "Cmd": cmd[..],
                     "Env": [
@@ -178,6 +195,16 @@ Config: {config:#?}
     }
 }
 
+impl StateVariant for ServiceCreating {
+    fn name() -> String {
+        "Creating".to_string()
+    }
+
+    fn as_state_variant(&self) -> String {
+        Self::name()
+    }
+}
+
 #[async_trait]
 impl<Ctx> State<Ctx> for ServiceCreating
 where
@@ -188,7 +215,9 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let container_name = self.container_name(ctx);
+        let container_name = self.container_name(ctx).ok_or(ServiceErrored::internal(
+            "missing container settings required by transitioning from creating step",
+        ))?;
         let Self { recreate_count, .. } = self;
 
         let container = ctx

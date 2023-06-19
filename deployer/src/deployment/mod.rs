@@ -14,7 +14,6 @@ use ulid::Ulid;
 use crate::project::docker::ContainerInspectResponseExt;
 use crate::{project::service::ServiceState, runtime_manager::RuntimeManager};
 use driver::DeploymentRunnable;
-use persistence::State;
 use tokio::sync::mpsc;
 
 use self::{deploy_layer::LogRecorder, persistence::dal::Dal};
@@ -74,6 +73,7 @@ where
         let dal = self.dal.expect("a DAL is required");
 
         tokio::spawn(driver::task(
+            dal.clone(),
             run_recv,
             runtime_manager.clone(),
             storage_manager.clone(),
@@ -127,7 +127,7 @@ impl<D: Dal + Sync + 'static> DeploymentManager<D> {
             .map_err(|err| error::Error::Send(err.to_string()))
     }
 
-    #[instrument(skip(self), fields(service_id = %service_id, state = %State::Built))]
+    #[instrument(skip(self), fields(service_id = %service_id))]
     pub async fn run_deployment(
         &self,
         service_id: Ulid,
@@ -174,7 +174,6 @@ type RunSender = mpsc::Sender<DeploymentRunnable>;
 pub struct Deployment {
     pub id: Ulid,
     pub service_id: Ulid,
-    pub state: State,
     pub last_update: DateTime<Utc>,
     pub is_next: bool,
     pub git_commit_hash: Option<String>,
@@ -190,7 +189,6 @@ impl FromRow<'_, SqliteRow> for Deployment {
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
             service_id: Ulid::from_string(row.try_get("service_id")?)
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
-            state: row.try_get("state")?,
             last_update: row.try_get("last_update")?,
             is_next: row.try_get("is_next")?,
             git_commit_hash: row.try_get("git_commit_hash")?,
@@ -199,13 +197,6 @@ impl FromRow<'_, SqliteRow> for Deployment {
             git_dirty: row.try_get("git_dirty")?,
         })
     }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct DeploymentState {
-    pub id: Ulid,
-    pub state: State,
-    pub last_update: DateTime<Utc>,
 }
 
 #[derive(Debug, PartialEq, Eq)]

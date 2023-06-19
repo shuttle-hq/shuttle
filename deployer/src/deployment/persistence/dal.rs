@@ -10,13 +10,15 @@ use sqlx::types::Json as SqlxJson;
 use sqlx::{migrate::Migrator, Row, SqlitePool};
 use sqlx::{query, FromRow};
 use thiserror::Error;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use ulid::Ulid;
 
-use crate::deployment::{Deployment, DeploymentState, RunningDeployment};
+use crate::deployment::{Deployment, RunningDeployment};
+use crate::project::service::state::f_running::ServiceRunning;
+use crate::project::service::state::StateVariant;
 use crate::project::service::ServiceState;
 
-use super::{Log, Service, State};
+use super::{Log, Service};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -24,6 +26,7 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 pub enum DalError {
     Sqlx(#[from] sqlx::Error),
     ServiceNotFound,
+    DeploymentNotFound,
     Decode(ulid::DecodeError),
 }
 
@@ -38,6 +41,7 @@ impl fmt::Display for DalError {
                 "failed to interact with recorder"
             }
             DalError::ServiceNotFound => "service not found",
+            DalError::DeploymentNotFound => "deployment not found",
             DalError::Decode(_) => "service id couldn't be decoded to Ulid",
         };
 
@@ -53,14 +57,14 @@ pub trait Dal: Send + Clone {
     // Get a service by id
     async fn service(&self, id: &Ulid) -> Result<Service, DalError>;
 
+    // Get a deployment by id
+    async fn deployment(&self, id: &Ulid) -> Result<Deployment, DalError>;
+
     // Insert a service if absent
     async fn insert_service_if_absent(&self, service: Service) -> Result<bool, DalError>;
 
     // Insert a new deployment
     async fn insert_deployment(&self, deployment: Deployment) -> Result<(), DalError>;
-
-    // Update all deployment invalid states inside persistence to `Stopped`.
-    async fn update_invalid_states_to_stopped(&self) -> Result<(), DalError>;
 
     // Get runnning or runnable deployments
     async fn running_deployments(&self) -> Result<Vec<RunningDeployment>, DalError>;
@@ -68,18 +72,12 @@ pub trait Dal: Send + Clone {
     // Get the service state
     async fn service_state(&self, service_id: &Ulid) -> Result<Option<ServiceState>, DalError>;
 
-    // Update a deployment state
-    async fn update_deployment_state(&self, state: DeploymentState) -> Result<(), DalError>;
-
     // Update the project information.
     async fn update_service_state(
         &self,
         service_id: Ulid,
         state: ServiceState,
     ) -> Result<(), DalError>;
-
-    // Get service running deployments
-    async fn service_running_deployments(&self, service_id: &Ulid) -> Result<Vec<Ulid>, DalError>;
 
     // Get services
     async fn services(&self) -> Result<Vec<Service>, DalError>;
@@ -146,6 +144,8 @@ impl Sqlite {
 #[async_trait]
 impl Dal for Sqlite {
     async fn insert_log(&self, _log: Log) -> Result<(), DalError> {
+        // Dummy implementation. Needs to send the logs to the log service.
+        debug!("{}", format!("{}", _log.state_variant));
         Ok(())
     }
 
@@ -174,6 +174,16 @@ impl Dal for Sqlite {
         Service::from_row(&row).map_err(DalError::Sqlx)
     }
 
+    async fn deployment(&self, id: &Ulid) -> Result<Deployment, DalError> {
+        let row = sqlx::query("SELECT * FROM deployments WHERE id = ?")
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DalError::from)?
+            .ok_or(DalError::DeploymentNotFound)?;
+        Deployment::from_row(&row).map_err(DalError::Sqlx)
+    }
+
     async fn insert_service_if_absent(&self, service: Service) -> Result<bool, DalError> {
         let Service {
             id,
@@ -198,11 +208,10 @@ impl Dal for Sqlite {
 
     async fn insert_deployment(&self, deployment: Deployment) -> Result<(), DalError> {
         sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update, is_next, git_commit_hash, git_commit_message, git_branch, git_dirty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO deployments (id, service_id, last_update, is_next, git_commit_hash, git_commit_message, git_branch, git_dirty) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(deployment.id.to_string())
         .bind(deployment.service_id.to_string())
-        .bind(deployment.state)
         .bind(deployment.last_update.timestamp())
         .bind(deployment.is_next)
         .bind(deployment.git_commit_hash)
@@ -215,40 +224,18 @@ impl Dal for Sqlite {
         .map_err(DalError::from)
     }
 
-    async fn update_invalid_states_to_stopped(&self) -> Result<(), DalError> {
-        sqlx::query("UPDATE deployments SET state = ? WHERE state IN(?, ?, ?, ?)")
-            .bind(State::Stopped)
-            .bind(State::Built)
-            .bind(State::Loading)
-            .execute(&self.pool)
-            .await
-            .map_err(DalError::from)
-            .map(|_| ())
-    }
-
     async fn running_deployments(&self) -> Result<Vec<RunningDeployment>, DalError> {
         sqlx::query_as(
-            r#"SELECT d.id as id, s.name AS service_name, service_id, d.is_next as is_next, s.state as service_state
+            r#"SELECT d.id as id, s.name AS service_name, service_id, d.is_next as is_next, s.state_variant as service_state
                     FROM deployments AS d
                     JOIN services AS s ON s.id = d.service_id
-                    WHERE d.state = ?
+                    WHERE s.state_variant = ?
                     ORDER BY last_update"#,
         )
-        .bind(State::Running)
+        .bind(ServiceRunning::name())
         .fetch_all(&self.pool)
         .await
         .map_err(DalError::from)
-    }
-
-    async fn update_deployment_state(&self, state: DeploymentState) -> Result<(), DalError> {
-        sqlx::query("UPDATE deployments SET state = ?, last_update = ? WHERE id = ?")
-            .bind(state.state)
-            .bind(state.last_update)
-            .bind(state.id.to_string())
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(DalError::from)
     }
 
     async fn update_service_state(
@@ -265,22 +252,6 @@ impl Dal for Sqlite {
             .await
             .map_err(DalError::from)
             .map(|_| ())
-    }
-
-    async fn service_running_deployments(&self, service_id: &Ulid) -> Result<Vec<Ulid>, DalError> {
-        let ids = sqlx::query_as::<_, Deployment>(
-            "SELECT * FROM deployments WHERE service_id = ? AND state = ?",
-        )
-        .bind(service_id.to_string())
-        .bind(State::Running)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(DalError::from)?
-        .into_iter()
-        .map(|deployment| deployment.id)
-        .collect();
-
-        Ok(ids)
     }
 
     async fn set_address(&self, service_id: &Ulid, address: &SocketAddr) -> Result<(), DalError> {

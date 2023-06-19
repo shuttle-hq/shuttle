@@ -411,7 +411,7 @@ mod tests {
     fn to_token_and_back() {
         let mut claim = Claim::new(
             "ferries".to_string(),
-            vec![Scope::Deployment, Scope::Project],
+            vec![Scope::DeploymentRead, Scope::Project],
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -433,7 +433,7 @@ mod tests {
     async fn authorization_layer() {
         let claim = Claim::new(
             "ferries".to_string(),
-            vec![Scope::Deployment, Scope::Project],
+            vec![Scope::DeploymentRead, Scope::Project],
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -531,7 +531,7 @@ mod tests {
     fn hack_symmetric_alg() {
         let claim = Claim::new(
             "hacker-hs256".to_string(),
-            vec![Scope::Deployment, Scope::Project],
+            vec![Scope::DeploymentRead, Scope::Project],
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -571,7 +571,7 @@ mod tests {
     fn hack_no_alg() {
         let claim = Claim::new(
             "hacker-no-alg".to_string(),
-            vec![Scope::Deployment, Scope::Project],
+            vec![Scope::DeploymentRead, Scope::Project],
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -603,7 +603,7 @@ mod tests {
     fn hack_no_sig() {
         let claim = Claim::new(
             "hacker-no-sig".to_string(),
-            vec![Scope::Deployment, Scope::Project],
+            vec![Scope::DeploymentRead, Scope::Project],
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -626,7 +626,7 @@ mod tests {
     fn hack_bad_iss() {
         let claim = Claim::new(
             "hacker-iss".to_string(),
-            vec![Scope::Deployment, Scope::Project],
+            vec![Scope::DeploymentRead, Scope::Project],
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();

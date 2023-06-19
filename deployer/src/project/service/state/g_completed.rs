@@ -9,13 +9,19 @@ use crate::project::docker::DockerContext;
 use super::m_errored::ServiceErrored;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ServiceStopped {
+pub struct ServiceCompleted {
     pub container: ContainerInspectResponse,
 }
 
-impl StateVariant for ServiceStopped {
+impl ServiceCompleted {
+    pub fn from_container(container: ContainerInspectResponse) -> Result<Self, ServiceErrored> {
+        Ok(Self { container })
+    }
+}
+
+impl StateVariant for ServiceCompleted {
     fn name() -> String {
-        "Stopped".to_string()
+        "Completed".to_string()
     }
 
     fn as_state_variant(&self) -> String {
@@ -24,11 +30,11 @@ impl StateVariant for ServiceStopped {
 }
 
 #[async_trait]
-impl<Ctx> State<Ctx> for ServiceStopped
+impl<Ctx> State<Ctx> for ServiceCompleted
 where
     Ctx: DockerContext,
 {
-    type Next = ServiceStopped;
+    type Next = ServiceCompleted;
     type Error = ServiceErrored;
 
     #[instrument(skip_all)]

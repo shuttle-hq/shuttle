@@ -8,7 +8,6 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE TABLE IF NOT EXISTS deployments (
   id TEXT PRIMARY KEY,                                -- The deployment id
   service_id TEXT NOT NULL,                           -- The associated service id
-  state TEXT NOT NULL,                                -- The deployment state
   last_update INTEGER NOT NULL,                       -- Last time this update was modified
   is_next BOOLEAN NOT NULL,                           -- Whether it's a next deployment or not
   git_commit_hash TEXT,                               -- Associated git commit hash the deployment points to

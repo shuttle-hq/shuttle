@@ -8,7 +8,10 @@ use futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
-use super::machine::{Refresh, State};
+use super::{
+    machine::{Refresh, State},
+    StateVariant,
+};
 use crate::{
     project::{docker::DockerContext, service::state::m_errored::ServiceErrored},
     safe_unwrap,
@@ -21,6 +24,16 @@ const MAX_REBOOTS: usize = 3;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceRebooting {
     pub container: ContainerInspectResponse,
+}
+
+impl StateVariant for ServiceRebooting {
+    fn name() -> String {
+        "Rebooting".to_string()
+    }
+
+    fn as_state_variant(&self) -> String {
+        Self::name()
+    }
 }
 
 #[async_trait]

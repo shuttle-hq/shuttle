@@ -23,15 +23,14 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 use shuttle_common::{tracing::JsonVisitor, ParseError, STATE_MESSAGE};
 use shuttle_proto::runtime;
-use std::{convert::TryFrom, str::FromStr, time::SystemTime};
+use std::{convert::TryFrom, time::SystemTime};
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use ulid::Ulid;
 
-use super::{
-    persistence::{self, LogLevel, State},
-    DeploymentState,
-};
+use crate::project::service::state::{f_running::ServiceRunning, StateVariant};
+
+use super::persistence::{self, LogLevel};
 
 /// Records logs for the deployment progress
 pub trait LogRecorder: Clone + Send + 'static {
@@ -44,8 +43,8 @@ pub struct Log {
     /// Deployment id
     pub deployment_id: Ulid,
 
-    /// Current state of the deployment
-    pub state: State,
+    /// Current state of the service containted by the deployment
+    pub state_variant: String,
 
     /// Log level
     pub level: LogLevel,
@@ -80,22 +79,12 @@ impl From<Log> for persistence::Log {
         Self {
             id: log.deployment_id,
             timestamp: log.timestamp,
-            state: log.state,
+            state_variant: log.state_variant,
             level: log.level,
             file: log.file,
             line: log.line,
             target: log.target,
             fields,
-        }
-    }
-}
-
-impl From<Log> for DeploymentState {
-    fn from(log: Log) -> Self {
-        Self {
-            id: log.deployment_id,
-            state: log.state,
-            last_update: log.timestamp,
         }
     }
 }
@@ -106,7 +95,7 @@ impl TryFrom<runtime::LogItem> for Log {
     fn try_from(log: runtime::LogItem) -> Result<Self, Self::Error> {
         Ok(Self {
             deployment_id: Default::default(),
-            state: State::Running,
+            state_variant: ServiceRunning::name(),
             level: runtime::LogLevel::from_i32(log.level)
                 .unwrap_or_default()
                 .into(),
@@ -180,7 +169,7 @@ where
 
                 self.recorder.record(Log {
                     deployment_id: details.id,
-                    state: details.state,
+                    state_variant: details.state_variant.clone(),
                     level: metadata.level().into(),
                     timestamp: Utc::now(),
                     file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
@@ -225,7 +214,7 @@ where
 
         self.recorder.record(Log {
             deployment_id: details.id,
-            state: details.state,
+            state_variant: details.state_variant.clone(),
             level: metadata.level().into(),
             timestamp: Utc::now(),
             file: metadata.file().map(str::to_string),
@@ -243,7 +232,7 @@ where
 #[derive(Debug, Default)]
 struct ScopeDetails {
     id: Ulid,
-    state: State,
+    state_variant: String,
 }
 
 impl From<&tracing::Level> for LogLevel {
@@ -281,7 +270,7 @@ impl NewStateVisitor {
 impl Visit for NewStateVisitor {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == Self::STATE_IDENT {
-            self.details.state = State::from_str(&format!("{value:?}")).unwrap_or_default();
+            self.details.state_variant = format!("{value:?}");
         } else if field.name() == Self::ID_IDENT {
             self.details.id = Ulid::from_string(&format!("{value:?}")).unwrap_or_default();
         }

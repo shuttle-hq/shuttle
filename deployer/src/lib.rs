@@ -5,8 +5,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use chrono::Utc;
+use deployment::persistence::Persistence;
 use deployment::persistence::{dal::Dal, Service};
-use deployment::persistence::{Persistence, State};
 use deployment::Deployment;
 use derive_builder::Builder;
 use error::{Error, Result};
@@ -14,6 +14,8 @@ use futures::TryFutureExt;
 use http::Uri;
 use project::docker::{ContainerSettings, ServiceDockerContext};
 use project::service::state::a_creating::ServiceCreating;
+use project::service::state::f_running::ServiceRunning;
+use project::service::state::StateVariant;
 use project::service::ServiceState;
 use project::task::{BoxedTask, Task, TaskBuilder};
 use runtime_manager::RuntimeManager;
@@ -30,9 +32,7 @@ use shuttle_proto::deployer::{
     deployer_server::{Deployer, DeployerServer},
     DeployRequest, DeployResponse, Deployment as ProtoDeployment,
 };
-use shuttle_proto::deployer::{
-    RestartDeploymentRequest, RestartDeploymentResponse, StopDeploymentRequest,
-};
+use shuttle_proto::deployer::{DestroyDeploymentRequest, DestroyDeploymentResponse};
 use tonic::{transport::Server, Response, Result as TonicResult};
 use tracing::{debug, error, info, instrument};
 use ulid::Ulid;
@@ -116,13 +116,6 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     }
 
     pub async fn start(self) -> Result<()> {
-        // First we update all the invalid deployments states to stopped.
-        self.persistence
-            .dal()
-            .update_invalid_states_to_stopped()
-            .await
-            .expect("to have the invalid states stopped");
-
         // The deployments which are in the `Running` state are considered runnable and they are started again. Running the
         // deployments happens after their associated services' sandboxes are healthy and we start them.
         let runnable_deployments = self.persistence.dal().running_deployments().await?;
@@ -140,6 +133,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             // Clean the previous docker container if any.
             self.instate_service(
                 &existing_deployment.service_id,
+                &existing_deployment.id,
                 existing_deployment.service_name,
                 image_name.clone(),
                 existing_deployment.idle_minutes,
@@ -178,13 +172,15 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     pub async fn instate_service(
         &self,
         service_id: &Ulid,
+        deployment_id: &Ulid,
         service_name: String,
         image_name: String,
         idle_minutes: u64,
         overwrite: bool,
     ) -> Result<()> {
         let creating = ServiceState::Creating(ServiceCreating::new(
-            service_id.to_string(),
+            *service_id,
+            *deployment_id,
             image_name,
             idle_minutes,
         ));
@@ -218,12 +214,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 TaskBuilder::new(dal)
                     .task_router(task_router)
                     .service_id(service_id)
-                    .service_context(ServiceDockerContext::new(
-                        docker,
-                        // Destroying an existing container
-                        ContainerSettings::default(),
-                        runtime_manager,
-                    ))
+                    .service_docker_context(ServiceDockerContext::new(docker, runtime_manager))
                     .and_then(task::destroy())
                     .and_then(task::run_until_done())
                     .send(&sender)
@@ -260,14 +251,17 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         Ok(())
     }
 
-    pub async fn create_deployment(&self, req_deployment: ProtoDeployment) -> Result<Deployment> {
+    pub async fn create_deployment(
+        &self,
+        id: Ulid,
+        req_deployment: ProtoDeployment,
+    ) -> Result<Deployment> {
         // Insert the new deployment.
         let service_id: Ulid =
             Ulid::from_string(req_deployment.service_id.as_str()).map_err(Error::UlidDecode)?;
         let deployment = Deployment {
-            id: Ulid::new(),
+            id,
             service_id,
-            state: State::Built,
             last_update: Utc::now(),
             is_next: req_deployment.is_next,
             git_branch: req_deployment.git_branch,
@@ -318,7 +312,11 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             TaskBuilder::new(dal)
                 .task_router(task_router)
                 .service_id(service_id)
-                .service_context(ServiceDockerContext::new(docker, cs, runtime_manager))
+                .service_docker_context(ServiceDockerContext::new_with_container_settings(
+                    docker,
+                    cs,
+                    runtime_manager,
+                ))
                 .and_then(task::run_until_done())
                 .and_then(task::check_health())
                 .send(&sender)
@@ -326,6 +324,8 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 .expect("to get a handle of the created task")
                 .await;
 
+            // Running the deployment after the previous task ends is a requirement because
+            // this is how we guarantee the container is up and ready to receive requests.
             deployment_manager
                 .run_deployment(
                     service_id,
@@ -347,43 +347,141 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         request: tonic::Request<DeployRequest>,
     ) -> TonicResult<tonic::Response<DeployResponse>, tonic::Status> {
         // Authorize the request.
-        request.verify(Scope::DeploymentPush)?;
+        request.verify(Scope::DeploymentWrite)?;
 
         let claim = request.extensions().get::<Claim>().cloned();
         let request = request.into_inner();
-        let req_deployment = request
-            .deployment
-            .ok_or(tonic::Status::invalid_argument("deployment info missing"))?;
-        let service_id: Ulid = Ulid::from_string(req_deployment.service_id.as_str())
-            .map_err(|_| tonic::Status::invalid_argument("invalid service id"))?;
+        let req_deployment = match request.deployment {
+            Some(inner) => inner,
+            None => {
+                return Ok(Response::new(DeployResponse {
+                    success: false,
+                    message: Some("invalid argument: missing deployment information".to_string()),
+                    deployment_id: None,
+                }))
+            }
+        };
+
+        let service_id = match Ulid::from_string(req_deployment.service_id.as_str()) {
+            Ok(inner) => inner,
+            Err(err) => {
+                return Ok(Response::new(DeployResponse {
+                    success: false,
+                    message: Some(err.to_string()),
+                    deployment_id: None,
+                }))
+            }
+        };
+
+        let deployment_id = Ulid::new();
 
         // Instate the service in the creating state.
-        self.instate_service(
-            &service_id,
-            req_deployment.service_name.clone(),
-            req_deployment.image_name.clone(),
-            u64::from(req_deployment.idle_minutes),
-            false,
-        )
-        .await
-        .map_err(|err| match err {
-            Error::ServiceAlreadyExists => tonic::Status::already_exists(err.to_string()),
-            _ => tonic::Status::internal(err.to_string()),
-        })?;
+        match self
+            .instate_service(
+                &service_id,
+                &deployment_id,
+                req_deployment.service_name.clone(),
+                req_deployment.image_name.clone(),
+                u64::from(req_deployment.idle_minutes),
+                false,
+            )
+            .await
+        {
+            Ok(inner) => inner,
+            Err(err) => {
+                return Ok(Response::new(DeployResponse {
+                    success: false,
+                    message: Some(err.to_string()),
+                    deployment_id: None,
+                }))
+            }
+        };
 
         // Create the deployment.
         let is_next = req_deployment.is_next;
         let image_name = req_deployment.image_name.clone();
-        let deployment = self
-            .create_deployment(req_deployment)
-            .await
-            .map_err(|err| tonic::Status::new(tonic::Code::Internal, err.to_string()))?;
+        let deployment = match self.create_deployment(deployment_id, req_deployment).await {
+            Ok(inner) => inner,
+            Err(err) => {
+                return Ok(Response::new(DeployResponse {
+                    success: false,
+                    message: Some(err.to_string()),
+                    deployment_id: None,
+                }))
+            }
+        };
 
         self.instate_deployment(image_name, service_id, deployment.id, claim, is_next)
             .await;
 
         Ok(Response::new(DeployResponse {
-            deployment_id: deployment.id.to_string(),
+            success: true,
+            deployment_id: Some(deployment_id.to_string()),
+            message: None,
+        }))
+    }
+
+    #[instrument(skip_all)]
+    async fn destroy_deployment(
+        &self,
+        request: tonic::Request<DestroyDeploymentRequest>,
+    ) -> TonicResult<tonic::Response<DestroyDeploymentResponse>, tonic::Status> {
+        // Authorize the request.
+        request.verify(Scope::DeploymentWrite)?;
+        let request = request.into_inner();
+
+        // Do a cleanup in terms of previous invalid deployments.
+        let deployment_id = Ulid::from_string(&request.deployment_id)
+            .map_err(|_| tonic::Status::invalid_argument("invalid deployment id"))?;
+        let deployment = self
+            .persistence
+            .dal()
+            .deployment(&deployment_id)
+            .await
+            .map_err(|err| tonic::Status::not_found(err.to_string()))?;
+        let service = self
+            .persistence
+            .dal()
+            .service(&deployment.service_id)
+            .await
+            .map_err(|err| tonic::Status::not_found(err.to_string()))?;
+
+        if service.state_variant != ServiceRunning::name() {
+            return Ok(Response::new(DestroyDeploymentResponse {
+                success: false,
+                message: Some("the deployment is not running".to_string()),
+            }));
+        }
+
+        // Destroying the deployment and waiting on finishing up
+        let dal = self.persistence.dal().clone();
+        let task_router = self.task_router.clone();
+        let docker = self.docker.clone();
+        let runtime_manager = self.runtime_manager.clone();
+        let sender = self.sender.clone();
+
+        // Destroy the existing service sandbox.
+        match TaskBuilder::new(dal)
+            .task_router(task_router)
+            .service_id(deployment.service_id)
+            .service_docker_context(ServiceDockerContext::new(docker, runtime_manager))
+            .and_then(task::destroy())
+            .and_then(task::run_until_done())
+            .send(&sender)
+            .await
+        {
+            Ok(handle) => handle.await,
+            Err(err) => {
+                return Ok(Response::new(DestroyDeploymentResponse {
+                    success: false,
+                    message: Some(err.to_string()),
+                }));
+            }
+        };
+
+        Ok(Response::new(DestroyDeploymentResponse {
+            success: true,
+            message: None,
         }))
     }
 }

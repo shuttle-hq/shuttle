@@ -6,14 +6,27 @@ use bollard::{
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use super::machine::State;
-use crate::{project::docker::DockerContext, safe_unwrap};
+use super::{machine::State, StateVariant};
+use crate::{
+    project::docker::{ContainerInspectResponseExt, DockerContext},
+    safe_unwrap,
+};
 
 use super::{m_destroyed::ServiceDestroyed, m_errored::ServiceErrored};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceDestroying {
     pub container: ContainerInspectResponse,
+}
+
+impl StateVariant for ServiceDestroying {
+    fn name() -> String {
+        "Destroying".to_string()
+    }
+
+    fn as_state_variant(&self) -> String {
+        Self::name()
+    }
 }
 
 #[async_trait]
@@ -27,6 +40,12 @@ where
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container } = self;
+
+        // Kill and remove the associated runtime client before killing the docker container.
+        let deployment_id = container.deployment_id()?;
+        ctx.runtime_manager().kill(&deployment_id).await;
+
+        // Stop and remove the docker container.
         let container_id = safe_unwrap!(container.id);
         ctx.docker()
             .stop_container(container_id, Some(StopContainerOptions { t: 1 }))

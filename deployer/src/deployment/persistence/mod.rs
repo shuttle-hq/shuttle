@@ -9,14 +9,12 @@ use self::dal::Dal;
 pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
 pub use self::service::Service;
-pub use self::state::State;
 pub use self::user::User;
 
 pub mod dal;
 mod error;
 pub mod log;
 pub mod service;
-mod state;
 mod user;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
@@ -56,7 +54,7 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
                             .insert_log(Log {
                                 id: log.deployment_id,
                                 timestamp: log.timestamp,
-                                state: log.state,
+                                state_variant: log.state_variant,
                                 level: log.level.clone(),
                                 file: log.file.clone(),
                                 line: log.line,
@@ -68,15 +66,6 @@ impl<D: Dal + Send + Sync + 'static> Persistence<D> {
                                 error!(
                                     error = &error as &dyn std::error::Error,
                                     "failed to insert state log"
-                                )
-                            });
-                        dal_cloned
-                            .update_deployment_state(log.clone().into())
-                            .await
-                            .unwrap_or_else(|error| {
-                                error!(
-                                    error = &error as &dyn std::error::Error,
-                                    "failed to update deployment state"
                                 )
                             });
                     }

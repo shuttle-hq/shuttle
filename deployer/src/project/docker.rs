@@ -112,15 +112,27 @@ impl ContainerSettings {
 #[derive(Clone)]
 pub struct ServiceDockerContext {
     docker: Docker,
-    settings: ContainerSettings,
+    settings: Option<ContainerSettings>,
     runtime_manager: RuntimeManager,
 }
 
 impl ServiceDockerContext {
-    pub fn new(docker: Docker, cs: ContainerSettings, runtime_manager: RuntimeManager) -> Self {
+    pub fn new(docker: Docker, runtime_manager: RuntimeManager) -> Self {
         Self {
             docker,
-            settings: cs,
+            settings: None,
+            runtime_manager,
+        }
+    }
+
+    pub fn new_with_container_settings(
+        docker: Docker,
+        cs: ContainerSettings,
+        runtime_manager: RuntimeManager,
+    ) -> Self {
+        Self {
+            docker,
+            settings: Some(cs),
             runtime_manager,
         }
     }
@@ -131,8 +143,8 @@ impl DockerContext for ServiceDockerContext {
         &self.docker
     }
 
-    fn container_settings(&self) -> &ContainerSettings {
-        &self.settings
+    fn container_settings(&self) -> Option<&ContainerSettings> {
+        self.settings.as_ref()
     }
 
     fn runtime_manager(&self) -> RuntimeManager {
@@ -143,7 +155,7 @@ impl DockerContext for ServiceDockerContext {
 pub trait DockerContext: Send + Sync {
     fn docker(&self) -> &Docker;
 
-    fn container_settings(&self) -> &ContainerSettings;
+    fn container_settings(&self) -> Option<&ContainerSettings>;
 
     fn runtime_manager(&self) -> RuntimeManager;
 }
@@ -171,6 +183,16 @@ pub trait ContainerInspectResponseExt {
             .config
             .labels
             .get("shuttle.service_id")))
+        .map_err(|err| ServiceErrored::internal(err.to_string()))
+    }
+
+    fn deployment_id(&self) -> Result<Ulid, ServiceErrored> {
+        let container = self.container();
+
+        Ulid::from_string(safe_unwrap!(container
+            .config
+            .labels
+            .get("shuttle.deployment_id")))
         .map_err(|err| ServiceErrored::internal(err.to_string()))
     }
 

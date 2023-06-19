@@ -8,6 +8,7 @@ use tracing::instrument;
 use crate::{project::docker::DockerContext, safe_unwrap};
 
 use super::machine::{Refresh, State};
+use super::StateVariant;
 use super::{d_started::ServiceStarted, m_errored::ServiceErrored};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -16,6 +17,16 @@ pub struct ServiceStarting {
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default)]
     pub restart_count: usize,
+}
+
+impl StateVariant for ServiceStarting {
+    fn name() -> String {
+        "Starting".to_string()
+    }
+
+    fn as_state_variant(&self) -> String {
+        Self::name()
+    }
 }
 
 #[async_trait]

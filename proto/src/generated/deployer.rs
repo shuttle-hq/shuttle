@@ -29,56 +29,26 @@ pub struct DeployRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeployResponse {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StopDeploymentRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StopDeploymentResponse {
     #[prost(bool, tag = "1")]
     pub success: bool,
+    #[prost(string, optional, tag = "2")]
+    pub deployment_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "3")]
+    pub message: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RestartDeploymentRequest {
+pub struct DestroyDeploymentRequest {
     #[prost(string, tag = "1")]
     pub deployment_id: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RestartDeploymentResponse {
+pub struct DestroyDeploymentResponse {
     #[prost(bool, tag = "1")]
     pub success: bool,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetDeploymentRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetDeploymentResponse {
-    #[prost(message, optional, tag = "1")]
-    pub deployment: ::core::option::Option<Deployment>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetDeploymentsRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetDeploymentsResponse {
-    #[prost(message, optional, tag = "1")]
-    pub deployment: ::core::option::Option<Deployment>,
+    #[prost(string, optional, tag = "2")]
+    pub message: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Generated client implementations.
 pub mod deployer_client {
@@ -166,6 +136,25 @@ pub mod deployer_client {
             let path = http::uri::PathAndQuery::from_static("/deployer.Deployer/Deploy");
             self.inner.unary(request.into_request(), path, codec).await
         }
+        pub async fn destroy_deployment(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DestroyDeploymentRequest>,
+        ) -> Result<tonic::Response<super::DestroyDeploymentResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/deployer.Deployer/DestroyDeployment",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -179,6 +168,10 @@ pub mod deployer_server {
             &self,
             request: tonic::Request<super::DeployRequest>,
         ) -> Result<tonic::Response<super::DeployResponse>, tonic::Status>;
+        async fn destroy_deployment(
+            &self,
+            request: tonic::Request<super::DestroyDeploymentRequest>,
+        ) -> Result<tonic::Response<super::DestroyDeploymentResponse>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct DeployerServer<T: Deployer> {
@@ -264,6 +257,46 @@ pub mod deployer_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = DeploySvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/deployer.Deployer/DestroyDeployment" => {
+                    #[allow(non_camel_case_types)]
+                    struct DestroyDeploymentSvc<T: Deployer>(pub Arc<T>);
+                    impl<
+                        T: Deployer,
+                    > tonic::server::UnaryService<super::DestroyDeploymentRequest>
+                    for DestroyDeploymentSvc<T> {
+                        type Response = super::DestroyDeploymentResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DestroyDeploymentRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).destroy_deployment(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = DestroyDeploymentSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

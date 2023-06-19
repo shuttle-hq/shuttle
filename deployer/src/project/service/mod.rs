@@ -9,6 +9,8 @@ use ulid::Ulid;
 
 use crate::runtime_manager::RuntimeManager;
 
+use self::state::g_completed::ServiceCompleted;
+use self::state::StateVariant;
 use self::{
     error::Error,
     state::{
@@ -17,7 +19,7 @@ use self::{
         c_starting::ServiceStarting,
         d_started::ServiceStarted,
         e_readying::ServiceReadying,
-        f_ready::ServiceReady,
+        f_running::ServiceRunning,
         g_rebooting::ServiceRebooting,
         h_recreating::ServiceRecreating,
         i_restarting::ServiceRestarting,
@@ -84,7 +86,8 @@ pub enum ServiceState {
     Starting(ServiceStarting),
     Restarting(ServiceRestarting),
     Started(ServiceStarted),
-    Ready(ServiceReady),
+    Running(ServiceRunning),
+    Completed(ServiceCompleted),
     Rebooting(ServiceRebooting),
     Stopping(ServiceStopping),
     Stopped(ServiceStopped),
@@ -100,7 +103,8 @@ impl_from_variant!(ServiceState:
     ServiceStarting => Starting,
     ServiceRestarting => Restarting,
     ServiceStarted => Started,
-    ServiceReady => Ready,
+    ServiceRunning => Running,
+    ServiceCompleted => Completed,
     ServiceStopping => Stopping,
     ServiceStopped => Stopped,
     ServiceRebooting => Rebooting,
@@ -111,19 +115,20 @@ impl_from_variant!(ServiceState:
 impl Display for ServiceState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            ServiceState::Creating(_) => write!(f, "Creating"),
-            ServiceState::Attaching(_) => write!(f, "Attaching"),
-            ServiceState::Recreating(_) => write!(f, "Recreating"),
-            ServiceState::Starting(_) => write!(f, "Starting"),
-            ServiceState::Restarting(_) => write!(f, "Restarting"),
-            ServiceState::Started(_) => write!(f, "Started"),
-            ServiceState::Ready(_) => write!(f, "Ready"),
-            ServiceState::Rebooting(_) => write!(f, "Rebooting"),
-            ServiceState::Stopping(_) => write!(f, "Stopping"),
-            ServiceState::Stopped(_) => write!(f, "Stopped"),
-            ServiceState::Destroying(_) => write!(f, "Destroying"),
-            ServiceState::Destroyed(_) => write!(f, "Destroyed"),
-            ServiceState::Errored(_) => write!(f, "Errored"),
+            ServiceState::Creating(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Attaching(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Recreating(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Starting(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Restarting(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Started(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Running(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Completed(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Rebooting(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Stopping(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Stopped(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Destroying(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Destroyed(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Errored(inner) => write!(f, "{}", inner.as_state_variant()),
         }
     }
 }
@@ -135,7 +140,7 @@ impl ServiceState {
         } else {
             Err(Error::InvalidOperation(format!(
                 "cannot stop a project in the `{}` state",
-                self.state()
+                self.as_state_variant_detailed()
             )))
         }
     }
@@ -146,7 +151,7 @@ impl ServiceState {
         } else {
             Err(Error::InvalidOperation(format!(
                 "cannot reboot a project in the `{}` state",
-                self.state()
+                self.as_state_variant_detailed()
             )))
         }
     }
@@ -168,13 +173,13 @@ impl ServiceState {
         } else {
             Err(Error::InvalidOperation(format!(
                 "cannot start a project in the `{}` state",
-                self.state()
+                self.as_state_variant_detailed()
             )))
         }
     }
 
     pub fn is_ready(&self) -> bool {
-        matches!(self, Self::Ready(_))
+        matches!(self, Self::Running(_))
     }
 
     pub fn is_destroyed(&self) -> bool {
@@ -185,14 +190,15 @@ impl ServiceState {
         matches!(self, Self::Stopped(_))
     }
 
-    pub fn state(&self) -> String {
+    pub fn as_state_variant_detailed(&self) -> String {
         match self {
-            Self::Started(_) => "started".to_string(),
-            Self::Ready(_) => "ready".to_string(),
-            Self::Stopped(_) => "stopped".to_string(),
+            Self::Started(inner) => inner.as_state_variant(),
+            Self::Running(inner) => inner.as_state_variant(),
+            Self::Completed(inner) => inner.as_state_variant(),
+            Self::Stopped(inner) => inner.as_state_variant(),
             Self::Starting(ServiceStarting { restart_count, .. }) => {
                 if *restart_count > 0 {
-                    format!("starting (attempt {restart_count})")
+                    format!("{} (attempt {restart_count})", ServiceStarting::name())
                 } else {
                     "starting".to_string()
                 }
@@ -232,7 +238,8 @@ impl ServiceState {
             | Self::Recreating(ServiceRecreating { container, .. })
             | Self::Restarting(ServiceRestarting { container, .. })
             | Self::Attaching(ServiceAttaching { container, .. })
-            | Self::Ready(ServiceReady { container, .. })
+            | Self::Running(ServiceRunning { container, .. })
+            | Self::Completed(ServiceCompleted { container, .. })
             | Self::Stopping(ServiceStopping { container, .. })
             | Self::Stopped(ServiceStopped { container, .. })
             | Self::Rebooting(ServiceRebooting { container, .. })
@@ -303,10 +310,10 @@ where
     type Next = Self;
     type Error = Infallible;
 
-    #[instrument(skip_all, fields(state = %self.state()))]
+    #[instrument(skip_all, fields(state = %self.as_state_variant_detailed()))]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let previous = self.clone();
-        let previous_state = previous.state();
+        let previous_state = previous.as_state_variant_detailed();
 
         let mut new = match self {
             Self::Creating(creating) => creating.next(ctx).await.into_try_state(),
@@ -345,7 +352,8 @@ where
                 Ok(ServiceReadying::Idle(stopping)) => Ok(stopping.into()),
                 Err(err) => Ok(Self::Errored(err)),
             },
-            Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
+            Self::Running(running) => running.next(ctx).await.into_try_state(),
+            Self::Completed(completed) => completed.next(ctx).await.into_try_state(),
             Self::Stopped(stopped) => stopped.next(ctx).await.into_try_state(),
             Self::Stopping(stopping) => stopping.next(ctx).await.into_try_state(),
             Self::Rebooting(rebooting) => rebooting.next(ctx).await.into_try_state(),
@@ -359,7 +367,7 @@ where
             error!(error = ?errored, "state for project errored");
         }
 
-        let new_state = new.as_ref().unwrap().state();
+        let new_state = new.as_ref().unwrap().as_state_variant_detailed();
         let container_id = new
             .as_ref()
             .unwrap()
@@ -379,7 +387,7 @@ where
     fn is_done(&self) -> bool {
         matches!(
             self,
-            Self::Errored(_) | Self::Ready(_) | Self::Destroyed(_) | Self::Stopped(_)
+            Self::Errored(_) | Self::Running(_) | Self::Destroyed(_) | Self::Stopped(_)
         )
     }
 }
@@ -441,7 +449,7 @@ where
                 Err(err) => return Err(Error::Docker(err)),
             },
             Self::Started(ServiceStarted { container, stats, .. })
-            | Self::Ready(ServiceReady { container, stats, .. })
+            | Self::Running(ServiceRunning { container, stats, .. })
              => match container
                 .clone()
                 .refresh(ctx)
@@ -493,6 +501,7 @@ where
             Self::Rebooting(rebooting) => Self::Rebooting(rebooting),
             Self::Destroying(destroying) => Self::Destroying(destroying),
             Self::Destroyed(destroyed) => Self::Destroyed(destroyed),
+            Self::Completed(completed) => Self::Completed(completed),
             Self::Errored(err) => Self::Errored(err),
         };
         Ok(refreshed)

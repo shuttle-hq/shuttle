@@ -3,7 +3,7 @@ use bollard::service::ContainerInspectResponse;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use super::machine::State;
+use super::{machine::State, StateVariant};
 use crate::project::docker::DockerContext;
 
 use super::m_errored::ServiceErrored;
@@ -11,6 +11,16 @@ use super::m_errored::ServiceErrored;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceDestroyed {
     pub destroyed: Option<ContainerInspectResponse>,
+}
+
+impl StateVariant for ServiceDestroyed {
+    fn name() -> String {
+        "Destroyed".to_string()
+    }
+
+    fn as_state_variant(&self) -> String {
+        Self::name()
+    }
 }
 
 #[async_trait]

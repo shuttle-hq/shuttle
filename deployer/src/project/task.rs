@@ -141,15 +141,15 @@ pub fn start() -> impl Task<ServiceTaskContext, Output = ServiceState, Error = E
 pub fn check_health() -> impl Task<ServiceTaskContext, Output = ServiceState, Error = Error> {
     run(|ctx| async move {
         match ctx.state.refresh(&ctx.docker_context).await {
-            Ok(ServiceState::Ready(mut ready)) => {
+            Ok(ServiceState::Running(mut ready)) => {
                 if ready
                     .is_healthy(ctx.docker_context.runtime_manager())
                     .await
                     .is_ok()
                 {
-                    TaskResult::Done(ServiceState::Ready(ready))
+                    TaskResult::Done(ServiceState::Running(ready))
                 } else {
-                    TaskResult::Done(ServiceState::Ready(ready).reboot().unwrap())
+                    TaskResult::Done(ServiceState::Running(ready).reboot().unwrap())
                 }
             }
             Ok(update) => TaskResult::Done(update),
@@ -188,7 +188,7 @@ impl<D: Dal + Send + Sync + 'static> TaskBuilder<D> {
         self
     }
 
-    pub fn service_context(mut self, service_context: ServiceDockerContext) -> Self {
+    pub fn service_docker_context(mut self, service_context: ServiceDockerContext) -> Self {
         self.service_context = Some(service_context);
         self
     }
@@ -471,7 +471,7 @@ where
         let span = info_span!(
             "polling service",
             ctx.service_id = ?service_task_ctx.service_id,
-            ctx.state = service_task_ctx.state.state()
+            ctx.state = service_task_ctx.state.as_state_variant_detailed()
         );
         let _ = span.enter();
 
@@ -493,13 +493,15 @@ where
         };
 
         if let Some(update) = res.as_ref().ok() {
-            trace!(new_state = ?update.state(), "new state");
+            trace!(new_state = ?update.as_state_variant_detailed(), "new state");
             match self
                 .dal
                 .update_service_state(self.service_id, update.clone())
                 .await
             {
-                Ok(_) => trace!(new_state = ?update.state(), "successfully updated project state"),
+                Ok(_) => {
+                    trace!(new_state = ?update.as_state_variant_detailed(), "successfully updated project state")
+                }
                 Err(err) => {
                     error!(err = %err, "could not update project state");
                     return TaskResult::Err(Error::Dal(err));

@@ -69,7 +69,6 @@ impl RuntimeManager {
 
             let stop_request = tonic::Request::new(StopRequest {});
             let response = runtime_client.stop(stop_request).await.unwrap();
-
             trace!(?response, "stop deployment response");
 
             response.into_inner().success

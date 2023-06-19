@@ -3,6 +3,7 @@ package deployer;
 
 service Deployer {
   rpc Deploy(DeployRequest) returns (DeployResponse);
+  rpc DestroyDeployment(DestroyDeploymentRequest) returns (DestroyDeploymentResponse);
 }
 
 message Deployment {
@@ -22,37 +23,16 @@ message DeployRequest {
 }
 
 message DeployResponse {
-  string deployment_id = 1;
-}
-
-message StopDeploymentRequest {
-  string deployment_id = 1;
-}
-
-message StopDeploymentResponse {
   bool success = 1;
+  optional string deployment_id = 2;
+  optional string message = 3;
 }
 
-message RestartDeploymentRequest {
+message DestroyDeploymentRequest {
   string deployment_id = 1;
 }
 
-message RestartDeploymentResponse {
+message DestroyDeploymentResponse {
   bool success = 1;
-}
-
-message GetDeploymentRequest {
-  string deployment_id = 1;
-}
-
-message GetDeploymentResponse {
-  Deployment deployment = 1;
-}
-
-message GetDeploymentsRequest {
-  string deployment_id = 1;
-}
-
-message GetDeploymentsResponse {
-  Deployment deployment = 1;
+  optional string message = 2;
 }

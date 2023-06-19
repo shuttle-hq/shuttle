@@ -35,10 +35,10 @@ const ISS: &str = "shuttle";
 #[serde(rename_all = "snake_case")]
 pub enum Scope {
     /// Read the details, such as status and address, of a deployment
-    Deployment,
+    DeploymentRead,
 
-    /// Push a new deployment
-    DeploymentPush,
+    /// Modify the state of a deployment or create a new one
+    DeploymentWrite,
 
     /// Read the logs of a deployment
     Logs,
@@ -97,8 +97,8 @@ impl ScopeBuilder {
     /// Create a builder with the standard scopes for new users.
     pub fn new() -> Self {
         Self(vec![
-            Scope::Deployment,
-            Scope::DeploymentPush,
+            Scope::DeploymentRead,
+            Scope::DeploymentWrite,
             Scope::Logs,
             Scope::Service,
             Scope::ServiceCreate,

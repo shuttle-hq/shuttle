@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
 use tracing::instrument;
 
-use super::machine::State;
+use super::{machine::State, StateVariant};
 use crate::{project::docker::DockerContext, safe_unwrap};
 
 use super::{a_creating::ServiceCreating, m_errored::ServiceErrored};
@@ -21,6 +21,16 @@ const MAX_RECREATES: usize = 5;
 pub struct ServiceRecreating {
     pub container: ContainerInspectResponse,
     pub recreate_count: usize,
+}
+
+impl StateVariant for ServiceRecreating {
+    fn name() -> String {
+        "Recreating".to_string()
+    }
+
+    fn as_state_variant(&self) -> String {
+        Self::name()
+    }
 }
 
 #[async_trait]

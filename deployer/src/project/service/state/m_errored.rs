@@ -6,7 +6,7 @@ use http::uri::InvalidUri;
 use serde::{Deserialize, Serialize};
 use tracing::{error, instrument};
 
-use super::machine::State;
+use super::{machine::State, StateVariant};
 use crate::project::{docker::DockerContext, service::ServiceState};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,6 +38,16 @@ impl ServiceErrored {
             message: message.as_ref().to_string(),
             ctx: None,
         }
+    }
+}
+
+impl StateVariant for ServiceErrored {
+    fn name() -> String {
+        "Errored".to_string()
+    }
+
+    fn as_state_variant(&self) -> String {
+        Self::name()
     }
 }
 

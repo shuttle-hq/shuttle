@@ -11,8 +11,8 @@ use crate::{
     safe_unwrap,
 };
 
-use super::m_errored::ServiceErrored;
 use super::machine::State;
+use super::{m_errored::ServiceErrored, StateVariant};
 
 const MAX_RESTARTS: usize = 5;
 
@@ -21,6 +21,16 @@ const MAX_RESTARTS: usize = 5;
 pub struct ServiceRestarting {
     pub container: ContainerInspectResponse,
     pub restart_count: usize,
+}
+
+impl StateVariant for ServiceRestarting {
+    fn name() -> String {
+        "Restarting".to_string()
+    }
+
+    fn as_state_variant(&self) -> String {
+        Self::name()
+    }
 }
 
 #[async_trait]

@@ -4,12 +4,23 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use super::machine::{Refresh, State};
+use super::StateVariant;
 use super::{j_stopped::ServiceStopped, m_errored::ServiceErrored};
 use crate::{project::docker::DockerContext, safe_unwrap};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServiceStopping {
     pub container: ContainerInspectResponse,
+}
+
+impl StateVariant for ServiceStopping {
+    fn name() -> String {
+        "Stopping".to_string()
+    }
+
+    fn as_state_variant(&self) -> String {
+        Self::name()
+    }
 }
 
 #[async_trait]

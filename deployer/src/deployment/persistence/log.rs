@@ -1,13 +1,11 @@
 use chrono::{DateTime, Utc};
 use ulid::Ulid;
 
-use super::State;
-
 #[derive(Clone, Debug, Eq, PartialEq, sqlx::FromRow)]
 pub struct Log {
     pub id: Ulid,
     pub timestamp: DateTime<Utc>,
-    pub state: State,
+    pub state_variant: String,
     pub level: Level,
     pub file: Option<String>,
     pub line: Option<u32>,

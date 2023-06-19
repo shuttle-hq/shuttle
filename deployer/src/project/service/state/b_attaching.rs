@@ -12,6 +12,7 @@ use super::{
     c_starting::ServiceStarting,
     m_errored::ServiceErrored,
     machine::{Refresh, State},
+    StateVariant,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -20,6 +21,16 @@ pub struct ServiceAttaching {
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default)]
     pub recreate_count: usize,
+}
+
+impl StateVariant for ServiceAttaching {
+    fn name() -> String {
+        "Attaching".to_string()
+    }
+
+    fn as_state_variant(&self) -> String {
+        Self::name()
+    }
 }
 
 #[async_trait]
@@ -35,7 +46,9 @@ where
         let Self { container, .. } = self;
 
         let container_id = safe_unwrap!(container.id);
-        let ContainerSettings { network_name, .. } = ctx.container_settings();
+        let ContainerSettings { network_name, .. } = ctx.container_settings().ok_or(
+            ServiceErrored::internal("missing container settings required by the attaching step"),
+        )?;
 
         // Disconnect the bridge network before trying to start up
         // For docker bug https://github.com/docker/cli/issues/1891

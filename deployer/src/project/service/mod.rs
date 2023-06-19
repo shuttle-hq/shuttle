@@ -178,7 +178,7 @@ impl ServiceState {
         }
     }
 
-    pub fn is_ready(&self) -> bool {
+    pub fn is_running(&self) -> bool {
         matches!(self, Self::Running(_))
     }
 
@@ -188,6 +188,17 @@ impl ServiceState {
 
     pub fn is_stopped(&self) -> bool {
         matches!(self, Self::Stopped(_))
+    }
+
+    pub fn is_completed(&self) -> bool {
+        matches!(self, Self::Completed(_))
+    }
+
+    pub fn is_starting(&self) -> bool {
+        matches!(
+            self,
+            Self::Creating(_) | Self::Attaching(_) | Self::Starting(_) | Self::Started(..)
+        )
     }
 
     pub fn as_state_variant_detailed(&self) -> String {

@@ -200,7 +200,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                     .update_service_state(*service_id, creating)
                     .await
                     .map_err(Error::Dal)?;
-            } else if overwrite {
+            } else if state.is_running() || state.is_starting() || overwrite {
                 // When overwritting, we must make sure we're transitioning to a new state
                 // on clean. This is done by destroying the previous deployment.
                 let dal = self.persistence.dal().clone();

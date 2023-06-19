@@ -37,7 +37,7 @@ use super::{
     persistence::dal::Dal,
 };
 
-type RunReceiver = mpsc::Receiver<DeploymentRunnable>;
+type RunReceiver = mpsc::Receiver<RunnableDeployment>;
 
 /// Run a task which takes runnable deploys from a channel and starts them up on our runtime
 /// A deploy is killed when it receives a signal from the kill channel
@@ -179,7 +179,7 @@ fn start_crashed_cleanup(_id: &Ulid, error: impl std::error::Error + 'static) {
 }
 
 #[derive(Clone, Debug)]
-pub struct DeploymentRunnable {
+pub struct RunnableDeployment {
     pub deployment_id: Ulid,
     pub service_name: String,
     pub service_id: Ulid,
@@ -189,7 +189,7 @@ pub struct DeploymentRunnable {
     pub is_next: bool,
 }
 
-impl DeploymentRunnable {
+impl RunnableDeployment {
     #[instrument(skip(self, dal, storage_manager, runtime_client, claim), fields(id = %self.deployment_id, state = %ServiceStarting::name()))]
     #[allow(clippy::too_many_arguments)]
     async fn load_and_run<D: Dal + Sync + 'static>(

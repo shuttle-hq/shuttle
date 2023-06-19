@@ -13,7 +13,7 @@ use ulid::Ulid;
 
 use crate::project::docker::ContainerInspectResponseExt;
 use crate::{project::service::ServiceState, runtime_manager::RuntimeManager};
-use driver::DeploymentRunnable;
+use driver::RunnableDeployment;
 use tokio::sync::mpsc;
 
 use self::{deploy_layer::LogRecorder, persistence::dal::Dal};
@@ -61,10 +61,6 @@ where
         self
     }
 
-    /// Creates two Tokio tasks, one for building queued services, the other for
-    /// executing/deploying built services. Two multi-producer, single consumer
-    /// channels are also created which are for moving on-going service
-    /// deployments between the aforementioned tasks.
     pub fn build(self) -> DeploymentManager<D> {
         let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
         let runtime_manager = self.runtime_manager.expect("a runtime manager to be set");
@@ -98,18 +94,15 @@ pub struct DeploymentManager<D: Dal + Sync + 'static> {
 }
 
 /// ```no-test
-/// queue channel   all deployments here are State::Queued until the get a slot from gateway
+///  run channel    all deployments here have a manifest coming from the shuttle-builder
 ///       |
 ///       v
-///  run channel    all deployments here are State::Built
-///       |
-///       v
-///    run task     tasks enter the State::Running state and begin
-///                 executing
+///    run task     tasks load and start the shuttle-runtimes that are started on a separate
+///                 worker
 /// ```
 impl<D: Dal + Sync + 'static> DeploymentManager<D> {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
-    /// processing service building, loading, and deployment.
+    /// processing service loading and starting.
     pub fn builder<LR>() -> DeploymentManagerBuilder<LR, D> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
@@ -120,7 +113,7 @@ impl<D: Dal + Sync + 'static> DeploymentManager<D> {
         }
     }
 
-    async fn run_push(&self, run: DeploymentRunnable) -> Result<(), error::Error> {
+    async fn run_push(&self, run: RunnableDeployment) -> Result<(), error::Error> {
         self.run_send
             .send(run)
             .await
@@ -143,7 +136,7 @@ impl<D: Dal + Sync + 'static> DeploymentManager<D> {
             .await
             .map_err(error::Error::Dal)?;
 
-        let run = DeploymentRunnable {
+        let run = RunnableDeployment {
             deployment_id,
             service_name: service.name,
             service_id: service.id,
@@ -168,7 +161,7 @@ impl<D: Dal + Sync + 'static> DeploymentManager<D> {
     }
 }
 
-type RunSender = mpsc::Sender<DeploymentRunnable>;
+type RunSender = mpsc::Sender<RunnableDeployment>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Deployment {

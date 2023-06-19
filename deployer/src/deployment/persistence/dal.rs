@@ -82,9 +82,6 @@ pub trait Dal: Send + Clone {
     // Get services
     async fn services(&self) -> Result<Vec<Service>, DalError>;
 
-    // Set the deployment address
-    async fn set_address(&self, id: &Ulid, address: &SocketAddr) -> Result<(), DalError>;
-
     // Set whether is a shuttle-next runtime
     async fn set_is_next(&self, id: &Ulid, is_next: bool) -> Result<(), DalError>;
 }
@@ -252,16 +249,6 @@ impl Dal for Sqlite {
             .await
             .map_err(DalError::from)
             .map(|_| ())
-    }
-
-    async fn set_address(&self, service_id: &Ulid, address: &SocketAddr) -> Result<(), DalError> {
-        sqlx::query("UPDATE deployments SET address = ? WHERE id = ?")
-            .bind(address.to_string())
-            .bind(service_id.to_string())
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(DalError::from)
     }
 
     async fn set_is_next(&self, service_id: &Ulid, is_next: bool) -> Result<(), DalError> {

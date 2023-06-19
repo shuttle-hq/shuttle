@@ -20,7 +20,6 @@ use crate::init::Template;
 #[derive(Parser)]
 #[command(
     version,
-    about,
     // Cargo passes in the subcommand name to the invoked executable. Use a
     // hidden, optional positional argument to deal with it.
     arg(clap::Arg::new("dummy")
@@ -85,6 +84,10 @@ impl ProjectArgs {
     }
 }
 
+/// A cargo command for the shuttle platform (https://www.shuttle.rs/)
+///
+/// See the CLI docs (https://docs.shuttle.rs/introduction/shuttle-commands)
+/// for more information.
 #[derive(Parser)]
 pub enum Command {
     /// Create a new shuttle project

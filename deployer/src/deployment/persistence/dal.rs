@@ -1,5 +1,4 @@
 use std::fmt;
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -81,9 +80,6 @@ pub trait Dal: Send + Clone {
 
     // Get services
     async fn services(&self) -> Result<Vec<Service>, DalError>;
-
-    // Set whether is a shuttle-next runtime
-    async fn set_is_next(&self, id: &Ulid, is_next: bool) -> Result<(), DalError>;
 }
 
 #[derive(Clone)]
@@ -249,16 +245,6 @@ impl Dal for Sqlite {
             .await
             .map_err(DalError::from)
             .map(|_| ())
-    }
-
-    async fn set_is_next(&self, service_id: &Ulid, is_next: bool) -> Result<(), DalError> {
-        sqlx::query("UPDATE deployments SET is_next = ? WHERE id = ?")
-            .bind(is_next)
-            .bind(service_id.to_string())
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(DalError::from)
     }
 
     // Get services

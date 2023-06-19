@@ -33,13 +33,15 @@ impl TempCargoHome {
             Err(_) => {
                 let dir = Builder::new().prefix("shuttle-tests").tempdir().unwrap();
 
-                // Apply the `patch.crates-io` for `shuttle-service`
                 let mut config = std::fs::File::create(dir.path().join("config.toml")).unwrap();
                 write!(
                     config,
                     r#"[patch.crates-io]
-shuttle-service = {{ path = "{}" }}
+shuttle-codegen = {{ path = "{}" }}
+shuttle-common = {{ path = "{}" }}
+shuttle-proto = {{ path = "{}" }}
 shuttle-runtime = {{ path = "{}" }}
+shuttle-service = {{ path = "{}" }}
 
 shuttle-aws-rds = {{ path = "{}" }}
 shuttle-persist = {{ path = "{}" }}
@@ -59,8 +61,11 @@ shuttle-thruster = {{ path = "{}" }}
 shuttle-tide = {{ path = "{}" }}
 shuttle-tower = {{ path = "{}" }}
 shuttle-warp = {{ path = "{}" }}"#,
-                    WORKSPACE_ROOT.join("service").display(),
+                    WORKSPACE_ROOT.join("codegen").display(),
+                    WORKSPACE_ROOT.join("common").display(),
+                    WORKSPACE_ROOT.join("proto").display(),
                     WORKSPACE_ROOT.join("runtime").display(),
+                    WORKSPACE_ROOT.join("service").display(),
                     WORKSPACE_ROOT.join("resources").join("aws-rds").display(),
                     WORKSPACE_ROOT.join("resources").join("persist").display(),
                     WORKSPACE_ROOT.join("resources").join("shared-db").display(),

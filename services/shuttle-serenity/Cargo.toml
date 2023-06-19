@@ -1,19 +1,20 @@
 [package]
 name = "shuttle-serenity"
 version = "0.21.0"
-edition = "2021"
-license = "Apache-2.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Service implementation to run a serenity server on shuttle"
 keywords = ["shuttle-service", "serenity"]
 
-[workspace]
-
 [dependencies]
 serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-shuttle-runtime = { path = "../../runtime", version = "0.21.0" }
+
+[dependencies.shuttle-runtime]
+workspace = true
 
 [dev-dependencies]
-anyhow = "1.0.69"
+anyhow = { workspace = true }
 shuttle-secrets = { path = "../../resources/secrets" }
 tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }
-tracing = "0.1.37"
+tracing = { workspace = true }

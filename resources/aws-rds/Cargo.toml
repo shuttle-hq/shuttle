@@ -10,10 +10,13 @@ keywords = ["shuttle-service", "rds"]
 async-trait = "0.1.56"
 paste = "1.0.7"
 serde = { version = "1.0.148", features = ["derive"] }
-shuttle-service = { path = "../../service", version = "0.21.0" }
-sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls"] }
+shuttle-service = { path = "../../service", version = "0.21.0", default-features = false }
+sqlx = "0.6.2"
 
 [features]
-postgres = ["sqlx/postgres"]
-mysql = ["sqlx/mysql"]
-mariadb = ["sqlx/mysql"]
+postgres = ["sqlx/postgres", "sqlx/runtime-tokio-native-tls"]
+postgres-rustls = ["sqlx/postgres", "sqlx/runtime-tokio-rustls"]
+mysql = ["sqlx/mysql", "sqlx/runtime-tokio-native-tls"]
+mysql-rustls = ["sqlx/mysql", "sqlx/runtime-tokio-rustls"]
+mariadb = ["sqlx/mysql", "sqlx/runtime-tokio-native-tls"]
+mariadb-rustls = ["sqlx/mysql", "sqlx/runtime-tokio-rustls"]

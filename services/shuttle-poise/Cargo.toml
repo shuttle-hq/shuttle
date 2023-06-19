@@ -1,16 +1,17 @@
 [package]
 name = "shuttle-poise"
 version = "0.21.0"
-edition = "2021"
-license = "Apache-2.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Service implementation to run a poise discord bot on shuttle"
 keywords = ["shuttle-service", "poise", "discord-bot", "serenity"]
 
-[workspace]
-
 [dependencies]
-poise = { version = "0.5.2" }
-shuttle-runtime = { path = "../../runtime", version = "0.21.0" }
+poise = "0.5.5"
+
+[dependencies.shuttle-runtime]
+workspace = true
 
 [dev-dependencies]
 shuttle-secrets = { path = "../../resources/secrets" }

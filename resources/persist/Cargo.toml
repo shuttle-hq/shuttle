@@ -1,14 +1,21 @@
 [package]
 name = "shuttle-persist"
 version = "0.21.0"
-edition = "2021"
-license = "Apache-2.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Plugin for persist objects"
 keywords = ["shuttle-service", "persistence"]
 
 [dependencies]
-async-trait = "0.1.56"
+async-trait = { workspace = true }
 bincode = "1.2.1"
-serde = { version = "1.0.0", features = ["derive"] }
-shuttle-service = { path = "../../service", version = "0.21.0" }
-thiserror = "1.0.32"
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+
+[dependencies.shuttle-common]
+workspace = true
+
+[dependencies.shuttle-service]
+workspace = true
+default-features = false

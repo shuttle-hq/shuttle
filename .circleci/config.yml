@@ -88,8 +88,11 @@ commands:
           command: |
             cat\<< EOF > ~/.cargo/config.toml
             [patch.crates-io]
-            shuttle-service = { path = "$PWD/service" }
+            shuttle-codegen = { path = "$PWD/codegen" }
+            shuttle-common = { path = "$PWD/common" }
+            shuttle-proto = { path = "$PWD/proto" }
             shuttle-runtime = { path = "$PWD/runtime" }
+            shuttle-service = { path = "$PWD/service" }
 
             shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
             shuttle-persist = { path = "$PWD/resources/persist" }
@@ -176,26 +179,30 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      # Check this to make sure we do not include patched dependencies in
-      # the Cargo.lock.
+      # Check this to make sure we do not include patched dependencies in the Cargo.lock.
       - run:
           command: |
-            [[ -z $(cat Cargo.lock | grep "\[\[patch.unused\]\]") ]]
+            [ -z $(grep "\[\[patch.unused\]\]" Cargo.lock) ]
       - run: cargo fmt --all --check
       # TODO: this is incompatible with workspace inheritance, uncomment when
       # https://github.com/DevinR528/cargo-sort/pull/29 is merged
       # - run: cargo install cargo-sort
       # - run: cargo sort --check --workspace
-      - run: |
-          cargo clippy --tests \
-                       --all-targets \
-                       --all-features \
-                       --no-deps -- \
-                       --D warnings \
-                       -A clippy::let-unit-value \
-                       -A clippy::format-push-string
+      - run: cargo clippy --tests --all-targets --all-features --no-deps -- --D warnings
       - save-cargo-cache
-  check-standalone:
+  test-workspace-member:
+    parameters:
+      crate:
+        description: "Crate in workspace to test"
+        type: string
+    executor: docker-rust
+    steps:
+      - checkout
+      - restore-cargo-cache
+      - apply-patches
+      - run: cargo test --package << parameters.crate >> --all-features -- --nocapture
+      - save-cargo-cache
+  test-standalone:
     parameters:
       path:
         description: "Path to crate external from workspace"
@@ -220,15 +227,13 @@ jobs:
                        << parameters.features >> \
                        --manifest-path << parameters.path >>/Cargo.toml \
                        --no-deps -- \
-                       --D warnings \
-                       -A clippy::let-unit-value \
-                       -A clippy::format-push-string
+                       --D warnings
       - run: cargo test << parameters.features >> --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
       - save-cargo-cache
-  platform-test:
+  test-workspace-member-integration:
     parameters:
       crate:
-        description: "Crate to test"
+        description: "Crate in workspace to test"
         type: string
     # Using an image since tests will start a docker container
     executor: image-ubuntu
@@ -601,64 +606,86 @@ workflows:
   ci:
     jobs:
       - workspace
-      - check-standalone:
-          name: << matrix.path >>
+      - test-workspace-member:
+          name: << matrix.crate >>
+          matrix:
+            parameters:
+              crate:
+                # resources
+                - shuttle-persist
+                - shuttle-secrets
+                - shuttle-static-folder
+                # services
+                - shuttle-actix-web
+                - shuttle-axum
+                - shuttle-next
+                - shuttle-poem
+                - shuttle-poise
+                - shuttle-rocket
+                - shuttle-salvo
+                - shuttle-serenity
+                - shuttle-thruster
+                - shuttle-tide
+                - shuttle-tower
+                - shuttle-warp
+      - test-standalone:
+          name: "<< matrix.path >>"
           matrix:
             parameters:
               path:
-                - resources/aws-rds
-                - resources/persist
-                - resources/secrets
-                - resources/static-folder
                 - resources/turso
-                - services/shuttle-actix-web
-                - services/shuttle-axum
-                - services/shuttle-next
-                - services/shuttle-poem
-                - services/shuttle-poise
-                - services/shuttle-rocket
-                - services/shuttle-salvo
-                - services/shuttle-serenity
-                - services/shuttle-thruster
-                - services/shuttle-tide
-                - services/shuttle-tower
-                - services/shuttle-warp
-      - check-standalone:
-          # shuttle-shared-db has mutually exclusive features
-          # so we run checks for each feature separately
+      - test-standalone:
+          # Has mutually exclusive features, so we run checks for each feature separately
           name: "resources/shared-db: << matrix.features >>"
           matrix:
-            alias: check-standalone-shared-db
+            alias: test-standalone-shared-db
             parameters:
-              path: [resources/shared-db]
+              path:
+                - resources/shared-db
               features:
                 - "-F mongodb"
                 - "-F postgres"
                 - "-F postgres-rustls"
-      - platform-test:
+      ############ This crate has no tests, therefore excluded.
+      # - test-standalone:
+      #   # Has mutually exclusive features, so we run checks for each feature separately
+      #     name: "resources/aws-rds: << matrix.features >>"
+      #     matrix:
+      #       alias: test-standalone-aws-rds
+      #       parameters:
+      #         path:
+      #           - resources/aws-rds
+      #         features:
+      #           - "-F postgres"
+      #           - "-F postgres-rustls"
+      #           - "-F mysql"
+      #           - "-F mysql-rustls"
+      #           - "-F mariadb"
+      #           - "-F mariadb-rustls"
+      - test-workspace-member-integration:
           name: << matrix.crate >>
           requires:
             - workspace
           matrix:
             parameters:
               crate:
-                [
-                  "shuttle-auth",
-                  "cargo-shuttle",
-                  "shuttle-codegen",
-                  "shuttle-common",
-                  "shuttle-deployer",
-                  "shuttle-proto",
-                  "shuttle-provisioner",
-                  "shuttle-resource-recorder",
-                  "shuttle-runtime",
-                  "shuttle-service",
-                ]
+                - shuttle-auth
+                - cargo-shuttle
+                - shuttle-codegen
+                - shuttle-common
+                - shuttle-deployer
+                - shuttle-proto
+                - shuttle-provisioner
+                - shuttle-resource-recorder
+                - shuttle-runtime
+                - shuttle-service
       - e2e-test:
           requires:
-            - platform-test
-            - check-standalone
-            - check-standalone-shared-db
+            - test-workspace-member
+            - test-workspace-member-integration
+            - test-standalone
+            - test-standalone-shared-db
+            # - test-standalone-aws-rds
           filters:
             branches:
               only: production

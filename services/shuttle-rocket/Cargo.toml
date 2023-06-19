@@ -1,16 +1,17 @@
 [package]
 name = "shuttle-rocket"
 version = "0.21.0"
-edition = "2021"
-license = "Apache-2.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Service implementation to run a rocket webserver on shuttle"
 keywords = ["shuttle-service", "rocket"]
 
-[workspace]
-
 [dependencies]
-rocket = { version = "0.5.0-rc.2" }
-shuttle-runtime = { path = "../../runtime", version = "0.21.0" }
+rocket = "0.5.0-rc.3"
+
+[dependencies.shuttle-runtime]
+workspace = true
 
 [dev-dependencies]
 tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

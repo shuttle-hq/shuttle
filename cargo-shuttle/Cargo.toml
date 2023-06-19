@@ -11,6 +11,7 @@ homepage = "https://www.shuttle.rs"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bollard = { workspace = true }
+cargo-generate = "0.18.3"
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
@@ -19,28 +20,31 @@ crossbeam-channel = { workspace = true }
 crossterm = { workspace = true }
 dialoguer = { version = "0.10.4", features = ["fuzzy-select"] }
 dirs = { workspace = true }
-dunce = "1.0.3"
+dunce = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
 git2 = "0.17.2"
 home = { workspace = true }
 headers = { workspace = true }
-indicatif = "0.17.3"
+indicatif = "0.17.5"
 ignore = "0.4.20"
 indoc = "2.0.1"
 openssl = { version = "0.10", optional = true }
 portpicker = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
-reqwest-middleware = "0.2.0"
-reqwest-retry = "0.2.0"
+reqwest-middleware = "0.2.2"
+reqwest-retry = "0.2.2"
 rmp-serde = { workspace = true }
+semver = "1.0.17"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres"] }
 strum = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal"] }
-tokio-tungstenite = { version = "0.19.0", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.19.0", features = [
+  "rustls-tls-webpki-roots",
+] }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tonic = { workspace = true }
@@ -50,11 +54,9 @@ tracing-subscriber = { workspace = true, features = [
   "env-filter",
   "fmt",
 ] }
-url = "2.3.1"
+url = "2.4.0"
 uuid = { workspace = true, features = ["v4"] }
-webbrowser = "0.8.2"
-semver = "1.0.17"
-cargo-generate = "0.18.3"
+webbrowser = "0.8.10"
 
 [dependencies.shuttle-common]
 workspace = true
@@ -71,7 +73,7 @@ features = ["builder"]
 vendored-openssl = ["openssl/vendored"]
 
 [dev-dependencies]
-assert_cmd = "2.0.6"
+assert_cmd = "2.0.11"
 rexpect = "0.5.0"
 tempfile = { workspace = true }
 test-context = "0.1.4"

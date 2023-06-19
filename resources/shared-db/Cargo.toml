@@ -7,11 +7,11 @@ description = "Plugin for managing shared databases on shuttle"
 keywords = ["shuttle-service", "database"]
 
 [dependencies]
-async-trait = "0.1.56"
-mongodb = { version = "2.3.0", optional = true }
-serde = { version = "1.0.148", features = ["derive"] }
-shuttle-service = { path = "../../service", version = "0.21.0" }
-sqlx = { version = "0.6.2", optional = true }
+async-trait = "0.1.68"
+mongodb = { version = "2.5.0", optional = true }
+serde = { version = "1.0.164", features = ["derive"] }
+shuttle-service = { path = "../../service", version = "0.21.0", default-features = false }
+sqlx = { version = "0.6.3", optional = true }
 
 [features]
 postgres = ["sqlx/postgres", "sqlx/runtime-tokio-native-tls"]

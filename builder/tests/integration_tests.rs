@@ -41,7 +41,7 @@ async fn build_crate() {
 
         // Build a normal hello world archive
         let deployment_id = Ulid::new().to_string();
-        let archive = fs::read(resources.join("hello-world-0.1.0.crate")).unwrap();
+        let archive = fs::read(resources.join("hello-world-0.1.0.tar.gz")).unwrap();
 
         let response = client
             .build(Request::new(BuildRequest {
@@ -57,7 +57,7 @@ async fn build_crate() {
 
         // Build an archive with secrets
         let deployment_id = Ulid::new().to_string();
-        let archive = fs::read(resources.join("secrets-0.1.0.crate")).unwrap();
+        let archive = fs::read(resources.join("secrets-0.1.0.tar.gz")).unwrap();
 
         let response = client
             .build(Request::new(BuildRequest {
@@ -80,7 +80,7 @@ async fn build_crate() {
         // Build a workspace archive
         // TODO: add workspace support to nbuild
         // let deployment_id = Ulid::new().to_string();
-        // let archive = fs::read(resources.join("workspace-0.1.0.crate")).unwrap();
+        // let archive = fs::read(resources.join("workspace-0.1.0.tar.gz")).unwrap();
 
         // let response = client
         //     .build(Request::new(BuildRequest {
@@ -97,7 +97,7 @@ async fn build_crate() {
         // Build a wasm archive
         // TODO: add target support to nbuild
         // let deployment_id = Ulid::new().to_string();
-        // let archive = fs::read(resources.join("wasm-0.1.0.crate")).unwrap();
+        // let archive = fs::read(resources.join("wasm-0.1.0.tar.gz")).unwrap();
 
         // let response = client
         //     .build(Request::new(BuildRequest {

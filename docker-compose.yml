@@ -129,34 +129,18 @@ services:
       - "--internal-pg-address=postgres"
       - "--fqdn=${DB_FQDN}"
       - "--auth-uri=http://auth:8000"
-  postgres:
-    image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
-    restart: always
+
+  deck-chores:
+    image: docker.io/funkyfuture/deck-chores:1
+    restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    networks:
-      user-net:
+      TIMEZONE: UTC
     volumes:
-      - postgres-vol:/var/lib/postgresql/data
-    ports:
-      - 8002:8000
-      - 5432:5432
+      - ${DOCKER_SOCK}:/var/run/docker.sock
     deploy:
       placement:
         constraints:
-          - node.hostname==postgres
-  mongodb:
-    image: docker.io/library/mongo:5.0.10
-    restart: always
-    networks:
-      user-net:
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-    deploy:
-      placement:
-        constraints:
-          - node.hostname==postgres
+          - node.hostname==controller
   otel-collector:
     image: "${CONTAINER_REGISTRY}/otel:${OTEL_TAG}"
     volumes:
@@ -172,6 +156,18 @@ services:
       placement:
         constraints:
           - node.hostname==controller
+  mongodb:
+    image: docker.io/library/mongo:5.0.10
+    restart: always
+    networks:
+      user-net:
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==postgres
   panamax:
     image: "${CONTAINER_REGISTRY}/panamax:${PANAMAX_TAG}"
     restart: always
@@ -188,14 +184,19 @@ services:
       placement:
         constraints:
           - node.hostname==controller
-  deck-chores:
-    image: docker.io/funkyfuture/deck-chores:1
-    restart: unless-stopped
+  postgres:
+    image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
+    restart: always
     environment:
-      TIMEZONE: UTC
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      user-net:
     volumes:
-      - ${DOCKER_SOCK}:/var/run/docker.sock
+      - postgres-vol:/var/lib/postgresql/data
+    ports:
+      - 8002:8000
+      - 5432:5432
     deploy:
       placement:
         constraints:
-          - node.hostname==controller
+          - node.hostname==postgres

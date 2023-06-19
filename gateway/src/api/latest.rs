@@ -1196,8 +1196,11 @@ pub mod tests {
     use axum::body::Body;
     use axum::headers::Authorization;
     use axum::http::Request;
+    use axum_extra::extract::cookie;
     use futures::TryFutureExt;
+    use http::HeaderValue;
     use hyper::StatusCode;
+    use serde_json::Value;
     use tokio::sync::mpsc::channel;
     use tokio::sync::oneshot;
     use tower::Service;
@@ -1385,6 +1388,181 @@ pub mod tests {
         //     })
         //     .await
         //     .unwrap();
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn api_auth_endpoints() -> anyhow::Result<()> {
+        use rand::distributions::{Alphanumeric, DistString};
+
+        // The api key of the admin user we inserted when setting up the shuttle environment,
+        // see the contribution doc for how to do that.
+        const AUTH_ADMIN_KEY: &str = "dh9z58jttoes3qvt";
+        let admin_authorization = Authorization::bearer(AUTH_ADMIN_KEY).unwrap();
+
+        let world = World::new().await;
+        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+
+        let (sender, mut receiver) = channel::<BoxedTask>(256);
+        tokio::spawn(async move {
+            while receiver.recv().await.is_some() {
+                // do not do any work with inbound requests
+            }
+        });
+
+        // The address of the auth service we start with `make up`, see the contribution doc.
+        let auth_uri: Uri = "http://127.0.0.1:8008".parse().unwrap();
+
+        let mut router = ApiBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_sender(sender)
+            .with_default_routes()
+            .with_auth_service(&auth_uri)
+            .await
+            .into_router();
+
+        // We'll insert a new user for our tests, first generate a name.
+        let new_user_name = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
+
+        let post_user_request = || {
+            Request::builder()
+                .method("POST")
+                .uri(format!("/users/{new_user_name}/basic"))
+                .body(Body::empty())
+                .unwrap()
+        };
+
+        // Post user without admin user.
+        router
+            .call(post_user_request())
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::UNAUTHORIZED))
+            .await
+            .unwrap();
+
+        // Post user with admin token.
+        router
+            .call(post_user_request().with_header(&admin_authorization))
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
+            .await
+            .unwrap();
+
+        // Login without admin user bearer token.
+        let login_request = || {
+            Request::builder()
+                .method("POST")
+                .uri(format!("/login/{new_user_name}"))
+                .body(Body::empty())
+                .unwrap()
+        };
+
+        router
+            .call(login_request())
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::UNAUTHORIZED))
+            .await
+            .unwrap();
+
+        // Login with admin user and verify that it returns the expected cookie.
+        let login_response = router
+            .call(login_request().with_header(&admin_authorization))
+            .await
+            .unwrap();
+
+        let cookie = login_response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap();
+
+        let cookie = Cookie::parse(cookie).unwrap();
+
+        assert_eq!(cookie.http_only(), Some(true));
+        assert_eq!(cookie.same_site(), Some(cookie::SameSite::Strict));
+        assert_eq!(cookie.secure(), Some(true));
+        assert_eq!(cookie.name(), COOKIE_NAME);
+
+        let get_user_request = || {
+            Request::builder()
+                .method("GET")
+                .uri(format!("/users/{new_user_name}"))
+                .body(Body::empty())
+                .unwrap()
+        };
+
+        // Get user without admin user bearer token.
+        router
+            .call(get_user_request())
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::UNAUTHORIZED))
+            .await
+            .unwrap();
+
+        // Get user with admin user bearer token.
+        let user = router
+            .call(get_user_request().with_header(&admin_authorization))
+            .await
+            .unwrap();
+
+        assert_eq!(user.status(), StatusCode::OK);
+        let user: Value =
+            serde_json::from_slice(&hyper::body::to_bytes(user.into_body()).await.unwrap())
+                .unwrap();
+
+        let user_api_key = user["key"].as_str().unwrap();
+
+        let reset_key_request = || {
+            Request::builder()
+                .method("PUT")
+                .uri("/users/reset-api-key")
+                .body(Body::empty())
+                .unwrap()
+        };
+
+        // Reset the api-key of our test using their api-key.
+        router
+            .call(reset_key_request().with_header(&Authorization::bearer(user_api_key).unwrap()))
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
+            .await
+            .unwrap();
+
+        // Reset the api-key of our test user using the cookie from login.
+        let mut reset_key_request = reset_key_request();
+
+        reset_key_request
+            .headers_mut()
+            .insert(COOKIE, HeaderValue::from_str(&cookie.to_string()).unwrap());
+
+        router
+            .call(reset_key_request)
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
+            .await
+            .unwrap();
+
+        // Logout our test user and verify that it returns the expected removal cookie,
+        // this expects the shuttle.sid cookie to be set know which user to logout.
+        let mut logout_request = Request::builder()
+            .method("POST")
+            .uri("/logout")
+            .body(Body::empty())
+            .unwrap();
+
+        logout_request
+            .headers_mut()
+            .insert(COOKIE, HeaderValue::from_str(&cookie.to_string()).unwrap());
+
+        let logout_response = router.call(logout_request).await.unwrap();
+
+        let cookie = logout_response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap();
+
+        let cookie = Cookie::parse(cookie).unwrap();
+
+        assert_eq!(cookie.http_only(), Some(true));
+        assert_eq!(cookie.name(), COOKIE_NAME);
 
         Ok(())
     }

@@ -173,6 +173,7 @@ impl State {
 
 /// Config when creating a new project
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct Config {
     pub idle_minutes: u64,
 }

@@ -18,6 +18,7 @@ use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
+use utoipa::ToSchema;
 
 pub mod acme;
 pub mod api;
@@ -172,7 +173,7 @@ impl std::fmt::Display for ProjectName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize, ToSchema)]
 #[sqlx(transparent)]
 pub struct AccountName(String);
 
@@ -772,7 +773,8 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(log_out.clone())
             .with_default_routes()
-            .with_auth_service(world.context().auth_uri)
+            .with_auth_service(&world.context().auth_uri)
+            .await
             .binding_to(world.args.control);
 
         let user = UserServiceBuilder::new()

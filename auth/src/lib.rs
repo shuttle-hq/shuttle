@@ -12,10 +12,9 @@ use cookie::{Cookie, SameSite};
 use http::header::SET_COOKIE;
 use ring::rand::SystemRandom;
 use secrets::KeyManager;
-use session::{
-    sign_cookie, SessionState, SessionToken, SessionUser, COOKIE_EXPIRATION, COOKIE_NAME,
-};
-use shuttle_common::claims::Claim;
+use session::{sign_cookie, SessionState, SessionToken, SessionUser, COOKIE_EXPIRATION};
+use shuttle_common::backends::auth::COOKIE_NAME;
+use shuttle_common::claims::{AccountTier, Claim};
 use shuttle_common::ApiKey;
 use shuttle_proto::auth::auth_server::Auth;
 use shuttle_proto::auth::{
@@ -35,7 +34,6 @@ pub use args::{Args, Commands, InitArgs};
 pub use dal::{Dal, Sqlite};
 pub use secrets::EdDsaManager;
 pub use session::SessionLayer;
-pub use user::AccountTier;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -91,9 +89,12 @@ where
     ) -> Result<User, Error> {
         let key = ApiKey::generate();
 
+        let account_tier = AccountTier::try_from(account_tier.as_str())
+            .map_err(|err| Error::InvalidAccountTier(err.to_string()))?;
+
         let user = self
             .dal
-            .create_user(account_name.into(), key, account_tier.try_into()?)
+            .create_user(account_name.into(), key, account_tier)
             .await?;
 
         Ok(user)
@@ -245,7 +246,8 @@ where
         Ok(Response::new(UserResponse {
             account_name: name.to_string(),
             account_tier: account_tier.to_string(),
-            // TODO: change this to .expose() when #925 is merged.
+            // This has to be as_ref to yield the inner key, the ApiKey
+            // display impl will return REDACTED.
             key: key.as_ref().to_string(),
         }))
     }
@@ -273,7 +275,8 @@ where
         Ok(Response::new(UserResponse {
             account_name: name.to_string(),
             account_tier: account_tier.to_string(),
-            // TODO: change this to .expose() when #925 is merged.
+            // This has to be as_ref to yield the inner key, the ApiKey
+            // display impl will return REDACTED.
             key: key.as_ref().to_string(),
         }))
     }
@@ -298,7 +301,9 @@ where
 
         let mut response = Response::new(UserResponse {
             account_name: name.to_string(),
-            key: key.to_string(),
+            // This has to be as_ref to yield the inner key, the ApiKey
+            // display impl will return REDACTED.
+            key: key.as_ref().to_string(),
             account_tier: account_tier.to_string(),
         });
 

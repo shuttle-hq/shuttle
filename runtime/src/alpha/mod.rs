@@ -12,15 +12,13 @@ use anyhow::Context;
 use async_trait::async_trait;
 use core::future::Future;
 use shuttle_common::{
-    backends::{
-        auth::{AuthPublicKey, JwtAuthenticationLayer},
-        tracing::ExtractPropagationLayer,
-    },
+    backends::{auth::JwtAuthenticationLayer, tracing::ExtractPropagationLayer},
     claims::{Claim, ClaimLayer, InjectPropagationLayer},
     resource,
     storage_manager::{ArtifactsStorageManager, StorageManager, WorkingDirStorageManager},
 };
 use shuttle_proto::{
+    auth::AuthPublicKey,
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
         self,
@@ -53,12 +51,14 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let args = Args::parse().expect("could not parse arguments");
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
+    let auth_client = shuttle_proto::auth::client(&args.auth_uri)
+        .await
+        .expect("auth service should be reachable");
+
     let provisioner_address = args.provisioner_address;
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
-        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
-            args.auth_uri,
-        )))
+        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_client)))
         .layer(ExtractPropagationLayer);
 
     // We wrap the StorageManager trait object in an Arc rather than a Box, since we need

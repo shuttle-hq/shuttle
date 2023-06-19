@@ -1,27 +1,28 @@
-use std::{convert::Infallible, fmt::Debug, net::Ipv4Addr, sync::Arc, time::Duration};
+use std::{convert::Infallible, fmt::Debug, sync::Arc, time::Duration};
 
 use axum::{
-    body::{boxed, HttpBody},
-    headers::{authorization::Bearer, Authorization, Cookie, Header, HeaderMapExt},
+    body::boxed,
+    headers::{authorization::Bearer, Authorization, HeaderMapExt},
     response::Response,
 };
-use futures::future::BoxFuture;
-use http::{Request, StatusCode, Uri};
-use hyper::{
-    client::{connect::dns::GaiResolver, HttpConnector},
-    Body, Client,
+use axum_extra::extract::CookieJar;
+use futures::{
+    future::{BoxFuture, Either},
+    Future,
 };
-use hyper_reverse_proxy::ReverseProxy;
-use once_cell::sync::Lazy;
-use opentelemetry::global;
-use opentelemetry_http::HeaderInjector;
-use shuttle_common::backends::{auth::ConvertResponse, cache::CacheManagement};
+use http::{header::COOKIE, HeaderMap, Request, StatusCode};
+use hyper::Body;
+use shuttle_common::{
+    backends::{auth::COOKIE_NAME, cache::CacheManagement},
+    claims::InjectPropagation,
+};
+use shuttle_proto::auth::{
+    auth_client::AuthClient, ApiKeyRequest, ConvertCookieRequest, TokenResponse,
+};
+use tonic::{metadata::MetadataValue, transport::Channel};
+use tonic::{Request as TonicRequest, Status};
 use tower::{Layer, Service};
-use tracing::{error, trace, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
-
-static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
-    Lazy::new(|| ReverseProxy::new(Client::new()));
+use tracing::{error, trace};
 
 /// Time to cache tokens for. Currently tokens take 15 minutes to expire (see [EXP_MINUTES]) which leaves a 10 minutes
 /// buffer (EXP_MINUTES - CACHE_MINUTES). We want the buffer to be atleast as long as the longest builds which has
@@ -35,18 +36,18 @@ const CACHE_MINUTES: u64 = 5;
 /// and inserting it in the cache if it isn't there.
 #[derive(Clone)]
 pub struct ShuttleAuthLayer {
-    auth_uri: Uri,
     cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
+    auth_client: AuthClient<InjectPropagation<Channel>>,
 }
 
 impl ShuttleAuthLayer {
     pub fn new(
-        auth_uri: Uri,
         cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
+        auth_client: AuthClient<InjectPropagation<Channel>>,
     ) -> Self {
         Self {
-            auth_uri,
             cache_manager,
+            auth_client,
         }
     }
 }
@@ -57,8 +58,8 @@ impl<S> Layer<S> for ShuttleAuthLayer {
     fn layer(&self, inner: S) -> Self::Service {
         ShuttleAuthService {
             inner,
-            auth_uri: self.auth_uri.clone(),
             cache_manager: self.cache_manager.clone(),
+            auth_client: self.auth_client.clone(),
         }
     }
 }
@@ -66,8 +67,8 @@ impl<S> Layer<S> for ShuttleAuthLayer {
 #[derive(Clone)]
 pub struct ShuttleAuthService<S> {
     inner: S,
-    auth_uri: Uri,
     cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
+    auth_client: AuthClient<InjectPropagation<Channel>>,
 }
 
 impl<S> Service<Request<Body>> for ShuttleAuthService<S>
@@ -110,200 +111,139 @@ where
             });
         }
 
-        let forward_to_auth = match req.uri().path() {
-            "/login" | "/logout" => true,
-            other => other.starts_with("/users"),
-        };
+        // TODO: read this page to get rid of this clone
+        // https://github.com/tower-rs/tower/blob/master/guides/building-a-middleware-from-scratch.md
+        let mut this = self.clone();
 
-        // If /users/reset-api-key is called, invalidate the cached JWT.
-        if req.uri().path() == "/users/reset-api-key" {
-            if let Some((cache_key, _)) = cache_key_and_token_req(&req) {
-                self.cache_manager.invalidate(&cache_key);
-            };
-        }
+        // Enrich the current key | session
+        Box::pin(async move {
+            // Only if there is something to upgrade
+            if let Some((cache_key, token_request)) =
+                cache_key_and_token_req(req.headers(), &mut this.auth_client)
+            {
+                // Check if the token is cached.
+                if let Some(token) = this.cache_manager.get(&cache_key) {
+                    trace!("JWT cache hit, setting token from cache on request");
 
-        // If logout is called, invalidate the cached JWT for the callers cookie.
-        if req.uri().path() == "/logout" {
-            if let Ok(Some(cookie)) = req.headers().typed_try_get::<Cookie>() {
-                if let Some(cache_key) = cookie.get("shuttle.sid").map(|id| id.to_string()) {
-                    self.cache_manager.invalidate(&cache_key);
-                }
-            };
-        }
+                    // Token is cached and not expired, return it in the response.
+                    req.headers_mut()
+                        .typed_insert(Authorization::bearer(&token).unwrap());
+                } else {
+                    trace!("JWT cache missed, sending convert token request");
 
-        if forward_to_auth {
-            let target_url = self.auth_uri.to_string();
+                    // Token is not in the cache, send a convert request with either a cookie
+                    // or an api-key bearer token from the request headers.
+                    let token_response = match token_request.await {
+                        Ok(res) => res,
+                        Err(error) => {
+                            error!(?error, "failed to call authentication service");
 
-            let cx = Span::current().context();
-
-            global::get_text_map_propagator(|propagator| {
-                propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
-            });
-
-            Box::pin(async move {
-                let response = PROXY_CLIENT
-                    .call(Ipv4Addr::LOCALHOST.into(), &target_url, req)
-                    .await;
-
-                match response {
-                    Ok(res) => {
-                        let (parts, body) = res.into_parts();
-                        let body =
-                            <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();
-
-                        Ok(Response::from_parts(parts, body))
-                    }
-                    Err(error) => {
-                        error!(?error, "failed to call authentication service");
-
-                        Ok(Response::builder()
-                            .status(StatusCode::SERVICE_UNAVAILABLE)
-                            .body(boxed(Body::empty()))
-                            .unwrap())
-                    }
-                }
-            })
-        } else {
-            // Enrich the current key | session
-
-            // TODO: read this page to get rid of this clone
-            // https://github.com/tower-rs/tower/blob/master/guides/building-a-middleware-from-scratch.md
-            let mut this = self.clone();
-
-            Box::pin(async move {
-                // Only if there is something to upgrade
-                if let Some((cache_key, token_request)) = cache_key_and_token_req(&req) {
-                    let target_url = this.auth_uri.to_string();
-
-                    // Check if the token is cached.
-                    if let Some(token) = this.cache_manager.get(&cache_key) {
-                        trace!("JWT cache hit, setting token from cache on request");
-
-                        // Token is cached and not expired, return it in the response.
-                        req.headers_mut()
-                            .typed_insert(Authorization::bearer(&token).unwrap());
-                    } else {
-                        trace!("JWT cache missed, sending convert token request");
-
-                        // Token is not in the cache, send a convert request.
-                        let token_response = match PROXY_CLIENT
-                            .call(Ipv4Addr::LOCALHOST.into(), &target_url, token_request)
-                            .await
-                        {
-                            Ok(res) => res,
-                            Err(error) => {
-                                error!(?error, "failed to call authentication service");
-
-                                return Ok(Response::builder()
-                                    .status(StatusCode::SERVICE_UNAVAILABLE)
-                                    .body(boxed(Body::empty()))
-                                    .unwrap());
-                            }
-                        };
-
-                        // Bubble up auth errors
-                        if token_response.status() != StatusCode::OK {
-                            let (parts, body) = token_response.into_parts();
-                            let body = body.map_err(axum::Error::new).boxed_unsync();
-
-                            return Ok(Response::from_parts(parts, body));
+                            return Ok(Response::builder()
+                                .status(StatusCode::SERVICE_UNAVAILABLE)
+                                .body(boxed(Body::empty()))
+                                .unwrap());
                         }
-
-                        let body = match hyper::body::to_bytes(token_response.into_body()).await {
-                            Ok(body) => body,
-                            Err(error) => {
-                                error!(
-                                    error = &error as &dyn std::error::Error,
-                                    "failed to get response body"
-                                );
-
-                                return Ok(Response::builder()
-                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                                    .body(boxed(Body::empty()))
-                                    .unwrap());
-                            }
-                        };
-
-                        let response = match serde_json::from_slice::<ConvertResponse>(&body) {
-                            Ok(response) => response,
-                            Err(error) => {
-                                error!(
-                                    error = &error as &dyn std::error::Error,
-                                    "failed to convert body to ConvertResponse"
-                                );
-
-                                return Ok(Response::builder()
-                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                                    .body(boxed(Body::empty()))
-                                    .unwrap());
-                            }
-                        };
-
-                        let bearer = Authorization::bearer(&response.token).expect("bearer token");
-
-                        this.cache_manager.insert(
-                            cache_key.as_str(),
-                            response.token,
-                            Duration::from_secs(CACHE_MINUTES * 60),
-                        );
-
-                        trace!("token inserted in cache, request proceeding");
-                        req.headers_mut().typed_insert(bearer);
-                    };
-                }
-
-                match this.inner.call(req).await {
-                    Ok(response) => Ok(response),
-                    Err(error) => {
-                        error!(?error, "unexpected internal error from gateway");
-
-                        Ok(Response::builder()
-                            .status(StatusCode::SERVICE_UNAVAILABLE)
-                            .body(boxed(Body::empty()))
-                            .unwrap())
                     }
+                    .into_inner();
+
+                    let bearer =
+                        Authorization::bearer(&token_response.token).expect("bearer token");
+
+                    this.cache_manager.insert(
+                        cache_key.as_str(),
+                        token_response.token,
+                        Duration::from_secs(CACHE_MINUTES * 60),
+                    );
+
+                    trace!("token inserted in cache, request proceeding");
+                    req.headers_mut().typed_insert(bearer);
+                };
+            }
+
+            match this.inner.call(req).await {
+                Ok(response) => Ok(response),
+                Err(error) => {
+                    error!(?error, "unexpected internal error from gateway");
+
+                    Ok(Response::builder()
+                        .status(StatusCode::SERVICE_UNAVAILABLE)
+                        .body(boxed(Body::empty()))
+                        .unwrap())
                 }
-            })
-        }
+            }
+        })
     }
 }
 
-fn cache_key_and_token_req(req: &Request<Body>) -> Option<(String, Request<Body>)> {
-    req.headers()
-        .typed_get::<Authorization<Bearer>>()
-        .map(|bearer| {
-            let cache_key = bearer.token().trim().to_string();
-            let token_request = make_token_request("/auth/key", bearer);
-            (cache_key, token_request)
-        })
-        .or_else(|| {
-            req.headers().typed_get::<Cookie>().and_then(|cookie| {
-                cookie.get("shuttle.sid").map(|id| {
-                    let cache_key = id.to_string();
-                    let token_request = make_token_request("/auth/session", cookie.clone());
-                    (cache_key, token_request)
-                })
-            })
-        })
+/// If the request headers contain a cookie or a bearer token, return a cache key as well as a future
+/// that we can .await if the cache is missed. The future will send a convert request to the auth
+/// service and resolve to a [TokenResponse] containing our JWT.
+fn cache_key_and_token_req<'a>(
+    headers: &HeaderMap,
+    auth_client: &'a mut AuthClient<InjectPropagation<Channel>>,
+) -> Option<(
+    String,
+    Either<
+        impl Future<Output = Result<tonic::Response<TokenResponse>, Status>> + 'a,
+        impl Future<Output = Result<tonic::Response<TokenResponse>, Status>> + 'a,
+    >,
+)> {
+    let Some((cache_key, request)) = convert_cookie_request(headers).or_else(|| convert_api_key_request(headers)) else {
+        // The headers contain neither a bearer token nor a cookie.
+        return None;
+    };
+
+    // While the futures resolve to the same output, they are anonymous types, so we
+    // use Either to combine them into a single type.
+    let future = match request {
+        ConvertRequestType::Cookie(cookie_request) => {
+            Either::Left(auth_client.convert_cookie(cookie_request))
+        }
+        ConvertRequestType::Bearer(bearer_request) => {
+            Either::Right(auth_client.convert_api_key(bearer_request))
+        }
+    };
+
+    Some((cache_key, future))
 }
 
-fn make_token_request(uri: &str, header: impl Header) -> Request<Body> {
-    let mut token_request = Request::builder().uri(uri);
-    token_request
-        .headers_mut()
-        .expect("manual request to be valid")
-        .typed_insert(header);
+enum ConvertRequestType {
+    Cookie(TonicRequest<ConvertCookieRequest>),
+    Bearer(TonicRequest<ApiKeyRequest>),
+}
 
-    let cx = Span::current().context();
+fn convert_cookie_request(headers: &HeaderMap) -> Option<(String, ConvertRequestType)> {
+    let jar = CookieJar::from_headers(headers);
 
-    global::get_text_map_propagator(|propagator| {
-        propagator.inject_context(
-            &cx,
-            &mut HeaderInjector(token_request.headers_mut().expect("request to be valid")),
-        )
+    let Some(cookie) = jar.get(COOKIE_NAME) else {
+        return None;
+    };
+
+    let Ok(metadata_value) = MetadataValue::try_from(&cookie.to_string()) else {
+        return None;
+    };
+
+    let mut request = TonicRequest::new(ConvertCookieRequest::default());
+
+    let cache_key = cookie.value().to_string();
+
+    request
+        .metadata_mut()
+        .insert(COOKIE.as_str(), metadata_value);
+
+    Some((cache_key, ConvertRequestType::Cookie(request)))
+}
+
+fn convert_api_key_request(headers: &HeaderMap) -> Option<(String, ConvertRequestType)> {
+    let Some(bearer) = headers
+        .typed_get::<Authorization<Bearer>>()
+        .map(|bearer| bearer.token().trim().to_string()) else {
+            return None;
+        };
+
+    let request = TonicRequest::new(ApiKeyRequest {
+        api_key: bearer.clone(),
     });
 
-    token_request
-        .body(Body::empty())
-        .expect("manual request to be valid")
+    Some((bearer, ConvertRequestType::Bearer(request)))
 }

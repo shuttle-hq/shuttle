@@ -10,27 +10,37 @@ use axum::handler::Handler;
 use axum::http::Request;
 use axum::middleware::from_extractor;
 use axum::response::Response;
-use axum::routing::{any, get, post};
+use axum::routing::{any, get, post, put};
 use axum::{Json as AxumJson, Router};
+use axum_extra::extract::cookie::Cookie;
+use axum_extra::extract::CookieJar;
 use fqdn::FQDN;
 use futures::Future;
+use http::header::COOKIE;
 use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
-use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
-use shuttle_common::backends::cache::CacheManager;
+use shuttle_common::backends::auth::{JwtAuthenticationLayer, ScopedLayer, COOKIE_NAME};
+use shuttle_common::backends::cache::{CacheManagement, CacheManager};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
-use shuttle_common::claims::{Scope, EXP_MINUTES};
+use shuttle_common::claims::{AccountTier, InjectPropagation, Scope, EXP_MINUTES};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
 use shuttle_common::request_span;
+use shuttle_proto::auth::auth_client::AuthClient;
+use shuttle_proto::auth::{
+    AuthPublicKey, LogoutRequest, NewUser, ResetKeyRequest, ResultResponse, UserRequest,
+};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
-use tracing::{field, instrument, trace};
+use tonic::metadata::MetadataValue;
+use tonic::transport::Channel;
+use tonic::Request as TonicRequest;
+use tracing::{debug, error, field, instrument, trace};
 use ttl_cache::TtlCache;
 use utoipa::IntoParams;
 
-use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
@@ -40,13 +50,13 @@ use x509_parser::pem::parse_x509_pem;
 use x509_parser::time::ASN1Time;
 
 use crate::acme::{AcmeClient, CustomDomain};
-use crate::auth::{ScopedUser, User};
+use crate::auth::{extract_metadata_cookie, insert_metadata_bearer_token, Key, ScopedUser, User};
 use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
 use crate::service::GatewayService;
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{Error, ProjectName};
+use crate::{AccountName, Error, ProjectName};
 
 use super::auth_layer::ShuttleAuthLayer;
 
@@ -153,6 +163,7 @@ async fn get_projects_list(
 #[utoipa::path(
     post,
     path = "/projects/{project_name}",
+    request_body = shuttle_common::models::project::Config,
     responses(
         (status = 200, description = "Successfully created a specific project.", body = shuttle_common::models::project::Response),
         (status = 500, description = "Server internal error.")
@@ -333,6 +344,9 @@ async fn delete_load(
     responses(
         (status = 200, description = "Successfully gets the build queue load as an admin.", body = shuttle_common::models::stats::LoadResponse),
         (status = 500, description = "Server internal error.")
+    ),
+    security(
+        ("api_key" = [])
     )
 )]
 async fn get_load_admin(
@@ -352,6 +366,9 @@ async fn get_load_admin(
     responses(
         (status = 200, description = "Successfully clears the build queue.", body = shuttle_common::models::stats::LoadResponse),
         (status = 500, description = "Server internal error.")
+    ),
+    security(
+        ("api_key" = [])
     )
 )]
 async fn delete_load_admin(
@@ -383,6 +400,9 @@ fn calculate_capacity(running_builds: &mut MutexGuard<TtlCache<Uuid, ()>>) -> st
     responses(
         (status = 200, description = "Successfully revived stopped or errored projects."),
         (status = 500, description = "Server internal error.")
+    ),
+    security(
+        ("api_key" = [])
     )
 )]
 async fn revive_projects(
@@ -402,6 +422,9 @@ async fn revive_projects(
     responses(
         (status = 200, description = "Successfully destroyed the projects."),
         (status = 500, description = "Server internal error.")
+    ),
+    security(
+        ("api_key" = [])
     )
 )]
 async fn destroy_projects(
@@ -605,11 +628,14 @@ async fn renew_gateway_acme_certificate(
 }
 
 #[utoipa::path(
-    post,
+    get,
     path = "/admin/projects",
     responses(
         (status = 200, description = "Successfully fetched the projects list.", body = shuttle_common::models::project::AdminResponse),
         (status = 500, description = "Server internal error.")
+    ),
+    security(
+        ("api_key" = [])
     )
 )]
 async fn get_projects(
@@ -624,14 +650,311 @@ async fn get_projects(
     Ok(AxumJson(projects))
 }
 
+/// Login a user by their account name and return a shuttle.sid cookie, this endpoint expects the
+/// api-key of an admin user as a Bearer token.
+#[instrument(skip_all, fields(%account_name))]
+#[utoipa::path(
+    post,
+    path = "/login/{account_name}",
+    responses(
+        (status = 200, description = "Successfully logged in user and returned cookie."),
+        (status = 401, description = "Unauthorized to due to missing or invalid admin api-key."),
+        (status = 500, description = "Server internal error."),
+        (status = 503, description = "Server not reachable.")
+    ),
+    params(
+        ("account_name" = AccountName, Path, description = "The account name of the user to log in."),
+    ),
+    security(
+        ("api_key" = [])
+    )
+)]
+async fn login(
+    jar: CookieJar,
+    State(RouterState {
+        mut auth_client, ..
+    }): State<RouterState>,
+    key: Key,
+    Path(account_name): Path<AccountName>,
+) -> Result<(CookieJar, AxumJson<shuttle_common::models::user::Response>), Error> {
+    let mut request = TonicRequest::new(UserRequest {
+        account_name: account_name.to_string(),
+    });
+
+    // This endpoint expects the api-key of an admin user in it's bearer token.
+    insert_metadata_bearer_token(request.metadata_mut(), key)?;
+
+    let response = auth_client.login(request).await.map_err(|error| {
+        debug!(error = ?error, "failed to login user");
+        Error::from_kind(ErrorKind::Unauthorized)
+    })?;
+
+    let cookie = extract_metadata_cookie(response.metadata(), "login")?;
+
+    let cookie = Cookie::parse(cookie.to_string()).map_err(|error| {
+        debug!(error = ?error, "failed to parse set-cookie cookie from login request");
+        Error::from_kind(ErrorKind::Internal)
+    })?;
+
+    let jar = jar.add(cookie);
+
+    let response = response.into_inner();
+
+    Ok((jar, AxumJson(response.into())))
+}
+
+/// Logout a user and return a shuttle.sid removal cookie. This endpoint expects a shuttle.sid
+/// cookie.
+#[instrument(skip_all)]
+#[utoipa::path(
+    post,
+    path = "/logout",
+    responses(
+        (status = 200, description = "Successfully logged out user and returned logout cookie."),
+        (status = 401, description = "Unauthorized to due to missing or invalid shuttle.sid cookie."),
+        (status = 500, description = "Server internal error."),
+        (status = 503, description = "Server not reachable.")
+    )
+)]
+async fn logout(
+    jar: CookieJar,
+    State(RouterState {
+        auth_cache,
+        mut auth_client,
+        ..
+    }): State<RouterState>,
+) -> Result<CookieJar, Error> {
+    let cookie = jar
+        .get(COOKIE_NAME)
+        .ok_or(Error::from_kind(ErrorKind::CookieMissing))?;
+
+    // This is the value in `shuttle.sid=<value>`.
+    let cache_key = cookie.value();
+
+    let mut request = TonicRequest::new(LogoutRequest::default());
+
+    request.metadata_mut().insert(
+        COOKIE.as_str(),
+        MetadataValue::try_from(&cookie.to_string()).map_err(|error| {
+            error!(error = ?error, "received malformed {COOKIE_NAME} cookie");
+
+            Error::from_kind(ErrorKind::CookieMalformed)
+        })?,
+    );
+
+    let response = auth_client
+        .logout(request)
+        .await
+        .map_err(|_| Error::from_kind(ErrorKind::Internal))?;
+
+    let logout_cookie = extract_metadata_cookie(response.metadata(), "logout")?;
+
+    let logout_cookie = Cookie::parse(logout_cookie.to_string()).map_err(|error| {
+        debug!(error = ?error, "failed to parse set-cookie cookie from logout request");
+        Error::from_kind(ErrorKind::Internal)
+    })?;
+
+    // TODO: verify this is the correct key
+    if auth_cache.invalidate(cache_key).is_none() {
+        debug!("did not find cookie key to invalidate in auth cache for logout request");
+    }
+
+    Ok(jar.add(logout_cookie))
+}
+
+/// Fetch a user from the auth service state, this endpoint expects the api-key of an admin user as
+/// a Bearer token.
+#[instrument(skip_all, fields(%account_name))]
+#[utoipa::path(
+    get,
+    path = "/users/{account_name}",
+    responses(
+        (status = 200, description = "Successfully retrieved user."),
+        (status = 401, description = "Unauthorized to due to missing or invalid admin api-key."),
+        (status = 404, description = "User not found."),
+        (status = 500, description = "Server internal error."),
+        (status = 503, description = "Server not reachable.")
+    ),
+    params(
+        ("account_name" = AccountName, Path, description = "The account name of the user to get."),
+    ),
+    security(
+        ("api_key" = [])
+    )
+)]
+async fn get_user(
+    State(RouterState {
+        mut auth_client, ..
+    }): State<RouterState>,
+    Path(account_name): Path<AccountName>,
+    key: Key,
+) -> Result<AxumJson<shuttle_common::models::user::Response>, Error> {
+    let mut request = TonicRequest::new(UserRequest {
+        account_name: account_name.to_string(),
+    });
+
+    // This endpoint expects the api-key of an admin user in it's bearer token.
+    insert_metadata_bearer_token(request.metadata_mut(), key)?;
+
+    let response = auth_client
+        .get_user_request(request)
+        .await
+        .map_err(|error| match error.code() {
+            // This is an admin guarded route, if it progresses to querying a user even if it doesn't succeed
+            // it is authorized. For any other failure return 401 Unauthorized.
+            // TODO: should we also make the get_user_request able to return a 500 on DB error?
+            tonic::Code::NotFound => Error::from_kind(ErrorKind::UserNotFound),
+            _ => Error::from_kind(ErrorKind::Unauthorized),
+        })?
+        .into_inner();
+
+    Ok(AxumJson(response.into()))
+}
+
+/// Insert a new user in the auth service state, this endpoint expects the api-key of an admin user as
+/// a Bearer token.
+#[instrument(skip_all, fields(%account_name, %account_tier))]
+#[utoipa::path(
+    post,
+    path = "/users/{account_name}/{account_tier}",
+    responses(
+        (status = 200, description = "Successfully logged in user and returned cookie."),
+        (status = 401, description = "Unauthorized to due to missing or invalid admin api-key."),
+        (status = 404, description = "User not found."),
+        (status = 500, description = "Server internal error."),
+        (status = 503, description = "Server not reachable.")
+    ),
+    params(
+        ("account_name" = AccountName, Path, description = "The account name of the new user."),
+        ("account_tier" = AccountTier, Path, description = "The account tier of the new user."),
+    ),
+    security(
+        ("api_key" = [])
+    )
+)]
+async fn post_user(
+    State(RouterState {
+        mut auth_client, ..
+    }): State<RouterState>,
+    Path((account_name, account_tier)): Path<(AccountName, AccountTier)>,
+    key: Key,
+) -> Result<AxumJson<shuttle_common::models::user::Response>, Error> {
+    let mut request = TonicRequest::new(NewUser {
+        account_name: account_name.to_string(),
+        account_tier: account_tier.to_string(),
+    });
+
+    // This endpoint expects the api-key of an admin user in it's bearer token.
+    insert_metadata_bearer_token(request.metadata_mut(), key)?;
+
+    let response = auth_client
+        .post_user_request(request)
+        .await
+        .map_err(|error| match error.code() {
+            tonic::Code::Internal => {
+                debug!(error = ?error, "failed to create new user");
+
+                Error::from_kind(ErrorKind::Internal)
+            }
+            _ => Error::from_kind(ErrorKind::Unauthorized),
+        })?
+        .into_inner();
+
+    Ok(AxumJson(response.into()))
+}
+
+/// Reset the api-key of a user, this endpoint expects a shuttle.sid cookie or the api-key of the
+/// user as a Bearer token.
+#[instrument(skip_all)]
+#[utoipa::path(
+    put,
+    path = "/users/reset-api-key",
+    responses(
+        (status = 200, description = "Successfully reset the users api-key."),
+        (status = 401, description = "Unauthorized to due to missing or invalid api-key or shuttle.sid cookie."),
+        (status = 500, description = "Server internal error."),
+        (status = 503, description = "Server not reachable.")
+    ),
+    security(
+        ("api_key" = [])
+    )
+)]
+async fn reset_api_key(
+    State(RouterState {
+        mut auth_client,
+        auth_cache,
+        ..
+    }): State<RouterState>,
+    key: Option<Key>,
+    jar: CookieJar,
+) -> Result<(), Error> {
+    let request_data = if let Some(cookie) = jar.get(COOKIE_NAME) {
+        // Received request with cookie, insert it into our reset-key request and
+        // use it to authorize the call.
+        let mut request = TonicRequest::new(ResetKeyRequest::default());
+
+        // This is the value in `shuttle.sid=<value>`.
+        let cache_key = cookie.value();
+
+        request.metadata_mut().insert(
+            COOKIE.as_str(),
+            MetadataValue::try_from(&cookie.to_string()).map_err(|error| {
+                error!(error = ?error, "received malformed {COOKIE_NAME} cookie");
+
+                Error::from_kind(ErrorKind::CookieMalformed)
+            })?,
+        );
+
+        Some((request, cache_key.to_string()))
+    } else if let Some(key) = key {
+        // Received request with api-key bearer token, insert it into our reset-key request and
+        // use it to authorize the call.
+        let key = shuttle_common::ApiKey::from(key).as_ref().to_string();
+        let cache_key = key.clone();
+
+        let request = TonicRequest::new(ResetKeyRequest { api_key: Some(key) });
+
+        Some((request, cache_key))
+    } else {
+        None
+    };
+
+    let Some((request, cache_key)) = request_data else {
+        return Err(Error::from_kind(ErrorKind::Unauthorized));
+    };
+
+    let ResultResponse { success, message } = auth_client
+        .reset_api_key(request)
+        .await
+        .map_err(|_| Error::from(ErrorKind::Internal))?
+        .into_inner();
+
+    if !success {
+        error!(message = ?message, "failed to reset api key");
+        Err(Error::from(ErrorKind::Internal))
+    } else {
+        if auth_cache.invalidate(&cache_key).is_none() {
+            debug!("did not find cookie key to invalidate in auth cache for reset-key request");
+        }
+        Ok(())
+    }
+}
+
 struct SecurityAddon;
 
 impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         if let Some(components) = openapi.components.as_mut() {
             components.add_security_scheme(
-                "Gateway API Key",
-                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("Bearer"))),
+                "api_key",
+                SecurityScheme::Http(
+                    HttpBuilder::new()
+                        .scheme(HttpAuthScheme::Bearer)
+                        .description(Some(
+                            "Api-key bearer token used to authorize requests that call the auth service.",
+                        ))
+                        .build(),
+                ),
             )
         }
     }
@@ -655,7 +978,12 @@ impl Modify for SecurityAddon {
         revive_projects,
         destroy_projects,
         get_load_admin,
-        delete_load_admin
+        delete_load_admin,
+        login,
+        logout,
+        get_user,
+        post_user,
+        reset_api_key
     ),
     modifiers(&SecurityAddon),
     components(schemas(
@@ -663,19 +991,26 @@ impl Modify for SecurityAddon {
         shuttle_common::models::stats::LoadResponse,
         shuttle_common::models::project::AdminResponse,
         shuttle_common::models::stats::LoadResponse,
-        shuttle_common::models::project::State
+        shuttle_common::models::project::State,
+        crate::AccountName,
+        shuttle_common::claims::AccountTier,
+        shuttle_common::models::project::Config
     ))
 )]
 pub struct ApiDoc;
 
 #[derive(Clone)]
 pub(crate) struct RouterState {
+    pub auth_client: AuthClient<InjectPropagation<Channel>>,
+    pub auth_cache: Arc<Box<dyn CacheManagement<Value = String>>>,
     pub service: Arc<GatewayService>,
     pub sender: Sender<BoxedTask>,
     pub running_builds: Arc<Mutex<TtlCache<Uuid, ()>>>,
 }
 
 pub struct ApiBuilder {
+    auth_client: Option<AuthClient<InjectPropagation<Channel>>>,
+    auth_cache: Option<Arc<Box<dyn CacheManagement<Value = String>>>>,
     router: Router<RouterState>,
     service: Option<Arc<GatewayService>>,
     sender: Option<Sender<BoxedTask>>,
@@ -691,6 +1026,8 @@ impl Default for ApiBuilder {
 impl ApiBuilder {
     pub fn new() -> Self {
         Self {
+            auth_client: None,
+            auth_cache: None,
             router: Router::new(),
             service: None,
             sender: None,
@@ -788,23 +1125,36 @@ impl ApiBuilder {
             )
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
+            .route("/logout", post(logout))
             .nest("/admin", admin_routes);
 
         self
     }
 
-    pub fn with_auth_service(mut self, auth_uri: Uri) -> Self {
-        let auth_public_key = AuthPublicKey::new(auth_uri.clone());
+    pub async fn with_auth_service(mut self, auth_uri: &Uri) -> Self {
+        let jwt_cache_manager: Arc<Box<dyn CacheManagement<Value = String>>> =
+            Arc::new(Box::new(CacheManager::new(1000)));
 
-        let jwt_cache_manager = CacheManager::new(1000);
+        self.auth_cache = Some(jwt_cache_manager.clone());
+
+        let auth_client = shuttle_proto::auth::client(auth_uri)
+            .await
+            .expect("auth service should be reachable");
+
+        let auth_public_key = AuthPublicKey::new(auth_client.clone());
+
+        self.auth_client = Some(auth_client.clone());
 
         self.router = self
             .router
             .layer(JwtAuthenticationLayer::new(auth_public_key))
-            .layer(ShuttleAuthLayer::new(
-                auth_uri,
-                Arc::new(Box::new(jwt_cache_manager)),
-            ));
+            .layer(ShuttleAuthLayer::new(jwt_cache_manager, auth_client))
+            // These routes expect an api-key bearer token, which would be converted to a JWT if
+            // it was passed through the auth layer.
+            .route("/login/:account_name", post(login))
+            .route("/users/:account_name", get(get_user))
+            .route("/users/:account_name/:account_tier", post(post_user))
+            .route("/users/reset-api-key", put(reset_api_key));
 
         self
     }
@@ -812,6 +1162,8 @@ impl ApiBuilder {
     pub fn into_router(self) -> Router {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
+        let auth_cache = self.auth_cache.expect("an auth cache is required");
+        let auth_client = self.auth_client.expect("an auth client is required");
 
         // Allow about 4 cores per build
         let mut concurrent_builds = num_cpus::get() / 4;
@@ -822,6 +1174,8 @@ impl ApiBuilder {
         let running_builds = Arc::new(Mutex::new(TtlCache::new(concurrent_builds)));
 
         self.router.with_state(RouterState {
+            auth_cache,
+            auth_client,
             service,
             sender,
             running_builds,
@@ -842,8 +1196,11 @@ pub mod tests {
     use axum::body::Body;
     use axum::headers::Authorization;
     use axum::http::Request;
+    use axum_extra::extract::cookie;
     use futures::TryFutureExt;
+    use http::HeaderValue;
     use hyper::StatusCode;
+    use serde_json::Value;
     use tokio::sync::mpsc::channel;
     use tokio::sync::oneshot;
     use tower::Service;
@@ -868,7 +1225,8 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
-            .with_auth_service(world.context().auth_uri)
+            .with_auth_service(&world.context().auth_uri)
+            .await
             .into_router();
 
         let neo_key = world.create_user("neo");
@@ -1034,6 +1392,181 @@ pub mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn api_auth_endpoints() -> anyhow::Result<()> {
+        use rand::distributions::{Alphanumeric, DistString};
+
+        // The api key of the admin user we inserted when setting up the shuttle environment,
+        // see the contribution doc for how to do that.
+        const AUTH_ADMIN_KEY: &str = "dh9z58jttoes3qvt";
+        let admin_authorization = Authorization::bearer(AUTH_ADMIN_KEY).unwrap();
+
+        let world = World::new().await;
+        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+
+        let (sender, mut receiver) = channel::<BoxedTask>(256);
+        tokio::spawn(async move {
+            while receiver.recv().await.is_some() {
+                // do not do any work with inbound requests
+            }
+        });
+
+        // The address of the auth service we start with `make up`, see the contribution doc.
+        let auth_uri: Uri = "http://127.0.0.1:8008".parse().unwrap();
+
+        let mut router = ApiBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_sender(sender)
+            .with_default_routes()
+            .with_auth_service(&auth_uri)
+            .await
+            .into_router();
+
+        // We'll insert a new user for our tests, first generate a name.
+        let new_user_name = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
+
+        let post_user_request = || {
+            Request::builder()
+                .method("POST")
+                .uri(format!("/users/{new_user_name}/basic"))
+                .body(Body::empty())
+                .unwrap()
+        };
+
+        // Post user without admin user.
+        router
+            .call(post_user_request())
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::UNAUTHORIZED))
+            .await
+            .unwrap();
+
+        // Post user with admin token.
+        router
+            .call(post_user_request().with_header(&admin_authorization))
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
+            .await
+            .unwrap();
+
+        // Login without admin user bearer token.
+        let login_request = || {
+            Request::builder()
+                .method("POST")
+                .uri(format!("/login/{new_user_name}"))
+                .body(Body::empty())
+                .unwrap()
+        };
+
+        router
+            .call(login_request())
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::UNAUTHORIZED))
+            .await
+            .unwrap();
+
+        // Login with admin user and verify that it returns the expected cookie.
+        let login_response = router
+            .call(login_request().with_header(&admin_authorization))
+            .await
+            .unwrap();
+
+        let cookie = login_response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap();
+
+        let cookie = Cookie::parse(cookie).unwrap();
+
+        assert_eq!(cookie.http_only(), Some(true));
+        assert_eq!(cookie.same_site(), Some(cookie::SameSite::Strict));
+        assert_eq!(cookie.secure(), Some(true));
+        assert_eq!(cookie.name(), COOKIE_NAME);
+
+        let get_user_request = || {
+            Request::builder()
+                .method("GET")
+                .uri(format!("/users/{new_user_name}"))
+                .body(Body::empty())
+                .unwrap()
+        };
+
+        // Get user without admin user bearer token.
+        router
+            .call(get_user_request())
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::UNAUTHORIZED))
+            .await
+            .unwrap();
+
+        // Get user with admin user bearer token.
+        let user = router
+            .call(get_user_request().with_header(&admin_authorization))
+            .await
+            .unwrap();
+
+        assert_eq!(user.status(), StatusCode::OK);
+        let user: Value =
+            serde_json::from_slice(&hyper::body::to_bytes(user.into_body()).await.unwrap())
+                .unwrap();
+
+        let user_api_key = user["key"].as_str().unwrap();
+
+        let reset_key_request = || {
+            Request::builder()
+                .method("PUT")
+                .uri("/users/reset-api-key")
+                .body(Body::empty())
+                .unwrap()
+        };
+
+        // Reset the api-key of our test using their api-key.
+        router
+            .call(reset_key_request().with_header(&Authorization::bearer(user_api_key).unwrap()))
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
+            .await
+            .unwrap();
+
+        // Reset the api-key of our test user using the cookie from login.
+        let mut reset_key_request = reset_key_request();
+
+        reset_key_request
+            .headers_mut()
+            .insert(COOKIE, HeaderValue::from_str(&cookie.to_string()).unwrap());
+
+        router
+            .call(reset_key_request)
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
+            .await
+            .unwrap();
+
+        // Logout our test user and verify that it returns the expected removal cookie,
+        // this expects the shuttle.sid cookie to be set know which user to logout.
+        let mut logout_request = Request::builder()
+            .method("POST")
+            .uri("/logout")
+            .body(Body::empty())
+            .unwrap();
+
+        logout_request
+            .headers_mut()
+            .insert(COOKIE, HeaderValue::from_str(&cookie.to_string()).unwrap());
+
+        let logout_response = router.call(logout_request).await.unwrap();
+
+        let cookie = logout_response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap();
+
+        let cookie = Cookie::parse(cookie).unwrap();
+
+        assert_eq!(cookie.http_only(), Some(true));
+        assert_eq!(cookie.name(), COOKIE_NAME);
+
+        Ok(())
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn status() {
         let world = World::new().await;
@@ -1057,7 +1590,8 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
-            .with_auth_service(world.context().auth_uri)
+            .with_auth_service(&world.context().auth_uri)
+            .await
             .into_router();
 
         let get_status = || {

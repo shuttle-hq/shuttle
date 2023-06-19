@@ -2,10 +2,12 @@ use std::time::Duration;
 
 use clap::Parser;
 use shuttle_common::backends::{
-    auth::{AuthPublicKey, JwtAuthenticationLayer},
+    auth::JwtAuthenticationLayer,
     tracing::{setup_tracing, ExtractPropagationLayer},
 };
-use shuttle_proto::resource_recorder::resource_recorder_server::ResourceRecorderServer;
+use shuttle_proto::{
+    auth::AuthPublicKey, resource_recorder::resource_recorder_server::ResourceRecorderServer,
+};
 use shuttle_resource_recorder::{args::Args, Service, Sqlite};
 use tonic::transport::Server;
 use tracing::trace;
@@ -18,11 +20,13 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
+    let auth_client = shuttle_proto::auth::client(&args.auth_uri)
+        .await
+        .expect("auth service should be reachable");
+
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
-        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
-            args.auth_uri,
-        )))
+        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_client)))
         .layer(ExtractPropagationLayer);
 
     let svc = Service::new(Sqlite::new(&args.state.display().to_string()).await);

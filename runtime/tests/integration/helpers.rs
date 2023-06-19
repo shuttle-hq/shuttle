@@ -8,6 +8,12 @@ use anyhow::Result;
 use async_trait::async_trait;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
+    auth::{
+        auth_server::{Auth, AuthServer},
+        ApiKeyRequest, ConvertCookieRequest, LogoutRequest, NewUser, PublicKeyRequest,
+        PublicKeyResponse, ResetKeyRequest, ResultResponse, TokenResponse, UserRequest,
+        UserResponse,
+    },
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
         DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
@@ -35,6 +41,10 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
         Ipv4Addr::LOCALHOST.into(),
         portpicker::pick_unused_port().unwrap(),
     );
+    let auth_address = SocketAddr::new(
+        Ipv4Addr::LOCALHOST.into(),
+        portpicker::pick_unused_port().unwrap(),
+    );
     let runtime_port = portpicker::pick_unused_port().unwrap();
     let runtime_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), runtime_port);
 
@@ -50,6 +60,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
     } = runtimes[0].clone();
 
     start_provisioner(DummyProvisioner, provisioner_address);
+    start_auth(DummyAuth, auth_address);
 
     // TODO: update this to work with shuttle-next projects, see cargo-shuttle local run
     let runtime_path = || executable_path.clone();
@@ -58,7 +69,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
         is_wasm,
         runtime::StorageManagerType::WorkingDir(PathBuf::from(project_path.clone())),
         &format!("http://{}", provisioner_address),
-        None,
+        Some(&format!("http://{}", auth_address)),
         runtime_port,
         runtime_path,
     )
@@ -104,5 +115,77 @@ impl Provisioner for DummyProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("did not expect any runtime test to delete dbs")
+    }
+}
+
+/// A dummy auth server for tests, an auth connection is required
+/// to start a project runtime.
+pub struct DummyAuth;
+
+fn start_auth(auth: DummyAuth, address: SocketAddr) {
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(AuthServer::new(auth))
+            .serve(address)
+            .await
+    });
+}
+
+#[async_trait]
+impl Auth for DummyAuth {
+    async fn get_user_request(
+        &self,
+        _request: Request<UserRequest>,
+    ) -> Result<Response<UserResponse>, Status> {
+        panic!("did not expect any runtime to get user")
+    }
+
+    async fn post_user_request(
+        &self,
+        _request: Request<NewUser>,
+    ) -> Result<Response<UserResponse>, Status> {
+        panic!("did not expect any runtime test to create users")
+    }
+
+    async fn login(
+        &self,
+        _request: Request<UserRequest>,
+    ) -> Result<Response<UserResponse>, Status> {
+        panic!("did not expect any runtime test to login user")
+    }
+
+    async fn logout(
+        &self,
+        mut _request: Request<LogoutRequest>,
+    ) -> Result<Response<ResultResponse>, Status> {
+        panic!("did not expect any runtime test to logout user")
+    }
+
+    async fn convert_api_key(
+        &self,
+        _request: Request<ApiKeyRequest>,
+    ) -> Result<Response<TokenResponse>, Status> {
+        panic!("did not expect any runtime test to convert api key")
+    }
+
+    async fn convert_cookie(
+        &self,
+        _request: Request<ConvertCookieRequest>,
+    ) -> Result<Response<TokenResponse>, Status> {
+        panic!("did not expect any runtime test to convert cookie")
+    }
+
+    async fn reset_api_key(
+        &self,
+        _request: Request<ResetKeyRequest>,
+    ) -> Result<Response<ResultResponse>, Status> {
+        panic!("did not expect any runtime test to reset api key")
+    }
+
+    async fn public_key(
+        &self,
+        _request: Request<PublicKeyRequest>,
+    ) -> Result<Response<PublicKeyResponse>, Status> {
+        panic!("did not expect any runtime test to request public key")
     }
 }

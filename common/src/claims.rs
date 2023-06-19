@@ -15,10 +15,12 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
-use strum::EnumMessage;
+use strum::{EnumMessage, EnumString};
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
 
 /// Minutes before a claim expires
 ///
@@ -131,6 +133,33 @@ impl ScopeBuilder {
 impl Default for ScopeBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::Display, Deserialize, EnumString)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "persist", derive(sqlx::Type))]
+#[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
+#[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+#[derive(Default)]
+pub enum AccountTier {
+    #[default]
+    Basic,
+    Pro,
+    Team,
+    Admin,
+}
+
+impl From<AccountTier> for Vec<Scope> {
+    fn from(tier: AccountTier) -> Self {
+        let mut builder = ScopeBuilder::new();
+
+        if tier == AccountTier::Admin {
+            builder = builder.with_admin()
+        }
+
+        builder.build()
     }
 }
 

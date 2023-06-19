@@ -4,8 +4,8 @@ use std::{
 };
 
 use portpicker::pick_unused_port;
-use shuttle_auth::{AccountTier, Dal, EdDsaManager, Service, SessionLayer, Sqlite};
-use shuttle_common::ApiKey;
+use shuttle_auth::{Dal, EdDsaManager, Service, SessionLayer, Sqlite};
+use shuttle_common::{claims::AccountTier, ApiKey};
 use shuttle_proto::auth::{
     auth_client::AuthClient, auth_server::AuthServer, NewUser, UserRequest, UserResponse,
 };

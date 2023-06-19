@@ -8,14 +8,16 @@ use hmac::{Hmac, Mac};
 use http::header::COOKIE;
 use ring::rand::{SecureRandom, SystemRandom};
 use sha2::Sha256;
-use shuttle_common::claims::ResponseFuture;
+use shuttle_common::{
+    backends::auth::COOKIE_NAME,
+    claims::{AccountTier, ResponseFuture},
+};
 use tonic::body::BoxBody;
 use tower::{Layer, Service};
 use tracing::error;
 
-use crate::{secrets::KeyManager, user::AccountName, AccountTier, Dal};
+use crate::{secrets::KeyManager, user::AccountName, Dal};
 
-pub const COOKIE_NAME: &str = "shuttle.sid";
 pub const COOKIE_EXPIRATION: i64 = 60 * 60 * 24; // One day
 const BASE64_DIGEST_LEN: usize = 44;
 

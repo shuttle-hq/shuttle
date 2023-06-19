@@ -1,9 +1,6 @@
 use std::{fmt::Formatter, str::FromStr};
 
-use shuttle_common::{
-    claims::{Scope, ScopeBuilder},
-    ApiKey,
-};
+use shuttle_common::{claims::AccountTier, ApiKey};
 use tonic::{metadata::MetadataMap, Status};
 
 use crate::{dal::Dal, Error};
@@ -56,45 +53,6 @@ pub async fn verify_admin<D: Dal + Send + Sync + 'static>(
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, sqlx::Type, strum::Display)]
-#[sqlx(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
-#[derive(Default)]
-pub enum AccountTier {
-    #[default]
-    Basic,
-    Pro,
-    Team,
-    Admin,
-}
-
-impl From<AccountTier> for Vec<Scope> {
-    fn from(tier: AccountTier) -> Self {
-        let mut builder = ScopeBuilder::new();
-
-        if tier == AccountTier::Admin {
-            builder = builder.with_admin()
-        }
-
-        builder.build()
-    }
-}
-
-impl TryFrom<String> for AccountTier {
-    type Error = Error;
-
-    fn try_from(value: String) -> Result<AccountTier, Error> {
-        let tier = match value.as_str() {
-            "basic" => AccountTier::Basic,
-            "pro" => AccountTier::Pro,
-            "team" => AccountTier::Team,
-            "admin" => AccountTier::Admin,
-            other => return Err(Error::InvalidAccountTier(other.to_string())),
-        };
-
-        Ok(tier)
-    }
-}
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct AccountName(String);

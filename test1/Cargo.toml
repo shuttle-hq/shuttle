@@ -1,0 +1,10 @@
+[package]
+name = "asdf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rocket = "0.5.0-rc.2"
+shuttle-rocket = "0.18.0"
+shuttle-runtime = "0.18.0"
+tokio = "1.26.0"

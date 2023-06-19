@@ -23,8 +23,8 @@ use pin_project::pin_project;
 use tokio::sync::mpsc;
 use tower::{Layer, Service};
 use tracing::{
-    debug_span, field::Visit, instrument::Instrumented, span, Instrument, Level, Metadata, Span,
-    Subscriber,
+    debug_span, error, field::Visit, instrument::Instrumented, span, Instrument, Level, Metadata,
+    Span, Subscriber,
 };
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
@@ -184,7 +184,10 @@ impl OtlpDeploymentLogRecorder {
             let mut otlp_client = match LogsServiceClient::connect(destination).await {
                 Ok(client) => client,
                 Err(error) => {
-                    println!("Could not connect to OTLP collector for logs. No logs will be send: {error}");
+                    error!(
+                        error = &error as &dyn std::error::Error,
+                        "Could not connect to OTLP collector for logs. No logs will be send"
+                    );
 
                     return;
                 }
@@ -201,8 +204,9 @@ impl OtlpDeploymentLogRecorder {
                 });
 
                 if let Err(error) = otlp_client.export(request).await {
-                    println!(
-                        "Otlp deployment log recorder encountered the following error(s): {error}"
+                    error!(
+                        error = &error as &dyn std::error::Error,
+                        "Otlp deployment log recorder encountered error while exporting the logs"
                     );
                 };
             }
@@ -248,7 +252,10 @@ impl DeploymentLogRecorder for OtlpDeploymentLogRecorder {
         };
 
         if let Err(error) = self.tx.send(scope_logs) {
-            println!("Failed to send deployment log in recorder: {error}");
+            error!(
+                error = &error as &dyn std::error::Error,
+                "Failed to send deployment log in recorder"
+            );
         }
     }
 }

@@ -1,8 +1,7 @@
-use super::deploy_layer::{Log, LogRecorder, LogType};
 use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
-use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
+use crate::persistence::{DeploymentUpdater, SecretRecorder};
 use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
 
 use cargo_metadata::Message;
@@ -31,7 +30,6 @@ pub async fn task(
     mut recv: QueueReceiver,
     run_send: RunSender,
     deployment_updater: impl DeploymentUpdater,
-    log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
     storage_manager: ArtifactsStorageManager,
     queue_client: impl BuildQueueClient,
@@ -45,7 +43,6 @@ pub async fn task(
 
         let deployment_updater = deployment_updater.clone();
         let run_send_cloned = run_send.clone();
-        let log_recorder = log_recorder.clone();
         let secret_recorder = secret_recorder.clone();
         let storage_manager = storage_manager.clone();
         let queue_client = queue_client.clone();
@@ -72,7 +69,6 @@ pub async fn task(
                     .handle(
                         storage_manager,
                         deployment_updater,
-                        log_recorder,
                         secret_recorder,
                     )
                     .await
@@ -153,12 +149,11 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    #[instrument(skip(self, storage_manager, deployment_updater, secret_recorder), fields(id = %self.id, state = %State::Building))]
     async fn handle(
         self,
         storage_manager: ArtifactsStorageManager,
         deployment_updater: impl DeploymentUpdater,
-        log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
     ) -> Result<Built> {
         info!("Extracting received data");
@@ -169,38 +164,7 @@ impl Queued {
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
         let id = self.id;
-        tokio::task::spawn_blocking(move || {
-            while let Ok(message) = rx.recv() {
-                trace!(?message, "received cargo message");
-                // TODO: change these to `info!(...)` as [valuable] support increases.
-                // Currently it is not possible to turn these serde `message`s into a `valuable`, but once it is the passing down of `log_recorder` should be removed.
-                let log = match message {
-                    Message::TextLine(line) => Log {
-                        id,
-                        state: State::Building,
-                        level: LogLevel::Info,
-                        timestamp: Utc::now(),
-                        file: None,
-                        line: None,
-                        target: String::new(),
-                        fields: json!({ "build_line": line }),
-                        r#type: LogType::Event,
-                    },
-                    message => Log {
-                        id,
-                        state: State::Building,
-                        level: LogLevel::Debug,
-                        timestamp: Utc::now(),
-                        file: None,
-                        line: None,
-                        target: String::new(),
-                        fields: serde_json::to_value(message).unwrap(),
-                        r#type: LogType::Event,
-                    },
-                };
-                log_recorder.record(log);
-            }
-        });
+        tokio::task::spawn_blocking(move || );
 
         let project_path = project_path.canonicalize()?;
 

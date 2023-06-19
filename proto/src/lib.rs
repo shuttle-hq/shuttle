@@ -378,3 +378,7 @@ pub mod auth {
 pub mod builder {
     include!("generated/builder.rs");
 }
+
+pub mod logger {
+    include!("generated/logger.rs");
+}

@@ -209,6 +209,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "persist")]
     #[test]
     fn generated_api_key_is_valid() {
         let key = ApiKey::generate();

@@ -5380,6 +5380,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-otlp",
+ "opentelemetry-proto",
  "pin-project",
  "proptest",
  "prost-types",
@@ -5508,6 +5509,31 @@ dependencies = [
  "utoipa-swagger-ui",
  "uuid",
  "x509-parser",
+]
+
+[[package]]
+name = "shuttle-logger"
+version = "0.18.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "clap",
+ "opentelemetry-proto",
+ "portpicker",
+ "pretty_assertions",
+ "prost-types",
+ "serde_json",
+ "shuttle-common",
+ "shuttle-common-tests",
+ "shuttle-proto",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "ulid",
 ]
 
 [[package]]

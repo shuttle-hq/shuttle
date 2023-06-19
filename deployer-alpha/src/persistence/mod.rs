@@ -1,12 +1,10 @@
 pub mod deployment;
 mod error;
-pub mod log;
 mod secret;
 pub mod service;
 mod state;
 mod user;
 
-use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
 use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 use error::{Error, Result};
@@ -29,7 +27,6 @@ use uuid::Uuid;
 use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentState, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
-pub use self::log::{Level as LogLevel, Log};
 pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
 pub use self::state::State;
@@ -40,8 +37,6 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 #[derive(Clone)]
 pub struct Persistence {
     pool: SqlitePool,
-    log_send: crossbeam_channel::Sender<deploy_layer::Log>,
-    stream_log_send: Sender<deploy_layer::Log>,
 }
 
 impl Persistence {
@@ -85,83 +80,9 @@ impl Persistence {
     async fn from_pool(pool: SqlitePool) -> (Self, JoinHandle<()>) {
         MIGRATIONS.run(&pool).await.unwrap();
 
-        let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
-            crossbeam_channel::bounded(0);
+        let handle = tokio::spawn(async move {});
 
-        let (stream_log_send, _) = broadcast::channel(1);
-        let stream_log_send_clone = stream_log_send.clone();
-
-        let pool_cloned = pool.clone();
-
-        // The logs are received on a non-async thread.
-        // This moves them to an async thread
-        let handle = tokio::spawn(async move {
-            while let Ok(log) = log_recv.recv() {
-                trace!(?log, "persistence received got log");
-                match log.r#type {
-                    LogType::Event => {
-                        insert_log(&pool_cloned, log.clone())
-                            .await
-                            .unwrap_or_else(|error| {
-                                error!(
-                                    error = &error as &dyn std::error::Error,
-                                    "failed to insert event log"
-                                )
-                            });
-                    }
-                    LogType::State => {
-                        insert_log(
-                            &pool_cloned,
-                            Log {
-                                id: log.id,
-                                timestamp: log.timestamp,
-                                state: log.state,
-                                level: log.level.clone(),
-                                file: log.file.clone(),
-                                line: log.line,
-                                target: String::new(),
-                                fields: json!(STATE_MESSAGE),
-                            },
-                        )
-                        .await
-                        .unwrap_or_else(|error| {
-                            error!(
-                                error = &error as &dyn std::error::Error,
-                                "failed to insert state log"
-                            )
-                        });
-                        update_deployment(&pool_cloned, log.clone())
-                            .await
-                            .unwrap_or_else(|error| {
-                                error!(
-                                    error = &error as &dyn std::error::Error,
-                                    "failed to update deployment state"
-                                )
-                            });
-                    }
-                };
-
-                let receiver_count = stream_log_send_clone.receiver_count();
-                trace!(?log, receiver_count, "sending log to broadcast stream");
-
-                if receiver_count > 0 {
-                    stream_log_send_clone.send(log).unwrap_or_else(|error| {
-                        error!(
-                            error = &error as &dyn std::error::Error,
-                            "failed to broadcast log"
-                        );
-
-                        0
-                    });
-                }
-            }
-        });
-
-        let persistence = Self {
-            pool,
-            log_send,
-            stream_log_send,
-        };
+        let persistence = Self { pool };
 
         (persistence, handle)
     }
@@ -293,21 +214,6 @@ impl Persistence {
         .await
         .map_err(Error::from)
     }
-
-    pub(crate) async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
-        // TODO: stress this a bit
-        get_deployment_logs(&self.pool, id).await
-    }
-
-    /// Get a broadcast channel for listening to logs that are being stored into persistence
-    pub fn get_log_subscriber(&self) -> Receiver<deploy_layer::Log> {
-        self.stream_log_send.subscribe()
-    }
-
-    /// Returns a sender for sending logs to persistence storage
-    pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
-        self.log_send.clone()
-    }
 }
 
 async fn update_deployment(pool: &SqlitePool, state: impl Into<DeploymentState>) -> Result<()> {
@@ -329,40 +235,6 @@ async fn get_deployment(pool: &SqlitePool, id: &Uuid) -> Result<Option<Deploymen
         .fetch_optional(pool)
         .await
         .map_err(Error::from)
-}
-
-async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
-    let log = log.into();
-
-    sqlx::query("INSERT INTO logs (id, timestamp, state, level, file, line, target, fields) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(log.id)
-        .bind(log.timestamp)
-        .bind(log.state)
-        .bind(log.level)
-        .bind(log.file)
-        .bind(log.line)
-        .bind(log.target)
-        .bind(log.fields)
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(Error::from)
-}
-
-async fn get_deployment_logs(pool: &SqlitePool, id: &Uuid) -> Result<Vec<Log>> {
-    sqlx::query_as("SELECT * FROM logs WHERE id = ? ORDER BY timestamp")
-        .bind(id)
-        .fetch_all(pool)
-        .await
-        .map_err(Error::from)
-}
-
-impl LogRecorder for Persistence {
-    fn record(&self, log: deploy_layer::Log) {
-        self.log_send
-            .send(log)
-            .expect("failed to move log to async thread");
-    }
 }
 
 #[async_trait::async_trait]
@@ -492,7 +364,6 @@ mod tests {
     use super::*;
     use crate::persistence::{
         deployment::{Deployment, DeploymentRunnable, DeploymentState},
-        log::{Level, Log},
         state::State,
     };
 
@@ -891,173 +762,6 @@ mod tests {
                     is_next: false,
                 },
             ]
-        );
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn log_insert() {
-        let (p, _) = Persistence::new_in_memory().await;
-        let deployment_id = add_deployment(&p.pool).await.unwrap();
-
-        let log = Log {
-            id: deployment_id,
-            timestamp: Utc::now(),
-            state: State::Queued,
-            level: Level::Info,
-            file: Some("queue.rs".to_string()),
-            line: Some(12),
-            target: "tests::log_insert".to_string(),
-            fields: json!({"message": "job queued"}),
-        };
-
-        insert_log(&p.pool, log.clone()).await.unwrap();
-
-        let logs = p.get_deployment_logs(&deployment_id).await.unwrap();
-        assert!(!logs.is_empty(), "there should be one log");
-
-        assert_eq!(logs.first().unwrap(), &log);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn logs_for_deployment() {
-        let (p, _) = Persistence::new_in_memory().await;
-        let deployment_a = add_deployment(&p.pool).await.unwrap();
-        let deployment_b = add_deployment(&p.pool).await.unwrap();
-
-        let log_a1 = Log {
-            id: deployment_a,
-            timestamp: Utc::now(),
-            state: State::Queued,
-            level: Level::Info,
-            file: Some("file.rs".to_string()),
-            line: Some(5),
-            target: "tests::logs_for_deployment".to_string(),
-            fields: json!({"message": "job queued"}),
-        };
-        let log_b = Log {
-            id: deployment_b,
-            timestamp: Utc::now(),
-            state: State::Queued,
-            level: Level::Info,
-            file: Some("file.rs".to_string()),
-            line: Some(5),
-            target: "tests::logs_for_deployment".to_string(),
-            fields: json!({"message": "job queued"}),
-        };
-        let log_a2 = Log {
-            id: deployment_a,
-            timestamp: Utc::now(),
-            state: State::Building,
-            level: Level::Warn,
-            file: None,
-            line: None,
-            target: String::new(),
-            fields: json!({"message": "unused Result"}),
-        };
-
-        for log in [log_a1.clone(), log_b, log_a2.clone()] {
-            insert_log(&p.pool, log).await.unwrap();
-        }
-
-        let logs = p.get_deployment_logs(&deployment_a).await.unwrap();
-        assert!(!logs.is_empty(), "there should be two logs");
-
-        assert_eq!(logs, vec![log_a1, log_a2]);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn log_recorder_event() {
-        let (p, handle) = Persistence::new_in_memory().await;
-        let deployment_id = add_deployment(&p.pool).await.unwrap();
-
-        let event = deploy_layer::Log {
-            id: deployment_id,
-            timestamp: Utc::now(),
-            state: State::Queued,
-            level: Level::Info,
-            file: Some("file.rs".to_string()),
-            line: Some(5),
-            target: "tests::log_recorder_event".to_string(),
-            fields: json!({"message": "job queued"}),
-            r#type: deploy_layer::LogType::Event,
-        };
-
-        p.record(event);
-
-        // Drop channel and wait for it to finish
-        drop(p.log_send);
-        assert!(handle.await.is_ok());
-
-        let logs = get_deployment_logs(&p.pool, &deployment_id).await.unwrap();
-
-        assert!(!logs.is_empty(), "there should be one log");
-
-        let log = logs.first().unwrap();
-        assert_eq!(log.id, deployment_id);
-        assert_eq!(log.state, State::Queued);
-        assert_eq!(log.level, Level::Info);
-        assert_eq!(log.file, Some("file.rs".to_string()));
-        assert_eq!(log.line, Some(5));
-        assert_eq!(log.fields, json!({"message": "job queued"}));
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn log_recorder_state() {
-        let (p, handle) = Persistence::new_in_memory().await;
-
-        let id = Uuid::new_v4();
-        let service_id = add_service(&p.pool).await.unwrap();
-
-        p.insert_deployment(Deployment {
-            id,
-            service_id,
-            state: State::Queued, // Should be different from the state recorded below
-            last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 39).unwrap(),
-            address: None,
-            is_next: false,
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-        let state = deploy_layer::Log {
-            id,
-            timestamp: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 59).unwrap(),
-            state: State::Running,
-            level: Level::Info,
-            file: None,
-            line: None,
-            target: String::new(),
-            fields: serde_json::Value::Null,
-            r#type: deploy_layer::LogType::State,
-        };
-
-        p.record(state);
-
-        // Drop channel and wait for it to finish
-        drop(p.log_send);
-        assert!(handle.await.is_ok());
-
-        let logs = get_deployment_logs(&p.pool, &id).await.unwrap();
-
-        assert!(!logs.is_empty(), "state change should be logged");
-
-        let log = logs.first().unwrap();
-        assert_eq!(log.id, id);
-        assert_eq!(log.state, State::Running);
-        assert_eq!(log.level, Level::Info);
-        assert_eq!(log.fields, json!("NEW STATE"));
-
-        assert_eq!(
-            get_deployment(&p.pool, &id).await.unwrap().unwrap(),
-            Deployment {
-                id,
-                service_id,
-                state: State::Running,
-                last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 59).unwrap(),
-                address: None,
-                is_next: false,
-                ..Default::default()
-            }
         );
     }
 

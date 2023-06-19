@@ -267,14 +267,31 @@ USE_PANAMAX=disable make test
 
 We use the [Angular Commit Guidelines](https://github.com/angular/angular/blob/master/CONTRIBUTING.md#commit). We expect all commits to conform to these guidelines.
 
-We will squash commits before merging to main. If you do want to squash commits, please do not do so
-after the review process has started, the commit history can be useful for reviewers.
-
 Before committing:
 
 - Make sure your commits don't trigger any warnings from Clippy by running: `cargo clippy --tests --all-targets`. If you have a good reason to contradict Clippy, insert an `#[allow(clippy::<lint>)]` macro, so that it won't complain.
 - Make sure your code is correctly formatted: `cargo fmt --all --check`.
 - If you've made changes to examples, make sure the above commands are ran there as well.
+
+## Opening a Pull Request
+
+Before opening a pull request it's a good idea to first open an issue, even if the change is small. This way you can get
+feedback and suggestions on the issue, as well as a confirmation from the maintainers that this is something
+we want to implement. This also greatly increases the likelihood of the pull request getting merged, and it reduces the 
+chance that multiple contributors start working on the same issue in parallel.
+
+We will squash commits before merging your PR to main. If you do want to squash commits, please do not do so
+after the review process has started, the commit history can be useful for reviewers.
+
+## Reviewing
+
+Anyone is welcome to review pull requests and provide feedback on issues, as long as they strive to be constructive,
+friendly and respectful of the contributor as well as in line with our [code of conduct](CODE_OF_CONDUCT.md).
+
+We will always strive to review pull requests as soon as we can, but during certain periods we may be too busy to
+review every pull request in a timely manner. This does not mean we are not excited about the contribution or that
+there is anything wrong with it, we are grateful for every contribution and the time spent on them. If you feel that
+your PR has gone under the radar for too long feel free to ping us and we'll try to get back to you with an update. 
 
 ## Project Layout
 

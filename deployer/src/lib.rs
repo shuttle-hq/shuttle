@@ -22,12 +22,10 @@ use runtime_manager::RuntimeManager;
 use shuttle_common::backends::auth::VerifyClaim;
 use shuttle_common::claims::Claim;
 use shuttle_common::{
-    backends::{
-        auth::{AuthPublicKey, JwtAuthenticationLayer},
-        tracing::ExtractPropagationLayer,
-    },
+    backends::{auth::JwtAuthenticationLayer, tracing::ExtractPropagationLayer},
     claims::Scope,
 };
+use shuttle_proto::auth::AuthPublicKey;
 use shuttle_proto::deployer::{
     deployer_server::{Deployer, DeployerServer},
     DeployRequest, DeployResponse, Deployment as ProtoDeployment,
@@ -155,7 +153,9 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         let mut server_builder = Server::builder()
             .http2_keepalive_interval(Some(Duration::from_secs(60)))
             .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
-                self.config.auth_uri.clone(),
+                shuttle_proto::auth::client(&self.config.auth_uri)
+                    .await
+                    .expect("auth service should be reachable"),
             )))
             .layer(ExtractPropagationLayer);
         let bind_address = self.config.bind_address;

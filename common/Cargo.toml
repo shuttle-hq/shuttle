@@ -41,7 +41,7 @@ sha2 = "0.10.2"
 sqlx = { workspace = true, optional = true, features = ["runtime-tokio-rustls"] }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true, optional = true }
-giti = { workspace = true, features = ["rt-multi-thread", "fs"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }
 tokio-stream = "0.1.14"
 tokio-tar = "0.3.0"
 tonic = { workspace = true, optional = true }
@@ -67,7 +67,6 @@ backend = [
     "opentelemetry-proto/gen-tonic",
     "opentelemetry-proto/logs",
     "thiserror",
-    "tokio",
     "tonic",
     "tower-http",
     "tracing-subscriber/env-filter",

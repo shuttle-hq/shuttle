@@ -233,10 +233,11 @@ impl Shuttle {
             }
         };
 
-        let serenity_idle_hint = template
-            .subfolder
-            .as_ref()
-            .is_some_and(|s| s.contains("serenity") || s.contains("poise"));
+        let serenity_idle_hint = if let Some(s) = template.subfolder.as_ref() {
+            s.contains("serenity") || s.contains("poise")
+        } else {
+            false
+        };
 
         // 5. Initialize locally
         init::cargo_generate(

@@ -123,6 +123,16 @@ pub enum DbOutput {
     Local(String),
 }
 
+// Holds the input for a Qdrant resource
+#[derive(Deserialize, Serialize, Default)]
+pub struct QdrantInput{}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QdrantReadyInfo {
+    pub url: String,
+    pub api_key: Option<String>,
+}
+
 /// Holds the details for a database connection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {

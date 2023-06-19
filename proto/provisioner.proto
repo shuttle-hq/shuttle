@@ -3,6 +3,7 @@ package provisioner;
 
 service Provisioner {
   rpc ProvisionDatabase(DatabaseRequest) returns (DatabaseResponse);
+  rpc ProvisionQdrant(QdrantRequest) returns (QdrantResponse);
   rpc DeleteDatabase(DatabaseRequest) returns (DatabaseDeletionResponse);
 }
 
@@ -12,6 +13,10 @@ message DatabaseRequest {
     Shared Shared = 10;
     AwsRds AwsRds = 11;
   };
+}
+
+message QdrantRequest {
+  string project_name = 1;
 }
 
 message Shared {
@@ -42,3 +47,8 @@ message DatabaseResponse {
 }
 
 message DatabaseDeletionResponse {}
+
+message QdrantResponse {
+  string url = 1;
+  optional string api_key = 2;
+}

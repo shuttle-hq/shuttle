@@ -6,8 +6,9 @@ use shuttle_common::{
     database,
     storage_manager::StorageManager,
     DatabaseReadyInfo,
+    QdrantReadyInfo,
 };
-use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
+use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest, QdrantRequest};
 use shuttle_service::{Environment, Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::info;
@@ -71,6 +72,29 @@ impl Factory for ProvisionerFactory {
         info!("Done provisioning database");
 
         Ok(info)
+    }
+
+    async fn get_qdrant_connection(&mut self) -> Result<QdrantReadyInfo, shuttle_service::Error> { 
+        let mut request = Request::new(QdrantRequest {
+            project_name: self.service_name.to_string(),
+        });
+
+        if let Some(claim) = &self.claim {
+            request.extensions_mut().insert(claim.clone());
+        }
+
+        let response = self
+            .provisioner_client
+            .provision_qdrant(request)
+            .await
+            .map_err(shuttle_service::error::CustomError::new)?
+            .into_inner();
+
+        let info: QdrantReadyInfo = response.into();
+
+        // return the connection info
+        Ok(info)
+        //Ok(QdrantReadyInfo { url: "http://0.0.0.0:6334".to_string(), api_key: None })
     }
 
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, shuttle_service::Error> {

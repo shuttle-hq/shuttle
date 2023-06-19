@@ -9,7 +9,7 @@ pub use error::{CustomError, Error};
 
 use serde::{de::DeserializeOwned, Serialize};
 pub use shuttle_common::{
-    database, resource::Type, DatabaseReadyInfo, DbInput, DbOutput, SecretStore,
+    database, resource::Type, DatabaseReadyInfo, DbInput, DbOutput, QdrantInput, QdrantReadyInfo, SecretStore,
 };
 
 #[cfg(feature = "codegen")]
@@ -84,6 +84,9 @@ pub trait Factory: Send + Sync {
         &mut self,
         db_type: database::Type,
     ) -> Result<DatabaseReadyInfo, crate::Error>;
+
+    /// Get a Qdrant connection
+    async fn get_qdrant_connection(&mut self) -> Result<QdrantReadyInfo, crate::Error>;
 
     /// Get all the secrets for a service
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, crate::Error>;

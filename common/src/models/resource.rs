@@ -21,6 +21,7 @@ pub fn get_resources_table(resources: &Vec<Response>, service_name: &str) -> Str
                 Type::Secrets => "Secrets",
                 Type::StaticFolder => "Static Folder",
                 Type::Persist => "Persist",
+                Type::Qdrant => "Qdrant",
             };
 
             let elements = acc.entry(title).or_insert(Vec::new());

@@ -1,4 +1,4 @@
-SRC_CRATES=auth builder cargo-shuttle codegen common deployer gateway logger proto provisioner service
+SRC_CRATES=auth builder cargo-shuttle codegen common deployer gateway logger proto provisioner resource-recorder service
 SRC=$(shell find $(SRC_CRATES) -name "*.rs" -type f -not -path "**/target/*")
 
 COMMIT_SHA ?= $(shell git rev-parse --short HEAD)
@@ -25,8 +25,9 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 RUSTUP_TOOLCHAIN=1.70.0
 
 TAG?=$(shell git describe --tags)
-BACKEND_TAG?=$(TAG)
+AUTH_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
+GATEWAY_TAG?=$(TAG)
 PROVISIONER_TAG?=$(TAG)
 
 DOCKER_BUILD?=docker buildx build
@@ -82,8 +83,9 @@ endif
 
 DOCKER_COMPOSE_ENV=\
 	STACK=$(STACK)\
-	BACKEND_TAG=$(BACKEND_TAG)\
+	AUTH_TAG=$(AUTH_TAG)\
 	DEPLOYER_TAG=$(DEPLOYER_TAG)\
+	GATEWAY_TAG=$(GATEWAY_TAG)\
 	PROVISIONER_TAG=$(PROVISIONER_TAG)\
 	POSTGRES_TAG=${POSTGRES_TAG}\
 	PANAMAX_TAG=${PANAMAX_TAG}\

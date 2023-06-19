@@ -14,7 +14,7 @@ networks:
         - subnet: 10.99.0.0/16
 services:
   auth:
-    image: "${CONTAINER_REGISTRY}/auth:${BACKEND_TAG}"
+    image: "${CONTAINER_REGISTRY}/auth:${AUTH_TAG}"
     ports:
       - 8008:8000
     deploy:
@@ -43,7 +43,7 @@ services:
       - "start"
       - "--address=0.0.0.0:8000"
   gateway:
-    image: "${CONTAINER_REGISTRY}/gateway:${BACKEND_TAG}"
+    image: "${CONTAINER_REGISTRY}/gateway:${GATEWAY_TAG}"
     depends_on:
       - provisioner
       - auth

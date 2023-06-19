@@ -65,6 +65,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 const SHUTTLE_LOGIN_URL: &str = "https://shuttle.rs/login";
 const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
+const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/introduction/shuttle-commands";
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -254,7 +255,8 @@ impl Shuttle {
             Hint: Check the examples repo for a full list of templates:
                   {EXAMPLES_REPO}
             Hint: You can also use `cargo shuttle init --from` to clone templates.
-                  See the docs or help page.
+                  See {SHUTTLE_CLI_DOCS_URL}
+                  or run `cargo shuttle init --help`
             "
         );
         println!();

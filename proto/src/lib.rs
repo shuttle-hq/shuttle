@@ -324,3 +324,7 @@ pub mod resource_recorder {
         }
     }
 }
+
+pub mod logger {
+    include!("generated/logger.rs");
+}

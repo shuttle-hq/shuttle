@@ -246,7 +246,8 @@ where
         Ok(Response::new(UserResponse {
             account_name: name.to_string(),
             account_tier: account_tier.to_string(),
-            // TODO: change this to .expose() when #925 is merged.
+            // This has to be as_ref to yield the inner key, the ApiKey
+            // display impl will return REDACTED.
             key: key.as_ref().to_string(),
         }))
     }
@@ -274,7 +275,8 @@ where
         Ok(Response::new(UserResponse {
             account_name: name.to_string(),
             account_tier: account_tier.to_string(),
-            // TODO: change this to .expose() when #925 is merged.
+            // This has to be as_ref to yield the inner key, the ApiKey
+            // display impl will return REDACTED.
             key: key.as_ref().to_string(),
         }))
     }
@@ -299,7 +301,8 @@ where
 
         let mut response = Response::new(UserResponse {
             account_name: name.to_string(),
-            // TODO: change this to .expose() when #925 is merged.
+            // This has to be as_ref to yield the inner key, the ApiKey
+            // display impl will return REDACTED.
             key: key.as_ref().to_string(),
             account_tier: account_tier.to_string(),
         });

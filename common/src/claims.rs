@@ -15,7 +15,7 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
-use strum::EnumMessage;
+use strum::{EnumMessage, EnumString};
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -136,7 +136,7 @@ impl Default for ScopeBuilder {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::Display, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::Display, Deserialize, EnumString)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "persist", derive(sqlx::Type))]
 #[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
@@ -160,22 +160,6 @@ impl From<AccountTier> for Vec<Scope> {
         }
 
         builder.build()
-    }
-}
-
-impl TryFrom<&str> for AccountTier {
-    type Error = Box<dyn std::error::Error + Send + Sync>;
-
-    fn try_from(value: &str) -> Result<AccountTier, Self::Error> {
-        let tier = match value {
-            "basic" => AccountTier::Basic,
-            "pro" => AccountTier::Pro,
-            "team" => AccountTier::Team,
-            "admin" => AccountTier::Admin,
-            other => return Err(format!("{other} is not a valid account tier").into()),
-        };
-
-        Ok(tier)
     }
 }
 

@@ -5,6 +5,7 @@ members = [
   "cargo-shuttle",
   "codegen",
   "common",
+  "common-tests",
   "deployer",
   "gateway",
   "proto",
@@ -31,6 +32,7 @@ repository = "https://github.com/shuttle-hq/shuttle"
 [workspace.dependencies]
 shuttle-codegen = { path = "codegen", version = "0.21.0" }
 shuttle-common = { path = "common", version = "0.21.0" }
+shuttle-common-tests = { path = "common-tests", version = "0.21.0" }
 shuttle-proto = { path = "proto", version = "0.21.0" }
 shuttle-service = { path = "service", version = "0.21.0" }
 

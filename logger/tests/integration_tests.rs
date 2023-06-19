@@ -4,7 +4,11 @@ use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsSe
 use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
 use serde_json::{json, Value};
-use shuttle_common::backends::tracing::{DeploymentLayer, OtlpDeploymentLogRecorder};
+use shuttle_common::{
+    backends::tracing::{DeploymentLayer, OtlpDeploymentLogRecorder},
+    claims::Scope,
+};
+use shuttle_common_tests::JwtScopesLayer;
 use shuttle_logger::{Service, ShuttleLogsOtlp, Sqlite};
 use shuttle_proto::logger::{
     logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogLevel, LogsRequest,
@@ -24,7 +28,7 @@ async fn logger() {
         let sqlite = Sqlite::new_in_memory().await;
 
         Server::builder()
-            // .layer(JwtScopesLayer::new(vec![Scope::Resources]))
+            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
             .add_service(LogsServiceServer::new(ShuttleLogsOtlp::new(
                 sqlite.get_sender(),
             )))
@@ -111,7 +115,7 @@ async fn logger_stream() {
         let sqlite = Sqlite::new_in_memory().await;
 
         Server::builder()
-            // .layer(JwtScopesLayer::new(vec![Scope::Resources]))
+            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
             .add_service(LogsServiceServer::new(ShuttleLogsOtlp::new(
                 sqlite.get_sender(),
             )))

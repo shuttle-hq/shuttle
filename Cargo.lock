@@ -5496,6 +5496,7 @@ dependencies = [
  "prost-types",
  "serde_json",
  "shuttle-common",
+ "shuttle-common-tests",
  "shuttle-proto",
  "sqlx",
  "thiserror",

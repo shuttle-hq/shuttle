@@ -38,3 +38,4 @@ workspace = true
 portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
+shuttle-common-tests = { workspace = true }

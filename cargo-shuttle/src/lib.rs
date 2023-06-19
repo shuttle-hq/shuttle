@@ -6,6 +6,7 @@ mod provisioner_server;
 
 use args::LogoutArgs;
 use indicatif::ProgressBar;
+use indoc::printdoc;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::deployment::{
     get_deployments_table, DeploymentRequest, GIT_STRINGS_MAX_LENGTH,
@@ -157,7 +158,7 @@ impl Shuttle {
     async fn init(&mut self, args: InitArgs, mut project_args: ProjectArgs) -> Result<()> {
         // Turns the template or git args (if present) to a vec of repo folders that match.
         // If an explicit git arg is given, or a framework only has one template, the vec length will be 1.
-        let git_templates = args.git_templates();
+        let git_templates = args.git_template();
 
         // Caveat: No way of telling if args.path was given or default
         // Ideally that would be checked here (go interactive if not given)
@@ -180,7 +181,12 @@ impl Shuttle {
 
         // 2. Ask for project name
         if project_args.name.is_none() {
-            println!("How do you want to name your project? It will be hosted at ${{project_name}}.shuttleapp.rs.");
+            printdoc!(
+                "
+                What do you want to name your project?
+                It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
+                "
+            );
             // TODO: Check whether the project name is still available
             project_args.name = Some(
                 Input::with_theme(&theme)
@@ -210,65 +216,23 @@ impl Shuttle {
         };
 
         // 4. Ask for the framework
-        let template = {
-            let templates = match git_templates {
-                Some(git_templates) => git_templates,
-                None => {
-                    println!(
-                        "Shuttle works with a range of web frameworks. Which one do you want to use?"
-                    );
-                    println!(
-                        "Hint: Check the shuttle-examples repo for a full list of templates: {}",
-                        EXAMPLES_REPO
-                    );
-                    let frameworks = args::InitTemplateArg::iter().collect::<Vec<_>>();
-                    let index = FuzzySelect::with_theme(&theme)
-                        .with_prompt("Framework")
-                        .items(&frameworks)
-                        .default(0)
-                        .interact()?;
-                    println!();
-                    frameworks[index].templates()
-                }
-            };
-
-            if templates.is_empty() {
-                bail!("Developer error. List of templates for that framework was empty.")
-            } else if !interactive || templates.len() == 1
-                || !Confirm::with_theme(&theme)
-                    .with_prompt(format!(
-                        "Use a different template than \"{}\"? ({} available)",
-                        templates[0]
-                            .subfolder
-                            .as_ref()
-                            .expect("Pre-defined templates from examples repo should always have a git path"),
-                        templates.len() - 1
-                    ))
-                    .default(false)
-                    .interact()?
-            {
-                // first entry should be hello-world (the default for that choice of framework)
-                templates[0].clone()
-            } else {
-                let framework_templates = templates
-                    .iter()
-                    .map(|t|
-                        t.subfolder
-                            .as_ref()
-                            .expect("Pre-defined templates from examples repo should always have a git path")
-                    )
-                    .collect::<Vec<_>>();
+        let template = match git_templates {
+            Some(git_templates) => git_templates,
+            None => {
+                println!(
+                    "Shuttle works with a range of web frameworks. Which one do you want to use?"
+                );
+                let frameworks = args::InitTemplateArg::iter().collect::<Vec<_>>();
                 let index = FuzzySelect::with_theme(&theme)
-                    .with_prompt("Template")
-                    .items(&framework_templates)
+                    .with_prompt("Framework")
+                    .items(&frameworks)
                     .default(0)
                     .interact()?;
                 println!();
-                templates[index].clone()
+                frameworks[index].template()
             }
         };
 
-        // Covers the official examples at least...
         let serenity_idle_hint = template
             .subfolder
             .as_ref()
@@ -283,6 +247,16 @@ impl Shuttle {
                 .expect("to have a project name provided"),
             template,
         )?;
+        println!();
+
+        printdoc!(
+            "
+            Hint: Check the examples repo for a full list of templates:
+                  {EXAMPLES_REPO}
+            Hint: You can also use `cargo shuttle init --from` to clone templates.
+                  See the docs or help page.
+            "
+        );
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
@@ -317,8 +291,11 @@ impl Shuttle {
                 "Run `cargo shuttle project start` to create a project environment on Shuttle."
             );
             if serenity_idle_hint {
-                println!(
-                    "Hint: Discord bots might want to use `--idle-minutes 0` when starting the project so that they don't go offline."
+                printdoc!(
+                    "
+                    Hint: Discord bots might want to use `--idle-minutes 0` when
+                          starting the project so that they don't go offline.
+                    "
                 );
             }
         }

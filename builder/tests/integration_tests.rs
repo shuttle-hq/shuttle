@@ -24,7 +24,7 @@ async fn build_crate() {
 
     let server_future = async {
         Server::builder()
-            .layer(JwtScopesLayer::new(vec![Scope::DeploymentPush]))
+            .layer(JwtScopesLayer::new(vec![Scope::DeploymentWrite]))
             .add_service(BuilderServer::new(Service::new()))
             .serve(addr)
             .await

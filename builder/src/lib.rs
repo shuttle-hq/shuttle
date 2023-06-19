@@ -100,7 +100,7 @@ impl Builder for Service {
         &self,
         request: Request<BuildRequest>,
     ) -> Result<Response<BuildResponse>, Status> {
-        request.verify(Scope::DeploymentPush)?;
+        request.verify(Scope::DeploymentWrite)?;
 
         let BuildRequest {
             deployment_id,
@@ -157,7 +157,7 @@ fn build_flake_file(path: &Path) -> Result<(), Error> {
     package.resolve();
 
     let package: nix::Package = package.into();
-    let name = package.name().to_string();
+    let name = package.identifier().to_string();
     let expr = package.into_derivative();
 
     fs::write(path.join(".nbuild.nix"), expr)?;

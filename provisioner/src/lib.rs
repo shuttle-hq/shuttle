@@ -12,7 +12,8 @@ use rand::Rng;
 use shuttle_common::claims::{Claim, Scope};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
-    aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, QdrantRequest, QdrantResponse, Shared,
+    aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse,
+    QdrantRequest, QdrantResponse, Shared,
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
@@ -459,7 +460,10 @@ impl Provisioner for MyProvisioner {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn provision_qdrant(&self, request: Request<QdrantRequest>) -> Result<Response<QdrantResponse>, Status> {
+    async fn provision_qdrant(
+        &self,
+        request: Request<QdrantRequest>,
+    ) -> Result<Response<QdrantResponse>, Status> {
         verify_claim(&request)?;
 
         todo!()

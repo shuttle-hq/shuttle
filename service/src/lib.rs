@@ -9,7 +9,8 @@ pub use error::{CustomError, Error};
 
 use serde::{de::DeserializeOwned, Serialize};
 pub use shuttle_common::{
-    database, resource::Type, DatabaseReadyInfo, DbInput, DbOutput, QdrantInput, QdrantReadyInfo, SecretStore,
+    database, resource::Type, DatabaseReadyInfo, DbInput, DbOutput, QdrantInput, QdrantReadyInfo,
+    SecretStore,
 };
 
 #[cfg(feature = "codegen")]

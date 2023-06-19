@@ -5,10 +5,11 @@ use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
     database,
     storage_manager::StorageManager,
-    DatabaseReadyInfo,
-    QdrantReadyInfo,
+    DatabaseReadyInfo, QdrantReadyInfo,
 };
-use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest, QdrantRequest};
+use shuttle_proto::provisioner::{
+    provisioner_client::ProvisionerClient, DatabaseRequest, QdrantRequest,
+};
 use shuttle_service::{Environment, Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::info;
@@ -74,7 +75,7 @@ impl Factory for ProvisionerFactory {
         Ok(info)
     }
 
-    async fn get_qdrant_connection(&mut self) -> Result<QdrantReadyInfo, shuttle_service::Error> { 
+    async fn get_qdrant_connection(&mut self) -> Result<QdrantReadyInfo, shuttle_service::Error> {
         let mut request = Request::new(QdrantRequest {
             project_name: self.service_name.to_string(),
         });

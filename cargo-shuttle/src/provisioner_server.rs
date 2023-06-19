@@ -5,6 +5,7 @@ use bollard::{
     exec::{CreateExecOptions, CreateExecResults},
     image::CreateImageOptions,
     models::{CreateImageInfo, HostConfig, PortBinding, ProgressDetail},
+    service::ContainerInspectResponse,
     Docker,
 };
 use crossterm::{
@@ -14,10 +15,13 @@ use crossterm::{
 };
 use futures::StreamExt;
 use portpicker::pick_unused_port;
-use shuttle_common::database::{AwsRdsEngine, SharedEngine};
+use shuttle_common::{
+    database::{AwsRdsEngine, SharedEngine},
+    QdrantReadyInfo,
+};
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
-    DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+    DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, QdrantRequest, QdrantResponse,
 };
 use shuttle_service::database::Type;
 use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
@@ -48,6 +52,104 @@ impl LocalProvisioner {
                 .serve(address)
                 .await
         })
+    }
+
+    fn get_container_host_port(&self, container: ContainerInspectResponse, port: &str) -> String {
+        container
+            .host_config
+            .expect("container to have host config")
+            .port_bindings
+            .expect("port bindings on container")
+            .get(port)
+            .expect("a port bindings entry")
+            .as_ref()
+            .expect("a port bindings")
+            .first()
+            .expect("at least one port binding")
+            .host_port
+            .as_ref()
+            .expect("a host port")
+            .clone()
+    }
+
+    async fn start_container_if_not_running(
+        &self,
+        container: ContainerInspectResponse,
+        container_type: &str,
+        container_name: &str,
+    ) {
+        if !container
+            .state
+            .expect("container to have a state")
+            .running
+            .expect("state to have a running key")
+        {
+            trace!("{container_type} container '{container_name}' not running, so starting it");
+            self.docker
+                .start_container(container_name, None::<StartContainerOptions<String>>)
+                .await
+                .expect("failed to start none running container");
+        }
+    }
+
+    async fn get_container(
+        &self,
+        container_name: &str,
+        image: String,
+        port: &str,
+        env: Option<Vec<String>>,
+    ) -> Result<ContainerInspectResponse, Status> {
+        match self.docker.inspect_container(container_name, None).await {
+            Ok(container) => {
+                trace!("found container {container_name}");
+                Ok(container)
+            }
+            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
+                if status_code == 404 =>
+            {
+                self.pull_image(&image).await.expect("failed to pull image");
+                trace!("will create container {container_name}");
+                let options = Some(CreateContainerOptions {
+                    name: container_name,
+                    platform: None,
+                });
+                let mut port_bindings = HashMap::new();
+                let host_port = pick_unused_port().expect("system to have a free port");
+                port_bindings.insert(
+                    port.to_string(),
+                    Some(vec![PortBinding {
+                        host_port: Some(host_port.to_string()),
+                        ..Default::default()
+                    }]),
+                );
+                let host_config = HostConfig {
+                    port_bindings: Some(port_bindings),
+                    ..Default::default()
+                };
+
+                let config: Config<String> = Config {
+                    image: Some(image.to_string()),
+                    env,
+                    host_config: Some(host_config),
+                    ..Default::default()
+                };
+
+                self.docker
+                    .create_container(options, config)
+                    .await
+                    .expect("to be able to create container");
+
+                Ok(self
+                    .docker
+                    .inspect_container(container_name, None)
+                    .await
+                    .expect("container to be created"))
+            }
+            Err(error) => {
+                error!("got unexpected error while inspecting docker container: {error}");
+                Err(Status::internal(error.to_string()))
+            }
+        }
     }
 
     async fn get_db_connection_string(
@@ -165,6 +267,34 @@ impl LocalProvisioner {
         Ok(res)
     }
 
+    async fn get_qdrant_connection_info(
+        &self,
+        project_name: &str,
+    ) -> Result<QdrantReadyInfo, Status> {
+        let QdrantConfig {
+            container_prefix,
+            image,
+            port,
+        } = qdrant_config();
+
+        let container_name = format!("{container_prefix}{project_name}");
+
+        let env = None;
+
+        let container = self
+            .get_container(&container_name, image, &port, env)
+            .await?;
+
+        let port = self.get_container_host_port(container.clone(), &port);
+
+        self.start_container_if_not_running(container, "Qdrant", &container_name)
+            .await;
+
+        let url = format!("http://localhost:{port}");
+
+        Ok(QdrantReadyInfo { url, api_key: None })
+    }
+
     async fn wait_for_ready(
         &self,
         container_name: &str,
@@ -273,6 +403,17 @@ impl Provisioner for LocalProvisioner {
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("local runner should not try to delete databases");
     }
+
+    async fn provision_qdrant(
+        &self,
+        request: Request<QdrantRequest>,
+    ) -> Result<Response<QdrantResponse>, Status> {
+        let QdrantRequest { project_name } = request.into_inner();
+
+        let res = self.get_qdrant_connection_info(&project_name).await?;
+
+        Ok(Response::new(res.into()))
+    }
 }
 
 fn print_layers(layers: &Vec<CreateImageInfo>) {
@@ -323,6 +464,20 @@ struct EngineConfig {
     port: String,
     env: Option<Vec<String>>,
     is_ready_cmd: Vec<String>,
+}
+
+struct QdrantConfig {
+    container_prefix: String,
+    image: String,
+    port: String,
+}
+
+fn qdrant_config() -> QdrantConfig {
+    QdrantConfig {
+        container_prefix: "shuttle_qdrant_".to_string(),
+        image: "qdrant/qdrant:latest".to_string(),
+        port: "6334/tcp".to_string(),
+    }
 }
 
 fn db_type_to_config(db_type: Type) -> EngineConfig {

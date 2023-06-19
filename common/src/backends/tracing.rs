@@ -32,6 +32,11 @@ use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
 use crate::tracing::JsonVisitor;
 
 const OTLP_ADDRESS: &str = "http://otel-collector:4317";
+pub const FILEPATH_KEY: &str = "code.filepath";
+pub const LINENO_KEY: &str = "code.lineno";
+pub const MESSAGE_KEY: &str = "message";
+pub const NAMESPACE_KEY: &str = "code.namespace";
+pub const TARGET_KEY: &str = "target";
 
 pub fn setup_tracing<S>(subscriber: S, service_name: &str)
 where
@@ -261,7 +266,7 @@ impl DeploymentLogRecorder for OtlpDeploymentLogRecorder {
 }
 
 fn get_body(visitor: &mut JsonVisitor) -> serde_json::Value {
-    visitor.fields.remove("message").unwrap_or_default()
+    visitor.fields.remove(MESSAGE_KEY).unwrap_or_default()
 }
 
 fn get_severity_number(metadata: &Metadata) -> SeverityNumber {
@@ -279,27 +284,27 @@ fn enrich_with_metadata(
     metadata: &Metadata,
 ) -> serde_json::Map<String, serde_json::Value> {
     visitor.fields.insert(
-        "target".to_string(),
+        TARGET_KEY.to_string(),
         serde_json::Value::String(visitor.target.unwrap_or(metadata.target().to_string())),
     );
 
     if let Some(filepath) = visitor.file.or(metadata.file().map(ToString::to_string)) {
         visitor.fields.insert(
-            "code.filepath".to_string(),
+            FILEPATH_KEY.to_string(),
             serde_json::Value::String(filepath),
         );
     }
 
     if let Some(lineno) = visitor.line.or(metadata.line()) {
         visitor.fields.insert(
-            "code.lineno".to_string(),
+            LINENO_KEY.to_string(),
             serde_json::Value::Number(lineno.into()),
         );
     }
 
     if let Some(namespace) = metadata.module_path() {
         visitor.fields.insert(
-            "code.namespace".to_string(),
+            NAMESPACE_KEY.to_string(),
             serde_json::Value::String(namespace.to_string()),
         );
     }

@@ -5,7 +5,10 @@ use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
 use serde_json::{json, Value};
 use shuttle_common::{
-    backends::tracing::{DeploymentLayer, OtlpDeploymentLogRecorder},
+    backends::tracing::{
+        DeploymentLayer, OtlpDeploymentLogRecorder, FILEPATH_KEY, LINENO_KEY, NAMESPACE_KEY,
+        TARGET_KEY,
+    },
     claims::Scope,
 };
 use shuttle_common_tests::JwtScopesLayer;
@@ -229,14 +232,14 @@ impl From<LogItem> for MinLogItem {
             let mut fields: Value = serde_json::from_slice(&log.fields).unwrap();
 
             let map = fields.as_object_mut().unwrap();
-            let target = map.remove("target").unwrap();
-            let filepath = map.remove("code.filepath").unwrap();
+            let target = map.remove(TARGET_KEY).unwrap();
+            let filepath = map.remove(FILEPATH_KEY).unwrap();
 
             assert_eq!(target, "integration_tests");
             assert_eq!(filepath, "logger/tests/integration_tests.rs");
 
-            map.remove("code.lineno").unwrap();
-            map.remove("code.namespace").unwrap();
+            map.remove(LINENO_KEY).unwrap();
+            map.remove(NAMESPACE_KEY).unwrap();
 
             fields
         };

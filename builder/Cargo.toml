@@ -1,5 +1,5 @@
 [package]
-name = "shuttle-resource-recorder"
+name = "shuttle-builder"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,18 +7,14 @@ repository.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true }
-prost-types = { workspace = true }
-sqlx = { workspace = true, features = [
-    "chrono",
-    "migrate",
-    "runtime-tokio-rustls",
-    "sqlite",
-] }
-strum = { workspace = true }
+flate2 = { workspace = true }
+nbuild-core = "0.1.1"
+tar = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio = { workspace = true, features = ["fs", "macros", "io-util", "process", "rt-multi-thread"] }
+toml = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default"] }
@@ -32,7 +28,7 @@ features = ["backend", "tonic"]
 workspace = true
 
 [dev-dependencies]
+hex = "0.4.3"
 portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
-serde_json = { workspace = true }
 shuttle-common-tests = { workspace = true }

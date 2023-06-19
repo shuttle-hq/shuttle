@@ -25,8 +25,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use flate2::read::GzDecoder;
-use tar::Archive;
 use tokio::fs;
 
 pub async fn task(
@@ -167,8 +165,6 @@ impl Queued {
 
         let project_path = storage_manager.service_build_path(&self.service_name)?;
 
-        extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
-
         info!("Building deployment");
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
@@ -211,9 +207,6 @@ impl Queued {
         // Currently returns the first found shuttle service in a given workspace.
         let runtime = build_deployment(&project_path, tx.clone()).await?;
 
-        // Get the Secrets.toml from the shuttle service in the workspace.
-        let secrets = get_secrets(&runtime.working_directory).await?;
-
         // Set the secrets from the service, ignoring any Secrets.toml if it is in the root of the workspace.
         // TODO: refactor this when we support starting multiple services. Do we want to set secrets in the
         // workspace root?
@@ -227,10 +220,6 @@ impl Queued {
 
             run_pre_deploy_tests(&project_path, tx).await?;
         }
-
-        info!("Moving built executable");
-
-        store_executable(&storage_manager, runtime.executable_path.clone(), &self.id).await?;
 
         let is_next = runtime.is_wasm;
 
@@ -263,23 +252,6 @@ impl fmt::Debug for Queued {
     }
 }
 
-#[instrument(skip(project_path))]
-async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
-    let secrets_file = project_path.join("Secrets.toml");
-
-    if secrets_file.exists() && secrets_file.is_file() {
-        let secrets_str = fs::read_to_string(secrets_file.clone()).await?;
-
-        let secrets: BTreeMap<String, String> = secrets_str.parse::<toml::Value>()?.try_into()?;
-
-        remove_file(secrets_file)?;
-
-        Ok(secrets)
-    } else {
-        Ok(Default::default())
-    }
-}
-
 #[instrument(skip(secrets, service_id, secret_recorder))]
 async fn set_secrets(
     secrets: BTreeMap<String, String>,
@@ -293,39 +265,6 @@ async fn set_secrets(
             .insert_secret(service_id, &key, &value)
             .await
             .map_err(|e| Error::SecretsSet(Box::new(e)))?;
-    }
-
-    Ok(())
-}
-
-/// Equivalent to the command: `tar -xzf --strip-components 1`
-#[instrument(skip(data, dest))]
-async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
-    let tar = GzDecoder::new(data);
-    let mut archive = Archive::new(tar);
-    archive.set_overwrite(true);
-
-    // Clear directory first
-    let mut entries = fs::read_dir(&dest).await?;
-    while let Some(entry) = entries.next_entry().await? {
-        // Ignore the build cache directory
-        if ["target", "Cargo.lock"].contains(&entry.file_name().to_string_lossy().as_ref()) {
-            continue;
-        }
-
-        if entry.metadata().await?.is_dir() {
-            fs::remove_dir_all(entry.path()).await?;
-        } else {
-            fs::remove_file(entry.path()).await?;
-        }
-    }
-
-    for entry in archive.entries()? {
-        let mut entry = entry?;
-        let path: PathBuf = entry.path()?.components().skip(1).collect();
-        let dst: PathBuf = dest.as_ref().join(path);
-        std::fs::create_dir_all(dst.parent().unwrap())?;
-        entry.unpack(dst)?;
     }
 
     Ok(())
@@ -392,21 +331,6 @@ async fn run_pre_deploy_tests(
     }
 }
 
-/// This will store the path to the executable for each runtime, which will be the users project with
-/// an embedded runtime for alpha, and a .wasm file for shuttle-next.
-#[instrument(skip(storage_manager, executable_path, id))]
-async fn store_executable(
-    storage_manager: &ArtifactsStorageManager,
-    executable_path: PathBuf,
-    id: &Uuid,
-) -> Result<()> {
-    let new_executable_path = storage_manager.deployment_executable_path(id)?;
-
-    fs::rename(executable_path, new_executable_path).await?;
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
@@ -417,109 +341,6 @@ mod tests {
     use uuid::Uuid;
 
     use crate::error::TestError;
-
-    #[tokio::test]
-    async fn extract_tar_gz_data() {
-        let dir = Builder::new()
-            .prefix("shuttle-extraction-test")
-            .tempdir()
-            .unwrap();
-        let p = dir.path();
-
-        // Files whose content should be replaced with the archive
-        fs::write(p.join("world.txt"), b"original text")
-            .await
-            .unwrap();
-
-        // Extra files that should be deleted
-        fs::write(
-            p.join("extra.txt"),
-            b"extra file at top level that should be deleted",
-        )
-        .await
-        .unwrap();
-        fs::create_dir_all(p.join("subdir")).await.unwrap();
-        fs::write(
-            p.join("subdir/extra.txt"),
-            b"extra file in subdir that should be deleted",
-        )
-        .await
-        .unwrap();
-
-        // Build cache in `/target` should not be cleared/deleted
-        fs::create_dir_all(p.join("target")).await.unwrap();
-        fs::write(p.join("target/asset.txt"), b"some file in the build cache")
-            .await
-            .unwrap();
-
-        // Cargo.lock file shouldn't be deleted
-        fs::write(p.join("Cargo.lock"), "lock file contents shouldn't matter")
-            .await
-            .unwrap();
-
-        // Binary data for an archive in the following form:
-        //
-        // - temp
-        //   - world.txt
-        //   - subdir
-        //     - hello.txt
-        let test_data = hex::decode(
-            "\
-1f8b0800000000000003edd5d10a823014c6f15df7143e41ede8997b1e4d\
-a3c03074528f9f0a41755174b1a2faff6e0653d8818f7d0bf5feb03271d9\
-91f76e5ac53b7bbd5e18d1d4a96a96e6a9b16225f7267191e79a0d7d28ba\
-2431fbe2f4f0bf67dfbf5498f23fb65d532dc329c439630a38cff541fe7a\
-977f6a9d98c4c619e7d69fe75f94ebc5a767c0e7ccf7bf1fca6ad7457b06\
-5eea7f95f1fe8b3aa5ffdfe13aff6ddd346d8467e0a5fef7e3be649928fd\
-ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
-        )
-        .unwrap();
-
-        super::extract_tar_gz_data(test_data.as_slice(), &p)
-            .await
-            .unwrap();
-        assert!(fs::read_to_string(p.join("world.txt"))
-            .await
-            .unwrap()
-            .starts_with("abc"));
-        assert!(fs::read_to_string(p.join("subdir/hello.txt"))
-            .await
-            .unwrap()
-            .starts_with("def"));
-
-        assert_eq!(
-            fs::metadata(p.join("extra.txt")).await.unwrap_err().kind(),
-            std::io::ErrorKind::NotFound,
-            "extra file should be deleted"
-        );
-        assert_eq!(
-            fs::metadata(p.join("subdir/extra.txt"))
-                .await
-                .unwrap_err()
-                .kind(),
-            std::io::ErrorKind::NotFound,
-            "extra file in subdir should be deleted"
-        );
-
-        assert_eq!(
-            fs::read_to_string(p.join("target/asset.txt"))
-                .await
-                .unwrap(),
-            "some file in the build cache",
-            "build cache file should not be touched"
-        );
-
-        assert_eq!(
-            fs::read_to_string(p.join("Cargo.lock")).await.unwrap(),
-            "lock file contents shouldn't matter",
-            "Cargo lock file should not be touched"
-        );
-
-        // Can we extract again without error?
-        super::extract_tar_gz_data(test_data.as_slice(), &p)
-            .await
-            .unwrap();
-    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn run_pre_deploy_tests() {
@@ -538,54 +359,5 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         super::run_pre_deploy_tests(&pass_project_path, tx)
             .await
             .unwrap();
-    }
-
-    #[tokio::test]
-    async fn store_executable() {
-        let executables_dir = Builder::new().prefix("executable-store").tempdir().unwrap();
-        let executables_p = executables_dir.path();
-        let storage_manager = ArtifactsStorageManager::new(executables_p.to_path_buf());
-
-        let build_p = storage_manager.builds_path().unwrap();
-
-        let executable_path = build_p.join("xyz");
-        let id = Uuid::new_v4();
-
-        fs::write(&executable_path, "barfoo").await.unwrap();
-
-        super::store_executable(&storage_manager, executable_path.clone(), &id)
-            .await
-            .unwrap();
-
-        // Old executable file gone?
-        assert!(!executable_path.exists());
-
-        assert_eq!(
-            fs::read_to_string(
-                executables_p
-                    .join("shuttle-executables")
-                    .join(id.to_string())
-            )
-            .await
-            .unwrap(),
-            "barfoo"
-        );
-    }
-
-    #[tokio::test]
-    async fn get_secrets() {
-        let temp = Builder::new().prefix("secrets").tempdir().unwrap();
-        let temp_p = temp.path();
-
-        let secret_p = temp_p.join("Secrets.toml");
-        let mut secret_file = File::create(secret_p.clone()).unwrap();
-        secret_file.write_all(b"KEY = 'value'").unwrap();
-
-        let actual = super::get_secrets(temp_p).await.unwrap();
-        let expected = BTreeMap::from([("KEY".to_string(), "value".to_string())]);
-
-        assert_eq!(actual, expected);
-
-        assert!(!secret_p.exists(), "the secrets file should be deleted");
     }
 }

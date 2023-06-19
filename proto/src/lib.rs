@@ -280,3 +280,7 @@ pub mod resource_recorder {
 pub mod auth {
     include!("generated/auth.rs");
 }
+
+pub mod builder {
+    include!("generated/builder.rs");
+}

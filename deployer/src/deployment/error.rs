@@ -1,4 +1,4 @@
-use super::persistence::dal::DalError;
+use crate::dal::DalError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

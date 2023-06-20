@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use axum::async_trait;
 use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow};
 use sqlx::types::Json as SqlxJson;
 use sqlx::{migrate::Migrator, Row, SqlitePool};
 use sqlx::{query, FromRow};
@@ -16,8 +16,6 @@ use crate::deployment::{Deployment, RunningDeployment};
 use crate::project::service::state::f_running::ServiceRunning;
 use crate::project::service::state::StateVariant;
 use crate::project::service::ServiceState;
-
-use super::Service;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -248,5 +246,26 @@ impl Dal for Sqlite {
             .map(|row| Service::from_row(row).map_err(DalError::Sqlx))
             .collect();
         services
+    }
+}
+
+// User service model
+#[derive(Clone, Debug, PartialEq)]
+pub struct Service {
+    pub id: Ulid,
+    pub name: String,
+    pub state_variant: String,
+    pub state: ServiceState,
+}
+
+impl FromRow<'_, SqliteRow> for Service {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            id: Ulid::from_string(row.try_get("id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            name: row.try_get("name")?,
+            state_variant: row.try_get("state_variant")?,
+            state: row.try_get::<SqlxJson<ServiceState>, _>("state")?.0,
+        })
     }
 }

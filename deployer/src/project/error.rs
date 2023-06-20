@@ -1,5 +1,6 @@
-use crate::deployment::persistence::dal::DalError;
 use std::{error::Error as StdError, fmt::Formatter};
+
+use crate::dal::DalError;
 
 /// A wrapper to capture any error possible with this service
 #[derive(Debug)]

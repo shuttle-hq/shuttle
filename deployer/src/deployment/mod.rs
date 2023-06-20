@@ -1,6 +1,5 @@
 pub mod driver;
 pub mod error;
-pub mod persistence;
 
 use chrono::{DateTime, Utc};
 use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
@@ -10,12 +9,11 @@ use std::path::PathBuf;
 use tracing::instrument;
 use ulid::Ulid;
 
+use crate::dal::Dal;
 use crate::project::docker::ContainerInspectResponseExt;
 use crate::{project::service::ServiceState, runtime_manager::RuntimeManager};
 use driver::RunnableDeployment;
 use tokio::sync::mpsc;
-
-use self::persistence::dal::Dal;
 
 const RUN_BUFFER_SIZE: usize = 100;
 

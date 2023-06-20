@@ -10,7 +10,7 @@ use tokio::time::{sleep, timeout};
 use tracing::{error, info_span, trace, warn};
 use ulid::Ulid;
 
-use crate::deployment::persistence::dal::Dal;
+use crate::dal::Dal;
 
 use super::docker::{DockerContext, ServiceDockerContext};
 use super::error::Error;

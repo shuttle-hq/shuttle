@@ -22,6 +22,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 
 use crate::{
+    dal::Dal,
     project::service::{
         state::{
             c_starting::ServiceStarting, f_running::ServiceRunning, g_completed::ServiceCompleted,
@@ -32,10 +33,7 @@ use crate::{
     runtime_manager::RuntimeManager,
 };
 
-use super::{
-    error::{Error, Result},
-    persistence::dal::Dal,
-};
+use super::error::{Error, Result};
 
 type RunReceiver = mpsc::Receiver<RunnableDeployment>;
 

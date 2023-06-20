@@ -5,8 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use chrono::Utc;
-use deployment::persistence::Persistence;
-use deployment::persistence::{dal::Dal, Service};
+use dal::{Dal, Service};
 use deployment::Deployment;
 use derive_builder::Builder;
 use error::{Error, Result};
@@ -40,6 +39,7 @@ use crate::project::task;
 use crate::project::worker::{TaskRouter, Worker};
 
 pub mod args;
+pub mod dal;
 pub mod deployment;
 pub mod error;
 pub mod project;
@@ -60,7 +60,7 @@ pub struct DeployerService<D: Dal + Send + Sync + 'static> {
     deployment_manager: DeploymentManager<D>,
     runtime_manager: RuntimeManager,
     docker: Docker,
-    persistence: Persistence<D>,
+    dal: D,
     task_router: TaskRouter<BoxedTask>,
     sender:
         tokio::sync::mpsc::Sender<Box<dyn Task<(), Output = (), Error = project::error::Error>>>,
@@ -70,13 +70,13 @@ pub struct DeployerService<D: Dal + Send + Sync + 'static> {
 impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     pub async fn new(
         runtime_manager: RuntimeManager,
-        persistence: Persistence<D>,
+        dal: D,
         config: DeployerServiceConfig,
     ) -> Self {
         let deployment_manager = DeploymentManager::builder()
             .artifacts_path(config.artifacts_path.clone())
             .runtime(runtime_manager.clone())
-            .dal(persistence.dal().clone())
+            .dal(dal.clone())
             .build();
 
         // We create the worker who handles creation of workers per service.
@@ -104,7 +104,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             )
             .expect("to initialize docker connection the installed docker daemon"),
             runtime_manager,
-            persistence,
+            dal,
             deployment_manager,
             task_router: TaskRouter::default(),
             sender,
@@ -115,13 +115,12 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     pub async fn start(self) -> Result<()> {
         // The deployments which are in the `Running` state are considered runnable and they are started again. Running the
         // deployments happens after their associated services' sandboxes are healthy and we start them.
-        let runnable_deployments = self.persistence.dal().running_deployments().await?;
+        let runnable_deployments = self.dal.running_deployments().await?;
         info!(count = %runnable_deployments.len(), "enqueuing runnable deployments");
         for existing_deployment in runnable_deployments {
             // We want to restart the corresponding deployment service container.
             let image_name = self
-                .persistence
-                .dal()
+                .dal
                 .service(&existing_deployment.service_id)
                 .await?
                 .state
@@ -183,10 +182,10 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             image_name,
             idle_minutes,
         ));
+
         // If the service already lives in the persistence with a previous state.
         if let Some(state) = self
-            .persistence
-            .dal()
+            .dal
             .service_state(service_id)
             .await
             .map_err(Error::Dal)?
@@ -194,15 +193,14 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             // But is in the destroyed state.
             if state.is_destroyed() {
                 // Update the state to creating, to reinstate it.
-                self.persistence
-                    .dal()
+                self.dal
                     .update_service_state(*service_id, creating)
                     .await
                     .map_err(Error::Dal)?;
             } else if state.is_running() || state.is_starting() || overwrite {
                 // When overwritting, we must make sure we're transitioning to a new state
                 // on clean. This is done by destroying the previous deployment.
-                let dal = self.persistence.dal().clone();
+                let dal = self.dal.clone();
                 let task_router = self.task_router.clone();
                 let docker = self.docker.clone();
                 let runtime_manager = self.runtime_manager.clone();
@@ -222,8 +220,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                     .await;
 
                 // Update the service with the creating state.
-                self.persistence
-                    .dal()
+                self.dal
                     .update_service_state(service_id, creating)
                     .await
                     .map_err(Error::Dal)?;
@@ -240,8 +237,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 state: creating,
             };
 
-            self.persistence
-                .dal()
+            self.dal
                 .insert_service_if_absent(service)
                 .await
                 .map_err(Error::Dal)?;
@@ -268,10 +264,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             git_commit_message: req_deployment.git_commit_message,
             git_dirty: req_deployment.git_dirty,
         };
-        self.persistence
-            .dal()
-            .insert_deployment(deployment.clone())
-            .await?;
+        self.dal.insert_deployment(deployment.clone()).await?;
         debug!("created deployment");
         Ok(deployment)
     }
@@ -291,7 +284,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         let auth_uri = self.config.auth_uri.to_string();
         let network_name = self.config.network_name.clone();
         let prefix = self.config.prefix.clone();
-        let dal = self.persistence.dal().clone();
+        let dal = self.dal.clone();
         let task_router = self.task_router.clone();
         let deployment_manager = self.deployment_manager.clone();
         let docker = self.docker.clone();
@@ -433,14 +426,12 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         let deployment_id = Ulid::from_string(&request.deployment_id)
             .map_err(|_| tonic::Status::invalid_argument("invalid deployment id"))?;
         let deployment = self
-            .persistence
-            .dal()
+            .dal
             .deployment(&deployment_id)
             .await
             .map_err(|err| tonic::Status::not_found(err.to_string()))?;
         let service = self
-            .persistence
-            .dal()
+            .dal
             .service(&deployment.service_id)
             .await
             .map_err(|err| tonic::Status::not_found(err.to_string()))?;
@@ -453,7 +444,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         }
 
         // Destroying the deployment and waiting on finishing up
-        let dal = self.persistence.dal().clone();
+        let dal = self.dal.clone();
         let task_router = self.task_router.clone();
         let docker = self.docker.clone();
         let runtime_manager = self.runtime_manager.clone();

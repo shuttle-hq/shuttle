@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use axum::async_trait;
+use chrono::{DateTime, Utc};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow};
 use sqlx::types::Json as SqlxJson;
@@ -12,7 +13,7 @@ use thiserror::Error;
 use tracing::{error, info};
 use ulid::Ulid;
 
-use crate::deployment::{Deployment, RunningDeployment};
+use crate::project::docker::ContainerInspectResponseExt;
 use crate::project::service::state::f_running::ServiceRunning;
 use crate::project::service::state::StateVariant;
 use crate::project::service::ServiceState;
@@ -266,6 +267,63 @@ impl FromRow<'_, SqliteRow> for Service {
             name: row.try_get("name")?,
             state_variant: row.try_get("state_variant")?,
             state: row.try_get::<SqlxJson<ServiceState>, _>("state")?.0,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Deployment {
+    pub id: Ulid,
+    pub service_id: Ulid,
+    pub last_update: DateTime<Utc>,
+    pub is_next: bool,
+    pub git_commit_hash: Option<String>,
+    pub git_commit_message: Option<String>,
+    pub git_branch: Option<String>,
+    pub git_dirty: Option<bool>,
+}
+
+impl FromRow<'_, SqliteRow> for Deployment {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            id: Ulid::from_string(row.try_get("id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            service_id: Ulid::from_string(row.try_get("service_id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            last_update: row.try_get("last_update")?,
+            is_next: row.try_get("is_next")?,
+            git_commit_hash: row.try_get("git_commit_hash")?,
+            git_commit_message: row.try_get("git_commit_message")?,
+            git_branch: row.try_get("git_branch")?,
+            git_dirty: row.try_get("git_dirty")?,
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct RunningDeployment {
+    pub id: Ulid,
+    pub service_name: String,
+    pub service_id: Ulid,
+    pub is_next: bool,
+    pub idle_minutes: u64,
+}
+
+impl FromRow<'_, SqliteRow> for RunningDeployment {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            id: Ulid::from_string(row.try_get("id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            service_name: row.try_get("service_name")?,
+            service_id: Ulid::from_string(row.try_get("service_id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            is_next: row.try_get("is_next")?,
+            idle_minutes: row
+                .try_get::<SqlxJson<ServiceState>, _>("service_state")?
+                .0
+                .container()
+                .map(|c| c.idle_minutes())
+                .expect("to extract idle minutes from the service state"),
         })
     }
 }

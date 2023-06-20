@@ -15,7 +15,6 @@ members = [
   "resource-recorder",
   "runtime",
   "service",
-  "orchestrator"
 ]
 
 exclude = [

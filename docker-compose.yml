@@ -1,7 +1,10 @@
 version: "3.7"
 volumes:
   auth-vol:
+  builder-store-vol:
   gateway-vol:
+  logger-vol:
+  resource-recorder-vol:
   postgres-vol:
   panamax-crates-vol:
   panamax-io-index-vol:
@@ -14,7 +17,7 @@ networks:
         - subnet: 10.99.0.0/16
 services:
   auth:
-    image: "${CONTAINER_REGISTRY}/auth:${BACKEND_TAG}"
+    image: "${CONTAINER_REGISTRY}/auth:${AUTH_TAG}"
     ports:
       - 8008:8000
     deploy:
@@ -33,20 +36,78 @@ services:
         constraints:
           - node.hostname==controller
     networks:
+      default:
       user-net:
     volumes:
-      - auth-vol:/var/lib/shuttle-auth
+      - auth-vol:/var/lib
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
-      - "--state=/var/lib/shuttle-auth"
+      - "--state=/var/lib"
       - "start"
       - "--address=0.0.0.0:8000"
-  gateway:
-    image: "${CONTAINER_REGISTRY}/gateway:${BACKEND_TAG}"
+  builder:
+    image: "${CONTAINER_REGISTRY}/builder:${BUILDER_TAG}"
     depends_on:
-      - provisioner
       - auth
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==builder
+    volumes:
+      - builder-store-vol:/nix/store
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--address=0.0.0.0:8000"
+      - "--auth-uri=http://auth:8000"
+  deployer:
+    image: "${CONTAINER_REGISTRY}/deployer:${DEPLOYER_TAG}"
+    depends_on:
+      - auth
+      - builder
+      - provisioner
+      - resource-recorder
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==runtimes
+    volumes:
+      # This image needs to run highly privileged in order to
+      # orchestrate user runtimes safely
+      - ${DOCKER_SOCK}:/var/run/docker.sock
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--address=0.0.0.0:8000"
+      - "--auth-uri=http://auth:8000"
+  gateway:
+    image: "${CONTAINER_REGISTRY}/gateway:${GATEWAY_TAG}"
+    depends_on:
+      - auth
+      - deployer
     ports:
       - 7999:7999
       - 8000:8000
@@ -66,17 +127,12 @@ services:
       placement:
         constraints:
           - node.hostname==controller
-    networks:
-      user-net:
     volumes:
-      - gateway-vol:/var/lib/shuttle
-      # This image needs to run highly privileged in order to
-      # orchestrate user runtimes safely
-      - ${DOCKER_SOCK}:/var/run/docker.sock
+      - gateway-vol:/var/lib
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
-      - "--state=/var/lib/shuttle"
+      - "--state=/var/lib"
       - "start"
       - "--control=0.0.0.0:8001"
       - "--user=0.0.0.0:8000"
@@ -95,6 +151,33 @@ services:
       timeout: 15s
       retries: 15
       #start_period: 30s
+  logger:
+    image: "${CONTAINER_REGISTRY}/logger:${LOGGER_TAG}"
+    depends_on:
+      - auth
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==controller
+    volumes:
+      - logger-vol:/var/lib
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--address=0.0.0.0:8000"
+      - "--state=/var/lib"
+      - "--auth-uri=http://auth:8000"
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
     depends_on:
@@ -129,22 +212,61 @@ services:
       - "--internal-pg-address=postgres"
       - "--fqdn=${DB_FQDN}"
       - "--auth-uri=http://auth:8000"
-  postgres:
-    image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
-    restart: always
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    networks:
-      user-net:
+  resource-recorder:
+    image: "${CONTAINER_REGISTRY}/resource-recorder:${RESOURCE_RECORDER_TAG}"
+    depends_on:
+      - auth
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==controller
     volumes:
-      - postgres-vol:/var/lib/postgresql/data
-    ports:
-      - 8002:8000
-      - 5432:5432
+      - resource-recorder-vol:/var/lib
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--address=0.0.0.0:8000"
+      - "--state=/var/lib"
+      - "--auth-uri=http://auth:8000"
+
+  deck-chores:
+    image: docker.io/funkyfuture/deck-chores:1
+    restart: unless-stopped
+    environment:
+      TIMEZONE: UTC
+    volumes:
+      - ${DOCKER_SOCK}:/var/run/docker.sock
     deploy:
       placement:
         constraints:
-          - node.hostname==postgres
+          - node.hostname==controller
+  otel-collector:
+    image: "${CONTAINER_REGISTRY}/otel:${OTEL_TAG}"
+    volumes:
+      # Pull docker stats
+      - ${DOCKER_SOCK}:/var/run/docker.sock:ro
+    restart: always
+    networks:
+      default:
+      user-net:
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_ENV=${DD_ENV}
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==controller
   mongodb:
     image: docker.io/library/mongo:5.0.10
     restart: always
@@ -157,21 +279,6 @@ services:
       placement:
         constraints:
           - node.hostname==postgres
-  otel-collector:
-    image: "${CONTAINER_REGISTRY}/otel:${OTEL_TAG}"
-    volumes:
-      # Pull docker stats
-      - ${DOCKER_SOCK}:/var/run/docker.sock:ro
-    restart: always
-    networks:
-      user-net:
-    environment:
-      - DD_API_KEY=${DD_API_KEY}
-      - DD_ENV=${DD_ENV}
-    deploy:
-      placement:
-        constraints:
-          - node.hostname==controller
   panamax:
     image: "${CONTAINER_REGISTRY}/panamax:${PANAMAX_TAG}"
     restart: always
@@ -188,14 +295,19 @@ services:
       placement:
         constraints:
           - node.hostname==controller
-  deck-chores:
-    image: docker.io/funkyfuture/deck-chores:1
-    restart: unless-stopped
+  postgres:
+    image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
+    restart: always
     environment:
-      TIMEZONE: UTC
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      user-net:
     volumes:
-      - ${DOCKER_SOCK}:/var/run/docker.sock
+      - postgres-vol:/var/lib/postgresql/data
+    ports:
+      - 8002:8000
+      - 5432:5432
     deploy:
       placement:
         constraints:
-          - node.hostname==controller
+          - node.hostname==postgres

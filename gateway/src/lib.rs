@@ -337,7 +337,7 @@ pub mod tests {
     use sqlx::SqlitePool;
 
     use crate::acme::AcmeClient;
-    use crate::args::{StartArgs, UseTls};
+    use crate::args::{Args, UseTls};
     use crate::service::MIGRATIONS;
 
     macro_rules! assert_err_kind {
@@ -441,7 +441,7 @@ pub mod tests {
     }
 
     pub struct World {
-        args: StartArgs,
+        args: Args,
         hyper: HyperClient<HttpConnector, Body>,
         pool: SqlitePool,
         acme_client: AcmeClient,
@@ -492,13 +492,14 @@ pub mod tests {
 
             let docker_host = "/var/run/docker.sock".to_string();
 
-            let args = StartArgs {
+            let args = Args {
                 control,
                 user,
                 bouncer,
                 use_tls: UseTls::Disable,
                 auth_uri: auth_uri.clone(),
                 proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
+                state: Default::default(),
             };
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
@@ -518,7 +519,7 @@ pub mod tests {
             }
         }
 
-        pub fn args(&self) -> StartArgs {
+        pub fn args(&self) -> Args {
             self.args.clone()
         }
 

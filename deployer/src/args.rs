@@ -21,10 +21,6 @@ pub struct Args {
     #[clap(long, default_value = "http://provisioner:5000")]
     pub provisioner_uri: Uri,
 
-    /// Uri to folder to store all runtime related artifacts
-    #[clap(long, default_value = "/tmp")]
-    pub artifacts_path: PathBuf,
-
     /// Used to prefix names for all docker resources
     #[clap(long, default_value = "shuttle_dev")]
     pub prefix: String,

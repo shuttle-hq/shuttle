@@ -52,7 +52,6 @@ pub struct DeployerServiceConfig {
     auth_uri: Uri,
     network_name: String,
     prefix: String,
-    artifacts_path: PathBuf,
 }
 
 pub struct DeployerService<D: Dal + Send + Sync + 'static> {
@@ -70,7 +69,6 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     pub async fn new(dal: D, config: DeployerServiceConfig) -> Self {
         let runtime_manager = RuntimeManager::new();
         let deployment_manager = DeploymentManager::builder()
-            .artifacts_path(config.artifacts_path.clone())
             .runtime(runtime_manager.clone())
             .dal(dal.clone())
             .build();

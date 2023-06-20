@@ -13,7 +13,6 @@ async fn main() {
     trace!(args = ?args, "parsed args");
 
     let config: DeployerServiceConfig = DeployerServiceConfigBuilder::default()
-        .artifacts_path(args.artifacts_path)
         .auth_uri(args.auth_uri)
         .provisioner_uri(args.provisioner_uri)
         .bind_address(args.address)

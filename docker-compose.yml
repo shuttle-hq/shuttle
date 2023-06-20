@@ -108,7 +108,7 @@ services:
       - "--state=/var/lib"
       - "--provisioner-uri=http://provisioner:8000"
       - "--prefix=${STACK}"
-      - "--network-name=${STACK}_user-net"
+      - "--users-network-name=${STACK}_user-net"
       - "--docker-host=/var/run/docker.sock"
   gateway:
     image: "${CONTAINER_REGISTRY}/gateway:${GATEWAY_TAG}"

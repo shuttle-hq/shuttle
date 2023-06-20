@@ -1,8 +1,7 @@
 use clap::Parser;
 use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_deployer::{
-    args::Args, dal::Sqlite, runtime_manager::RuntimeManager, DeployerService,
-    DeployerServiceConfig, DeployerServiceConfigBuilder,
+    args::Args, dal::Sqlite, DeployerService, DeployerServiceConfig, DeployerServiceConfigBuilder,
 };
 use tracing::{error, trace};
 
@@ -24,8 +23,7 @@ async fn main() {
         .build()
         .expect("to build the deployer service configuration");
 
-    let runtime_manager = RuntimeManager::new();
-    let svc = DeployerService::new(runtime_manager, Sqlite::new(&args.state).await, config).await;
+    let svc = DeployerService::new(Sqlite::new(&args.state).await, config).await;
 
     match svc.start().await {
         Ok(_) => (),

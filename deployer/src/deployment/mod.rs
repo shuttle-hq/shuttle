@@ -61,7 +61,6 @@ impl<D: Dal + Send + Sync + 'static> DeploymentManagerBuilder<D> {
 
         DeploymentManager {
             run_send,
-            runtime_manager,
             storage_manager,
             dal,
         }
@@ -71,7 +70,6 @@ impl<D: Dal + Send + Sync + 'static> DeploymentManagerBuilder<D> {
 #[derive(Clone)]
 pub struct DeploymentManager<D: Dal + Sync + 'static> {
     run_send: RunSender,
-    runtime_manager: RuntimeManager,
     storage_manager: ArtifactsStorageManager,
     dal: D,
 }
@@ -132,10 +130,6 @@ impl<D: Dal + Sync + 'static> DeploymentManager<D> {
         };
 
         self.run_push(run).await
-    }
-
-    pub async fn kill(&mut self, id: Ulid) {
-        self.runtime_manager.kill(&id).await;
     }
 
     pub fn storage_manager(&self) -> ArtifactsStorageManager {

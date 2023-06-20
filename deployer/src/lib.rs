@@ -67,11 +67,8 @@ pub struct DeployerService<D: Dal + Send + Sync + 'static> {
 }
 
 impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
-    pub async fn new(
-        runtime_manager: RuntimeManager,
-        dal: D,
-        config: DeployerServiceConfig,
-    ) -> Self {
+    pub async fn new(dal: D, config: DeployerServiceConfig) -> Self {
+        let runtime_manager = RuntimeManager::new();
         let deployment_manager = DeploymentManager::builder()
             .artifacts_path(config.artifacts_path.clone())
             .runtime(runtime_manager.clone())

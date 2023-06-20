@@ -125,7 +125,10 @@ pub enum DbOutput {
 
 // Holds the input for a Qdrant resource
 #[derive(Deserialize, Serialize, Default)]
-pub struct QdrantInput {}
+pub struct QdrantInput {
+    pub cloud_url: Option<String>,
+    pub api_key: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QdrantReadyInfo {

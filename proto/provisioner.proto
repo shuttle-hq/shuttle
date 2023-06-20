@@ -17,6 +17,8 @@ message DatabaseRequest {
 
 message QdrantRequest {
   string project_name = 1;
+  string url = 2;
+  string api_key = 3;
 }
 
 message Shared {

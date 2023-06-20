@@ -278,11 +278,8 @@ impl LocalProvisioner {
         } = qdrant_config();
 
         let container_name = format!("{container_prefix}{project_name}");
-        let api_key = "local_api_key".to_string();
 
-        let env = Some(vec![
-            format!("QDRANT__SERVICE__API_KEY={api_key}"),
-        ]);
+        let env = None;
 
         let container = self
             .get_container(&container_name, image, &port, env)
@@ -295,7 +292,7 @@ impl LocalProvisioner {
 
         let url = format!("http://localhost:{port}");
 
-        Ok(QdrantReadyInfo { url, api_key: Some(api_key) })
+        Ok(QdrantReadyInfo { url, api_key: None })
     }
 
     async fn wait_for_ready(
@@ -411,7 +408,11 @@ impl Provisioner for LocalProvisioner {
         &self,
         request: Request<QdrantRequest>,
     ) -> Result<Response<QdrantResponse>, Status> {
-        let QdrantRequest { project_name } = request.into_inner();
+        let QdrantRequest {
+            project_name,
+            url: _,
+            api_key: _,
+        } = request.into_inner();
 
         let res = self.get_qdrant_connection_info(&project_name).await?;
 

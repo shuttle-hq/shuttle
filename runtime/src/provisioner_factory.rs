@@ -75,9 +75,15 @@ impl Factory for ProvisionerFactory {
         Ok(info)
     }
 
-    async fn get_qdrant_connection(&mut self) -> Result<QdrantReadyInfo, shuttle_service::Error> {
+    async fn get_qdrant_connection(
+        &mut self,
+        url: String,
+        api_key: String,
+    ) -> Result<QdrantReadyInfo, shuttle_service::Error> {
         let mut request = Request::new(QdrantRequest {
             project_name: self.service_name.to_string(),
+            url,
+            api_key,
         });
 
         if let Some(claim) = &self.claim {

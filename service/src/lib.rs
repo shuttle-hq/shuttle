@@ -87,7 +87,11 @@ pub trait Factory: Send + Sync {
     ) -> Result<DatabaseReadyInfo, crate::Error>;
 
     /// Get a Qdrant connection
-    async fn get_qdrant_connection(&mut self) -> Result<QdrantReadyInfo, crate::Error>;
+    async fn get_qdrant_connection(
+        &mut self,
+        url: String,
+        api_key: String,
+    ) -> Result<QdrantReadyInfo, crate::Error>;
 
     /// Get all the secrets for a service
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, crate::Error>;

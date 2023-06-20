@@ -102,8 +102,8 @@ services:
   gateway:
     image: "${CONTAINER_REGISTRY}/gateway:${GATEWAY_TAG}"
     depends_on:
-      - provisioner
       - auth
+      - deployer
     ports:
       - 7999:7999
       - 8000:8000

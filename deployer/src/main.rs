@@ -27,7 +27,7 @@ async fn main() {
         .provisioner_uri(args.provisioner_uri)
         .bind_address(args.address)
         .docker_host(args.docker_host)
-        .network_name(args.network_name)
+        .network_name(args.users_network_name)
         .prefix(args.prefix)
         .build()
         .expect("to build the deployer service configuration");

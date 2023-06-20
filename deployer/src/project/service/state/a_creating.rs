@@ -15,7 +15,7 @@ use crate::{
     deserialize_json,
     project::{
         docker::{ContainerInspectResponseExt, ContainerSettings, DockerContext},
-        service::error::Error,
+        service::{error::Error, RUNTIME_API_PORT},
     },
 };
 
@@ -129,7 +129,8 @@ impl ServiceCreating {
         // use that to get the executable with the shuttle-runtime, because otherwise, when we're
         // creating the create container config we're overwriting the executable path and it can
         // not be found afterward.
-        let mut cmd = vec!["--port", "8001"];
+        let port = RUNTIME_API_PORT.to_string();
+        let mut cmd = vec!["--port", port.as_str()];
         // Currently, shuttle-next doesn't support a significant amount of Shuttle resources, so
         // we're completting the args here only for the alpha runtime.
         if !*is_next {

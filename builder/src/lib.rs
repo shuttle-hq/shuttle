@@ -157,7 +157,7 @@ fn build_flake_file(path: &Path) -> Result<(), Error> {
     package.resolve();
 
     let package: nix::Package = package.into();
-    let name = package.identifier();
+    let name = package.name().to_string();
     let expr = package.into_derivative();
 
     fs::write(path.join(".nbuild.nix"), expr)?;

@@ -10,7 +10,7 @@ pub struct Args {
     pub address: SocketAddr,
 
     /// Where to store resources state
-    #[arg(long, default_value = "./deployer.sqlite")]
+    #[arg(long, default_value = "./")]
     pub state: PathBuf,
 
     /// Address to reach the authentication service at
@@ -18,7 +18,7 @@ pub struct Args {
     pub auth_uri: Uri,
 
     /// Address to connect to the provisioning service
-    #[clap(long, default_value = "http://provisioner:5000")]
+    #[clap(long, default_value = "http://provisioner:5001")]
     pub provisioner_uri: Uri,
 
     /// Used to prefix names for all docker resources
@@ -26,7 +26,7 @@ pub struct Args {
     pub prefix: String,
 
     /// The overlay network name used for the user services
-    #[clap(long, default_value = "shared_user_net")]
+    #[clap(long, default_value = "shuttle_dev_user-net")]
     pub users_network_name: String,
 
     /// The path to the docker daemon socket

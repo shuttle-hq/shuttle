@@ -12,6 +12,8 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
+    let db_path = &args.state.join("deployer.sqlite");
+
     let config: DeployerServiceConfig = DeployerServiceConfigBuilder::default()
         .auth_uri(args.auth_uri)
         .provisioner_uri(args.provisioner_uri)
@@ -22,7 +24,7 @@ async fn main() {
         .build()
         .expect("to build the deployer service configuration");
 
-    let svc = DeployerService::new(Sqlite::new(&args.state).await, config).await;
+    let svc = DeployerService::new(Sqlite::new(db_path).await, config).await;
 
     match svc.start().await {
         Ok(_) => (),

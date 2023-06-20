@@ -28,7 +28,6 @@ use shuttle_proto::auth::auth_client::AuthClient;
 use shuttle_proto::auth::{
     AuthPublicKey, LogoutRequest, NewUser, ResetKeyRequest, ResultResponse, UserRequest,
 };
-use tokio::sync::mpsc::Sender;
 use tonic::metadata::MetadataValue;
 use tonic::transport::Channel;
 use tonic::Request as TonicRequest;
@@ -45,11 +44,8 @@ use x509_parser::time::ASN1Time;
 
 use crate::acme::{AcmeClient, CustomDomain};
 use crate::auth::{extract_metadata_cookie, insert_metadata_bearer_token, Key};
-use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
 use crate::service::GatewayService;
-use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
-use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{AccountName, Error, ProjectName};
 
 use super::auth_layer::ShuttleAuthLayer;
@@ -105,21 +101,11 @@ impl StatusResponse {
         (status = 500, description = "Server internal error.")
     )
 )]
-async fn get_status(State(RouterState { sender, .. }): State<RouterState>) -> Response<Body> {
-    let (status, body) = if sender.is_closed() || sender.capacity() == 0 {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            StatusResponse::unhealthy(),
-        )
-    } else if sender.capacity() < WORKER_QUEUE_SIZE - SVC_DEGRADED_THRESHOLD {
-        (StatusCode::OK, StatusResponse::degraded())
-    } else {
-        (StatusCode::OK, StatusResponse::healthy())
-    };
+async fn get_status() -> Response<Body> {
+    let body = serde_json::to_vec(&StatusResponse::healthy()).unwrap();
 
-    let body = serde_json::to_vec(&body).unwrap();
     Response::builder()
-        .status(status)
+        .status(StatusCode::OK)
         .body(body.into())
         .unwrap()
 }
@@ -161,9 +147,7 @@ async fn create_acme_account(
     )
 )]
 async fn request_custom_domain_acme_certificate(
-    State(RouterState {
-        service, sender, ..
-    }): State<RouterState>,
+    State(RouterState { service, .. }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     Path((project_name, fqdn)): Path<(ProjectName, String)>,
@@ -180,28 +164,29 @@ async fn request_custom_domain_acme_certificate(
     let project = service.find_project(&project_name).await?;
     let idle_minutes = project.container().unwrap().idle_minutes();
 
+    // TODO: just starting routing requests to this domain to the same deployer project ip?
     // Destroy and recreate the project with the new domain.
-    service
-        .new_task()
-        .project(project_name.clone())
-        .and_then(task::destroy())
-        .and_then(task::run_until_done())
-        .and_then(task::run({
-            let fqdn = fqdn.to_string();
-            move |ctx| {
-                let fqdn = fqdn.clone();
-                async move {
-                    let creating = ProjectCreating::new_with_random_initial_key(
-                        ctx.project_name,
-                        idle_minutes,
-                    )
-                    .with_fqdn(fqdn);
-                    TaskResult::Done(Project::Creating(creating))
-                }
-            }
-        }))
-        .send(&sender)
-        .await?;
+    // service
+    //     .new_task()
+    //     .project(project_name.clone())
+    //     .and_then(task::destroy())
+    //     .and_then(task::run_until_done())
+    //     .and_then(task::run({
+    //         let fqdn = fqdn.to_string();
+    //         move |ctx| {
+    //             let fqdn = fqdn.clone();
+    //             async move {
+    //                 let creating = ProjectCreating::new_with_random_initial_key(
+    //                     ctx.project_name,
+    //                     idle_minutes,
+    //                 )
+    //                 .with_fqdn(fqdn);
+    //                 TaskResult::Done(Project::Creating(creating))
+    //             }
+    //         }
+    //     }))
+    //     .send(&sender)
+    //     .await?;
 
     let mut buf = Vec::new();
     buf.extend(certs.as_bytes());
@@ -651,7 +636,6 @@ pub(crate) struct RouterState {
     pub auth_client: AuthClient<InjectPropagation<Channel>>,
     pub auth_cache: Arc<Box<dyn CacheManagement<Value = String>>>,
     pub service: Arc<GatewayService>,
-    pub sender: Sender<BoxedTask>,
 }
 
 pub struct ApiBuilder {
@@ -659,7 +643,6 @@ pub struct ApiBuilder {
     auth_cache: Option<Arc<Box<dyn CacheManagement<Value = String>>>>,
     router: Router<RouterState>,
     service: Option<Arc<GatewayService>>,
-    sender: Option<Sender<BoxedTask>>,
     bind: Option<SocketAddr>,
 }
 
@@ -676,7 +659,6 @@ impl ApiBuilder {
             auth_cache: None,
             router: Router::new(),
             service: None,
-            sender: None,
             bind: None,
         }
     }
@@ -716,11 +698,6 @@ impl ApiBuilder {
 
     pub fn with_service(mut self, service: Arc<GatewayService>) -> Self {
         self.service = Some(service);
-        self
-    }
-
-    pub fn with_sender(mut self, sender: Sender<BoxedTask>) -> Self {
-        self.sender = Some(sender);
         self
     }
 
@@ -791,7 +768,6 @@ impl ApiBuilder {
 
     pub fn into_router(self) -> Router {
         let service = self.service.expect("a GatewayService is required");
-        let sender = self.sender.expect("a task Sender is required");
         let auth_cache = self.auth_cache.expect("an auth cache is required");
         let auth_client = self.auth_client.expect("an auth client is required");
 
@@ -799,7 +775,6 @@ impl ApiBuilder {
             auth_cache,
             auth_client,
             service,
-            sender,
         })
     }
 
@@ -822,7 +797,6 @@ pub mod tests {
     use http::HeaderValue;
     use hyper::StatusCode;
     use serde_json::Value;
-    use tokio::sync::mpsc::channel;
     use tower::Service;
 
     use super::*;
@@ -839,21 +813,14 @@ pub mod tests {
         let admin_authorization = Authorization::bearer(AUTH_ADMIN_KEY).unwrap();
 
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
-
-        let (sender, mut receiver) = channel::<BoxedTask>(256);
-        tokio::spawn(async move {
-            while receiver.recv().await.is_some() {
-                // do not do any work with inbound requests
-            }
-        });
+        let service =
+            Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn().to_string()).await);
 
         // The address of the auth service we start with `make up`, see the contribution doc.
         let auth_uri: Uri = "http://127.0.0.1:8008".parse().unwrap();
 
         let mut router = ApiBuilder::new()
             .with_service(Arc::clone(&service))
-            .with_sender(sender)
             .with_default_routes()
             .with_auth_service(&auth_uri)
             .await
@@ -1007,18 +974,11 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn status() {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
-
-        let (sender, mut receiver) = channel::<BoxedTask>(256);
-        tokio::spawn(async move {
-            while receiver.recv().await.is_some() {
-                // do not do any work with inbound requests
-            }
-        });
+        let service =
+            Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn().to_string()).await);
 
         let mut router = ApiBuilder::new()
             .with_service(Arc::clone(&service))
-            .with_sender(sender)
             .with_default_routes()
             .with_auth_service(&world.context().auth_uri)
             .await

@@ -1,13 +1,3 @@
-use std::io::Cursor;
-use std::net::Ipv4Addr;
-use std::ops::Sub;
-use std::path::PathBuf;
-use std::sync::Arc;
-
-use axum::body::Body;
-use axum::headers::HeaderMapExt;
-use axum::http::Request;
-use axum::response::Response;
 use fqdn::{Fqdn, FQDN};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
@@ -15,25 +5,22 @@ use hyper::Client;
 use hyper_reverse_proxy::ReverseProxy;
 use instant_acme::{AccountCredentials, ChallengeType};
 use once_cell::sync::Lazy;
-use opentelemetry::global;
-use opentelemetry_http::HeaderInjector;
-use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::{query, Error as SqlxError, Row};
-use tracing::{debug, warn, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
+use std::io::Cursor;
+use std::ops::Sub;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tracing::{debug, warn};
 use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
 use x509_parser::prelude::parse_x509_pem;
 use x509_parser::time::ASN1Time;
 
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
-use crate::project::Project;
-use crate::task::{BoxedTask, TaskBuilder};
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
-use crate::worker::TaskRouter;
-use crate::{AccountName, Error, ErrorKind, ProjectDetails, ProjectName};
+use crate::{Error, ErrorKind, ProjectDetails, ProjectName};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -48,7 +35,6 @@ impl From<SqlxError> for Error {
 
 pub struct GatewayService {
     db: SqlitePool,
-    task_router: TaskRouter<BoxedTask>,
     state_location: PathBuf,
     proxy_fqdn: String,
 }
@@ -59,48 +45,11 @@ impl GatewayService {
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
     pub async fn init(db: SqlitePool, state_location: PathBuf, proxy_fqdn: String) -> Self {
-        let task_router = TaskRouter::new();
-
         Self {
             db,
-            task_router,
             state_location,
             proxy_fqdn,
         }
-    }
-
-    pub async fn route(
-        &self,
-        project: &Project,
-        project_name: &ProjectName,
-        account_name: &AccountName,
-        mut req: Request<Body>,
-    ) -> Result<Response<Body>, Error> {
-        let target_ip = project
-            .target_ip()?
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
-
-        let target_url = format!("http://{target_ip}:8001");
-
-        debug!(target_url, "routing control");
-
-        let control_key = self.control_key_from_project_name(project_name).await?;
-
-        let headers = req.headers_mut();
-        headers.typed_insert(XShuttleAccountName(account_name.to_string()));
-        headers.typed_insert(XShuttleAdminSecret(control_key));
-
-        let cx = Span::current().context();
-        global::get_text_map_propagator(|propagator| {
-            propagator.inject_context(&cx, &mut HeaderInjector(headers))
-        });
-
-        let resp = PROXY_CLIENT
-            .call(Ipv4Addr::LOCALHOST.into(), &target_url, req)
-            .await
-            .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
-
-        Ok(resp)
     }
 
     pub async fn control_key_from_project_name(
@@ -318,15 +267,6 @@ impl GatewayService {
         }
     }
 
-    /// Create a builder for a new [ProjectTask]
-    pub fn new_task(self: &Arc<Self>) -> TaskBuilder {
-        TaskBuilder::new(self.clone())
-    }
-
-    pub fn task_router(&self) -> TaskRouter<BoxedTask> {
-        self.task_router.clone()
-    }
-
     pub fn credentials(&self) -> AccountCredentials<'_> {
         let creds_path = self.state_location.join("acme.json");
         if !creds_path.exists() {
@@ -347,8 +287,10 @@ pub mod tests {
 
     use super::*;
 
-    use crate::task::{self, TaskResult};
-    use crate::tests::{assert_err_kind, World};
+    use crate::{
+        tests::{assert_err_kind, World},
+        AccountName,
+    };
 
     #[tokio::test]
     async fn service_create_find_custom_domain() -> anyhow::Result<()> {
@@ -366,11 +308,6 @@ pub mod tests {
             svc.project_details_for_custom_domain(&domain).await,
             ErrorKind::CustomDomainNotFound
         );
-
-        // let _ = svc
-        //     .create_project(project_name.clone(), account.clone(), false, 0)
-        //     .await
-        //     .unwrap();
 
         svc.create_custom_domain(&project_name, &domain, certificate, private_key)
             .await
@@ -406,7 +343,7 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn service_create_custom_domain_destroy_recreate_project() -> anyhow::Result<()> {
+    async fn service_create_custom_domain() -> anyhow::Result<()> {
         let world = World::new().await;
         let svc =
             Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn().to_string()).await);
@@ -422,33 +359,9 @@ pub mod tests {
             ErrorKind::CustomDomainNotFound
         );
 
-        // let _ = svc
-        //     .create_project(project_name.clone(), account.clone(), false, 0)
-        //     .await
-        //     .unwrap();
-
         svc.create_custom_domain(&project_name, &domain, certificate, private_key)
             .await
             .unwrap();
-
-        let mut work = svc
-            .new_task()
-            .project(project_name.clone())
-            .and_then(task::destroy())
-            .build();
-
-        while let TaskResult::Pending(_) = work.poll(()).await {}
-        assert!(matches!(work.poll(()).await, TaskResult::Done(())));
-
-        // let recreated_project = svc
-        //     .create_project(project_name.clone(), account.clone(), false, 0)
-        //     .await
-        //     .unwrap();
-
-        // let Project::Creating(creating) = recreated_project else {
-        //     panic!("Project should be Creating");
-        // };
-        // assert_eq!(creating.fqdn(), &Some(domain.to_string()));
 
         Ok(())
     }

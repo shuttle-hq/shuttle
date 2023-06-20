@@ -36,6 +36,7 @@ services:
         constraints:
           - node.hostname==controller
     networks:
+      default:
       user-net:
     volumes:
       - auth-vol:/var/lib/shuttle-auth
@@ -126,8 +127,6 @@ services:
       placement:
         constraints:
           - node.hostname==controller
-    networks:
-      user-net:
     volumes:
       - gateway-vol:/var/lib/shuttle
     environment:
@@ -259,6 +258,7 @@ services:
       - ${DOCKER_SOCK}:/var/run/docker.sock:ro
     restart: always
     networks:
+      default:
       user-net:
     environment:
       - DD_API_KEY=${DD_API_KEY}

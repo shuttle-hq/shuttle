@@ -95,7 +95,6 @@ impl Factory for ProvisionerFactory {
 
         // return the connection info
         Ok(info)
-        //Ok(QdrantReadyInfo { url: "http://0.0.0.0:6334".to_string(), api_key: None })
     }
 
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, shuttle_service::Error> {

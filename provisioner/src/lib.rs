@@ -262,6 +262,14 @@ impl MyProvisioner {
                 if let ModifyDBInstanceError::DbInstanceNotFoundFault(_) = err.err() {
                     debug!("creating new AWS RDS {instance_name}");
 
+                    // The engine display impl is used for both the engine and the database name,
+                    // but for mysql the engine name is an invalid database name.
+                    let db_name = if let aws_rds::Engine::Mysql(_) = engine {
+                        "msql".to_string()
+                    } else {
+                        engine.to_string()
+                    };
+
                     client
                         .create_db_instance()
                         .db_instance_identifier(&instance_name)
@@ -272,7 +280,7 @@ impl MyProvisioner {
                         .allocated_storage(20)
                         .backup_retention_period(0) // Disable backups
                         .publicly_accessible(true)
-                        .db_name(engine.to_string())
+                        .db_name(db_name)
                         .set_db_subnet_group_name(Some(RDS_SUBNET_GROUP.to_string()))
                         .send()
                         .await?

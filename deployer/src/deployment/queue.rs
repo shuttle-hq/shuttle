@@ -336,7 +336,7 @@ async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<BuiltService> {
-    let runtimes = build_workspace(project_path, true, tx)
+    let runtimes = build_workspace(project_path, true, tx, true)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 
@@ -379,14 +379,11 @@ async fn run_pre_deploy_tests(
 
     let stdout = cmd.stdout.take().unwrap();
     let stdout_reader = BufReader::new(stdout);
-    stdout_reader
-        .lines()
-        .filter_map(|line| line.ok())
-        .for_each(|line| {
-            if let Err(error) = write.send(format!("{}\n", line.trim_end_matches('\n'))) {
-                error!("failed to send line to pipe: {error}");
-            }
-        });
+    for line in stdout_reader.lines().flatten() {
+        if let Err(error) = write.send(format!("{}\n", line.trim_end_matches('\n'))) {
+            error!("failed to send to pipe: {error}");
+        }
+    }
 
     if cmd.wait().map_err(TestError::Run)?.success() {
         Ok(())

@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use cargo_metadata::MetadataCommand;
 use clap::{
     builder::{OsStringValueParser, PossibleValue, TypedValueParser},
@@ -15,12 +15,9 @@ use clap_complete::Shell;
 use shuttle_common::{models::project::IDLE_MINUTES, project::ProjectName};
 use uuid::Uuid;
 
-use crate::init::Template;
-
 #[derive(Parser)]
 #[command(
     version,
-    about,
     // Cargo passes in the subcommand name to the invoked executable. Use a
     // hidden, optional positional argument to deal with it.
     arg(clap::Arg::new("dummy")
@@ -28,7 +25,7 @@ use crate::init::Template;
         .required(false)
         .hide(true))
 )]
-pub struct Args {
+pub struct ShuttleArgs {
     #[command(flatten)]
     pub project_args: ProjectArgs,
     /// Run this command against the API at the supplied URL
@@ -85,6 +82,10 @@ impl ProjectArgs {
     }
 }
 
+/// A cargo command for the shuttle platform (https://www.shuttle.rs/)
+///
+/// See the CLI docs (https://docs.shuttle.rs/introduction/shuttle-commands)
+/// for more information.
 #[derive(Parser)]
 pub enum Command {
     /// Create a new shuttle project
@@ -228,78 +229,109 @@ pub struct RunArgs {
     /// Use 0.0.0.0 instead of localhost (for usage with local external devices)
     #[arg(long)]
     pub external: bool,
-    /// Use release mode for building the project.
+    /// Use release mode for building the project
     #[arg(long, short = 'r')]
     pub release: bool,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 pub struct InitArgs {
-    /// Initialize the project with a template
-    #[arg(long, short, value_enum)]
+    /// Clone a starter template from shuttle's official examples
+    #[arg(long, short, value_enum, conflicts_with_all = &["from", "subfolder"])]
     pub template: Option<InitTemplateArg>,
+    /// Clone a template from a git repository or local path using cargo-generate
+    #[arg(long)]
+    pub from: Option<String>,
+    /// Path to the template in the source (used with --from)
+    #[arg(long, requires = "from")]
+    pub subfolder: Option<String>,
+
+    /// Path where to place the new shuttle project
+    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
+    pub path: PathBuf,
+
     /// Whether to create the environment for this project on shuttle
     #[arg(long)]
     pub create_env: bool,
     #[command(flatten)]
     pub login_args: LoginArgs,
-    /// Path to initialize a new shuttle project
-    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
-    pub path: PathBuf,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone, Debug, strum::Display, strum::EnumIter)]
+#[strum(serialize_all = "kebab-case")]
 pub enum InitTemplateArg {
-    /// Initialize with actix-web framework
+    /// Actix-web framework
     ActixWeb,
-    /// Initialize with axum framework
+    /// Axum web framework
     Axum,
-    /// Initialize with poem framework
+    /// Poem web framework
     Poem,
-    /// Initialize with poise framework
+    /// Poise Discord framework
     Poise,
-    /// Initialize with rocket framework
+    /// Rocket web framework
     Rocket,
-    /// Initialize with salvo framework
+    /// Salvo web framework
     Salvo,
-    /// Initialize with serenity framework
+    /// Serenity Discord framework
     Serenity,
-    /// Initialize with tide framework
-    Tide,
-    /// Initialize with thruster framework
+    /// Thruster web framework
     Thruster,
-    /// Initialize with tower framework
+    /// Tide web framework
+    Tide,
+    /// Tower web framework
     Tower,
-    /// Initialize with warp framework
+    /// Warp web framework
     Warp,
-    /// Initialize with no template
+    /// No template - Custom empty service
     None,
 }
 
+pub const EXAMPLES_REPO: &str = "https://github.com/shuttle-hq/shuttle-examples";
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TemplateLocation {
+    pub auto_path: String,
+    pub subfolder: Option<String>,
+}
+
 impl InitArgs {
-    /// `None` -> No template chosen, ask for it
-    ///
-    /// `Some(Template::None)` -> Init with a blank cargo project
-    pub fn framework(&self) -> Option<Template> {
-        // Why separate enums?
-        // Future might have more options that pre-defined templates
-        self.template.as_ref().map(|t| {
-            use InitTemplateArg::*;
-            match t {
-                ActixWeb => Template::ActixWeb,
-                Axum => Template::Axum,
-                Poem => Template::Poem,
-                Poise => Template::Poise,
-                Rocket => Template::Rocket,
-                Salvo => Template::Salvo,
-                Serenity => Template::Serenity,
-                Tide => Template::Tide,
-                Thruster => Template::Thruster,
-                Tower => Template::Tower,
-                Warp => Template::Warp,
-                None => Template::None,
-            }
+    pub fn git_template(&self) -> anyhow::Result<Option<TemplateLocation>> {
+        if self.from.is_some() && self.template.is_some() {
+            bail!("Template and From args can not be set at the same time.");
+        }
+        Ok(if let Some(from) = self.from.clone() {
+            Some(TemplateLocation {
+                auto_path: from,
+                subfolder: self.subfolder.clone(),
+            })
+        } else {
+            self.template.as_ref().map(|t| t.template())
         })
+    }
+}
+
+impl InitTemplateArg {
+    pub fn template(&self) -> TemplateLocation {
+        use InitTemplateArg::*;
+        let path = match self {
+            ActixWeb => "actix-web/hello-world",
+            Axum => "axum/hello-world",
+            Poem => "poem/hello-world",
+            Poise => "poise/hello-world",
+            Rocket => "rocket/hello-world",
+            Salvo => "salvo/hello-world",
+            Serenity => "serenity/hello-world",
+            Thruster => "thruster/hello-world",
+            Tide => "tide/hello-world",
+            Tower => "tower/hello-world",
+            Warp => "warp/hello-world",
+            None => "custom/none",
+        };
+
+        TemplateLocation {
+            auto_path: EXAMPLES_REPO.into(),
+            subfolder: Some(path.to_string()),
+        }
     }
 }
 
@@ -329,27 +361,84 @@ mod tests {
 
     #[test]
     fn test_init_args_framework() {
+        // pre-defined template (only hello world)
+        let init_args = InitArgs {
+            template: Some(InitTemplateArg::Tower),
+            from: None,
+            subfolder: None,
+            create_env: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+        assert_eq!(
+            init_args.git_template().unwrap(),
+            Some(TemplateLocation {
+                auto_path: EXAMPLES_REPO.into(),
+                subfolder: Some("tower/hello-world".into())
+            })
+        );
+
+        // pre-defined template (multiple)
         let init_args = InitArgs {
             template: Some(InitTemplateArg::Axum),
+            from: None,
+            subfolder: None,
             create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
-        assert_eq!(init_args.framework(), Some(Template::Axum));
+        assert_eq!(
+            init_args.git_template().unwrap(),
+            Some(TemplateLocation {
+                auto_path: EXAMPLES_REPO.into(),
+                subfolder: Some("axum/hello-world".into())
+            })
+        );
+
+        // pre-defined "none" template
         let init_args = InitArgs {
             template: Some(InitTemplateArg::None),
+            from: None,
+            subfolder: None,
             create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
-        assert_eq!(init_args.framework(), Some(Template::None));
+        assert_eq!(
+            init_args.git_template().unwrap(),
+            Some(TemplateLocation {
+                auto_path: EXAMPLES_REPO.into(),
+                subfolder: Some("custom/none".into())
+            })
+        );
+
+        // git template with path
         let init_args = InitArgs {
             template: None,
+            from: Some("https://github.com/some/repo".into()),
+            subfolder: Some("some/path".into()),
             create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
-        assert_eq!(init_args.framework(), None);
+        assert_eq!(
+            init_args.git_template().unwrap(),
+            Some(TemplateLocation {
+                auto_path: "https://github.com/some/repo".into(),
+                subfolder: Some("some/path".into())
+            })
+        );
+
+        // No template or repo chosen
+        let init_args = InitArgs {
+            template: None,
+            from: None,
+            subfolder: None,
+            create_env: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+        assert_eq!(init_args.git_template().unwrap(), None);
     }
 
     #[test]

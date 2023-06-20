@@ -1,15 +1,11 @@
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    path::PathBuf,
 };
 
 use opentelemetry::global;
 use portpicker::pick_unused_port;
-use shuttle_common::{
-    claims::{Claim, ClaimService, InjectPropagation},
-    storage_manager::ArtifactsStorageManager,
-};
+use shuttle_common::claims::{Claim, ClaimService, InjectPropagation};
 
 use shuttle_proto::runtime::{
     runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
@@ -43,7 +39,6 @@ pub async fn task<D: Dal + Sync + 'static>(
     dal: D,
     mut recv: RunReceiver,
     mut runtime_manager: RuntimeManager,
-    storage_manager: ArtifactsStorageManager,
     claim: Option<Claim>,
 ) {
     info!("Run task started");
@@ -55,7 +50,6 @@ pub async fn task<D: Dal + Sync + 'static>(
             .await
             .expect("to set up a runtime client against a ready deployment");
         let claim = claim.clone();
-        let storage_manager = storage_manager.clone();
         let runtime_manager = runtime_manager.clone();
         let dal = dal.clone();
         tokio::spawn(async move {
@@ -77,10 +71,7 @@ pub async fn task<D: Dal + Sync + 'static>(
             }
 
             async move {
-                if let Err(err) = runnable
-                    .load_and_run(dal, storage_manager, runtime_client, claim)
-                    .await
-                {
+                if let Err(err) = runnable.load_and_run(dal, runtime_client, claim).await {
                     start_crashed_cleanup(&deployment_id, err)
                 }
 
@@ -188,22 +179,14 @@ pub struct RunnableDeployment {
 }
 
 impl RunnableDeployment {
-    #[instrument(skip(self, dal, storage_manager, runtime_client, claim), fields(id = %self.deployment_id, state = %ServiceStarting::name()))]
+    #[instrument(skip(self, dal, runtime_client, claim), fields(id = %self.deployment_id, state = %ServiceStarting::name()))]
     #[allow(clippy::too_many_arguments)]
     async fn load_and_run<D: Dal + Sync + 'static>(
         self,
         dal: D,
-        storage_manager: ArtifactsStorageManager,
         runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         claim: Option<Claim>,
     ) -> Result<()> {
-        // For alpha this is the path to the users project with an embedded runtime.
-        // For shuttle-next this is the path to the compiled .wasm file, which will be
-        // used in the load request.
-        let executable_path = storage_manager
-            .deployment_executable_path(&self.deployment_id)
-            .map_err(Error::IoError)?;
-
         let port = match pick_unused_port() {
             Some(port) => port,
             None => {
@@ -216,13 +199,7 @@ impl RunnableDeployment {
         let address = SocketAddr::new(IpAddr::V4(self.target_ip), port);
 
         // Execute loaded service
-        load(
-            self.service_name.clone(),
-            executable_path.clone(),
-            runtime_client.clone(),
-            claim,
-        )
-        .await?;
+        load(self.service_name.clone(), runtime_client.clone(), claim).await?;
 
         tokio::spawn(run(self.deployment_id, dal, runtime_client, address));
 
@@ -232,24 +209,16 @@ impl RunnableDeployment {
 
 async fn load(
     service_name: String,
-    executable_path: PathBuf,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Option<Claim>,
 ) -> Result<()> {
-    info!(
-        "loading project from: {}",
-        executable_path
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap_or_default()
-    );
-
+    // For alpha this is the path to the users project with an embedded runtime.
+    // For shuttle-next this is the path to the compiled .wasm file, which will be
+    // used in the load request.
+    // TODO: we need pass down the path for shuttle next
+    let path = String::new();
     let mut load_request = tonic::Request::new(LoadRequest {
-        path: executable_path
-            .into_os_string()
-            .into_string()
-            .unwrap_or_default(),
+        path,
         service_name,
         resources: Vec::new(),
         secrets: HashMap::new(),

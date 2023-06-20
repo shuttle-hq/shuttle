@@ -1,8 +1,7 @@
 pub mod driver;
 pub mod error;
 
-use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
-use std::path::PathBuf;
+use shuttle_common::claims::Claim;
 use tracing::instrument;
 use ulid::Ulid;
 
@@ -14,7 +13,6 @@ use tokio::sync::mpsc;
 const RUN_BUFFER_SIZE: usize = 100;
 
 pub struct DeploymentManagerBuilder<D: Dal + Sync + 'static> {
-    artifacts_path: Option<PathBuf>,
     runtime_manager: Option<RuntimeManager>,
     dal: Option<D>,
     claim: Option<Claim>,
@@ -23,12 +21,6 @@ pub struct DeploymentManagerBuilder<D: Dal + Sync + 'static> {
 impl<D: Dal + Send + Sync + 'static> DeploymentManagerBuilder<D> {
     pub fn dal(mut self, dal: D) -> Self {
         self.dal = Some(dal);
-
-        self
-    }
-
-    pub fn artifacts_path(mut self, artifacts_path: PathBuf) -> Self {
-        self.artifacts_path = Some(artifacts_path);
 
         self
     }
@@ -45,32 +37,24 @@ impl<D: Dal + Send + Sync + 'static> DeploymentManagerBuilder<D> {
     }
 
     pub fn build(self) -> DeploymentManager<D> {
-        let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
         let runtime_manager = self.runtime_manager.expect("a runtime manager to be set");
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
-        let storage_manager = ArtifactsStorageManager::new(artifacts_path);
         let dal = self.dal.expect("a DAL is required");
 
         tokio::spawn(driver::task(
             dal.clone(),
             run_recv,
             runtime_manager.clone(),
-            storage_manager.clone(),
             self.claim,
         ));
 
-        DeploymentManager {
-            run_send,
-            storage_manager,
-            dal,
-        }
+        DeploymentManager { run_send, dal }
     }
 }
 
 #[derive(Clone)]
 pub struct DeploymentManager<D: Dal + Sync + 'static> {
     run_send: RunSender,
-    storage_manager: ArtifactsStorageManager,
     dal: D,
 }
 
@@ -86,7 +70,6 @@ impl<D: Dal + Sync + 'static> DeploymentManager<D> {
     /// processing service loading and starting.
     pub fn builder() -> DeploymentManagerBuilder<D> {
         DeploymentManagerBuilder {
-            artifacts_path: None,
             runtime_manager: None,
             dal: None,
             claim: None,
@@ -130,10 +113,6 @@ impl<D: Dal + Sync + 'static> DeploymentManager<D> {
         };
 
         self.run_push(run).await
-    }
-
-    pub fn storage_manager(&self) -> ArtifactsStorageManager {
-        self.storage_manager.clone()
     }
 }
 

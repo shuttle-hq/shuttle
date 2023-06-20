@@ -4,6 +4,7 @@ volumes:
   builder-store-vol:
   gateway-vol:
   logger-vol:
+  resource-recorder-vol:
   postgres-vol:
   panamax-crates-vol:
   panamax-io-index-vol:
@@ -75,6 +76,8 @@ services:
     depends_on:
       - auth
       - builder
+      - provisioner
+      - resource-recorder
     deploy:
       restart_policy:
         condition: on-failure
@@ -91,7 +94,6 @@ services:
         constraints:
           - node.hostname==runtimes
     volumes:
-      - deployer-vol:/var/lib/shuttle-deployer
       # This image needs to run highly privileged in order to
       # orchestrate user runtimes safely
       - ${DOCKER_SOCK}:/var/run/docker.sock
@@ -210,6 +212,33 @@ services:
       - "--internal-mongodb-address=mongodb"
       - "--internal-pg-address=postgres"
       - "--fqdn=${DB_FQDN}"
+      - "--auth-uri=http://auth:8000"
+  resource-recorder:
+    image: "${CONTAINER_REGISTRY}/resource-recorder:${RESOURCE_RECORDER_TAG}"
+    depends_on:
+      - auth
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==controller
+    volumes:
+      - resource-recorder-vol:/var/lib/shuttle-resource-recorder
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--address=0.0.0.0:8000"
+      - "--state=/var/lib/shuttle-resource-recorder"
       - "--auth-uri=http://auth:8000"
 
   deck-chores:

@@ -21,6 +21,7 @@ exclude = [
   "e2e",
   "examples",
   "deployer-alpha",
+  "gateway-alpha",
   "resources",
   "services",
 ]

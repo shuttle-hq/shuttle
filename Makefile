@@ -26,6 +26,7 @@ RUSTUP_TOOLCHAIN=1.70.0
 
 TAG?=$(shell git describe --tags)
 AUTH_TAG?=$(TAG)
+BUILDER_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
 GATEWAY_TAG?=$(TAG)
 PROVISIONER_TAG?=$(TAG)
@@ -84,6 +85,7 @@ endif
 DOCKER_COMPOSE_ENV=\
 	STACK=$(STACK)\
 	AUTH_TAG=$(AUTH_TAG)\
+	BUILDER_TAG=$(BUILDER_TAG)\
 	DEPLOYER_TAG=$(DEPLOYER_TAG)\
 	GATEWAY_TAG=$(GATEWAY_TAG)\
 	PROVISIONER_TAG=$(PROVISIONER_TAG)\
@@ -108,7 +110,7 @@ clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgres panamax otel
+images: shuttle-auth shuttle-builder shuttle-deployer shuttle-gateway shuttle-provisioner otel panamax postgres
 
 postgres:
 	$(DOCKER_BUILD) \

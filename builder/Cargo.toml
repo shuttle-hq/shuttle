@@ -9,7 +9,7 @@ repository.workspace = true
 async-trait = { workspace = true }
 clap = { workspace = true }
 flate2 = { workspace = true }
-nbuild-core = "0.1.1"
+nbuild-core = "0.1.2"
 tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }

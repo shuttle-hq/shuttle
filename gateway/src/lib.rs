@@ -352,9 +352,9 @@ pub mod tests {
 
     use crate::acme::AcmeClient;
     use crate::api::latest::ApiBuilder;
-    use crate::args::{ContextArgs, StartArgs, UseTls};
+    use crate::args::{StartArgs, UseTls};
     use crate::proxy::UserServiceBuilder;
-    use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
+    use crate::service::{GatewayService, MIGRATIONS};
     use crate::worker::Worker;
     use crate::DockerContext;
 
@@ -545,7 +545,6 @@ pub mod tests {
 
     pub struct World {
         docker: Docker,
-        settings: ContainerSettings,
         args: StartArgs,
         hyper: HyperClient<HttpConnector, Body>,
         pool: SqlitePool,
@@ -557,7 +556,6 @@ pub mod tests {
     #[derive(Clone)]
     pub struct WorldContext {
         pub docker: Docker,
-        pub container_settings: ContainerSettings,
         pub hyper: HyperClient<HttpConnector, Body>,
         pub auth_uri: Uri,
     }
@@ -604,18 +602,9 @@ pub mod tests {
                 user,
                 bouncer,
                 use_tls: UseTls::Disable,
-                context: ContextArgs {
-                    docker_host,
-                    image,
-                    prefix,
-                    provisioner_host,
-                    auth_uri: auth_uri.clone(),
-                    network_name,
-                    proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
-                },
+                auth_uri: auth_uri.clone(),
+                proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
             };
-
-            let settings = ContainerSettings::builder().from_args(&args.context).await;
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
 
@@ -626,7 +615,6 @@ pub mod tests {
 
             Self {
                 docker,
-                settings,
                 args,
                 hyper,
                 pool,
@@ -636,8 +624,8 @@ pub mod tests {
             }
         }
 
-        pub fn args(&self) -> ContextArgs {
-            self.args.context.clone()
+        pub fn args(&self) -> StartArgs {
+            self.args.clone()
         }
 
         pub fn pool(&self) -> SqlitePool {
@@ -649,7 +637,7 @@ pub mod tests {
         }
 
         pub fn fqdn(&self) -> FQDN {
-            self.args().proxy_fqdn
+            self.args.proxy_fqdn
         }
 
         pub fn acme_client(&self) -> AcmeClient {
@@ -677,20 +665,9 @@ pub mod tests {
         pub fn context(&self) -> WorldContext {
             WorldContext {
                 docker: self.docker.clone(),
-                container_settings: self.settings.clone(),
                 hyper: self.hyper.clone(),
                 auth_uri: self.auth_uri.clone(),
             }
-        }
-    }
-
-    impl DockerContext for WorldContext {
-        fn docker(&self) -> &Docker {
-            &self.docker
-        }
-
-        fn container_settings(&self) -> &ContainerSettings {
-            &self.container_settings
         }
     }
 
@@ -751,7 +728,8 @@ pub mod tests {
     #[tokio::test]
     async fn end_to_end() {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let service =
+            Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn().to_string()).await);
         let worker = Worker::new();
 
         let (log_out, mut log_in) = channel(256);

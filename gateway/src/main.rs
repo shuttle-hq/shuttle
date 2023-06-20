@@ -58,7 +58,7 @@ async fn main() -> io::Result<()> {
 }
 
 async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
-    let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await);
+    let gateway = Arc::new(GatewayService::init(db, fs, args.proxy_fqdn).await);
 
     let worker = Worker::new();
 

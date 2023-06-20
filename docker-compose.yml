@@ -39,11 +39,11 @@ services:
       default:
       user-net:
     volumes:
-      - auth-vol:/var/lib/shuttle-auth
+      - auth-vol:/var/lib
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
-      - "--state=/var/lib/shuttle-auth"
+      - "--state=/var/lib"
       - "start"
       - "--address=0.0.0.0:8000"
   builder:
@@ -128,11 +128,11 @@ services:
         constraints:
           - node.hostname==controller
     volumes:
-      - gateway-vol:/var/lib/shuttle
+      - gateway-vol:/var/lib
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
-      - "--state=/var/lib/shuttle"
+      - "--state=/var/lib"
       - "start"
       - "--control=0.0.0.0:8001"
       - "--user=0.0.0.0:8000"
@@ -171,12 +171,12 @@ services:
         constraints:
           - node.hostname==controller
     volumes:
-      - logger-vol:/var/lib/shuttle-logger
+      - logger-vol:/var/lib
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
       - "--address=0.0.0.0:8000"
-      - "--state=/var/lib/shuttle-logger"
+      - "--state=/var/lib"
       - "--auth-uri=http://auth:8000"
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
@@ -232,12 +232,12 @@ services:
         constraints:
           - node.hostname==controller
     volumes:
-      - resource-recorder-vol:/var/lib/shuttle-resource-recorder
+      - resource-recorder-vol:/var/lib
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
       - "--address=0.0.0.0:8000"
-      - "--state=/var/lib/shuttle-resource-recorder"
+      - "--state=/var/lib"
       - "--auth-uri=http://auth:8000"
 
   deck-chores:

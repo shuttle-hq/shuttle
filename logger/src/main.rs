@@ -19,6 +19,7 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
+    let db_path = args.state.join("logger.sqlite");
     let auth_client = shuttle_proto::auth::client(&args.auth_uri)
         .await
         .expect("auth service should be reachable");
@@ -28,7 +29,7 @@ async fn main() {
         .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_client)))
         .layer(ExtractPropagationLayer);
 
-    let sqlite = Sqlite::new(&args.state.display().to_string()).await;
+    let sqlite = Sqlite::new(&db_path.display().to_string()).await;
     let svc = ShuttleLogsOtlp::new(sqlite.get_sender());
     let svc = LogsServiceServer::new(svc);
     let router = server_builder

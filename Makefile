@@ -29,6 +29,7 @@ AUTH_TAG?=$(TAG)
 BUILDER_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
 GATEWAY_TAG?=$(TAG)
+LOGGER_TAG?=$(TAG)
 PROVISIONER_TAG?=$(TAG)
 
 DOCKER_BUILD?=docker buildx build
@@ -88,6 +89,7 @@ DOCKER_COMPOSE_ENV=\
 	BUILDER_TAG=$(BUILDER_TAG)\
 	DEPLOYER_TAG=$(DEPLOYER_TAG)\
 	GATEWAY_TAG=$(GATEWAY_TAG)\
+	LOGGER_TAG=$(LOGGER_TAG)\
 	PROVISIONER_TAG=$(PROVISIONER_TAG)\
 	POSTGRES_TAG=${POSTGRES_TAG}\
 	PANAMAX_TAG=${PANAMAX_TAG}\
@@ -110,7 +112,7 @@ clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-auth shuttle-builder shuttle-deployer shuttle-gateway shuttle-provisioner otel panamax postgres
+images: shuttle-auth shuttle-builder shuttle-deployer shuttle-gateway shuttle-logger shuttle-provisioner otel panamax postgres
 
 postgres:
 	$(DOCKER_BUILD) \

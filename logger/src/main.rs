@@ -3,11 +3,11 @@ use std::time::Duration;
 use clap::Parser;
 use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsServiceServer;
 use shuttle_common::backends::{
-    auth::{AuthPublicKey, JwtAuthenticationLayer},
+    auth::JwtAuthenticationLayer,
     tracing::{setup_tracing, ExtractPropagationLayer},
 };
 use shuttle_logger::{args::Args, Service, ShuttleLogsOtlp, Sqlite};
-use shuttle_proto::logger::logger_server::LoggerServer;
+use shuttle_proto::{auth::AuthPublicKey, logger::logger_server::LoggerServer};
 use tonic::transport::Server;
 use tracing::trace;
 
@@ -19,11 +19,13 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
+    let auth_client = shuttle_proto::auth::client(&args.auth_uri)
+        .await
+        .expect("auth service should be reachable");
+
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
-        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
-            args.auth_uri,
-        )))
+        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_client)))
         .layer(ExtractPropagationLayer);
 
     let sqlite = Sqlite::new(&args.state.display().to_string()).await;

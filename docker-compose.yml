@@ -3,6 +3,7 @@ volumes:
   auth-vol:
   builder-store-vol:
   gateway-vol:
+  logger-vol:
   postgres-vol:
   panamax-crates-vol:
   panamax-io-index-vol:
@@ -149,6 +150,33 @@ services:
       timeout: 15s
       retries: 15
       #start_period: 30s
+  logger:
+    image: "${CONTAINER_REGISTRY}/logger:${LOGGER_TAG}"
+    depends_on:
+      - auth
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==controller
+    volumes:
+      - logger-vol:/var/lib/shuttle-logger
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--address=0.0.0.0:8000"
+      - "--state=/var/lib/shuttle-logger"
+      - "--auth-uri=http://auth:8000"
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
     depends_on:

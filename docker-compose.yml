@@ -7,6 +7,7 @@ volumes:
   panamax-io-index-vol:
   resource-recorder-vol:
   mongodb-vol:
+  logger-vol:
 networks:
   user-net:
     attachable: true
@@ -16,7 +17,7 @@ networks:
         - subnet: 10.99.0.0/16
 services:
   auth:
-    image: "${CONTAINER_REGISTRY}/auth:${BACKEND_TAG}"
+    image: "${CONTAINER_REGISTRY}/auth:${AUTH_TAG}"
     ports:
       - 8008:8000
     deploy:
@@ -35,20 +36,51 @@ services:
         constraints:
           - node.hostname==controller
     networks:
+      default:
       user-net:
     volumes:
-      - auth-vol:/var/lib/shuttle-auth
+      - auth-vol:/var/lib
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
-      - "--state=/var/lib/shuttle-auth"
+      - "--state=/var/lib"
       - "start"
       - "--address=0.0.0.0:8000"
-  gateway:
-    image: "${CONTAINER_REGISTRY}/gateway:${BACKEND_TAG}"
+  deployer:
+    image: "${CONTAINER_REGISTRY}/deployer:${DEPLOYER_TAG}"
     depends_on:
-      - provisioner
       - auth
+      - provisioner
+      - resource-recorder
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==runtimes
+    volumes:
+      # This image needs to run highly privileged in order to
+      # orchestrate user runtimes safely
+      - ${DOCKER_SOCK}:/var/run/docker.sock
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--address=0.0.0.0:8000"
+      - "--auth-uri=http://auth:8000"
+  gateway:
+    image: "${CONTAINER_REGISTRY}/gateway:${GATEWAY_TAG}"
+    depends_on:
+      - auth
+      - deployer
     ports:
       - 7999:7999
       - 8000:8000
@@ -68,18 +100,13 @@ services:
       placement:
         constraints:
           - node.hostname==controller
-    networks:
-      user-net:
     volumes:
-      - gateway-vol:/var/lib/shuttle
-      # This image needs to run highly privileged in order to
-      # orchestrate user runtimes safely
-      - ${DOCKER_SOCK}:/var/run/docker.sock
+      - gateway-vol:/var/lib
     environment:
       - RUST_LOG=${RUST_LOG}
       - LD_LIBRARY_PATH=/usr/src/shuttle/gateway
     command:
-      - "--state=/var/lib/shuttle"
+      - "--state=/var/lib"
       - "start"
       - "--control=0.0.0.0:8001"
       - "--user=0.0.0.0:8000"
@@ -99,6 +126,33 @@ services:
       timeout: 15s
       retries: 15
       #start_period: 30s
+  logger:
+    image: "${CONTAINER_REGISTRY}/logger:${LOGGER_TAG}"
+    depends_on:
+      - auth
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==controller
+    volumes:
+      - logger-vol:/var/lib
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--address=0.0.0.0:8000"
+      - "--state=/var/lib"
+      - "--auth-uri=http://auth:8000"
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
     depends_on:
@@ -225,13 +279,13 @@ services:
         constraints:
           - node.hostname==controller
   deck-chores:
-    image: docker.io/funkyfuture/deck-chores:1
-    restart: unless-stopped
-    environment:
-      TIMEZONE: UTC
-    volumes:
-      - ${DOCKER_SOCK}:/var/run/docker.sock
-    deploy:
-      placement:
-        constraints:
-          - node.hostname==controller
+      image: docker.io/funkyfuture/deck-chores:1
+      restart: unless-stopped
+      environment:
+        TIMEZONE: UTC
+      volumes:
+        - ${DOCKER_SOCK}:/var/run/docker.sock
+      deploy:
+        placement:
+          constraints:
+            - node.hostname==controller

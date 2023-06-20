@@ -3,12 +3,10 @@ use tokio::task::JoinHandle;
 
 use self::dal::Dal;
 pub use self::error::Error as PersistenceError;
-pub use self::log::{Level as LogLevel, Log};
 pub use self::service::Service;
 
 pub mod dal;
 mod error;
-pub mod log;
 pub mod service;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");

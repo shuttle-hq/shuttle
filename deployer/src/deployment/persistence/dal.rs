@@ -9,7 +9,7 @@ use sqlx::types::Json as SqlxJson;
 use sqlx::{migrate::Migrator, Row, SqlitePool};
 use sqlx::{query, FromRow};
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 use ulid::Ulid;
 
 use crate::deployment::{Deployment, RunningDeployment};
@@ -17,7 +17,7 @@ use crate::project::service::state::f_running::ServiceRunning;
 use crate::project::service::state::StateVariant;
 use crate::project::service::ServiceState;
 
-use super::{Log, Service};
+use super::Service;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -50,9 +50,6 @@ impl fmt::Display for DalError {
 
 #[async_trait]
 pub trait Dal: Send + Clone {
-    // Have the dal connected to the log service.
-    async fn insert_log(&self, log: Log) -> Result<(), DalError>;
-
     // Get a service by id
     async fn service(&self, id: &Ulid) -> Result<Service, DalError>;
 
@@ -136,12 +133,6 @@ impl Sqlite {
 
 #[async_trait]
 impl Dal for Sqlite {
-    async fn insert_log(&self, _log: Log) -> Result<(), DalError> {
-        // Dummy implementation. Needs to send the logs to the log service.
-        debug!("{}", format!("{}", _log.state_variant));
-        Ok(())
-    }
-
     async fn service_state(&self, service_id: &Ulid) -> Result<Option<ServiceState>, DalError> {
         query(
             r#"

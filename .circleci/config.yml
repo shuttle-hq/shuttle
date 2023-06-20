@@ -401,7 +401,8 @@ jobs:
           command: |
             # From https://github.com/briansmith/ring/issues/1414#issuecomment-1055177218
             export CC_aarch64_unknown_linux_musl=clang
-            cargo build --release --package cargo-shuttle --target << parameters.target >>
+            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
+            cargo build --release --package cargo-shuttle --features vendored-openssl --target << parameters.target >>
       - make-artifact:
           target: << parameters.target >>
   build-binaries-windows:
@@ -426,7 +427,8 @@ jobs:
             # From https://github.com/alexcrichton/openssl-src-rs/issues/45
             # Because of https://github.com/openssl/openssl/issues/9048
             $env:OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
-            ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --target x86_64-pc-windows-msvc
+            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
+            ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --features vendored-openssl --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - make-artifact:
           target: x86_64-pc-windows-msvc
@@ -443,7 +445,8 @@ jobs:
       - run:
           name: Build
           command: |
-            cargo build --release --package cargo-shuttle --target x86_64-apple-darwin
+            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
+            cargo build --release --package cargo-shuttle --features vendored-openssl --target x86_64-apple-darwin
       - make-artifact:
           target: x86_64-apple-darwin
   publish-github-release:

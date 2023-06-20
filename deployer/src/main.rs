@@ -2,25 +2,20 @@ use clap::Parser;
 use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_deployer::{
     args::Args,
-    deployment::{
-        deploy_layer::DeployLayer,
-        persistence::{dal::Sqlite, Persistence},
-    },
+    deployment::persistence::{dal::Sqlite, Persistence},
     runtime_manager::RuntimeManager,
     DeployerService, DeployerServiceConfig, DeployerServiceConfigBuilder,
 };
 use tracing::{error, trace};
-use tracing_subscriber::prelude::*;
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
     let (persistence, _) = Persistence::from_dal(Sqlite::new(&args.state).await).await;
-    setup_tracing(
-        tracing_subscriber::registry().with(DeployLayer::new(persistence.clone())),
-        "deployer",
-    );
+    setup_tracing(tracing_subscriber::registry(), "deployer");
+
     trace!(args = ?args, "parsed args");
+
     let config: DeployerServiceConfig = DeployerServiceConfigBuilder::default()
         .artifacts_path(args.artifacts_path)
         .auth_uri(args.auth_uri)
@@ -32,7 +27,7 @@ async fn main() {
         .build()
         .expect("to build the deployer service configuration");
 
-    let runtime_manager = RuntimeManager::new(persistence.get_log_sender());
+    let runtime_manager = RuntimeManager::new();
     let svc = DeployerService::new(runtime_manager, persistence, config).await;
 
     match svc.start().await {

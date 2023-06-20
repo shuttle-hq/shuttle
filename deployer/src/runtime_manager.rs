@@ -11,7 +11,7 @@ use tower::ServiceBuilder;
 use tracing::trace;
 use ulid::Ulid;
 
-use crate::{deployment::deploy_layer, project::service::RUNTIME_API_PORT};
+use crate::project::service::RUNTIME_API_PORT;
 
 type Runtimes =
     Arc<tokio::sync::Mutex<HashMap<Ulid, RuntimeClient<ClaimService<InjectPropagation<Channel>>>>>>;
@@ -21,14 +21,12 @@ type Runtimes =
 #[derive(Clone)]
 pub struct RuntimeManager {
     runtimes: Runtimes,
-    log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
 }
 
 impl RuntimeManager {
-    pub fn new(log_sender: crossbeam_channel::Sender<deploy_layer::Log>) -> Self {
+    pub fn new() -> Self {
         Self {
             runtimes: Default::default(),
-            log_sender,
         }
     }
 
@@ -103,7 +101,6 @@ impl RuntimeManager {
     }
 
     pub async fn logs_subscribe(&self, deployment_id: &Ulid) -> anyhow::Result<()> {
-        let sender = self.log_sender.clone();
         let mut stream = self
             .runtimes
             .lock()
@@ -114,13 +111,10 @@ impl RuntimeManager {
             .await
             .context("subscribing to runtime logs stream")?
             .into_inner();
-        let deployment_id = *deployment_id;
+
         tokio::spawn(async move {
             while let Ok(Some(log)) = stream.message().await {
-                if let Ok(mut log) = deploy_layer::Log::try_from(log) {
-                    log.deployment_id = deployment_id;
-                    sender.send(log).expect("to send log to persistence");
-                }
+                println!("{log:?}");
             }
         });
 

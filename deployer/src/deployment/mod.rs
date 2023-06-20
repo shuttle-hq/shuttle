@@ -1,4 +1,3 @@
-pub mod deploy_layer;
 pub mod driver;
 pub mod error;
 pub mod persistence;
@@ -16,28 +15,18 @@ use crate::{project::service::ServiceState, runtime_manager::RuntimeManager};
 use driver::RunnableDeployment;
 use tokio::sync::mpsc;
 
-use self::{deploy_layer::LogRecorder, persistence::dal::Dal};
+use self::persistence::dal::Dal;
 
 const RUN_BUFFER_SIZE: usize = 100;
 
-pub struct DeploymentManagerBuilder<LR, D: Dal + Sync + 'static> {
-    build_log_recorder: Option<LR>,
+pub struct DeploymentManagerBuilder<D: Dal + Sync + 'static> {
     artifacts_path: Option<PathBuf>,
     runtime_manager: Option<RuntimeManager>,
     dal: Option<D>,
     claim: Option<Claim>,
 }
 
-impl<LR, D: Dal + Send + Sync + 'static> DeploymentManagerBuilder<LR, D>
-where
-    LR: LogRecorder,
-{
-    pub fn build_log_recorder(mut self, build_log_recorder: LR) -> Self {
-        self.build_log_recorder = Some(build_log_recorder);
-
-        self
-    }
-
+impl<D: Dal + Send + Sync + 'static> DeploymentManagerBuilder<D> {
     pub fn dal(mut self, dal: D) -> Self {
         self.dal = Some(dal);
 
@@ -103,9 +92,8 @@ pub struct DeploymentManager<D: Dal + Sync + 'static> {
 impl<D: Dal + Sync + 'static> DeploymentManager<D> {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service loading and starting.
-    pub fn builder<LR>() -> DeploymentManagerBuilder<LR, D> {
+    pub fn builder() -> DeploymentManagerBuilder<D> {
         DeploymentManagerBuilder {
-            build_log_recorder: None,
             artifacts_path: None,
             runtime_manager: None,
             dal: None,

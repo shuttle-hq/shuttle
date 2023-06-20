@@ -74,7 +74,6 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         config: DeployerServiceConfig,
     ) -> Self {
         let deployment_manager = DeploymentManager::builder()
-            .build_log_recorder(persistence.clone())
             .artifacts_path(config.artifacts_path.clone())
             .runtime(runtime_manager.clone())
             .dal(persistence.dal().clone())

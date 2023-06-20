@@ -154,7 +154,7 @@ async fn axum_static_files() {
     let client = reqwest::Client::new();
 
     let request_text = client
-        .get(format!("{url}/hello"))
+        .get(url.clone())
         .send()
         .await
         .unwrap()
@@ -164,7 +164,14 @@ async fn axum_static_files() {
 
     assert_eq!(request_text, "Hello, world!");
 
-    let request_text = client.get(url).send().await.unwrap().text().await.unwrap();
+    let request_text = client
+        .get(format!("{url}/assets"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
 
     assert!(
         request_text.contains("This is an example of serving static files with axum and shuttle.")

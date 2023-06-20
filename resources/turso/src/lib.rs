@@ -64,7 +64,7 @@ impl Turso {
             .get(&self.token_secret)
         {
             Some(token) => Ok(TursoOutput {
-                conn_url: Url::parse(&addr).map_err(Error::UrlParseError)?,
+                conn_url: Url::parse(addr).map_err(Error::UrlParseError)?,
                 token: Some(token.to_string()),
             }),
             None => Err(ShuttleError::Custom(CustomError::msg(format!(

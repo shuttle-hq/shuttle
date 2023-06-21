@@ -30,7 +30,7 @@ async fn main() -> io::Result<()> {
 
 async fn start(db: Sqlite, args: Args) -> io::Result<()> {
     let gateway_service =
-        Arc::new(GatewayService::init(db, args.state, args.proxy_fqdn.clone()).await);
+        Arc::new(GatewayService::init(db.clone(), args.state, args.proxy_fqdn.clone()).await);
 
     let acme_client = AcmeClient::new();
 
@@ -41,7 +41,7 @@ async fn start(db: Sqlite, args: Args) -> io::Result<()> {
     let proxy_fqdn = args.proxy_fqdn.clone();
 
     let mut user_builder = UserServiceBuilder::new()
-        .with_service(gateway_service.clone())
+        .with_dal(db)
         .with_public(proxy_fqdn)
         .with_user_proxy_binding_to(args.user)
         .with_bouncer(args.bouncer);

@@ -114,7 +114,7 @@ impl RouterBuilder {
                     .post(
                         create_service
                             // Set the body size limit for this endpoint to 50MB
-                            .layer(DefaultBodyLimit::max(50000000))
+                            .layer(DefaultBodyLimit::max(50_000_000))
                             .layer(ScopedLayer::new(vec![Scope::ServiceCreate])),
                     )
                     .delete(stop_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate]))),

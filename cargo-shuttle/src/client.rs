@@ -207,22 +207,6 @@ impl Client {
             .await
     }
 
-    async fn post<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
-        let url = format!("{}{}", self.api_url, path);
-
-        let mut builder = Self::get_retry_client().post(url);
-
-        builder = self.set_builder_auth(builder);
-
-        if let Some(body) = body {
-            let body = serde_json::to_string(&body)?;
-            builder = builder.body(body);
-            builder = builder.header("Content-Type", "application/json");
-        }
-
-        Ok(builder.send().await?)
-    }
-
     async fn put<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path);
 

@@ -78,7 +78,7 @@ impl std::fmt::Display for Item {
         write!(
             f,
             "{} {} {}",
-            datetime.to_rfc3339(),
+            datetime.to_rfc3339().dim(),
             self.level.get_colored(),
             message
         )

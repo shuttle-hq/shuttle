@@ -1,25 +1,35 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
-use http::Uri;
+use tonic::transport::Uri;
 
-/// Service to deploy projects on the shuttle infrastructure
-#[derive(Debug, Parser)]
-#[clap(author, version, about)]
+#[derive(Parser, Debug)]
 pub struct Args {
+    /// Address to bind to
+    #[arg(long, default_value = "127.0.0.1:8000")]
+    pub address: SocketAddr,
+
+    /// Where to store resources state
+    #[arg(long, default_value = "./")]
+    pub state: PathBuf,
+
     /// Address to reach the authentication service at
-    #[clap(long, default_value = "http://127.0.0.1:8008")]
+    #[arg(long, default_value = "http://auth:8008")]
     pub auth_uri: Uri,
 
-    /// Address to bind API to
-    #[clap(long, default_value = "0.0.0.0:8001")]
-    pub api_address: SocketAddr,
+    /// Address to connect to the provisioning service
+    #[arg(long, default_value = "http://provisioner:5001")]
+    pub provisioner_uri: Uri,
 
-    /// Flag used to prepare the deployer for a local run
-    #[clap(long)]
-    pub local: bool,
+    /// Used to prefix names for all docker resources
+    #[arg(long, default_value = "shuttle_dev")]
+    pub prefix: String,
 
-    /// Path used by the mocked builder to return an image archive.
-    #[clap(long)]
-    pub image_archive_path: String,
+    /// The overlay network name used for the user services
+    #[arg(long, default_value = "shuttle_dev_user-net")]
+    pub users_network_name: String,
+
+    /// The path to the docker daemon socket
+    #[arg(long, default_value = "/var/run/docker.sock")]
+    pub docker_host: PathBuf,
 }

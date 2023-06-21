@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
 use shuttle_common::{
     models::{project, stats, ToJson},
-    project::ProjectName,
+    project::RawProjectName,
 };
 use tracing::trace;
 
@@ -36,7 +36,7 @@ impl Client {
     pub async fn acme_request_certificate(
         &self,
         fqdn: &str,
-        project_name: &ProjectName,
+        project_name: &RawProjectName,
         credentials: &serde_json::Value,
     ) -> Result<String> {
         let path = format!("/admin/acme/request/{project_name}/{fqdn}");
@@ -46,7 +46,7 @@ impl Client {
     pub async fn acme_renew_custom_domain_certificate(
         &self,
         fqdn: &str,
-        project_name: &ProjectName,
+        project_name: &RawProjectName,
         credentials: &serde_json::Value,
     ) -> Result<String> {
         let path = format!("/admin/acme/renew/{project_name}/{fqdn}");

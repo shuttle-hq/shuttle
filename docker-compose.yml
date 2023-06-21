@@ -2,6 +2,7 @@ version: "3.7"
 volumes:
   auth-vol:
   builder-store-vol:
+  deployer-vol:
   gateway-vol:
   logger-vol:
   resource-recorder-vol:
@@ -95,6 +96,7 @@ services:
         constraints:
           - node.hostname==runtimes
     volumes:
+      - deployer-vol:/var/lib
       # This image needs to run highly privileged in order to
       # orchestrate user runtimes safely
       - ${DOCKER_SOCK}:/var/run/docker.sock
@@ -103,6 +105,11 @@ services:
     command:
       - "--address=0.0.0.0:8000"
       - "--auth-uri=http://auth:8000"
+      - "--state=/var/lib"
+      - "--provisioner-uri=http://provisioner:8000"
+      - "--prefix=${STACK}"
+      - "--users-network-name=${STACK}_user-net"
+      - "--docker-host=/var/run/docker.sock"
   gateway:
     image: "${CONTAINER_REGISTRY}/gateway:${GATEWAY_TAG}"
     depends_on:

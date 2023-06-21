@@ -32,9 +32,7 @@ rustrict = { version = "0.7.4", optional = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
-sqlx = { workspace = true, optional = true, features = [
-  "runtime-tokio-rustls",
-] }
+sqlx = { workspace = true, optional = true, features = ["runtime-tokio-rustls"] }
 thiserror = { workspace = true, optional = true }
 tonic = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
@@ -49,30 +47,30 @@ uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 
 [features]
 backend = [
-  "async-trait",
-  "axum/matched-path",
-  "claims",
-  "hyper/client",
-  "opentelemetry-otlp",
-  "thiserror",
-  "tower-http",
-  "tracing-subscriber/env-filter",
-  "tracing-subscriber/fmt",
-  "ttl_cache",
+    "async-trait",
+    "axum/matched-path",
+    "claims",
+    "hyper/client",
+    "opentelemetry-otlp",
+    "thiserror",
+    "tower-http",
+    "tracing-subscriber/env-filter",
+    "tracing-subscriber/fmt",
+    "ttl_cache"
 ]
 claims = [
-  "bytes",
-  "chrono/clock",
-  "headers",
-  "http",
-  "http-body",
-  "jsonwebtoken",
-  "opentelemetry",
-  "opentelemetry-http",
-  "pin-project",
-  "tower",
-  "tracing",
-  "tracing-opentelemetry",
+    "bytes",
+    "chrono/clock",
+    "headers",
+    "http",
+    "http-body",
+    "jsonwebtoken",
+    "opentelemetry",
+    "opentelemetry-http",
+    "pin-project",
+    "tower",
+    "tracing",
+    "tracing-opentelemetry",
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
 error = ["prost-types", "thiserror", "uuid"]
@@ -82,12 +80,12 @@ persist = ["sqlx/sqlite", "rand"]
 service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid"]
 tracing = []
 wasm = [
-  "chrono/clock",
-  "http-serde",
-  "http",
-  "rmp-serde",
-  "tracing",
-  "tracing-subscriber",
+    "chrono/clock",
+    "http-serde",
+    "http",
+    "rmp-serde",
+    "tracing",
+    "tracing-subscriber",
 ]
 
 [dev-dependencies]

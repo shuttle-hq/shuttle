@@ -1,5 +1,7 @@
 #[cfg(feature = "backend")]
 pub mod backends;
+#[cfg(feature = "builder")]
+pub mod builder;
 #[cfg(feature = "claims")]
 pub mod claims;
 pub mod database;
@@ -18,8 +20,6 @@ pub mod storage_manager;
 pub mod tracing;
 #[cfg(feature = "wasm")]
 pub mod wasm;
-#[cfg(feature = "builder")]
-pub mod builder;
 
 use std::collections::BTreeMap;
 use std::fmt::Debug;

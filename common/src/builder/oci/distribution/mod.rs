@@ -1,5 +1,4 @@
 //! Pull and Push images to OCI registry based on [OCI distribution specification](https://github.com/opencontainers/distribution-spec)
-
 mod auth;
 mod client;
 mod name;

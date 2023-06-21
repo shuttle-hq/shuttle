@@ -158,7 +158,8 @@ impl ServiceCreating {
                         "shuttle.service_id": service_id,
                         "shuttle.service_name": runnable_deployment.service_name,
                         "shuttle.idle_minutes": format!("{idle_minutes}"),
-                        "shuttle.deployment_id": deployment_id
+                        "shuttle.deployment_id": deployment_id,
+                        "shuttle.is_next": runnable_deployment.is_next.to_string()
                     },
                     "Cmd": cmd[..],
                     "Env": [

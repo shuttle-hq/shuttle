@@ -4,6 +4,7 @@ package deployer;
 service Deployer {
   rpc Deploy(DeployRequest) returns (DeployResponse);
   rpc DestroyDeployment(DestroyDeploymentRequest) returns (DestroyDeploymentResponse);
+  rpc TargetIp(TargetIpRequest) returns (TargetIpResponse);
 }
 
 message Deployment {
@@ -29,10 +30,29 @@ message DeployResponse {
 }
 
 message DestroyDeploymentRequest {
+  // Deployment id we wish to destroy.
   string deployment_id = 1;
 }
 
 message DestroyDeploymentResponse {
+  // Whether the destroying was successful.
   bool success = 1;
+  // A message that brings context in case of failure.
   optional string message = 2;
+}
+
+message TargetIpRequest {
+  // The service id we request the target ip for
+  string service_id = 1;
+  // If the service_id is on the stopped code path, reinstate it.
+  bool instate = 2;
+}
+
+message TargetIpResponse {
+  // Whether the target ip request was successful.
+  bool success = 1;
+  // The target ip of the requested service.
+  optional string target_ip = 2;
+  // A message that brings context in case of failure.
+  optional string message = 3;
 }

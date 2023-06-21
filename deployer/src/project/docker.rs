@@ -216,6 +216,34 @@ pub trait ContainerInspectResponseExt {
         .map_err(|err| ServiceErrored::internal(err.to_string()))
     }
 
+    fn service_name(&self) -> Result<String, ServiceErrored> {
+        let container = self.container();
+        if let Some(config) = &container.config {
+            if let Some(labels) = &config.labels {
+                if let Some(service_name) = labels.get("shuttle.service_name") {
+                    return Ok(service_name.clone());
+                }
+            }
+        }
+
+        Err(ServiceErrored::internal(
+            "missing service name label on the container inspect info",
+        ))
+    }
+
+    fn image_name(&self) -> Result<String, ServiceErrored> {
+        let container = self.container();
+        if let Some(config) = &container.config {
+            if let Some(image_name) = &config.image {
+                return Ok(image_name.clone());
+            }
+        }
+
+        Err(ServiceErrored::internal(
+            "missing image name from the container inspect info",
+        ))
+    }
+
     fn idle_minutes(&self) -> u64 {
         let container = self.container();
 
@@ -228,6 +256,20 @@ pub trait ContainerInspectResponseExt {
         }
 
         IDLE_MINUTES
+    }
+
+    fn is_next(&self) -> bool {
+        let container = self.container();
+
+        if let Some(config) = &container.config {
+            if let Some(labels) = &config.labels {
+                if let Some(idle_minutes) = labels.get("shuttle.is_next") {
+                    return idle_minutes.parse::<bool>().unwrap_or(false);
+                }
+            }
+        }
+
+        false
     }
 
     fn find_arg_and_then<'s, F, O>(&'s self, find: &str, and_then: F) -> Result<O, ServiceErrored>

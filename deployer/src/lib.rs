@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use bollard::service::ContainerInspectResponse;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use chrono::Utc;
 use dal::{Dal, Deployment, Service};
@@ -11,7 +12,7 @@ use derive_builder::Builder;
 use error::{Error, Result};
 use futures::TryFutureExt;
 use http::Uri;
-use project::docker::{ContainerSettings, ServiceDockerContext};
+use project::docker::{ContainerInspectResponseExt, ContainerSettings, ServiceDockerContext};
 use project::service::state::a_creating::ServiceCreating;
 use project::service::state::f_running::ServiceRunning;
 use project::service::state::StateVariant;
@@ -29,7 +30,9 @@ use shuttle_proto::deployer::{
     deployer_server::{Deployer, DeployerServer},
     DeployRequest, DeployResponse,
 };
-use shuttle_proto::deployer::{DestroyDeploymentRequest, DestroyDeploymentResponse};
+use shuttle_proto::deployer::{
+    DestroyDeploymentRequest, DestroyDeploymentResponse, TargetIpRequest, TargetIpResponse,
+};
 use tokio::sync::mpsc::{self, Sender};
 use tonic::{transport::Server, Response, Result as TonicResult};
 use tracing::{error, info, instrument};
@@ -46,6 +49,28 @@ pub mod project;
 pub mod runtime_manager;
 
 const RUN_BUFFER_SIZE: usize = 100;
+
+macro_rules! try_result_unwrap {
+    ($in:expr, $response:expr) => {
+        match $in {
+            Ok(inner) => inner,
+            Err(_err) => {
+                return $response;
+            }
+        }
+    };
+}
+
+macro_rules! try_option_unwrap {
+    ($in:expr, $response:expr) => {
+        match $in {
+            Some(inner) => inner,
+            None => {
+                return $response;
+            }
+        }
+    };
+}
 
 #[derive(Default)]
 pub struct GitMetadata {
@@ -377,18 +402,30 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         let request = request.into_inner();
 
         // Do a cleanup in terms of previous invalid deployments.
-        let deployment_id = Ulid::from_string(&request.deployment_id)
-            .map_err(|_| tonic::Status::invalid_argument("invalid deployment id"))?;
-        let deployment = self
-            .dal
-            .deployment(&deployment_id)
-            .await
-            .map_err(|err| tonic::Status::not_found(err.to_string()))?;
-        let service = self
-            .dal
-            .service(&deployment.service_id)
-            .await
-            .map_err(|err| tonic::Status::not_found(err.to_string()))?;
+        let deployment_id = try_result_unwrap!(
+            Ulid::from_string(&request.deployment_id),
+            Ok(Response::new(DestroyDeploymentResponse {
+                success: false,
+                message: Some("the deployment id couldn't be parsed".to_string()),
+            }))
+        );
+
+        let deployment = try_result_unwrap!(
+            self.dal.deployment(&deployment_id).await,
+            Ok(Response::new(DestroyDeploymentResponse {
+                success: false,
+                message: Some("error fetching deployment from persistence".to_string())
+            }))
+        );
+        let service = match self.dal.service(&deployment.service_id).await {
+            Ok(inner) => inner,
+            Err(err) => {
+                return Ok(Response::new(DestroyDeploymentResponse {
+                    success: false,
+                    message: Some(format!("error fetching service from persistence: {}", err)),
+                }))
+            }
+        };
 
         if service.state_variant != ServiceRunning::name() {
             return Ok(Response::new(DestroyDeploymentResponse {
@@ -425,6 +462,142 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
 
         Ok(Response::new(DestroyDeploymentResponse {
             success: true,
+            message: None,
+        }))
+    }
+
+    #[instrument(skip_all)]
+    async fn target_ip(
+        &self,
+        request: tonic::Request<TargetIpRequest>,
+    ) -> TonicResult<tonic::Response<TargetIpResponse>, tonic::Status> {
+        // Authorize the request.
+        request.verify(Scope::ServiceRead)?;
+        let claim = request.extensions().get::<Claim>().cloned();
+        let request = request.into_inner();
+
+        // Do a cleanup in terms of previous invalid deployments.
+        let service_id = Ulid::from_string(&request.service_id)
+            .map_err(|_| tonic::Status::invalid_argument("invalid deployment id"))?;
+        let service = self
+            .dal
+            .service(&service_id)
+            .await
+            .map_err(|err| tonic::Status::not_found(err.to_string()))?;
+
+        if service.state.is_completed() || service.state.is_destroyed() {
+            return Ok(Response::new(TargetIpResponse {
+                success: false,
+                target_ip: None,
+                message: Some("the service is not running".to_string()),
+            }));
+        }
+
+        if service.state.is_stopped() && request.instate {
+            let container: ContainerInspectResponse = try_option_unwrap!(service.state.container(), Ok(Response::new(TargetIpResponse {
+                success: false,
+                target_ip: None,
+                message: Some("the service is an unknown state, it's stopped but it doesn't have a container inspect info attached".to_string()),
+            })));
+
+            let deployment_id = try_result_unwrap!(container.deployment_id(), Ok(Response::new(TargetIpResponse{
+                success: false,
+                target_ip: None,
+                message: Some("the service is an unknown state, it's stopped but it doesn't have an deployment id attached".to_string()),
+            })));
+
+            let service_name = try_result_unwrap!(container.service_name(), Ok(Response::new(TargetIpResponse {
+                success: false,
+                target_ip: None,
+                message: Some("the service is an unknown state, it's stopped but it doesn't have a service name attached".to_string()),
+            })));
+            let deployment = try_result_unwrap!(
+                self.dal.deployment(&deployment_id).await,
+                Ok(Response::new(TargetIpResponse {
+                    success: false,
+                    message: Some("error fetching deployment from persistence".to_string()),
+                    target_ip: None
+                }))
+            );
+            let image_name = try_result_unwrap!(
+                container.image_name(),
+                Ok(Response::new(TargetIpResponse {
+                    success: false,
+                    message: Some(
+                        "error fetching the image name from the container inspect info".to_string()
+                    ),
+                    target_ip: None,
+                }))
+            );
+            let idle_minutes = container.idle_minutes();
+            let is_next = container.is_next();
+
+            let git_metadata = GitMetadata {
+                git_branch: deployment.git_branch,
+                git_commit_hash: deployment.git_commit_hash,
+                git_commit_message: deployment.git_commit_message,
+                git_dirty: deployment.git_dirty,
+            };
+            let runnable_deployment = RunnableDeployment {
+                deployment_id,
+                service_name,
+                service_id,
+                tracing_context: Default::default(),
+                claim,
+                target_ip: None,
+                is_next,
+            };
+
+            try_result_unwrap!(
+                self.instate_service(
+                    runnable_deployment,
+                    git_metadata,
+                    image_name,
+                    idle_minutes,
+                    false,
+                )
+                .await,
+                Ok(Response::new(TargetIpResponse {
+                    success: false,
+                    message: Some("failed instating the service".to_string()),
+                    target_ip: None
+                }))
+            );
+        }
+
+        let target_ip = try_result_unwrap!(
+            try_option_unwrap!(
+                try_result_unwrap!(
+                    self.dal.service_state(&service_id).await,
+                    Ok(Response::new(TargetIpResponse {
+                        success: false,
+                        message: Some(
+                            "error fetching the service state from persistence".to_string()
+                        ),
+                        target_ip: None
+                    }))
+                ),
+                Ok(Response::new(TargetIpResponse {
+                    success: false,
+                    message: Some(
+                        "no service found when trying to query for its state".to_string()
+                    ),
+                    target_ip: None
+                }))
+            )
+            .target_ip(&self.config.network_name),
+            Ok(Response::new(TargetIpResponse {
+                success: false,
+                message: Some(
+                    "no target ip was found on the container inspect response".to_string()
+                ),
+                target_ip: None
+            }))
+        );
+
+        Ok(Response::new(TargetIpResponse {
+            success: true,
+            target_ip: Some(target_ip.to_string()),
             message: None,
         }))
     }

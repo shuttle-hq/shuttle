@@ -11,7 +11,7 @@ use derive_builder::Builder;
 use error::{Error, Result};
 use futures::TryFutureExt;
 use http::Uri;
-use project::docker::{ContainerInspectResponseExt, ContainerSettings, ServiceDockerContext};
+use project::docker::{ContainerSettings, ServiceDockerContext};
 use project::service::state::a_creating::ServiceCreating;
 use project::service::state::f_running::ServiceRunning;
 use project::service::state::StateVariant;
@@ -189,7 +189,10 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         Ok(())
     }
 
-    // Ensures this service is created and the runtime loaded & started.
+    // Ensures this service is created and the runtime loaded & started. Important to note that this method
+    // can be called when starting the deployer, to pick up from persistence the existing deployments and
+    // reinstate them if they are on the running code path, but also when deploying a brand new deployment,
+    // storing it in the persistence.
     pub async fn instate_service(
         &self,
         runnable_deployment: RunnableDeployment,
@@ -288,9 +291,9 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         request: tonic::Request<DeployRequest>,
     ) -> TonicResult<tonic::Response<DeployResponse>, tonic::Status> {
         // Authorize the request.
-        // request.verify(Scope::DeploymentWrite)?;
+        request.verify(Scope::DeploymentWrite)?;
 
-        // let claim = request.extensions().get::<Claim>().cloned();
+        let claim = request.extensions().get::<Claim>().cloned();
         let request = request.into_inner();
         let req_deployment = match request.deployment {
             Some(inner) => inner,
@@ -325,7 +328,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
             service_name,
             service_id,
             tracing_context: Default::default(),
-            claim: None, // TODO: add a proper claim
+            claim,
             target_ip: None,
             is_next,
         };

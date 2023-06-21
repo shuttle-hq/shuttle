@@ -199,7 +199,9 @@ pub struct RunnableDeployment {
     pub service_name: String,
     pub service_id: Ulid,
     pub tracing_context: HashMap<String, String>,
+    // When deployments are reinstated at the deployment startup there is no claim.
     pub claim: Option<Claim>,
+    // The target IP of the deployment, which is resolved after the service gets attached to the network.
     pub target_ip: Option<Ipv4Addr>,
     pub is_next: bool,
 }

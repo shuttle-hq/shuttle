@@ -233,6 +233,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 name: runnable_deployment.service_name.clone(),
                 state_variant: creating.to_string(),
                 state: creating,
+                last_update: Utc::now(),
             };
             self.dal
                 .insert_service_if_absent(service)

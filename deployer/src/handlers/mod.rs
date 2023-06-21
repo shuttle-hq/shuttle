@@ -7,7 +7,7 @@ use axum::extract::{
     ws::{self, WebSocket},
     FromRequest,
 };
-use axum::extract::{Extension, Path, Query};
+use axum::extract::{DefaultBodyLimit, Extension, Path, Query};
 use axum::handler::Handler;
 use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
@@ -111,7 +111,12 @@ impl RouterBuilder {
             .route(
                 "/projects/:project_name/services/:service_name",
                 get(get_service.layer(ScopedLayer::new(vec![Scope::Service])))
-                    .post(create_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate])))
+                    .post(
+                        create_service
+                            // Set the body size limit for this endpoint to 50MB
+                            .layer(DefaultBodyLimit::max(50_000_000))
+                            .layer(ScopedLayer::new(vec![Scope::ServiceCreate])),
+                    )
                     .delete(stop_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate]))),
             )
             .route(
@@ -667,10 +672,16 @@ where
         req: Request<B>,
         state: &S,
     ) -> std::result::Result<Self, Self::Rejection> {
-        let bytes = Bytes::from_request(req, state)
-            .await
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
-        let t = rmp_serde::from_slice::<T>(&bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
+        let bytes = Bytes::from_request(req, state).await.map_err(|_| {
+            error!("failed to collect body bytes, is the body too large?");
+            StatusCode::PAYLOAD_TOO_LARGE
+        })?;
+
+        let t = rmp_serde::from_slice::<T>(&bytes).map_err(|error| {
+            error!(error = %error, "failed to deserialize request body");
+            StatusCode::BAD_REQUEST
+        })?;
+
         Ok(Self(t))
     }
 }

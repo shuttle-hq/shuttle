@@ -174,17 +174,19 @@ impl Dal for Sqlite {
             state_variant,
             state,
             last_update,
+            project_id,
         } = service;
 
         if self.service(&id).await.is_ok() {
             return Ok(false);
         }
 
-        sqlx::query("INSERT INTO services (id, name, state_variant, state, last_update) VALUES (?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO services (id, name, state_variant, state, last_update, project_id) VALUES (?, ?, ?, ?, ?, ?)")
             .bind(id.to_string())
             .bind(name)
             .bind(state_variant)
             .bind(last_update.timestamp())
+            .bind(project_id.to_string())
             .bind(SqlxJson(state))
             .execute(&self.pool)
             .await?;
@@ -211,7 +213,7 @@ impl Dal for Sqlite {
 
     async fn running_deployments(&self) -> Result<Vec<RunningDeployment>, DalError> {
         sqlx::query_as(
-            r#"SELECT d.id as id, s.name AS service_name, service_id, d.is_next as is_next, s.state as service_state
+            r#"SELECT d.id as id, s.name AS service_name, service_id, d.is_next as is_next, s.state as service_state, s.project_id as project_id
                     FROM deployments AS d
                     JOIN services AS s ON s.id = d.service_id
                     WHERE s.state_variant = ?
@@ -261,12 +263,15 @@ pub struct Service {
     pub state_variant: String,
     pub state: ServiceState,
     pub last_update: DateTime<Utc>,
+    pub project_id: Ulid,
 }
 
 impl FromRow<'_, SqliteRow> for Service {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
         Ok(Self {
             id: Ulid::from_string(row.try_get("id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            project_id: Ulid::from_string(row.try_get("project_id")?)
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
             name: row.try_get("name")?,
             state_variant: row.try_get("state_variant")?,
@@ -317,8 +322,9 @@ impl FromRow<'_, SqliteRow> for Deployment {
 #[derive(Debug, PartialEq, Eq)]
 pub struct RunningDeployment {
     pub id: Ulid,
-    pub service_name: String,
+    pub project_id: Ulid,
     pub service_id: Ulid,
+    pub service_name: String,
     pub is_next: bool,
     pub idle_minutes: u64,
 }
@@ -338,6 +344,8 @@ impl FromRow<'_, SqliteRow> for RunningDeployment {
                 .container()
                 .map(|c| c.idle_minutes())
                 .expect("to extract idle minutes from the service state"),
+            project_id: Ulid::from_string(row.try_get("project_id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
         })
     }
 }

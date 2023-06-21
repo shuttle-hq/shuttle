@@ -164,6 +164,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
 
             self.instate_service(
                 runnable_deployment,
+                existing_deployment.project_id,
                 GitMetadata::default(),
                 image_name.clone(),
                 existing_deployment.idle_minutes,
@@ -198,6 +199,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     pub async fn instate_service(
         &self,
         runnable_deployment: RunnableDeployment,
+        project_id: Ulid,
         git_metadata: GitMetadata,
         image_name: String,
         idle_minutes: u64,
@@ -234,6 +236,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 state_variant: creating.to_string(),
                 state: creating,
                 last_update: Utc::now(),
+                project_id,
             };
             self.dal
                 .insert_service_if_absent(service)
@@ -304,6 +307,8 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         let service_id = Ulid::from_string(req_deployment.service_id.as_str())
             .map_err(|err| tonic::Status::invalid_argument(err.to_string()))?;
 
+        let project_id = Ulid::from_string(req_deployment.project_id.as_str())
+            .map_err(|err| tonic::Status::invalid_argument(err.to_string()))?;
         // Create the deployment.
         let deployment_id = Ulid::new();
         let is_next = req_deployment.is_next;
@@ -329,6 +334,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         // Instate the service.
         self.instate_service(
             runnable_deployment,
+            project_id,
             git_metadata,
             image_name,
             idle_minutes,
@@ -423,13 +429,18 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         let request = request.into_inner();
 
         // Do a cleanup in terms of previous invalid deployments.
-        let service_id = Ulid::from_string(&request.service_id)
-            .map_err(|_| tonic::Status::invalid_argument("invalid deployment id"))?;
+        let service_id = Ulid::from_string(request.service_id.as_str())
+            .map_err(|err| tonic::Status::invalid_argument(err.to_string()))?;
+        let project_id = Ulid::from_string(request.project_id.as_str())
+            .map_err(|err| tonic::Status::invalid_argument(err.to_string()))?;
         let service = self
             .dal
             .service(&service_id)
             .await
-            .map_err(|err| tonic::Status::not_found(err.to_string()))?;
+            .map_err(|err| match err {
+                DalError::ServiceNotFound => tonic::Status::not_found(err.to_string()),
+                _ => tonic::Status::internal(err.to_string()),
+            })?;
 
         if !service.state.is_running() {
             return Err(tonic::Status::cancelled("the service is not running"));
@@ -475,6 +486,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
 
             self.instate_service(
                 runnable_deployment,
+                project_id,
                 git_metadata,
                 image_name,
                 idle_minutes,

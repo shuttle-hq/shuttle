@@ -9,14 +9,15 @@ service Deployer {
 
 message Deployment {
   string service_id = 1;
-  string service_name = 2;
-  bool is_next = 3;
-  uint32 idle_minutes = 4;
-  string image_name = 5;
-  optional string git_commit_message = 6;
-  optional string git_commit_hash = 7;
-  optional string git_branch = 8;
-  optional bool git_dirty = 9;
+  string project_id = 2;
+  string service_name = 3;
+  bool is_next = 4;
+  uint32 idle_minutes = 5;
+  string image_name = 6;
+  optional string git_commit_message = 7;
+  optional string git_commit_hash = 8;
+  optional string git_branch = 9;
+  optional bool git_dirty = 10;
 }
 
 message DeployRequest {
@@ -35,7 +36,7 @@ message DestroyDeploymentRequest {
 message DestroyDeploymentResponse {}
 
 message TargetIpRequest {
-  // The service id we request the target ip for
+  // The service id we request the target ip for.
   string service_id = 1;
   // The project id we request the target ip for
   string project_id = 2;

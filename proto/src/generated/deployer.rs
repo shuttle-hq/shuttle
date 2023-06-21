@@ -4,20 +4,22 @@ pub struct Deployment {
     #[prost(string, tag = "1")]
     pub service_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    pub project_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
     pub service_name: ::prost::alloc::string::String,
-    #[prost(bool, tag = "3")]
+    #[prost(bool, tag = "4")]
     pub is_next: bool,
-    #[prost(uint32, tag = "4")]
+    #[prost(uint32, tag = "5")]
     pub idle_minutes: u32,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag = "6")]
     pub image_name: ::prost::alloc::string::String,
-    #[prost(string, optional, tag = "6")]
-    pub git_commit_message: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "7")]
-    pub git_commit_hash: ::core::option::Option<::prost::alloc::string::String>,
+    pub git_commit_message: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "8")]
+    pub git_commit_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "9")]
     pub git_branch: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(bool, optional, tag = "9")]
+    #[prost(bool, optional, tag = "10")]
     pub git_dirty: ::core::option::Option<bool>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -45,7 +47,7 @@ pub struct DestroyDeploymentResponse {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TargetIpRequest {
-    /// The service id we request the target ip for
+    /// The service id we request the target ip for.
     #[prost(string, tag = "1")]
     pub service_id: ::prost::alloc::string::String,
     /// The project id we request the target ip for
@@ -65,8 +67,8 @@ pub struct TargetIpResponse {
 /// Generated client implementations.
 pub mod deployer_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     #[derive(Debug, Clone)]
     pub struct DeployerClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -110,9 +112,8 @@ pub mod deployer_client {
                     <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-            >>::Error: Into<StdError> + Send + Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
+                Into<StdError> + Send + Sync,
         {
             DeployerClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -135,15 +136,12 @@ pub mod deployer_client {
             &mut self,
             request: impl tonic::IntoRequest<super::DeployRequest>,
         ) -> Result<tonic::Response<super::DeployResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/deployer.Deployer/Deploy");
             self.inner.unary(request.into_request(), path, codec).await
@@ -152,38 +150,28 @@ pub mod deployer_client {
             &mut self,
             request: impl tonic::IntoRequest<super::DestroyDeploymentRequest>,
         ) -> Result<tonic::Response<super::DestroyDeploymentResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/deployer.Deployer/DestroyDeployment",
-            );
+            let path = http::uri::PathAndQuery::from_static("/deployer.Deployer/DestroyDeployment");
             self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn target_ip(
             &mut self,
             request: impl tonic::IntoRequest<super::TargetIpRequest>,
         ) -> Result<tonic::Response<super::TargetIpResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/deployer.Deployer/TargetIp",
-            );
+            let path = http::uri::PathAndQuery::from_static("/deployer.Deployer/TargetIp");
             self.inner.unary(request.into_request(), path, codec).await
         }
     }
@@ -227,10 +215,7 @@ pub mod deployer_server {
                 send_compression_encodings: Default::default(),
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -258,10 +243,7 @@ pub mod deployer_server {
         type Response = http::Response<tonic::body::BoxBody>;
         type Error = std::convert::Infallible;
         type Future = BoxFuture<Self::Response, Self::Error>;
-        fn poll_ready(
-            &mut self,
-            _cx: &mut Context<'_>,
-        ) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
@@ -270,13 +252,9 @@ pub mod deployer_server {
                 "/deployer.Deployer/Deploy" => {
                     #[allow(non_camel_case_types)]
                     struct DeploySvc<T: Deployer>(pub Arc<T>);
-                    impl<T: Deployer> tonic::server::UnaryService<super::DeployRequest>
-                    for DeploySvc<T> {
+                    impl<T: Deployer> tonic::server::UnaryService<super::DeployRequest> for DeploySvc<T> {
                         type Response = super::DeployResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::DeployRequest>,
@@ -293,11 +271,10 @@ pub mod deployer_server {
                         let inner = inner.0;
                         let method = DeploySvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -306,23 +283,17 @@ pub mod deployer_server {
                 "/deployer.Deployer/DestroyDeployment" => {
                     #[allow(non_camel_case_types)]
                     struct DestroyDeploymentSvc<T: Deployer>(pub Arc<T>);
-                    impl<
-                        T: Deployer,
-                    > tonic::server::UnaryService<super::DestroyDeploymentRequest>
-                    for DestroyDeploymentSvc<T> {
+                    impl<T: Deployer> tonic::server::UnaryService<super::DestroyDeploymentRequest>
+                        for DestroyDeploymentSvc<T>
+                    {
                         type Response = super::DestroyDeploymentResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::DestroyDeploymentRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
-                                (*inner).destroy_deployment(request).await
-                            };
+                            let fut = async move { (*inner).destroy_deployment(request).await };
                             Box::pin(fut)
                         }
                     }
@@ -333,11 +304,10 @@ pub mod deployer_server {
                         let inner = inner.0;
                         let method = DestroyDeploymentSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -346,13 +316,9 @@ pub mod deployer_server {
                 "/deployer.Deployer/TargetIp" => {
                     #[allow(non_camel_case_types)]
                     struct TargetIpSvc<T: Deployer>(pub Arc<T>);
-                    impl<T: Deployer> tonic::server::UnaryService<super::TargetIpRequest>
-                    for TargetIpSvc<T> {
+                    impl<T: Deployer> tonic::server::UnaryService<super::TargetIpRequest> for TargetIpSvc<T> {
                         type Response = super::TargetIpResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::TargetIpRequest>,
@@ -369,28 +335,23 @@ pub mod deployer_server {
                         let inner = inner.0;
                         let method = TargetIpSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        Ok(
-                            http::Response::builder()
-                                .status(200)
-                                .header("grpc-status", "12")
-                                .header("content-type", "application/grpc")
-                                .body(empty_body())
-                                .unwrap(),
-                        )
-                    })
-                }
+                _ => Box::pin(async move {
+                    Ok(http::Response::builder()
+                        .status(200)
+                        .header("grpc-status", "12")
+                        .header("content-type", "application/grpc")
+                        .body(empty_body())
+                        .unwrap())
+                }),
             }
         }
     }

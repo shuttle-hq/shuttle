@@ -18,15 +18,15 @@ pub struct Args {
     pub auth_uri: Uri,
 
     /// Address to connect to the provisioning service
-    #[clap(long, default_value = "http://provisioner:5001")]
+    #[arg(long, default_value = "http://provisioner:5001")]
     pub provisioner_uri: Uri,
 
     /// Used to prefix names for all docker resources
-    #[clap(long, default_value = "shuttle_dev")]
+    #[arg(long, default_value = "shuttle_dev")]
     pub prefix: String,
 
     /// The overlay network name used for the user services
-    #[clap(long, default_value = "shuttle_dev_user-net")]
+    #[arg(long, default_value = "shuttle_dev_user-net")]
     pub users_network_name: String,
 
     /// The path to the docker daemon socket

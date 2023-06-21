@@ -3,10 +3,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bollard::service::ContainerInspectResponse;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use chrono::Utc;
-use dal::{Dal, Deployment, Service};
+use dal::{Dal, DalError, Deployment, Service};
 use deployment::RunnableDeployment;
 use derive_builder::Builder;
 use error::{Error, Result};
@@ -38,8 +37,8 @@ use tonic::{transport::Server, Response, Result as TonicResult};
 use tracing::{error, info, instrument};
 use ulid::Ulid;
 
-use crate::project::task;
 use crate::project::worker::{TaskRouter, Worker};
+use crate::project::{error::Error as ProjectError, task};
 
 pub mod args;
 pub mod dal;
@@ -49,28 +48,6 @@ pub mod project;
 pub mod runtime_manager;
 
 const RUN_BUFFER_SIZE: usize = 100;
-
-macro_rules! try_result_unwrap {
-    ($in:expr, $response:expr) => {
-        match $in {
-            Ok(inner) => inner,
-            Err(_err) => {
-                return $response;
-            }
-        }
-    };
-}
-
-macro_rules! try_option_unwrap {
-    ($in:expr, $response:expr) => {
-        match $in {
-            Some(inner) => inner,
-            None => {
-                return $response;
-            }
-        }
-    };
-}
 
 #[derive(Default)]
 pub struct GitMetadata {
@@ -214,10 +191,10 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         Ok(())
     }
 
-    // Ensures this service is created and the runtime loaded & started. Important to note that this method
-    // can be called when starting the deployer, to pick up from persistence the existing deployments and
-    // reinstate them if they are on the running code path, but also when deploying a brand new deployment,
-    // storing it in the persistence.
+    /// Ensures this service is created and the runtime loaded & started. Important to note that this method
+    /// can be called when starting the deployer, to pick up from persistence the existing deployments and
+    /// reinstate them if they are on the running code path, but also when deploying a brand new deployment,
+    /// storing it in the persistence.
     pub async fn instate_service(
         &self,
         runnable_deployment: RunnableDeployment,
@@ -320,27 +297,11 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
 
         let claim = request.extensions().get::<Claim>().cloned();
         let request = request.into_inner();
-        let req_deployment = match request.deployment {
-            Some(inner) => inner,
-            None => {
-                return Ok(Response::new(DeployResponse {
-                    success: false,
-                    message: Some("invalid argument: missing deployment information".to_string()),
-                    deployment_id: None,
-                }))
-            }
-        };
-
-        let service_id = match Ulid::from_string(req_deployment.service_id.as_str()) {
-            Ok(inner) => inner,
-            Err(err) => {
-                return Ok(Response::new(DeployResponse {
-                    success: false,
-                    message: Some(err.to_string()),
-                    deployment_id: None,
-                }))
-            }
-        };
+        let req_deployment = request.deployment.ok_or(tonic::Status::invalid_argument(
+            "missing deploymet information in the rpc call",
+        ))?;
+        let service_id = Ulid::from_string(req_deployment.service_id.as_str())
+            .map_err(|err| tonic::Status::invalid_argument(err.to_string()))?;
 
         // Create the deployment.
         let deployment_id = Ulid::new();
@@ -365,30 +326,20 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         );
 
         // Instate the service.
-        match self
-            .instate_service(
-                runnable_deployment,
-                git_metadata,
-                image_name,
-                idle_minutes,
-                false,
-            )
-            .await
-        {
-            Ok(inner) => inner,
-            Err(err) => {
-                return Ok(Response::new(DeployResponse {
-                    success: false,
-                    message: Some(err.to_string()),
-                    deployment_id: None,
-                }))
-            }
-        };
+        self.instate_service(
+            runnable_deployment,
+            git_metadata,
+            image_name,
+            idle_minutes,
+            false,
+        )
+        .await
+        .map_err(|err| {
+            tonic::Status::internal(format!("failed to instate the service: {}", err))
+        })?;
 
         Ok(Response::new(DeployResponse {
-            success: true,
-            deployment_id: Some(deployment_id.to_string()),
-            message: None,
+            deployment_id: deployment_id.to_string(),
         }))
     }
 
@@ -402,36 +353,29 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         let request = request.into_inner();
 
         // Do a cleanup in terms of previous invalid deployments.
-        let deployment_id = try_result_unwrap!(
-            Ulid::from_string(&request.deployment_id),
-            Ok(Response::new(DestroyDeploymentResponse {
-                success: false,
-                message: Some("the deployment id couldn't be parsed".to_string()),
-            }))
-        );
-
-        let deployment = try_result_unwrap!(
-            self.dal.deployment(&deployment_id).await,
-            Ok(Response::new(DestroyDeploymentResponse {
-                success: false,
-                message: Some("error fetching deployment from persistence".to_string())
-            }))
-        );
-        let service = match self.dal.service(&deployment.service_id).await {
-            Ok(inner) => inner,
-            Err(err) => {
-                return Ok(Response::new(DestroyDeploymentResponse {
-                    success: false,
-                    message: Some(format!("error fetching service from persistence: {}", err)),
-                }))
-            }
-        };
+        let deployment_id = Ulid::from_string(&request.deployment_id)
+            .map_err(|err| tonic::Status::invalid_argument(err.to_string()))?;
+        let deployment = self
+            .dal
+            .deployment(&deployment_id)
+            .await
+            .map_err(|err| match err {
+                DalError::DeploymentNotFound => tonic::Status::not_found(err.to_string()),
+                _ => tonic::Status::internal(err.to_string()),
+            })?;
+        let service = self
+            .dal
+            .service(&deployment.service_id)
+            .await
+            .map_err(|err| match err {
+                DalError::ServiceNotFound => tonic::Status::not_found(err.to_string()),
+                _ => tonic::Status::internal(err.to_string()),
+            })?;
 
         if service.state_variant != ServiceRunning::name() {
-            return Ok(Response::new(DestroyDeploymentResponse {
-                success: false,
-                message: Some("the deployment is not running".to_string()),
-            }));
+            return Err(tonic::Status::cancelled(
+                "deployment is not running".to_string(),
+            ));
         }
 
         // Destroying the deployment and waiting on finishing up
@@ -441,8 +385,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         let runtime_manager = self.runtime_manager.clone();
         let sender = self.deployment_state_machine_channel.clone();
 
-        // Destroy the existing service sandbox.
-        match TaskBuilder::new(dal)
+        TaskBuilder::new(dal)
             .task_router(task_router)
             .service_id(deployment.service_id)
             .service_docker_context(ServiceDockerContext::new(docker, runtime_manager))
@@ -450,20 +393,22 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
             .and_then(task::run_until_done())
             .send(&sender)
             .await
-        {
-            Ok(handle) => handle.await,
-            Err(err) => {
-                return Ok(Response::new(DestroyDeploymentResponse {
-                    success: false,
-                    message: Some(err.to_string()),
-                }));
-            }
-        };
+            .map_err(|err| match err {
+                ProjectError::TaskInternal => tonic::Status::internal(err.to_string()),
+                ProjectError::Service(err) => tonic::Status::internal(err.to_string()),
+                ProjectError::ServiceUnavailable => tonic::Status::unavailable(err.to_string()),
+                ProjectError::Dal(dal_err) => match dal_err {
+                    DalError::Sqlx(_) | DalError::Decode(_) => tonic::Status::internal(
+                        "querying the database while destroying the project failed",
+                    ),
+                    DalError::ServiceNotFound | DalError::DeploymentNotFound => {
+                        tonic::Status::not_found(dal_err.to_string())
+                    }
+                },
+            })?
+            .await;
 
-        Ok(Response::new(DestroyDeploymentResponse {
-            success: true,
-            message: None,
-        }))
+        Ok(Response::new(DestroyDeploymentResponse {}))
     }
 
     #[instrument(skip_all)]
@@ -485,50 +430,29 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
             .await
             .map_err(|err| tonic::Status::not_found(err.to_string()))?;
 
-        if service.state.is_completed() || service.state.is_destroyed() {
-            return Ok(Response::new(TargetIpResponse {
-                success: false,
-                target_ip: None,
-                message: Some("the service is not running".to_string()),
-            }));
+        if !service.state.is_running() {
+            return Err(tonic::Status::cancelled("the service is not running"));
         }
 
         if service.state.is_stopped() && request.instate {
-            let container: ContainerInspectResponse = try_option_unwrap!(service.state.container(), Ok(Response::new(TargetIpResponse {
-                success: false,
-                target_ip: None,
-                message: Some("the service is an unknown state, it's stopped but it doesn't have a container inspect info attached".to_string()),
-            })));
-
-            let deployment_id = try_result_unwrap!(container.deployment_id(), Ok(Response::new(TargetIpResponse{
-                success: false,
-                target_ip: None,
-                message: Some("the service is an unknown state, it's stopped but it doesn't have an deployment id attached".to_string()),
-            })));
-
-            let service_name = try_result_unwrap!(container.service_name(), Ok(Response::new(TargetIpResponse {
-                success: false,
-                target_ip: None,
-                message: Some("the service is an unknown state, it's stopped but it doesn't have a service name attached".to_string()),
-            })));
-            let deployment = try_result_unwrap!(
-                self.dal.deployment(&deployment_id).await,
-                Ok(Response::new(TargetIpResponse {
-                    success: false,
-                    message: Some("error fetching deployment from persistence".to_string()),
-                    target_ip: None
-                }))
-            );
-            let image_name = try_result_unwrap!(
-                container.image_name(),
-                Ok(Response::new(TargetIpResponse {
-                    success: false,
-                    message: Some(
-                        "error fetching the image name from the container inspect info".to_string()
-                    ),
-                    target_ip: None,
-                }))
-            );
+            let container = service.state.container().ok_or(tonic::Status::internal("the service is an unknown state, it's stopped but it doesn't have a container inspect info attached".to_string()))?;
+            let deployment_id = container
+                .deployment_id()
+                .map_err(|err| tonic::Status::internal(err.to_string()))?;
+            let service_name = container
+                .service_name()
+                .map_err(|err| tonic::Status::internal(err.to_string()))?;
+            let deployment =
+                self.dal
+                    .deployment(&deployment_id)
+                    .await
+                    .map_err(|err| match err {
+                        DalError::DeploymentNotFound => tonic::Status::not_found(err.to_string()),
+                        _ => tonic::Status::internal(err.to_string()),
+                    })?;
+            let image_name = container
+                .image_name()
+                .map_err(|err| tonic::Status::internal(err.to_string()))?;
             let idle_minutes = container.idle_minutes();
             let is_next = container.is_next();
 
@@ -548,57 +472,35 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
                 is_next,
             };
 
-            try_result_unwrap!(
-                self.instate_service(
-                    runnable_deployment,
-                    git_metadata,
-                    image_name,
-                    idle_minutes,
-                    false,
-                )
-                .await,
-                Ok(Response::new(TargetIpResponse {
-                    success: false,
-                    message: Some("failed instating the service".to_string()),
-                    target_ip: None
-                }))
-            );
+            self.instate_service(
+                runnable_deployment,
+                git_metadata,
+                image_name,
+                idle_minutes,
+                false,
+            )
+            .await
+            .map_err(|err| {
+                tonic::Status::internal(format!("failed to instate the service: {err}"))
+            })?;
         }
 
-        let target_ip = try_result_unwrap!(
-            try_option_unwrap!(
-                try_result_unwrap!(
-                    self.dal.service_state(&service_id).await,
-                    Ok(Response::new(TargetIpResponse {
-                        success: false,
-                        message: Some(
-                            "error fetching the service state from persistence".to_string()
-                        ),
-                        target_ip: None
-                    }))
-                ),
-                Ok(Response::new(TargetIpResponse {
-                    success: false,
-                    message: Some(
-                        "no service found when trying to query for its state".to_string()
-                    ),
-                    target_ip: None
-                }))
-            )
-            .target_ip(&self.config.network_name),
-            Ok(Response::new(TargetIpResponse {
-                success: false,
-                message: Some(
-                    "no target ip was found on the container inspect response".to_string()
-                ),
-                target_ip: None
-            }))
-        );
+        let new_state = self
+            .dal
+            .service_state(&service_id)
+            .await
+            .map_err(|err| {
+                tonic::Status::internal(format!("failed to fetch the service state {err}"))
+            })?
+            .ok_or(tonic::Status::internal("couldn't find the service state"))?;
+        let new_target_ip = new_state
+            .target_ip(&self.config.network_name)
+            .map_err(|err| {
+                tonic::Status::internal(format!("failed to extract the target ip {err}"))
+            })?;
 
         Ok(Response::new(TargetIpResponse {
-            success: true,
-            target_ip: Some(target_ip.to_string()),
-            message: None,
+            target_ip: new_target_ip.to_string(),
         }))
     }
 }

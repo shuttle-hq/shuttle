@@ -4,7 +4,6 @@ use std::{
 };
 
 use opentelemetry::global;
-use portpicker::pick_unused_port;
 use shuttle_common::claims::{Claim, ClaimService, InjectPropagation};
 
 use shuttle_proto::runtime::{
@@ -32,6 +31,8 @@ use crate::{
 use crate::dal::DalError;
 
 type RunReceiver = mpsc::Receiver<RunnableDeployment>;
+
+const USER_SERVICE_DEFAULT_PORT: u16 = 8080;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -136,16 +137,7 @@ async fn cleanup<D: Dal + Sync + 'static>(
 }
 
 #[instrument(skip(deployment_id, dal), fields(deployment_id = %deployment_id, state = %ServiceCompleted::name()))]
-async fn completed_cleanup<D: Dal + Sync + 'static>(
-    deployment_id: &Ulid,
-    dal: D,
-    // docker: Docker,
-    // runtime_manager: RuntimeManager,
-    // sender: tokio::sync::mpsc::Sender<
-    //     Box<dyn Task<(), Output = (), Error = crate::project::error::Error>>,
-    // >,
-    // task_router: TaskRouter<BoxedTask>,
-) -> Result<()> {
+async fn completed_cleanup<D: Dal + Sync + 'static>(deployment_id: &Ulid, dal: D) -> Result<()> {
     info!("service was stopped by its own");
 
     // We're updating the service state. We should expect to have the container end by itself.
@@ -215,18 +207,9 @@ impl RunnableDeployment {
         runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         claim: Option<Claim>,
     ) -> Result<()> {
-        let port = match pick_unused_port() {
-            Some(port) => port,
-            None => {
-                return Err(Error::PrepareRun(
-                    "could not find a free port to deploy service on".to_string(),
-                ))
-            }
-        };
-
         let address = SocketAddr::new(
             IpAddr::V4(self.target_ip.expect("to have a target ip set")),
-            port,
+            USER_SERVICE_DEFAULT_PORT,
         );
 
         // Execute loaded service
@@ -332,326 +315,4 @@ async fn run<D: Dal + Sync + 'static>(
             error!(%status, "failed to start service");
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    // use std::{
-    //     net::{Ipv4Addr, SocketAddr},
-    //     path::PathBuf,
-    //     process::Command,
-    //     sync::Arc,
-    //     time::Duration,
-    // };
-
-    // use async_trait::async_trait;
-    // use portpicker::pick_unused_port;
-    // use shuttle_common::storage_manager::ArtifactsStorageManager;
-    // use shuttle_proto::{
-    //     provisioner::{
-    //         provisioner_server::{Provisioner, ProvisionerServer},
-    //         DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
-    //     },
-    //     runtime::{StopReason, SubscribeStopResponse},
-    // };
-    // use tempfile::Builder;
-    // use tokio::{
-    //     sync::{oneshot, Mutex},
-    //     time::sleep,
-    // };
-    // use tonic::transport::Server;
-    // use uuid::Uuid;
-
-    // use crate::{
-    //     persistence::{DeploymentUpdater, Resource, ResourceManager, Secret, SecretGetter},
-    //     RuntimeManager,
-    // };
-
-    // use super::Built;
-
-    // const RESOURCES_PATH: &str = "tests/resources";
-
-    // fn get_storage_manager() -> ArtifactsStorageManager {
-    //     let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
-    //     let path = tmp_dir.into_path();
-
-    //     ArtifactsStorageManager::new(path)
-    // }
-
-    // async fn kill_old_deployments() -> crate::error::Result<()> {
-    //     Ok(())
-    // }
-
-    // struct ProvisionerMock;
-
-    // #[async_trait]
-    // impl Provisioner for ProvisionerMock {
-    //     async fn provision_database(
-    //         &self,
-    //         _request: tonic::Request<DatabaseRequest>,
-    //     ) -> Result<tonic::Response<DatabaseResponse>, tonic::Status> {
-    //         panic!("no run tests should request a db");
-    //     }
-
-    //     async fn delete_database(
-    //         &self,
-    //         _request: tonic::Request<DatabaseRequest>,
-    //     ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
-    //         panic!("no run tests should delete a db");
-    //     }
-    // }
-
-    // fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
-    //     let provisioner_addr =
-    //         SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
-    //     let mock = ProvisionerMock;
-
-    //     tokio::spawn(async move {
-    //         Server::builder()
-    //             .add_service(ProvisionerServer::new(mock))
-    //             .serve(provisioner_addr)
-    //             .await
-    //             .unwrap();
-    //     });
-
-    //     let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
-    //     let path = tmp_dir.into_path();
-    //     let (tx, rx) = crossbeam_channel::unbounded();
-
-    //     tokio::runtime::Handle::current().spawn_blocking(move || {
-    //         while let Ok(log) = rx.recv() {
-    //             println!("test log: {log:?}");
-    //         }
-    //     });
-
-    //     RuntimeManager::new(path, format!("http://{}", provisioner_addr), None, tx)
-    // }
-
-    // #[derive(Clone)]
-    // struct StubSecretGetter;
-
-    // #[async_trait]
-    // impl SecretGetter for StubSecretGetter {
-    //     type Err = std::io::Error;
-
-    //     async fn get_secrets(&self, _service_id: &Uuid) -> Result<Vec<Secret>, Self::Err> {
-    //         Ok(Default::default())
-    //     }
-    // }
-
-    // #[derive(Clone)]
-    // struct StubResourceManager;
-
-    // #[async_trait]
-    // impl ResourceManager for StubResourceManager {
-    //     type Err = std::io::Error;
-
-    //     async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
-    //         Ok(())
-    //     }
-    //     async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
-    //         Ok(Vec::new())
-    //     }
-    // }
-
-    // #[derive(Clone)]
-    // struct StubDeploymentUpdater;
-
-    // #[async_trait]
-    // impl DeploymentUpdater for StubDeploymentUpdater {
-    //     type Err = std::io::Error;
-
-    //     async fn set_address(&self, _id: &Uuid, _address: &SocketAddr) -> Result<(), Self::Err> {
-    //         Ok(())
-    //     }
-
-    //     async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
-    //         Ok(())
-    //     }
-    // }
-
-    // // This test uses the kill signal to make sure a service does stop when asked to
-    // #[tokio::test]
-    // async fn can_be_killed() {
-    //     let (built, storage_manager) = make_and_built("sleep-async");
-    //     let id = built.id;
-    //     let runtime_manager = get_runtime_manager();
-    //     let (cleanup_send, cleanup_recv) = oneshot::channel();
-
-    //     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
-    //         let response = response.unwrap();
-    //         match (
-    //             StopReason::from_i32(response.reason).unwrap(),
-    //             response.message,
-    //         ) {
-    //             (StopReason::Request, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
-    //             _ => panic!("expected stop due to request"),
-    //         }
-    //     };
-
-    //     built
-    //         .handle(
-    //             storage_manager,
-    //             StubSecretGetter,
-    //             StubResourceManager,
-    //             runtime_manager.clone(),
-    //             StubDeploymentUpdater,
-    //             kill_old_deployments(),
-    //             handle_cleanup,
-    //         )
-    //         .await
-    //         .unwrap();
-
-    //     // Give it some time to start up
-    //     sleep(Duration::from_secs(1)).await;
-
-    //     // Send kill signal
-    //     assert!(runtime_manager.lock().await.kill(&id).await);
-
-    //     tokio::select! {
-    //         _ = sleep(Duration::from_secs(1)) => panic!("cleanup should have been called"),
-    //         Ok(()) = cleanup_recv => {}
-    //     }
-    // }
-
-    // // This test does not use a kill signal to stop the service. Rather the service decided to stop on its own without errors
-    // #[tokio::test]
-    // async fn self_stop() {
-    //     let (built, storage_manager) = make_and_built("sleep-async");
-    //     let runtime_manager = get_runtime_manager();
-    //     let (cleanup_send, cleanup_recv) = oneshot::channel();
-
-    //     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
-    //         let response = response.unwrap();
-    //         match (
-    //             StopReason::from_i32(response.reason).unwrap(),
-    //             response.message,
-    //         ) {
-    //             (StopReason::End, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
-    //             _ => panic!("expected stop due to self end"),
-    //         }
-    //     };
-
-    //     built
-    //         .handle(
-    //             storage_manager,
-    //             StubSecretGetter,
-    //             StubResourceManager,
-    //             runtime_manager.clone(),
-    //             StubDeploymentUpdater,
-    //             kill_old_deployments(),
-    //             handle_cleanup,
-    //         )
-    //         .await
-    //         .unwrap();
-
-    //     tokio::select! {
-    //         _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service stopped on its own"),
-    //         Ok(()) = cleanup_recv => {},
-    //     }
-
-    //     // Prevent the runtime manager from dropping earlier, which will kill the processes it manages
-    //     drop(runtime_manager);
-    // }
-
-    // // Test for panics in Service::bind
-    // #[tokio::test]
-    // async fn panic_in_bind() {
-    //     let (built, storage_manager) = make_and_built("bind-panic");
-    //     let runtime_manager = get_runtime_manager();
-    //     let (cleanup_send, cleanup_recv) = oneshot::channel();
-
-    //     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
-    //         let response = response.unwrap();
-    //         match (
-    //             StopReason::from_i32(response.reason).unwrap(),
-    //             response.message,
-    //         ) {
-    //             (StopReason::Crash, mes) if mes.contains("panic in bind") => {
-    //                 cleanup_send.send(()).unwrap()
-    //             }
-    //             (_, mes) => panic!("expected stop due to crash: {mes}"),
-    //         }
-    //     };
-
-    //     built
-    //         .handle(
-    //             storage_manager,
-    //             StubSecretGetter,
-    //             StubResourceManager,
-    //             runtime_manager.clone(),
-    //             StubDeploymentUpdater,
-    //             kill_old_deployments(),
-    //             handle_cleanup,
-    //         )
-    //         .await
-    //         .unwrap();
-
-    //     tokio::select! {
-    //         _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service handle stopped after panic"),
-    //         Ok(()) = cleanup_recv => {}
-    //     }
-
-    //     // Prevent the runtime manager from dropping earlier, which will kill the processes it manages
-    //     drop(runtime_manager);
-    // }
-
-    // // Test for panics in the main function
-    // #[tokio::test]
-    // #[should_panic(expected = "Load(\"main panic\")")]
-    // async fn panic_in_main() {
-    //     let (built, storage_manager) = make_and_built("main-panic");
-    //     let runtime_manager = get_runtime_manager();
-
-    //     let handle_cleanup = |_result| panic!("service should never be started");
-
-    //     built
-    //         .handle(
-    //             storage_manager,
-    //             StubSecretGetter,
-    //             StubResourceManager,
-    //             runtime_manager.clone(),
-    //             StubDeploymentUpdater,
-    //             kill_old_deployments(),
-    //             handle_cleanup,
-    //         )
-    //         .await
-    //         .unwrap();
-    // }
-
-    // fn make_and_built(crate_name: &str) -> (Built, ArtifactsStorageManager) {
-    //     let crate_dir: PathBuf = [RESOURCES_PATH, crate_name].iter().collect();
-
-    //     Command::new("cargo")
-    //         .args(["build", "--release"])
-    //         .current_dir(&crate_dir)
-    //         .spawn()
-    //         .unwrap()
-    //         .wait()
-    //         .unwrap();
-
-    //     let lib_name = if cfg!(target_os = "windows") {
-    //         format!("{}.exe", crate_name)
-    //     } else {
-    //         crate_name.to_string()
-    //     };
-
-    //     let id = Uuid::new_v4();
-    //     let so_path = crate_dir.join("target/release").join(lib_name);
-    //     let storage_manager = get_storage_manager();
-    //     let new_so_path = storage_manager.deployment_executable_path(&id).unwrap();
-
-    //     std::fs::copy(so_path, new_so_path).unwrap();
-    //     (
-    //         Built {
-    //             id,
-    //             service_name: crate_name.to_string(),
-    //             service_id: Uuid::new_v4(),
-    //             tracing_context: Default::default(),
-    //             is_next: false,
-    //             claim: None,
-    //         },
-    //         storage_manager,
-    //     )
-    // }
 }

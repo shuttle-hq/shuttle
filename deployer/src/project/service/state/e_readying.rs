@@ -15,8 +15,4 @@ impl StateVariant for ServiceReadying {
     fn name() -> String {
         "Readying".to_string()
     }
-
-    fn as_state_variant(&self) -> String {
-        Self::name()
-    }
 }

@@ -24,7 +24,6 @@ hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", 
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-http = { workspace = true }
-portpicker = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -53,7 +52,7 @@ ulid = { workspace = true, features = ["serde", "uuid"] }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["backend", "models", "builder", "claims", "tonic"]
+features = ["backend", "models", "claims", "tonic"]
 
 [dependencies.shuttle-proto]
 workspace = true

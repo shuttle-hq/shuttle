@@ -12,6 +12,13 @@ use crate::safe_unwrap;
 use super::service::state::m_errored::ServiceErrored;
 use super::service::state::machine::Refresh;
 
+const CONTAINER_LABEL_SHUTTLE_SERVICE_ID: &str = "shuttle.service_id";
+const CONTAINER_LABEL_SHUTTLE_DEPLOYMENT_ID: &str = "shuttle.deployment_id";
+const CONTAINER_LABEL_SHUTTLE_SERVICE_NAME: &str = "shuttle.service_name";
+const CONTAINER_LABEL_SHUTTLE_IDLE_MINUTES: &str = "shuttle.idle_minutes";
+// Tag on the container to mark a container that holds a shuttle-next runtime.
+const CONTAINER_LABEL_SHUTTLE_IS_NEXT: &str = "shuttle.is_next";
+
 pub struct ContainerSettingsBuilder {
     prefix: Option<String>,
     image_name: Option<String>,
@@ -202,7 +209,7 @@ pub trait ContainerInspectResponseExt {
         Ulid::from_string(safe_unwrap!(container
             .config
             .labels
-            .get("shuttle.service_id")))
+            .get(CONTAINER_LABEL_SHUTTLE_SERVICE_ID)))
         .map_err(|err| ServiceErrored::internal(err.to_string()))
     }
 
@@ -212,7 +219,7 @@ pub trait ContainerInspectResponseExt {
         Ulid::from_string(safe_unwrap!(container
             .config
             .labels
-            .get("shuttle.deployment_id")))
+            .get(CONTAINER_LABEL_SHUTTLE_DEPLOYMENT_ID)))
         .map_err(|err| ServiceErrored::internal(err.to_string()))
     }
 
@@ -220,7 +227,7 @@ pub trait ContainerInspectResponseExt {
         let container = self.container();
         if let Some(config) = &container.config {
             if let Some(labels) = &config.labels {
-                if let Some(service_name) = labels.get("shuttle.service_name") {
+                if let Some(service_name) = labels.get(CONTAINER_LABEL_SHUTTLE_SERVICE_NAME) {
                     return Ok(service_name.clone());
                 }
             }
@@ -249,7 +256,7 @@ pub trait ContainerInspectResponseExt {
 
         if let Some(config) = &container.config {
             if let Some(labels) = &config.labels {
-                if let Some(idle_minutes) = labels.get("shuttle.idle_minutes") {
+                if let Some(idle_minutes) = labels.get(CONTAINER_LABEL_SHUTTLE_IDLE_MINUTES) {
                     return idle_minutes.parse::<u64>().unwrap_or(IDLE_MINUTES);
                 }
             }
@@ -263,7 +270,7 @@ pub trait ContainerInspectResponseExt {
 
         if let Some(config) = &container.config {
             if let Some(labels) = &config.labels {
-                if let Some(idle_minutes) = labels.get("shuttle.is_next") {
+                if let Some(idle_minutes) = labels.get(CONTAINER_LABEL_SHUTTLE_IS_NEXT) {
                     return idle_minutes.parse::<bool>().unwrap_or(false);
                 }
             }

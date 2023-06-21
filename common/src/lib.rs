@@ -1,7 +1,5 @@
 #[cfg(feature = "backend")]
 pub mod backends;
-#[cfg(feature = "builder")]
-pub mod builder;
 #[cfg(feature = "claims")]
 pub mod claims;
 pub mod database;

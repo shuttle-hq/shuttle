@@ -18,5 +18,7 @@ pub mod machine;
 
 pub trait StateVariant {
     fn name() -> String;
-    fn as_state_variant(&self) -> String;
+    fn as_state_variant(&self) -> String {
+        Self::name()
+    }
 }

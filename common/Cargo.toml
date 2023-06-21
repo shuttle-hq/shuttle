@@ -8,22 +8,18 @@ description = "Common library for the shuttle platform (https://www.shuttle.rs/)
 
 [dependencies]
 anyhow = { workspace = true }
-async-recursion = { version = "1.0.4", optional = true }
 async-trait = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
-base16ct = { version = "0.1.1", default-features = false, features = ["alloc"], optional = true }
 bytes = { workspace = true, optional = true }
 chrono = { workspace = true }
 comfy-table = { version = "6.2.0", optional = true }
 crossterm = { workspace = true, optional = true }
-dirs = { workspace = true, optional = true }
 headers = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 http-body = { version = "0.4.5", optional = true }
 http-serde = { version = "1.1.2", optional = true }
 hyper = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
-oci-spec = { version = "0.5.7", optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
 opentelemetry-otlp = { version = "0.12.0", optional = true }
@@ -31,19 +27,15 @@ opentelemetry-proto = { version = "0.2.0", optional = true }
 pin-project = { workspace = true, optional = true }
 prost-types = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
-regex = { version = "1.5.6", optional = true }
 reqwest = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }
 rustrict = { version = "0.7.4", optional = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
-sha2 = { version = "0.10.2", optional = true }
 sqlx = { workspace = true, optional = true, features = ["runtime-tokio-rustls"] }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "fs"], optional = true }
-tokio-stream = { version = "0.1.14", optional = true }
-tokio-tar = { version = "0.3.0", optional = true }
 tonic = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
@@ -52,7 +44,6 @@ tracing = { workspace = true, features = ["std"] }
 tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 ttl_cache = { workspace = true, optional = true }
-url = { workspace = true, optional = true }
 utoipa = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 ulid = { workspace = true, features = ["serde", "uuid"] }
@@ -67,24 +58,13 @@ backend = [
     "opentelemetry-proto/gen-tonic",
     "opentelemetry-proto/logs",
     "thiserror",
+    "tokio/rt-multi-thread",
+    "tokio/fs",
     "tonic",
     "tower-http",
     "tracing-subscriber/env-filter",
     "tracing-subscriber/fmt",
     "ttl_cache",
-]
-builder = [
-    "async-recursion",
-    "base16ct/alloc",
-    "oci-spec",
-    "regex",
-    "sha2",
-    "tokio/rt-multi-thread",
-    "tokio/fs",
-    "tokio-stream",
-    "tokio-tar",
-    "url",
-    "dirs"
 ]
 claims = [
     "bytes",

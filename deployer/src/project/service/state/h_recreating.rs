@@ -27,10 +27,6 @@ impl StateVariant for ServiceRecreating {
     fn name() -> String {
         "Recreating".to_string()
     }
-
-    fn as_state_variant(&self) -> String {
-        Self::name()
-    }
 }
 
 #[async_trait]

@@ -23,10 +23,6 @@ impl StateVariant for ServiceDestroying {
     fn name() -> String {
         "Destroying".to_string()
     }
-
-    fn as_state_variant(&self) -> String {
-        Self::name()
-    }
 }
 
 #[async_trait]

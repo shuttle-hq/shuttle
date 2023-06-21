@@ -45,10 +45,6 @@ impl StateVariant for ServiceErrored {
     fn name() -> String {
         "Errored".to_string()
     }
-
-    fn as_state_variant(&self) -> String {
-        Self::name()
-    }
 }
 
 #[async_trait]

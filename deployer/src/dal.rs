@@ -239,7 +239,7 @@ impl Dal for Sqlite {
 
     // Get services
     async fn services(&self) -> Result<Vec<Service>, DalError> {
-        let services: Result<Vec<Service>, DalError> = query("SELECT & FROM services")
+        let services: Result<Vec<Service>, DalError> = query("SELECT * FROM services")
             .fetch_all(&self.pool)
             .await
             .map_err(DalError::Sqlx)?

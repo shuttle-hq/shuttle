@@ -29,12 +29,8 @@ pub struct DeployRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeployResponse {
-    #[prost(bool, tag = "1")]
-    pub success: bool,
-    #[prost(string, optional, tag = "2")]
-    pub deployment_id: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(string, optional, tag = "3")]
-    pub message: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, tag = "2")]
+    pub deployment_id: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -45,36 +41,26 @@ pub struct DestroyDeploymentRequest {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DestroyDeploymentResponse {
-    /// Whether the destroying was successful.
-    #[prost(bool, tag = "1")]
-    pub success: bool,
-    /// A message that brings context in case of failure.
-    #[prost(string, optional, tag = "2")]
-    pub message: ::core::option::Option<::prost::alloc::string::String>,
-}
+pub struct DestroyDeploymentResponse {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TargetIpRequest {
     /// The service id we request the target ip for
     #[prost(string, tag = "1")]
     pub service_id: ::prost::alloc::string::String,
+    /// The project id we request the target ip for
+    #[prost(string, tag = "2")]
+    pub project_id: ::prost::alloc::string::String,
     /// If the service_id is on the stopped code path, reinstate it.
-    #[prost(bool, tag = "2")]
+    #[prost(bool, tag = "3")]
     pub instate: bool,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TargetIpResponse {
-    /// Whether the target ip request was successful.
-    #[prost(bool, tag = "1")]
-    pub success: bool,
     /// The target ip of the requested service.
-    #[prost(string, optional, tag = "2")]
-    pub target_ip: ::core::option::Option<::prost::alloc::string::String>,
-    /// A message that brings context in case of failure.
-    #[prost(string, optional, tag = "3")]
-    pub message: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, tag = "1")]
+    pub target_ip: ::prost::alloc::string::String,
 }
 /// Generated client implementations.
 pub mod deployer_client {

@@ -29,10 +29,6 @@ impl StateVariant for ServiceReady {
     fn name() -> String {
         "Ready".to_string()
     }
-
-    fn as_state_variant(&self) -> String {
-        Self::name()
-    }
 }
 
 #[async_trait]

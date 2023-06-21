@@ -30,10 +30,6 @@ impl StateVariant for ServiceRebooting {
     fn name() -> String {
         "Rebooting".to_string()
     }
-
-    fn as_state_variant(&self) -> String {
-        Self::name()
-    }
 }
 
 #[async_trait]

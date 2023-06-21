@@ -17,10 +17,6 @@ impl StateVariant for ServiceStopped {
     fn name() -> String {
         "Stopped".to_string()
     }
-
-    fn as_state_variant(&self) -> String {
-        Self::name()
-    }
 }
 
 #[async_trait]

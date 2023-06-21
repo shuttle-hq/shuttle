@@ -8,7 +8,7 @@ use shuttle_proto::runtime::{
 };
 use tonic::transport::{Channel, Endpoint};
 use tower::ServiceBuilder;
-use tracing::trace;
+use tracing::{debug, trace};
 use ulid::Ulid;
 
 use crate::project::service::RUNTIME_API_PORT;
@@ -18,31 +18,26 @@ type Runtimes =
 
 /// Manager that can start up mutliple runtimes. This is needed so that two runtimes can be up when a new deployment is made:
 /// One runtime for the new deployment being loaded; another for the currently active deployment
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct RuntimeManager {
     runtimes: Runtimes,
 }
 
 impl RuntimeManager {
-    pub fn new() -> Self {
-        Self {
-            runtimes: Default::default(),
-        }
-    }
-
     pub async fn runtime_client(
         &mut self,
-        deployment_id: Ulid,
+        service_id: Ulid,
         target_ip: Ipv4Addr,
     ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
-        trace!("making new client");
+        debug!("making new client");
         let mut guard = self.runtimes.lock().await;
 
-        if let Some(runtime_client) = guard.get(&deployment_id) {
+        if let Some(runtime_client) = guard.get(&service_id) {
             return Ok(runtime_client.clone());
         }
 
         // Connection to the docker container where the shuttle-runtime lives.
+
         let conn = Endpoint::new(format!("http://{target_ip}:{RUNTIME_API_PORT}"))
             .context("creating runtime client endpoint")?
             .connect_timeout(Duration::from_secs(5));
@@ -53,7 +48,7 @@ impl RuntimeManager {
             .layer(InjectPropagationLayer)
             .service(channel);
         let runtime_client = runtime_client::RuntimeClient::new(channel);
-        guard.insert(deployment_id, runtime_client.clone());
+        guard.insert(service_id, runtime_client.clone());
 
         Ok(runtime_client)
     }
@@ -76,11 +71,11 @@ impl RuntimeManager {
         }
     }
 
-    pub async fn is_healthy(&self, id: &Ulid) -> bool {
+    pub async fn is_healthy(&self, service_id: &Ulid) -> bool {
         let mut guard = self.runtimes.lock().await;
 
-        if let Some(runtime_client) = guard.get_mut(id) {
-            trace!(%id, "sending ping to the runtime");
+        if let Some(runtime_client) = guard.get_mut(service_id) {
+            trace!(%service_id, "sending ping to the runtime");
 
             let ping = tonic::Request::new(Ping {});
             let response = runtime_client.health_check(ping).await;
@@ -100,13 +95,13 @@ impl RuntimeManager {
         }
     }
 
-    pub async fn logs_subscribe(&self, deployment_id: &Ulid) -> anyhow::Result<()> {
+    pub async fn logs_subscribe(&self, service_id: &Ulid) -> anyhow::Result<()> {
         let mut stream = self
             .runtimes
             .lock()
             .await
-            .get_mut(deployment_id)
-            .context(format!("No runtime client for deployment {deployment_id}"))?
+            .get_mut(service_id)
+            .context(format!("No runtime client for deployment {service_id}"))?
             .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
             .await
             .context("subscribing to runtime logs stream")?

@@ -3,6 +3,7 @@ pub mod b_attaching;
 pub mod c_starting;
 pub mod d_started;
 pub mod e_readying;
+pub mod f_ready;
 pub mod f_running;
 pub mod g_completed;
 pub mod g_rebooting;

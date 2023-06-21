@@ -209,7 +209,7 @@ impl Dal for Sqlite {
 
     async fn running_deployments(&self) -> Result<Vec<RunningDeployment>, DalError> {
         sqlx::query_as(
-            r#"SELECT d.id as id, s.name AS service_name, service_id, d.is_next as is_next, s.state_variant as service_state
+            r#"SELECT d.id as id, s.name AS service_name, service_id, d.is_next as is_next, s.state as service_state
                     FROM deployments AS d
                     JOIN services AS s ON s.id = d.service_id
                     WHERE s.state_variant = ?

@@ -29,9 +29,31 @@ use crate::{
     runtime_manager::RuntimeManager,
 };
 
-use super::error::{Error, Result};
+use crate::dal::DalError;
 
 type RunReceiver = mpsc::Receiver<RunnableDeployment>;
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Database error")]
+    Dal(DalError),
+    #[error("Missing IPv4 address in the persistence")]
+    MissingIpv4Address,
+    #[error("Error occurred when running a deployment: {0}")]
+    Send(String),
+    #[error("Error at service runtime: {0}")]
+    Runtime(anyhow::Error),
+    #[error("Error preparing the service runtime: {0}")]
+    PrepareRun(String),
+    #[error("Encountered IO error: {0}")]
+    IoError(std::io::Error),
+    #[error("Error during the service load phase: {0}")]
+    Load(String),
+    #[error("Error during the service run phase: {0}")]
+    Start(String),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Run a task which takes runnable deploys from a channel and starts them up on our runtime
 /// A deploy is killed when it receives a signal from the kill channel
@@ -39,17 +61,21 @@ pub async fn task<D: Dal + Sync + 'static>(
     dal: D,
     mut recv: RunReceiver,
     mut runtime_manager: RuntimeManager,
-    claim: Option<Claim>,
 ) {
     info!("Run task started");
 
     while let Some(runnable) = recv.recv().await {
         info!("Deployment to be run: {}", runnable.deployment_id);
         let runtime_client = runtime_manager
-            .runtime_client(runnable.service_id, runnable.target_ip)
+            .runtime_client(
+                runnable.service_id,
+                runnable
+                    .target_ip
+                    .expect("to have a target ip set for the runtime client"),
+            )
             .await
             .expect("to set up a runtime client against a ready deployment");
-        let claim = claim.clone();
+        let claim = runnable.claim.clone();
         let runtime_manager = runtime_manager.clone();
         let dal = dal.clone();
         tokio::spawn(async move {
@@ -63,7 +89,7 @@ pub async fn task<D: Dal + Sync + 'static>(
 
             // We are subscribing to the runtime logs emitted during the load phase here.
             if let Err(err) = runtime_manager
-                .logs_subscribe(&deployment_id)
+                .logs_subscribe(&runnable.service_id)
                 .await
                 .map_err(|err| Error::PrepareRun(err.to_string()))
             {
@@ -174,7 +200,7 @@ pub struct RunnableDeployment {
     pub service_id: Ulid,
     pub tracing_context: HashMap<String, String>,
     pub claim: Option<Claim>,
-    pub target_ip: Ipv4Addr,
+    pub target_ip: Option<Ipv4Addr>,
     pub is_next: bool,
 }
 
@@ -196,7 +222,10 @@ impl RunnableDeployment {
             }
         };
 
-        let address = SocketAddr::new(IpAddr::V4(self.target_ip), port);
+        let address = SocketAddr::new(
+            IpAddr::V4(self.target_ip.expect("to have a target ip set")),
+            port,
+        );
 
         // Execute loaded service
         load(self.service_name.clone(), runtime_client.clone(), claim).await?;

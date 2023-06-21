@@ -9,6 +9,7 @@ use ulid::Ulid;
 
 use crate::runtime_manager::RuntimeManager;
 
+use self::state::f_ready::ServiceReady;
 use self::state::g_completed::ServiceCompleted;
 use self::state::StateVariant;
 use self::{
@@ -86,6 +87,7 @@ pub enum ServiceState {
     Starting(ServiceStarting),
     Restarting(ServiceRestarting),
     Started(ServiceStarted),
+    Ready(ServiceReady),
     Running(ServiceRunning),
     Completed(ServiceCompleted),
     Rebooting(ServiceRebooting),
@@ -103,6 +105,7 @@ impl_from_variant!(ServiceState:
     ServiceStarting => Starting,
     ServiceRestarting => Restarting,
     ServiceStarted => Started,
+    ServiceReady => Ready,
     ServiceRunning => Running,
     ServiceCompleted => Completed,
     ServiceStopping => Stopping,
@@ -121,6 +124,7 @@ impl Display for ServiceState {
             ServiceState::Starting(inner) => write!(f, "{}", inner.as_state_variant()),
             ServiceState::Restarting(inner) => write!(f, "{}", inner.as_state_variant()),
             ServiceState::Started(inner) => write!(f, "{}", inner.as_state_variant()),
+            ServiceState::Ready(inner) => write!(f, "{}", inner.as_state_variant()),
             ServiceState::Running(inner) => write!(f, "{}", inner.as_state_variant()),
             ServiceState::Completed(inner) => write!(f, "{}", inner.as_state_variant()),
             ServiceState::Rebooting(inner) => write!(f, "{}", inner.as_state_variant()),
@@ -183,27 +187,34 @@ impl ServiceState {
     }
 
     pub fn is_destroyed(&self) -> bool {
-        matches!(self, Self::Destroyed(_))
+        matches!(self, Self::Destroyed(_) | Self::Destroying(_))
     }
 
     pub fn is_stopped(&self) -> bool {
-        matches!(self, Self::Stopped(_))
+        matches!(self, Self::Stopped(_) | Self::Stopping(_))
     }
 
     pub fn is_completed(&self) -> bool {
         matches!(self, Self::Completed(_))
     }
 
-    pub fn is_starting(&self) -> bool {
+    pub fn is_started(&self) -> bool {
         matches!(
             self,
-            Self::Creating(_) | Self::Attaching(_) | Self::Starting(_) | Self::Started(..)
+            Self::Creating(_)
+                | Self::Attaching(_)
+                | Self::Starting(_)
+                | Self::Started(..)
+                | Self::Rebooting(_)
+                | Self::Recreating(_)
+                | Self::Restarting(_)
         )
     }
 
     pub fn as_state_variant_detailed(&self) -> String {
         match self {
             Self::Started(inner) => inner.as_state_variant(),
+            Self::Ready(inner) => inner.as_state_variant(),
             Self::Running(inner) => inner.as_state_variant(),
             Self::Completed(inner) => inner.as_state_variant(),
             Self::Stopped(inner) => inner.as_state_variant(),
@@ -249,6 +260,7 @@ impl ServiceState {
             | Self::Recreating(ServiceRecreating { container, .. })
             | Self::Restarting(ServiceRestarting { container, .. })
             | Self::Attaching(ServiceAttaching { container, .. })
+            | Self::Ready(ServiceReady { container, .. })
             | Self::Running(ServiceRunning { container, .. })
             | Self::Completed(ServiceCompleted { container, .. })
             | Self::Stopping(ServiceStopping { container, .. })
@@ -363,6 +375,7 @@ where
                 Ok(ServiceReadying::Idle(stopping)) => Ok(stopping.into()),
                 Err(err) => Ok(Self::Errored(err)),
             },
+            Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
             Self::Running(running) => running.next(ctx).await.into_try_state(),
             Self::Completed(completed) => completed.next(ctx).await.into_try_state(),
             Self::Stopped(stopped) => stopped.next(ctx).await.into_try_state(),
@@ -460,7 +473,7 @@ where
                 Err(err) => return Err(Error::Docker(err)),
             },
             Self::Started(ServiceStarted { container, stats, .. })
-            | Self::Running(ServiceRunning { container, stats, .. })
+            | Self::Ready(ServiceReady { container, stats, .. })
              => match container
                 .clone()
                 .refresh(ctx)
@@ -469,6 +482,33 @@ where
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
                         Self::Started(ServiceStarted::new(container, stats))
+                    }
+                    // Restart the container if it went down
+                    ContainerStateStatusEnum::EXITED => Self::Restarting(ServiceRestarting  { container, restart_count: 0 }),
+                    _ => {
+                        return Err(Error::Internal(
+                            "container resource has drifted out of sync from a started state: cannot recover".to_string(),
+                        ))
+                    }
+                },
+                Err(DockerError::DockerResponseServerError {
+                    status_code: 404, ..
+                }) => {
+                    // container not found, let's try to recreate it
+                    // with the same image
+                    Self::Creating(ServiceCreating::from_container(container, 0)?)
+                }
+                Err(err) => return Err(Error::Docker(err)),
+            },
+            Self::Running(ServiceRunning { container, stats, service})
+             => match container
+                .clone()
+                .refresh(ctx)
+                .await
+            {
+                Ok(container) => match safe_unwrap!(container.state.status) {
+                    ContainerStateStatusEnum::RUNNING => {
+                        Self::Running(ServiceRunning {container, service, stats})
                     }
                     // Restart the container if it went down
                     ContainerStateStatusEnum::EXITED => Self::Restarting(ServiceRestarting  { container, restart_count: 0 }),

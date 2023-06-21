@@ -102,9 +102,9 @@ impl ServiceCreating {
     ) -> Result<(CreateContainerOptions<String>, Config<String>), Error> {
         let ContainerSettings {
             prefix,
-            is_next,
             provisioner_host,
             auth_uri,
+            runnable_deployment,
             ..
         } = ctx.container_settings().ok_or(Error::Internal(
             "missing container settings required by the creating step".to_string(),
@@ -133,7 +133,7 @@ impl ServiceCreating {
         let mut cmd = vec!["--port", port.as_str()];
         // Currently, shuttle-next doesn't support a significant amount of Shuttle resources, so
         // we're completting the args here only for the alpha runtime.
-        if !*is_next {
+        if !runnable_deployment.is_next {
             cmd.extend([
                 "--storage-manager-type",
                 "artifacts",
@@ -156,6 +156,7 @@ impl ServiceCreating {
                     "Hostname": format!("{prefix}{service_id}"), // TODO: add volumes migration APIs
                     "Labels": {
                         "shuttle.service_id": service_id,
+                        "shuttle.service_name": runnable_deployment.service_name,
                         "shuttle.idle_minutes": format!("{idle_minutes}"),
                         "shuttle.deployment_id": deployment_id
                     },

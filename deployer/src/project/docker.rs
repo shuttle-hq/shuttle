@@ -1,8 +1,11 @@
+use tokio::sync::mpsc::Sender;
+
 use async_trait::async_trait;
 use bollard::{errors::Error as DockerError, service::ContainerInspectResponse, Docker};
 use shuttle_common::models::project::IDLE_MINUTES;
 use ulid::Ulid;
 
+use crate::deployment::RunnableDeployment;
 use crate::runtime_manager::RuntimeManager;
 use crate::safe_unwrap;
 
@@ -15,7 +18,8 @@ pub struct ContainerSettingsBuilder {
     provisioner: Option<String>,
     auth_uri: Option<String>,
     network_name: Option<String>,
-    is_next: bool,
+    runtime_start_channel: Option<Sender<RunnableDeployment>>,
+    runnable_deployment: Option<RunnableDeployment>,
 }
 
 impl Default for ContainerSettingsBuilder {
@@ -32,7 +36,8 @@ impl ContainerSettingsBuilder {
             provisioner: None,
             auth_uri: None,
             network_name: None,
-            is_next: false,
+            runnable_deployment: None,
+            runtime_start_channel: None,
         }
     }
 
@@ -61,8 +66,13 @@ impl ContainerSettingsBuilder {
         self
     }
 
-    pub fn is_next(mut self, is_next: bool) -> Self {
-        self.is_next = is_next;
+    pub fn runnable_deployment(mut self, runnable_deployment: RunnableDeployment) -> Self {
+        self.runnable_deployment = Some(runnable_deployment);
+        self
+    }
+
+    pub fn runtime_start_channel(mut self, sender: Sender<RunnableDeployment>) -> Self {
+        self.runtime_start_channel = Some(sender);
         self
     }
 
@@ -83,24 +93,34 @@ impl ContainerSettingsBuilder {
             .network_name
             .take()
             .expect("to provide a network name to the container settings");
+        let runtime_start_channel = self
+            .runtime_start_channel
+            .take()
+            .expect(" to provide a channel to be used for starting a runable deployment");
+        let runnable_deployment = self
+            .runnable_deployment
+            .take()
+            .expect("to provide a runnable deployment");
 
         ContainerSettings {
             prefix,
             provisioner_host,
             auth_uri,
             network_name,
-            is_next: self.is_next,
+            runnable_deployment,
+            runtime_start_channel,
         }
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct ContainerSettings {
     pub prefix: String,
     pub provisioner_host: String,
     pub auth_uri: String,
     pub network_name: String,
-    pub is_next: bool,
+    pub runnable_deployment: RunnableDeployment,
+    pub runtime_start_channel: Sender<RunnableDeployment>,
 }
 
 impl ContainerSettings {

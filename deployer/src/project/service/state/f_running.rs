@@ -1,9 +1,6 @@
 use std::{collections::VecDeque, net::Ipv4Addr};
 
-use crate::{
-    project::{docker::DockerContext, service::Service},
-    runtime_manager::RuntimeManager,
-};
+use crate::project::{docker::DockerContext, service::Service};
 use async_trait::async_trait;
 use bollard::{container::Stats, service::ContainerInspectResponse};
 use serde::{Deserialize, Serialize};
@@ -47,12 +44,5 @@ where
 impl ServiceRunning {
     pub fn target_ip(&self) -> Ipv4Addr {
         self.service.target
-    }
-
-    pub async fn is_healthy(
-        &mut self,
-        runtime_manager: RuntimeManager,
-    ) -> Result<bool, super::super::error::Error> {
-        self.service.is_healthy(runtime_manager).await
     }
 }

@@ -6,11 +6,12 @@ use async_trait::async_trait;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use chrono::Utc;
 use dal::{Dal, Deployment, Service};
+use deployment::RunnableDeployment;
 use derive_builder::Builder;
 use error::{Error, Result};
 use futures::TryFutureExt;
 use http::Uri;
-use project::docker::{ContainerSettings, ServiceDockerContext};
+use project::docker::{ContainerInspectResponseExt, ContainerSettings, ServiceDockerContext};
 use project::service::state::a_creating::ServiceCreating;
 use project::service::state::f_running::ServiceRunning;
 use project::service::state::StateVariant;
@@ -26,14 +27,14 @@ use shuttle_common::{
 use shuttle_proto::auth::AuthPublicKey;
 use shuttle_proto::deployer::{
     deployer_server::{Deployer, DeployerServer},
-    DeployRequest, DeployResponse, Deployment as ProtoDeployment,
+    DeployRequest, DeployResponse,
 };
 use shuttle_proto::deployer::{DestroyDeploymentRequest, DestroyDeploymentResponse};
+use tokio::sync::mpsc::{self, Sender};
 use tonic::{transport::Server, Response, Result as TonicResult};
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info, instrument};
 use ulid::Ulid;
 
-use crate::deployment::DeploymentManager;
 use crate::project::task;
 use crate::project::worker::{TaskRouter, Worker};
 
@@ -43,6 +44,32 @@ pub mod deployment;
 pub mod error;
 pub mod project;
 pub mod runtime_manager;
+
+const RUN_BUFFER_SIZE: usize = 100;
+
+#[derive(Default)]
+pub struct GitMetadata {
+    git_commit_hash: Option<String>,
+    git_branch: Option<String>,
+    git_dirty: Option<bool>,
+    git_commit_message: Option<String>,
+}
+
+impl GitMetadata {
+    pub fn new(
+        git_branch: Option<String>,
+        git_commit_hash: Option<String>,
+        git_commit_message: Option<String>,
+        git_dirty: Option<bool>,
+    ) -> Self {
+        GitMetadata {
+            git_commit_hash,
+            git_branch,
+            git_dirty,
+            git_commit_message,
+        }
+    }
+}
 
 #[derive(Builder, Clone)]
 pub struct DeployerServiceConfig {
@@ -55,37 +82,37 @@ pub struct DeployerServiceConfig {
 }
 
 pub struct DeployerService<D: Dal + Send + Sync + 'static> {
-    deployment_manager: DeploymentManager<D>,
     runtime_manager: RuntimeManager,
     docker: Docker,
     dal: D,
     task_router: TaskRouter<BoxedTask>,
-    sender:
+    deployment_state_machine_channel:
         tokio::sync::mpsc::Sender<Box<dyn Task<(), Output = (), Error = project::error::Error>>>,
+    runtime_start_channel: Sender<RunnableDeployment>,
     config: DeployerServiceConfig,
 }
 
 impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     pub async fn new(dal: D, config: DeployerServiceConfig) -> Self {
-        let runtime_manager = RuntimeManager::new();
-        let deployment_manager = DeploymentManager::builder()
-            .runtime(runtime_manager.clone())
-            .dal(dal.clone())
-            .build();
+        let runtime_manager = RuntimeManager::default();
 
         // We create the worker who handles creation of workers per service.
         // We're sending through this channel the work that needs to be taken
         // care of for a service.
         let worker = Worker::new();
-        let sender: tokio::sync::mpsc::Sender<
-            Box<dyn Task<(), Output = (), Error = project::error::Error>>,
-        > = worker.sender();
+        let deployment_state_machine_channel = worker.sender();
         tokio::spawn(
             worker
                 .start()
                 .map_ok(|_| info!("worker terminated successfully"))
                 .map_err(|err| error!("worker error: {}", err)),
         );
+        let (runtime_start_channel, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
+        tokio::spawn(deployment::task(
+            dal.clone(),
+            run_recv,
+            runtime_manager.clone(),
+        ));
 
         Self {
             docker: Docker::connect_with_unix(
@@ -99,9 +126,9 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             .expect("to initialize docker connection the installed docker daemon"),
             runtime_manager,
             dal,
-            deployment_manager,
             task_router: TaskRouter::default(),
-            sender,
+            deployment_state_machine_channel,
+            runtime_start_channel,
             config,
         }
     }
@@ -113,33 +140,34 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         info!(count = %runnable_deployments.len(), "enqueuing runnable deployments");
         for existing_deployment in runnable_deployments {
             // We want to restart the corresponding deployment service container.
-            let image_name = self
+            let state = self
                 .dal
                 .service(&existing_deployment.service_id)
                 .await?
-                .state
+                .state;
+
+            // Clean the previous docker container if any.
+            let runnable_deployment = RunnableDeployment {
+                deployment_id: existing_deployment.id,
+                service_name: existing_deployment.service_name,
+                service_id: existing_deployment.service_id,
+                tracing_context: Default::default(),
+                claim: None,
+                target_ip: state.target_ip(self.config.network_name.as_str()).ok(),
+                is_next: existing_deployment.is_next,
+            };
+            let image_name = state
                 .image()
                 .map_err(|err| Error::Internal(err.to_string()))?;
-            // Clean the previous docker container if any.
+
             self.instate_service(
-                &existing_deployment.service_id,
-                &existing_deployment.id,
-                existing_deployment.service_name,
+                runnable_deployment,
+                GitMetadata::default(),
                 image_name.clone(),
                 existing_deployment.idle_minutes,
-                true,
+                false,
             )
             .await?;
-
-            self.instate_deployment(
-                image_name,
-                existing_deployment.service_id,
-                existing_deployment.id,
-                // We don't need a claim to start again an existing running deployment.
-                None,
-                existing_deployment.is_next,
-            )
-            .await;
         }
 
         let mut server_builder = Server::builder()
@@ -161,167 +189,94 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         Ok(())
     }
 
+    // Ensures this service is created and the runtime loaded & started.
     pub async fn instate_service(
         &self,
-        service_id: &Ulid,
-        deployment_id: &Ulid,
-        service_name: String,
+        runnable_deployment: RunnableDeployment,
+        git_metadata: GitMetadata,
         image_name: String,
         idle_minutes: u64,
-        overwrite: bool,
+        force: bool,
     ) -> Result<()> {
+        // The creating step might be required, initing now.
         let creating = ServiceState::Creating(ServiceCreating::new(
-            *service_id,
-            *deployment_id,
-            image_name,
+            runnable_deployment.service_id,
+            runnable_deployment.deployment_id,
+            image_name.clone(),
             idle_minutes,
         ));
 
         // If the service already lives in the persistence with a previous state.
         if let Some(state) = self
             .dal
-            .service_state(service_id)
+            .service_state(&runnable_deployment.service_id)
             .await
             .map_err(Error::Dal)?
         {
-            // But is in the destroyed state.
-            if state.is_destroyed() {
-                // Update the state to creating, to reinstate it.
+            // But the container is not on the running path and the instating is with force.
+            if (state.is_destroyed() || state.is_stopped() || state.is_completed()) && force {
+                // Update the state to creating.
                 self.dal
-                    .update_service_state(*service_id, creating)
+                    .update_service_state(runnable_deployment.service_id, creating)
                     .await
                     .map_err(Error::Dal)?;
-            } else if state.is_running() || state.is_starting() || overwrite {
-                // When overwritting, we must make sure we're transitioning to a new state
-                // on clean. This is done by destroying the previous deployment.
-                let dal = self.dal.clone();
-                let task_router = self.task_router.clone();
-                let docker = self.docker.clone();
-                let runtime_manager = self.runtime_manager.clone();
-                let sender = self.sender.clone();
-                let service_id = *service_id;
-
-                // Destroy the existing service sandbox.
-                TaskBuilder::new(dal)
-                    .task_router(task_router)
-                    .service_id(service_id)
-                    .service_docker_context(ServiceDockerContext::new(docker, runtime_manager))
-                    .and_then(task::destroy())
-                    .and_then(task::run_until_done())
-                    .send(&sender)
-                    .await
-                    .expect("to get a handle of the created task")
-                    .await;
-
-                // Update the service with the creating state.
-                self.dal
-                    .update_service_state(service_id, creating)
-                    .await
-                    .map_err(Error::Dal)?;
-            } else {
-                // Otherwise it already exists
-                return Err(Error::ServiceAlreadyExists);
             }
         } else {
             // Insert the service.
             let service = Service {
-                id: *service_id,
-                name: service_name,
+                id: runnable_deployment.service_id,
+                name: runnable_deployment.service_name.clone(),
                 state_variant: creating.to_string(),
                 state: creating,
             };
-
             self.dal
                 .insert_service_if_absent(service)
                 .await
                 .map_err(Error::Dal)?;
+
+            // Insert the new deployment.
+            let deployment = Deployment {
+                id: runnable_deployment.deployment_id,
+                service_id: runnable_deployment.service_id,
+                last_update: Utc::now(),
+                is_next: runnable_deployment.is_next,
+                git_branch: git_metadata.git_branch,
+                git_commit_hash: git_metadata.git_commit_hash,
+                git_commit_message: git_metadata.git_commit_message,
+                git_dirty: git_metadata.git_dirty,
+            };
+            self.dal.insert_deployment(deployment).await?;
         }
 
+        // We want to refresh the service.
+        let service_id = runnable_deployment.service_id;
+        let cs = ContainerSettings::builder()
+            .image(image_name)
+            .provisioner_host(self.config.provisioner_uri.to_string())
+            .auth_uri(self.config.auth_uri.to_string())
+            .network_name(self.config.network_name.to_string())
+            .runnable_deployment(runnable_deployment)
+            .runtime_start_channel(self.runtime_start_channel.clone())
+            .prefix(self.config.prefix.to_string())
+            .build()
+            .await;
+
+        TaskBuilder::new(self.dal.clone())
+            .task_router(self.task_router.clone())
+            .service_id(service_id)
+            .service_docker_context(ServiceDockerContext::new_with_container_settings(
+                self.docker.clone(),
+                cs,
+                self.runtime_manager.clone(),
+            ))
+            .and_then(task::refresh())
+            .and_then(task::run_until_done())
+            .send(&self.deployment_state_machine_channel)
+            .await
+            .expect("to get a handle of the created task")
+            .await;
+
         Ok(())
-    }
-
-    pub async fn create_deployment(
-        &self,
-        id: Ulid,
-        req_deployment: ProtoDeployment,
-    ) -> Result<Deployment> {
-        // Insert the new deployment.
-        let service_id: Ulid =
-            Ulid::from_string(req_deployment.service_id.as_str()).map_err(Error::UlidDecode)?;
-        let deployment = Deployment {
-            id,
-            service_id,
-            last_update: Utc::now(),
-            is_next: req_deployment.is_next,
-            git_branch: req_deployment.git_branch,
-            git_commit_hash: req_deployment.git_commit_hash,
-            git_commit_message: req_deployment.git_commit_message,
-            git_dirty: req_deployment.git_dirty,
-        };
-        self.dal.insert_deployment(deployment.clone()).await?;
-        debug!("created deployment");
-        Ok(deployment)
-    }
-
-    // Establish a deployment based on the state found in persistence and based on
-    // the deployer configuration data.
-    async fn instate_deployment(
-        &self,
-        image_name: String,
-        service_id: Ulid,
-        deployment_id: Ulid,
-        claim: Option<Claim>,
-        is_next: bool,
-    ) {
-        // Start the deplyoment sandbox and run the shuttle-runtime in a separate task.
-        let provisioner_uri = self.config.provisioner_uri.to_string();
-        let auth_uri = self.config.auth_uri.to_string();
-        let network_name = self.config.network_name.clone();
-        let prefix = self.config.prefix.clone();
-        let dal = self.dal.clone();
-        let task_router = self.task_router.clone();
-        let deployment_manager = self.deployment_manager.clone();
-        let docker = self.docker.clone();
-        let runtime_manager = self.runtime_manager.clone();
-        let sender = self.sender.clone();
-        tokio::spawn(async move {
-            let cs = ContainerSettings::builder()
-                .image(image_name)
-                .provisioner_host(provisioner_uri)
-                .auth_uri(auth_uri)
-                .network_name(network_name.clone())
-                .prefix(prefix)
-                .build()
-                .await;
-            debug!("driving the task for the docker container creation");
-            // Awaiting on the task handle waits for the check_health to pass.
-            TaskBuilder::new(dal)
-                .task_router(task_router)
-                .service_id(service_id)
-                .service_docker_context(ServiceDockerContext::new_with_container_settings(
-                    docker,
-                    cs,
-                    runtime_manager,
-                ))
-                .and_then(task::run_until_done())
-                .and_then(task::check_health())
-                .send(&sender)
-                .await
-                .expect("to get a handle of the created task")
-                .await;
-
-            // Running the deployment after the previous task ends is a requirement because
-            // this is how we guarantee the container is up and ready to receive requests.
-            deployment_manager
-                .run_deployment(
-                    service_id,
-                    deployment_id,
-                    network_name.as_str(),
-                    claim,
-                    is_next,
-                )
-                .await
-        });
     }
 }
 
@@ -333,9 +288,9 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         request: tonic::Request<DeployRequest>,
     ) -> TonicResult<tonic::Response<DeployResponse>, tonic::Status> {
         // Authorize the request.
-        request.verify(Scope::DeploymentWrite)?;
+        // request.verify(Scope::DeploymentWrite)?;
 
-        let claim = request.extensions().get::<Claim>().cloned();
+        // let claim = request.extensions().get::<Claim>().cloned();
         let request = request.into_inner();
         let req_deployment = match request.deployment {
             Some(inner) => inner,
@@ -359,16 +314,35 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
             }
         };
 
+        // Create the deployment.
         let deployment_id = Ulid::new();
+        let is_next = req_deployment.is_next;
+        let service_name: String = req_deployment.service_name.clone();
+        let image_name = req_deployment.image_name.clone();
+        let idle_minutes = u64::from(req_deployment.idle_minutes);
+        let runnable_deployment = RunnableDeployment {
+            deployment_id,
+            service_name,
+            service_id,
+            tracing_context: Default::default(),
+            claim: None, // TODO: add a proper claim
+            target_ip: None,
+            is_next,
+        };
+        let git_metadata = GitMetadata::new(
+            req_deployment.git_branch,
+            req_deployment.git_commit_hash,
+            req_deployment.git_commit_message,
+            req_deployment.git_dirty,
+        );
 
-        // Instate the service in the creating state.
+        // Instate the service.
         match self
             .instate_service(
-                &service_id,
-                &deployment_id,
-                req_deployment.service_name.clone(),
-                req_deployment.image_name.clone(),
-                u64::from(req_deployment.idle_minutes),
+                runnable_deployment,
+                git_metadata,
+                image_name,
+                idle_minutes,
                 false,
             )
             .await
@@ -382,23 +356,6 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
                 }))
             }
         };
-
-        // Create the deployment.
-        let is_next = req_deployment.is_next;
-        let image_name = req_deployment.image_name.clone();
-        let deployment = match self.create_deployment(deployment_id, req_deployment).await {
-            Ok(inner) => inner,
-            Err(err) => {
-                return Ok(Response::new(DeployResponse {
-                    success: false,
-                    message: Some(err.to_string()),
-                    deployment_id: None,
-                }))
-            }
-        };
-
-        self.instate_deployment(image_name, service_id, deployment.id, claim, is_next)
-            .await;
 
         Ok(Response::new(DeployResponse {
             success: true,
@@ -442,7 +399,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         let task_router = self.task_router.clone();
         let docker = self.docker.clone();
         let runtime_manager = self.runtime_manager.clone();
-        let sender = self.sender.clone();
+        let sender = self.deployment_state_machine_channel.clone();
 
         // Destroy the existing service sandbox.
         match TaskBuilder::new(dal)

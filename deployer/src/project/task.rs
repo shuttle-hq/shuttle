@@ -141,15 +141,15 @@ pub fn start() -> impl Task<ServiceTaskContext, Output = ServiceState, Error = E
 pub fn check_health() -> impl Task<ServiceTaskContext, Output = ServiceState, Error = Error> {
     run(|ctx| async move {
         match ctx.state.refresh(&ctx.docker_context).await {
-            Ok(ServiceState::Running(mut ready)) => {
+            Ok(ServiceState::Ready(mut ready)) => {
                 if ready
                     .is_healthy(ctx.docker_context.runtime_manager())
                     .await
                     .is_ok()
                 {
-                    TaskResult::Done(ServiceState::Running(ready))
+                    TaskResult::Done(ServiceState::Ready(ready))
                 } else {
-                    TaskResult::Done(ServiceState::Running(ready).reboot().unwrap())
+                    TaskResult::Done(ServiceState::Ready(ready).reboot().unwrap())
                 }
             }
             Ok(update) => TaskResult::Done(update),

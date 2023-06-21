@@ -166,6 +166,26 @@ async fn get_projects_list(
     Ok(AxumJson(projects))
 }
 
+/// Get all projects, this requires an admin bearer token.
+#[utoipa::path(
+    post,
+    path = "/admin/projects",
+    responses(
+        (status = 200, description = "Successfully fetched the projects list.", body = shuttle_common::models::project::AdminResponse),
+        (status = 500, description = "Server internal error.")
+    ),
+    security(
+        ("api_key" = [])
+    )
+)]
+async fn get_projects(
+    State(RouterState { service, .. }): State<RouterState>,
+) -> Result<AxumJson<Vec<project::AdminResponse>>, Error> {
+    let projects = service.iter_projects().await?.map(Into::into).collect();
+
+    Ok(AxumJson(projects))
+}
+
 // TODO: route deployer control plane requests
 
 #[instrument(skip_all, fields(%email, ?acme_server))]
@@ -755,6 +775,7 @@ impl ApiBuilder {
 
     pub fn with_default_routes(mut self) -> Self {
         let admin_routes = Router::new()
+            .route("/projects", get(get_projects))
             // TODO: The `/swagger-ui` responds with a 303 See Other response which is followed in
             // browsers but leads to 404 Not Found. This must be investigated.
             .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))

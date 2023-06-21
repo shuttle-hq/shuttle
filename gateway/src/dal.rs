@@ -10,7 +10,7 @@ use sqlx::{
 };
 use tracing::{error, info};
 
-use crate::{acme::CustomDomain, AccountName, ProjectName};
+use crate::{acme::CustomDomain, AccountName, ProjectDetails, ProjectName};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -42,6 +42,8 @@ impl fmt::Display for DalError {
 pub trait Dal {
     /// Find project by project name.
     async fn get_project(&self, project_name: &ProjectName) -> Result<ProjectName, DalError>;
+    /// Get all the projects in the gateway state.
+    async fn get_all_projects(&self) -> Result<Vec<ProjectDetails>, DalError>;
     /// Get the name of all projects belonging to a user.
     async fn get_user_projects(
         &self,
@@ -139,6 +141,20 @@ impl Dal for Sqlite {
             .await?
             .map(|row| row.get("project_name"))
             .ok_or(DalError::ProjectNotFound)?;
+
+        Ok(result)
+    }
+
+    async fn get_all_projects(&self) -> Result<Vec<ProjectDetails>, DalError> {
+        let result = query("SELECT project_name, account_name FROM projects")
+            .fetch_all(&self.pool)
+            .await?
+            .iter()
+            .map(|row| ProjectDetails {
+                project_name: row.try_get("project_name").unwrap(),
+                account_name: row.try_get("account_name").unwrap(),
+            })
+            .collect();
 
         Ok(result)
     }

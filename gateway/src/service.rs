@@ -13,7 +13,7 @@ use x509_parser::time::ASN1Time;
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
 use crate::dal::{Dal, Sqlite};
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
-use crate::{AccountName, Error, ErrorKind, ProjectName};
+use crate::{AccountName, Error, ErrorKind, ProjectDetails, ProjectName};
 
 #[derive(Clone)]
 pub struct GatewayService {
@@ -36,6 +36,15 @@ impl GatewayService {
         let result = self.dal.get_project(project_name).await?;
 
         Ok(result)
+    }
+
+    /// Fetch an iterator over all projects.
+    pub async fn iter_projects(
+        &self,
+    ) -> Result<impl ExactSizeIterator<Item = ProjectDetails>, Error> {
+        let iter = self.dal.get_all_projects().await?.into_iter();
+
+        Ok(iter)
     }
 
     pub async fn iter_user_projects(

@@ -186,6 +186,7 @@ impl Dal for Sqlite {
             .bind(name)
             .bind(state_variant)
             .bind(last_update.timestamp())
+            .bind(project_id.to_string())
             .bind(SqlxJson(state))
             .bind(last_update.timestamp())
             .bind(project_id.to_string())

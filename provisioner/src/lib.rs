@@ -466,7 +466,16 @@ impl Provisioner for MyProvisioner {
     ) -> Result<Response<QdrantResponse>, Status> {
         verify_claim(&request)?;
 
-        todo!()
+        let QdrantRequest {
+            project_name: _,
+            url,
+            api_key,
+        } = request.into_inner();
+
+        Ok(Response::new(QdrantResponse {
+            url,
+            api_key: Some(api_key),
+        }))
     }
 }
 

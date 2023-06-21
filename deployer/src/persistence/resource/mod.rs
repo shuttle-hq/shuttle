@@ -95,6 +95,7 @@ impl FromStr for Type {
                 "secrets" => Ok(Self::Secrets),
                 "static_folder" => Ok(Self::StaticFolder),
                 "persist" => Ok(Self::Persist),
+                "qdrant" => Ok(Self::Qdrant),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }

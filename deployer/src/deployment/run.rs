@@ -420,7 +420,8 @@ mod tests {
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
-            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, QdrantRequest,
+            QdrantResponse,
         },
         runtime::{StopReason, SubscribeStopResponse},
     };
@@ -461,6 +462,13 @@ mod tests {
             _request: tonic::Request<DatabaseRequest>,
         ) -> Result<tonic::Response<DatabaseResponse>, tonic::Status> {
             panic!("no run tests should request a db");
+        }
+
+        async fn provision_qdrant(
+            &self,
+            _request: tonic::Request<QdrantRequest>,
+        ) -> Result<tonic::Response<QdrantResponse>, tonic::Status> {
+            panic!("no layer tests should request qdrant")
         }
 
         async fn delete_database(

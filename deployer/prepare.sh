@@ -14,6 +14,7 @@ if [[ $PROD != "true" ]]; then
 
     shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" }
     shuttle-persist = { path = "/usr/src/shuttle/resources/persist" }
+    shuttle-qdrant = { path = "/usr/src/shuttle/resources/qdrant" }
     shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
     shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
     shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }

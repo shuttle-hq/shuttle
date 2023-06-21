@@ -4,7 +4,7 @@ use clap::{Parser, ValueEnum};
 use fqdn::FQDN;
 use http::Uri;
 
-#[derive(Clone, Parser)]
+#[derive(Clone, Parser, Debug)]
 pub struct Args {
     /// Address to bind the control plane to
     #[arg(long, default_value = "127.0.0.1:8001")]

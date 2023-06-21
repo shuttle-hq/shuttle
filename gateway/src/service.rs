@@ -1,68 +1,69 @@
 use fqdn::{Fqdn, FQDN};
-use hyper::client::connect::dns::GaiResolver;
-use hyper::client::HttpConnector;
-use hyper::Client;
-use hyper_reverse_proxy::ReverseProxy;
 use instant_acme::{AccountCredentials, ChallengeType};
-use once_cell::sync::Lazy;
-use sqlx::migrate::Migrator;
-use sqlx::sqlite::SqlitePool;
-use sqlx::{query, Error as SqlxError, Row};
 use std::io::Cursor;
 use std::ops::Sub;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::warn;
 use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
 use x509_parser::prelude::parse_x509_pem;
 use x509_parser::time::ASN1Time;
 
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
+use crate::dal::{Dal, Sqlite};
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
-use crate::{Error, ErrorKind, ProjectDetails, ProjectName};
+use crate::{AccountName, Error, ErrorKind, ProjectName};
 
-pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
-static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
-    Lazy::new(|| ReverseProxy::new(Client::new()));
-
-impl From<SqlxError> for Error {
-    fn from(err: SqlxError) -> Self {
-        debug!("internal SQLx error: {err}");
-        Self::source(ErrorKind::Internal, err)
-    }
-}
-
+#[derive(Clone)]
 pub struct GatewayService {
-    db: SqlitePool,
+    dal: Arc<dyn Dal + Send + Sync + 'static>,
     state_location: PathBuf,
-    proxy_fqdn: String,
+    proxy_fqdn: FQDN,
 }
 
 impl GatewayService {
     /// Initialize `GatewayService` and its required dependencies.
-    ///
-    /// * `args` - The [`Args`] with which the service was
-    /// started. Will be passed as [`Context`] to workers and state.
-    pub async fn init(db: SqlitePool, state_location: PathBuf, proxy_fqdn: String) -> Self {
+    pub async fn init(dal: Sqlite, state_location: PathBuf, proxy_fqdn: FQDN) -> Self {
         Self {
-            db,
+            dal: Arc::new(dal),
             state_location,
             proxy_fqdn,
         }
     }
 
-    pub async fn control_key_from_project_name(
+    pub async fn find_project(&self, project_name: &ProjectName) -> Result<ProjectName, Error> {
+        let result = self.dal.get_project(project_name).await?;
+
+        Ok(result)
+    }
+
+    pub async fn iter_user_projects(
         &self,
-        project_name: &ProjectName,
-    ) -> Result<String, Error> {
-        let control_key = query("SELECT initial_key FROM projects WHERE project_name = ?1")
-            .bind(project_name)
-            .fetch_optional(&self.db)
-            .await?
-            .map(|row| row.try_get("initial_key").unwrap())
-            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))?;
-        Ok(control_key)
+        account_name: &AccountName,
+    ) -> Result<impl Iterator<Item = ProjectName>, Error> {
+        let iter = self
+            .dal
+            .get_user_projects(account_name)
+            .await
+            .map(|projects| projects.into_iter())?;
+
+        Ok(iter)
+    }
+
+    pub async fn iter_user_projects_paginated(
+        &self,
+        account_name: &AccountName,
+        offset: u32,
+        limit: u32,
+    ) -> Result<impl Iterator<Item = ProjectName>, Error> {
+        let iter = self
+            .dal
+            .get_user_projects_paginated(account_name, offset, limit)
+            .await
+            .map(|projects| projects.into_iter())?;
+
+        Ok(iter)
     }
 
     pub async fn create_custom_domain(
@@ -72,84 +73,42 @@ impl GatewayService {
         certs: &str,
         private_key: &str,
     ) -> Result<(), Error> {
-        query("INSERT OR REPLACE INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
-            .bind(fqdn.to_string())
-            .bind(project_name)
-            .bind(certs)
-            .bind(private_key)
-            .execute(&self.db)
+        self.dal
+            .create_custom_domain(project_name, fqdn, certs, private_key)
             .await?;
 
         Ok(())
     }
 
     pub async fn iter_custom_domains(&self) -> Result<impl Iterator<Item = CustomDomain>, Error> {
-        query("SELECT fqdn, project_name, certificate, private_key FROM custom_domains")
-            .fetch_all(&self.db)
+        let result = self
+            .dal
+            .get_custom_domains()
             .await
-            .map(|res| {
-                res.into_iter().map(|row| CustomDomain {
-                    fqdn: row.get::<&str, _>("fqdn").parse().unwrap(),
-                    project_name: row.try_get("project_name").unwrap(),
-                    certificate: row.get("certificate"),
-                    private_key: row.get("private_key"),
-                })
-            })
-            .map_err(|_| Error::from_kind(ErrorKind::Internal))
+            .map(|domains| domains.into_iter())?;
+
+        Ok(result)
     }
 
     pub async fn find_custom_domain_for_project(
         &self,
         project_name: &ProjectName,
     ) -> Result<CustomDomain, Error> {
-        let custom_domain = query(
-            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains WHERE project_name = ?1",
-        )
-        .bind(project_name.to_string())
-        .fetch_optional(&self.db)
-        .await?
-        .map(|row| CustomDomain {
-            fqdn: row.get::<&str, _>("fqdn").parse().unwrap(),
-            project_name: row.try_get("project_name").unwrap(),
-            certificate: row.get("certificate"),
-            private_key: row.get("private_key"),
-        })
-        .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
-        Ok(custom_domain)
+        let result = self
+            .dal
+            .find_custom_domain_for_project(project_name)
+            .await?;
+
+        Ok(result)
     }
 
     pub async fn project_details_for_custom_domain(
         &self,
         fqdn: &Fqdn,
     ) -> Result<CustomDomain, Error> {
-        let custom_domain = query(
-            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains WHERE fqdn = ?1",
-        )
-        .bind(fqdn.to_string())
-        .fetch_optional(&self.db)
-        .await?
-        .map(|row| CustomDomain {
-            fqdn: row.get::<&str, _>("fqdn").parse().unwrap(),
-            project_name: row.try_get("project_name").unwrap(),
-            certificate: row.get("certificate"),
-            private_key: row.get("private_key"),
-        })
-        .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
-        Ok(custom_domain)
-    }
+        let result = self.dal.project_details_for_custom_domain(fqdn).await?;
 
-    pub async fn iter_projects_detailed(
-        &self,
-    ) -> Result<impl Iterator<Item = ProjectDetails>, Error> {
-        let iter = query("SELECT project_name, account_name FROM projects")
-            .fetch_all(&self.db)
-            .await?
-            .into_iter()
-            .map(|row| ProjectDetails {
-                project_name: row.try_get("project_name").unwrap(),
-                account_name: row.try_get("account_name").unwrap(),
-            });
-        Ok(iter)
+        Ok(result)
     }
 
     /// Returns the current certificate as a pair of the chain and private key.
@@ -185,7 +144,7 @@ impl GatewayService {
         acme: &AcmeClient,
         creds: AccountCredentials<'a>,
     ) -> ChainAndPrivateKey {
-        let public: FQDN = self.proxy_fqdn.parse().unwrap();
+        let public = self.proxy_fqdn.clone();
         let identifier = format!("*.{public}");
 
         // Use ::Dns01 challenge because that's the only supported
@@ -287,18 +246,13 @@ pub mod tests {
 
     use super::*;
 
-    use crate::{
-        tests::{assert_err_kind, World},
-        AccountName,
-    };
+    use crate::tests::{assert_err_kind, World};
 
     #[tokio::test]
     async fn service_create_find_custom_domain() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc =
-            Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn().to_string()).await);
+        let svc = Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn()).await);
 
-        let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();
         let domain: FQDN = "neo.the.matrix".parse().unwrap();
         let certificate = "dummy certificate";
@@ -345,10 +299,8 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_custom_domain() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc =
-            Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn().to_string()).await);
+        let svc = Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn()).await);
 
-        let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();
         let domain: FQDN = "neo.the.matrix".parse().unwrap();
         let certificate = "dummy certificate";

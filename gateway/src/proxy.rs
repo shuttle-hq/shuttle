@@ -125,17 +125,13 @@ impl UserProxy {
             .typed_insert(XShuttleProject(project_name.to_string()));
 
         // TODO: get the IP of the project to proxy to from the new deployer.
-        // let project = self
-        //     .gateway
-        //     .find_or_start_project(&project_name, task_sender)
-        //     .await?;
+        let _project = self.gateway.find_project(&project_name).await?;
 
         // Record current project for tracing purposes
         span.record("project", &project_name.to_string());
 
-        let target_ip = project
-            .target_ip()?
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
+        // TODO: get ip from state (the gateway state will get it from deployer)
+        let target_ip = "127.0.0.1";
 
         let target_url = format!("http://{}:{}", target_ip, 8000);
 

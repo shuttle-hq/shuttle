@@ -11,17 +11,19 @@ use std::str::FromStr;
 use acme::AcmeClientError;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use dal::DalError;
 use futures::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use tokio::sync::mpsc::error::SendError;
-use tracing::error;
+use tracing::{debug, error};
 use utoipa::ToSchema;
 
 pub mod acme;
 pub mod api;
 pub mod args;
 pub mod auth;
+pub mod dal;
 pub mod proxy;
 pub mod service;
 pub mod tls;
@@ -64,6 +66,13 @@ impl Error {
 
     pub fn kind(&self) -> ErrorKind {
         self.kind
+    }
+}
+
+impl From<DalError> for Error {
+    fn from(err: DalError) -> Self {
+        debug!("internal SQLx error: {err}");
+        Self::source(ErrorKind::Internal, err)
     }
 }
 
@@ -312,17 +321,14 @@ pub trait Refresh<Ctx>: Sized {
 #[cfg(test)]
 pub mod tests {
     use std::collections::HashMap;
-    use std::env;
     use std::net::SocketAddr;
     use std::str::FromStr;
     use std::sync::{Arc, Mutex};
 
-    use anyhow::{anyhow, Context as AnyhowContext};
     use axum::headers::authorization::Bearer;
     use axum::headers::Authorization;
     use axum::routing::get;
     use axum::{extract, Router, TypedHeader};
-    use bollard::Docker;
     use fqdn::FQDN;
     use futures::prelude::*;
     use hyper::client::HttpConnector;
@@ -330,15 +336,14 @@ pub mod tests {
     use hyper::http::Uri;
     use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
     use jsonwebtoken::EncodingKey;
-    use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
+    use rand::distributions::{Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
     use shuttle_common::backends::auth::ConvertResponse;
     use shuttle_common::claims::{Claim, Scope};
-    use sqlx::SqlitePool;
 
     use crate::acme::AcmeClient;
     use crate::args::{Args, UseTls};
-    use crate::service::MIGRATIONS;
+    use crate::dal::Sqlite;
 
     macro_rules! assert_err_kind {
         {
@@ -443,7 +448,7 @@ pub mod tests {
     pub struct World {
         args: Args,
         hyper: HyperClient<HttpConnector, Body>,
-        pool: SqlitePool,
+        pool: Sqlite,
         acme_client: AcmeClient,
         auth_service: Arc<Mutex<AuthService>>,
         auth_uri: Uri,
@@ -457,14 +462,6 @@ pub mod tests {
 
     impl World {
         pub async fn new() -> Self {
-            let docker = Docker::connect_with_local_defaults().unwrap();
-
-            docker
-                .list_images::<&str>(None)
-                .await
-                .context(anyhow!("A docker daemon does not seem accessible",))
-                .unwrap();
-
             let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
             let user = control + 1;
             let bouncer = user + 1;
@@ -476,21 +473,6 @@ pub mod tests {
             let auth_uri: Uri = format!("http://{auth}").parse().unwrap();
 
             let auth_service = AuthService::new(auth);
-
-            let prefix = format!(
-                "shuttle_test_{}_",
-                Alphanumeric.sample_string(&mut rand::thread_rng(), 4)
-            );
-
-            let image = env::var("SHUTTLE_TESTS_RUNTIME_IMAGE")
-                .unwrap_or_else(|_| "public.ecr.aws/shuttle/deployer:latest".to_string());
-
-            let network_name =
-                env::var("SHUTTLE_TESTS_NETWORK").unwrap_or_else(|_| "shuttle_default".to_string());
-
-            let provisioner_host = "provisioner".to_string();
-
-            let docker_host = "/var/run/docker.sock".to_string();
 
             let args = Args {
                 control,
@@ -504,8 +486,7 @@ pub mod tests {
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
 
-            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-            MIGRATIONS.run(&pool).await.unwrap();
+            let pool = Sqlite::new_in_memory().await;
 
             let acme_client = AcmeClient::new();
 
@@ -523,7 +504,7 @@ pub mod tests {
             self.args.clone()
         }
 
-        pub fn pool(&self) -> SqlitePool {
+        pub fn pool(&self) -> Sqlite {
             self.pool.clone()
         }
 
@@ -532,7 +513,7 @@ pub mod tests {
         }
 
         pub fn fqdn(&self) -> FQDN {
-            self.args.proxy_fqdn
+            self.args.proxy_fqdn.clone()
         }
 
         pub fn acme_client(&self) -> AcmeClient {

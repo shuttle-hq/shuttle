@@ -4,7 +4,7 @@ use std::ops::Sub;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{Extension, Path, State};
+use axum::extract::{Extension, Path, Query, State};
 use axum::handler::Handler;
 use axum::middleware::from_extractor;
 use axum::response::Response;
@@ -23,6 +23,7 @@ use shuttle_common::backends::cache::{CacheManagement, CacheManager};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{AccountTier, InjectPropagation, Scope};
 use shuttle_common::models::error::ErrorKind;
+use shuttle_common::models::project;
 use shuttle_common::request_span;
 use shuttle_proto::auth::auth_client::AuthClient;
 use shuttle_proto::auth::{
@@ -43,7 +44,7 @@ use x509_parser::pem::parse_x509_pem;
 use x509_parser::time::ASN1Time;
 
 use crate::acme::{AcmeClient, CustomDomain};
-use crate::auth::{extract_metadata_cookie, insert_metadata_bearer_token, Key};
+use crate::auth::{extract_metadata_cookie, insert_metadata_bearer_token, Key, ScopedUser, User};
 use crate::service::GatewayService;
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::{AccountName, Error, ProjectName};
@@ -110,6 +111,63 @@ async fn get_status() -> Response<Body> {
         .unwrap()
 }
 
+#[instrument(skip(service))]
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}",
+    responses(
+        (status = 200, description = "Successfully got a specific project information.", body = shuttle_common::models::project::Response),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The name of the project."),
+    )
+)]
+async fn get_project(
+    State(RouterState { service, .. }): State<RouterState>,
+    ScopedUser { scope, .. }: ScopedUser,
+) -> Result<AxumJson<project::Response>, Error> {
+    let project_name = service.find_project(&scope).await?;
+
+    let response = project::Response {
+        name: project_name.to_string(),
+    };
+
+    Ok(AxumJson(response))
+}
+
+#[utoipa::path(
+    get,
+    path = "/projects",
+    responses(
+        (status = 200, description = "Successfully got the projects list.", body = [shuttle_common::models::project::Response]),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        PaginationDetails
+    )
+)]
+async fn get_projects_list(
+    State(RouterState { service, .. }): State<RouterState>,
+    User { name, .. }: User,
+    Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
+) -> Result<AxumJson<Vec<project::Response>>, Error> {
+    let limit = limit.unwrap_or(u32::MAX);
+    let page = page.unwrap_or(0);
+    let projects = service
+        // The `offset` is page size * amount of pages
+        .iter_user_projects_paginated(&name, limit * page, limit)
+        .await?
+        .map(|project_name| project::Response {
+            name: project_name.to_string(),
+        })
+        .collect();
+
+    Ok(AxumJson(projects))
+}
+
+// TODO: route deployer control plane requests
+
 #[instrument(skip_all, fields(%email, ?acme_server))]
 #[utoipa::path(
     post,
@@ -160,33 +218,6 @@ async fn request_custom_domain_acme_certificate(
     let (certs, private_key) = service
         .create_custom_domain_certificate(&fqdn, &acme_client, &project_name, credentials)
         .await?;
-
-    let project = service.find_project(&project_name).await?;
-    let idle_minutes = project.container().unwrap().idle_minutes();
-
-    // TODO: just starting routing requests to this domain to the same deployer project ip?
-    // Destroy and recreate the project with the new domain.
-    // service
-    //     .new_task()
-    //     .project(project_name.clone())
-    //     .and_then(task::destroy())
-    //     .and_then(task::run_until_done())
-    //     .and_then(task::run({
-    //         let fqdn = fqdn.to_string();
-    //         move |ctx| {
-    //             let fqdn = fqdn.clone();
-    //             async move {
-    //                 let creating = ProjectCreating::new_with_random_initial_key(
-    //                     ctx.project_name,
-    //                     idle_minutes,
-    //                 )
-    //                 .with_fqdn(fqdn);
-    //                 TaskResult::Done(Project::Creating(creating))
-    //             }
-    //         }
-    //     }))
-    //     .send(&sender)
-    //     .await?;
 
     let mut buf = Vec::new();
     buf.extend(certs.as_bytes());
@@ -733,6 +764,8 @@ impl ApiBuilder {
             .router
             .route("/", get(get_status))
             .route("/logout", post(logout))
+            .route("/projects/:project_name", get(get_project))
+            .route("/projects", get(get_projects_list))
             .nest("/admin", admin_routes);
 
         self
@@ -787,8 +820,6 @@ impl ApiBuilder {
 
 #[cfg(test)]
 pub mod tests {
-    use std::sync::Arc;
-
     use axum::body::Body;
     use axum::headers::Authorization;
     use axum::http::Request;
@@ -813,14 +844,13 @@ pub mod tests {
         let admin_authorization = Authorization::bearer(AUTH_ADMIN_KEY).unwrap();
 
         let world = World::new().await;
-        let service =
-            Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn().to_string()).await);
+        let service = Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn()).await);
 
         // The address of the auth service we start with `make up`, see the contribution doc.
         let auth_uri: Uri = "http://127.0.0.1:8008".parse().unwrap();
 
         let mut router = ApiBuilder::new()
-            .with_service(Arc::clone(&service))
+            .with_service(service)
             .with_default_routes()
             .with_auth_service(&auth_uri)
             .await
@@ -974,11 +1004,10 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn status() {
         let world = World::new().await;
-        let service =
-            Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn().to_string()).await);
+        let service = Arc::new(GatewayService::init(world.pool(), "".into(), world.fqdn()).await);
 
         let mut router = ApiBuilder::new()
-            .with_service(Arc::clone(&service))
+            .with_service(service)
             .with_default_routes()
             .with_auth_service(&world.context().auth_uri)
             .await

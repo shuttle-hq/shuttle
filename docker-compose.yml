@@ -133,16 +133,10 @@ services:
       - RUST_LOG=${RUST_LOG}
     command:
       - "--state=/var/lib"
-      - "start"
       - "--control=0.0.0.0:8001"
       - "--user=0.0.0.0:8000"
       - "--bouncer=0.0.0.0:7999"
-      - "--image=${CONTAINER_REGISTRY}/deployer:${DEPLOYER_TAG}"
-      - "--prefix=shuttle_"
-      - "--network-name=${STACK}_user-net"
-      - "--docker-host=/var/run/docker.sock"
       - "--auth-uri=http://auth:8000"
-      - "--provisioner-host=provisioner"
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"
     healthcheck:

@@ -1,0 +1,49 @@
+syntax = "proto3";
+package deployer;
+
+service Deployer {
+  rpc Deploy(DeployRequest) returns (DeployResponse);
+  rpc DestroyDeployment(DestroyDeploymentRequest) returns (DestroyDeploymentResponse);
+  rpc TargetIp(TargetIpRequest) returns (TargetIpResponse);
+}
+
+message Deployment {
+  string service_id = 1;
+  string service_name = 2;
+  bool is_next = 3;
+  uint32 idle_minutes = 4;
+  string image_name = 5;
+  optional string git_commit_message = 6;
+  optional string git_commit_hash = 7;
+  optional string git_branch = 8;
+  optional bool git_dirty = 9;
+}
+
+message DeployRequest {
+  Deployment deployment = 1;
+}
+
+message DeployResponse {
+  string deployment_id = 2;
+}
+
+message DestroyDeploymentRequest {
+  // Deployment id we wish to destroy.
+  string deployment_id = 1;
+}
+
+message DestroyDeploymentResponse {}
+
+message TargetIpRequest {
+  // The service id we request the target ip for
+  string service_id = 1;
+  // The project id we request the target ip for
+  string project_id = 2;
+  // If the service_id is on the stopped code path, reinstate it.
+  bool instate = 3;
+}
+
+message TargetIpResponse {
+  // The target ip of the requested service.
+  string target_ip = 1;
+}

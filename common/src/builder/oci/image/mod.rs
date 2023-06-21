@@ -5,7 +5,6 @@ use oci_spec::image::{ImageIndex, ImageManifest};
 use std::fmt;
 use tokio::io::AsyncReadExt;
 use tokio_stream::*;
-
 use url::Url;
 
 mod annotations;

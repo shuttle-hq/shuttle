@@ -3,7 +3,7 @@ use std::{net::SocketAddr, path::PathBuf};
 use clap::Parser;
 use fqdn::FQDN;
 use hyper::Uri;
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::RawProjectName;
 use tonic::transport::Endpoint;
 
 /// Program to handle the deploys for a single project
@@ -37,7 +37,7 @@ pub struct Args {
 
     /// Project being served by this deployer
     #[clap(long)]
-    pub project: ProjectName,
+    pub project: RawProjectName,
 
     /// Secret that will be used to perform admin tasks on this deployer
     #[clap(long)]

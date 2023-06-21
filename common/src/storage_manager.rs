@@ -1,6 +1,6 @@
 use std::{fs, io, path::PathBuf};
 
-use uuid::Uuid;
+use ulid::Ulid;
 
 pub trait StorageManager: Sync + Send {
     /// Path for a specific service build files
@@ -38,7 +38,7 @@ impl ArtifactsStorageManager {
     }
 
     /// Path to executable for a service
-    pub fn deployment_executable_path(&self, deployment_id: &Uuid) -> Result<PathBuf, io::Error> {
+    pub fn deployment_executable_path(&self, deployment_id: &Ulid) -> Result<PathBuf, io::Error> {
         let executable_path = self.executables_path()?.join(deployment_id.to_string());
 
         Ok(executable_path)

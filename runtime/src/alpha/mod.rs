@@ -23,7 +23,7 @@ use shuttle_proto::{
     runtime::{
         self,
         runtime_server::{Runtime, RuntimeServer},
-        LoadRequest, LoadResponse, LogItem, StartRequest, StartResponse, StopReason, StopRequest,
+        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
         StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
@@ -31,7 +31,7 @@ use shuttle_service::{Environment, Factory, Service, ServiceName};
 use tokio::sync::{broadcast, oneshot};
 use tokio::sync::{
     broadcast::Sender,
-    mpsc::{self, UnboundedReceiver, UnboundedSender},
+    mpsc::{self},
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
@@ -41,13 +41,17 @@ use tonic::{
 use tower::ServiceBuilder;
 use tracing::{error, info, trace, warn};
 
-use crate::{provisioner_factory::ProvisionerFactory, Logger, ResourceTracker};
+use crate::{
+    logger::{LogRecorder, OtlpRecorder},
+    provisioner_factory::ProvisionerFactory,
+    Logger, ResourceTracker,
+};
 
 use self::args::Args;
 
 mod args;
 
-pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
+pub async fn start(loader: impl Loader<ProvisionerFactory, OtlpRecorder> + Send + 'static) {
     let args = Args::parse().expect("could not parse arguments");
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
@@ -92,8 +96,6 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
 
 pub struct Alpha<L, S> {
     // Mutexes are for interior mutability
-    logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
-    logs_tx: UnboundedSender<LogItem>,
     stopped_tx: Sender<(StopReason, String)>,
     provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
@@ -110,12 +112,9 @@ impl<L, S> Alpha<L, S> {
         storage_manager: Arc<dyn StorageManager>,
         env: Environment,
     ) -> Self {
-        let (tx, rx) = mpsc::unbounded_channel();
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
-            logs_rx: Mutex::new(Some(rx)),
-            logs_tx: tx,
             stopped_tx,
             kill_tx: Mutex::new(None),
             provisioner_address,
@@ -128,9 +127,10 @@ impl<L, S> Alpha<L, S> {
 }
 
 #[async_trait]
-pub trait Loader<Fac>
+pub trait Loader<Fac, R>
 where
     Fac: Factory,
+    R: LogRecorder,
 {
     type Service: Service;
 
@@ -138,17 +138,18 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
-        logger: Logger,
+        logger: Logger<R>,
     ) -> Result<Self::Service, shuttle_service::Error>;
 }
 
 #[async_trait]
-impl<F, O, Fac, S> Loader<Fac> for F
+impl<F, O, Fac, S, R> Loader<Fac, R> for F
 where
-    F: FnOnce(Fac, ResourceTracker, Logger) -> O + Send,
+    F: FnOnce(Fac, ResourceTracker, Logger<R>) -> O + Send,
     O: Future<Output = Result<S, shuttle_service::Error>> + Send,
     Fac: Factory + 'static,
     S: Service,
+    R: LogRecorder + Send + 'static,
 {
     type Service = S;
 
@@ -156,7 +157,7 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
-        logger: Logger,
+        logger: Logger<R>,
     ) -> Result<Self::Service, shuttle_service::Error> {
         (self)(factory, resource_tracker, logger).await
     }
@@ -165,7 +166,7 @@ where
 #[async_trait]
 impl<L, S> Runtime for Alpha<L, S>
 where
-    L: Loader<ProvisionerFactory, Service = S> + Send + 'static,
+    L: Loader<ProvisionerFactory, OtlpRecorder, Service = S> + Send + 'static,
     S: Service + Send + 'static,
 {
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
@@ -215,8 +216,7 @@ where
         );
         trace!("got factory");
 
-        let logs_tx = self.logs_tx.clone();
-        let logger = Logger::new(logs_tx);
+        let logger = Logger::new(OtlpRecorder);
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
@@ -304,8 +304,6 @@ where
         let service_address = SocketAddr::from_str(&ip)
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
-
-        let _logs_tx = self.logs_tx.clone();
 
         trace!(%service_address, "starting");
 
@@ -419,21 +417,11 @@ where
         &self,
         _request: Request<SubscribeLogsRequest>,
     ) -> Result<Response<Self::SubscribeLogsStream>, Status> {
-        let logs_rx = self.logs_rx.lock().unwrap().deref_mut().take();
+        let (_tx, rx) = mpsc::channel(1);
 
-        if let Some(mut logs_rx) = logs_rx {
-            let (tx, rx) = mpsc::channel(1);
+        // Move logger items into stream to be returned
+        tokio::spawn(async move {});
 
-            // Move logger items into stream to be returned
-            tokio::spawn(async move {
-                while let Some(log) = logs_rx.recv().await {
-                    tx.send(Ok(log)).await.expect("to send log");
-                }
-            });
-
-            Ok(Response::new(ReceiverStream::new(rx)))
-        } else {
-            Err(Status::internal("logs have already been subscribed to"))
-        }
+        Ok(Response::new(ReceiverStream::new(rx)))
     }
 }

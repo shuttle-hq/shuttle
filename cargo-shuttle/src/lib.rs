@@ -82,7 +82,6 @@ impl Shuttle {
                 | Command::Deployment(..)
                 | Command::Resource(..)
                 | Command::Stop
-                | Command::Clean
                 | Command::Secrets
                 | Command::Status
                 | Command::Logs { .. }
@@ -115,7 +114,6 @@ impl Shuttle {
             }
             Command::Resource(ResourceCommand::List) => self.resources_list(&self.client()?).await,
             Command::Stop => self.stop(&self.client()?).await,
-            Command::Clean => self.clean(&self.client()?).await,
             Command::Secrets => self.secrets(&self.client()?).await,
             Command::Project(ProjectCommand::List { page, limit }) => {
                 self.projects_list(&self.client()?, page, limit).await
@@ -318,18 +316,6 @@ impl Shuttle {
         let table = secret::get_table(&secrets);
 
         println!("{table}");
-
-        Ok(())
-    }
-
-    async fn clean(&self, client: &Client) -> Result<()> {
-        let lines = client.clean_project(self.ctx.project_name()).await?;
-
-        for line in lines {
-            println!("{line}");
-        }
-
-        println!("Cleaning done!");
 
         Ok(())
     }

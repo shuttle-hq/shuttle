@@ -119,8 +119,6 @@ pub enum Command {
     Resource(ResourceCommand),
     /// Manage secrets for this shuttle service
     Secrets,
-    /// Remove cargo build artifacts in the shuttle environment
-    Clean,
     /// Login to the shuttle platform
     Login(LoginArgs),
     /// Log out of the shuttle platform

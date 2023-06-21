@@ -92,16 +92,6 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn clean_project(&self, project: &ProjectName) -> Result<Vec<String>> {
-        let path = format!("/projects/{}/clean", project.as_str(),);
-
-        self.post(path, Option::<String>::None)
-            .await
-            .context("failed to get clean output")?
-            .to_json()
-            .await
-    }
-
     pub async fn get_projects_list(&self, page: u32, limit: u32) -> Result<Vec<project::Response>> {
         let path = format!("/projects?page={}&limit={}", page.saturating_sub(1), limit);
 

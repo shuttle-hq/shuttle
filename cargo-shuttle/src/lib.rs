@@ -1224,6 +1224,8 @@ impl Shuttle {
 
         // Make sure the target folder is excluded at all times
         let overrides = OverrideBuilder::new(working_directory)
+            .add("!.git/")
+            .context("add `!.git/` override")?
             .add("!target/")
             .context("add `!target/` override")?
             .build()

@@ -11,9 +11,7 @@ use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::deployment::{
     get_deployments_table, DeploymentRequest, GIT_STRINGS_MAX_LENGTH,
 };
-use shuttle_common::models::project::IDLE_MINUTES;
 use shuttle_common::models::resource::get_resources_table;
-use shuttle_common::project::ProjectName;
 use shuttle_common::{resource, ApiKey};
 use shuttle_proto::runtime::runtime_client::RuntimeClient;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, StopRequest, SubscribeLogsRequest};
@@ -40,7 +38,7 @@ use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use config::RequestContext;
 use crossterm::style::Stylize;
-use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
+use dialoguer::{theme::ColorfulTheme, FuzzySelect, Input, Password};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::{StreamExt, TryFutureExt};
@@ -55,7 +53,7 @@ use tar::Builder;
 use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
-use crate::args::{DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand};
+use crate::args::{DeploymentCommand, ProjectCommand, ResourceCommand};
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
 
@@ -83,13 +81,6 @@ impl Shuttle {
             Command::Deploy(..)
                 | Command::Deployment(..)
                 | Command::Resource(..)
-                | Command::Project(
-                    // ProjectCommand::List does not need to know which project we are in
-                    ProjectCommand::Start { .. }
-                        | ProjectCommand::Stop { .. }
-                        | ProjectCommand::Restart { .. }
-                        | ProjectCommand::Status { .. }
-                )
                 | Command::Stop
                 | Command::Clean
                 | Command::Secrets
@@ -126,19 +117,9 @@ impl Shuttle {
             Command::Stop => self.stop(&self.client()?).await,
             Command::Clean => self.clean(&self.client()?).await,
             Command::Secrets => self.secrets(&self.client()?).await,
-            Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
-                self.project_create(&self.client()?, idle_minutes).await
-            }
-            Command::Project(ProjectCommand::Restart(ProjectStartArgs { idle_minutes })) => {
-                self.project_recreate(&self.client()?, idle_minutes).await
-            }
-            Command::Project(ProjectCommand::Status { follow }) => {
-                self.project_status(&self.client()?, follow).await
-            }
             Command::Project(ProjectCommand::List { page, limit }) => {
                 self.projects_list(&self.client()?, page, limit).await
             }
-            Command::Project(ProjectCommand::Stop) => self.project_delete(&self.client()?).await,
         }
         .map(|_| CommandOutcome::Ok)
     }
@@ -166,8 +147,6 @@ impl Shuttle {
                 println!();
             } else if args.login_args.api_key.is_some() {
                 self.login(args.login_args.clone()).await?;
-            } else if args.create_env {
-                bail!("Tried to login to create a Shuttle environment, but no API key was set.")
             }
         }
 
@@ -228,35 +207,6 @@ impl Shuttle {
                 .expect("to have a project name provided"),
             framework,
         )?;
-        println!();
-
-        // 6. Confirm that the user wants to create the project environment on Shuttle
-        let should_create_environment = if !interactive {
-            args.create_env
-        } else if args.create_env {
-            true
-        } else {
-            let should_create = Confirm::with_theme(&theme)
-                .with_prompt("Do you want to create the project environment on Shuttle?")
-                .default(true)
-                .interact()?;
-
-            println!();
-            should_create
-        };
-
-        if should_create_environment {
-            // Set the project working directory path to the init path,
-            // so `load_project` is ran with the correct project path
-            project_args.working_directory = path;
-
-            self.load_project(&mut project_args)?;
-            self.project_create(&self.client()?, IDLE_MINUTES).await?;
-        } else {
-            println!(
-                "Run `cargo shuttle project start` to create a project environment on Shuttle."
-            );
-        }
 
         Ok(())
     }
@@ -961,33 +911,6 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_create(&self, client: &Client, idle_minutes: u64) -> Result<()> {
-        let config = project::Config { idle_minutes };
-
-        self.wait_with_spinner(
-            &[
-                project::State::Ready,
-                project::State::Errored {
-                    message: Default::default(),
-                },
-            ],
-            client.create_project(self.ctx.project_name(), config),
-            self.ctx.project_name(),
-            client,
-        )
-        .await?;
-        println!("Run `cargo shuttle deploy` to deploy your Shuttle service.");
-
-        Ok(())
-    }
-
-    async fn project_recreate(&self, client: &Client, idle_minutes: u64) -> Result<()> {
-        self.project_delete(client).await?;
-        self.project_create(client, idle_minutes).await?;
-
-        Ok(())
-    }
-
     async fn projects_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
         if limit == 0 {
             println!();
@@ -999,73 +922,6 @@ impl Shuttle {
 
         println!("{projects_table}");
 
-        Ok(())
-    }
-
-    async fn project_status(&self, client: &Client, follow: bool) -> Result<()> {
-        if follow {
-            self.wait_with_spinner(
-                &[
-                    project::State::Ready,
-                    project::State::Destroyed,
-                    project::State::Errored {
-                        message: Default::default(),
-                    },
-                ],
-                client.get_project(self.ctx.project_name()),
-                self.ctx.project_name(),
-                client,
-            )
-            .await?;
-        } else {
-            let project = client.get_project(self.ctx.project_name()).await?;
-            println!("{project}");
-        }
-
-        Ok(())
-    }
-
-    async fn project_delete(&self, client: &Client) -> Result<()> {
-        self.wait_with_spinner(
-            &[
-                project::State::Destroyed,
-                project::State::Errored {
-                    message: Default::default(),
-                },
-            ],
-            client.delete_project(self.ctx.project_name()),
-            self.ctx.project_name(),
-            client,
-        )
-        .await?;
-        println!("Run `cargo shuttle project start` to recreate project environment on Shuttle.");
-
-        Ok(())
-    }
-
-    async fn wait_with_spinner<'a, Fut>(
-        &self,
-        states_to_check: &[project::State],
-        fut: Fut,
-        project_name: &'a ProjectName,
-        client: &'a Client,
-    ) -> Result<(), anyhow::Error>
-    where
-        Fut: std::future::Future<Output = Result<project::Response>> + 'a,
-    {
-        let mut project = fut.await?;
-
-        let progress_bar = create_spinner();
-        loop {
-            if states_to_check.contains(&project.state) {
-                break;
-            }
-
-            progress_bar.set_message(format!("{project}"));
-            project = client.get_project(project_name).await?;
-        }
-        progress_bar.finish_and_clear();
-        println!("{project}");
         Ok(())
     }
 

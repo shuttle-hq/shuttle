@@ -165,18 +165,6 @@ pub enum ResourceCommand {
 
 #[derive(Parser)]
 pub enum ProjectCommand {
-    /// Create an environment for this project on shuttle
-    Start(ProjectStartArgs),
-    /// Check the status of this project's environment on shuttle
-    Status {
-        #[arg(short, long)]
-        /// Follow status of project command
-        follow: bool,
-    },
-    /// Destroy this project's environment (container) on shuttle
-    Stop,
-    /// Destroy and create an environment for this project on shuttle
-    Restart(ProjectStartArgs),
     /// List all projects belonging to the calling account
     List {
         #[arg(long, default_value = "1")]
@@ -187,14 +175,6 @@ pub enum ProjectCommand {
         /// How many projects per page to display
         limit: u32,
     },
-}
-
-#[derive(Parser, Debug)]
-pub struct ProjectStartArgs {
-    #[arg(long, default_value_t = IDLE_MINUTES)]
-    /// How long to wait before putting the project in an idle state due to inactivity.
-    /// 0 means the project will never idle
-    pub idle_minutes: u64,
 }
 
 #[derive(Parser, Clone, Debug)]
@@ -218,6 +198,10 @@ pub struct DeployArgs {
     /// Don't run pre-deploy tests
     #[arg(long)]
     pub no_test: bool,
+    #[arg(long, default_value_t = IDLE_MINUTES)]
+    /// How long to wait before putting the project in an idle state due to inactivity.
+    /// 0 means the project will never idle
+    pub idle_minutes: u64,
 }
 
 #[derive(Parser, Debug)]
@@ -238,9 +222,6 @@ pub struct InitArgs {
     /// Initialize the project with a template
     #[arg(long, short, value_enum)]
     pub template: Option<InitTemplateArg>,
-    /// Whether to create the environment for this project on shuttle
-    #[arg(long)]
-    pub create_env: bool,
     #[command(flatten)]
     pub login_args: LoginArgs,
     /// Path to initialize a new shuttle project
@@ -331,21 +312,18 @@ mod tests {
     fn test_init_args_framework() {
         let init_args = InitArgs {
             template: Some(InitTemplateArg::Axum),
-            create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
         assert_eq!(init_args.framework(), Some(Template::Axum));
         let init_args = InitArgs {
             template: Some(InitTemplateArg::None),
-            create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
         assert_eq!(init_args.framework(), Some(Template::None));
         let init_args = InitArgs {
             template: None,
-            create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };

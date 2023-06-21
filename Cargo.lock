@@ -5240,7 +5240,6 @@ dependencies = [
  "http-serde",
  "hyper",
  "jsonwebtoken",
- "lazy_static",
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",

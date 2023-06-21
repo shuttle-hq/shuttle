@@ -125,16 +125,10 @@ impl From<&tracing::Level> for Level {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lazy_static::lazy_static;
 
-    lazy_static! {
-        static ref TZ_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    }
-
-    // Chrono uses std Time internally, so we need to lock the TZ env var
-    // to force the tests to run in a specific timezone
+    // Chrono uses std Time (to libc) internally, if you want to use this method
+    // in more than one test, you need to handle async tests properly.
     fn with_tz<F: FnOnce()>(tz: &str, f: F) {
-        let _guard = TZ_LOCK.lock();
         let prev_tz = std::env::var("TZ").unwrap_or("".to_string());
         std::env::set_var("TZ", tz);
         f();

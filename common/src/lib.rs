@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[cfg(macro_use)]
+extern crate lazy_static;
+
 #[cfg(feature = "backend")]
 pub mod backends;
 #[cfg(feature = "claims")]

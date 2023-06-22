@@ -12,7 +12,7 @@ use derive_builder::Builder;
 use error::{Error, Result};
 use futures::TryFutureExt;
 use http::Uri;
-use project::docker::{ContainerInspectResponseExt, ContainerSettings, ServiceDockerContext};
+use project::docker::{ContainerSettings, ServiceDockerContext};
 use project::service::state::a_creating::ServiceCreating;
 use project::service::state::f_running::ServiceRunning;
 use project::service::state::StateVariant;
@@ -312,9 +312,9 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         request: tonic::Request<DeployRequest>,
     ) -> TonicResult<tonic::Response<DeployResponse>, tonic::Status> {
         // Authorize the request.
-        // request.verify(Scope::DeploymentWrite)?;
+        request.verify(Scope::DeploymentWrite)?;
 
-        // let claim = request.extensions().get::<Claim>().cloned();
+        let claim = request.extensions().get::<Claim>().cloned();
         let request = request.into_inner();
         let req_deployment = request.deployment.ok_or(tonic::Status::invalid_argument(
             "missing deploymet information in the rpc call",
@@ -335,7 +335,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
             service_name,
             service_id,
             tracing_context: Default::default(),
-            claim: None,
+            claim,
             target_ip: None,
             is_next,
         };
@@ -371,7 +371,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         request: tonic::Request<DestroyDeploymentRequest>,
     ) -> TonicResult<tonic::Response<DestroyDeploymentResponse>, tonic::Status> {
         // Authorize the request.
-        // request.verify(Scope::DeploymentWrite)?;
+        request.verify(Scope::DeploymentWrite)?;
         let request = request.into_inner();
 
         // Do a cleanup in terms of previous invalid deployments.
@@ -445,7 +445,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         &self,
         request: tonic::Request<SubscribeProjectsRequest>,
     ) -> TonicResult<tonic::Response<Self::SubscribeProjectsStream>, tonic::Status> {
-        // request.verify(Scope::ProjectRead)?;
+        request.verify(Scope::Admin)?;
         let events_rx = self.project_events_channel_rx.lock().await.take();
 
         if let Some(mut events_rx) = events_rx {
@@ -503,7 +503,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         &self,
         request: tonic::Request<UnsubscribeProjectsRequest>,
     ) -> TonicResult<tonic::Response<UnsubscribeProjectsResponse>, tonic::Status> {
-        // request.verify(Scope::ProjectWrite)?;
+        request.verify(Scope::Admin)?;
         let mut guard_rx = self.project_events_channel_rx.lock().await;
         let mut guard_tx = self.project_events_channel_tx.lock().await;
         let (tx, rx) = mpsc::unbounded_channel::<ProjectEvent>();

@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS custom_domains_copy (
 INSERT INTO custom_domains_copy (fqdn, project_id, certificate, private_key)
 SELECT 
   custom_domains.fqdn,
-  projects_copy.project_id, -- Copy the generated id from projects_copy from the related projects_copy row.
+  projects_copy.project_id, -- Copy the generated ulid from the related projects_copy row.
   custom_domains.fqdn,
   custom_domains.private_key
 FROM custom_domains
@@ -45,10 +45,10 @@ DROP TABLE custom_domains;
 DROP TABLE projects;
 ALTER TABLE projects_copy RENAME TO projects;
 
--- Recreate the custom_domains table with a FK constraint on the project_id.
+-- Recreate the custom_domains table with an FK constraint on the project_id.
 CREATE TABLE IF NOT EXISTS custom_domains (
   fqdn TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects (project_id), -- Recreate the table with project id as FK.
+  project_id TEXT NOT NULL REFERENCES projects (project_id),
   certificate TEXT NOT NULL,
   private_key TEXT NOT NULL
 );

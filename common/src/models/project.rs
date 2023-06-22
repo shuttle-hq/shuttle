@@ -23,6 +23,8 @@ pub const fn idle_minutes() -> u64 {
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::Response))]
 pub struct Response {
     pub name: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::models::project::State))]
+    pub state: State,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
@@ -70,7 +72,7 @@ impl Eq for State {}
 
 impl Display for Response {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "project '{}'", self.name)
+        write!(f, "project '{}' is {}", self.name, self.state)
     }
 }
 
@@ -210,7 +212,12 @@ pub fn get_table(projects: &Vec<Response>, page: u32) -> String {
             ]);
 
         for project in projects.iter() {
-            table.add_row(vec![Cell::new(&project.name)]);
+            table.add_row(vec![
+                Cell::new(&project.name),
+                Cell::new(&project.state)
+                    .fg(project.state.get_color())
+                    .set_alignment(CellAlignment::Center),
+            ]);
         }
 
         format!(

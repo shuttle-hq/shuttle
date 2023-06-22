@@ -17,8 +17,8 @@ use hyper::{Body, Request, Response};
 use shuttle_common::wasm::{Bytesable, Log, RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
-    self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
-    StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
+    self, LoadRequest, LoadResponse, Ping, Pong, StartRequest, StartResponse, StopReason,
+    StopRequest, StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -197,6 +197,13 @@ impl Runtime for AxumWasm {
         });
 
         Ok(tonic::Response::new(ReceiverStream::new(rx)))
+    }
+
+    async fn health_check(
+        &self,
+        _request: tonic::Request<Ping>,
+    ) -> Result<tonic::Response<Pong>, tonic::Status> {
+        Ok(tonic::Response::new(Pong {}))
     }
 }
 struct RouterBuilder {

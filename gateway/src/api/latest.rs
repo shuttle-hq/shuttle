@@ -132,6 +132,9 @@ async fn get_project<D: Dal>(
 
     let response = project::Response {
         name: project_name.to_string(),
+        // TODO: This is hardcoded until we refactor the way we get the state of a project,
+        // if we do at all in the gateway.
+        state: project::State::Ready,
     };
 
     Ok(AxumJson(response))
@@ -161,6 +164,9 @@ async fn get_projects_list<D: Dal>(
         .await?
         .map(|project_name| project::Response {
             name: project_name.to_string(),
+            // TODO: This is hardcoded until we refactor the way we get the state of a project,
+            // if we do at all in the gateway.
+            state: project::State::Ready,
         })
         .collect();
 

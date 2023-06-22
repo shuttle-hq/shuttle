@@ -177,6 +177,7 @@ where
             resources,
             secrets,
             service_name,
+            deployment_id,
         } = request.into_inner();
         trace!(path, "loading alpha project");
 
@@ -216,7 +217,9 @@ where
         );
         trace!("got factory");
 
-        let logger = Logger::new(OtlpRecorder);
+        // TODO: make an argument when starting runtime
+        let destination = "localhost:4317";
+        let logger = Logger::new(OtlpRecorder::new(&deployment_id, destination));
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 

@@ -4,7 +4,6 @@ use std::{
     task::{Context, Poll},
 };
 
-use chrono::Utc;
 use http::{Request, Response};
 use opentelemetry::{
     global,
@@ -17,26 +16,21 @@ use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_proto::tonic::{
     collector::logs::v1::{logs_service_client::LogsServiceClient, ExportLogsServiceRequest},
     common::v1::InstrumentationScope,
-    logs::v1::{LogRecord, ResourceLogs, ScopeLogs, SeverityNumber},
+    logs::v1::{ResourceLogs, ScopeLogs},
 };
 use pin_project::pin_project;
 use tokio::sync::mpsc;
 use tower::{Layer, Service};
 use tracing::{
-    debug_span, error, field::Visit, instrument::Instrumented, span, Instrument, Level, Metadata,
-    Span, Subscriber,
+    debug_span, error, field::Visit, instrument::Instrumented, span, Instrument, Metadata, Span,
+    Subscriber,
 };
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
 
-use crate::tracing::JsonVisitor;
+use crate::tracing::{serde_json_map_to_key_value_list, JsonVisitor};
 
 const OTLP_ADDRESS: &str = "http://otel-collector:4317";
-pub const FILEPATH_KEY: &str = "code.filepath";
-pub const LINENO_KEY: &str = "code.lineno";
-pub const MESSAGE_KEY: &str = "message";
-pub const NAMESPACE_KEY: &str = "code.namespace";
-pub const TARGET_KEY: &str = "target";
 
 pub fn setup_tracing<S>(subscriber: S, service_name: &str)
 where
@@ -221,26 +215,8 @@ impl OtlpDeploymentLogRecorder {
 }
 
 impl DeploymentLogRecorder for OtlpDeploymentLogRecorder {
-    fn record_log(
-        &self,
-        details: &DeploymentDetails,
-        mut visitor: JsonVisitor,
-        metadata: &Metadata,
-    ) {
-        let body = get_body(&mut visitor);
-        let severity_number = get_severity_number(metadata);
-        let attributes = enrich_with_metadata(visitor, metadata);
-        let attributes = serde_json_map_to_key_value_list(attributes);
-
-        let log_record = LogRecord {
-            time_unix_nano: Utc::now().timestamp_nanos() as u64,
-            severity_number: severity_number.into(),
-            severity_text: metadata.level().to_string(),
-            body: serde_json_value_to_any_value(body),
-            attributes,
-            dropped_attributes_count: 0,
-            ..Default::default()
-        };
+    fn record_log(&self, details: &DeploymentDetails, visitor: JsonVisitor, metadata: &Metadata) {
+        let log_record = visitor.into_log_record(metadata);
 
         let scope_attributes = vec![("deployment_id".into(), details.id.clone().into())];
         let scope_attributes =
@@ -263,100 +239,6 @@ impl DeploymentLogRecorder for OtlpDeploymentLogRecorder {
             );
         }
     }
-}
-
-fn get_body(visitor: &mut JsonVisitor) -> serde_json::Value {
-    visitor.fields.remove(MESSAGE_KEY).unwrap_or_default()
-}
-
-fn get_severity_number(metadata: &Metadata) -> SeverityNumber {
-    match *metadata.level() {
-        Level::TRACE => SeverityNumber::Trace,
-        Level::DEBUG => SeverityNumber::Debug,
-        Level::INFO => SeverityNumber::Info,
-        Level::WARN => SeverityNumber::Warn,
-        Level::ERROR => SeverityNumber::Error,
-    }
-}
-
-fn enrich_with_metadata(
-    mut visitor: JsonVisitor,
-    metadata: &Metadata,
-) -> serde_json::Map<String, serde_json::Value> {
-    visitor.fields.insert(
-        TARGET_KEY.to_string(),
-        serde_json::Value::String(visitor.target.unwrap_or(metadata.target().to_string())),
-    );
-
-    if let Some(filepath) = visitor.file.or(metadata.file().map(ToString::to_string)) {
-        visitor.fields.insert(
-            FILEPATH_KEY.to_string(),
-            serde_json::Value::String(filepath),
-        );
-    }
-
-    if let Some(lineno) = visitor.line.or(metadata.line()) {
-        visitor.fields.insert(
-            LINENO_KEY.to_string(),
-            serde_json::Value::Number(lineno.into()),
-        );
-    }
-
-    if let Some(namespace) = metadata.module_path() {
-        visitor.fields.insert(
-            NAMESPACE_KEY.to_string(),
-            serde_json::Value::String(namespace.to_string()),
-        );
-    }
-
-    visitor.fields
-}
-
-fn serde_json_value_to_any_value(
-    value: serde_json::Value,
-) -> Option<opentelemetry_proto::tonic::common::v1::AnyValue> {
-    use opentelemetry_proto::tonic::common::v1::any_value::Value;
-
-    let value = match value {
-        serde_json::Value::Null => return None,
-        serde_json::Value::Bool(b) => Value::BoolValue(b),
-        serde_json::Value::Number(n) => {
-            if n.is_f64() {
-                Value::DoubleValue(n.as_f64().unwrap()) // Safe to unwrap as we just checked if it is a f64
-            } else {
-                Value::IntValue(n.as_i64().unwrap()) // Safe to unwrap since we know it is not a f64
-            }
-        }
-        serde_json::Value::String(s) => Value::StringValue(s),
-        serde_json::Value::Array(a) => {
-            Value::ArrayValue(opentelemetry_proto::tonic::common::v1::ArrayValue {
-                values: a
-                    .into_iter()
-                    .flat_map(serde_json_value_to_any_value)
-                    .collect(),
-            })
-        }
-        serde_json::Value::Object(o) => {
-            Value::KvlistValue(opentelemetry_proto::tonic::common::v1::KeyValueList {
-                values: serde_json_map_to_key_value_list(o),
-            })
-        }
-    };
-
-    Some(opentelemetry_proto::tonic::common::v1::AnyValue { value: Some(value) })
-}
-
-fn serde_json_map_to_key_value_list(
-    map: serde_json::Map<String, serde_json::Value>,
-) -> Vec<opentelemetry_proto::tonic::common::v1::KeyValue> {
-    map.into_iter()
-        .map(
-            |(key, value)| opentelemetry_proto::tonic::common::v1::KeyValue {
-                key,
-                value: serde_json_value_to_any_value(value),
-            },
-        )
-        .collect()
 }
 
 /// Tracing layer to capture logs that relate to a deployment task.

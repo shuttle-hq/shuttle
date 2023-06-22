@@ -3,7 +3,10 @@ use opentelemetry_proto::tonic::{
     common::v1::InstrumentationScope,
     logs::v1::{ResourceLogs, ScopeLogs},
 };
-use shuttle_common::tracing::{serde_json_map_to_key_value_list, JsonVisitor};
+use shuttle_common::{
+    backends::tracing::{into_log_record, serde_json_map_to_key_value_list},
+    tracing::JsonVisitor,
+};
 use tokio::sync::mpsc;
 use tracing::{
     error,
@@ -79,7 +82,7 @@ impl OtlpRecorder {
 
 impl LogRecorder for OtlpRecorder {
     fn record_log(&self, visitor: JsonVisitor, metadata: &Metadata) {
-        let log_record = visitor.into_log_record(metadata);
+        let log_record = into_log_record(visitor, metadata);
 
         let scope_attributes = vec![("deployment_id".into(), self.deployment_id.clone().into())];
         let scope_attributes =

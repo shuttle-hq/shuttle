@@ -10,8 +10,8 @@ use opentelemetry_proto::tonic::{
     logs::v1::{LogRecord, SeverityNumber},
 };
 use shuttle_common::{
+    backends::tracing::{from_any_value_kv_to_serde_json_map, from_any_value_to_serde_json_value},
     log::Level,
-    tracing::{from_any_value_kv_to_serde_json_map, from_any_value_to_serde_json_value},
     LogItem,
 };
 use tokio::task::JoinHandle;

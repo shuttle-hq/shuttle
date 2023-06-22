@@ -8,7 +8,7 @@ use opentelemetry_proto::tonic::{
 };
 use prost_types::Timestamp;
 use serde_json::Value;
-use shuttle_common::tracing::{
+use shuttle_common::backends::tracing::{
     from_any_value_kv_to_serde_json_map, from_any_value_to_serde_json_value,
 };
 use shuttle_proto::logger::{self, LogItem};

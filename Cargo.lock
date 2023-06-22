@@ -5171,7 +5171,6 @@ dependencies = [
  "opentelemetry-proto",
  "pin-project",
  "proptest",
- "prost-types",
  "rand",
  "reqwest",
  "ring",

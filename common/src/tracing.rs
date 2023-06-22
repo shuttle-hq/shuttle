@@ -1,5 +1,8 @@
 use chrono::Utc;
-use opentelemetry_proto::tonic::logs::v1::{LogRecord, SeverityNumber};
+use opentelemetry_proto::tonic::{
+    common::v1::{any_value, AnyValue, KeyValue},
+    logs::v1::{LogRecord, SeverityNumber},
+};
 use serde_json::json;
 use tracing::{field::Visit, Level, Metadata};
 
@@ -19,7 +22,7 @@ pub struct JsonVisitor {
 }
 
 impl JsonVisitor {
-    /// Ignores log metadata as it is included in the other LogItem fields (target, file, line...)
+    /// Get log fields from the `log` crate
     fn filter_insert(&mut self, field: &tracing::field::Field, value: serde_json::Value) {
         match field.name() {
             "log.line" => self.line = value.as_u64().map(|u| u as u32),
@@ -169,9 +172,10 @@ fn serde_json_value_to_any_value(
     Some(opentelemetry_proto::tonic::common::v1::AnyValue { value: Some(value) })
 }
 
+/// Convert a [serde_json::Map] into an anyvalue [KeyValue] list
 pub fn serde_json_map_to_key_value_list(
     map: serde_json::Map<String, serde_json::Value>,
-) -> Vec<opentelemetry_proto::tonic::common::v1::KeyValue> {
+) -> Vec<KeyValue> {
     map.into_iter()
         .map(
             |(key, value)| opentelemetry_proto::tonic::common::v1::KeyValue {
@@ -180,4 +184,47 @@ pub fn serde_json_map_to_key_value_list(
             },
         )
         .collect()
+}
+
+/// Convert an [AnyValue] to a [serde_json::Value]
+pub fn from_any_value_to_serde_json_value(any_value: AnyValue) -> serde_json::Value {
+    let Some(value) = any_value.value else {
+        return serde_json::Value::Null
+    };
+
+    match value {
+        any_value::Value::StringValue(s) => serde_json::Value::String(s),
+        any_value::Value::BoolValue(b) => serde_json::Value::Bool(b),
+        any_value::Value::IntValue(i) => serde_json::Value::Number(i.into()),
+        any_value::Value::DoubleValue(f) => {
+            let Some(number) = serde_json::Number::from_f64(f) else {return serde_json::Value::Null};
+            serde_json::Value::Number(number)
+        }
+        any_value::Value::ArrayValue(a) => {
+            let values = a
+                .values
+                .into_iter()
+                .map(from_any_value_to_serde_json_value)
+                .collect();
+
+            serde_json::Value::Array(values)
+        }
+        any_value::Value::KvlistValue(kv) => {
+            let map = from_any_value_kv_to_serde_json_map(kv.values);
+
+            serde_json::Value::Object(map)
+        }
+        any_value::Value::BytesValue(_) => serde_json::Value::Null,
+    }
+}
+
+/// Convert a [KeyValue] list in a [serde_json::Map]
+pub fn from_any_value_kv_to_serde_json_map(
+    kv_list: Vec<KeyValue>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let iter = kv_list
+        .into_iter()
+        .flat_map(|kv| Some((kv.key, from_any_value_to_serde_json_value(kv.value?))));
+
+    serde_json::Map::from_iter(iter)
 }

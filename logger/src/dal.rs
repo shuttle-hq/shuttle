@@ -8,6 +8,9 @@ use opentelemetry_proto::tonic::{
 };
 use prost_types::Timestamp;
 use serde_json::Value;
+use shuttle_common::tracing::{
+    from_any_value_kv_to_serde_json_map, from_any_value_to_serde_json_value,
+};
 use shuttle_proto::logger::{self, LogItem};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
@@ -267,43 +270,4 @@ fn get_attribute(attributes: Vec<KeyValue>, key: &str) -> Option<String> {
         any_value::Value::StringValue(s) => Some(s),
         _ => None,
     }
-}
-
-fn from_any_value_to_serde_json_value(any_value: AnyValue) -> Value {
-    let Some(value) = any_value.value else {
-        return Value::Null
-    };
-
-    match value {
-        any_value::Value::StringValue(s) => Value::String(s),
-        any_value::Value::BoolValue(b) => Value::Bool(b),
-        any_value::Value::IntValue(i) => Value::Number(i.into()),
-        any_value::Value::DoubleValue(f) => {
-            let Some(number) = serde_json::Number::from_f64(f) else {return Value::Null};
-            Value::Number(number)
-        }
-        any_value::Value::ArrayValue(a) => {
-            let values = a
-                .values
-                .into_iter()
-                .map(from_any_value_to_serde_json_value)
-                .collect();
-
-            Value::Array(values)
-        }
-        any_value::Value::KvlistValue(kv) => {
-            let map = from_any_value_kv_to_serde_json_map(kv.values);
-
-            Value::Object(map)
-        }
-        any_value::Value::BytesValue(_) => Value::Null,
-    }
-}
-
-fn from_any_value_kv_to_serde_json_map(kv_list: Vec<KeyValue>) -> serde_json::Map<String, Value> {
-    let iter = kv_list
-        .into_iter()
-        .flat_map(|kv| Some((kv.key, from_any_value_to_serde_json_value(kv.value?))));
-
-    serde_json::Map::from_iter(iter)
 }

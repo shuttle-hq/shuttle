@@ -105,12 +105,15 @@ pub async fn build_workspace(
 
     let mut runtimes = Vec::new();
 
+    println!("{:?}", metadata.target_directory);
+
     if !alpha_packages.is_empty() {
         let mut service = compile(
             alpha_packages,
             release_mode,
             false,
             project_path.clone(),
+            metadata.target_directory.clone(),
             deployment,
             tx.clone(),
         )
@@ -126,6 +129,7 @@ pub async fn build_workspace(
             release_mode,
             true,
             project_path,
+            metadata.target_directory.clone(),
             deployment,
             tx,
         )
@@ -214,10 +218,12 @@ async fn compile(
     release_mode: bool,
     wasm: bool,
     project_path: PathBuf,
+    target_path: impl Into<PathBuf>,
     deployment: bool,
     tx: Sender<Message>,
 ) -> anyhow::Result<Vec<BuiltService>> {
     let manifest_path = project_path.join("Cargo.toml");
+    let target_path = target_path.into();
 
     let mut cargo = tokio::process::Command::new("cargo");
 
@@ -276,7 +282,7 @@ async fn compile(
         if wasm {
             let mut path: PathBuf = [
                 project_path.clone(),
-                "target".into(),
+                target_path.clone(),
                 "wasm32-wasi".into(),
                 profile.into(),
                 #[allow(clippy::single_char_pattern)]
@@ -301,13 +307,13 @@ async fn compile(
         } else {
             let mut path: PathBuf = [
                 project_path.clone(),
-                "target".into(),
+                target_path.clone(),
                 profile.into(),
                 package.clone().name.into(),
             ]
             .iter()
             .collect();
-            path.set_extension(std::env::consts::EXE_SUFFIX);
+            path.set_extension(std::env::consts::EXE_EXTENSION);
 
             let mut working_directory = package.clone().manifest_path.into_std_path_buf();
             working_directory.pop();

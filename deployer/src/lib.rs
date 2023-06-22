@@ -312,9 +312,9 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         request: tonic::Request<DeployRequest>,
     ) -> TonicResult<tonic::Response<DeployResponse>, tonic::Status> {
         // Authorize the request.
-        // request.verify(Scope::DeploymentWrite)?;
+        request.verify(Scope::DeploymentWrite)?;
 
-        // let claim = request.extensions().get::<Claim>().cloned();
+        let claim = request.extensions().get::<Claim>().cloned();
         let request = request.into_inner();
         let req_deployment = request.deployment.ok_or(tonic::Status::invalid_argument(
             "missing deploymet information in the rpc call",
@@ -335,7 +335,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
             service_name,
             service_id,
             tracing_context: Default::default(),
-            claim: None,
+            claim,
             target_ip: None,
             is_next,
         };
@@ -371,7 +371,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         request: tonic::Request<DestroyDeploymentRequest>,
     ) -> TonicResult<tonic::Response<DestroyDeploymentResponse>, tonic::Status> {
         // Authorize the request.
-        // request.verify(Scope::DeploymentWrite)?;
+        request.verify(Scope::DeploymentWrite)?;
         let request = request.into_inner();
 
         // Do a cleanup in terms of previous invalid deployments.

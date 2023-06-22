@@ -705,12 +705,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "base16ct"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "349a06037c7bf932dd7e7d1f653678b2038b9ad46a74102f1fc7bd7872678cce"
-
-[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5142,13 +5136,18 @@ dependencies = [
 name = "shuttle-builder"
 version = "0.18.0"
 dependencies = [
+ "async-recursion",
  "async-trait",
  "clap",
+ "dirs 5.0.1",
  "flate2",
  "hex",
  "nbuild-core",
+ "oci-spec",
  "portpicker",
  "pretty_assertions",
+ "regex",
+ "sha2",
  "shuttle-common",
  "shuttle-common-tests",
  "shuttle-proto",
@@ -5156,11 +5155,14 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-stream",
+ "tokio-tar",
  "toml 0.5.11",
  "tonic",
  "tracing",
  "tracing-subscriber",
  "ulid",
+ "url",
 ]
 
 [[package]]
@@ -5180,24 +5182,20 @@ name = "shuttle-common"
 version = "0.18.0"
 dependencies = [
  "anyhow",
- "async-recursion",
  "async-trait",
  "axum",
- "base16ct",
  "base64 0.13.1",
  "bytes",
  "cap-std",
  "chrono",
  "comfy-table",
  "crossterm",
- "dirs 5.0.1",
  "headers",
  "http",
  "http-body",
  "http-serde",
  "hyper",
  "jsonwebtoken",
- "oci-spec",
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",
@@ -5207,20 +5205,16 @@ dependencies = [
  "proptest",
  "prost-types",
  "rand",
- "regex",
  "reqwest",
  "ring",
  "rmp-serde",
  "rustrict",
  "serde",
  "serde_json",
- "sha2",
  "sqlx",
  "strum",
  "thiserror",
  "tokio",
- "tokio-stream",
- "tokio-tar",
  "tonic",
  "tower",
  "tower-http 0.4.0",
@@ -5230,7 +5224,6 @@ dependencies = [
  "tracing-subscriber",
  "ttl_cache",
  "ulid",
- "url",
  "utoipa",
  "uuid",
 ]
@@ -5266,7 +5259,6 @@ dependencies = [
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",
- "portpicker",
  "rand",
  "serde",
  "serde_json",
@@ -5296,7 +5288,6 @@ dependencies = [
  "axum-extra",
  "axum-server",
  "base64 0.13.1",
- "bollard",
  "chrono",
  "clap",
  "colored",
@@ -5308,7 +5299,6 @@ dependencies = [
  "instant-acme",
  "jsonwebtoken",
  "lazy_static",
- "num_cpus",
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",
@@ -5328,6 +5318,7 @@ dependencies = [
  "sqlx",
  "strum",
  "tempfile",
+ "thiserror",
  "tokio",
  "tonic",
  "tower",

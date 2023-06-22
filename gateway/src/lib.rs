@@ -11,25 +11,22 @@ use std::str::FromStr;
 use acme::AcmeClientError;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use bollard::Docker;
+use dal::DalError;
 use futures::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize};
-use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use tokio::sync::mpsc::error::SendError;
-use tracing::error;
+use tracing::{debug, error};
 use utoipa::ToSchema;
 
 pub mod acme;
 pub mod api;
 pub mod args;
 pub mod auth;
-pub mod project;
+pub mod dal;
 pub mod proxy;
 pub mod service;
-pub mod task;
 pub mod tls;
-pub mod worker;
 
 /// Server-side errors that do not have to do with the user runtime
 /// should be [`Error`]s.
@@ -69,6 +66,13 @@ impl Error {
 
     pub fn kind(&self) -> ErrorKind {
         self.kind
+    }
+}
+
+impl From<DalError> for Error {
+    fn from(err: DalError) -> Self {
+        debug!("internal SQLx error: {err}");
+        Self::source(ErrorKind::Internal, err)
     }
 }
 
@@ -217,12 +221,6 @@ impl From<ProjectDetails> for shuttle_common::models::project::AdminResponse {
     }
 }
 
-pub trait DockerContext: Send + Sync {
-    fn docker(&self) -> &Docker;
-
-    fn container_settings(&self) -> &ContainerSettings;
-}
-
 #[async_trait]
 pub trait Service {
     type Context;
@@ -323,18 +321,14 @@ pub trait Refresh<Ctx>: Sized {
 #[cfg(test)]
 pub mod tests {
     use std::collections::HashMap;
-    use std::env;
     use std::net::SocketAddr;
     use std::str::FromStr;
     use std::sync::{Arc, Mutex};
-    use std::time::Duration;
 
-    use anyhow::{anyhow, Context as AnyhowContext};
     use axum::headers::authorization::Bearer;
     use axum::headers::Authorization;
     use axum::routing::get;
     use axum::{extract, Router, TypedHeader};
-    use bollard::Docker;
     use fqdn::FQDN;
     use futures::prelude::*;
     use hyper::client::HttpConnector;
@@ -342,90 +336,14 @@ pub mod tests {
     use hyper::http::Uri;
     use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
     use jsonwebtoken::EncodingKey;
-    use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
+    use rand::distributions::{Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
     use shuttle_common::backends::auth::ConvertResponse;
     use shuttle_common::claims::{Claim, Scope};
-    use shuttle_common::models::project;
-    use sqlx::SqlitePool;
-    use tokio::sync::mpsc::channel;
 
     use crate::acme::AcmeClient;
-    use crate::api::latest::ApiBuilder;
-    use crate::args::{ContextArgs, StartArgs, UseTls};
-    use crate::proxy::UserServiceBuilder;
-    use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
-    use crate::worker::Worker;
-    use crate::DockerContext;
-
-    macro_rules! value_block_helper {
-        ($next:ident, $block:block) => {
-            $block
-        };
-        ($next:ident,) => {
-            $next
-        };
-    }
-
-    macro_rules! assert_stream_matches {
-        (
-            $stream:ident,
-            $(#[assertion = $assert:literal])?
-                $($pattern:pat_param)|+ $(if $guard:expr)? $(=> $more:block)?,
-        ) => {{
-            let next = ::futures::stream::StreamExt::next(&mut $stream)
-                .await
-                .expect("Stream ended before the last of assertions");
-
-            match &next {
-                $($pattern)|+ $(if $guard)? => {
-                    print!("{}", ::colored::Colorize::green(::colored::Colorize::bold("[ok]")));
-                    $(print!(" {}", $assert);)?
-                        print!("\n");
-                    crate::tests::value_block_helper!(next, $($more)?)
-                },
-                _ => {
-                    eprintln!("{} {:#?}", ::colored::Colorize::red(::colored::Colorize::bold("[err]")), next);
-                    eprint!("{}", ::colored::Colorize::red(::colored::Colorize::bold("Assertion failed")));
-                    $(eprint!(": {}", $assert);)?
-                        eprint!("\n");
-                    panic!("State mismatch")
-                }
-            }
-        }};
-        (
-            $stream:ident,
-            $(#[$($meta:tt)*])*
-                $($pattern:pat_param)|+ $(if $guard:expr)? $(=> $more:block)?,
-            $($(#[$($metas:tt)*])* $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
-        ) => {{
-            assert_stream_matches!(
-                $stream,
-                $(#[$($meta)*])* $($pattern)|+ $(if $guard)? => {
-                    $($more)?
-                        assert_stream_matches!(
-                            $stream,
-                            $($(#[$($metas)*])* $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
-                        )
-                },
-            )
-        }};
-    }
-
-    macro_rules! assert_matches {
-        {
-            $ctx:ident,
-            $state:expr,
-            $($(#[$($meta:tt)*])* $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
-        } => {{
-            let state = $state;
-            let mut stream = crate::EndStateExt::into_stream(state, &$ctx);
-            assert_stream_matches!(
-                stream,
-                $($(#[$($meta)*])* $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
-            )
-        }}
-    }
+    use crate::args::{Args, UseTls};
+    use crate::dal::Sqlite;
 
     macro_rules! assert_err_kind {
         {
@@ -439,23 +357,7 @@ pub mod tests {
         }};
     }
 
-    macro_rules! timed_loop {
-        (wait: $wait:literal$(, max: $max:literal)?, $block:block) => {{
-            #[allow(unused_mut)]
-            #[allow(unused_variables)]
-            let mut tries = 0;
-            loop {
-                $block
-                    tries += 1;
-                $(if tries > $max {
-                    panic!("timed out in the loop");
-                })?
-                    ::tokio::time::sleep(::std::time::Duration::from_secs($wait)).await;
-            }
-        }};
-    }
-
-    pub(crate) use {assert_err_kind, assert_matches, assert_stream_matches, value_block_helper};
+    pub(crate) use assert_err_kind;
 
     mod request_builder_ext {
         pub trait Sealed {}
@@ -544,11 +446,9 @@ pub mod tests {
     }
 
     pub struct World {
-        docker: Docker,
-        settings: ContainerSettings,
-        args: StartArgs,
+        args: Args,
         hyper: HyperClient<HttpConnector, Body>,
-        pool: SqlitePool,
+        pool: Sqlite,
         acme_client: AcmeClient,
         auth_service: Arc<Mutex<AuthService>>,
         auth_uri: Uri,
@@ -556,22 +456,12 @@ pub mod tests {
 
     #[derive(Clone)]
     pub struct WorldContext {
-        pub docker: Docker,
-        pub container_settings: ContainerSettings,
         pub hyper: HyperClient<HttpConnector, Body>,
         pub auth_uri: Uri,
     }
 
     impl World {
         pub async fn new() -> Self {
-            let docker = Docker::connect_with_local_defaults().unwrap();
-
-            docker
-                .list_images::<&str>(None)
-                .await
-                .context(anyhow!("A docker daemon does not seem accessible",))
-                .unwrap();
-
             let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
             let user = control + 1;
             let bouncer = user + 1;
@@ -584,49 +474,23 @@ pub mod tests {
 
             let auth_service = AuthService::new(auth);
 
-            let prefix = format!(
-                "shuttle_test_{}_",
-                Alphanumeric.sample_string(&mut rand::thread_rng(), 4)
-            );
-
-            let image = env::var("SHUTTLE_TESTS_RUNTIME_IMAGE")
-                .unwrap_or_else(|_| "public.ecr.aws/shuttle/deployer:latest".to_string());
-
-            let network_name =
-                env::var("SHUTTLE_TESTS_NETWORK").unwrap_or_else(|_| "shuttle_default".to_string());
-
-            let provisioner_host = "provisioner".to_string();
-
-            let docker_host = "/var/run/docker.sock".to_string();
-
-            let args = StartArgs {
+            let args = Args {
                 control,
                 user,
                 bouncer,
                 use_tls: UseTls::Disable,
-                context: ContextArgs {
-                    docker_host,
-                    image,
-                    prefix,
-                    provisioner_host,
-                    auth_uri: auth_uri.clone(),
-                    network_name,
-                    proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
-                },
+                auth_uri: auth_uri.clone(),
+                proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
+                state: Default::default(),
             };
-
-            let settings = ContainerSettings::builder().from_args(&args.context).await;
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
 
-            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-            MIGRATIONS.run(&pool).await.unwrap();
+            let pool = Sqlite::new_in_memory().await;
 
             let acme_client = AcmeClient::new();
 
             Self {
-                docker,
-                settings,
                 args,
                 hyper,
                 pool,
@@ -636,11 +500,11 @@ pub mod tests {
             }
         }
 
-        pub fn args(&self) -> ContextArgs {
-            self.args.context.clone()
+        pub fn args(&self) -> Args {
+            self.args.clone()
         }
 
-        pub fn pool(&self) -> SqlitePool {
+        pub fn pool(&self) -> Sqlite {
             self.pool.clone()
         }
 
@@ -649,7 +513,7 @@ pub mod tests {
         }
 
         pub fn fqdn(&self) -> FQDN {
-            self.args().proxy_fqdn
+            self.args.proxy_fqdn.clone()
         }
 
         pub fn acme_client(&self) -> AcmeClient {
@@ -676,21 +540,9 @@ pub mod tests {
     impl World {
         pub fn context(&self) -> WorldContext {
             WorldContext {
-                docker: self.docker.clone(),
-                container_settings: self.settings.clone(),
                 hyper: self.hyper.clone(),
                 auth_uri: self.auth_uri.clone(),
             }
-        }
-    }
-
-    impl DockerContext for WorldContext {
-        fn docker(&self) -> &Docker {
-            &self.docker
-        }
-
-        fn container_settings(&self) -> &ContainerSettings {
-            &self.container_settings
         }
     }
 
@@ -746,150 +598,5 @@ pub mod tests {
 
             this
         }
-    }
-
-    #[tokio::test]
-    async fn end_to_end() {
-        let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
-        let worker = Worker::new();
-
-        let (log_out, mut log_in) = channel(256);
-        tokio::spawn({
-            let sender = worker.sender();
-            async move {
-                while let Some(work) = log_in.recv().await {
-                    sender
-                        .send(work)
-                        .await
-                        .map_err(|_| "could not send work")
-                        .unwrap();
-                }
-            }
-        });
-
-        let api_client = world.client(world.args.control);
-        let api = ApiBuilder::new()
-            .with_service(Arc::clone(&service))
-            .with_sender(log_out.clone())
-            .with_default_routes()
-            .with_auth_service(&world.context().auth_uri)
-            .await
-            .binding_to(world.args.control);
-
-        let user = UserServiceBuilder::new()
-            .with_service(Arc::clone(&service))
-            .with_task_sender(log_out)
-            .with_public(world.fqdn())
-            .with_user_proxy_binding_to(world.args.user);
-
-        let _gateway = tokio::spawn(async move {
-            tokio::select! {
-                _ = worker.start() => {},
-                _ = api.serve() => {},
-                _ = user.serve() => {}
-            }
-        });
-
-        // Allow the spawns to start
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        let neo_key = world.create_user("neo");
-
-        let authorization = Authorization::bearer(&neo_key).unwrap();
-
-        println!("Creating the matrix project");
-        api_client
-            .request(
-                Request::post("/projects/matrix")
-                    .with_header(&authorization)
-                    .header("Content-Type", "application/json")
-                    .body("{\"idle_minutes\": 3}".into())
-                    .unwrap(),
-            )
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK);
-            })
-            .await
-            .unwrap();
-
-        timed_loop!(wait: 1, max: 12, {
-            let project: project::Response = api_client
-                .request(
-                    Request::get("/projects/matrix")
-                        .with_header(&authorization)
-                        .body(Body::empty())
-                        .unwrap(),
-                )
-                .map_ok(|resp| {
-                    assert_eq!(resp.status(), StatusCode::OK);
-                    serde_json::from_slice(resp.body()).unwrap()
-                })
-                .await
-                .unwrap();
-
-            if project.state == project::State::Ready {
-                break;
-            }
-
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        });
-
-        println!("get matrix project status");
-        api_client
-            .request(
-                Request::get("/projects/matrix/status")
-                    .with_header(&authorization)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
-            .await
-            .unwrap();
-
-        println!("delete matrix project");
-        api_client
-            .request(
-                Request::delete("/projects/matrix")
-                    .with_header(&authorization)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
-            .await
-            .unwrap();
-
-        timed_loop!(wait: 1, max: 20, {
-            let resp = api_client
-                .request(
-                    Request::get("/projects/matrix")
-                        .with_header(&authorization)
-                        .body(Body::empty())
-                        .unwrap(),
-                )
-                .await
-                .unwrap();
-            let resp = serde_json::from_slice::<project::Response>(resp.body().as_slice()).unwrap();
-            if matches!(resp.state, project::State::Destroyed) {
-                break;
-            }
-        });
-
-        // Attempting to delete already Destroyed project will return Destroyed
-        api_client
-            .request(
-                Request::delete("/projects/matrix")
-                    .with_header(&authorization)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK);
-                let resp =
-                    serde_json::from_slice::<project::Response>(resp.body().as_slice()).unwrap();
-                assert_eq!(resp.state, project::State::Destroyed);
-            })
-            .await
-            .unwrap();
     }
 }

@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::str::FromStr;
 
 use axum::extract::{FromRef, FromRequestParts, Path};
@@ -13,6 +14,7 @@ use tonic::metadata::{MetadataMap, MetadataValue};
 use tracing::{debug, error, trace, Span};
 
 use crate::api::latest::RouterState;
+use crate::dal::Dal;
 use crate::{AccountName, Error, ErrorKind, ProjectName};
 
 /// A wrapper to enrich a token with user details
@@ -21,17 +23,21 @@ use crate::{AccountName, Error, ErrorKind, ProjectName};
 /// details. Generally you want to use [`ScopedUser`] instead to ensure the request
 /// is valid against the user's owned resources.
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
-pub struct User {
+pub struct User<D> {
     pub projects: Vec<ProjectName>,
     pub claim: Claim,
     pub name: AccountName,
+    /// We need this so we can use a generic D: Dal in the FromRequestParts implementations
+    /// for [User] and [ScopedUser], otherwise the D generic would be unconstrained.
+    pub phantom: PhantomData<D>,
 }
 
 #[async_trait]
-impl<S> FromRequestParts<S> for User
+impl<S, D> FromRequestParts<S> for User<D>
 where
     S: Send + Sync,
-    RouterState: FromRef<S>,
+    RouterState<D>: FromRef<S>,
+    D: Dal + 'static,
 {
     type Rejection = Error;
 
@@ -49,6 +55,7 @@ where
             claim: claim.clone(),
             projects: service.iter_user_projects(&name).await?.collect(),
             name,
+            phantom: Default::default(),
         };
 
         trace!(?user, "got user");
@@ -62,16 +69,17 @@ where
 ///
 /// It is guaranteed that [`ScopedUser::scope`] exists and is owned
 /// by [`ScopedUser::name`].
-pub struct ScopedUser {
-    pub user: User,
+pub struct ScopedUser<D> {
+    pub user: User<D>,
     pub scope: ProjectName,
 }
 
 #[async_trait]
-impl<S> FromRequestParts<S> for ScopedUser
+impl<S, D> FromRequestParts<S> for ScopedUser<D>
 where
     S: Send + Sync,
-    RouterState: FromRef<S>,
+    RouterState<D>: FromRef<S>,
+    D: Dal + 'static,
 {
     type Rejection = Error;
 

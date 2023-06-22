@@ -11,7 +11,6 @@ axum = { workspace = true, features = ["default", "headers"] }
 axum-extra = { version = "0.7.4", features = ["cookie"] }
 axum-server = { version = "0.4.4", features = ["tls-rustls"] }
 base64 = { workspace = true }
-bollard = "0.14.0"
 chrono = { workspace = true }
 clap = { workspace = true }
 fqdn = { workspace = true }
@@ -21,7 +20,6 @@ hyper = { workspace = true, features = ["stream"] }
 hyper-reverse-proxy = { workspace = true }
 instant-acme = "0.2.0"
 lazy_static = "1.4.0"
-num_cpus = "1.15.0"
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-http = { workspace = true }
@@ -40,6 +38,7 @@ sqlx = { workspace = true, features = [
     "migrate",
 ] }
 strum = { workspace = true }
+thiserror = { workspace  = true }
 tokio = { workspace = true, features = ["full"] }
 tonic = { workspace = true }
 tower = { workspace = true, features = ["steer"] }

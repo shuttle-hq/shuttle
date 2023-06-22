@@ -29,11 +29,9 @@ use tracing::{error, trace};
 /// been observed to be around 5 minutes.
 const CACHE_MINUTES: u64 = 5;
 
-/// The idea of this layer is to do two things:
-/// 1. Forward all user related routes (`/login`, `/logout`, `/users/*`, etc) to our auth service
-/// 2. Upgrade all Authorization Bearer keys and session cookies to JWT tokens for internal
-/// communication inside and below gateway, fetching the JWT token from a ttl-cache if it isn't expired,
-/// and inserting it in the cache if it isn't there.
+/// If the request headers contain an Authorization Bearer key or a session cookie, try to convert
+/// it to a JWT token for internal communication inside and below gateway, fetching the JWT token
+/// from a ttl-cache if it isn't expired, and inserting it in the cache if it isn't there.
 #[derive(Clone)]
 pub struct ShuttleAuthLayer {
     cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,

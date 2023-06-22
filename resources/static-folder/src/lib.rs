@@ -123,7 +123,7 @@ mod tests {
     use std::path::PathBuf;
 
     use async_trait::async_trait;
-    use shuttle_service::{DatabaseReadyInfo, Factory, ResourceBuilder};
+    use shuttle_service::{DatabaseReadyInfo, Factory, QdrantReadyInfo, ResourceBuilder};
     use tempfile::{Builder, TempDir};
 
     use crate::StaticFolder;
@@ -179,6 +179,14 @@ mod tests {
             _db_type: shuttle_service::database::Type,
         ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
             panic!("no static folder test should try to get a db connection string")
+        }
+
+        async fn get_qdrant_connection(
+            &mut self,
+            _url: String,
+            _api_key: String,
+        ) -> Result<QdrantReadyInfo, shuttle_service::Error> {
+            panic!("no static folder test should try to get a qdrant connection string")
         }
 
         async fn get_secrets(

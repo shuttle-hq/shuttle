@@ -56,23 +56,6 @@ pub(crate) async fn put_user_reset_key(
     user_manager.reset_key(account_name).await
 }
 
-pub(crate) async fn login(
-    mut session: WritableSession,
-    State(user_manager): State<UserManagerState>,
-    Json(request): Json<LoginRequest>,
-) -> Result<Json<user::Response>, Error> {
-    let user = user_manager.get_user(request.account_name).await?;
-
-    session
-        .insert("account_name", user.name.clone())
-        .expect("to set account name");
-    session
-        .insert("account_tier", user.account_tier)
-        .expect("to set account tier");
-
-    Ok(Json(user.into()))
-}
-
 pub(crate) async fn logout(mut session: WritableSession) {
     session.destroy();
 }

@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.18.0"
+version = "0.19.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -14,7 +14,7 @@ bollard = { workspace = true }
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
-clap_complete = "4.1.5"
+clap_complete = "4.3.1"
 crossbeam-channel = { workspace = true }
 crossterm = { workspace = true }
 dialoguer = { version = "0.10.4", features = ["fuzzy-select"] }
@@ -28,6 +28,7 @@ headers = { workspace = true }
 indicatif = "0.17.3"
 ignore = "0.4.20"
 indoc = "2.0.1"
+openssl = { version = "0.10", optional = true }
 portpicker = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = "0.2.0"
@@ -39,7 +40,7 @@ sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres"] }
 strum = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal"] }
-tokio-tungstenite = { version = "0.18.0", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.19.0", features = ["rustls-tls-webpki-roots"] }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tonic = { workspace = true }
@@ -65,6 +66,9 @@ workspace = true
 [dependencies.shuttle-service]
 workspace = true
 features = ["builder"]
+
+[features]
+vendored-openssl = ["openssl/vendored"]
 
 [dev-dependencies]
 assert_cmd = "2.0.6"

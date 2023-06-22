@@ -6,6 +6,7 @@ mod provisioner_server;
 
 use args::LogoutArgs;
 use indicatif::ProgressBar;
+use indoc::printdoc;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::deployment::{
     get_deployments_table, DeploymentRequest, GIT_STRINGS_MAX_LENGTH,
@@ -33,7 +34,7 @@ use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
-pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
+pub use args::{Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs, ShuttleArgs};
 use cargo_metadata::Message;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
@@ -54,7 +55,9 @@ use tar::Builder;
 use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
-use crate::args::{DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand};
+use crate::args::{
+    DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand, EXAMPLES_REPO,
+};
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
 
@@ -62,6 +65,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 const SHUTTLE_LOGIN_URL: &str = "https://shuttle.rs/login";
 const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
+const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/introduction/shuttle-commands";
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -73,7 +77,7 @@ impl Shuttle {
         Ok(Self { ctx })
     }
 
-    pub async fn run(mut self, mut args: Args) -> Result<CommandOutcome> {
+    pub async fn run(mut self, mut args: ShuttleArgs) -> Result<CommandOutcome> {
         trace!("running local client");
 
         // All commands that need to know which project is being handled
@@ -153,7 +157,12 @@ impl Shuttle {
     /// If both a project name and framework are passed as arguments, it will run without any extra
     /// interaction.
     async fn init(&mut self, args: InitArgs, mut project_args: ProjectArgs) -> Result<()> {
-        let interactive = project_args.name.is_none() || args.framework().is_none();
+        // Turns the template or git args (if present) to a repo+folder.
+        let git_templates = args.git_template()?;
+
+        // Caveat: No way of telling if args.path was given or default
+        // Ideally that would be checked here (go interactive if not given)
+        let interactive = project_args.name.is_none() || git_templates.is_none();
 
         let theme = ColorfulTheme::default();
 
@@ -172,7 +181,12 @@ impl Shuttle {
 
         // 2. Ask for project name
         if project_args.name.is_none() {
-            println!("How do you want to name your project? It will be hosted at ${{project_name}}.shuttleapp.rs.");
+            printdoc!(
+                "
+                What do you want to name your project?
+                It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
+                "
+            );
             // TODO: Check whether the project name is still available
             project_args.name = Some(
                 Input::with_theme(&theme)
@@ -202,20 +216,27 @@ impl Shuttle {
         };
 
         // 4. Ask for the framework
-        let framework = match args.framework() {
-            Some(framework) => framework,
+        let template = match git_templates {
+            Some(git_templates) => git_templates,
             None => {
                 println!(
                     "Shuttle works with a range of web frameworks. Which one do you want to use?"
                 );
-                let frameworks = init::Template::iter().collect::<Vec<_>>();
+                let frameworks = args::InitTemplateArg::iter().collect::<Vec<_>>();
                 let index = FuzzySelect::with_theme(&theme)
+                    .with_prompt("Framework")
                     .items(&frameworks)
                     .default(0)
                     .interact()?;
                 println!();
-                frameworks[index]
+                frameworks[index].template()
             }
+        };
+
+        let serenity_idle_hint = if let Some(s) = template.subfolder.as_ref() {
+            s.contains("serenity") || s.contains("poise")
+        } else {
+            false
         };
 
         // 5. Initialize locally
@@ -225,8 +246,19 @@ impl Shuttle {
                 .name
                 .as_ref()
                 .expect("to have a project name provided"),
-            framework,
+            template,
         )?;
+        println!();
+
+        printdoc!(
+            "
+            Hint: Check the examples repo for a full list of templates:
+                  {EXAMPLES_REPO}
+            Hint: You can also use `cargo shuttle init --from` to clone templates.
+                  See {SHUTTLE_CLI_DOCS_URL}
+                  or run `cargo shuttle init --help`
+            "
+        );
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
@@ -239,7 +271,6 @@ impl Shuttle {
                 .with_prompt("Do you want to create the project environment on Shuttle?")
                 .default(true)
                 .interact()?;
-
             println!();
             should_create
         };
@@ -247,14 +278,28 @@ impl Shuttle {
         if should_create_environment {
             // Set the project working directory path to the init path,
             // so `load_project` is ran with the correct project path
-            project_args.working_directory = path;
+            project_args.working_directory = path.clone();
 
             self.load_project(&mut project_args)?;
             self.project_create(&self.client()?, IDLE_MINUTES).await?;
-        } else {
+        }
+
+        if std::env::current_dir().is_ok_and(|d| d != path) {
+            println!("You can `cd` to the directory, then:");
+        }
+        println!("Run `cargo shuttle run` to run the app locally.");
+        if !should_create_environment {
             println!(
                 "Run `cargo shuttle project start` to create a project environment on Shuttle."
             );
+            if serenity_idle_hint {
+                printdoc!(
+                    "
+                    Hint: Discord bots might want to use `--idle-minutes 0` when starting the
+                    project so that they don't go offline: https://docs.shuttle.rs/introduction/idle-projects
+                    "
+                );
+            }
         }
 
         Ok(())
@@ -1177,8 +1222,10 @@ impl Shuttle {
             .parent()
             .context("get parent directory of crate")?;
 
-        // Make sure the target folder is excluded at all times
+        // Make sure the target  and .git folders are excluded at all times
         let overrides = OverrideBuilder::new(working_directory)
+            .add("!.git/")
+            .context("add `!.git/` override")?
             .add("!target/")
             .context("add `!target/` override")?
             .build()

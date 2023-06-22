@@ -13,7 +13,7 @@ use tracing::{
 use tracing_subscriber::Layer;
 
 /// Record a single log
-pub trait LogRecorder {
+pub trait LogRecorder: Send + Sync {
     fn record_log(&self, visitor: JsonVisitor, metadata: &Metadata);
 }
 
@@ -39,38 +39,36 @@ impl OtlpRecorder {
         });
 
         tokio::spawn(async move {
-            let mut otlp_client = match LogsServiceClient::connect(destination).await {
-                Ok(client) => client,
-                Err(error) => {
-                    println!(
-                        "Could not connect to OTLP collector for logs. No logs will be send: {error}"
+            match LogsServiceClient::connect(destination).await {
+                Ok(mut otlp_client) => {
+                    while let Some(scope_logs) = rx.recv().await {
+                        let resource_log = ResourceLogs {
+                            scope_logs: vec![scope_logs],
+                            resource: resource.clone(),
+                            ..Default::default()
+                        };
+                        let request = tonic::Request::new(ExportLogsServiceRequest {
+                            resource_logs: vec![resource_log],
+                        });
+
+                        if let Err(error) = otlp_client.export(request).await {
+                            error!(
+                        error = &error as &dyn std::error::Error,
+                        "Otlp deployment log recorder encountered error while exporting the logs"
                     );
+                        };
+                    }
+                }
+                Err(error) => {
                     error!(
                         error = &error as &dyn std::error::Error,
                         "Could not connect to OTLP collector for logs. No logs will be send"
                     );
 
-                    return;
+                    // Consume the logs so that the channel does not overflow
+                    while let Some(_scope_logs) = rx.recv().await {}
                 }
             };
-
-            while let Some(scope_logs) = rx.recv().await {
-                let resource_log = ResourceLogs {
-                    scope_logs: vec![scope_logs],
-                    resource: resource.clone(),
-                    ..Default::default()
-                };
-                let request = tonic::Request::new(ExportLogsServiceRequest {
-                    resource_logs: vec![resource_log],
-                });
-
-                if let Err(error) = otlp_client.export(request).await {
-                    error!(
-                        error = &error as &dyn std::error::Error,
-                        "Otlp deployment log recorder encountered error while exporting the logs"
-                    );
-                };
-            }
         });
         Self {
             tx,

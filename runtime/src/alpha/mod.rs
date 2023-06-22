@@ -35,7 +35,7 @@ use tokio::sync::{
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
-    transport::{Endpoint, Server},
+    transport::{Endpoint, Server, Uri},
     Request, Response, Status,
 };
 use tower::ServiceBuilder;
@@ -60,6 +60,7 @@ pub async fn start(loader: impl Loader<ProvisionerFactory, OtlpRecorder> + Send 
         .expect("auth service should be reachable");
 
     let provisioner_address = args.provisioner_address;
+    let logger_uri = args.logger_uri;
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
         .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_client)))
@@ -82,7 +83,13 @@ pub async fn start(loader: impl Loader<ProvisionerFactory, OtlpRecorder> + Send 
         };
 
     let router = {
-        let alpha = Alpha::new(provisioner_address, loader, storage_manager, env);
+        let alpha = Alpha::new(
+            provisioner_address,
+            logger_uri,
+            loader,
+            storage_manager,
+            env,
+        );
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
@@ -98,6 +105,7 @@ pub struct Alpha<L, S> {
     // Mutexes are for interior mutability
     stopped_tx: Sender<(StopReason, String)>,
     provisioner_address: Endpoint,
+    logger_uri: Uri,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     storage_manager: Arc<dyn StorageManager>,
     loader: Mutex<Option<L>>,
@@ -108,6 +116,7 @@ pub struct Alpha<L, S> {
 impl<L, S> Alpha<L, S> {
     pub fn new(
         provisioner_address: Endpoint,
+        logger_uri: Uri,
         loader: L,
         storage_manager: Arc<dyn StorageManager>,
         env: Environment,
@@ -118,6 +127,7 @@ impl<L, S> Alpha<L, S> {
             stopped_tx,
             kill_tx: Mutex::new(None),
             provisioner_address,
+            logger_uri,
             storage_manager,
             loader: Mutex::new(Some(loader)),
             service: Mutex::new(None),
@@ -149,7 +159,7 @@ where
     O: Future<Output = Result<S, shuttle_service::Error>> + Send,
     Fac: Factory + 'static,
     S: Service,
-    R: LogRecorder + Send + 'static,
+    R: LogRecorder + 'static,
 {
     type Service = S;
 
@@ -218,8 +228,8 @@ where
         trace!("got factory");
 
         // TODO: make an argument when starting runtime
-        let destination = "localhost:4317";
-        let logger = Logger::new(OtlpRecorder::new(&deployment_id, destination));
+        let destination = self.logger_uri.to_string();
+        let logger = Logger::new(OtlpRecorder::new(&deployment_id, &destination));
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 

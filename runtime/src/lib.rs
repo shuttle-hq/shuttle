@@ -224,7 +224,7 @@ mod resource_tracker;
 
 pub use alpha::{start, Alpha};
 pub use async_trait::async_trait;
-pub use logger::Logger;
+pub use logger::{LogRecorder, Logger};
 #[cfg(feature = "next")]
 pub use next::{AxumWasm, NextArgs};
 pub use provisioner_factory::ProvisionerFactory;

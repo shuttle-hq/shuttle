@@ -3,7 +3,7 @@ use std::{path::Path, str::FromStr, time::SystemTime};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use opentelemetry_proto::tonic::{
-    common::v1::{any_value, AnyValue, KeyValue},
+    common::v1::{any_value, KeyValue},
     logs::v1::{LogRecord, ResourceLogs, ScopeLogs, SeverityNumber},
 };
 use prost_types::Timestamp;

@@ -21,18 +21,14 @@ use shuttle_proto::{
     auth::AuthPublicKey,
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
-        self,
         runtime_server::{Runtime, RuntimeServer},
         LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
-        StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
+        StopResponse, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
 use shuttle_service::{Environment, Factory, Service, ServiceName};
 use tokio::sync::{broadcast, oneshot};
-use tokio::sync::{
-    broadcast::Sender,
-    mpsc::{self},
-};
+use tokio::sync::{broadcast::Sender, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
     transport::{Endpoint, Server, Uri},
@@ -57,7 +53,7 @@ pub async fn start(loader: impl Loader<ProvisionerFactory, OtlpRecorder> + Send 
 
     let auth_client = shuttle_proto::auth::client(&args.auth_uri)
         .await
-        .expect("auth service should be reachable");
+        .expect("auth service should be reached");
 
     let provisioner_address = args.provisioner_address;
     let logger_uri = args.logger_uri;
@@ -420,20 +416,6 @@ where
                 .unwrap();
             }
         });
-
-        Ok(Response::new(ReceiverStream::new(rx)))
-    }
-
-    type SubscribeLogsStream = ReceiverStream<Result<runtime::LogItem, Status>>;
-
-    async fn subscribe_logs(
-        &self,
-        _request: Request<SubscribeLogsRequest>,
-    ) -> Result<Response<Self::SubscribeLogsStream>, Status> {
-        let (_tx, rx) = mpsc::channel(1);
-
-        // Move logger items into stream to be returned
-        tokio::spawn(async move {});
 
         Ok(Response::new(ReceiverStream::new(rx)))
     }

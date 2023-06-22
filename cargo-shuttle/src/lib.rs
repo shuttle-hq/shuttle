@@ -18,7 +18,7 @@ use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{resource, ApiKey};
 use shuttle_proto::runtime::runtime_client::RuntimeClient;
-use shuttle_proto::runtime::{self, LoadRequest, StartRequest, StopRequest, SubscribeLogsRequest};
+use shuttle_proto::runtime::{self, LoadRequest, StartRequest, StopRequest};
 
 use tokio::process::Child;
 use tokio::task::JoinHandle;
@@ -618,24 +618,6 @@ impl Shuttle {
             .collect();
 
         println!("{}", get_resources_table(&resources, service_name.as_str()));
-
-        let mut stream = runtime_client
-            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
-            .or_else(|err| async {
-                provisioner_server.abort();
-                logger_server.abort();
-                runtime.kill().await?;
-                Err(err)
-            })
-            .await?
-            .into_inner();
-
-        tokio::spawn(async move {
-            while let Ok(Some(log)) = stream.message().await {
-                let log: shuttle_common::LogItem = log.try_into().expect("to convert log");
-                println!("{log}");
-            }
-        });
 
         let addr = SocketAddr::new(
             if run_args.external {

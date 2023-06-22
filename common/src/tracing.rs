@@ -1,10 +1,14 @@
+#[cfg(feature = "backend")]
 use chrono::Utc;
+#[cfg(feature = "backend")]
 use opentelemetry_proto::tonic::{
     common::v1::{any_value, AnyValue, KeyValue},
     logs::v1::{LogRecord, SeverityNumber},
 };
 use serde_json::json;
-use tracing::{field::Visit, Level, Metadata};
+use tracing::field::Visit;
+#[cfg(feature = "backend")]
+use tracing::{Level, Metadata};
 
 pub const MESSAGE_KEY: &str = "message";
 pub const FILEPATH_KEY: &str = "code.filepath";
@@ -35,6 +39,7 @@ impl JsonVisitor {
         }
     }
 
+    #[cfg(feature = "backend")]
     /// Use metadata to turn self into a [LogRecord]
     pub fn into_log_record(mut self, metadata: &Metadata) -> LogRecord {
         let body = self.get_body();
@@ -53,11 +58,13 @@ impl JsonVisitor {
         }
     }
 
+    #[cfg(feature = "backend")]
     /// Get the body from a visitor
     fn get_body(&mut self) -> serde_json::Value {
         self.fields.remove(MESSAGE_KEY).unwrap_or_default()
     }
 
+    #[cfg(feature = "backend")]
     /// Add metadata information to own fields and return those fields
     fn enrich_with_metadata(
         self,
@@ -128,6 +135,7 @@ impl Visit for JsonVisitor {
     }
 }
 
+#[cfg(feature = "backend")]
 fn get_severity_number(metadata: &Metadata) -> SeverityNumber {
     match *metadata.level() {
         Level::TRACE => SeverityNumber::Trace,
@@ -138,6 +146,7 @@ fn get_severity_number(metadata: &Metadata) -> SeverityNumber {
     }
 }
 
+#[cfg(feature = "backend")]
 fn serde_json_value_to_any_value(
     value: serde_json::Value,
 ) -> Option<opentelemetry_proto::tonic::common::v1::AnyValue> {
@@ -172,6 +181,7 @@ fn serde_json_value_to_any_value(
     Some(opentelemetry_proto::tonic::common::v1::AnyValue { value: Some(value) })
 }
 
+#[cfg(feature = "backend")]
 /// Convert a [serde_json::Map] into an anyvalue [KeyValue] list
 pub fn serde_json_map_to_key_value_list(
     map: serde_json::Map<String, serde_json::Value>,
@@ -186,6 +196,7 @@ pub fn serde_json_map_to_key_value_list(
         .collect()
 }
 
+#[cfg(feature = "backend")]
 /// Convert an [AnyValue] to a [serde_json::Value]
 pub fn from_any_value_to_serde_json_value(any_value: AnyValue) -> serde_json::Value {
     let Some(value) = any_value.value else {
@@ -218,6 +229,7 @@ pub fn from_any_value_to_serde_json_value(any_value: AnyValue) -> serde_json::Va
     }
 }
 
+#[cfg(feature = "backend")]
 /// Convert a [KeyValue] list in a [serde_json::Map]
 pub fn from_any_value_kv_to_serde_json_map(
     kv_list: Vec<KeyValue>,

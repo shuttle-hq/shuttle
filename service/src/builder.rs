@@ -105,8 +105,6 @@ pub async fn build_workspace(
 
     let mut runtimes = Vec::new();
 
-    println!("{:?}", metadata.target_directory);
-
     if !alpha_packages.is_empty() {
         let mut service = compile(
             alpha_packages,

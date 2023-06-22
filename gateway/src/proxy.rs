@@ -69,7 +69,7 @@ where
 #[derive(Clone)]
 pub struct UserProxy<D>
 where
-    D: Dal + Send + Sync + 'static,
+    D: Dal,
 {
     dal: D,
     remote_addr: SocketAddr,
@@ -78,7 +78,7 @@ where
 
 impl<'r, D> AsResponderTo<&'r AddrStream> for UserProxy<D>
 where
-    D: Dal + Send + Sync + Clone + 'static,
+    D: Dal,
 {
     fn as_responder_to(&self, addr_stream: &'r AddrStream) -> Self {
         let mut responder = self.clone();
@@ -101,7 +101,7 @@ where
 
 impl<D> UserProxy<D>
 where
-    D: Dal + Send + Sync + 'static,
+    D: Dal,
 {
     async fn proxy(self, mut req: Request<Body>) -> Result<Response, Error> {
         let span = debug_span!("proxy", http.method = %req.method(), http.host = ?req.headers().get("Host"), http.uri = %req.uri(), http.status_code = field::Empty, project = field::Empty);
@@ -165,7 +165,7 @@ where
 
 impl<D> Service<Request<Body>> for UserProxy<D>
 where
-    D: Dal + Send + Sync + Clone + 'static,
+    D: Dal + 'static,
 {
     type Response = Response;
     type Error = Error;
@@ -187,7 +187,7 @@ where
 #[derive(Clone)]
 pub struct Bouncer<D>
 where
-    D: Dal + Send + Sync + 'static,
+    D: Dal,
 {
     dal: D,
     public: FQDN,
@@ -195,7 +195,7 @@ where
 
 impl<'r, D> AsResponderTo<&'r AddrStream> for Bouncer<D>
 where
-    D: Dal + Send + Sync + Clone + 'static,
+    D: Dal,
 {
     fn as_responder_to(&self, _req: &'r AddrStream) -> Self {
         self.clone()
@@ -204,7 +204,7 @@ where
 
 impl<D> Bouncer<D>
 where
-    D: Dal + Send + Sync + Clone + 'static,
+    D: Dal,
 {
     async fn bounce(self, req: Request<Body>) -> Result<Response, Error> {
         let mut resp = Response::builder();
@@ -237,7 +237,7 @@ where
 
 impl<D> Service<Request<Body>> for Bouncer<D>
 where
-    D: Dal + Send + Sync + Clone + 'static,
+    D: Dal + 'static,
 {
     type Response = Response;
     type Error = Error;
@@ -255,7 +255,7 @@ where
 
 pub struct UserServiceBuilder<D>
 where
-    D: Dal + Send + Sync + 'static,
+    D: Dal,
 {
     dal: Option<D>,
     acme: Option<AcmeClient>,
@@ -267,7 +267,7 @@ where
 
 impl<D> Default for UserServiceBuilder<D>
 where
-    D: Dal + Send + Sync + Clone + 'static,
+    D: Dal + 'static,
 {
     fn default() -> Self {
         Self::new()
@@ -276,7 +276,7 @@ where
 
 impl<D> UserServiceBuilder<D>
 where
-    D: Dal + Send + Sync + Clone + 'static,
+    D: Dal + 'static,
 {
     pub fn new() -> Self {
         Self {

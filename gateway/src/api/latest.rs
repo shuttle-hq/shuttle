@@ -45,6 +45,7 @@ use x509_parser::time::ASN1Time;
 
 use crate::acme::{AcmeClient, CustomDomain};
 use crate::auth::{extract_metadata_cookie, insert_metadata_bearer_token, Key, ScopedUser, User};
+use crate::dal::Dal;
 use crate::service::GatewayService;
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::{AccountName, Error, ProjectName};
@@ -123,9 +124,9 @@ async fn get_status() -> Response<Body> {
         ("project_name" = String, Path, description = "The name of the project."),
     )
 )]
-async fn get_project(
-    State(RouterState { service, .. }): State<RouterState>,
-    ScopedUser { scope, .. }: ScopedUser,
+async fn get_project<D: Dal>(
+    State(RouterState { service, .. }): State<RouterState<D>>,
+    ScopedUser { scope, .. }: ScopedUser<D>,
 ) -> Result<AxumJson<project::Response>, Error> {
     let project_name = service.find_project(&scope).await?;
 
@@ -147,9 +148,9 @@ async fn get_project(
         PaginationDetails
     )
 )]
-async fn get_projects_list(
-    State(RouterState { service, .. }): State<RouterState>,
-    User { name, .. }: User,
+async fn get_projects_list<D: Dal>(
+    State(RouterState { service, .. }): State<RouterState<D>>,
+    User { name, .. }: User<D>,
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
     let limit = limit.unwrap_or(u32::MAX);
@@ -178,8 +179,8 @@ async fn get_projects_list(
         ("api_key" = [])
     )
 )]
-async fn get_projects(
-    State(RouterState { service, .. }): State<RouterState>,
+async fn get_projects<D: Dal>(
+    State(RouterState { service, .. }): State<RouterState<D>>,
 ) -> Result<AxumJson<Vec<project::AdminResponse>>, Error> {
     let projects = service.iter_projects().await?.map(Into::into).collect();
 
@@ -224,8 +225,8 @@ async fn create_acme_account(
         ("fqdn" = String, Path, description = "The fqdn that represents the requested custom domain."),
     )
 )]
-async fn request_custom_domain_acme_certificate(
-    State(RouterState { service, .. }): State<RouterState>,
+async fn request_custom_domain_acme_certificate<D: Dal>(
+    State(RouterState { service, .. }): State<RouterState<D>>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     Path((project_name, fqdn)): Path<(ProjectName, String)>,
@@ -264,8 +265,8 @@ async fn request_custom_domain_acme_certificate(
         ("fqdn" = String, Path, description = "The fqdn that represents the requested custom domain."),
     )
 )]
-async fn renew_custom_domain_acme_certificate(
-    State(RouterState { service, .. }): State<RouterState>,
+async fn renew_custom_domain_acme_certificate<D: Dal>(
+    State(RouterState { service, .. }): State<RouterState<D>>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     Path((project_name, fqdn)): Path<(ProjectName, String)>,
@@ -338,8 +339,8 @@ async fn renew_custom_domain_acme_certificate(
         (status = 500, description = "Server internal error.")
     )
 )]
-async fn renew_gateway_acme_certificate(
-    State(RouterState { service, .. }): State<RouterState>,
+async fn renew_gateway_acme_certificate<D: Dal>(
+    State(RouterState { service, .. }): State<RouterState<D>>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
@@ -369,11 +370,11 @@ async fn renew_gateway_acme_certificate(
         ("api_key" = [])
     )
 )]
-async fn login(
+async fn login<D: Dal>(
     jar: CookieJar,
     State(RouterState {
         mut auth_client, ..
-    }): State<RouterState>,
+    }): State<RouterState<D>>,
     key: Key,
     Path(account_name): Path<AccountName>,
 ) -> Result<(CookieJar, AxumJson<shuttle_common::models::user::Response>), Error> {
@@ -416,13 +417,13 @@ async fn login(
         (status = 503, description = "Server not reachable.")
     )
 )]
-async fn logout(
+async fn logout<D: Dal>(
     jar: CookieJar,
     State(RouterState {
         auth_cache,
         mut auth_client,
         ..
-    }): State<RouterState>,
+    }): State<RouterState<D>>,
 ) -> Result<CookieJar, Error> {
     let cookie = jar
         .get(COOKIE_NAME)
@@ -482,10 +483,10 @@ async fn logout(
         ("api_key" = [])
     )
 )]
-async fn get_user(
+async fn get_user<D: Dal>(
     State(RouterState {
         mut auth_client, ..
-    }): State<RouterState>,
+    }): State<RouterState<D>>,
     Path(account_name): Path<AccountName>,
     key: Key,
 ) -> Result<AxumJson<shuttle_common::models::user::Response>, Error> {
@@ -532,10 +533,10 @@ async fn get_user(
         ("api_key" = [])
     )
 )]
-async fn post_user(
+async fn post_user<D: Dal>(
     State(RouterState {
         mut auth_client, ..
-    }): State<RouterState>,
+    }): State<RouterState<D>>,
     Path((account_name, account_tier)): Path<(AccountName, AccountTier)>,
     key: Key,
 ) -> Result<AxumJson<shuttle_common::models::user::Response>, Error> {
@@ -579,12 +580,12 @@ async fn post_user(
         ("api_key" = [])
     )
 )]
-async fn reset_api_key(
+async fn reset_api_key<D: Dal>(
     State(RouterState {
         mut auth_client,
         auth_cache,
         ..
-    }): State<RouterState>,
+    }): State<RouterState<D>>,
     key: Option<Key>,
     jar: CookieJar,
 ) -> Result<(), Error> {
@@ -683,27 +684,33 @@ impl Modify for SecurityAddon {
 pub struct ApiDoc;
 
 #[derive(Clone)]
-pub(crate) struct RouterState {
+pub(crate) struct RouterState<D: Dal> {
     pub auth_client: AuthClient<InjectPropagation<Channel>>,
     pub auth_cache: Arc<Box<dyn CacheManagement<Value = String>>>,
-    pub service: Arc<GatewayService>,
+    pub service: Arc<GatewayService<D>>,
 }
 
-pub struct ApiBuilder {
+pub struct ApiBuilder<D: Dal> {
     auth_client: Option<AuthClient<InjectPropagation<Channel>>>,
     auth_cache: Option<Arc<Box<dyn CacheManagement<Value = String>>>>,
-    router: Router<RouterState>,
-    service: Option<Arc<GatewayService>>,
+    router: Router<RouterState<D>>,
+    service: Option<Arc<GatewayService<D>>>,
     bind: Option<SocketAddr>,
 }
 
-impl Default for ApiBuilder {
+impl<D> Default for ApiBuilder<D>
+where
+    D: Dal + 'static,
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ApiBuilder {
+impl<D> ApiBuilder<D>
+where
+    D: Dal + 'static,
+{
     pub fn new() -> Self {
         Self {
             auth_client: None,
@@ -747,7 +754,7 @@ impl ApiBuilder {
         self
     }
 
-    pub fn with_service(mut self, service: Arc<GatewayService>) -> Self {
+    pub fn with_service(mut self, service: Arc<GatewayService<D>>) -> Self {
         self.service = Some(service);
         self
     }

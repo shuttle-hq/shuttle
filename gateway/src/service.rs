@@ -11,22 +11,25 @@ use x509_parser::prelude::parse_x509_pem;
 use x509_parser::time::ASN1Time;
 
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
-use crate::dal::{Dal, Sqlite};
+use crate::dal::Dal;
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::{AccountName, Error, ErrorKind, ProjectDetails, ProjectName};
 
 #[derive(Clone)]
-pub struct GatewayService {
-    dal: Arc<dyn Dal + Send + Sync + 'static>,
+pub struct GatewayService<D: Dal> {
+    dal: D,
     state_location: PathBuf,
     proxy_fqdn: FQDN,
 }
 
-impl GatewayService {
+impl<D> GatewayService<D>
+where
+    D: Dal,
+{
     /// Initialize `GatewayService` and its required dependencies.
-    pub async fn init(dal: Sqlite, state_location: PathBuf, proxy_fqdn: FQDN) -> Self {
+    pub async fn init(dal: D, state_location: PathBuf, proxy_fqdn: FQDN) -> Self {
         Self {
-            dal: Arc::new(dal),
+            dal,
             state_location,
             proxy_fqdn,
         }

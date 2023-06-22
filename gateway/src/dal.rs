@@ -1,4 +1,8 @@
-use std::{fmt, path::Path, str::FromStr};
+use std::{
+    fmt::{self, Debug},
+    path::Path,
+    str::FromStr,
+};
 
 use async_trait::async_trait;
 use fqdn::Fqdn;
@@ -39,7 +43,7 @@ impl fmt::Display for DalError {
 }
 
 #[async_trait]
-pub trait Dal {
+pub trait Dal: Sync + Send + Debug + Clone {
     /// Find project by project name.
     async fn get_project(&self, project_name: &ProjectName) -> Result<ProjectName, DalError>;
     /// Get all the projects in the gateway state.
@@ -81,7 +85,7 @@ pub trait Dal {
     ) -> Result<CustomDomain, DalError>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Sqlite {
     pool: SqlitePool,
 }

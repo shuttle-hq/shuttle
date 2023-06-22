@@ -1222,8 +1222,10 @@ impl Shuttle {
             .parent()
             .context("get parent directory of crate")?;
 
-        // Make sure the target folder is excluded at all times
+        // Make sure the target  and .git folders are excluded at all times
         let overrides = OverrideBuilder::new(working_directory)
+            .add("!.git/")
+            .context("add `!.git/` override")?
             .add("!target/")
             .context("add `!target/` override")?
             .build()

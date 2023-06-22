@@ -1,14 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use super::{
-    d_started::ServiceStarted, f_ready::ServiceReady, k_stopping::ServiceStopping, StateVariant,
-};
+use super::{d_started::ServiceStarted, f_ready::ServiceReady, StateVariant};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ServiceReadying {
     Ready(ServiceReady),
     Started(ServiceStarted),
-    Idle(ServiceStopping),
 }
 
 impl StateVariant for ServiceReadying {

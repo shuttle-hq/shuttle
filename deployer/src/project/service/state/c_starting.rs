@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use async_trait::async_trait;
 use bollard::{errors::Error as DockerError, service::ContainerInspectResponse};
 use serde::{Deserialize, Serialize};
@@ -52,6 +50,6 @@ where
 
         let container = container.refresh(ctx).await?;
 
-        Ok(Self::Next::new(container, VecDeque::new()))
+        Ok(Self::Next::new(container))
     }
 }

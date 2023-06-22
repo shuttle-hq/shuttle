@@ -8,7 +8,7 @@ use shuttle_proto::runtime::{
 };
 use tonic::transport::{Channel, Endpoint};
 use tower::ServiceBuilder;
-use tracing::{debug, trace};
+use tracing::{debug, info, trace};
 use ulid::Ulid;
 
 use crate::project::service::RUNTIME_API_PORT;
@@ -29,7 +29,6 @@ impl RuntimeManager {
         service_id: Ulid,
         target_ip: Ipv4Addr,
     ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
-        debug!("making new client");
         let mut guard = self.runtimes.lock().await;
 
         if let Some(runtime_client) = guard.get(&service_id) {
@@ -37,7 +36,6 @@ impl RuntimeManager {
         }
 
         // Connection to the docker container where the shuttle-runtime lives.
-
         let conn = Endpoint::new(format!("http://{target_ip}:{RUNTIME_API_PORT}"))
             .context("creating runtime client endpoint")?
             .connect_timeout(Duration::from_secs(5));
@@ -90,7 +88,7 @@ impl RuntimeManager {
                 }
             }
         } else {
-            trace!("no client running");
+            info!("no client running");
             false
         }
     }

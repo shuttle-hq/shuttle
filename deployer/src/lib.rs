@@ -18,6 +18,7 @@ use project::service::state::f_running::ServiceRunning;
 use project::service::state::StateVariant;
 use project::service::ServiceState;
 use project::task::{BoxedTask, Task, TaskBuilder};
+use project::worker::WORKER_QUEUE_SIZE;
 use runtime_manager::RuntimeManager;
 use shuttle_common::backends::auth::VerifyClaim;
 use shuttle_common::claims::Claim;
@@ -36,8 +37,9 @@ use shuttle_proto::deployer::{
 };
 use tokio::sync::mpsc::{self, Sender, UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 use tonic::{transport::Server, Response, Result as TonicResult};
-use tracing::{error, info, instrument};
+use tracing::{debug, error, info, info_span, instrument, warn, Instrument};
 use ulid::Ulid;
 
 use crate::project::worker::{TaskRouter, Worker};
@@ -51,6 +53,7 @@ pub mod project;
 pub mod runtime_manager;
 
 const RUN_BUFFER_SIZE: usize = 100;
+pub const SVC_DEGRADED_THRESHOLD: usize = 128;
 
 #[derive(Default)]
 pub struct GitMetadata {
@@ -149,6 +152,9 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     }
 
     pub async fn start(self) -> Result<()> {
+        // We're instating first the task that will idle the task when needed.
+        let idling_task_handle = self.instate_service_idling_task();
+
         // The deployments which are in the `Running` state are considered runnable and they are started again. Running the
         // deployments happens after their associated services' sandboxes are healthy and we start them.
         let runnable_deployments = self.dal.running_deployments().await?;
@@ -198,10 +204,11 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         let svc = DeployerServer::new(self);
         let router = server_builder.add_service(svc);
 
-        router
-            .serve(bind_address)
-            .await
-            .expect("to serve on address");
+        tokio::select!(
+            _ = idling_task_handle => info!("idling task handle exited"),
+            _ = router.serve(bind_address) => info!("deployer server exited")
+        );
+
         Ok(())
     }
 
@@ -301,6 +308,73 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             .await;
 
         Ok(())
+    }
+
+    // Every 60 secs go over all `::Running` projects and check their health.
+    pub fn instate_service_idling_task(&self) -> JoinHandle<()> {
+        let dal = self.dal.clone();
+        let deployment_state_machine_channel = self.deployment_state_machine_channel.clone();
+        let task_router = self.task_router.clone();
+        let docker = self.docker.clone();
+        let runtime_manager = self.runtime_manager.clone();
+        let project_events_channel = self.project_events_channel_tx.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(10));
+            interval.tick().await; // first tick is immediate
+            loop {
+                interval.tick().await;
+                if deployment_state_machine_channel.capacity()
+                    < WORKER_QUEUE_SIZE - SVC_DEGRADED_THRESHOLD
+                {
+                    // If degraded, don't stack more health checks.
+                    warn!(
+                        deployment_state_machine_channel.capacity =
+                            deployment_state_machine_channel.capacity(),
+                        "skipping health checks"
+                    );
+                    continue;
+                }
+
+                if let Ok(deployments) = dal.running_deployments().await {
+                    let span = info_span!(
+                        "running health checks",
+                        healthcheck.num_projects = deployments.len()
+                    );
+
+                    let dal = dal.clone();
+                    let task_router = task_router.clone();
+                    let docker = docker.clone();
+                    let deployment_state_machine_channel = deployment_state_machine_channel.clone();
+                    let runtime_manager = runtime_manager.clone();
+                    let project_events_channel = project_events_channel.clone();
+                    async move {
+                        for deployment in deployments {
+                            if let Ok(handle) = TaskBuilder::new(dal.clone())
+                                .task_router(task_router.clone())
+                                .service_id(deployment.service_id)
+                                .service_docker_context(ServiceDockerContext::new(
+                                    docker.clone(),
+                                    runtime_manager.clone(),
+                                    project_events_channel.clone(),
+                                ))
+                                .and_then(task::check_health())
+                                .and_then(task::run_until_done())
+                                .send(&deployment_state_machine_channel)
+                                .await
+                            {
+                                // We wait for the check to be done before
+                                // queuing up the next one.
+                                handle.await;
+                            }
+                        }
+                    }
+                    .instrument(span)
+                    .await;
+                } else {
+                    info!("no running deployment");
+                }
+            }
+        })
     }
 }
 

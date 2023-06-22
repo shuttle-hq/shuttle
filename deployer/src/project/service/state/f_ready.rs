@@ -1,11 +1,8 @@
 use std::{collections::VecDeque, net::Ipv4Addr};
 
-use crate::{
-    project::{docker::DockerContext, service::Service},
-    runtime_manager::RuntimeManager,
-};
+use crate::project::{docker::DockerContext, service::Service};
 use async_trait::async_trait;
-use bollard::{container::Stats, service::ContainerInspectResponse};
+use bollard::service::ContainerInspectResponse;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -20,9 +17,6 @@ use super::{
 pub struct ServiceReady {
     pub container: ContainerInspectResponse,
     pub service: Service,
-    // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
-    #[serde(default)]
-    pub stats: VecDeque<Stats>,
 }
 
 impl StateVariant for ServiceReady {
@@ -42,11 +36,7 @@ where
     #[instrument(skip_all)]
     async fn next(mut self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let target_ip = self.target_ip();
-        let Self {
-            container,
-            service,
-            stats,
-        } = self;
+        let Self { container, service } = self;
 
         let cs = ctx.container_settings().ok_or(ServiceErrored::internal(
             "failed to get the container settings in the ready state",
@@ -67,7 +57,7 @@ where
                 ))
             })?,
             service,
-            stats,
+            stats: VecDeque::new(),
         })
     }
 }
@@ -75,12 +65,5 @@ where
 impl ServiceReady {
     pub fn target_ip(&self) -> Ipv4Addr {
         self.service.target
-    }
-
-    pub async fn is_healthy(
-        &mut self,
-        runtime_manager: RuntimeManager,
-    ) -> Result<bool, super::super::error::Error> {
-        self.service.is_healthy(runtime_manager).await
     }
 }

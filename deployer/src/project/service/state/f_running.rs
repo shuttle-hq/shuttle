@@ -17,6 +17,20 @@ pub struct ServiceRunning {
     pub stats: VecDeque<Stats>,
 }
 
+impl ServiceRunning {
+    pub fn new(
+        container: ContainerInspectResponse,
+        stats: VecDeque<Stats>,
+        service: Service,
+    ) -> Self {
+        Self {
+            container,
+            stats,
+            service,
+        }
+    }
+}
+
 impl StateVariant for ServiceRunning {
     fn name() -> String {
         "Running".to_string()
@@ -28,7 +42,7 @@ impl<Ctx> State<Ctx> for ServiceRunning
 where
     Ctx: DockerContext,
 {
-    type Next = Self;
+    type Next = ServiceRunning;
     type Error = ServiceErrored;
 
     #[instrument(skip_all)]

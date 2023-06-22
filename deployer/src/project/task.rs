@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use futures::Future;
+use shuttle_proto::runtime::Ping;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -7,7 +8,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
-use tracing::{error, info_span, trace, warn};
+use tracing::{error, info, info_span, trace, warn};
 use ulid::Ulid;
 
 use crate::dal::Dal;
@@ -141,15 +142,28 @@ pub fn start() -> impl Task<ServiceTaskContext, Output = ServiceState, Error = E
 pub fn check_health() -> impl Task<ServiceTaskContext, Output = ServiceState, Error = Error> {
     run(|ctx| async move {
         match ctx.state.refresh(&ctx.docker_context).await {
-            Ok(ServiceState::Ready(mut ready)) => {
-                if ready
-                    .is_healthy(ctx.docker_context.runtime_manager())
+            Ok(ServiceState::Running(running)) => {
+                if let Ok(mut runtime_client) = ctx
+                    .docker_context
+                    .runtime_manager()
+                    .runtime_client(ctx.service_id, running.target_ip())
                     .await
-                    .is_ok()
                 {
-                    TaskResult::Done(ServiceState::Ready(ready))
+                    if runtime_client.health_check(Ping {}).await.is_ok() {
+                        TaskResult::Done(ServiceState::Running(running))
+                    } else {
+                        TaskResult::Done(
+                            ServiceState::Running(running)
+                                .reboot()
+                                .expect("failed when tried to reboot the service"),
+                        )
+                    }
                 } else {
-                    TaskResult::Done(ServiceState::Ready(ready).reboot().unwrap())
+                    TaskResult::Done(
+                        ServiceState::Running(running)
+                            .reboot()
+                            .expect("failed when tried to reboot the service"),
+                    )
                 }
             }
             Ok(update) => TaskResult::Done(update),

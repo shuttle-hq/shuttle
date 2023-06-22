@@ -1,15 +1,16 @@
-use std::{collections::VecDeque, convert::Infallible, fmt::Display, net::Ipv4Addr, str::FromStr};
+use std::{convert::Infallible, fmt::Display, net::Ipv4Addr, str::FromStr};
 
+use crate::deployment::USER_SERVICE_DEFAULT_PORT;
+use crate::runtime_manager::RuntimeManager;
 use async_trait::async_trait;
+use bollard::container::StatsOptions;
 use bollard::errors::Error as DockerError;
 use bollard::service::{ContainerInspectResponse, ContainerStateStatusEnum};
 use serde::{Deserialize, Serialize};
 use shuttle_proto::deployer::{ProjectChange, ProjectEvent};
+use tokio_stream::StreamExt;
 use tracing::{debug, error, instrument};
 use ulid::Ulid;
-
-use crate::deployment::USER_SERVICE_DEFAULT_PORT;
-use crate::runtime_manager::RuntimeManager;
 
 use self::state::f_ready::ServiceReady;
 use self::state::g_completed::ServiceCompleted;
@@ -374,7 +375,6 @@ where
             Self::Started(started) => match started.next(ctx).await {
                 Ok(ServiceReadying::Ready(ready)) => Ok(ready.into()),
                 Ok(ServiceReadying::Started(started)) => Ok(started.into()),
-                Ok(ServiceReadying::Idle(stopping)) => Ok(stopping.into()),
                 Err(err) => Ok(Self::Errored(err)),
             },
             Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
@@ -488,6 +488,7 @@ where
     /// state which is probably prone to erroneously setting the
     /// project into the wrong state if the docker is transitioning
     /// the state of its resources under us
+    #[instrument(skip_all)]
     async fn refresh(self, ctx: &Ctx) -> Result<Self, Self::Error> {
         let refreshed = match self {
             Self::Creating(creating) => Self::Creating(creating),
@@ -499,7 +500,7 @@ where
             {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ServiceStarted::new(container, VecDeque::new()))
+                        Self::Started(ServiceStarted::new(container))
                     }
                     ContainerStateStatusEnum::CREATED => Self::Starting(ServiceStarting {
                         container,
@@ -521,8 +522,8 @@ where
                 }
                 Err(err) => return Err(Error::Docker(err)),
             },
-            Self::Started(ServiceStarted { container, stats, .. })
-            | Self::Ready(ServiceReady { container, stats, .. })
+            Self::Started(ServiceStarted { container, .. })
+            | Self::Ready(ServiceReady { container, .. })
              => match container
                 .clone()
                 .refresh(ctx)
@@ -530,7 +531,7 @@ where
             {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ServiceStarted::new(container, stats))
+                        Self::Started(ServiceStarted::new(container))
                     }
                     // Restart the container if it went down
                     ContainerStateStatusEnum::EXITED => Self::Restarting(ServiceRestarting  { container, restart_count: 0 }),
@@ -549,7 +550,7 @@ where
                 }
                 Err(err) => return Err(Error::Docker(err)),
             },
-            Self::Running(ServiceRunning { container, stats, service})
+            Self::Running(ServiceRunning { container, mut stats, service})
              => match container
                 .clone()
                 .refresh(ctx)
@@ -557,7 +558,78 @@ where
             {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Running(ServiceRunning {container, service, stats})
+                        let container = container.refresh(ctx).await.map_err(Error::Docker)?;
+                        let idle_minutes = container.idle_minutes();
+
+                        // Idle minutes of `0` means it is disabled and the project will always stay up
+                        if idle_minutes < 1 {
+                            Self::Running(ServiceRunning {
+                                container,
+                                service,
+                                stats,
+                            })
+                        } else {
+                            let new_stat = ctx
+                                .docker()
+                                .stats(
+                                    safe_unwrap!(container.id),
+                                    Some(StatsOptions {
+                                        one_shot: true,
+                                        stream: false,
+                                    }),
+                                )
+                                .next()
+                                .await
+                                .expect("to get the stats")
+                                .map_err(Error::Docker)?;
+
+                            stats.push_back(new_stat.clone());
+
+                            let mut last = None;
+
+                            while stats.len() > (idle_minutes as usize) {
+                                last = stats.pop_front();
+                            }
+
+                            if let Some(last) = last {
+                                let cpu_per_minute = (new_stat.cpu_stats.cpu_usage.total_usage
+                                    - last.cpu_stats.cpu_usage.total_usage)
+                                    / idle_minutes;
+
+                                debug!("{} has {} CPU usage per minute", service.id, cpu_per_minute);
+
+                                // From analysis we know the following kind of CPU usage for different kinds of idle projects
+                                // Web framework uses 6_200_000 CPU per minute
+                                // Serenity uses 20_000_000 CPU per minute
+                                //
+                                // We want to make sure we are able to stop these kinds of projects
+                                //
+                                // Now, the following kind of CPU usage has been observed for different kinds of projects having
+                                // 2 web requests / processing 2 discord messages per minute
+                                // Web framework uses 100_000_000 CPU per minute
+                                // Serenity uses 30_000_000 CPU per minute
+                                //
+                                // And projects at these levels we will want to keep active. However, the 30_000_000
+                                // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
+                                // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
+                                // active framework for now
+                                if cpu_per_minute < 100_000_000 {
+                                    Self::Stopping(ServiceStopping { container })
+                                } else {
+                                    Self::Running(ServiceRunning {
+                                        container,
+                                        service,
+                                        stats,
+                                    })
+                                }
+                            } else {
+                                Self::Running(ServiceRunning {
+                                    container,
+                                    service,
+                                    stats,
+                                })
+                            }
+                        }
                     }
                     // Restart the container if it went down
                     ContainerStateStatusEnum::EXITED => Self::Restarting(ServiceRestarting  { container, restart_count: 0 }),
@@ -575,7 +647,7 @@ where
                     Self::Creating(ServiceCreating::from_container(container, 0)?)
                 }
                 Err(err) => return Err(Error::Docker(err)),
-            },
+            }
             Self::Stopping(ServiceStopping { container })
              => match container
                 .clone()

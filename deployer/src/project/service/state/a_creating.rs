@@ -7,7 +7,8 @@ use bollard::{
 use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::project::idle_minutes;
-use tracing::{debug, instrument};
+use shuttle_proto::deployer::{ProjectChange, ProjectEvent};
+use tracing::{debug, error, instrument};
 use ulid::Ulid;
 
 use super::{machine::State, StateVariant};
@@ -29,6 +30,8 @@ pub struct ServiceCreating {
     service_id: String,
     /// The deployment Ulid
     deployment_id: String,
+    /// The deployment Ulid
+    project_id: String,
     /// Image used to create the container from
     image: String,
     /// Configuration will be extracted from there if specified (will
@@ -46,6 +49,7 @@ impl ServiceCreating {
     pub fn new(
         service_id: Ulid,
         deployment_id: Ulid,
+        project_id: Ulid,
         image_name: String,
         idle_minutes: u64,
     ) -> Self {
@@ -56,6 +60,7 @@ impl ServiceCreating {
             from: None,
             recreate_count: 0,
             idle_minutes,
+            project_id: project_id.to_string(),
         }
     }
 
@@ -66,6 +71,7 @@ impl ServiceCreating {
         let service_id = container.service_id()?;
         let idle_minutes = container.idle_minutes();
         let deployment_id = container.deployment_id()?;
+        let project_id = container.project_id()?;
 
         Ok(Self {
             service_id: service_id.to_string(),
@@ -76,6 +82,7 @@ impl ServiceCreating {
             from: Some(container),
             recreate_count,
             idle_minutes,
+            project_id: project_id.to_string(),
         })
     }
 
@@ -115,6 +122,7 @@ impl ServiceCreating {
             image,
             idle_minutes,
             deployment_id,
+            project_id,
             ..
         } = &self;
 
@@ -159,6 +167,7 @@ impl ServiceCreating {
                         "shuttle.service_name": runnable_deployment.service_name,
                         "shuttle.idle_minutes": format!("{idle_minutes}"),
                         "shuttle.deployment_id": deployment_id,
+                        "shuttle.project_id": project_id,
                         "shuttle.is_next": runnable_deployment.is_next.to_string()
                     },
                     "Cmd": cmd[..],
@@ -217,6 +226,8 @@ where
         let container_name = self.container_name(ctx).ok_or(ServiceErrored::internal(
             "missing container settings required by transitioning from creating step",
         ))?;
+        let service_id = self.service_id.clone();
+        let project_id = self.project_id.clone();
         let Self { recreate_count, .. } = self;
 
         let container = ctx
@@ -237,6 +248,33 @@ where
                 }
             })
             .await?;
+
+        // Sending an event corresponding to the creation state. We do it separately from the ServiceState because
+        // this is the first state, transitioning in it by force.
+        if ctx
+            .events_tx()
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|tx| {
+                tx.send(ProjectEvent {
+                    service_id,
+                    project_id,
+                    change: Some(ProjectChange {
+                        state_variant: ServiceCreating::name(),
+                        socket_addr: None,
+                    }),
+                })
+                .ok()
+            })
+            .is_none()
+        {
+            error!(
+                "couldn't send project event for {}",
+                ServiceCreating::name(),
+            )
+        };
+
         Ok(ServiceAttaching {
             container,
             recreate_count,

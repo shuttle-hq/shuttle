@@ -20,8 +20,8 @@ tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "macros", "io-util", "process", "rt-multi-thread"] }
-tokio-stream = { version = "0.1.14", optional = true }
-tokio-tar = { version = "0.3.0", optional = true }
+tokio-stream = { version = "0.1.14" }
+tokio-tar = { version = "0.3.0" }
 toml = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }

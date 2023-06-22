@@ -1,4 +1,8 @@
-use tokio::sync::mpsc::Sender;
+use std::sync::Arc;
+
+use shuttle_proto::deployer::ProjectEvent;
+use tokio::sync::mpsc::{Sender, UnboundedSender};
+use tokio::sync::Mutex;
 
 use async_trait::async_trait;
 use bollard::{errors::Error as DockerError, service::ContainerInspectResponse, Docker};
@@ -13,6 +17,7 @@ use super::service::state::m_errored::ServiceErrored;
 use super::service::state::machine::Refresh;
 
 const CONTAINER_LABEL_SHUTTLE_SERVICE_ID: &str = "shuttle.service_id";
+const CONTAINER_LABEL_SHUTTLE_PROJECT_ID: &str = "shuttle.project_id";
 const CONTAINER_LABEL_SHUTTLE_DEPLOYMENT_ID: &str = "shuttle.deployment_id";
 const CONTAINER_LABEL_SHUTTLE_SERVICE_NAME: &str = "shuttle.service_name";
 const CONTAINER_LABEL_SHUTTLE_IDLE_MINUTES: &str = "shuttle.idle_minutes";
@@ -141,14 +146,20 @@ pub struct ServiceDockerContext {
     docker: Docker,
     settings: Option<ContainerSettings>,
     runtime_manager: RuntimeManager,
+    events_tx: Arc<Mutex<Option<UnboundedSender<ProjectEvent>>>>,
 }
 
 impl ServiceDockerContext {
-    pub fn new(docker: Docker, runtime_manager: RuntimeManager) -> Self {
+    pub fn new(
+        docker: Docker,
+        runtime_manager: RuntimeManager,
+        events_tx: Arc<Mutex<Option<UnboundedSender<ProjectEvent>>>>,
+    ) -> Self {
         Self {
             docker,
             settings: None,
             runtime_manager,
+            events_tx,
         }
     }
 
@@ -156,11 +167,13 @@ impl ServiceDockerContext {
         docker: Docker,
         cs: ContainerSettings,
         runtime_manager: RuntimeManager,
+        events_tx: Arc<Mutex<Option<UnboundedSender<ProjectEvent>>>>,
     ) -> Self {
         Self {
             docker,
             settings: Some(cs),
             runtime_manager,
+            events_tx,
         }
     }
 }
@@ -177,6 +190,10 @@ impl DockerContext for ServiceDockerContext {
     fn runtime_manager(&self) -> RuntimeManager {
         self.runtime_manager.clone()
     }
+
+    fn events_tx(&self) -> Arc<Mutex<Option<UnboundedSender<ProjectEvent>>>> {
+        self.events_tx.clone()
+    }
 }
 
 pub trait DockerContext: Send + Sync {
@@ -185,6 +202,8 @@ pub trait DockerContext: Send + Sync {
     fn container_settings(&self) -> Option<&ContainerSettings>;
 
     fn runtime_manager(&self) -> RuntimeManager;
+
+    fn events_tx(&self) -> Arc<Mutex<Option<UnboundedSender<ProjectEvent>>>>;
 }
 
 #[async_trait]
@@ -210,6 +229,16 @@ pub trait ContainerInspectResponseExt {
             .config
             .labels
             .get(CONTAINER_LABEL_SHUTTLE_SERVICE_ID)))
+        .map_err(|err| ServiceErrored::internal(err.to_string()))
+    }
+
+    fn project_id(&self) -> Result<Ulid, ServiceErrored> {
+        let container = self.container();
+
+        Ulid::from_string(safe_unwrap!(container
+            .config
+            .labels
+            .get(CONTAINER_LABEL_SHUTTLE_PROJECT_ID)))
         .map_err(|err| ServiceErrored::internal(err.to_string()))
     }
 

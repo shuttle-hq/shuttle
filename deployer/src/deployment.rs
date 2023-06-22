@@ -32,7 +32,7 @@ use crate::dal::DalError;
 
 type RunReceiver = mpsc::Receiver<RunnableDeployment>;
 
-const USER_SERVICE_DEFAULT_PORT: u16 = 8080;
+pub const USER_SERVICE_DEFAULT_PORT: u16 = 8080;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

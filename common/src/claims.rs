@@ -50,10 +50,10 @@ pub enum Scope {
     ServiceWrite,
 
     /// Read the status of a project
-    Project,
+    ProjectRead,
 
     /// Create a new project
-    ProjectCreate,
+    ProjectWrite,
 
     /// Get the resources for a project
     Resources,
@@ -102,8 +102,8 @@ impl ScopeBuilder {
             Scope::Logs,
             Scope::ServiceRead,
             Scope::ServiceWrite,
-            Scope::Project,
-            Scope::ProjectCreate,
+            Scope::ProjectRead,
+            Scope::ProjectWrite,
             Scope::Resources,
             Scope::ResourcesWrite,
             Scope::Secret,

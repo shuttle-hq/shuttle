@@ -185,9 +185,9 @@ impl Dal for Sqlite {
             .bind(id.to_string())
             .bind(name)
             .bind(state_variant)
+            .bind(SqlxJson(state))
             .bind(last_update.timestamp())
             .bind(project_id.to_string())
-            .bind(SqlxJson(state))
             .execute(&self.pool)
             .await?;
         Ok(true)
@@ -217,7 +217,7 @@ impl Dal for Sqlite {
                     FROM deployments AS d
                     JOIN services AS s ON s.id = d.service_id
                     WHERE s.state_variant = ?
-                    ORDER BY last_update"#,
+                    ORDER BY d.last_update"#,
         )
         .bind(ServiceRunning::name())
         .fetch_all(&self.pool)

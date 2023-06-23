@@ -4,11 +4,11 @@ use anyhow::Context;
 use shuttle_common::claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer};
 use shuttle_proto::runtime::{
     runtime_client::{self, RuntimeClient},
-    Ping, StopRequest, SubscribeLogsRequest,
+    StopRequest, SubscribeLogsRequest,
 };
 use tonic::transport::{Channel, Endpoint};
 use tower::ServiceBuilder;
-use tracing::{debug, info, trace};
+use tracing::trace;
 use ulid::Ulid;
 
 use crate::project::service::RUNTIME_API_PORT;
@@ -66,30 +66,6 @@ impl RuntimeManager {
         } else {
             trace!("no client running");
             true
-        }
-    }
-
-    pub async fn is_healthy(&self, service_id: &Ulid) -> bool {
-        let mut guard = self.runtimes.lock().await;
-
-        if let Some(runtime_client) = guard.get_mut(service_id) {
-            trace!(%service_id, "sending ping to the runtime");
-
-            let ping = tonic::Request::new(Ping {});
-            let response = runtime_client.health_check(ping).await;
-            match response {
-                Ok(_) => {
-                    trace!("runtime responded with pong");
-                    true
-                }
-                Err(status) => {
-                    trace!(?status, "health check failed");
-                    false
-                }
-            }
-        } else {
-            info!("no client running");
-            false
         }
     }
 

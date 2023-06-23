@@ -1,7 +1,6 @@
 use std::{convert::Infallible, fmt::Display, net::Ipv4Addr, str::FromStr};
 
 use crate::deployment::USER_SERVICE_DEFAULT_PORT;
-use crate::runtime_manager::RuntimeManager;
 use async_trait::async_trait;
 use bollard::container::StatsOptions;
 use bollard::errors::Error as DockerError;
@@ -10,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use shuttle_proto::deployer::{ProjectChange, ProjectEvent};
 use tokio_stream::StreamExt;
 use tracing::{debug, error, instrument};
-use ulid::Ulid;
 
 use self::state::f_ready::ServiceReady;
 use self::state::g_completed::ServiceCompleted;
@@ -723,16 +721,5 @@ impl Service {
             target,
             last_check: None,
         })
-    }
-
-    pub async fn is_healthy(
-        &mut self,
-        runtime_manager: RuntimeManager,
-    ) -> Result<bool, error::Error> {
-        let service_id = Ulid::from_string(self.id.as_str())
-            .map_err(|err| error::Error::Parse(err.to_string()))?;
-        let is_healthy = runtime_manager.is_healthy(&service_id).await;
-        self.last_check = Some(HealthCheckRecord::new(is_healthy));
-        Ok(is_healthy)
     }
 }

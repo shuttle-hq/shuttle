@@ -39,7 +39,7 @@ use tokio::sync::mpsc::{self, Sender, UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tonic::{transport::Server, Response, Result as TonicResult};
-use tracing::{debug, error, info, info_span, instrument, warn, Instrument};
+use tracing::{error, info, info_span, instrument, warn, Instrument};
 use ulid::Ulid;
 
 use crate::project::worker::{TaskRouter, Worker};

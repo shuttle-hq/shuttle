@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
-use tracing::{error, info, info_span, trace, warn};
+use tracing::{error, info_span, trace, warn};
 use ulid::Ulid;
 
 use crate::dal::Dal;

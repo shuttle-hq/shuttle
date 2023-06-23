@@ -229,6 +229,9 @@ pub struct RunArgs {
     /// Use 0.0.0.0 instead of localhost (for usage with local external devices)
     #[arg(long)]
     pub external: bool,
+    /// Set the list of features to activate
+    #[arg(long)]
+    pub features: Vec<String>,
     /// Use release mode for building the project
     #[arg(long, short = 'r')]
     pub release: bool,

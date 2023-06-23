@@ -74,6 +74,7 @@ fn extract_shuttle_toml_name(path: PathBuf) -> anyhow::Result<String> {
 /// Given a project directory path, builds the crate
 pub async fn build_workspace(
     project_path: &Path,
+    features: Vec<String>,
     release_mode: bool,
     tx: Sender<Message>,
     deployment: bool,
@@ -108,6 +109,7 @@ pub async fn build_workspace(
     if !alpha_packages.is_empty() {
         let mut service = compile(
             alpha_packages,
+            features.clone(),
             release_mode,
             false,
             project_path.clone(),
@@ -124,6 +126,7 @@ pub async fn build_workspace(
     if !next_packages.is_empty() {
         let mut service = compile(
             next_packages,
+            features,
             release_mode,
             true,
             project_path,
@@ -213,6 +216,7 @@ fn is_cdylib(target: &Target) -> bool {
 
 async fn compile(
     packages: Vec<&Package>,
+    features: Vec<String>,
     release_mode: bool,
     wasm: bool,
     project_path: PathBuf,
@@ -251,6 +255,10 @@ async fn compile(
 
     if wasm {
         cargo.arg("--target").arg("wasm32-wasi");
+    }
+
+    if !features.is_empty() {
+        cargo.arg("--features").arg(features.join(","));
     }
 
     let mut handle = cargo.spawn()?;

@@ -49,8 +49,6 @@ services:
       - "--address=0.0.0.0:8000"
   builder:
     image: "${CONTAINER_REGISTRY}/builder:${BUILDER_TAG}"
-    depends_on:
-      - auth
     deploy:
       restart_policy:
         condition: on-failure
@@ -75,11 +73,6 @@ services:
       - "--auth-uri=http://auth:8000"
   deployer:
     image: "${CONTAINER_REGISTRY}/deployer:${DEPLOYER_TAG}"
-    depends_on:
-      - auth
-      - builder
-      - provisioner
-      - resource-recorder
     deploy:
       restart_policy:
         condition: on-failure
@@ -112,9 +105,6 @@ services:
       - "--docker-host=/var/run/docker.sock"
   gateway:
     image: "${CONTAINER_REGISTRY}/gateway:${GATEWAY_TAG}"
-    depends_on:
-      - auth
-      - deployer
     ports:
       - 7999:7999
       - 8000:8000
@@ -154,8 +144,6 @@ services:
       #start_period: 30s
   logger:
     image: "${CONTAINER_REGISTRY}/logger:${LOGGER_TAG}"
-    depends_on:
-      - auth
     deploy:
       restart_policy:
         condition: on-failure
@@ -184,7 +172,6 @@ services:
     depends_on:
       - postgres
       - mongodb
-      - auth
     environment:
       - RUST_LOG=${RUST_LOG}
     networks:
@@ -215,8 +202,6 @@ services:
       - "--auth-uri=http://auth:8000"
   resource-recorder:
     image: "${CONTAINER_REGISTRY}/resource-recorder:${RESOURCE_RECORDER_TAG}"
-    depends_on:
-      - auth
     deploy:
       restart_policy:
         condition: on-failure

@@ -30,7 +30,6 @@ in
       fastmod
       pebble
       kondo
-      openssl
     ];
 
     PROTOC = "${protobuf}/bin/protoc";

@@ -1,17 +1,18 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use chrono::Utc;
 use dal::{Dal, DalError, Deployment, Service};
-use deployment::RunnableDeployment;
+use deployment::{RunnableDeployment, USER_SERVICE_DEFAULT_PORT};
 use derive_builder::Builder;
 use error::{Error, Result};
 use futures::TryFutureExt;
 use http::Uri;
-use project::docker::{ContainerInspectResponseExt, ContainerSettings, ServiceDockerContext};
+use project::docker::{ContainerSettings, ServiceDockerContext};
 use project::service::state::a_creating::ServiceCreating;
 use project::service::state::f_running::ServiceRunning;
 use project::service::state::StateVariant;
@@ -30,9 +31,11 @@ use shuttle_proto::deployer::{
     DeployRequest, DeployResponse,
 };
 use shuttle_proto::deployer::{
-    DestroyDeploymentRequest, DestroyDeploymentResponse, TargetIpRequest, TargetIpResponse,
+    DestroyDeploymentRequest, DestroyDeploymentResponse, ProjectChange, ProjectEvent,
+    SubscribeProjectsRequest, UnsubscribeProjectsRequest, UnsubscribeProjectsResponse,
 };
-use tokio::sync::mpsc::{self, Sender};
+use tokio::sync::mpsc::{self, Sender, UnboundedReceiver, UnboundedSender};
+use tokio::sync::Mutex;
 use tonic::{transport::Server, Response, Result as TonicResult};
 use tracing::{error, info, instrument};
 use ulid::Ulid;
@@ -91,6 +94,13 @@ pub struct DeployerService<D: Dal + Send + Sync + 'static> {
     deployment_state_machine_channel:
         tokio::sync::mpsc::Sender<Box<dyn Task<(), Output = (), Error = project::error::Error>>>,
     runtime_start_channel: Sender<RunnableDeployment>,
+
+    // These channel are intended to work with one subscriber. They can be reinitialized as well.
+    // They are wrapped in Mutex first because we want them with interior muttability (see unsubscribe method).
+    // They are wrapped in Arc because they get sent on all deployment tasks.
+    project_events_channel_tx: Arc<Mutex<Option<UnboundedSender<ProjectEvent>>>>,
+    project_events_channel_rx: Arc<Mutex<Option<UnboundedReceiver<ProjectEvent>>>>,
+
     config: DeployerServiceConfig,
 }
 
@@ -115,6 +125,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             run_recv,
             runtime_manager.clone(),
         ));
+        let (tx, rx) = mpsc::unbounded_channel::<ProjectEvent>();
 
         Self {
             docker: Docker::connect_with_unix(
@@ -131,6 +142,8 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
             task_router: TaskRouter::default(),
             deployment_state_machine_channel,
             runtime_start_channel,
+            project_events_channel_tx: Arc::new(Mutex::new(Some(tx))),
+            project_events_channel_rx: Arc::new(Mutex::new(Some(rx))),
             config,
         }
     }
@@ -164,6 +177,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
 
             self.instate_service(
                 runnable_deployment,
+                existing_deployment.project_id,
                 GitMetadata::default(),
                 image_name.clone(),
                 existing_deployment.idle_minutes,
@@ -198,6 +212,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
     pub async fn instate_service(
         &self,
         runnable_deployment: RunnableDeployment,
+        project_id: Ulid,
         git_metadata: GitMetadata,
         image_name: String,
         idle_minutes: u64,
@@ -207,6 +222,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
         let creating = ServiceState::Creating(ServiceCreating::new(
             runnable_deployment.service_id,
             runnable_deployment.deployment_id,
+            project_id,
             image_name.clone(),
             idle_minutes,
         ));
@@ -233,6 +249,8 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 name: runnable_deployment.service_name.clone(),
                 state_variant: creating.to_string(),
                 state: creating,
+                last_update: Utc::now(),
+                project_id,
             };
             self.dal
                 .insert_service_if_absent(service)
@@ -273,6 +291,7 @@ impl<D: Dal + Send + Sync + 'static> DeployerService<D> {
                 self.docker.clone(),
                 cs,
                 self.runtime_manager.clone(),
+                self.project_events_channel_tx.clone(),
             ))
             .and_then(task::refresh())
             .and_then(task::run_until_done())
@@ -303,6 +322,8 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         let service_id = Ulid::from_string(req_deployment.service_id.as_str())
             .map_err(|err| tonic::Status::invalid_argument(err.to_string()))?;
 
+        let project_id = Ulid::from_string(req_deployment.project_id.as_str())
+            .map_err(|err| tonic::Status::invalid_argument(err.to_string()))?;
         // Create the deployment.
         let deployment_id = Ulid::new();
         let is_next = req_deployment.is_next;
@@ -328,6 +349,7 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         // Instate the service.
         self.instate_service(
             runnable_deployment,
+            project_id,
             git_metadata,
             image_name,
             idle_minutes,
@@ -388,7 +410,11 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         TaskBuilder::new(dal)
             .task_router(task_router)
             .service_id(deployment.service_id)
-            .service_docker_context(ServiceDockerContext::new(docker, runtime_manager))
+            .service_docker_context(ServiceDockerContext::new(
+                docker,
+                runtime_manager,
+                self.project_events_channel_tx.clone(),
+            ))
             .and_then(task::destroy())
             .and_then(task::run_until_done())
             .send(&sender)
@@ -411,96 +437,82 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
         Ok(Response::new(DestroyDeploymentResponse {}))
     }
 
+    type SubscribeProjectsStream =
+        tokio_stream::wrappers::ReceiverStream<TonicResult<ProjectEvent, tonic::Status>>;
+
     #[instrument(skip_all)]
-    async fn target_ip(
+    async fn subscribe_projects(
         &self,
-        request: tonic::Request<TargetIpRequest>,
-    ) -> TonicResult<tonic::Response<TargetIpResponse>, tonic::Status> {
-        // Authorize the request.
-        request.verify(Scope::ServiceRead)?;
-        let claim = request.extensions().get::<Claim>().cloned();
-        let request = request.into_inner();
+        _request: tonic::Request<SubscribeProjectsRequest>,
+    ) -> TonicResult<tonic::Response<Self::SubscribeProjectsStream>, tonic::Status> {
+        // We can not authorize yet to easily these requests given they need machine-to-machine authorization.
+        // TODO: add support for this in the auth component.
+        // request.verify(Scope::Admin)?;
+        let events_rx = self.project_events_channel_rx.lock().await.take();
 
-        // Do a cleanup in terms of previous invalid deployments.
-        let service_id = Ulid::from_string(&request.service_id)
-            .map_err(|_| tonic::Status::invalid_argument("invalid deployment id"))?;
-        let service = self
-            .dal
-            .service(&service_id)
-            .await
-            .map_err(|err| tonic::Status::not_found(err.to_string()))?;
+        if let Some(mut events_rx) = events_rx {
+            let (tx, rx) = mpsc::channel(1);
+            let dal = self.dal.clone();
+            let network_name = self.config.network_name.clone();
+            // Move the events items into stream to be returned
+            tokio::spawn(async move {
+                let services = dal.services().await.unwrap_or_else(|err| {
+                    error!("{err}");
+                    Vec::new()
+                });
+                for service in services {
+                    let socket_addr = if service.state.is_running() {
+                        let target_ip = service
+                            .state
+                            .target_ip(network_name.as_str())
+                            .expect("to be attached to the network");
+                        Some(format!("{}:{}", target_ip, USER_SERVICE_DEFAULT_PORT))
+                    } else {
+                        None
+                    };
 
-        if !service.state.is_running() {
-            return Err(tonic::Status::cancelled("the service is not running"));
-        }
-
-        if service.state.is_stopped() && request.instate {
-            let container = service.state.container().ok_or(tonic::Status::internal("the service is an unknown state, it's stopped but it doesn't have a container inspect info attached".to_string()))?;
-            let deployment_id = container
-                .deployment_id()
-                .map_err(|err| tonic::Status::internal(err.to_string()))?;
-            let service_name = container
-                .service_name()
-                .map_err(|err| tonic::Status::internal(err.to_string()))?;
-            let deployment =
-                self.dal
-                    .deployment(&deployment_id)
+                    tx.send(Ok(ProjectEvent {
+                        service_id: service.id.to_string(),
+                        project_id: service.project_id.to_string(),
+                        change: Some(ProjectChange {
+                            state_variant: service.state_variant,
+                            socket_addr,
+                        }),
+                    }))
                     .await
-                    .map_err(|err| match err {
-                        DalError::DeploymentNotFound => tonic::Status::not_found(err.to_string()),
-                        _ => tonic::Status::internal(err.to_string()),
-                    })?;
-            let image_name = container
-                .image_name()
-                .map_err(|err| tonic::Status::internal(err.to_string()))?;
-            let idle_minutes = container.idle_minutes();
-            let is_next = container.is_next();
+                    .unwrap_or_else(|err| error!("errored when sending project event: {err}"));
+                }
 
-            let git_metadata = GitMetadata {
-                git_branch: deployment.git_branch,
-                git_commit_hash: deployment.git_commit_hash,
-                git_commit_message: deployment.git_commit_message,
-                git_dirty: deployment.git_dirty,
-            };
-            let runnable_deployment = RunnableDeployment {
-                deployment_id,
-                service_name,
-                service_id,
-                tracing_context: Default::default(),
-                claim,
-                target_ip: None,
-                is_next,
-            };
+                while let Some(event) = events_rx.recv().await {
+                    tx.send(Ok(event))
+                        .await
+                        .unwrap_or_else(|err| error!("errored when sending project event: {err}"));
+                }
+            });
 
-            self.instate_service(
-                runnable_deployment,
-                git_metadata,
-                image_name,
-                idle_minutes,
-                false,
-            )
-            .await
-            .map_err(|err| {
-                tonic::Status::internal(format!("failed to instate the service: {err}"))
-            })?;
+            Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+                rx,
+            )))
+        } else {
+            Err(tonic::Status::cancelled(
+                "the events have already been subscribed to. You must unsubscribe first to be able to subscribe again.",
+            ))
         }
+    }
 
-        let new_state = self
-            .dal
-            .service_state(&service_id)
-            .await
-            .map_err(|err| {
-                tonic::Status::internal(format!("failed to fetch the service state {err}"))
-            })?
-            .ok_or(tonic::Status::internal("couldn't find the service state"))?;
-        let new_target_ip = new_state
-            .target_ip(&self.config.network_name)
-            .map_err(|err| {
-                tonic::Status::internal(format!("failed to extract the target ip {err}"))
-            })?;
-
-        Ok(Response::new(TargetIpResponse {
-            target_ip: new_target_ip.to_string(),
-        }))
+    #[instrument(skip_all)]
+    async fn unsubscribe_projects(
+        &self,
+        _request: tonic::Request<UnsubscribeProjectsRequest>,
+    ) -> TonicResult<tonic::Response<UnsubscribeProjectsResponse>, tonic::Status> {
+        // We can not authorize yet to easily these requests given they need machine-to-machine authorization.
+        // TODO: add support for this in the auth component.
+        // request.verify(Scope::Admin)?;
+        let mut guard_rx = self.project_events_channel_rx.lock().await;
+        let mut guard_tx = self.project_events_channel_tx.lock().await;
+        let (tx, rx) = mpsc::unbounded_channel::<ProjectEvent>();
+        guard_rx.replace(rx);
+        guard_tx.replace(tx);
+        Ok(Response::new(UnsubscribeProjectsResponse {}))
     }
 }

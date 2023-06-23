@@ -4,9 +4,11 @@ use async_trait::async_trait;
 use bollard::errors::Error as DockerError;
 use bollard::service::{ContainerInspectResponse, ContainerStateStatusEnum};
 use serde::{Deserialize, Serialize};
+use shuttle_proto::deployer::{ProjectChange, ProjectEvent};
 use tracing::{debug, error, instrument};
 use ulid::Ulid;
 
+use crate::deployment::USER_SERVICE_DEFAULT_PORT;
 use crate::runtime_manager::RuntimeManager;
 
 use self::state::f_ready::ServiceReady;
@@ -222,34 +224,34 @@ impl ServiceState {
                 if *restart_count > 0 {
                     format!("{} (attempt {restart_count})", ServiceStarting::name())
                 } else {
-                    "starting".to_string()
+                    ServiceStarting::name()
                 }
             }
             Self::Recreating(ServiceRecreating { recreate_count, .. }) => {
-                format!("recreating (attempt {recreate_count})")
+                format!("{} (attempt {recreate_count})", ServiceRecreating::name())
             }
             Self::Restarting(ServiceRestarting { restart_count, .. }) => {
-                format!("restarting (attempt {restart_count})")
+                format!("{} (attempt {restart_count})", ServiceRestarting::name())
             }
-            Self::Stopping(_) => "stopping".to_string(),
-            Self::Rebooting(_) => "rebooting".to_string(),
+            Self::Stopping(inner) => inner.as_state_variant(),
+            Self::Rebooting(inner) => inner.as_state_variant(),
             Self::Creating(ServiceCreating { recreate_count, .. }) => {
                 if *recreate_count > 0 {
-                    format!("creating (attempt {recreate_count})")
+                    format!("{} (attempt {recreate_count})", ServiceCreating::name())
                 } else {
-                    "creating".to_string()
+                    ServiceCreating::name()
                 }
             }
             Self::Attaching(ServiceAttaching { recreate_count, .. }) => {
                 if *recreate_count > 0 {
-                    format!("attaching (attempt {recreate_count})")
+                    format!("{} (attempt {recreate_count})", ServiceAttaching::name())
                 } else {
-                    "attaching".to_string()
+                    ServiceAttaching::name()
                 }
             }
-            Self::Destroying(_) => "destroying".to_string(),
-            Self::Destroyed(_) => "destroyed".to_string(),
-            Self::Errored(_) => "error".to_string(),
+            Self::Destroying(inner) => inner.as_state_variant(),
+            Self::Destroyed(inner) => inner.as_state_variant(),
+            Self::Errored(inner) => inner.as_state_variant(),
         }
     }
 
@@ -391,13 +393,60 @@ where
             error!(error = ?errored, "state for project errored");
         }
 
-        let new_state = new.as_ref().unwrap().as_state_variant_detailed();
+        let new_state = new
+            .as_ref()
+            .expect("to have an inner state")
+            .as_state_variant_detailed();
         let container_id = new
             .as_ref()
-            .unwrap()
+            .expect("to have an inner state")
             .container_id()
             .map(|id| format!("{id}: "))
             .unwrap_or_default();
+        let container = new
+            .as_ref()
+            .expect("to have an inner state")
+            .container()
+            .expect("to have a container");
+        let service_id = container
+            .service_id()
+            .map_err(|err| ServiceErrored::internal(err.to_string()))
+            .expect("to have a service id");
+        let project_id = container
+            .project_id()
+            .map_err(|err| ServiceErrored::internal(err.to_string()))
+            .expect("to have a project id");
+        let service = Service::from_container(container).ok();
+        let new_state_variant = new.as_ref().expect("to have an inner state").to_string();
+
+        // Sending an event corresponding to the transition.
+        if ctx
+            .events_tx()
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|tx| {
+                tx.send(ProjectEvent {
+                    service_id: service_id.to_string(),
+                    project_id: project_id.to_string(),
+                    change: Some(ProjectChange {
+                        state_variant: new_state_variant.clone(),
+                        socket_addr: service
+                            .filter(|_| new_state_variant == ServiceRunning::name())
+                            .map(|service| {
+                                format!("{}:{}", service.target, USER_SERVICE_DEFAULT_PORT)
+                            }),
+                    }),
+                })
+                .ok()
+            })
+            .is_none()
+        {
+            error!(
+                "couldn't send project event for {}",
+                new.as_ref().expect("to have an inner state").to_string()
+            )
+        };
         debug!("{container_id}{previous_state} -> {new_state}");
 
         new
@@ -577,6 +626,7 @@ impl HealthCheckRecord {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Service {
     id: String,
+    project_id: String,
     target: Ipv4Addr,
     last_check: Option<HealthCheckRecord>,
 }
@@ -584,6 +634,7 @@ pub struct Service {
 impl Service {
     pub fn from_container(container: ContainerInspectResponse) -> Result<Self, ServiceErrored> {
         let service_id = container.service_id()?;
+        let project_id = container.project_id()?;
 
         let network = safe_unwrap!(container.network_settings.networks)
             .values()
@@ -596,6 +647,7 @@ impl Service {
 
         Ok(Self {
             id: service_id.to_string(),
+            project_id: project_id.to_string(),
             target,
             last_check: None,
         })

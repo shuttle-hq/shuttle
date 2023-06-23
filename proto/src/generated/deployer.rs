@@ -4,20 +4,22 @@ pub struct Deployment {
     #[prost(string, tag = "1")]
     pub service_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    pub project_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
     pub service_name: ::prost::alloc::string::String,
-    #[prost(bool, tag = "3")]
+    #[prost(bool, tag = "4")]
     pub is_next: bool,
-    #[prost(uint32, tag = "4")]
+    #[prost(uint32, tag = "5")]
     pub idle_minutes: u32,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag = "6")]
     pub image_name: ::prost::alloc::string::String,
-    #[prost(string, optional, tag = "6")]
-    pub git_commit_message: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "7")]
-    pub git_commit_hash: ::core::option::Option<::prost::alloc::string::String>,
+    pub git_commit_message: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "8")]
+    pub git_commit_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "9")]
     pub git_branch: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(bool, optional, tag = "9")]
+    #[prost(bool, optional, tag = "10")]
     pub git_dirty: ::core::option::Option<bool>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -44,23 +46,30 @@ pub struct DestroyDeploymentRequest {
 pub struct DestroyDeploymentResponse {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TargetIpRequest {
-    /// The service id we request the target ip for
+pub struct SubscribeProjectsRequest {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UnsubscribeProjectsRequest {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UnsubscribeProjectsResponse {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ProjectChange {
     #[prost(string, tag = "1")]
-    pub service_id: ::prost::alloc::string::String,
-    /// The project id we request the target ip for
-    #[prost(string, tag = "2")]
-    pub project_id: ::prost::alloc::string::String,
-    /// If the service_id is on the stopped code path, reinstate it.
-    #[prost(bool, tag = "3")]
-    pub instate: bool,
+    pub state_variant: ::prost::alloc::string::String,
+    #[prost(string, optional, tag = "2")]
+    pub socket_addr: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TargetIpResponse {
-    /// The target ip of the requested service.
+pub struct ProjectEvent {
     #[prost(string, tag = "1")]
-    pub target_ip: ::prost::alloc::string::String,
+    pub service_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub project_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub change: ::core::option::Option<ProjectChange>,
 }
 /// Generated client implementations.
 pub mod deployer_client {
@@ -167,10 +176,13 @@ pub mod deployer_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
-        pub async fn target_ip(
+        pub async fn subscribe_projects(
             &mut self,
-            request: impl tonic::IntoRequest<super::TargetIpRequest>,
-        ) -> Result<tonic::Response<super::TargetIpResponse>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::SubscribeProjectsRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::ProjectEvent>>,
+            tonic::Status,
+        > {
             self.inner
                 .ready()
                 .await
@@ -182,7 +194,26 @@ pub mod deployer_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/deployer.Deployer/TargetIp",
+                "/deployer.Deployer/SubscribeProjects",
+            );
+            self.inner.server_streaming(request.into_request(), path, codec).await
+        }
+        pub async fn unsubscribe_projects(
+            &mut self,
+            request: impl tonic::IntoRequest<super::UnsubscribeProjectsRequest>,
+        ) -> Result<tonic::Response<super::UnsubscribeProjectsResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/deployer.Deployer/UnsubscribeProjects",
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
@@ -203,10 +234,20 @@ pub mod deployer_server {
             &self,
             request: tonic::Request<super::DestroyDeploymentRequest>,
         ) -> Result<tonic::Response<super::DestroyDeploymentResponse>, tonic::Status>;
-        async fn target_ip(
+        /// Server streaming response type for the SubscribeProjects method.
+        type SubscribeProjectsStream: futures_core::Stream<
+                Item = Result<super::ProjectEvent, tonic::Status>,
+            >
+            + Send
+            + 'static;
+        async fn subscribe_projects(
             &self,
-            request: tonic::Request<super::TargetIpRequest>,
-        ) -> Result<tonic::Response<super::TargetIpResponse>, tonic::Status>;
+            request: tonic::Request<super::SubscribeProjectsRequest>,
+        ) -> Result<tonic::Response<Self::SubscribeProjectsStream>, tonic::Status>;
+        async fn unsubscribe_projects(
+            &self,
+            request: tonic::Request<super::UnsubscribeProjectsRequest>,
+        ) -> Result<tonic::Response<super::UnsubscribeProjectsResponse>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct DeployerServer<T: Deployer> {
@@ -343,22 +384,28 @@ pub mod deployer_server {
                     };
                     Box::pin(fut)
                 }
-                "/deployer.Deployer/TargetIp" => {
+                "/deployer.Deployer/SubscribeProjects" => {
                     #[allow(non_camel_case_types)]
-                    struct TargetIpSvc<T: Deployer>(pub Arc<T>);
-                    impl<T: Deployer> tonic::server::UnaryService<super::TargetIpRequest>
-                    for TargetIpSvc<T> {
-                        type Response = super::TargetIpResponse;
+                    struct SubscribeProjectsSvc<T: Deployer>(pub Arc<T>);
+                    impl<
+                        T: Deployer,
+                    > tonic::server::ServerStreamingService<
+                        super::SubscribeProjectsRequest,
+                    > for SubscribeProjectsSvc<T> {
+                        type Response = super::ProjectEvent;
+                        type ResponseStream = T::SubscribeProjectsStream;
                         type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
+                            tonic::Response<Self::ResponseStream>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::TargetIpRequest>,
+                            request: tonic::Request<super::SubscribeProjectsRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move { (*inner).target_ip(request).await };
+                            let fut = async move {
+                                (*inner).subscribe_projects(request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -367,7 +414,47 @@ pub mod deployer_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
-                        let method = TargetIpSvc(inner);
+                        let method = SubscribeProjectsSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/deployer.Deployer/UnsubscribeProjects" => {
+                    #[allow(non_camel_case_types)]
+                    struct UnsubscribeProjectsSvc<T: Deployer>(pub Arc<T>);
+                    impl<
+                        T: Deployer,
+                    > tonic::server::UnaryService<super::UnsubscribeProjectsRequest>
+                    for UnsubscribeProjectsSvc<T> {
+                        type Response = super::UnsubscribeProjectsResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::UnsubscribeProjectsRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).unsubscribe_projects(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = UnsubscribeProjectsSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

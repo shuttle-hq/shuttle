@@ -521,11 +521,10 @@ pub mod tests {
         }
 
         pub fn create_user(&self, user: &str) -> String {
-            self.auth_service
-                .lock()
-                .unwrap()
-                .users
-                .insert(user.to_string(), vec![Scope::Project, Scope::ProjectCreate]);
+            self.auth_service.lock().unwrap().users.insert(
+                user.to_string(),
+                vec![Scope::ProjectRead, Scope::ProjectWrite],
+            );
 
             user.to_string()
         }

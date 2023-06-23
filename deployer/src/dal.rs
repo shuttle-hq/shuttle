@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use axum::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow};
 use sqlx::types::Json as SqlxJson;
@@ -173,17 +173,21 @@ impl Dal for Sqlite {
             name,
             state_variant,
             state,
+            last_update,
+            project_id,
         } = service;
 
         if self.service(&id).await.is_ok() {
             return Ok(false);
         }
 
-        sqlx::query("INSERT INTO services (id, name, state_variant, state) VALUES (?, ?, ?, ?)")
+        sqlx::query("INSERT INTO services (id, name, state_variant, state, last_update, project_id) VALUES (?, ?, ?, ?, ?, ?)")
             .bind(id.to_string())
             .bind(name)
             .bind(state_variant)
             .bind(SqlxJson(state))
+            .bind(last_update.timestamp())
+            .bind(project_id.to_string())
             .execute(&self.pool)
             .await?;
         Ok(true)
@@ -209,11 +213,11 @@ impl Dal for Sqlite {
 
     async fn running_deployments(&self) -> Result<Vec<RunningDeployment>, DalError> {
         sqlx::query_as(
-            r#"SELECT d.id as id, s.name AS service_name, service_id, d.is_next as is_next, s.state as service_state
+            r#"SELECT d.id as id, s.name AS service_name, service_id, d.is_next as is_next, s.state as service_state, s.project_id as project_id
                     FROM deployments AS d
                     JOIN services AS s ON s.id = d.service_id
                     WHERE s.state_variant = ?
-                    ORDER BY last_update"#,
+                    ORDER BY d.last_update"#,
         )
         .bind(ServiceRunning::name())
         .fetch_all(&self.pool)
@@ -227,9 +231,10 @@ impl Dal for Sqlite {
         state: ServiceState,
     ) -> Result<(), DalError> {
         let state_variant = state.to_string();
-        query("UPDATE services SET state = ?1, state_variant = ?2 WHERE id = ?3")
+        query("UPDATE services SET state = ?1, state_variant = ?2, last_update = ?3 WHERE id = ?4")
             .bind(SqlxJson(state.clone()))
             .bind(state_variant)
+            .bind(Utc::now().timestamp())
             .bind(service_id.to_string())
             .execute(&self.pool)
             .await
@@ -257,6 +262,8 @@ pub struct Service {
     pub name: String,
     pub state_variant: String,
     pub state: ServiceState,
+    pub last_update: DateTime<Utc>,
+    pub project_id: Ulid,
 }
 
 impl FromRow<'_, SqliteRow> for Service {
@@ -264,9 +271,16 @@ impl FromRow<'_, SqliteRow> for Service {
         Ok(Self {
             id: Ulid::from_string(row.try_get("id")?)
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            project_id: Ulid::from_string(row.try_get("project_id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
             name: row.try_get("name")?,
             state_variant: row.try_get("state_variant")?,
             state: row.try_get::<SqlxJson<ServiceState>, _>("state")?.0,
+            last_update: DateTime::<Utc>::from_utc(
+                NaiveDateTime::from_timestamp_opt(row.try_get("last_update")?, 0)
+                    .expect("to get a naive date time out of the last_update field of the service"),
+                Utc,
+            ),
         })
     }
 }
@@ -290,7 +304,12 @@ impl FromRow<'_, SqliteRow> for Deployment {
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
             service_id: Ulid::from_string(row.try_get("service_id")?)
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
-            last_update: row.try_get("last_update")?,
+            last_update: DateTime::<Utc>::from_utc(
+                NaiveDateTime::from_timestamp_opt(row.try_get("last_update")?, 0).expect(
+                    "to get a naive date time out of the last_update field of the deployment",
+                ),
+                Utc,
+            ),
             is_next: row.try_get("is_next")?,
             git_commit_hash: row.try_get("git_commit_hash")?,
             git_commit_message: row.try_get("git_commit_message")?,
@@ -303,8 +322,9 @@ impl FromRow<'_, SqliteRow> for Deployment {
 #[derive(Debug, PartialEq, Eq)]
 pub struct RunningDeployment {
     pub id: Ulid,
-    pub service_name: String,
+    pub project_id: Ulid,
     pub service_id: Ulid,
+    pub service_name: String,
     pub is_next: bool,
     pub idle_minutes: u64,
 }
@@ -324,6 +344,8 @@ impl FromRow<'_, SqliteRow> for RunningDeployment {
                 .container()
                 .map(|c| c.idle_minutes())
                 .expect("to extract idle minutes from the service state"),
+            project_id: Ulid::from_string(row.try_get("project_id")?)
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
         })
     }
 }

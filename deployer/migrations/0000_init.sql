@@ -2,7 +2,9 @@ CREATE TABLE IF NOT EXISTS services (
   id TEXT PRIMARY KEY,                 -- The service id in ulid format
   name TEXT NOT NULL,                  -- The service name
   state_variant TEXT NOT NULL,         -- The service state variant
-  state JSON NOT NULL                  -- The serialized docker container inspect state
+  state JSON NOT NULL,                 -- The serialized docker container inspect state
+  project_id TEXT NOT NULL,            -- The project id that owns the service
+  last_update INTEGER NOT NULL         -- The timestamp of the last service update
 );
 
 CREATE TABLE IF NOT EXISTS deployments (

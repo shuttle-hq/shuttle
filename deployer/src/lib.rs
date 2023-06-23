@@ -443,9 +443,11 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
     #[instrument(skip_all)]
     async fn subscribe_projects(
         &self,
-        request: tonic::Request<SubscribeProjectsRequest>,
+        _request: tonic::Request<SubscribeProjectsRequest>,
     ) -> TonicResult<tonic::Response<Self::SubscribeProjectsStream>, tonic::Status> {
-        request.verify(Scope::Admin)?;
+        // We can not authorize yet to easily these requests given they need machine-to-machine authorization.
+        // TODO: add support for this in the auth component.
+        // request.verify(Scope::Admin)?;
         let events_rx = self.project_events_channel_rx.lock().await.take();
 
         if let Some(mut events_rx) = events_rx {
@@ -501,9 +503,11 @@ impl<D: Dal + Sync + 'static> Deployer for DeployerService<D> {
     #[instrument(skip_all)]
     async fn unsubscribe_projects(
         &self,
-        request: tonic::Request<UnsubscribeProjectsRequest>,
+        _request: tonic::Request<UnsubscribeProjectsRequest>,
     ) -> TonicResult<tonic::Response<UnsubscribeProjectsResponse>, tonic::Status> {
-        request.verify(Scope::Admin)?;
+        // We can not authorize yet to easily these requests given they need machine-to-machine authorization.
+        // TODO: add support for this in the auth component.
+        // request.verify(Scope::Admin)?;
         let mut guard_rx = self.project_events_channel_rx.lock().await;
         let mut guard_tx = self.project_events_channel_tx.lock().await;
         let (tx, rx) = mpsc::unbounded_channel::<ProjectEvent>();

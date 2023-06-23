@@ -95,6 +95,7 @@ impl StatusResponse {
     }
 }
 
+#[instrument]
 #[utoipa::path(
     get,
     path = "/",
@@ -140,6 +141,7 @@ async fn get_project<D: Dal>(
     Ok(AxumJson(response))
 }
 
+#[instrument(skip_all, fields(%name))]
 #[utoipa::path(
     get,
     path = "/projects",
@@ -174,6 +176,7 @@ async fn get_projects_list<D: Dal>(
 }
 
 /// Get all projects, this requires an admin bearer token.
+#[instrument(skip_all)]
 #[utoipa::path(
     post,
     path = "/admin/projects",

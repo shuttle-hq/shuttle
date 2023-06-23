@@ -7,7 +7,7 @@ use shuttle_service::{
 };
 use url::Url;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Turso {
     addr: String,
     token: String,
@@ -75,11 +75,7 @@ impl ResourceBuilder<Client> for Turso {
     type Output = TursoOutput;
 
     fn new() -> Self {
-        Self {
-            addr: "".to_string(),
-            token: "".to_string(),
-            local_addr: None,
-        }
+        Self::default()
     }
 
     fn config(&self) -> &Self::Config {

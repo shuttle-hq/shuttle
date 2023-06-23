@@ -19,6 +19,7 @@ In the case of an Axum server, your main function will look like this:
 
 ```rust
 use libsql_client::client::Client;
+use shuttle_axum::ShuttleAxum;
 
 #[shuttle_runtime::main]
 async fn app(#[shuttle_turso::Turso(addr="libsql://my-turso-db-name.turso.io", token="{secrets.DB_TURSO_TOKEN}")] client: Client) -> ShuttleAxum { }

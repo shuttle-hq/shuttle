@@ -10,7 +10,7 @@ use url::Url;
 #[derive(Serialize, Deserialize)]
 pub struct Turso {
     addr: String,
-    token_secret: String,
+    token: String,
     local_addr: Option<String>,
 }
 
@@ -26,8 +26,8 @@ impl Turso {
         self
     }
 
-    pub fn token_secret(mut self, token_secret: &str) -> Self {
-        self.token_secret = token_secret.to_string();
+    pub fn token(mut self, token: &str) -> Self {
+        self.token = token.to_string();
         self
     }
 
@@ -54,24 +54,16 @@ impl From<Error> for shuttle_service::Error {
 impl Turso {
     async fn output_from_addr(
         &self,
-        factory: &mut dyn Factory,
         addr: &str,
     ) -> Result<<Turso as ResourceBuilder<Client>>::Output, shuttle_service::Error> {
-        match factory
-            .get_secrets()
-            .await
-            .expect("secrets should be available")
-            .get(&self.token_secret)
-        {
-            Some(token) => Ok(TursoOutput {
-                conn_url: Url::parse(addr).map_err(Error::UrlParseError)?,
-                token: Some(token.to_string()),
-            }),
-            None => Err(ShuttleError::Custom(CustomError::msg(format!(
-                "could't find secret {}",
-                self.token_secret
-            )))),
-        }
+        Ok(TursoOutput {
+            conn_url: Url::parse(addr).map_err(Error::UrlParseError)?,
+            token: if self.token.is_empty() {
+                None
+            } else {
+                Some(self.token.clone())
+            },
+        })
     }
 }
 
@@ -85,7 +77,7 @@ impl ResourceBuilder<Client> for Turso {
     fn new() -> Self {
         Self {
             addr: "".to_string(),
-            token_secret: "TURSO_DB_TOKEN".to_string(),
+            token: "".to_string(),
             local_addr: None,
         }
     }
@@ -108,7 +100,7 @@ impl ResourceBuilder<Client> for Turso {
                     } else {
                         format!("libsql://{}", self.addr)
                     };
-                    self.output_from_addr(factory, &addr).await
+                    self.output_from_addr(&addr).await
                 }
             }
             shuttle_service::Environment::Local => {
@@ -118,10 +110,7 @@ impl ResourceBuilder<Client> for Turso {
                     .join(format!("{}.db", factory.get_service_name()));
 
                 match self.local_addr {
-                    Some(ref local_addr) => {
-                        // Read the secret the same way we would for production
-                        self.output_from_addr(factory, local_addr).await
-                    }
+                    Some(ref local_addr) => self.output_from_addr(local_addr).await,
                     None => {
                         let conn_url = format!(
                             "file://{}",
@@ -131,6 +120,7 @@ impl ResourceBuilder<Client> for Turso {
                         );
                         Ok(TursoOutput {
                             conn_url: Url::parse(&conn_url).map_err(Error::UrlParseError)?,
+                            // Nullify the token since we're using a file as database.
                             token: None,
                         })
                     }
@@ -152,7 +142,6 @@ impl ResourceBuilder<Client> for Turso {
 #[cfg(test)]
 mod test {
 
-    use std::collections::BTreeMap;
     use std::path::PathBuf;
     use std::{fs, str::FromStr};
 
@@ -167,7 +156,6 @@ mod test {
         temp_dir: TempDir,
         pub service_name: String,
         pub environment: Environment,
-        pub token_value: Option<String>,
     }
 
     impl MockFactory {
@@ -176,7 +164,6 @@ mod test {
                 temp_dir: Builder::new().prefix("shuttle-turso").tempdir().unwrap(),
                 service_name: "shuttle-turso".to_string(),
                 environment: Environment::Local,
-                token_value: None,
             }
         }
 
@@ -207,11 +194,7 @@ mod test {
         async fn get_secrets(
             &mut self,
         ) -> Result<std::collections::BTreeMap<String, String>, shuttle_service::Error> {
-            let mut secrets = BTreeMap::new();
-            if let Some(token_value) = &self.token_value {
-                secrets.insert("TURSO_DB_TOKEN".to_string(), token_value.to_string());
-            }
-            Ok(secrets)
+            panic!("no turso test should try to get secrets")
         }
 
         fn get_service_name(&self) -> shuttle_service::ServiceName {
@@ -253,7 +236,6 @@ mod test {
     #[tokio::test]
     async fn local_database_user_supplied() {
         let mut factory = MockFactory::new();
-        factory.token_value = Some("token".to_string());
 
         let mut turso = Turso::new();
         let local_addr = "libsql://test-addr.turso.io";
@@ -264,7 +246,7 @@ mod test {
             output,
             TursoOutput {
                 conn_url: Url::parse(local_addr).unwrap(),
-                token: Some("token".to_string())
+                token: None
             }
         )
     }
@@ -283,11 +265,11 @@ mod test {
     async fn remote_database() {
         let mut factory = MockFactory::new();
         factory.environment = Environment::Production;
-        factory.token_value = Some("token".to_string());
 
         let mut turso = Turso::new();
         let addr = "my-turso-addr.turso.io".to_string();
         turso.addr = addr.clone();
+        turso.token = "token".to_string();
         let output = turso.output(&mut factory).await.unwrap();
 
         assert_eq!(

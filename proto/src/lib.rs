@@ -111,7 +111,7 @@ pub mod runtime {
     use tokio::process;
     use tonic::transport::{Channel, Endpoint};
     use tower::ServiceBuilder;
-    use tracing::info;
+    use tracing::{info, trace};
 
     pub enum StorageManagerType {
         Artifacts(PathBuf),
@@ -247,22 +247,36 @@ pub mod runtime {
             args
         };
 
+        trace!(
+            "Spawning runtime process {:?} {:?}",
+            runtime_executable_path,
+            args
+        );
         let runtime = process::Command::new(runtime_executable_path)
             .args(&args)
             .kill_on_drop(true)
             .spawn()
             .context("spawning runtime process")?;
 
-        // Sleep because the timeout below does not seem to work
-        // TODO: investigate why
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
         info!("connecting runtime client");
         let conn = Endpoint::new(format!("http://127.0.0.1:{port}"))
             .context("creating runtime client endpoint")?
             .connect_timeout(Duration::from_secs(5));
 
-        let channel = conn.connect().await.context("connecting runtime client")?;
+        // Wait for the spawned process to open the endpoint port.
+        // Connecting instantly does not give it enough time.
+        let channel = tokio::time::timeout(Duration::from_millis(500), async move {
+            loop {
+                if let Ok(channel) = conn.connect().await {
+                    break channel;
+                }
+                trace!("waiting for runtime endpoint to open");
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .context("runtime client endpoint did not open in time")?;
+
         let channel = ServiceBuilder::new()
             .layer(ClaimLayer)
             .layer(InjectPropagationLayer)

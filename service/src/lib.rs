@@ -112,8 +112,9 @@ pub trait Factory: Send + Sync {
 /// Your resource will be available on a [shuttle_runtime::main][main] function as follow:
 /// ```
 /// #[shuttle_runtime::main]
-/// async fn my_service([custom_resource_crate::namespace::B] custom_resource: T)
-///     -> shuttle_axum::ShuttleAxum {}
+/// async fn my_service(
+///     [custom_resource_crate::namespace::B] custom_resource: T,
+/// ) -> shuttle_axum::ShuttleAxum {}
 /// ```
 ///
 /// Here `custom_resource_crate::namespace` is the crate and namespace to a builder `B` that implements [`ResourceBuilder`] to create resource `T`.
@@ -155,7 +156,6 @@ pub trait Factory: Send + Sync {
 ///         &self
 ///     }
 ///
-///
 ///     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, shuttle_service::Error> {
 ///         Ok(self.name)
 ///     }
@@ -171,8 +171,7 @@ pub trait Factory: Send + Sync {
 /// #[shuttle_runtime::main]
 /// async fn my_service(
 ///     [custom_resource_crate::Builder(name = "John")] resource: custom_resource_crate::Resource
-/// )
-///     -> shuttle_axum::ShuttleAxum {}
+/// ) -> shuttle_axum::ShuttleAxum {}
 /// ```
 #[async_trait]
 pub trait ResourceBuilder<T> {

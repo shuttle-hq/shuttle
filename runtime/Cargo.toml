@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-runtime"
-version = "0.18.0"
+version = "0.19.0"
 edition.workspace = true
 license.workspace = true
 description = "Runtime to start and manage any service that runs on shuttle"
@@ -19,7 +19,7 @@ chrono = { workspace = true }
 prost-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-strfmt = "0.2.2"
+strfmt = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = "0.1.11"
@@ -38,6 +38,10 @@ rmp-serde = { workspace = true, optional = true }
 wasi-common = { version = "7.0.0", optional = true }
 wasmtime = { version = "7.0.0", optional = true }
 wasmtime-wasi = { version = "7.0.0", optional = true }
+
+[dependencies.shuttle-codegen]
+workspace = true
+features = ["frameworks"]
 
 [dependencies.shuttle-common]
 workspace = true

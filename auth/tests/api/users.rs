@@ -1,8 +1,7 @@
 use crate::helpers::{self, app};
 use axum::body::Body;
-use axum_extra::extract::cookie::Cookie;
 use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
-use serde_json::{self, json, Value};
+use serde_json::{self, Value};
 
 #[tokio::test]
 async fn post_user() {
@@ -109,7 +108,7 @@ async fn get_user() {
 async fn test_reset_key() {
     let app = app().await;
 
-    // Reset API key without cookie or API key.
+    // Reset API key without API key.
     let request = Request::builder()
         .uri("/users/reset-api-key")
         .method("PUT")
@@ -117,36 +116,6 @@ async fn test_reset_key() {
         .unwrap();
     let response = app.send_request(request).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-    // Reset API key with cookie.
-    let response = app.post_user("test-user", "basic").await;
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body = serde_json::to_vec(&json! ({"account_name": "test-user"})).unwrap();
-    let request = Request::builder()
-        .uri("/login")
-        .method("POST")
-        .header("Content-Type", "application/json")
-        .body(Body::from(body))
-        .unwrap();
-    let response = app.send_request(request).await;
-    assert_eq!(response.status(), StatusCode::OK);
-    let cookie = response
-        .headers()
-        .get("set-cookie")
-        .unwrap()
-        .to_str()
-        .unwrap();
-    let cookie = Cookie::parse(cookie).unwrap();
-
-    let request = Request::builder()
-        .uri("/users/reset-api-key")
-        .method("PUT")
-        .header("Cookie", cookie.stripped().to_string())
-        .body(Body::empty())
-        .unwrap();
-    let response = app.send_request(request).await;
-    assert_eq!(response.status(), StatusCode::OK);
 
     // Reset API key with API key.
     let request = Request::builder()

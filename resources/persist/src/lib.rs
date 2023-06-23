@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use bincode::{deserialize_from, serialize_into, Error as BincodeError};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use shuttle_common::project::ProjectName;
-use shuttle_service::Type;
-use shuttle_service::{Factory, ResourceBuilder};
+use shuttle_service::{Factory, ResourceBuilder, ServiceName, Type};
 use std::fs;
 use std::fs::File;
 use std::io::BufReader;
@@ -29,7 +27,7 @@ pub struct Persist;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct PersistInstance {
-    service_name: ProjectName,
+    service_name: ServiceName,
 }
 
 impl PersistInstance {
@@ -100,13 +98,12 @@ impl ResourceBuilder<PersistInstance> for Persist {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shuttle_common::project::ProjectName;
     use std::str::FromStr;
 
     #[test]
     fn test_save_and_load() {
         let persist = PersistInstance {
-            service_name: ProjectName::from_str("test").unwrap(),
+            service_name: ServiceName::from_str("test").unwrap(),
         };
 
         persist.save("test", "test").unwrap();
@@ -117,7 +114,7 @@ mod tests {
     #[test]
     fn test_load_error() {
         let persist = PersistInstance {
-            service_name: ProjectName::from_str("test").unwrap(),
+            service_name: ServiceName::from_str("test").unwrap(),
         };
 
         // unwrapp error

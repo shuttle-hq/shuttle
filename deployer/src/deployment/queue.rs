@@ -209,10 +209,10 @@ impl Queued {
         let project_path = project_path.canonicalize()?;
 
         // Currently returns the first found shuttle service in a given workspace.
-        let runtime = build_deployment(&project_path, tx.clone()).await?;
+        let built_service = build_deployment(&project_path, tx.clone()).await?;
 
         // Get the Secrets.toml from the shuttle service in the workspace.
-        let secrets = get_secrets(&runtime.working_directory).await?;
+        let secrets = get_secrets(&built_service.working_directory).await?;
 
         // Set the secrets from the service, ignoring any Secrets.toml if it is in the root of the workspace.
         // TODO: refactor this when we support starting multiple services. Do we want to set secrets in the
@@ -230,9 +230,14 @@ impl Queued {
 
         info!("Moving built executable");
 
-        store_executable(&storage_manager, runtime.executable_path.clone(), &self.id).await?;
+        store_executable(
+            &storage_manager,
+            built_service.executable_path.clone(),
+            &self.id,
+        )
+        .await?;
 
-        let is_next = runtime.is_wasm;
+        let is_next = built_service.is_wasm;
 
         deployment_updater
             .set_is_next(&id, is_next)
@@ -322,9 +327,11 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 
     for entry in archive.entries()? {
         let mut entry = entry?;
-        let path: PathBuf = entry.path()?.components().skip(1).collect();
+        let name = entry.path()?;
+        let path: PathBuf = name.components().skip(1).collect();
         let dst: PathBuf = dest.as_ref().join(path);
         std::fs::create_dir_all(dst.parent().unwrap())?;
+        trace!("Unpacking {:?} to {:?}", name, dst);
         entry.unpack(dst)?;
     }
 

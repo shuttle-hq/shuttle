@@ -111,6 +111,7 @@ pub async fn build_workspace(
             release_mode,
             false,
             project_path.clone(),
+            metadata.target_directory.clone(),
             deployment,
             tx.clone(),
         )
@@ -126,6 +127,7 @@ pub async fn build_workspace(
             release_mode,
             true,
             project_path,
+            metadata.target_directory.clone(),
             deployment,
             tx,
         )
@@ -211,6 +213,7 @@ async fn compile(
     release_mode: bool,
     wasm: bool,
     project_path: PathBuf,
+    target_path: impl Into<PathBuf>,
     deployment: bool,
     tx: Sender<Message>,
 ) -> anyhow::Result<Vec<BuiltService>> {
@@ -218,6 +221,7 @@ async fn compile(
     if !manifest_path.exists() {
         bail!("failed to read the Shuttle project manifest");
     }
+    let target_path = target_path.into();
 
     let mut cargo = tokio::process::Command::new("cargo");
 
@@ -275,7 +279,7 @@ async fn compile(
         if wasm {
             let mut path: PathBuf = [
                 project_path.clone(),
-                "target".into(),
+                target_path.clone(),
                 "wasm32-wasi".into(),
                 profile.into(),
                 package.name.replace('-', "_").into(),
@@ -299,13 +303,13 @@ async fn compile(
         } else {
             let mut path: PathBuf = [
                 project_path.clone(),
-                "target".into(),
+                target_path.clone(),
                 profile.into(),
                 package.clone().name.into(),
             ]
             .iter()
             .collect();
-            path.set_extension(std::env::consts::EXE_SUFFIX);
+            path.set_extension(std::env::consts::EXE_EXTENSION);
 
             let mut working_directory = package.clone().manifest_path.into_std_path_buf();
             working_directory.pop();

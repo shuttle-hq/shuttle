@@ -195,11 +195,18 @@ impl SecretStore {
     }
 }
 
+impl IntoIterator for SecretStore {
+    type Item = (String, String);
+    type IntoIter = <BTreeMap<String, String> as IntoIterator>::IntoIter;
+    fn into_iter(self) -> Self::IntoIter {
+        self.secrets.into_iter()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use proptest::prelude::*;
-
-    use crate::ApiKey;
 
     proptest! {
         #[test]
@@ -226,5 +233,19 @@ mod tests {
     #[should_panic(expected = "The API key should consist of only alphanumeric characters.")]
     fn non_alphanumeric_api_key() {
         ApiKey::parse("dh9z58jttoes3qv@").unwrap();
+    }
+
+    #[test]
+    fn secretstore_intoiter() {
+        let bt = BTreeMap::from([
+            ("1".to_owned(), "2".to_owned()),
+            ("3".to_owned(), "4".to_owned()),
+        ]);
+        let ss = SecretStore::new(bt);
+
+        let mut iter = ss.into_iter();
+        assert_eq!(iter.next(), Some(("1".to_owned(), "2".to_owned())));
+        assert_eq!(iter.next(), Some(("3".to_owned(), "4".to_owned())));
+        assert_eq!(iter.next(), None);
     }
 }

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use fs_extra::dir::{copy, CopyOptions};
 use serde::Serialize;
 use shuttle_service::{
-    error::{CustomError, Error as ShuttleError},
+    error::{CustomError, Error as ShuttleServiceError},
     Factory, ResourceBuilder, Type,
 };
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ pub struct StaticFolder<'a> {
 
 pub enum Error {
     AbsolutePath,
-    TransversedUp,
+    TraversedUp,
     Copy(fs_extra::error::Error),
 }
 
@@ -63,7 +63,7 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
         trace!(input_directory = ?input_dir, "got input directory");
 
         match dunce::canonicalize(input_dir.clone()) {
-            Ok(canonical_path) if canonical_path != input_dir => return Err(Error::TransversedUp)?,
+            Ok(canonical_path) if canonical_path != input_dir => return Err(Error::TraversedUp)?,
             Ok(_) => {
                 // The path did not change to outside the crate's build folder
             }
@@ -107,13 +107,11 @@ impl From<Error> for shuttle_service::Error {
     fn from(error: Error) -> Self {
         let msg = match error {
             Error::AbsolutePath => "Cannot use an absolute path for a static folder".to_string(),
-            Error::TransversedUp => {
-                "Cannot transverse out of crate for a static folder".to_string()
-            }
+            Error::TraversedUp => "Cannot traverse out of crate for a static folder".to_string(),
             Error::Copy(error) => format!("Cannot copy static folder: {}", error),
         };
 
-        ShuttleError::Custom(CustomError::msg(msg))
+        ShuttleServiceError::Custom(CustomError::msg(msg))
     }
 }
 
@@ -247,8 +245,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[should_panic(expected = "Cannot transverse out of crate for a static folder")]
-    async fn cannot_transverse_up() {
+    #[should_panic(expected = "Cannot traverse out of crate for a static folder")]
+    async fn cannot_traverse_up() {
         let mut factory = MockFactory::new();
 
         let password_file_path = factory.escape_path().join("passwd");

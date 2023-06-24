@@ -8,11 +8,12 @@ keywords = ["shuttle-service", "database"]
 
 [dependencies]
 async-trait = "0.1.56"
+deadpool-diesel = { version = "0.4.1", features = ["postgres"], optional = true }
 mongodb = { version = "2.3.0", optional = true }
 serde = { version = "1.0.148", features = ["derive"] }
 shuttle-service = { path = "../../service", version = "0.19.0" }
 sqlx = { version = "0.6.2", optional = true }
 
 [features]
-postgres = ["sqlx/postgres", "sqlx/runtime-tokio-native-tls"]
-postgres-rustls = ["sqlx/postgres", "sqlx/runtime-tokio-rustls"]
+postgres = ["sqlx/postgres", "sqlx/runtime-tokio-native-tls", "deadpool-diesel"]
+postgres-rustls = ["sqlx/postgres", "sqlx/runtime-tokio-rustls", "deadpool-diesel"]

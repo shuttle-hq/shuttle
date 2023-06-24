@@ -9,4 +9,4 @@ pub use mongo::MongoDb;
 mod postgres;
 
 #[cfg(any(feature = "postgres", feature = "postgres-rustls"))]
-pub use postgres::Postgres;
+pub use postgres::{PostgresDiesel, PostgresSQLX};

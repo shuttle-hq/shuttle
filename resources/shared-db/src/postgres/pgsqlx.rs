@@ -5,13 +5,13 @@ use shuttle_service::{
 };
 
 #[derive(Serialize)]
-pub struct Postgres {
+pub struct PostgresSQLX {
     config: DbInput,
 }
 
 /// Get an `sqlx::PgPool` from any factory
 #[async_trait]
-impl ResourceBuilder<sqlx::PgPool> for Postgres {
+impl ResourceBuilder<sqlx::PgPool> for PostgresSQLX {
     const TYPE: Type = Type::Database(database::Type::Shared(database::SharedEngine::Postgres));
 
     type Config = DbInput;
@@ -70,7 +70,7 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
     }
 }
 
-impl Postgres {
+impl PostgresSQLX {
     /// Use a custom connection string for local runs
     pub fn local_uri(mut self, local_uri: &str) -> Self {
         self.config.local_uri = Some(local_uri.to_string());

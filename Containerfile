@@ -3,8 +3,7 @@
 
 # Base image for builds and cache
 ARG RUSTUP_TOOLCHAIN
-FROM rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-build
-RUN apt update && apt install -y curl
+FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-build
 RUN cargo install cargo-chef --locked
 WORKDIR /build
 
@@ -43,7 +42,7 @@ RUN cargo build --bin shuttle-${folder} \
 
 # The final image for this "shuttle-..." crate
 ARG RUSTUP_TOOLCHAIN
-FROM rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-crate
+FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-crate
 ARG folder
 ARG prepare_args
 # used as env variable in prepare script

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 #[cfg(feature = "openapi")]
@@ -22,10 +24,22 @@ pub enum State {
 }
 
 /// This which environment is this deployment taking place
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Environment {
     Local,
     Production,
+}
+
+impl FromStr for Environment {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "local" => Ok(Environment::Local),
+            "production" => Ok(Environment::Production),
+            _ => Err(()),
+        }
+    }
 }
 
 #[cfg(test)]

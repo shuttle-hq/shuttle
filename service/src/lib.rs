@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
@@ -39,12 +38,6 @@ pub trait Factory: Send + Sync {
 
     /// Get the environment for this deployment
     fn get_environment(&self) -> Environment;
-
-    /// Get the path where the build files are stored for this service
-    fn get_build_path(&self) -> Result<PathBuf, crate::Error>;
-
-    /// Get the path where files can be stored for this deployment
-    fn get_storage_path(&self) -> Result<PathBuf, crate::Error>;
 }
 
 /// Used to get resources of type `T` from factories.

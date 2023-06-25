@@ -273,10 +273,12 @@ impl RequestContext {
             .workspace_path()
             .unwrap_or(project_args.working_directory.clone());
 
+        trace!("looking for Shuttle.toml in {}", workspace_path.display());
         let local_manager = LocalConfigManager::new(workspace_path, "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
 
         if !project.exists() {
+            trace!("no local Shuttle.toml found");
             project.replace(ProjectConfig::default());
         } else {
             trace!("found a local Shuttle.toml");

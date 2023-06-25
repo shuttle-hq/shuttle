@@ -327,7 +327,6 @@ mod tests {
         },
         resource_recorder::{ResourcesResponse, ResultResponse},
     };
-    use tempfile::Builder;
     use tokio::{select, time::sleep};
     use tonic::transport::Server;
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -478,11 +477,9 @@ mod tests {
                 .unwrap();
         });
 
-        let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
-        let path = tmp_dir.into_path();
         let (tx, _rx) = crossbeam_channel::unbounded();
 
-        RuntimeManager::new(path, format!("http://{}", provisioner_addr), None, tx)
+        RuntimeManager::new(format!("http://{}", provisioner_addr), None, tx)
     }
 
     #[async_trait::async_trait]

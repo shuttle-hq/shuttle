@@ -29,7 +29,6 @@ use shuttle_common::models::deployment::{
 };
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
-use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
 use tracing::{error, field, instrument, trace, warn};
@@ -688,14 +687,8 @@ pub async fn get_secrets(
 )]
 pub async fn clean_project(
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Path(project_name): Path<String>,
 ) -> Result<Json<Vec<String>>> {
-    let project_path = deployment_manager
-        .storage_manager()
-        .service_build_path(&project_name)
-        .map_err(anyhow::Error::new)?;
-
-    let lines = clean_crate(&project_path, true).await?;
+    let lines = clean_crate(deployment_manager.builds_path(), true).await?;
 
     Ok(Json(lines))
 }

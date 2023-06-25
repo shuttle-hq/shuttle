@@ -97,7 +97,7 @@ pub mod provisioner {
 pub mod runtime {
     use std::{
         convert::TryFrom,
-        path::PathBuf,
+        path::{Path, PathBuf},
         str::FromStr,
         time::{Duration, SystemTime},
     };
@@ -114,11 +114,6 @@ pub mod runtime {
     use tonic::transport::{Channel, Endpoint};
     use tower::ServiceBuilder;
     use tracing::{info, trace};
-
-    pub enum StorageManagerType {
-        Artifacts(PathBuf),
-        WorkingDir(PathBuf),
-    }
 
     include!("generated/runtime.rs");
 
@@ -213,22 +208,17 @@ pub mod runtime {
 
     pub async fn start(
         wasm: bool,
-        storage_manager_type: StorageManagerType,
+        in_deployment: bool,
         provisioner_address: &str,
         auth_uri: Option<&String>,
         port: u16,
         get_runtime_executable: impl FnOnce() -> PathBuf,
+        project_path: &Path,
     ) -> anyhow::Result<(
         process::Child,
         runtime_client::RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     )> {
-        let (storage_manager_type, storage_manager_path) = match storage_manager_type {
-            StorageManagerType::Artifacts(path) => ("artifacts", path),
-            StorageManagerType::WorkingDir(path) => ("working-dir", path),
-        };
-
         let port = &port.to_string();
-        let storage_manager_path = &storage_manager_path.display().to_string();
         let runtime_executable_path = get_runtime_executable();
 
         let args = if wasm {
@@ -239,10 +229,8 @@ pub mod runtime {
                 port,
                 "--provisioner-address",
                 provisioner_address,
-                "--storage-manager-type",
-                storage_manager_type,
-                "--storage-manager-path",
-                storage_manager_path,
+                "--env",
+                if in_deployment { "production" } else { "local" },
             ];
 
             if let Some(auth_uri) = auth_uri {
@@ -257,11 +245,15 @@ pub mod runtime {
             runtime_executable_path,
             args
         );
-        let runtime = process::Command::new(runtime_executable_path)
-            .args(&args)
-            .kill_on_drop(true)
-            .spawn()
-            .context("spawning runtime process")?;
+        let runtime = process::Command::new(
+            std::fs::canonicalize(runtime_executable_path)
+                .context("canonicalize path the renamed executable")?,
+        )
+        .current_dir(project_path)
+        .args(args)
+        .kill_on_drop(true)
+        .spawn()
+        .context("spawning runtime process")?;
 
         info!("connecting runtime client");
         let conn = Endpoint::new(format!("http://127.0.0.1:{port}"))

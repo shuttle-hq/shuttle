@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddr},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -11,7 +11,6 @@ use portpicker::pick_unused_port;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
     resource,
-    storage_manager::ArtifactsStorageManager,
 };
 
 use shuttle_proto::{
@@ -31,7 +30,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use super::{RunReceiver, State};
+use super::{queue::EXECUTABLE_DIRNAME, RunReceiver, State};
 use crate::{
     error::{Error, Result},
     persistence::{DeploymentUpdater, ResourceManager, SecretGetter},
@@ -47,7 +46,7 @@ pub async fn task(
     active_deployment_getter: impl ActiveDeploymentsGetter,
     secret_getter: impl SecretGetter,
     resource_manager: impl ResourceManager,
-    storage_manager: ArtifactsStorageManager,
+    builds_path: PathBuf,
 ) {
     info!("Run task started");
 
@@ -59,11 +58,10 @@ pub async fn task(
                 let id = built.id;
 
                 info!("Built deployment at the front of run queue: {id}");
-
                 let deployment_updater = deployment_updater.clone();
                 let secret_getter = secret_getter.clone();
                 let resource_manager = resource_manager.clone();
-                let storage_manager = storage_manager.clone();
+                let builds_path = builds_path.clone();
 
                 let old_deployments_killer = kill_old_deployments(
                     built.service_id,
@@ -104,13 +102,13 @@ pub async fn task(
                     async move {
                         match built
                             .handle(
-                                storage_manager,
                                 secret_getter,
                                 resource_manager,
                                 runtime_manager,
                                 deployment_updater,
                                 old_deployments_killer,
                                 cleanup,
+                                builds_path.as_path(),
                             )
                             .await
                         {
@@ -215,22 +213,25 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, storage_manager, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(skip(self, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
-        storage_manager: ArtifactsStorageManager,
         secret_getter: impl SecretGetter,
         resource_manager: impl ResourceManager,
         runtime_manager: Arc<Mutex<RuntimeManager>>,
         deployment_updater: impl DeploymentUpdater,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
+        builds_path: &Path,
     ) -> Result<JoinHandle<()>> {
+        let project_path = builds_path.join(&self.service_name);
         // For alpha this is the path to the users project with an embedded runtime.
         // For shuttle-next this is the path to the compiled .wasm file, which will be
         // used in the load request.
-        let executable_path = storage_manager.deployment_executable_path(&self.id)?;
+        let executable_path = project_path
+            .join(EXECUTABLE_DIRNAME)
+            .join(self.id.to_string());
 
         let port = match pick_unused_port() {
             Some(port) => port,
@@ -253,7 +254,7 @@ impl Built {
         let runtime_client = runtime_manager
             .lock()
             .await
-            .get_runtime_client(self.id, alpha_runtime_path.clone())
+            .get_runtime_client(self.id, project_path.as_path(), alpha_runtime_path)
             .await
             .map_err(Error::Runtime)?;
 
@@ -432,14 +433,13 @@ mod tests {
     use std::{
         net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
-        process::Command,
         sync::Arc,
         time::Duration,
     };
 
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
-    use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
+    use shuttle_common::claims::Claim;
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
@@ -448,8 +448,8 @@ mod tests {
         resource_recorder::{ResourcesResponse, ResultResponse},
         runtime::{StopReason, SubscribeStopResponse},
     };
-    use tempfile::Builder;
     use tokio::{
+        process::Command,
         sync::{oneshot, Mutex},
         time::sleep,
     };
@@ -458,6 +458,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
+        deployment::queue::EXECUTABLE_DIRNAME,
         persistence::{DeploymentUpdater, ResourceManager, Secret, SecretGetter},
         RuntimeManager,
     };
@@ -465,13 +466,6 @@ mod tests {
     use super::Built;
 
     const RESOURCES_PATH: &str = "tests/resources";
-
-    fn get_storage_manager() -> ArtifactsStorageManager {
-        let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
-        let path = tmp_dir.into_path();
-
-        ArtifactsStorageManager::new(path)
-    }
 
     async fn kill_old_deployments() -> crate::error::Result<()> {
         Ok(())
@@ -516,8 +510,6 @@ mod tests {
                 .unwrap();
         });
 
-        let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
-        let path = tmp_dir.into_path();
         let (tx, rx) = crossbeam_channel::unbounded();
 
         tokio::runtime::Handle::current().spawn_blocking(move || {
@@ -526,7 +518,7 @@ mod tests {
             }
         });
 
-        RuntimeManager::new(path, format!("http://{}", provisioner_addr), None, tx)
+        RuntimeManager::new(format!("http://{}", provisioner_addr), None, tx)
     }
 
     #[derive(Clone)]
@@ -591,7 +583,7 @@ mod tests {
     // This test uses the kill signal to make sure a service does stop when asked to
     #[tokio::test]
     async fn can_be_killed() {
-        let (built, storage_manager) = make_and_built("sleep-async");
+        let (built, path) = make_and_built("sleep-async").await;
         let id = built.id;
         let runtime_manager = get_runtime_manager();
         let (cleanup_send, cleanup_recv) = oneshot::channel();
@@ -609,13 +601,13 @@ mod tests {
 
         built
             .handle(
-                storage_manager,
                 StubSecretGetter,
                 StubResourceManager,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),
                 handle_cleanup,
+                path.as_path(),
             )
             .await
             .unwrap();
@@ -635,7 +627,7 @@ mod tests {
     // This test does not use a kill signal to stop the service. Rather the service decided to stop on its own without errors
     #[tokio::test]
     async fn self_stop() {
-        let (built, storage_manager) = make_and_built("sleep-async");
+        let (built, path) = make_and_built("sleep-async").await;
         let runtime_manager = get_runtime_manager();
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
@@ -652,13 +644,13 @@ mod tests {
 
         built
             .handle(
-                storage_manager,
                 StubSecretGetter,
                 StubResourceManager,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),
                 handle_cleanup,
+                path.as_path(),
             )
             .await
             .unwrap();
@@ -675,7 +667,7 @@ mod tests {
     // Test for panics in Service::bind
     #[tokio::test]
     async fn panic_in_bind() {
-        let (built, storage_manager) = make_and_built("bind-panic");
+        let (built, path) = make_and_built("bind-panic").await;
         let runtime_manager = get_runtime_manager();
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
@@ -694,13 +686,13 @@ mod tests {
 
         built
             .handle(
-                storage_manager,
                 StubSecretGetter,
                 StubResourceManager,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),
                 handle_cleanup,
+                path.as_path(),
             )
             .await
             .unwrap();
@@ -718,26 +710,28 @@ mod tests {
     #[tokio::test]
     #[should_panic(expected = "Load(\"main panic\")")]
     async fn panic_in_main() {
-        let (built, storage_manager) = make_and_built("main-panic");
+        let (built, path) = make_and_built("main-panic").await;
         let runtime_manager = get_runtime_manager();
 
         let handle_cleanup = |_result| panic!("service should never be started");
 
-        built
+        let x = built
             .handle(
-                storage_manager,
                 StubSecretGetter,
                 StubResourceManager,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),
                 handle_cleanup,
+                path.as_path(),
             )
-            .await
-            .unwrap();
+            .await;
+        println!("{:?}", x);
+
+        x.unwrap();
     }
 
-    fn make_and_built(crate_name: &str) -> (Built, ArtifactsStorageManager) {
+    async fn make_and_built(crate_name: &str) -> (Built, PathBuf) {
         let crate_dir: PathBuf = [RESOURCES_PATH, crate_name].iter().collect();
 
         Command::new("cargo")
@@ -746,20 +740,22 @@ mod tests {
             .spawn()
             .unwrap()
             .wait()
+            .await
             .unwrap();
 
-        let lib_name = if cfg!(target_os = "windows") {
+        let bin_name = if cfg!(target_os = "windows") {
             format!("{}.exe", crate_name)
         } else {
             crate_name.to_string()
         };
 
         let id = Uuid::new_v4();
-        let so_path = crate_dir.join("target/release").join(lib_name);
-        let storage_manager = get_storage_manager();
-        let new_so_path = storage_manager.deployment_executable_path(&id).unwrap();
+        let exe_path = crate_dir.join("target/release").join(bin_name);
+        let new_dir = crate_dir.join(EXECUTABLE_DIRNAME);
+        let new_exe_path = new_dir.join(id.to_string());
 
-        std::fs::copy(so_path, new_so_path).unwrap();
+        std::fs::create_dir_all(new_dir).unwrap();
+        std::fs::copy(exe_path, new_exe_path).unwrap();
         (
             Built {
                 id,
@@ -770,7 +766,7 @@ mod tests {
                 is_next: false,
                 claim: Default::default(),
             },
-            storage_manager,
+            RESOURCES_PATH.into(), // is joined later on with `service_name` to arrive at `crate_name`
         )
     }
 }

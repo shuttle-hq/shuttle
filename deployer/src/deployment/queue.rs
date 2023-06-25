@@ -1,35 +1,36 @@
-use super::deploy_layer::{Log, LogRecorder, LogType};
-use super::gateway_client::BuildQueueClient;
-use super::{Built, QueueReceiver, RunSender, State};
-use crate::error::{Error, Result, TestError};
-use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
-use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
-
-use cargo_metadata::Message;
-use chrono::Utc;
-use crossbeam_channel::Sender;
-use opentelemetry::global;
-use serde_json::json;
-use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_workspace, BuiltService};
-use tokio::task::JoinSet;
-use tokio::time::{sleep, timeout};
-use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
-use ulid::Ulid;
-use uuid::Uuid;
-
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
-use std::fs::remove_file;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use cargo_metadata::Message;
+use chrono::Utc;
+use crossbeam_channel::Sender;
 use flate2::read::GzDecoder;
+use opentelemetry::global;
+use serde_json::json;
+use shuttle_common::claims::Claim;
+use shuttle_service::builder::{build_workspace, BuiltService};
 use tar::Archive;
-use tokio::fs;
+use tokio::{
+    fs,
+    task::JoinSet,
+    time::{sleep, timeout},
+};
+use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+use ulid::Ulid;
+use uuid::Uuid;
+
+use super::deploy_layer::{Log, LogRecorder, LogType};
+use super::gateway_client::BuildQueueClient;
+use super::{Built, QueueReceiver, RunSender, State};
+use crate::error::{Error, Result, TestError};
+use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
+
+pub const EXECUTABLE_DIRNAME: &str = ".shuttle-executables";
 
 pub async fn task(
     mut recv: QueueReceiver,
@@ -37,8 +38,8 @@ pub async fn task(
     deployment_updater: impl DeploymentUpdater,
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
-    storage_manager: ArtifactsStorageManager,
     queue_client: impl BuildQueueClient,
+    builds_path: PathBuf,
 ) {
     info!("Queue task started");
 
@@ -50,13 +51,12 @@ pub async fn task(
                 let id = queued.id;
 
                 info!("Queued deployment at the front of the queue: {id}");
-
                 let deployment_updater = deployment_updater.clone();
                 let run_send_cloned = run_send.clone();
                 let log_recorder = log_recorder.clone();
                 let secret_recorder = secret_recorder.clone();
-                let storage_manager = storage_manager.clone();
                 let queue_client = queue_client.clone();
+                let builds_path = builds_path.clone();
 
                 tasks.spawn(async move {
                     let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -66,8 +66,10 @@ pub async fn task(
                     span.set_parent(parent_cx);
 
                     async move {
+                        // Timeout after 3 minutes if the build queue hangs or it takes
+                        // too long for a slot to become available
                         match timeout(
-                            Duration::from_secs(60 * 3), // Timeout after 3 minutes if the build queue hangs or it takes too long for a slot to become available
+                            Duration::from_secs(60 * 3),
                             wait_for_queue(queue_client.clone(), id),
                         )
                         .await
@@ -78,10 +80,10 @@ pub async fn task(
 
                         match queued
                             .handle(
-                                storage_manager,
                                 deployment_updater,
                                 log_recorder,
                                 secret_recorder,
+                                builds_path.as_path(),
                             )
                             .await
                         {
@@ -171,17 +173,18 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    #[instrument(skip(self, deployment_updater, log_recorder, secret_recorder, builds_path), fields(id = %self.id, state = %State::Building))]
     async fn handle(
         self,
-        storage_manager: ArtifactsStorageManager,
         deployment_updater: impl DeploymentUpdater,
         log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
+        builds_path: &Path,
     ) -> Result<Built> {
         info!("Extracting received data");
 
-        let project_path = storage_manager.service_build_path(&self.service_name)?;
+        let project_path = builds_path.join(&self.service_name);
+        fs::create_dir_all(&project_path).await?;
 
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
@@ -228,7 +231,7 @@ impl Queued {
         let built_service = build_deployment(&project_path, tx.clone()).await?;
 
         // Get the Secrets.toml from the shuttle service in the workspace.
-        let secrets = get_secrets(&built_service.working_directory).await?;
+        let secrets = get_secrets(built_service.crate_directory()).await?;
 
         // Set the secrets from the service, ignoring any Secrets.toml if it is in the root of the workspace.
         // TODO: refactor this when we support starting multiple services. Do we want to set secrets in the
@@ -245,10 +248,12 @@ impl Queued {
         }
 
         info!("Moving built executable");
-
-        store_executable(
-            &storage_manager,
-            built_service.executable_path.clone(),
+        move_executable(
+            built_service.executable_path.as_path(),
+            built_service
+                .workspace_path
+                .join(EXECUTABLE_DIRNAME)
+                .as_path(),
             &self.id,
         )
         .await?;
@@ -294,7 +299,7 @@ async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
 
         let secrets: BTreeMap<String, String> = secrets_str.parse::<toml::Value>()?.try_into()?;
 
-        remove_file(secrets_file)?;
+        fs::remove_file(secrets_file).await?;
 
         Ok(secrets)
     } else {
@@ -418,15 +423,14 @@ async fn run_pre_deploy_tests(
 
 /// This will store the path to the executable for each runtime, which will be the users project with
 /// an embedded runtime for alpha, and a .wasm file for shuttle-next.
-#[instrument(skip(storage_manager, executable_path, id))]
-async fn store_executable(
-    storage_manager: &ArtifactsStorageManager,
-    executable_path: PathBuf,
-    id: &Uuid,
+#[instrument(skip(executable_path, to_directory, new_filename))]
+async fn move_executable(
+    executable_path: &Path,
+    to_directory: &Path,
+    new_filename: &Uuid,
 ) -> Result<()> {
-    let new_executable_path = storage_manager.deployment_executable_path(id)?;
-
-    fs::rename(executable_path, new_executable_path).await?;
+    fs::create_dir_all(to_directory).await?;
+    fs::rename(executable_path, to_directory.join(new_filename.to_string())).await?;
 
     Ok(())
 }
@@ -435,7 +439,6 @@ async fn store_executable(
 mod tests {
     use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
 
-    use shuttle_common::storage_manager::ArtifactsStorageManager;
     use tempfile::Builder;
     use tokio::fs;
     use uuid::Uuid;
@@ -568,16 +571,12 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     async fn store_executable() {
         let executables_dir = Builder::new().prefix("executable-store").tempdir().unwrap();
         let executables_p = executables_dir.path();
-        let storage_manager = ArtifactsStorageManager::new(executables_p.to_path_buf());
-
-        let build_p = storage_manager.builds_path().unwrap();
-
-        let executable_path = build_p.join("xyz");
+        let executable_path = executables_p.join("xyz");
         let id = Uuid::new_v4();
 
         fs::write(&executable_path, "barfoo").await.unwrap();
 
-        super::store_executable(&storage_manager, executable_path.clone(), &id)
+        super::move_executable(executable_path.as_path(), executables_p, &id)
             .await
             .unwrap();
 
@@ -585,13 +584,9 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         assert!(!executable_path.exists());
 
         assert_eq!(
-            fs::read_to_string(
-                executables_p
-                    .join("shuttle-executables")
-                    .join(id.to_string())
-            )
-            .await
-            .unwrap(),
+            fs::read_to_string(executables_p.join(id.to_string()))
+                .await
+                .unwrap(),
             "barfoo"
         );
     }

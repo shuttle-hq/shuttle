@@ -1,4 +1,8 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::Context;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
@@ -31,7 +35,6 @@ type Runtimes = Arc<
 #[derive(Clone)]
 pub struct RuntimeManager {
     runtimes: Runtimes,
-    artifacts_path: PathBuf,
     provisioner_address: String,
     auth_uri: Option<String>,
     log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
@@ -39,14 +42,12 @@ pub struct RuntimeManager {
 
 impl RuntimeManager {
     pub fn new(
-        artifacts_path: PathBuf,
         provisioner_address: String,
         auth_uri: Option<String>,
         log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
     ) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             runtimes: Default::default(),
-            artifacts_path,
             provisioner_address,
             auth_uri,
             log_sender,
@@ -56,6 +57,7 @@ impl RuntimeManager {
     pub async fn get_runtime_client(
         &mut self,
         id: Uuid,
+        project_path: &Path,
         alpha_runtime_path: Option<PathBuf>,
     ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
         trace!("making new client");
@@ -98,7 +100,7 @@ impl RuntimeManager {
                     }
                 }
 
-                debug!("Returning path to shuttle-next runtime",);
+                debug!("Returning path to shuttle-next runtime");
                 // If we're in a deployer built with the containerfile, the runtime will have
                 // been installed in deploy.sh.
                 home::cargo_home()
@@ -109,11 +111,12 @@ impl RuntimeManager {
 
         let (process, runtime_client) = runtime::start(
             is_next,
-            runtime::StorageManagerType::Artifacts(self.artifacts_path.clone()),
+            true,
             &self.provisioner_address,
             self.auth_uri.as_ref(),
             port,
             get_runtime_executable,
+            project_path,
         )
         .await
         .context("failed to start shuttle runtime")?;

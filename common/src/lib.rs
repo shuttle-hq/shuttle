@@ -12,8 +12,6 @@ pub mod models;
 #[cfg(feature = "service")]
 pub mod project;
 pub mod resource;
-#[cfg(feature = "service")]
-pub mod storage_manager;
 #[cfg(feature = "tracing")]
 pub mod tracing;
 #[cfg(feature = "wasm")]

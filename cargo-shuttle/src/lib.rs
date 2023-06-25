@@ -26,7 +26,7 @@ use shuttle_common::{
 use shuttle_common::{project::ProjectName, resource, ApiKey};
 use shuttle_proto::runtime::{
     self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest,
-    StorageManagerType, SubscribeLogsRequest,
+    SubscribeLogsRequest,
 };
 use shuttle_service::builder::{build_workspace, BuiltService};
 
@@ -538,19 +538,13 @@ impl Shuttle {
             RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         )>,
     > {
-        let BuiltService {
-            executable_path,
-            is_wasm,
-            working_directory,
-            ..
-        } = service.clone();
-
-        trace!("loading secrets");
-        let secrets_path = if working_directory.join("Secrets.dev.toml").exists() {
-            working_directory.join("Secrets.dev.toml")
+        let crate_directory = service.crate_directory();
+        let secrets_path = if crate_directory.join("Secrets.dev.toml").exists() {
+            crate_directory.join("Secrets.dev.toml")
         } else {
-            working_directory.join("Secrets.toml")
+            crate_directory.join("Secrets.toml")
         };
+        trace!("Loading secrets from {}", secrets_path.display());
 
         let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)
         {
@@ -565,8 +559,8 @@ impl Shuttle {
             Default::default()
         };
 
-        let runtime_path = || {
-            if is_wasm {
+        let get_runtime_executable = || {
+            if service.is_wasm {
                 let runtime_path = home::cargo_home()
                     .expect("failed to find cargo home dir")
                     .join("bin/shuttle-next");
@@ -611,8 +605,8 @@ impl Shuttle {
 
                 runtime_path
             } else {
-                trace!(path = ?executable_path, "using alpha runtime");
-                if let Err(err) = check_version(&executable_path) {
+                trace!(path = ?service.executable_path, "using alpha runtime");
+                if let Err(err) = check_version(&service.executable_path) {
                     warn!("{}", err);
                     if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
                         println!("Warning: {}.", mismatch);
@@ -634,18 +628,19 @@ impl Shuttle {
                         }
                     }
                 }
-                executable_path.clone()
+                service.executable_path.clone()
             }
         };
 
         // Child process and gRPC client for sending requests to it
         let (mut runtime, mut runtime_client) = runtime::start(
-            is_wasm,
-            StorageManagerType::WorkingDir(working_directory.to_path_buf()),
+            service.is_wasm,
+            false,
             &format!("http://localhost:{provisioner_port}"),
             None,
             run_args.port - idx - 1,
-            runtime_path,
+            get_runtime_executable,
+            service.workspace_path.as_path(),
         )
         .await
         .map_err(|err| {
@@ -655,7 +650,9 @@ impl Shuttle {
 
         let service_name = service.service_name()?;
         let load_request = tonic::Request::new(LoadRequest {
-            path: executable_path
+            path: service
+                .executable_path
+                .clone()
                 .into_os_string()
                 .into_string()
                 .expect("to convert path to string"),
@@ -707,9 +704,9 @@ impl Shuttle {
 
         let addr = SocketAddr::new(
             if run_args.external {
-                Ipv4Addr::new(0, 0, 0, 0)
+                Ipv4Addr::UNSPECIFIED // 0.0.0.0
             } else {
-                Ipv4Addr::LOCALHOST
+                Ipv4Addr::LOCALHOST // 127.0.0.1
             }
             .into(),
             run_args.port + idx,
@@ -772,8 +769,12 @@ impl Shuttle {
         provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
     ) -> Result<(), Status> {
         match runtime {
-            Some(inner) => existing_runtimes.push(inner),
+            Some(inner) => {
+                trace!("Adding runtime PID: {:?}", inner.0.id());
+                existing_runtimes.push(inner);
+            }
             None => {
+                trace!("Runtime error: No runtime process. Crashed during startup?");
                 provisioner_server.abort();
                 for rt_info in existing_runtimes {
                     let mut errored_out = false;
@@ -862,7 +863,12 @@ impl Shuttle {
             // This must stop all the existing runtimes and creating new ones.
             signal_received = tokio::select! {
                 res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
-                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &provisioner_server).await?;
+                    match res {
+                        Ok(runtime) => {
+                            Shuttle::add_runtime_info(runtime, &mut runtimes, &provisioner_server).await?;
+                        },
+                        Err(e) => println!("Runtime error: {e:?}"),
+                    }
                     false
                 },
                 _ = sigterm_notif.recv() => {

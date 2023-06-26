@@ -53,7 +53,7 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let args = match Args::parse() {
         Ok(args) => args,
         Err(e) => {
-            println!("{e}");
+            error!("{e}");
             let help_str = "[HINT]: Run shuttle with `cargo shuttle run`";
             let wrapper_str = "-".repeat(help_str.len());
             println!("{wrapper_str}\n{help_str}\n{wrapper_str}");

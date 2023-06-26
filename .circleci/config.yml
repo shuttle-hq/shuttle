@@ -29,7 +29,7 @@ commands:
       - run:
           name: Install sccache
           command: |
-            export SCCACHE_VERSION='v0.4.2'
+            export SCCACHE_VERSION='v0.5.3'
             ls ~/.cargo/bin/sccache || curl -L https://github.com/mozilla/sccache/releases/download/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz | tar -xOz sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache > ~/.cargo/bin/sccache && chmod +x ~/.cargo/bin/sccache
             # This configures Rust to use sccache.
             echo 'export "RUSTC_WRAPPER"="sccache"' >> $BASH_ENV
@@ -299,7 +299,7 @@ jobs:
         default: false
     steps:
       - checkout
-      - run: 
+      - run:
           name: Set git tag in bash_env
           command: |
             echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
@@ -342,40 +342,40 @@ jobs:
         type: boolean
         default: false
     steps:
-    - checkout
-    - run:
-        name: Set git tag in bash_env
-        command: |
-          echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
-    - add_ssh_keys:
-        fingerprints:
-          - << parameters.ssh-fingerprint >>
-    - run:
-        name: Generate ssh config
-        command: ./.circleci/<< parameters.ssh-config-script >>
-    - run:
-        name: Deploy images
-        command: |
-          DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> USE_TLS=enable PROD=<< parameters.production >> DD_API_KEY=$DD_API_KEY \
-          POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
-          MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
-          TAG=$TAG \
-          make deploy
-    - when:
-        condition: << parameters.production >>
-        steps:
-          - run:
-              name: Pull new deployer image on prod
-              command: |
-                ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
-    - when:
-        condition:
-          not: << parameters.production >>
-        steps:
-          - run:
-              name: Pull new deployer image on dev
-              command: |
-                ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
+      - checkout
+      - run:
+          name: Set git tag in bash_env
+          command: |
+            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+      - add_ssh_keys:
+          fingerprints:
+            - << parameters.ssh-fingerprint >>
+      - run:
+          name: Generate ssh config
+          command: ./.circleci/<< parameters.ssh-config-script >>
+      - run:
+          name: Deploy images
+          command: |
+            DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> USE_TLS=enable PROD=<< parameters.production >> DD_API_KEY=$DD_API_KEY \
+            POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
+            MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
+            TAG=$TAG \
+            make deploy
+      - when:
+          condition: << parameters.production >>
+          steps:
+            - run:
+                name: Pull new deployer image on prod
+                command: |
+                  ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
+      - when:
+          condition:
+            not: << parameters.production >>
+          steps:
+            - run:
+                name: Pull new deployer image on dev
+                command: |
+                  ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
       image: << parameters.image >>
@@ -482,7 +482,7 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - run:
           name: "Install Shuttle"
-          command:  cargo install cargo-shuttle --path ./cargo-shuttle
+          command: cargo install cargo-shuttle --path ./cargo-shuttle
       - run: cargo shuttle --version
       - run:
           name: Login
@@ -513,7 +513,7 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - run:
           name: "Install Shuttle"
-          command:  cargo install cargo-shuttle --path ./cargo-shuttle
+          command: cargo install cargo-shuttle --path ./cargo-shuttle
       - run: cargo shuttle --version
       - run:
           name: Login
@@ -558,7 +558,7 @@ jobs:
             C:\rustup-init.exe -y --default-toolchain 1.70.0 --target x86_64-pc-windows-msvc
       - run:
           name: "Install Shuttle"
-          command:  ..\.cargo\bin\cargo.exe install cargo-shuttle --path ./cargo-shuttle
+          command: ..\.cargo\bin\cargo.exe install cargo-shuttle --path ./cargo-shuttle
       - run: ..\.cargo\bin\cargo.exe shuttle --version
       - run:
           name: Login
@@ -618,8 +618,8 @@ workflows:
                 - services/shuttle-tower
                 - services/shuttle-warp
       - check-standalone:
-        # shuttle-shared-db has mutually exclusive features
-        # so we run checks for each feature separately
+          # shuttle-shared-db has mutually exclusive features
+          # so we run checks for each feature separately
           name: "resources/shared-db: << matrix.features >>"
           matrix:
             alias: check-standalone-shared-db
@@ -645,7 +645,7 @@ workflows:
                   "shuttle-proto",
                   "shuttle-provisioner",
                   "shuttle-runtime",
-                  "shuttle-service"
+                  "shuttle-service",
                 ]
       - e2e-test:
           requires:
@@ -808,13 +808,13 @@ workflows:
       - publish-crates:
           matrix:
             parameters:
-              path: 
+              path:
                 [
                   "resources/aws-rds",
                   "resources/shared-db",
                   "resources/secrets",
                   "resources/persist",
-                  "resources/static-folder"
+                  "resources/static-folder",
                 ]
           name: publish-<< matrix.path >>
           requires:
@@ -833,12 +833,12 @@ workflows:
       - publish-crates:
           matrix:
             parameters:
-              path: 
+              path:
                 [
-                  "services/shuttle-actix-web", 
-                  "services/shuttle-axum", 
-                  "services/shuttle-next", 
-                  "services/shuttle-poem", 
+                  "services/shuttle-actix-web",
+                  "services/shuttle-axum",
+                  "services/shuttle-next",
+                  "services/shuttle-poem",
                   "services/shuttle-poise",
                   "services/shuttle-rocket",
                   "services/shuttle-salvo",
@@ -846,7 +846,7 @@ workflows:
                   "services/shuttle-thruster",
                   "services/shuttle-tide",
                   "services/shuttle-tower",
-                  "services/shuttle-warp"
+                  "services/shuttle-warp",
                 ]
           name: publish-<< matrix.path >>
           requires:

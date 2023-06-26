@@ -144,12 +144,9 @@ pub async fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Res
     let project_path = project_path.to_owned();
     let manifest_path = project_path.join("Cargo.toml");
     if !manifest_path.exists() {
-        return Err(anyhow!("failed to read the Shuttle project manifest"));
+        bail!("failed to read the Shuttle project manifest");
     }
-    let mut profile = "dev";
-    if release_mode {
-        profile = "release";
-    }
+    let profile = if release_mode { "release" } else { "dev" };
     let output = tokio::process::Command::new("cargo")
         .arg("clean")
         .arg("--manifest-path")
@@ -221,6 +218,9 @@ async fn compile(
     tx: Sender<Message>,
 ) -> anyhow::Result<Vec<BuiltService>> {
     let manifest_path = project_path.join("Cargo.toml");
+    if !manifest_path.exists() {
+        bail!("failed to read the Shuttle project manifest");
+    }
     let target_path = target_path.into();
 
     let mut cargo = tokio::process::Command::new("cargo");
@@ -240,14 +240,13 @@ async fn compile(
         cargo.arg("--package").arg(package.name.clone());
     }
 
-    let mut profile = "debug";
-
-    if release_mode {
-        profile = "release";
+    let profile = if release_mode {
         cargo.arg("--profile").arg("release");
+        "release"
     } else {
         cargo.arg("--profile").arg("dev");
-    }
+        "debug"
+    };
 
     if wasm {
         cargo.arg("--target").arg("wasm32-wasi");
@@ -283,8 +282,7 @@ async fn compile(
                 target_path.clone(),
                 "wasm32-wasi".into(),
                 profile.into(),
-                #[allow(clippy::single_char_pattern)]
-                package.clone().name.replace("-", "_").into(),
+                package.name.replace('-', "_").into(),
             ]
             .iter()
             .collect();

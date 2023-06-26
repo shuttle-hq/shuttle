@@ -335,7 +335,9 @@ where
                     match res {
                         Ok(_) => {
                             info!("service stopped all on its own");
-                            let _ = stopped_tx.send((StopReason::End, String::new()));
+                            let _ = stopped_tx
+                                .send((StopReason::End, String::new()))
+                                .map_err(|e| error!("{e}"));
                         },
                         Err(error) => {
                             if error.is_panic() {
@@ -352,12 +354,12 @@ where
 
                                 let _ = stopped_tx
                                     .send((StopReason::Crash, msg))
-                                    ;
+                                    .map_err(|e| error!("{e}"));
                             } else {
                                 error!(%error, "service crashed");
                                 let _ = stopped_tx
                                     .send((StopReason::Crash, error.to_string()))
-                                    ;
+                                    .map_err(|e| error!("{e}"));
                             }
                         },
                     }
@@ -365,7 +367,9 @@ where
                 message = kill_rx => {
                     match message {
                         Ok(_) => {
-                            let _ = stopped_tx.send((StopReason::Request, String::new()));
+                            let _ = stopped_tx
+                                .send((StopReason::Request, String::new()))
+                                .map_err(|e| error!("{e}"));
                         }
                         Err(_) => trace!("the sender dropped")
                     };

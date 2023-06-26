@@ -22,8 +22,8 @@ use crate::{
 };
 
 use super::handlers::{
-    convert_cookie, convert_key, get_public_key, get_user, logout, post_user, put_user_reset_key,
-    refresh_token,
+    convert_cookie, convert_key, get_public_key, get_user, health_check, logout, post_user,
+    put_user_reset_key, refresh_token,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -64,6 +64,7 @@ impl Default for ApiBuilder {
 impl ApiBuilder {
     pub fn new() -> Self {
         let router = Router::new()
+            .route("/", get(health_check))
             .route("/logout", post(logout))
             .route("/auth/session", get(convert_cookie))
             .route("/auth/key", get(convert_key))

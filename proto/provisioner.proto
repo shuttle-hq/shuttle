@@ -4,6 +4,7 @@ package provisioner;
 service Provisioner {
   rpc ProvisionDatabase(DatabaseRequest) returns (DatabaseResponse);
   rpc DeleteDatabase(DatabaseRequest) returns (DatabaseDeletionResponse);
+  rpc HealthCheck(Ping) returns (Pong);
 }
 
 message DatabaseRequest {
@@ -42,3 +43,5 @@ message DatabaseResponse {
 }
 
 message DatabaseDeletionResponse {}
+message Ping {}
+message Pong {}

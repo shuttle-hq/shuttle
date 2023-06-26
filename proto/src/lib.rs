@@ -265,13 +265,16 @@ pub mod runtime {
 
         // Wait for the spawned process to open the endpoint port.
         // Connecting instantly does not give it enough time.
-        let channel = tokio::time::timeout(Duration::from_millis(500), async move {
+        let channel = tokio::time::timeout(Duration::from_millis(7000), async move {
+            let mut ms = 5;
             loop {
                 if let Ok(channel) = conn.connect().await {
                     break channel;
                 }
                 trace!("waiting for runtime endpoint to open");
-                tokio::time::sleep(Duration::from_millis(5)).await;
+                // exponential backoff
+                tokio::time::sleep(Duration::from_millis(ms)).await;
+                ms *= 2;
             }
         })
         .await

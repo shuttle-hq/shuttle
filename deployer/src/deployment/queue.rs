@@ -43,64 +43,68 @@ pub async fn task(
 
     let mut tasks = JoinSet::new();
 
-    while let Some(queued) = recv.recv().await {
-        let id = queued.id;
+    loop {
+        tokio::select! {
+            Some(queued) = recv.recv() => {
+                let id = queued.id;
 
-        info!("Queued deployment at the front of the queue: {id}");
+                info!("Queued deployment at the front of the queue: {id}");
 
-        let deployment_updater = deployment_updater.clone();
-        let run_send_cloned = run_send.clone();
-        let log_recorder = log_recorder.clone();
-        let secret_recorder = secret_recorder.clone();
-        let storage_manager = storage_manager.clone();
-        let queue_client = queue_client.clone();
+                let deployment_updater = deployment_updater.clone();
+                let run_send_cloned = run_send.clone();
+                let log_recorder = log_recorder.clone();
+                let secret_recorder = secret_recorder.clone();
+                let storage_manager = storage_manager.clone();
+                let queue_client = queue_client.clone();
 
-        tasks.spawn(async move {
-            let parent_cx = global::get_text_map_propagator(|propagator| {
-                propagator.extract(&queued.tracing_context)
-            });
-            let span = debug_span!("builder");
-            span.set_parent(parent_cx);
+                tasks.spawn(async move {
+                    let parent_cx = global::get_text_map_propagator(|propagator| {
+                        propagator.extract(&queued.tracing_context)
+                    });
+                    let span = debug_span!("builder");
+                    span.set_parent(parent_cx);
 
-            async move {
-                match timeout(
-                    Duration::from_secs(60 * 3), // Timeout after 3 minutes if the build queue hangs or it takes too long for a slot to become available
-                    wait_for_queue(queue_client.clone(), id),
-                )
-                .await
-                {
-                    Ok(_) => {}
-                    Err(err) => return build_failed(&id, err),
-                }
+                    async move {
+                        match timeout(
+                            Duration::from_secs(60 * 3), // Timeout after 3 minutes if the build queue hangs or it takes too long for a slot to become available
+                            wait_for_queue(queue_client.clone(), id),
+                        )
+                        .await
+                        {
+                            Ok(_) => {}
+                            Err(err) => return build_failed(&id, err),
+                        }
 
-                match queued
-                    .handle(
-                        storage_manager,
-                        deployment_updater,
-                        log_recorder,
-                        secret_recorder,
-                    )
+                        match queued
+                            .handle(
+                                storage_manager,
+                                deployment_updater,
+                                log_recorder,
+                                secret_recorder,
+                            )
+                            .await
+                        {
+                            Ok(built) => {
+                                remove_from_queue(queue_client, id).await;
+                                promote_to_run(built, run_send_cloned).await
+                            }
+                            Err(err) => {
+                                remove_from_queue(queue_client, id).await;
+                                build_failed(&id, err)
+                            }
+                        }
+                    }
+                    .instrument(span)
                     .await
-                {
-                    Ok(built) => {
-                        remove_from_queue(queue_client, id).await;
-                        promote_to_run(built, run_send_cloned).await
-                    }
-                    Err(err) => {
-                        remove_from_queue(queue_client, id).await;
-                        build_failed(&id, err)
-                    }
+                });
+            },
+            Some(res) = tasks.join_next() => {
+                match res {
+                    Ok(_) => (),
+                    Err(err) => error!(error = %err, "an error happened while joining a builder task"),
                 }
             }
-            .instrument(span)
-            .await
-        });
-    }
-
-    while let Some(res) = tasks.join_next().await {
-        match res {
-            Ok(_) => (),
-            Err(err) => error!(error = %err, "an error happened when joining a builder task"),
+            else => break
         }
     }
 }

@@ -49,84 +49,89 @@ pub async fn task(
 
     let mut set = JoinSet::new();
 
-    while let Some(built) = recv.recv().await {
-        let id = built.id;
+    loop {
+        tokio::select! {
+            Some(built) = recv.recv() => {
+                let id = built.id;
 
-        info!("Built deployment at the front of run queue: {id}");
+                info!("Built deployment at the front of run queue: {id}");
 
-        let deployment_updater = deployment_updater.clone();
-        let secret_getter = secret_getter.clone();
-        let resource_manager = resource_manager.clone();
-        let storage_manager = storage_manager.clone();
+                let deployment_updater = deployment_updater.clone();
+                let secret_getter = secret_getter.clone();
+                let resource_manager = resource_manager.clone();
+                let storage_manager = storage_manager.clone();
 
-        let old_deployments_killer = kill_old_deployments(
-            built.service_id,
-            id,
-            active_deployment_getter.clone(),
-            runtime_manager.clone(),
-        );
-        let cleanup = move |response: Option<SubscribeStopResponse>| {
-            debug!(response = ?response,  "stop client response: ");
+                let old_deployments_killer = kill_old_deployments(
+                    built.service_id,
+                    id,
+                    active_deployment_getter.clone(),
+                    runtime_manager.clone(),
+                );
+                let cleanup = move |response: Option<SubscribeStopResponse>| {
+                    debug!(response = ?response,  "stop client response: ");
 
-            if let Some(response) = response {
-                match StopReason::from_i32(response.reason).unwrap_or_default() {
-                    StopReason::Request => stopped_cleanup(&id),
-                    StopReason::End => completed_cleanup(&id),
-                    StopReason::Crash => crashed_cleanup(
-                        &id,
-                        Error::Run(anyhow::Error::msg(response.message).into()),
-                    ),
-                }
-            } else {
-                crashed_cleanup(
-                    &id,
-                    Error::Runtime(anyhow::anyhow!(
-                        "stop subscribe channel stopped unexpectedly"
-                    )),
-                )
-            }
-        };
-        let runtime_manager = runtime_manager.clone();
-
-        set.spawn(async move {
-            let parent_cx = global::get_text_map_propagator(|propagator| {
-                propagator.extract(&built.tracing_context)
-            });
-            let span = debug_span!("runner");
-            span.set_parent(parent_cx);
-
-            async move {
-                match built
-                    .handle(
-                        storage_manager,
-                        secret_getter,
-                        resource_manager,
-                        runtime_manager,
-                        deployment_updater,
-                        old_deployments_killer,
-                        cleanup,
-                    )
-                    .await
-                {
-                    Ok(handle) => handle
-                        .await
-                        .expect("the call to run in built.handle to be done"),
-                    Err(err) => start_crashed_cleanup(&id, err),
+                    if let Some(response) = response {
+                        match StopReason::from_i32(response.reason).unwrap_or_default() {
+                            StopReason::Request => stopped_cleanup(&id),
+                            StopReason::End => completed_cleanup(&id),
+                            StopReason::Crash => crashed_cleanup(
+                                &id,
+                                Error::Run(anyhow::Error::msg(response.message).into()),
+                            ),
+                        }
+                    } else {
+                        crashed_cleanup(
+                            &id,
+                            Error::Runtime(anyhow::anyhow!(
+                                "stop subscribe channel stopped unexpectedly"
+                            )),
+                        )
+                    }
                 };
+                let runtime_manager = runtime_manager.clone();
 
-                info!("deployment done");
-            }
-            .instrument(span)
-            .await
-        });
-    }
+                set.spawn(async move {
+                    let parent_cx = global::get_text_map_propagator(|propagator| {
+                        propagator.extract(&built.tracing_context)
+                    });
+                    let span = debug_span!("runner");
+                    span.set_parent(parent_cx);
 
-    while let Some(res) = set.join_next().await {
-        match res {
-            Ok(_) => (),
-            Err(err) => {
-                error!(error = %err, "an error happened when joining a deployment run task")
+                    async move {
+                        match built
+                            .handle(
+                                storage_manager,
+                                secret_getter,
+                                resource_manager,
+                                runtime_manager,
+                                deployment_updater,
+                                old_deployments_killer,
+                                cleanup,
+                            )
+                            .await
+                        {
+                            Ok(handle) => handle
+                                .await
+                                .expect("the call to run in built.handle to be done"),
+                            Err(err) => start_crashed_cleanup(&id, err),
+                        };
+
+                        info!("deployment done");
+                    }
+                    .instrument(span)
+                    .await
+                });
+            },
+            Some(res) = set.join_next() => {
+                match res {
+                    Ok(_) => (),
+                    Err(err) => {
+                        error!(error = %err, "an error happened while joining a deployment run task")
+                    }
+                }
+
             }
+            else => break
         }
     }
 }

@@ -106,7 +106,7 @@ where
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
     /// deployments between the aforementioned tasks.
-    pub fn build(self) -> (JoinSet<()>, DeploymentManager) {
+    pub fn build(self) -> DeploymentManager {
         let build_log_recorder = self
             .build_log_recorder
             .expect("a build log recorder to be set");
@@ -149,15 +149,13 @@ where
             storage_manager.clone(),
         ));
 
-        (
-            set,
-            DeploymentManager {
-                queue_send,
-                run_send,
-                runtime_manager,
-                storage_manager,
-            },
-        )
+        DeploymentManager {
+            queue_send,
+            run_send,
+            runtime_manager,
+            storage_manager,
+            _join_set: Arc::new(Mutex::new(set)),
+        }
     }
 }
 
@@ -167,6 +165,7 @@ pub struct DeploymentManager {
     run_send: RunSender,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
     storage_manager: ArtifactsStorageManager,
+    _join_set: Arc<Mutex<JoinSet<()>>>,
 }
 
 /// ```no-test

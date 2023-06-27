@@ -29,6 +29,7 @@ pub async fn start(
     runtime_manager: Arc<Mutex<RuntimeManager>>,
     args: Args,
 ) {
+    // when _set is dropped once axum exits, the deployment tasks will be aborted.
     let deployment_manager = DeploymentManager::builder()
         .build_log_recorder(persistence.clone())
         .secret_recorder(persistence.clone())

@@ -314,6 +314,7 @@ async fn load(
     debug!("loading service");
     let response = runtime_client.load(load_request).await;
 
+    info!("resources have been loaded");
     match response {
         Ok(response) => {
             let response = response.into_inner();

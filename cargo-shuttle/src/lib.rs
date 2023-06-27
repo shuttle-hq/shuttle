@@ -1031,10 +1031,20 @@ impl Shuttle {
 
                             return Ok(CommandOutcome::DeploymentFailure);
                         }
-                        shuttle_common::deployment::State::Running
-                        | shuttle_common::deployment::State::Completed
-                        | shuttle_common::deployment::State::Stopped
-                        | shuttle_common::deployment::State::Unknown => {
+                        shuttle_common::deployment::State::Running => {
+                            println!("got Running in logs stream");
+                            break;
+                        }
+                        shuttle_common::deployment::State::Completed => {
+                            println!("got Completed in logs stream");
+                            break;
+                        }
+                        shuttle_common::deployment::State::Stopped => {
+                            println!("got Stopped in logs stream");
+                            break;
+                        }
+                        shuttle_common::deployment::State::Unknown => {
+                            println!("got Unknown in logs stream");
                             break;
                         }
                     };
@@ -1090,9 +1100,12 @@ impl Shuttle {
                         "State: Crashed - Deployment crashed after startup.".red()
                     );
                 }
-                _ => println!(
-                    "Deployment encountered an unexpected error - Please create a ticket to report this."
-                ),
+                state => {
+                    println!("{state}");
+                    println!(
+                    "Deployment entered an unexpected state - Please create a ticket to report this."
+                );
+                }
             }
 
             println!();

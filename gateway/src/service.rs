@@ -208,7 +208,6 @@ impl GatewayService {
         let provider = GatewayContextProvider::new(docker, container_settings);
 
         let task_router = TaskRouter::new();
-
         Self {
             provider,
             db,
@@ -747,7 +746,6 @@ impl GatewayService {
     pub fn provisioner_host(&self) -> &Endpoint {
         &self.provisioner_host
     }
-
     pub fn auth_uri(&self) -> &Uri {
         &self.auth_host
     }

@@ -49,7 +49,7 @@ use crate::service::GatewayService;
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{Error, ProjectName};
+use crate::{Error, ProjectName, AUTH_CLIENT};
 
 use super::auth_layer::ShuttleAuthLayer;
 
@@ -290,14 +290,16 @@ async fn get_status(
     statuses.push(("shuttle-provisioner", provisioner_status));
 
     // Compute auth status.
-    let auth_status = if let Ok(response) = reqwest::get(service.auth_uri().to_string()).await {
-        if response.status() == 200 {
-            StatusResponse::healthy()
-        } else {
-            StatusResponse::unhealthy()
+    let auth_status = {
+        let response = AUTH_CLIENT
+            .get_or_init(reqwest::Client::new)
+            .get(service.auth_uri().to_string())
+            .send()
+            .await;
+        match response {
+            Ok(response) if response.status() == 200 => StatusResponse::healthy(),
+            Ok(_) | Err(_) => StatusResponse::unhealthy(),
         }
-    } else {
-        StatusResponse::unhealthy()
     };
 
     statuses.push(("shuttle-auth", auth_status));

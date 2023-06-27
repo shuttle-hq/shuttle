@@ -52,10 +52,12 @@ mod args;
 pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let args = match Args::parse() {
         Ok(args) => args,
-        Err(_) => {
+        Err(e) => {
+            error!("{e}");
             let help_str = "[HINT]: Run shuttle with `cargo shuttle run`";
             let wrapper_str = "-".repeat(help_str.len());
-            return println!("{wrapper_str}\n{help_str}\n{wrapper_str}",);
+            println!("{wrapper_str}\n{help_str}\n{wrapper_str}");
+            return;
         }
     };
 
@@ -333,7 +335,9 @@ where
                     match res {
                         Ok(_) => {
                             info!("service stopped all on its own");
-                            stopped_tx.send((StopReason::End, String::new())).unwrap();
+                            let _ = stopped_tx
+                                .send((StopReason::End, String::new()))
+                                .map_err(|e| error!("{e}"));
                         },
                         Err(error) => {
                             if error.is_panic() {
@@ -348,14 +352,14 @@ where
 
                                 error!(error = msg, "service panicked");
 
-                                stopped_tx
+                                let _ = stopped_tx
                                     .send((StopReason::Crash, msg))
-                                    .unwrap();
+                                    .map_err(|e| error!("{e}"));
                             } else {
                                 error!(%error, "service crashed");
-                                stopped_tx
+                                let _ = stopped_tx
                                     .send((StopReason::Crash, error.to_string()))
-                                    .unwrap();
+                                    .map_err(|e| error!("{e}"));
                             }
                         },
                     }
@@ -363,7 +367,9 @@ where
                 message = kill_rx => {
                     match message {
                         Ok(_) => {
-                            stopped_tx.send((StopReason::Request, String::new())).unwrap();
+                            let _ = stopped_tx
+                                .send((StopReason::Request, String::new()))
+                                .map_err(|e| error!("{e}"));
                         }
                         Err(_) => trace!("the sender dropped")
                     };

@@ -321,7 +321,7 @@ mod tests {
     use portpicker::pick_unused_port;
     use shuttle_proto::provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
     };
     use tempfile::Builder;
     use tokio::{select, time::sleep};
@@ -450,6 +450,13 @@ mod tests {
             _request: tonic::Request<DatabaseRequest>,
         ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
             panic!("no deploy layer tests should request delete a db");
+        }
+
+        async fn health_check(
+            &self,
+            _request: tonic::Request<Ping>,
+        ) -> Result<tonic::Response<Pong>, tonic::Status> {
+            panic!("no run tests should do a health check");
         }
     }
 

@@ -60,6 +60,11 @@ pub(crate) async fn logout(mut session: WritableSession) {
     session.destroy();
 }
 
+// Dummy health-check returning 200 if the auth server is up.
+pub(crate) async fn health_check() -> Result<(), Error> {
+    Ok(())
+}
+
 pub(crate) async fn convert_cookie(
     session: ReadableSession,
     State(key_manager): State<KeyManagerState>,

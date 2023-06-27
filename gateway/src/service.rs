@@ -10,6 +10,7 @@ use axum::http::Request;
 use axum::response::Response;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use fqdn::{Fqdn, FQDN};
+use http::Uri;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::Client;
@@ -25,6 +26,7 @@ use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, QueryBuilder, Row};
 use tokio::sync::mpsc::Sender;
+use tonic::transport::Endpoint;
 use tracing::{debug, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use x509_parser::nom::AsBytes;
@@ -187,6 +189,10 @@ pub struct GatewayService {
     db: SqlitePool,
     task_router: TaskRouter<BoxedTask>,
     state_location: PathBuf,
+
+    // We store these because we'll need them for the health checks
+    provisioner_host: Endpoint,
+    auth_host: Uri,
 }
 
 impl GatewayService {
@@ -202,12 +208,14 @@ impl GatewayService {
         let provider = GatewayContextProvider::new(docker, container_settings);
 
         let task_router = TaskRouter::new();
-
         Self {
             provider,
             db,
             task_router,
             state_location,
+            provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
+                .expect("to have a valid provisioner endpoint"),
+            auth_host: args.auth_uri,
         }
     }
 
@@ -733,6 +741,13 @@ impl GatewayService {
 
         serde_json::from_reader(std::fs::File::open(creds_path).expect("Invalid credentials path"))
             .expect("Can not parse admin credentials from path")
+    }
+
+    pub fn provisioner_host(&self) -> &Endpoint {
+        &self.provisioner_host
+    }
+    pub fn auth_uri(&self) -> &Uri {
+        &self.auth_host
     }
 }
 

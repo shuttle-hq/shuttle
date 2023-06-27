@@ -10,7 +10,7 @@ use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
     },
     runtime::{self, runtime_client::RuntimeClient},
 };
@@ -104,5 +104,9 @@ impl Provisioner for DummyProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("did not expect any runtime test to delete dbs")
+    }
+
+    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        panic!("did not expect any runtime test to do a provisioner health check")
     }
 }

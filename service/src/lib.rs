@@ -99,7 +99,7 @@ pub trait Factory: Send + Sync {
 ///     }
 ///
 ///     fn config(&self) -> &Self::Config {
-///         &self
+///         self
 ///     }
 ///
 ///     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, shuttle_service::Error> {

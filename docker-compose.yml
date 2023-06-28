@@ -129,6 +129,8 @@ services:
       - "--internal-pg-address=postgres"
       - "--fqdn=${DB_FQDN}"
       - "--auth-uri=http://auth:8000"
+    volumes:
+      - provisioner-vol:/var/lib/shuttle
   postgres:
     image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
     restart: always

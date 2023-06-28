@@ -817,7 +817,7 @@ impl DynamoDBHandler {
     }
 
     fn get_access_key_file_name(&self) -> String {
-        format!("{}.txt", self.prefix)
+        format!("/var/lib/shuttle/{}.txt", self.prefix)
     }
 
     async fn delete_saved_access_key(&self) -> Result<(), std::io::Error> {

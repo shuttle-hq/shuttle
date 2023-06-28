@@ -39,12 +39,14 @@ impl Turso {
 
 pub enum Error {
     UrlParseError(url::ParseError),
+    LocateLocalDB(std::io::Error),
 }
 
 impl From<Error> for shuttle_service::Error {
     fn from(error: Error) -> Self {
         let msg = match error {
-            Error::UrlParseError(err) => format!("Cannot parse Turso Url: {}", err),
+            Error::UrlParseError(err) => format!("Failed to parse Turso Url: {}", err),
+            Error::LocateLocalDB(err) => format!("Failed to get path to local db file: {}", err),
         };
 
         ShuttleError::Custom(CustomError::msg(msg))
@@ -100,20 +102,19 @@ impl ResourceBuilder<Client> for Turso {
                 }
             }
             shuttle_service::Environment::Local => {
-                // Default to a local db of the name of the service.
-                let default_db_path = factory
-                    .get_build_path()?
-                    .join(format!("{}.db", factory.get_service_name()));
-
                 match self.local_addr {
                     Some(ref local_addr) => self.output_from_addr(local_addr).await,
                     None => {
-                        let conn_url = format!(
-                            "file://{}",
-                            default_db_path
-                                .to_str()
-                                .expect("local db should be a valid unicode string")
-                        );
+                        // Default to a local db of the name of the service.
+                        let db_file = std::env::current_dir() // Should be root of the project's workspace
+                            .and_then(std::fs::canonicalize)
+                            .map(|cd| {
+                                let mut p = cd.join(factory.get_service_name().to_string());
+                                p.set_extension("db");
+                                p
+                            })
+                            .map_err(Error::LocateLocalDB)?;
+                        let conn_url = format!("file:///{}", db_file.display());
                         Ok(TursoOutput {
                             conn_url: Url::parse(&conn_url).map_err(Error::UrlParseError)?,
                             // Nullify the token since we're using a file as database.
@@ -137,19 +138,15 @@ impl ResourceBuilder<Client> for Turso {
 
 #[cfg(test)]
 mod test {
-
-    use std::path::PathBuf;
-    use std::{fs, str::FromStr};
+    use std::str::FromStr;
 
     use async_trait::async_trait;
     use shuttle_service::{DatabaseReadyInfo, Environment, Factory, ResourceBuilder, ServiceName};
-    use tempfile::{Builder, TempDir};
     use url::Url;
 
     use crate::{Turso, TursoOutput};
 
     struct MockFactory {
-        temp_dir: TempDir,
         pub service_name: String,
         pub environment: Environment,
     }
@@ -157,24 +154,9 @@ mod test {
     impl MockFactory {
         fn new() -> Self {
             Self {
-                temp_dir: Builder::new().prefix("shuttle-turso").tempdir().unwrap(),
                 service_name: "shuttle-turso".to_string(),
                 environment: Environment::Local,
             }
-        }
-
-        fn build_path(&self) -> PathBuf {
-            self.get_path("build")
-        }
-
-        fn get_path(&self, folder: &str) -> PathBuf {
-            let path = self.temp_dir.path().join(folder);
-
-            if !path.exists() {
-                fs::create_dir(&path).unwrap();
-            }
-
-            path
         }
     }
 
@@ -200,14 +182,6 @@ mod test {
         fn get_environment(&self) -> shuttle_service::Environment {
             self.environment
         }
-
-        fn get_build_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {
-            Ok(self.build_path())
-        }
-
-        fn get_storage_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {
-            panic!("no turso test should try to get the storage path")
-        }
     }
 
     #[tokio::test]
@@ -216,17 +190,9 @@ mod test {
 
         let turso = Turso::new();
         let output = turso.output(&mut factory).await.unwrap();
-        assert_eq!(
-            output,
-            TursoOutput {
-                conn_url: Url::parse(&format!(
-                    "file:///{}/shuttle-turso.db",
-                    factory.get_build_path().unwrap().to_str().unwrap()
-                ))
-                .unwrap(),
-                token: None
-            }
-        )
+        assert_eq!(output.token, None);
+        assert!(output.conn_url.to_string().starts_with("file:///"));
+        assert!(output.conn_url.to_string().ends_with("shuttle-turso.db"));
     }
 
     #[tokio::test]

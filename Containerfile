@@ -16,8 +16,9 @@ COPY . .
 RUN find ${SRC_CRATES} \( -name "*.proto" -or -name "*.rs" -or -name "*.toml" -or -name "Cargo.lock" -or -name "README.md" -or -name "*.sql" \) -type f -exec install -D \{\} /build/\{\} \;
 # This is used to carry over in the docker images any *.pem files from shuttle root directory,
 # to be used for TLS testing, as described here in the admin README.md.
-RUN [ "$CARGO_PROFILE" != "release" ] && \
-    find ${SRC_CRATES} -name "*.pem" -type f -exec install -D \{\} /build/\{\} \;
+RUN if [ "$CARGO_PROFILE" != "release" ]; then \
+    find ${SRC_CRATES} -name "*.pem" -type f -exec install -D \{\} /build/\{\} \;; \
+    fi
 
 
 # Stores cargo chef recipe

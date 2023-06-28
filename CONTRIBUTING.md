@@ -78,6 +78,7 @@ shuttle-persist = { path = "[base]/shuttle/resources/persist" }
 shuttle-shared-db = { path = "[base]/shuttle/resources/shared-db" }
 shuttle-secrets = { path = "[base]/shuttle/resources/secrets" }
 shuttle-static-folder = { path = "[base]/shuttle/resources/static-folder" }
+shuttle-turso = { path = "[base]/shuttle/resources/turso" }
 
 shuttle-axum = { path = "[base]/shuttle/services/shuttle-axum" }
 shuttle-actix-web = { path = "[base]/shuttle/services/shuttle-actix-web" }

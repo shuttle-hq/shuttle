@@ -96,6 +96,7 @@ commands:
             shuttle-shared-db = { path = "$PWD/resources/shared-db" }
             shuttle-secrets = { path = "$PWD/resources/secrets" }
             shuttle-static-folder = { path = "$PWD/resources/static-folder" }
+            shuttle-turso = { path = "$PWD/resources/turso" }
 
             shuttle-axum = { path = "$PWD/services/shuttle-axum" }
             shuttle-actix-web = { path = "$PWD/services/shuttle-actix-web" }
@@ -605,6 +606,7 @@ workflows:
                 - resources/persist
                 - resources/secrets
                 - resources/static-folder
+                - resources/turso
                 - services/shuttle-actix-web
                 - services/shuttle-axum
                 - services/shuttle-next

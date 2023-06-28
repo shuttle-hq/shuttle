@@ -60,6 +60,10 @@ impl From<Deployment> for shuttle_common::models::deployment::Response {
             service_id: deployment.service_id,
             state: deployment.state.into(),
             last_update: deployment.last_update,
+            git_commit_id: deployment.git_commit_id,
+            git_commit_msg: deployment.git_commit_msg,
+            git_branch: deployment.git_branch,
+            git_dirty: deployment.git_dirty,
         }
     }
 }

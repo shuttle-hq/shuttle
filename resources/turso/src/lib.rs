@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use libsql_client::{client::Client, new_client_from_config, Config};
+use libsql_client::{Client, Config};
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
@@ -126,7 +126,7 @@ impl ResourceBuilder<Client> for Turso {
     }
 
     async fn build(config: &Self::Output) -> Result<Client, shuttle_service::Error> {
-        let client = new_client_from_config(Config {
+        let client = Client::from_config(Config {
             url: config.conn_url.clone(),
             auth_token: config.token.clone(),
         })

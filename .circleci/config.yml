@@ -813,9 +813,10 @@ workflows:
               path:
                 [
                   "resources/aws-rds",
-                  "resources/shared-db",
-                  "resources/secrets",
                   "resources/persist",
+                  "resources/secrets",
+                  "resources/shared-db",
+                  "resources/shuttle-turso",
                   "resources/static-folder",
                 ]
           name: publish-<< matrix.path >>

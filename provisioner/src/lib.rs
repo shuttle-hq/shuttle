@@ -838,15 +838,12 @@ impl DynamoDBHandler {
     }
 
     fn get_access_key_file_name(&self) -> String {
-        format!(
-            "{}{}.txt",
-            self.provisioner_state
-                .as_path()
-                .as_os_str()
-                .to_str()
-                .expect("to have a valid utf8 filename"),
-            self.prefix
-        )
+        let mut access_key_file_path = self.provisioner_state.clone();
+        access_key_file_path.push(self.prefix.clone());
+        access_key_file_path
+            .to_str()
+            .expect("to have a valid access key file name")
+            .to_string()
     }
 
     async fn delete_saved_access_key(&self) -> Result<(), std::io::Error> {
@@ -947,7 +944,7 @@ fn engine_to_port(engine: aws_rds::Engine) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, time::Duration};
+    use std::time::Duration;
 
     use aws_sdk_dynamodb::types::{
         AttributeDefinition, KeySchemaElement, KeyType, ProvisionedThroughput, ScalarAttributeType,
@@ -969,7 +966,7 @@ mod tests {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
-            PathBuf::from("."),
+            TempDir::new().unwrap().into_path(),
         )
         .await
         .unwrap()

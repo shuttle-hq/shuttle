@@ -12,6 +12,7 @@ use opentelemetry::global;
 use serde_json::json;
 use shuttle_common::claims::Claim;
 use shuttle_service::builder::{build_workspace, BuiltService};
+use tokio::task::JoinSet;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -40,58 +41,71 @@ pub async fn task(
 ) {
     info!("Queue task started");
 
-    while let Some(queued) = recv.recv().await {
-        let id = queued.id;
+    let mut tasks = JoinSet::new();
 
-        info!("Queued deployment at the front of the queue: {id}");
+    loop {
+        tokio::select! {
+            Some(queued) = recv.recv() => {
+                let id = queued.id;
 
-        let deployment_updater = deployment_updater.clone();
-        let run_send_cloned = run_send.clone();
-        let log_recorder = log_recorder.clone();
-        let secret_recorder = secret_recorder.clone();
-        let storage_manager = storage_manager.clone();
-        let queue_client = queue_client.clone();
+                info!("Queued deployment at the front of the queue: {id}");
 
-        tokio::spawn(async move {
-            let parent_cx = global::get_text_map_propagator(|propagator| {
-                propagator.extract(&queued.tracing_context)
-            });
-            let span = debug_span!("builder");
-            span.set_parent(parent_cx);
+                let deployment_updater = deployment_updater.clone();
+                let run_send_cloned = run_send.clone();
+                let log_recorder = log_recorder.clone();
+                let secret_recorder = secret_recorder.clone();
+                let storage_manager = storage_manager.clone();
+                let queue_client = queue_client.clone();
 
-            async move {
-                match timeout(
-                    Duration::from_secs(60 * 3), // Timeout after 3 minutes if the build queue hangs or it takes too long for a slot to become available
-                    wait_for_queue(queue_client.clone(), id),
-                )
-                .await
-                {
-                    Ok(_) => {}
-                    Err(err) => return build_failed(&id, err),
-                }
+                tasks.spawn(async move {
+                    let parent_cx = global::get_text_map_propagator(|propagator| {
+                        propagator.extract(&queued.tracing_context)
+                    });
+                    let span = debug_span!("builder");
+                    span.set_parent(parent_cx);
 
-                match queued
-                    .handle(
-                        storage_manager,
-                        deployment_updater,
-                        log_recorder,
-                        secret_recorder,
-                    )
+                    async move {
+                        match timeout(
+                            Duration::from_secs(60 * 3), // Timeout after 3 minutes if the build queue hangs or it takes too long for a slot to become available
+                            wait_for_queue(queue_client.clone(), id),
+                        )
+                        .await
+                        {
+                            Ok(_) => {}
+                            Err(err) => return build_failed(&id, err),
+                        }
+
+                        match queued
+                            .handle(
+                                storage_manager,
+                                deployment_updater,
+                                log_recorder,
+                                secret_recorder,
+                            )
+                            .await
+                        {
+                            Ok(built) => {
+                                remove_from_queue(queue_client, id).await;
+                                promote_to_run(built, run_send_cloned).await
+                            }
+                            Err(err) => {
+                                remove_from_queue(queue_client, id).await;
+                                build_failed(&id, err)
+                            }
+                        }
+                    }
+                    .instrument(span)
                     .await
-                {
-                    Ok(built) => {
-                        remove_from_queue(queue_client, id).await;
-                        promote_to_run(built, run_send_cloned).await
-                    }
-                    Err(err) => {
-                        remove_from_queue(queue_client, id).await;
-                        build_failed(&id, err)
-                    }
+                });
+            },
+            Some(res) = tasks.join_next() => {
+                match res {
+                    Ok(_) => (),
+                    Err(err) => error!(error = %err, "an error happened while joining a builder task"),
                 }
             }
-            .instrument(span)
-            .await
-        });
+            else => break
+        }
     }
 }
 
@@ -327,9 +341,11 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 
     for entry in archive.entries()? {
         let mut entry = entry?;
-        let path: PathBuf = entry.path()?.components().skip(1).collect();
+        let name = entry.path()?;
+        let path: PathBuf = name.components().skip(1).collect();
         let dst: PathBuf = dest.as_ref().join(path);
         std::fs::create_dir_all(dst.parent().unwrap())?;
+        trace!("Unpacking {:?} to {:?}", name, dst);
         entry.unpack(dst)?;
     }
 

@@ -51,6 +51,7 @@ Shuttle is built for productivity, reliability and performance:
 ![star](https://i.imgur.com/kLWmThm.gif)
 
 ## Console Sneak Peek (gif)
+
 ![console-sneak-peek](https://i.imgur.com/1qdWipP.gif)
 *The gif above demonstrates the ease of adding/managing resources to your project(s) in our upcoming console. Bear in mind that the ease of adding resources is already there, albeit without the visualization coming from the console.*
 
@@ -66,6 +67,7 @@ which will automatically install the correct target for your system.
 To install with `cargo-binstall`, run:
 
 ```sh
+cargo install binstall
 cargo binstall cargo-shuttle
 ```
 
@@ -74,6 +76,8 @@ Although a bit slower, you can also install directly with cargo:
 ```sh
 cargo install cargo-shuttle
 ```
+
+*If installing binstall or cargo-shuttle fails, try adding `--locked` to the install command.*
 
 After installing, log in with:
 
@@ -87,9 +91,7 @@ To initialize your project, simply write:
 cargo shuttle init --axum hello-world
 ```
 
-> Note: if you use [sparse registries](https://blog.rust-lang.org/inside-rust/2023/01/30/cargo-sparse-protocol.html) (which
-> is enabled by default on `nightly`), you may encounter [this bug](https://github.com/shuttle-hq/shuttle/issues/821) when 
-> running the `init` command. To resolve this, see [this comment](https://github.com/shuttle-hq/shuttle/issues/821#issuecomment-1525317860).
+> Note: if you use [sparse registries](https://blog.rust-lang.org/inside-rust/2023/01/30/cargo-sparse-protocol.html) (which is enabled by default on `nightly`), you may encounter [this bug](https://github.com/shuttle-hq/shuttle/issues/821) when running the `init` command. To resolve this, see [this comment](https://github.com/shuttle-hq/shuttle/issues/821#issuecomment-1525317860).
 
 And to deploy it, write:
 

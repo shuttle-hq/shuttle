@@ -214,7 +214,6 @@ mod test {
         ) -> Result<DynamoDbReadyInfo, shuttle_service::Error> {
             panic!("no turso test should try to get a dynamodb connection")
         }
-
     }
 
     #[tokio::test]

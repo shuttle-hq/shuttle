@@ -6,8 +6,7 @@ use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 pub use shuttle_common::{
     database, deployment::Environment, project::ProjectName as ServiceName, resource::Type,
-    DatabaseReadyInfo, DbInput, DbOutput, SecretStore, DynamoDBInput,
-    DynamoDbReadyInfo
+    DatabaseReadyInfo, DbInput, DbOutput, DynamoDBInput, DynamoDbReadyInfo, SecretStore,
 };
 
 pub mod error;

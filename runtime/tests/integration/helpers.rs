@@ -11,7 +11,7 @@ use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
         DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbDeletionResponse,
-        DynamoDbRequest, DynamoDbResponse,  Ping, Pong,
+        DynamoDbRequest, DynamoDbResponse, Ping, Pong,
     },
     runtime::{self, runtime_client::RuntimeClient},
 };

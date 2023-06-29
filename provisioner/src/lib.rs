@@ -21,7 +21,9 @@ use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
-use shuttle_proto::provisioner::{DynamoDbDeletionResponse, DynamoDbRequest, DynamoDbResponse, Ping, Pong};
+use shuttle_proto::provisioner::{
+    DynamoDbDeletionResponse, DynamoDbRequest, DynamoDbResponse, Ping, Pong,
+};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use std::fs::File;
 use std::io::BufRead;

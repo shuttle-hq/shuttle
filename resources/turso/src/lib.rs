@@ -208,6 +208,13 @@ mod test {
         fn get_storage_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {
             panic!("no turso test should try to get the storage path")
         }
+
+        async fn get_dynamodb_connection(
+            &mut self,
+        ) -> Result<DynamoDbReadyInfo, shuttle_service::Error> {
+            panic!("no turso test should try to get a dynamodb connection")
+        }
+
     }
 
     #[tokio::test]

@@ -142,7 +142,7 @@ mod test {
     use std::{fs, str::FromStr};
 
     use async_trait::async_trait;
-    use shuttle_service::{DatabaseReadyInfo, Environment, Factory, ResourceBuilder, ServiceName};
+    use shuttle_service::{DatabaseReadyInfo, DynamoDbReadyInfo, Environment, Factory, ResourceBuilder, ServiceName};
     use tempfile::{Builder, TempDir};
     use url::Url;
 

@@ -41,6 +41,10 @@ impl PersistInstance {
         Ok(serialize_into(&mut writer, &struc).map_err(PersistError::Serialize))?
     }
 
+    pub fn list(&self) -> Result<Vec<String>, PersistError> {
+        todo!()
+    }
+
     pub fn load<T>(&self, key: &str) -> Result<T, PersistError>
     where
         T: DeserializeOwned,

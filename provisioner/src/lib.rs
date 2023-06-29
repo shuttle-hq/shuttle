@@ -947,7 +947,7 @@ fn engine_to_port(engine: aws_rds::Engine) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::{env::temp_dir, path::PathBuf, time::Duration};
+    use std::{path::PathBuf, time::Duration};
 
     use aws_sdk_dynamodb::types::{
         AttributeDefinition, KeySchemaElement, KeyType, ProvisionedThroughput, ScalarAttributeType,
@@ -955,6 +955,7 @@ mod tests {
     use tokio::time::sleep;
 
     use crate::{get_prefix, DynamoDBHandler, MyProvisioner};
+    use tempfile::TempDir;
 
     use super::delete_dynamodb_tables_by_prefix;
 
@@ -1006,7 +1007,11 @@ mod tests {
     async fn test_create_and_delete_dynamodb_policy() {
         let provisioner = make_test_provisioner().await;
         let prefix = get_prefix("test_create_and_delete_dynamodb_policy");
-        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config, temp_dir());
+        let dynamodb_handler = DynamoDBHandler::new(
+            &prefix,
+            &provisioner.aws_config,
+            TempDir::new().unwrap().into_path(),
+        );
 
         dynamodb_handler.create_dynamodb_policy().await.unwrap();
 
@@ -1018,7 +1023,11 @@ mod tests {
     async fn test_create_and_delete_aws_user() {
         let provisioner = make_test_provisioner().await;
         let prefix = get_prefix("test_create_and_delete_aws_user");
-        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config, temp_dir());
+        let dynamodb_handler = DynamoDBHandler::new(
+            &prefix,
+            &provisioner.aws_config,
+            TempDir::new().unwrap().into_path(),
+        );
 
         dynamodb_handler.create_iam_identity().await.unwrap();
 
@@ -1063,7 +1072,11 @@ mod tests {
     async fn test_dynamodb_delete_table_names_by_prefix() {
         let provisioner = make_test_provisioner().await;
         let prefix = get_prefix("test_dynamodb_delete_table_names_by_prefix");
-        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config, temp_dir());
+        let dynamodb_handler = DynamoDBHandler::new(
+            &prefix,
+            &provisioner.aws_config,
+            TempDir::new().unwrap().into_path(),
+        );
 
         create_dynamodb_table(&dynamodb_handler.dynamodb_client, &format!("{}1", prefix)).await;
         create_dynamodb_table(&dynamodb_handler.dynamodb_client, &format!("{}2", prefix)).await;
@@ -1084,7 +1097,11 @@ mod tests {
         let access_key_id = "my-access-key".to_string();
         let secret_access_key = "my-secret-access-key".to_string();
         let prefix = get_prefix("test_get_access_key");
-        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config, temp_dir());
+        let dynamodb_handler = DynamoDBHandler::new(
+            &prefix,
+            &provisioner.aws_config,
+            TempDir::new().unwrap().into_path(),
+        );
 
         assert_eq!(dynamodb_handler.get_saved_access_key().await, None);
 

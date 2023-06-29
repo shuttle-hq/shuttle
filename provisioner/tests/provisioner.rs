@@ -1,5 +1,4 @@
 mod helpers;
-use std::env::temp_dir;
 
 use ctor::dtor;
 use helpers::{exec_mongosh, exec_psql, DbType, DockerInstance};
@@ -7,6 +6,7 @@ use once_cell::sync::Lazy;
 use serde_json::Value;
 use shuttle_proto::provisioner::shared;
 use shuttle_provisioner::MyProvisioner;
+use tempfile::TempDir;
 
 static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::Postgres));
 static MONGODB: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::MongoDb));
@@ -25,7 +25,7 @@ async fn shared_db_role_does_not_exist() {
         "fqdn".to_string(),
         "pg".to_string(),
         "mongodb".to_string(),
-        temp_dir(),
+        TempDir::new().unwrap().into_path(),
     )
     .await
     .unwrap();
@@ -54,7 +54,7 @@ async fn shared_db_role_does_exist() {
         "fqdn".to_string(),
         "pg".to_string(),
         "mongodb".to_string(),
-        temp_dir(),
+        TempDir::new().unwrap().into_path(),
     )
     .await
     .unwrap();
@@ -88,7 +88,7 @@ async fn injection_safe() {
         "fqdn".to_string(),
         "pg".to_string(),
         "mongodb".to_string(),
-        temp_dir(),
+        TempDir::new().unwrap().into_path(),
     )
     .await
     .unwrap();
@@ -110,7 +110,7 @@ async fn shared_db_missing() {
         "fqdn".to_string(),
         "pg".to_string(),
         "mongodb".to_string(),
-        temp_dir(),
+        TempDir::new().unwrap().into_path(),
     )
     .await
     .unwrap();
@@ -139,7 +139,7 @@ async fn shared_db_filled() {
         "fqdn".to_string(),
         "pg".to_string(),
         "mongodb".to_string(),
-        temp_dir(),
+        TempDir::new().unwrap().into_path(),
     )
     .await
     .unwrap();
@@ -170,7 +170,7 @@ async fn shared_mongodb_role_does_not_exist() {
         "fqdn".to_string(),
         "pg".to_string(),
         "mongodb".to_string(),
-        temp_dir(),
+        TempDir::new().unwrap().into_path(),
     )
     .await
     .unwrap();
@@ -195,7 +195,7 @@ async fn shared_mongodb_role_does_exist() {
         "fqdn".to_string(),
         "pg".to_string(),
         "mongodb".to_string(),
-        temp_dir(),
+        TempDir::new().unwrap().into_path(),
     )
     .await
     .unwrap();

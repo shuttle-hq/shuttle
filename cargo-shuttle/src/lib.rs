@@ -1033,6 +1033,9 @@ impl Shuttle {
                         }
                         shuttle_common::deployment::State::Running => {
                             println!("got Running in logs stream");
+                            let fields: serde_json::Value =
+                                serde_json::from_slice(log_item.fields.as_slice()).unwrap();
+                            println!("log item: {:?}", fields);
                             break;
                         }
                         shuttle_common::deployment::State::Completed => {

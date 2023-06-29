@@ -106,6 +106,7 @@ pub mod runtime {
     use prost_types::Timestamp;
     use shuttle_common::{
         claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer},
+        deployment::State,
         ParseError,
     };
     use tokio::process;
@@ -178,6 +179,7 @@ pub mod runtime {
                 line,
                 target: log.target,
                 fields: log.fields,
+                state: State::Running.to_string(),
             }
         }
     }

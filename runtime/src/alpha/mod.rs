@@ -41,7 +41,7 @@ use tonic::{
     Request, Response, Status,
 };
 use tower::ServiceBuilder;
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 
 use crate::{provisioner_factory::ProvisionerFactory, Logger, ResourceTracker};
 
@@ -300,6 +300,7 @@ where
         Ok(Response::new(message))
     }
 
+    #[instrument(skip_all)]
     async fn start(
         &self,
         request: Request<StartRequest>,

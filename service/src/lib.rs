@@ -3,15 +3,15 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
+use serde::{de::DeserializeOwned, Serialize};
+pub use shuttle_common::{
+    database, deployment::Environment, project::ProjectName as ServiceName, resource::Type,
+    DatabaseReadyInfo, DbInput, DbOutput, SecretStore, DynamoDBInput,
+    DynamoDbReadyInfo
+};
 
 pub mod error;
 pub use error::{CustomError, Error};
-
-use serde::{de::DeserializeOwned, Serialize};
-pub use shuttle_common::{
-    database, resource::Type, DatabaseReadyInfo, DbInput, DbOutput, DynamoDBInput,
-    DynamoDbReadyInfo, SecretStore,
-};
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
@@ -71,7 +71,8 @@ pub use shuttle_codegen::main;
 #[cfg(feature = "builder")]
 pub mod builder;
 
-pub use shuttle_common::{deployment::Environment, project::ProjectName as ServiceName};
+pub const NEXT_NAME: &str = "shuttle-next";
+pub const RUNTIME_NAME: &str = "shuttle-runtime";
 
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///
@@ -116,8 +117,9 @@ pub trait Factory: Send + Sync {
 /// Your resource will be available on a [shuttle_runtime::main][main] function as follow:
 /// ```
 /// #[shuttle_runtime::main]
-/// async fn my_service([custom_resource_crate::namespace::B] custom_resource: T)
-///     -> shuttle_axum::ShuttleAxum {}
+/// async fn my_service(
+///     [custom_resource_crate::namespace::B] custom_resource: T,
+/// ) -> shuttle_axum::ShuttleAxum {}
 /// ```
 ///
 /// Here `custom_resource_crate::namespace` is the crate and namespace to a builder `B` that implements [`ResourceBuilder`] to create resource `T`.
@@ -156,9 +158,8 @@ pub trait Factory: Send + Sync {
 ///     }
 ///
 ///     fn config(&self) -> &Self::Config {
-///         &self
+///         self
 ///     }
-///
 ///
 ///     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, shuttle_service::Error> {
 ///         Ok(self.name)
@@ -175,8 +176,7 @@ pub trait Factory: Send + Sync {
 /// #[shuttle_runtime::main]
 /// async fn my_service(
 ///     [custom_resource_crate::Builder(name = "John")] resource: custom_resource_crate::Resource
-/// )
-///     -> shuttle_axum::ShuttleAxum {}
+/// ) -> shuttle_axum::ShuttleAxum {}
 /// ```
 #[async_trait]
 pub trait ResourceBuilder<T> {
@@ -220,6 +220,3 @@ pub trait Service: Send {
     /// The deployer expects this instance of [Service][Service] to bind to the passed [SocketAddr][SocketAddr].
     async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error>;
 }
-
-pub const NEXT_NAME: &str = "shuttle-next";
-pub const RUNTIME_NAME: &str = "shuttle-runtime";

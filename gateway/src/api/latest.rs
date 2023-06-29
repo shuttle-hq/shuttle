@@ -14,7 +14,7 @@ use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::{StatusCode, Uri};
+use http::Uri;
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
@@ -24,8 +24,11 @@ use shuttle_common::claims::{Scope, EXP_MINUTES};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
 use shuttle_common::request_span;
+use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
+use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
+use tower::ServiceBuilder;
 use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
 use utoipa::IntoParams;
@@ -46,15 +49,16 @@ use crate::service::GatewayService;
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{Error, ProjectName};
+use crate::{Error, ProjectName, AUTH_CLIENT};
 
 use super::auth_layer::ShuttleAuthLayer;
 
 pub const SVC_DEGRADED_THRESHOLD: usize = 128;
+pub const SHUTTLE_GATEWAY_VARIANT: &str = "shuttle-gateway";
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum GatewayStatus {
+pub enum ComponentStatus {
     Healthy,
     Degraded,
     Unhealthy,
@@ -62,7 +66,7 @@ pub enum GatewayStatus {
 
 #[derive(Serialize, Deserialize)]
 pub struct StatusResponse {
-    status: GatewayStatus,
+    status: ComponentStatus,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
@@ -76,19 +80,19 @@ pub struct PaginationDetails {
 impl StatusResponse {
     pub fn healthy() -> Self {
         Self {
-            status: GatewayStatus::Healthy,
+            status: ComponentStatus::Healthy,
         }
     }
 
     pub fn degraded() -> Self {
         Self {
-            status: GatewayStatus::Degraded,
+            status: ComponentStatus::Degraded,
         }
     }
 
     pub fn unhealthy() -> Self {
         Self {
-            status: GatewayStatus::Unhealthy,
+            status: ComponentStatus::Unhealthy,
         }
     }
 }
@@ -255,23 +259,55 @@ async fn route_project(
         (status = 500, description = "Server internal error.")
     )
 )]
-async fn get_status(State(RouterState { sender, .. }): State<RouterState>) -> Response<Body> {
-    let (status, body) = if sender.is_closed() || sender.capacity() == 0 {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            StatusResponse::unhealthy(),
-        )
+async fn get_status(
+    State(RouterState {
+        sender, service, ..
+    }): State<RouterState>,
+) -> Response<Body> {
+    let mut statuses = Vec::new();
+    // Compute gateway status.
+    if sender.is_closed() || sender.capacity() == 0 {
+        statuses.push((SHUTTLE_GATEWAY_VARIANT, StatusResponse::unhealthy()));
     } else if sender.capacity() < WORKER_QUEUE_SIZE - SVC_DEGRADED_THRESHOLD {
-        (StatusCode::OK, StatusResponse::degraded())
+        statuses.push((SHUTTLE_GATEWAY_VARIANT, StatusResponse::degraded()));
     } else {
-        (StatusCode::OK, StatusResponse::healthy())
+        statuses.push((SHUTTLE_GATEWAY_VARIANT, StatusResponse::healthy()));
     };
 
-    let body = serde_json::to_vec(&body).unwrap();
+    // Compute provisioner status.
+    let provisioner_status = if let Ok(channel) = service.provisioner_host().connect().await {
+        let channel = ServiceBuilder::new().service(channel);
+        let mut provisioner_client = ProvisionerClient::new(channel);
+        if provisioner_client.health_check(Ping {}).await.is_ok() {
+            StatusResponse::healthy()
+        } else {
+            StatusResponse::unhealthy()
+        }
+    } else {
+        StatusResponse::unhealthy()
+    };
+
+    statuses.push(("shuttle-provisioner", provisioner_status));
+
+    // Compute auth status.
+    let auth_status = {
+        let response = AUTH_CLIENT
+            .get_or_init(reqwest::Client::new)
+            .get(service.auth_uri().to_string())
+            .send()
+            .await;
+        match response {
+            Ok(response) if response.status() == 200 => StatusResponse::healthy(),
+            Ok(_) | Err(_) => StatusResponse::unhealthy(),
+        }
+    };
+
+    statuses.push(("shuttle-auth", auth_status));
+
+    let body = serde_json::to_vec(&statuses).expect("could not make a json out of the statuses");
     Response::builder()
-        .status(status)
         .body(body.into())
-        .unwrap()
+        .expect("could not make a response with the status check response")
 }
 
 #[instrument(skip_all)]

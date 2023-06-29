@@ -1,4 +1,4 @@
-use cargo_shuttle::{Args, Command, ProjectArgs, RunArgs, Shuttle};
+use cargo_shuttle::{Command, ProjectArgs, RunArgs, Shuttle, ShuttleArgs};
 use portpicker::pick_unused_port;
 use reqwest::StatusCode;
 use std::{fs::canonicalize, process::exit, time::Duration};
@@ -6,7 +6,18 @@ use tokio::time::sleep;
 
 /// creates a `cargo-shuttle` run instance with some reasonable defaults set.
 async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
-    let working_directory = canonicalize(working_directory).unwrap();
+    let working_directory = match canonicalize(working_directory) {
+        Ok(wd) => wd,
+        Err(e) => {
+            // DEBUG CI (no such file): SLEEP AND TRY AGAIN?
+            println!(
+                "Did not find directory: {} !!! because {:?}",
+                working_directory, e
+            );
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            canonicalize(working_directory).unwrap()
+        }
+    };
 
     let port = pick_unused_port().unwrap();
 
@@ -22,7 +33,7 @@ async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
         release: false,
     };
 
-    let runner = Shuttle::new().unwrap().run(Args {
+    let runner = Shuttle::new().unwrap().run(ShuttleArgs {
         api_url: Some("http://shuttle.invalid:80".to_string()),
         project_args: ProjectArgs {
             working_directory: working_directory.clone(),
@@ -31,27 +42,43 @@ async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
         cmd: Command::Run(run_args),
     });
 
-    let working_directory_clone = working_directory.clone();
+    tokio::spawn({
+        let working_directory = working_directory.clone();
+        async move {
+            sleep(Duration::from_secs(10 * 60)).await;
 
-    tokio::spawn(async move {
-        sleep(Duration::from_secs(600)).await;
-
-        println!(
-            "run test for '{}' took too long. Did it fail to shutdown?",
-            working_directory_clone.display()
-        );
-        exit(1);
+            println!(
+                "run test for '{}' took too long. Did it fail to shutdown?",
+                working_directory.display()
+            );
+            exit(1);
+        }
     });
 
-    tokio::spawn(runner);
+    let runner_handle = tokio::spawn(runner);
 
     // Wait for service to be responsive
-    while (reqwest::Client::new().get(url.clone()).send().await).is_err() {
-        println!(
-            "waiting for '{}' to start up...",
-            working_directory.display()
-        );
-        sleep(Duration::from_millis(350)).await;
+    let mut counter = 0;
+    let client = reqwest::Client::new();
+    while client.get(url.clone()).send().await.is_err() {
+        if runner_handle.is_finished() {
+            println!(
+                "run test for '{}' exited early. Did it fail to compile/run?",
+                working_directory.clone().display()
+            );
+            exit(1);
+        }
+
+        // reduce spam
+        if counter == 0 {
+            println!(
+                "waiting for '{}' to start up...",
+                working_directory.display()
+            );
+        }
+        counter = (counter + 1) % 10;
+
+        sleep(Duration::from_millis(500)).await;
     }
 
     url
@@ -127,7 +154,7 @@ async fn axum_static_files() {
     let client = reqwest::Client::new();
 
     let request_text = client
-        .get(format!("{url}/hello"))
+        .get(url.clone())
         .send()
         .await
         .unwrap()
@@ -137,13 +164,21 @@ async fn axum_static_files() {
 
     assert_eq!(request_text, "Hello, world!");
 
-    let request_text = client.get(url).send().await.unwrap().text().await.unwrap();
+    let request_text = client
+        .get(format!("{url}/assets"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
 
     assert!(
         request_text.contains("This is an example of serving static files with axum and shuttle.")
     );
 }
 
+// note: you need `rustup target add wasm32-wasi` to make this project compile
 #[tokio::test(flavor = "multi_thread")]
 async fn shuttle_next() {
     let url = cargo_shuttle_run("../examples/next/hello-world", false).await;

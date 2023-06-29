@@ -43,6 +43,7 @@ pub enum Type {
     StaticFolder,
     Persist,
     DynamoDB,
+    Turso,
 }
 
 impl From<Type> for shuttle_common::resource::Type {
@@ -53,6 +54,7 @@ impl From<Type> for shuttle_common::resource::Type {
             Type::StaticFolder => Self::StaticFolder,
             Type::Persist => Self::Persist,
             Type::DynamoDB => Self::DynamoDB,
+            Type::Turso => Self::Turso,
         }
     }
 }
@@ -65,6 +67,7 @@ impl From<shuttle_common::resource::Type> for Type {
             shuttle_common::resource::Type::StaticFolder => Self::StaticFolder,
             shuttle_common::resource::Type::Persist => Self::Persist,
             shuttle_common::resource::Type::DynamoDB => Self::DynamoDB,
+            shuttle_common::resource::Type::Turso => Self::Turso,
         }
     }
 }
@@ -77,6 +80,7 @@ impl Display for Type {
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
             Type::DynamoDB => write!(f, "dynamodb"),
+            Type::Turso => write!(f, "turso"),
         }
     }
 }
@@ -96,6 +100,7 @@ impl FromStr for Type {
                 "static_folder" => Ok(Self::StaticFolder),
                 "persist" => Ok(Self::Persist),
                 "dynamodb" => Ok(Self::DynamoDB),
+                "turso" => Ok(Self::Turso),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }
@@ -145,6 +150,7 @@ mod tests {
             Type::StaticFolder,
             Type::Persist,
             Type::DynamoDB,
+            Type::Turso,
         ];
 
         for input in inputs {

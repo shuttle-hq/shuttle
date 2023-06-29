@@ -1,7 +1,7 @@
 mod init;
 mod run;
 
-use cargo_shuttle::{Args, Command, CommandOutcome, ProjectArgs, Shuttle};
+use cargo_shuttle::{Command, CommandOutcome, ProjectArgs, Shuttle, ShuttleArgs};
 use std::path::Path;
 
 /// creates a `cargo-shuttle` run instance with some reasonable defaults set.
@@ -13,7 +13,7 @@ async fn cargo_shuttle_command(
 
     Shuttle::new()
         .unwrap()
-        .run(Args {
+        .run(ShuttleArgs {
             api_url: Some("http://shuttle.invalid:80".to_string()),
             project_args: ProjectArgs {
                 working_directory,

@@ -18,7 +18,10 @@ use shuttle_proto::runtime::{
     runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
     SubscribeStopResponse,
 };
-use tokio::sync::Mutex;
+use tokio::{
+    sync::Mutex,
+    task::{JoinHandle, JoinSet},
+};
 use tonic::{transport::Channel, Code};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -44,73 +47,92 @@ pub async fn task(
 ) {
     info!("Run task started");
 
-    while let Some(built) = recv.recv().await {
-        let id = built.id;
+    let mut set = JoinSet::new();
 
-        info!("Built deployment at the front of run queue: {id}");
+    loop {
+        tokio::select! {
+            Some(built) = recv.recv() => {
+                let id = built.id;
 
-        let deployment_updater = deployment_updater.clone();
-        let secret_getter = secret_getter.clone();
-        let resource_manager = resource_manager.clone();
-        let storage_manager = storage_manager.clone();
+                info!("Built deployment at the front of run queue: {id}");
 
-        let old_deployments_killer = kill_old_deployments(
-            built.service_id,
-            id,
-            active_deployment_getter.clone(),
-            runtime_manager.clone(),
-        );
-        let cleanup = move |response: Option<SubscribeStopResponse>| {
-            debug!(response = ?response,  "stop client response: ");
+                let deployment_updater = deployment_updater.clone();
+                let secret_getter = secret_getter.clone();
+                let resource_manager = resource_manager.clone();
+                let storage_manager = storage_manager.clone();
 
-            if let Some(response) = response {
-                match StopReason::from_i32(response.reason).unwrap_or_default() {
-                    StopReason::Request => stopped_cleanup(&id),
-                    StopReason::End => completed_cleanup(&id),
-                    StopReason::Crash => crashed_cleanup(
-                        &id,
-                        Error::Run(anyhow::Error::msg(response.message).into()),
-                    ),
-                }
-            } else {
-                crashed_cleanup(
-                    &id,
-                    Error::Runtime(anyhow::anyhow!(
-                        "stop subscribe channel stopped unexpectedly"
-                    )),
-                )
-            }
-        };
-        let runtime_manager = runtime_manager.clone();
+                let old_deployments_killer = kill_old_deployments(
+                    built.service_id,
+                    id,
+                    active_deployment_getter.clone(),
+                    runtime_manager.clone(),
+                );
+                let cleanup = move |response: Option<SubscribeStopResponse>| {
+                    debug!(response = ?response,  "stop client response: ");
 
-        tokio::spawn(async move {
-            let parent_cx = global::get_text_map_propagator(|propagator| {
-                propagator.extract(&built.tracing_context)
-            });
-            let span = debug_span!("runner");
-            span.set_parent(parent_cx);
+                    if let Some(response) = response {
+                        match StopReason::from_i32(response.reason).unwrap_or_default() {
+                            StopReason::Request => stopped_cleanup(&id),
+                            StopReason::End => completed_cleanup(&id),
+                            StopReason::Crash => crashed_cleanup(
+                                &id,
+                                Error::Run(anyhow::Error::msg(response.message).into()),
+                            ),
+                        }
+                    } else {
+                        crashed_cleanup(
+                            &id,
+                            Error::Runtime(anyhow::anyhow!(
+                                "stop subscribe channel stopped unexpectedly"
+                            )),
+                        )
+                    }
+                };
+                let runtime_manager = runtime_manager.clone();
 
-            async move {
-                if let Err(err) = built
-                    .handle(
-                        storage_manager,
-                        secret_getter,
-                        resource_manager,
-                        runtime_manager,
-                        deployment_updater,
-                        old_deployments_killer,
-                        cleanup,
-                    )
+                set.spawn(async move {
+                    let parent_cx = global::get_text_map_propagator(|propagator| {
+                        propagator.extract(&built.tracing_context)
+                    });
+                    let span = debug_span!("runner");
+                    span.set_parent(parent_cx);
+
+                    async move {
+                        match built
+                            .handle(
+                                storage_manager,
+                                secret_getter,
+                                resource_manager,
+                                runtime_manager,
+                                deployment_updater,
+                                old_deployments_killer,
+                                cleanup,
+                            )
+                            .await
+                        {
+                            Ok(handle) => handle
+                                .await
+                                .expect("the call to run in built.handle to be done"),
+                            Err(err) => start_crashed_cleanup(&id, err),
+                        };
+
+                        info!("deployment done");
+                    }
+                    .instrument(span)
                     .await
-                {
-                    start_crashed_cleanup(&id, err)
+                });
+            },
+            Some(res) = set.join_next() => {
+                match res {
+                    Ok(_) => (),
+                    Err(err) => {
+                        error!(error = %err, "an error happened while joining a deployment run task")
+                    }
                 }
 
-                info!("deployment done");
             }
-            .instrument(span)
-            .await
-        });
+            else => break
+        }
     }
 }
 
@@ -199,7 +221,7 @@ impl Built {
         deployment_updater: impl DeploymentUpdater,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
-    ) -> Result<()> {
+    ) -> Result<JoinHandle<()>> {
         // For alpha this is the path to the users project with an embedded runtime.
         // For shuttle-next this is the path to the compiled .wasm file, which will be
         // used in the load request.
@@ -244,7 +266,7 @@ impl Built {
         )
         .await?;
 
-        tokio::spawn(run(
+        let handler = tokio::spawn(run(
             self.id,
             self.service_name,
             runtime_client,
@@ -253,7 +275,7 @@ impl Built {
             cleanup,
         ));
 
-        Ok(())
+        Ok(handler)
     }
 }
 
@@ -421,7 +443,7 @@ mod tests {
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbDeletionResponse,
-            DynamoDbRequest, DynamoDbResponse,
+            DynamoDbRequest, DynamoDbResponse, Ping, Pong,
         },
         runtime::{StopReason, SubscribeStopResponse},
     };
@@ -483,6 +505,13 @@ mod tests {
             _request: tonic::Request<DynamoDbRequest>,
         ) -> Result<tonic::Response<DynamoDbDeletionResponse>, tonic::Status> {
             panic!("no run tests should delete a dynamodb");
+        }
+
+        async fn health_check(
+            &self,
+            _request: tonic::Request<Ping>,
+        ) -> Result<tonic::Response<Pong>, tonic::Status> {
+            panic!("no run tests should do a health check");
         }
     }
 

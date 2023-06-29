@@ -36,6 +36,7 @@ pub enum Type {
     Secrets,
     StaticFolder,
     Persist,
+    Turso,
 }
 
 impl Response {
@@ -60,6 +61,7 @@ impl Display for Type {
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
             Type::DynamoDB => write!(f, "dynamodb"),
+            Type::Turso => write!(f, "turso"),
         }
     }
 }

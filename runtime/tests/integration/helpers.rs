@@ -11,7 +11,7 @@ use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
         DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbDeletionResponse,
-        DynamoDbRequest, DynamoDbResponse,
+        DynamoDbRequest, DynamoDbResponse,  Ping, Pong,
     },
     runtime::{self, runtime_client::RuntimeClient},
 };
@@ -119,5 +119,9 @@ impl Provisioner for DummyProvisioner {
         _request: Request<DynamoDbRequest>,
     ) -> Result<Response<DynamoDbDeletionResponse>, Status> {
         panic!("no run tests should delete a dynamodb");
+    }
+
+    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        panic!("did not expect any runtime test to do a provisioner health check")
     }
 }

@@ -6,6 +6,7 @@ service Provisioner {
   rpc ProvisionDynamoDB(DynamoDBRequest) returns (DynamoDBResponse);
   rpc DeleteDatabase(DatabaseRequest) returns (DatabaseDeletionResponse);
   rpc DeleteDynamoDB(DynamoDBRequest) returns (DynamoDBDeletionResponse);
+  rpc HealthCheck(Ping) returns (Pong);
 }
 
 
@@ -61,3 +62,6 @@ message DynamoDBResponse {
 }
 
 message DynamoDBDeletionResponse {}
+
+message Ping {}
+message Pong {}

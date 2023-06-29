@@ -22,7 +22,7 @@ use shuttle_common::{
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
     DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, DynamoDbDeletionResponse,
-    DynamoDbRequest, DynamoDbResponse,
+    DynamoDbRequest, DynamoDbResponse, Ping, Pong
 };
 use shuttle_service::database::Type;
 use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
@@ -365,6 +365,10 @@ impl Provisioner for LocalProvisioner {
         _request: Request<DynamoDbRequest>,
     ) -> Result<Response<DynamoDbDeletionResponse>, Status> {
         unimplemented!()
+    }
+    
+    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        panic!("local runner should not try to do a health check");
     }
 }
 

@@ -6,218 +6,46 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 use cargo_generate::{GenerateArgs, TemplatePath, Vcs};
+use git2::Repository;
 use indoc::indoc;
 use shuttle_common::project::ProjectName;
 use toml_edit::{value, Document};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::Display, strum::EnumIter)]
-#[strum(serialize_all = "kebab-case")]
-pub enum Template {
-    ActixWeb,
-    Axum,
-    Poise,
-    Poem,
-    Rocket,
-    Salvo,
-    Serenity,
-    Tide,
-    Thruster,
-    Tower,
-    Warp,
-    None,
-}
+use crate::args::TemplateLocation;
 
-impl Template {
-    /// Returns a framework-specific struct that implements the trait `ShuttleInit`
-    /// for writing framework-specific dependencies to `Cargo.toml` and generating
-    /// boilerplate code in `src/main.rs`.
-    pub fn init_config(&self) -> Box<dyn ShuttleInit> {
-        use Template::*;
-        match self {
-            ActixWeb => Box::new(ShuttleInitActixWeb),
-            Axum => Box::new(ShuttleInitAxum),
-            Rocket => Box::new(ShuttleInitRocket),
-            Tide => Box::new(ShuttleInitTide),
-            Tower => Box::new(ShuttleInitTower),
-            Poem => Box::new(ShuttleInitPoem),
-            Salvo => Box::new(ShuttleInitSalvo),
-            Serenity => Box::new(ShuttleInitSerenity),
-            Poise => Box::new(ShuttleInitPoise),
-            Warp => Box::new(ShuttleInitWarp),
-            Thruster => Box::new(ShuttleInitThruster),
-            None => Box::new(ShuttleInitNoOp),
-        }
-    }
-}
-
-pub trait ShuttleInit {
-    fn get_repo_url(&self) -> &'static str;
-    fn get_sub_path(&self) -> Option<&'static str>;
-}
-
-pub struct ShuttleInitActixWeb;
-
-impl ShuttleInit for ShuttleInitActixWeb {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("actix-web/hello-world")
-    }
-}
-
-pub struct ShuttleInitAxum;
-
-impl ShuttleInit for ShuttleInitAxum {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("axum/hello-world")
-    }
-}
-
-pub struct ShuttleInitRocket;
-
-impl ShuttleInit for ShuttleInitRocket {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("rocket/hello-world")
-    }
-}
-
-pub struct ShuttleInitTide;
-
-impl ShuttleInit for ShuttleInitTide {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("tide/hello-world")
-    }
-}
-
-pub struct ShuttleInitPoem;
-
-impl ShuttleInit for ShuttleInitPoem {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("poem/hello-world")
-    }
-}
-
-pub struct ShuttleInitSalvo;
-
-impl ShuttleInit for ShuttleInitSalvo {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("salvo/hello-world")
-    }
-}
-
-pub struct ShuttleInitSerenity;
-
-impl ShuttleInit for ShuttleInitSerenity {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("serenity/hello-world")
-    }
-}
-
-pub struct ShuttleInitPoise;
-
-impl ShuttleInit for ShuttleInitPoise {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("poise/hello-world")
-    }
-}
-
-pub struct ShuttleInitTower;
-
-impl ShuttleInit for ShuttleInitTower {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("tower/hello-world")
-    }
-}
-
-pub struct ShuttleInitWarp;
-
-impl ShuttleInit for ShuttleInitWarp {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("warp/hello-world")
-    }
-}
-
-pub struct ShuttleInitThruster;
-
-impl ShuttleInit for ShuttleInitThruster {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("thruster/hello-world")
-    }
-}
-
-pub struct ShuttleInitNoOp;
-impl ShuttleInit for ShuttleInitNoOp {
-    fn get_repo_url(&self) -> &'static str {
-        "http://github.com/shuttle-hq/shuttle-examples.git"
-    }
-
-    fn get_sub_path(&self) -> Option<&'static str> {
-        Some("custom/none")
-    }
-}
-
-pub fn cargo_generate(path: PathBuf, name: &ProjectName, framework: Template) -> Result<()> {
-    let config = framework.init_config();
-
+/// More about how this works: https://cargo-generate.github.io/cargo-generate/
+pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocation) -> Result<()> {
     println!(r#"    Creating project "{name}" in {path:?}"#);
+
+    let do_git_init = Repository::discover(&path).is_err();
+
     let generate_args = GenerateArgs {
-        init: true,
         template_path: TemplatePath {
-            git: Some(config.get_repo_url().to_string()),
-            auto_path: config.get_sub_path().map(str::to_string),
+            // Automatically guess location from:
+            // - cargo-generate "favorites", see their docs
+            // - git hosts (gh:, gl: etc.)
+            // - local path (check if exists)
+            // - github username+repo (shuttle-hq/shuttle-examples)
+            auto_path: Some(temp_loc.auto_path.clone()),
+            // subfolder in the source folder that was found
+            subfolder: temp_loc.subfolder,
             ..Default::default()
         },
-        name: Some(name.to_string()), // appears to do nothing...
+        // setting this prevents cargo-generate from prompting the user.
+        // it will then be used to try and replace a "{{project-name}}" placeholder in the cloned folder.
+        // (not intended with Shuttle templates)
+        name: Some(name.to_string()),
         destination: Some(path.clone()),
+        init: true, // don't create a folder to place the template in
         vcs: Some(Vcs::Git),
+        force_git_init: do_git_init, // git init after cloning
         ..Default::default()
     };
     cargo_generate::generate(generate_args)
         .with_context(|| "Failed to initialize with cargo generate.")?;
 
-    set_crate_name(&path, name.as_str()).with_context(|| "Failed to set crate name.")?;
+    set_crate_name(&path, name.as_str())
+        .with_context(|| "Failed to set crate name. No Cargo.toml in template?")?;
     remove_shuttle_toml(&path);
     create_gitignore_file(&path).with_context(|| "Failed to create .gitignore file.")?;
 

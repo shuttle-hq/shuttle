@@ -21,7 +21,7 @@ use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
-use shuttle_proto::provisioner::{DynamoDbDeletionResponse, DynamoDbRequest, DynamoDbResponse};
+use shuttle_proto::provisioner::{DynamoDbDeletionResponse, DynamoDbRequest, DynamoDbResponse, Ping, Pong};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use std::fs::File;
 use std::io::BufRead;
@@ -320,6 +320,14 @@ impl MyProvisioner {
                 if let ModifyDBInstanceError::DbInstanceNotFoundFault(_) = err.err() {
                     debug!("creating new AWS RDS {instance_name}");
 
+                    // The engine display impl is used for both the engine and the database name,
+                    // but for mysql the engine name is an invalid database name.
+                    let db_name = if let aws_rds::Engine::Mysql(_) = engine {
+                        "msql".to_string()
+                    } else {
+                        engine.to_string()
+                    };
+
                     client
                         .create_db_instance()
                         .db_instance_identifier(&instance_name)
@@ -330,7 +338,7 @@ impl MyProvisioner {
                         .allocated_storage(20)
                         .backup_retention_period(0) // Disable backups
                         .publicly_accessible(true)
-                        .db_name(engine.to_string())
+                        .db_name(db_name)
                         .set_db_subnet_group_name(Some(RDS_SUBNET_GROUP.to_string()))
                         .send()
                         .await?
@@ -582,6 +590,11 @@ impl Provisioner for MyProvisioner {
         let reply = self.delete_dynamodb(&request.project_name).await?;
 
         Ok(Response::new(reply))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        Ok(Response::new(Pong {}))
     }
 }
 

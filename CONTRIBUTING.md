@@ -76,6 +76,7 @@ shuttle-persist = { path = "[base]/shuttle/resources/persist" }
 shuttle-shared-db = { path = "[base]/shuttle/resources/shared-db" }
 shuttle-secrets = { path = "[base]/shuttle/resources/secrets" }
 shuttle-static-folder = { path = "[base]/shuttle/resources/static-folder" }
+shuttle-turso = { path = "[base]/shuttle/resources/turso" }
 
 shuttle-axum = { path = "[base]/shuttle/services/shuttle-axum" }
 shuttle-actix-web = { path = "[base]/shuttle/services/shuttle-actix-web" }
@@ -167,11 +168,13 @@ Next up we need to insert an admin user into the `auth` state using the ID of th
 container and the auth CLI `init` command:
 
 ```bash
-AUTH_CONTAINER_ID=$(docker ps -qf "name=auth") \
-    docker exec $AUTH_CONTAINER_ID ./usr/local/bin/service \
+AUTH_CONTAINER_ID=$(docker ps -qf "name=auth")
+
+docker exec $AUTH_CONTAINER_ID ./usr/local/bin/service \
     --state=/var/lib/shuttle-auth \
     init --name admin --key dh9z58jttoes3qvt
 ```
+
 > Note: if you have done this already for this container you will get a "UNIQUE constraint failed"
 > error, you can ignore this.
 
@@ -185,7 +188,7 @@ cargo shuttle login --api-key dh9z58jttoes3qvt
 We're now ready to start a local run of the deployer:
 
 ```bash
-cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --proxy-fqdn local.rs --admin-secret test-key --local --project <project_name>
+cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --proxy-fqdn local.rs --admin-secret dh9z58jttoes3qvt --local --project <project_name>
 ```
 
 The `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.
@@ -205,30 +208,41 @@ cargo run --bin cargo-shuttle --manifest-path="../../../Cargo.toml" -- deploy
 If you want to use Podman instead of Docker, you can configure the build process with environment variables.
 
 Use Podman for building container images by setting `DOCKER_BUILD`.
-```
+
+```sh
 export DOCKER_BUILD=podman build --network host
 ```
 
 The Shuttle containers expect access to a Docker-compatible API over a socket. Expose a rootless Podman socket either
+
 - [with systemd](https://github.com/containers/podman/tree/main/contrib/systemd), if your system supports it,
+
     ```sh
     systemctl start --user podman.service
     ```
+
 - or by [running the server directly](https://docs.podman.io/en/latest/markdown/podman-system-service.1.html).
+
     ```sh
     podman system service --time=0 unix://$XDG_RUNTIME_DIR/podman.sock
     ```
+
 Then set `DOCKER_SOCK` to the *absolute path* of the socket (no protocol prefix).
+
 ```sh
 export DOCKER_SOCK=$(podman system info -f "{{.Host.RemoteSocket.Path}}")
 ```
 
 Finally, configure Docker Compose. You can either
+
 - configure Docker Compose to use the Podman socket by setting `DOCKER_HOST` (including the `unix://` protocol prefix),
+
     ```sh
     export DOCKER_HOST=unix://$(podman system info -f "{{.Host.RemoteSocket.Path}}")
     ```
+
 - or install [Podman Compose](https://github.com/containers/podman-compose) and use it by setting `DOCKER_COMPOSE`.
+
     ```sh
     export DOCKER_COMPOSE=podman-compose
     ```
@@ -267,14 +281,30 @@ USE_PANAMAX=disable make test
 
 We use the [Angular Commit Guidelines](https://github.com/angular/angular/blob/master/CONTRIBUTING.md#commit). We expect all commits to conform to these guidelines.
 
-We will squash commits before merging to main. If you do want to squash commits, please do not do so
-after the review process has started, the commit history can be useful for reviewers.
-
 Before committing:
 
 - Make sure your commits don't trigger any warnings from Clippy by running: `cargo clippy --tests --all-targets`. If you have a good reason to contradict Clippy, insert an `#[allow(clippy::<lint>)]` macro, so that it won't complain.
 - Make sure your code is correctly formatted: `cargo fmt --all --check`.
 - If you've made changes to examples, make sure the above commands are ran there as well.
+
+## Opening a Pull Request
+
+Before opening a pull request it's a good idea to first open an issue, even if the change is small.
+This way you can get feedback and suggestions on the issue, as well as a confirmation from the maintainers that this is something we want to implement.
+This also greatly increases the likelihood of the pull request getting merged, and it reduces the chance that multiple contributors start working on the same issue in parallel.
+
+We will squash commits before merging your PR to main. If you do want to squash commits, please do not do so
+after the review process has started, the commit history can be useful for reviewers.
+
+## Reviewing
+
+Anyone is welcome to review pull requests and provide feedback on issues, as long as they strive to be constructive,
+friendly and respectful of the contributor as well as in line with our [code of conduct](CODE_OF_CONDUCT.md).
+
+We will always strive to review pull requests as soon as we can, but during certain periods we may be too busy to
+review every pull request in a timely manner. This does not mean we are not excited about the contribution or that
+there is anything wrong with it, we are grateful for every contribution and the time spent on them. If you feel that
+your PR has gone under the radar for too long feel free to ping us and we'll try to get back to you with an update.
 
 ## Project Layout
 
@@ -332,16 +362,18 @@ and renewing SSL certificates through the acme client in the `gateway`.
 
 - `common` contains shared models and functions used by the other libraries and binaries.
 - `codegen` contains our proc-macro code which gets exposed to user services from `runtime`.
-The redirect through `runtime` is to make it available under the prettier name of `shuttle_runtime::main`.
-- `runtime` contains the `alpha` runtime, which embeds a gRPC server and a `Loader` in a service with the `shuttle_runtime::main` macro. The gRPC server receives commands from `deployer` like `start` and `stop`. The `Loader` sets up a tracing subscriber and provisions resources for the users service. The `runtime` crate also contains the `shuttle-next` binary, which is a standalone runtime binary that is started by the `deployer` or the `cargo-shuttle` CLI, responsible for loading and starting `shuttle-next` services.
-- `service` is where our special `Service` trait is defined. Anything implementing this `Service` can be loaded by the `deployer` and the local runner in `cargo-shuttle`. The `service` library also defines the `ResourceBuilder` and `Factory` trais 
-which are used in our codegen to provision resources. The `service` library also contains the utilities we use for compiling users
-crates with `cargo`.
-- `proto` contains the gRPC server and client definitions to allow `deployer` to communicate with `provisioner`, and to allow
-the `deployer` and `cargo-shuttle` cli to communicate with the `alpha` and `shuttle-next` runtimes.
+  The redirect through `runtime` is to make it available under the prettier name of `shuttle_runtime::main`.
+- `runtime` contains the `alpha` runtime, which embeds a gRPC server and a `Loader` in a service with the `shuttle_runtime::main` macro.
+  The gRPC server receives commands from `deployer` like `start` and `stop`.
+  The `Loader` sets up a tracing subscriber and provisions resources for the users service.
+  The `runtime` crate also contains the `shuttle-next` binary, which is a standalone runtime binary that is started by the `deployer` or the `cargo-shuttle` CLI, responsible for loading and starting `shuttle-next` services.
+- `service` is where our special `Service` trait is defined.
+  Anything implementing this `Service` can be loaded by the `deployer` and the local runner in `cargo-shuttle`.
+  The `service` library also defines the `ResourceBuilder` and `Factory` trais which are used in our codegen to provision resources.
+  The `service` library also contains the utilities we use for compiling users crates with `cargo`.
+- `proto` contains the gRPC server and client definitions to allow `deployer` to communicate with `provisioner`, and to allow the `deployer` and `cargo-shuttle` cli to communicate with the `alpha` and `shuttle-next` runtimes.
 - `resources` contains various implementations of `ResourceBuilder`, which are consumed in the `codegen` to provision resources.
-- `services` contains implementations of `Service` for common Rust web frameworks. Anything implementing `Service` can be deployed
-by shuttle.
+- `services` contains implementations of `Service` for common Rust web frameworks. Anything implementing `Service` can be deployed by shuttle.
 - `e2e` just contains tests which starts up the `deployer` in a container and then deploys services to it using `cargo-shuttle`.
 
 Lastly, the `user service` is not a folder in this repository, but is the user service that will be deployed by `deployer`.

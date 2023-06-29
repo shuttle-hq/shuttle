@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::time::Duration;
 
 pub use args::Args;
@@ -46,6 +47,7 @@ pub struct MyProvisioner {
     fqdn: String,
     internal_pg_address: String,
     internal_mongodb_address: String,
+    state: PathBuf,
 }
 
 impl MyProvisioner {
@@ -55,6 +57,7 @@ impl MyProvisioner {
         fqdn: String,
         internal_pg_address: String,
         internal_mongodb_address: String,
+        state: PathBuf,
     ) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
@@ -86,6 +89,7 @@ impl MyProvisioner {
             fqdn,
             internal_pg_address,
             internal_mongodb_address,
+            state,
         })
     }
 
@@ -252,7 +256,7 @@ impl MyProvisioner {
     pub async fn request_dynamodb(&self, project_name: &str) -> Result<DynamoDbResponse, Error> {
         let prefix = get_prefix(project_name);
 
-        let dynamodb_handler = DynamoDBHandler::new(&prefix, &self.aws_config);
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &self.aws_config, self.state.clone());
 
         dynamodb_handler.create_dynamodb_policy().await?;
 
@@ -282,7 +286,7 @@ impl MyProvisioner {
     async fn delete_dynamodb(&self, project_name: &str) -> Result<DynamoDbDeletionResponse, Error> {
         let prefix = get_prefix(project_name);
 
-        let dynamodb_handler = DynamoDBHandler::new(&prefix, &self.aws_config);
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &self.aws_config, self.state.clone());
 
         dynamodb_handler.detach_user_policy().await?;
         dynamodb_handler.delete_access_key().await?;
@@ -605,10 +609,11 @@ struct DynamoDBHandler {
     dynamodb_client: aws_sdk_dynamodb::Client,
     iam_client: aws_sdk_iam::Client,
     sts_client: aws_sdk_sts::Client,
+    provisioner_state: PathBuf,
 }
 
 impl DynamoDBHandler {
-    fn new(prefix: &str, aws_config: &aws_config::SdkConfig) -> Self {
+    fn new(prefix: &str, aws_config: &aws_config::SdkConfig, provisioner_state: PathBuf) -> Self {
         let dynamodb_client = aws_sdk_dynamodb::Client::new(aws_config);
         let iam_client = aws_sdk_iam::Client::new(aws_config);
         let sts_client = aws_sdk_sts::Client::new(aws_config);
@@ -618,6 +623,7 @@ impl DynamoDBHandler {
             dynamodb_client,
             iam_client,
             sts_client,
+            provisioner_state,
         }
     }
 
@@ -818,7 +824,7 @@ impl DynamoDBHandler {
     }
 
     async fn get_saved_access_key(&self) -> Option<(String, String)> {
-        if let Ok(file) = std::fs::File::open(self.get_access_key_file_name()) {
+        if let Ok(file) = File::open(self.get_access_key_file_name()) {
             let mut lines = std::io::BufReader::new(file).lines();
 
             if let Some(Ok(access_key_id)) = lines.next() {
@@ -832,7 +838,15 @@ impl DynamoDBHandler {
     }
 
     fn get_access_key_file_name(&self) -> String {
-        format!("/var/lib/shuttle/{}.txt", self.prefix)
+        format!(
+            "{}{}.txt",
+            self.provisioner_state
+                .as_path()
+                .as_os_str()
+                .to_str()
+                .expect("to have a valid utf8 filename"),
+            self.prefix
+        )
     }
 
     async fn delete_saved_access_key(&self) -> Result<(), std::io::Error> {
@@ -933,7 +947,7 @@ fn engine_to_port(engine: aws_rds::Engine) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{env::temp_dir, path::PathBuf, time::Duration};
 
     use aws_sdk_dynamodb::types::{
         AttributeDefinition, KeySchemaElement, KeyType, ProvisionedThroughput, ScalarAttributeType,
@@ -954,6 +968,7 @@ mod tests {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            PathBuf::from("."),
         )
         .await
         .unwrap()
@@ -991,7 +1006,7 @@ mod tests {
     async fn test_create_and_delete_dynamodb_policy() {
         let provisioner = make_test_provisioner().await;
         let prefix = get_prefix("test_create_and_delete_dynamodb_policy");
-        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config);
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config, temp_dir());
 
         dynamodb_handler.create_dynamodb_policy().await.unwrap();
 
@@ -1003,7 +1018,7 @@ mod tests {
     async fn test_create_and_delete_aws_user() {
         let provisioner = make_test_provisioner().await;
         let prefix = get_prefix("test_create_and_delete_aws_user");
-        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config);
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config, temp_dir());
 
         dynamodb_handler.create_iam_identity().await.unwrap();
 
@@ -1048,7 +1063,7 @@ mod tests {
     async fn test_dynamodb_delete_table_names_by_prefix() {
         let provisioner = make_test_provisioner().await;
         let prefix = get_prefix("test_dynamodb_delete_table_names_by_prefix");
-        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config);
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config, temp_dir());
 
         create_dynamodb_table(&dynamodb_handler.dynamodb_client, &format!("{}1", prefix)).await;
         create_dynamodb_table(&dynamodb_handler.dynamodb_client, &format!("{}2", prefix)).await;
@@ -1069,7 +1084,7 @@ mod tests {
         let access_key_id = "my-access-key".to_string();
         let secret_access_key = "my-secret-access-key".to_string();
         let prefix = get_prefix("test_get_access_key");
-        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config);
+        let dynamodb_handler = DynamoDBHandler::new(&prefix, &provisioner.aws_config, temp_dir());
 
         assert_eq!(dynamodb_handler.get_saved_access_key().await, None);
 

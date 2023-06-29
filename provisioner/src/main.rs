@@ -21,6 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         internal_pg_address,
         internal_mongodb_address,
         auth_uri,
+        state,
     } = Args::parse();
     let addr = SocketAddr::new(ip, port);
 
@@ -30,6 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fqdn.to_string(),
         internal_pg_address,
         internal_mongodb_address,
+        state,
     )
     .await
     .unwrap();

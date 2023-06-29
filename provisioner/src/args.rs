@@ -1,5 +1,6 @@
 use std::{
     net::{IpAddr, Ipv4Addr},
+    path::PathBuf,
     str::FromStr,
 };
 
@@ -41,6 +42,10 @@ pub struct Args {
     /// Address to reach the authentication service at
     #[arg(long, default_value = "http://127.0.0.1:8008")]
     pub auth_uri: Uri,
+
+    /// Path to the provisioner state
+    #[arg(long, default_value = "/var/lib/shuttle")]
+    pub state: PathBuf,
 }
 
 fn parse_fqdn(src: &str) -> Result<FQDN, String> {

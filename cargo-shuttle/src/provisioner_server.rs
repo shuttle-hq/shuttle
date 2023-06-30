@@ -437,9 +437,9 @@ fn dynamodb_config() -> DynamoDbConfig {
         container_name: "shuttle_dynamodb".to_string(),
         image: "amazon/dynamodb-local:latest".to_string(),
         port: "8000/tcp".to_string(),
-        aws_access_key_id: "DUMMY_ID_EXAMPLE".to_string(),
-        aws_secret_access_key: "DUMMY_EXAMPLE_KEY".to_string(),
-        aws_default_region: "DUMMY_EXAMPLE_REGION".to_string(),
+        aws_access_key_id: "DUMMYIDEXAMPLE".to_string(),
+        aws_secret_access_key: "DUMMYEXAMPLEKEY".to_string(),
+        aws_default_region: "DUMMYEXAMPLEREGION".to_string(),
         is_ready_cmd: vec!["curl".to_string(), "0.0.0.0:8000".to_string()],
     }
 }

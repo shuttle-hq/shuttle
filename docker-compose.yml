@@ -2,6 +2,7 @@ version: "3.7"
 volumes:
   auth-vol:
   gateway-vol:
+  provisioner-vol:
   postgres-vol:
   panamax-crates-vol:
   panamax-io-index-vol:

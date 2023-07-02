@@ -41,8 +41,26 @@ impl PersistInstance {
         Ok(serialize_into(&mut writer, &struc).map_err(PersistError::Serialize))?
     }
 
-    pub fn list(&self) -> Result<Vec<String>, PersistError> {
-        todo!()
+    // list method returns a vector of strings containing all the keys associated with a PersistInstance
+    pub fn list(&self) -> Result<Vec<String>, String> {
+        // call the storage folder function, bind it to a variable called folder_to_list
+        let folder_to_list = self.get_storage_folder();
+
+        // create an empty, mutable vector to store the list of strings we want to return
+        let mut list = Vec::new();
+
+        // iterate over the entries in folder_to_list, convert each entry into a string, and store it in the list vector
+        for item in folder_to_list.iter() {
+            let os_string = item.to_os_string();
+            let converted_string = match os_string.into_string() {
+                Ok(converted_string) => converted_string,
+                Err(_) => "Unable to obtain a path string.".to_string(),
+            };
+            list.push(converted_string);
+        }
+
+        // return the list of strings
+        Ok(list)
     }
 
     pub fn load<T>(&self, key: &str) -> Result<T, PersistError>
@@ -113,6 +131,17 @@ mod tests {
         persist.save("test", "test").unwrap();
         let result: String = persist.load("test").unwrap();
         assert_eq!(result, "test");
+    }
+
+    // new unit test for the list method
+    #[test]
+    fn test_list() {
+        let persist = PersistInstance {
+            service_name: ServiceName::from_str("test").unwrap(),
+        };
+        
+        let result = vec!["shuttle_persist", "test"];
+        assert_eq!(result, persist.list().unwrap());
     }
 
     #[test]

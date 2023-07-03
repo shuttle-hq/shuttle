@@ -333,10 +333,10 @@ async fn load(
         load_request.extensions_mut().insert(claim);
     }
 
-    debug!("loading service");
+    debug!(service_name = %service_name, "loading service");
     let response = runtime_client.load(load_request).await;
 
-    info!("resources have been loaded");
+    debug!(service_name = %service_name, "service loaded");
     match response {
         Ok(response) => {
             let response = response.into_inner();

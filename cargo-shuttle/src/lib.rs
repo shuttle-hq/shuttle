@@ -1034,23 +1034,9 @@ impl Shuttle {
 
                             return Ok(CommandOutcome::DeploymentFailure);
                         }
-                        shuttle_common::deployment::State::Running => {
-                            println!("got Running in logs stream");
-                            let fields: serde_json::Value =
-                                serde_json::from_slice(log_item.fields.as_slice()).unwrap();
-                            println!("log item: {:?}", fields);
-                            break;
-                        }
-                        shuttle_common::deployment::State::Completed => {
-                            println!("got Completed in logs stream");
-                            break;
-                        }
-                        shuttle_common::deployment::State::Stopped => {
-                            println!("got Stopped in logs stream");
-                            break;
-                        }
-                        shuttle_common::deployment::State::Unknown => {
-                            println!("got Unknown in logs stream");
+                        // Break on remaining end states: Running, Stopped, Completed or Unknown.
+                        end_state => {
+                            debug!(state = %end_state, "received end state, breaking deployment stream");
                             break;
                         }
                     };
@@ -1107,7 +1093,7 @@ impl Shuttle {
                     );
                 }
                 state => {
-                    println!("{state}");
+                    debug!("deployment logs stream received state: {state} when it expected to receive state: running");
                     println!(
                     "Deployment entered an unexpected state - Please create a ticket to report this."
                 );

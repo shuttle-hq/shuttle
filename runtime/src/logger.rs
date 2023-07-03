@@ -68,7 +68,11 @@ where
                     .target
                     .unwrap_or_else(|| metadata.target().to_string()),
                 fields: serde_json::to_vec(&visitor.fields).unwrap(),
-                state: self.state.lock().unwrap().to_string(),
+                state: self
+                    .state
+                    .lock()
+                    .expect("state lock should not be poisoned")
+                    .to_string(),
             }
         };
 
@@ -81,7 +85,10 @@ where
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
         if event.metadata().name() == "start" {
-            *self.state.lock().unwrap() = State::Running;
+            *self
+                .state
+                .lock()
+                .expect("state lock should not be poisoned") = State::Running;
         }
         let datetime = Utc::now();
 
@@ -100,7 +107,11 @@ where
                     .target
                     .unwrap_or_else(|| metadata.target().to_string()),
                 fields: serde_json::to_vec(&visitor.fields).unwrap(),
-                state: self.state.lock().unwrap().to_string(),
+                state: self
+                    .state
+                    .lock()
+                    .expect("state lock should not be poisoned")
+                    .to_string(),
             }
         };
 

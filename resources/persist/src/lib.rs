@@ -16,6 +16,10 @@ pub enum PersistError {
     Open(std::io::Error),
     #[error("failed to create folder: {0}")]
     CreateFolder(std::io::Error),
+    #[error("failed to list contents of folder: {0}")]
+    ListFolder(std::io::Error),
+    #[error("failed to remove file: {0}")]
+    RemoveFile(std::io::Error),
     #[error("failed to serialize data: {0}")]
     Serialize(BincodeError),
     #[error("failed to deserialize data: {0}")]
@@ -41,26 +45,30 @@ impl PersistInstance {
         Ok(serialize_into(&mut writer, &struc).map_err(PersistError::Serialize))?
     }
 
-    // list method returns a vector of strings containing all the keys associated with a PersistInstance
-    pub fn list(&self) -> Result<Vec<String>, String> {
-        // call the storage folder function, bind it to a variable called folder_to_list
-        let folder_to_list = self.get_storage_folder();
+    /// list method returns a vector of strings containing all the keys associated with a PersistInstance
+    pub fn list(&self) -> Result<Vec<String>, PersistError> {
+        let storage_folder = self.get_storage_folder();
 
-        // create an empty, mutable vector to store the list of strings we want to return
         let mut list = Vec::new();
 
-        // iterate over the entries in folder_to_list, convert each entry into a string, and store it in the list vector
-        for item in folder_to_list.iter() {
-            let os_string = item.to_os_string();
-            let converted_string = match os_string.into_string() {
-                Ok(converted_string) => converted_string,
-                Err(_) => "Unable to obtain a path string.".to_string(),
-            };
-            list.push(converted_string);
+        let entries = fs::read_dir(storage_folder).map_err(PersistError::ListFolder)?;
+        for entry in entries {
+            let dir = entry.map_err(PersistError::ListFolder)?;
+            list.push(
+                dir.path()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap_or_else(|_| "path contains non-UTF-8 characters".to_string()),
+            );
         }
-
-        // return the list of strings
         Ok(list)
+    }
+
+    /// remove method deletes a key from the PersistInstance
+    pub fn remove(&self, key: &str) -> Result<(), PersistError> {
+        let file_path = self.get_storage_file(key);
+        fs::remove_file(file_path).map_err(PersistError::RemoveFile)?;
+        Ok(())
     }
 
     pub fn load<T>(&self, key: &str) -> Result<T, PersistError>
@@ -133,24 +141,35 @@ mod tests {
         assert_eq!(result, "test");
     }
 
-    // new unit test for the list method
     #[test]
     fn test_list() {
         let persist = PersistInstance {
             service_name: ServiceName::from_str("test").unwrap(),
         };
-        
-        let result = vec!["shuttle_persist", "test"];
+
+        let result = vec!["shuttle_persist/test/test.bin"];
         assert_eq!(result, persist.list().unwrap());
     }
 
+    #[test]
+    fn test_remove() {
+        let persist = PersistInstance {
+            service_name: ServiceName::from_str("test").unwrap(),
+        };
+
+        persist.save("test", "test").unwrap();
+        persist.remove("test").unwrap();
+        let result: Vec<String> = Vec::new();
+        assert_eq!(result, persist.list().unwrap());
+    }
+    
     #[test]
     fn test_load_error() {
         let persist = PersistInstance {
             service_name: ServiceName::from_str("test").unwrap(),
         };
 
-        // unwrapp error
+        // unwrap error
         let result = persist.load::<String>("error").unwrap_err();
         assert_eq!(
             result.to_string(),

@@ -816,8 +816,8 @@ workflows:
                   "resources/persist",
                   "resources/secrets",
                   "resources/shared-db",
-                  "resources/shuttle-turso",
                   "resources/static-folder",
+                  "resources/turso",
                 ]
           name: publish-<< matrix.path >>
           requires:

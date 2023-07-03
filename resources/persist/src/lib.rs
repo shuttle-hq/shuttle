@@ -144,23 +144,24 @@ mod tests {
     #[test]
     fn test_list() {
         let persist = PersistInstance {
-            service_name: ServiceName::from_str("test").unwrap(),
+            service_name: ServiceName::from_str("test_list").unwrap(),
         };
 
-        let result = vec!["shuttle_persist/test/test.bin"];
+        persist.save("test_list", "test_list").unwrap();
+
+        let result = vec!["shuttle_persist/test_list/test_list.bin"];
         assert_eq!(result, persist.list().unwrap());
     }
 
     #[test]
     fn test_remove() {
         let persist = PersistInstance {
-            service_name: ServiceName::from_str("test").unwrap(),
+            service_name: ServiceName::from_str("test_remove").unwrap(),
         };
 
-        persist.save("test", "test").unwrap();
-        persist.remove("test").unwrap();
-        let result: Vec<String> = Vec::new();
-        assert_eq!(result, persist.list().unwrap());
+        persist.save("test_remove", "test_remove").unwrap();
+        persist.remove("test_remove").unwrap();
+        assert!(persist.list().unwrap().is_empty());
     }
 
     #[test]

@@ -162,7 +162,7 @@ mod tests {
         let result: Vec<String> = Vec::new();
         assert_eq!(result, persist.list().unwrap());
     }
-    
+
     #[test]
     fn test_load_error() {
         let persist = PersistInstance {

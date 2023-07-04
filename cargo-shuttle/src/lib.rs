@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use shuttle_common::models::deployment::CREATE_SERVICE_BODY_LIMIT;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     models::{
@@ -1000,6 +1001,12 @@ impl Shuttle {
         }
 
         deployment_req.data = self.make_archive()?;
+        if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
+            bail!(
+                "The project is too large - we have a {}MB project limit.",
+                CREATE_SERVICE_BODY_LIMIT / 1_000_000
+            );
+        }
 
         let deployment = client
             .deploy(self.ctx.project_name(), deployment_req)

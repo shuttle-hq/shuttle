@@ -24,7 +24,9 @@ use shuttle_common::backends::auth::{
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
-use shuttle_common::models::deployment::{DeploymentRequest, GIT_STRINGS_MAX_LENGTH, CREATE_SERVICE_BODY_LIMIT};
+use shuttle_common::models::deployment::{
+    DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
+};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::storage_manager::StorageManager;

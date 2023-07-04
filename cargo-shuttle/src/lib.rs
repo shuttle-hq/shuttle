@@ -1002,7 +1002,10 @@ impl Shuttle {
 
         deployment_req.data = self.make_archive()?;
         if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
-            bail!("The project is too large - we have a {}MB project limit.", CREATE_SERVICE_BODY_LIMIT / 1_000_000);
+            bail!(
+                "The project is too large - we have a {}MB project limit.",
+                CREATE_SERVICE_BODY_LIMIT / 1_000_000
+            );
         }
 
         let deployment = client

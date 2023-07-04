@@ -24,7 +24,7 @@ use shuttle_common::backends::auth::{
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
-use shuttle_common::models::deployment::{DeploymentRequest, GIT_STRINGS_MAX_LENGTH};
+use shuttle_common::models::deployment::{DeploymentRequest, GIT_STRINGS_MAX_LENGTH, CREATE_SERVICE_BODY_LIMIT};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::storage_manager::StorageManager;
@@ -114,7 +114,7 @@ impl RouterBuilder {
                     .post(
                         create_service
                             // Set the body size limit for this endpoint to 50MB
-                            .layer(DefaultBodyLimit::max(50_000_000))
+                            .layer(DefaultBodyLimit::max(CREATE_SERVICE_BODY_LIMIT))
                             .layer(ScopedLayer::new(vec![Scope::ServiceCreate])),
                     )
                     .delete(stop_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate]))),

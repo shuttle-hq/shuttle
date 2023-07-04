@@ -18,6 +18,8 @@ pub enum PersistError {
     CreateFolder(std::io::Error),
     #[error("failed to list contents of folder: {0}")]
     ListFolder(std::io::Error),
+    #[error("failed to clear the folder: {0}")]
+    ClearFolder(std::io::Error),
     #[error("failed to remove file: {0}")]
     RemoveFile(std::io::Error),
     #[error("failed to serialize data: {0}")]
@@ -64,9 +66,20 @@ impl PersistInstance {
         Ok(list)
     }
 
+    /// clear method removes the storage folder from the PersistInstance
+    pub fn clear(&self) -> Result<(), PersistError> {
+        let folder_path = self.get_storage_folder();
+        fs::remove_dir_all(folder_path).map_err(PersistError::ClearFolder)?;
+        Ok(())
+    }
+
     /// remove method deletes a key from the PersistInstance
-    pub fn remove(&self, key: &str) -> Result<(), PersistError> {
-        let file_path = self.get_storage_file(key);
+    pub fn remove(&self, list_item: Vec<String>) -> Result<(), PersistError> {
+        let mut item_index: usize = 0;
+        for (index, _items) in list_item.iter().enumerate() {
+            item_index = index;
+        }
+        let file_path = self.get_storage_file(&list_item[item_index]);
         fs::remove_file(file_path).map_err(PersistError::RemoveFile)?;
         Ok(())
     }
@@ -149,8 +162,24 @@ mod tests {
 
         persist.save("test_list", "test_list").unwrap();
 
-        let result = vec!["shuttle_persist/test_list/test_list.bin"];
-        assert_eq!(result, persist.list().unwrap());
+        let result = vec!["shuttle_persist/test_list/test_list.bin".to_string()];
+        let list_result = persist.list().unwrap();
+        assert_eq!(result, list_result);
+    }
+
+    #[test]
+    fn test_clear() {
+        let persist = PersistInstance {
+            service_name: ServiceName::from_str("test_clear").unwrap(),
+        };
+
+        persist.save("test_clear", "test_clear").unwrap();
+        persist.clear().unwrap();
+        let clear_result = persist.list().unwrap_err();
+        assert_eq!(
+            clear_result.to_string(),
+            "failed to list contents of folder: No such file or directory (os error 2)"
+        );
     }
 
     #[test]
@@ -160,7 +189,8 @@ mod tests {
         };
 
         persist.save("test_remove", "test_remove").unwrap();
-        persist.remove("test_remove").unwrap();
+        let item_to_remove = vec!["test_remove".to_string()];
+        persist.remove(item_to_remove).unwrap();
         assert!(persist.list().unwrap().is_empty());
     }
 

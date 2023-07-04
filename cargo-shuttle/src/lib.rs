@@ -1093,7 +1093,7 @@ impl Shuttle {
                     );
                 }
                 state => {
-                    debug!("deployment logs stream received state: {state} when it expected to receive state: running");
+                    debug!("deployment logs stream received state: {state} when it expected to receive running state");
                     println!(
                     "Deployment entered an unexpected state - Please create a ticket to report this."
                 );

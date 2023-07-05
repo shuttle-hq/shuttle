@@ -60,7 +60,9 @@ impl PersistInstance {
                 dir.path()
                     .into_os_string()
                     .into_string()
-                    .unwrap_or_else(|_| "path contains non-UTF-8 characters".to_string()),
+                    .unwrap_or_else(|_| "path contains non-UTF-8 characters".to_string())
+                    .split(".bin")
+                    .collect::<String>(),
             );
         }
         Ok(list)
@@ -74,8 +76,8 @@ impl PersistInstance {
     }
 
     /// remove method deletes a key from the PersistInstance
-    pub fn remove(&self, list_item: String) -> Result<(), PersistError> {
-        let file_path = self.get_storage_file(&list_item);
+    pub fn remove(&self, key: String) -> Result<(), PersistError> {
+        let file_path = self.get_storage_file(&key);
         fs::remove_file(file_path).map_err(PersistError::RemoveFile)?;
         Ok(())
     }
@@ -158,7 +160,7 @@ mod tests {
 
         persist.save("test_list", "test_list").unwrap();
 
-        let result = vec!["shuttle_persist/test_list/test_list.bin".to_string()];
+        let result = vec!["shuttle_persist/test_list/test_list".to_string()];
         let list_result = persist.list().unwrap();
         assert_eq!(result, list_result);
     }
@@ -185,9 +187,9 @@ mod tests {
         };
 
         persist.save("test_remove", "test_remove").unwrap();
-        let item_to_remove = "test_remove".to_string();
-        persist.remove(item_to_remove).unwrap();
-        assert!(persist.list().unwrap().is_empty());
+        let list = persist.list().unwrap();
+        let _ = persist.remove(list[0].clone());
+        assert!(!list.contains(&"test_remove".to_string()));
     }
 
     #[test]

@@ -54,8 +54,6 @@ url = "2.3.1"
 uuid = { workspace = true, features = ["v4"] }
 webbrowser = "0.8.2"
 semver = "1.0.17"
-aws-sdk-dynamodb = { workspace = true }
-aws-config = { workspace = true }
 cargo-generate = "0.18.3"
 
 [dependencies.shuttle-common]
@@ -73,6 +71,8 @@ features = ["builder"]
 vendored-openssl = ["openssl/vendored"]
 
 [dev-dependencies]
+aws-sdk-dynamodb = { workspace = true }
+aws-config = { workspace = true }
 assert_cmd = "2.0.6"
 rexpect = "0.5.0"
 tempfile = { workspace = true }

@@ -171,3 +171,4 @@ pub struct DeploymentRequest {
 
 pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
 const GIT_OPTION_NONE_TEXT: &str = "N/A";
+pub const CREATE_SERVICE_BODY_LIMIT: usize = 50_000_000;

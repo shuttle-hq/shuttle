@@ -108,6 +108,8 @@ pub enum ParseError {
     Timestamp(#[from] prost_types::TimestampError),
     #[error("failed to parse serde: {0}")]
     Serde(#[from] serde_json::Error),
+    #[error("failed to parse state: {0}")]
+    State(String),
 }
 
 /// Holds the input for a DB resource

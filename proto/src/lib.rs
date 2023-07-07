@@ -106,6 +106,7 @@ pub mod runtime {
     use prost_types::Timestamp;
     use shuttle_common::{
         claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer},
+        deployment::State,
         ParseError,
     };
     use tokio::process;
@@ -178,6 +179,9 @@ pub mod runtime {
                 line,
                 target: log.target,
                 fields: log.fields,
+                // We can safely assume the state received from shuttle-next to be running,
+                // it will not currently load any resources.
+                state: State::Running.to_string(),
             }
         }
     }

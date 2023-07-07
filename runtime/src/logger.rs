@@ -1,8 +1,11 @@
-use std::time::SystemTime;
+use std::{
+    sync::{Arc, Mutex},
+    time::SystemTime,
+};
 
 use chrono::Utc;
 use prost_types::Timestamp;
-use shuttle_common::tracing::JsonVisitor;
+use shuttle_common::{deployment::State, tracing::JsonVisitor};
 use shuttle_proto::runtime::{LogItem, LogLevel};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{
@@ -13,11 +16,15 @@ use tracing_subscriber::Layer;
 
 pub struct Logger {
     tx: UnboundedSender<LogItem>,
+    state: Arc<Mutex<State>>,
 }
 
 impl Logger {
     pub fn new(tx: UnboundedSender<LogItem>) -> Self {
-        Self { tx }
+        Self {
+            tx,
+            state: Arc::new(Mutex::new(State::Loading)),
+        }
     }
 }
 
@@ -61,6 +68,11 @@ where
                     .target
                     .unwrap_or_else(|| metadata.target().to_string()),
                 fields: serde_json::to_vec(&visitor.fields).unwrap(),
+                state: self
+                    .state
+                    .lock()
+                    .expect("state lock should not be poisoned")
+                    .to_string(),
             }
         };
 
@@ -72,6 +84,12 @@ where
         event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
+        if event.metadata().name() == "start" {
+            *self
+                .state
+                .lock()
+                .expect("state lock should not be poisoned") = State::Running;
+        }
         let datetime = Utc::now();
 
         let item = {
@@ -89,6 +107,11 @@ where
                     .target
                     .unwrap_or_else(|| metadata.target().to_string()),
                 fields: serde_json::to_vec(&visitor.fields).unwrap(),
+                state: self
+                    .state
+                    .lock()
+                    .expect("state lock should not be poisoned")
+                    .to_string(),
             }
         };
 

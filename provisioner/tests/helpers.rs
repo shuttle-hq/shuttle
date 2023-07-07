@@ -103,7 +103,7 @@ impl From<DbType> for Config<'_> {
         match db_type {
             DbType::Postgres => Config {
                 container_name: PG_CONTAINER_NAME,
-                image: "docker.io/library/postgres:11",
+                image: "docker.io/library/postgres:14",
                 engine: "postgres",
                 port: "5432",
                 env: vec!["POSTGRES_PASSWORD=password"],

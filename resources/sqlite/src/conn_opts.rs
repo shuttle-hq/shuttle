@@ -21,13 +21,13 @@ use tracing::debug;
 /// `in_memory` methods to configure the type of database created.
 ///
 /// Note that Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`, `extension`,
-/// `shared_cache` options. The following options are internally controlled by pragmas and hence also not exposed: `foreign_keys`, `locking_mode`, `auto_vacuum`, `page_size`
+/// `shared_cache` options. The following options are internally controlled by pragmas and hence also not exposed: `foreign_keys`, `locking_mode`, `auto_vacuum`, `page_size`.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct SQLiteConnOpts {
+pub struct ShuttleSqliteConnOpts {
     // Used for constructing the full connection string internally in `try_from`.
     pub(crate) storage_path: PathBuf,
-    pub(crate) journal_mode: Option<SQLiteJournalMode>,
-    pub(crate) synchronous: Option<SQLiteSynchronous>,
+    pub(crate) journal_mode: Option<ShuttleSqliteJournalMode>,
+    pub(crate) synchronous: Option<ShuttleSqliteSynchronous>,
     // Mirrored options from the original.
     pub(crate) filename: Cow<'static, Path>,
     pub(crate) in_memory: bool,
@@ -44,13 +44,13 @@ pub struct SQLiteConnOpts {
     pub(crate) serialized: bool,
 }
 
-impl Default for SQLiteConnOpts {
+impl Default for ShuttleSqliteConnOpts {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SQLiteConnOpts {
+impl ShuttleSqliteConnOpts {
     pub fn new() -> Self {
         Self {
             storage_path: PathBuf::new(),
@@ -84,13 +84,13 @@ impl SQLiteConnOpts {
     }
 
     /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.journal_mode).
-    pub fn journal_mode(mut self, journal_mode: SQLiteJournalMode) -> Self {
+    pub fn journal_mode(mut self, journal_mode: ShuttleSqliteJournalMode) -> Self {
         self.journal_mode = Some(journal_mode);
         self
     }
 
     /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.synchronous).
-    pub fn synchronous(mut self, synchronous: SQLiteSynchronous) -> Self {
+    pub fn synchronous(mut self, synchronous: ShuttleSqliteSynchronous) -> Self {
         self.synchronous = Some(synchronous);
         self
     }
@@ -151,11 +151,11 @@ impl SQLiteConnOpts {
     }
 }
 
-impl TryFrom<&SQLiteConnOpts> for SqliteConnectOptions {
+impl TryFrom<&ShuttleSqliteConnOpts> for SqliteConnectOptions {
     type Error = shuttle_service::Error;
 
-    fn try_from(opts: &SQLiteConnOpts) -> Result<Self, Self::Error> {
-        let SQLiteConnOpts {
+    fn try_from(opts: &ShuttleSqliteConnOpts) -> Result<Self, Self::Error> {
+        let ShuttleSqliteConnOpts {
             storage_path,
             filename,
             journal_mode,

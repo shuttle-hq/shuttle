@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::error::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
-pub enum SQLiteJournalMode {
+pub enum ShuttleSqliteJournalMode {
     Delete,
     Truncate,
     Persist,
@@ -14,36 +14,36 @@ pub enum SQLiteJournalMode {
     Off,
 }
 
-impl SQLiteJournalMode {
+impl ShuttleSqliteJournalMode {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
-            SQLiteJournalMode::Delete => "DELETE",
-            SQLiteJournalMode::Truncate => "TRUNCATE",
-            SQLiteJournalMode::Persist => "PERSIST",
-            SQLiteJournalMode::Memory => "MEMORY",
-            SQLiteJournalMode::Wal => "WAL",
-            SQLiteJournalMode::Off => "OFF",
+            ShuttleSqliteJournalMode::Delete => "DELETE",
+            ShuttleSqliteJournalMode::Truncate => "TRUNCATE",
+            ShuttleSqliteJournalMode::Persist => "PERSIST",
+            ShuttleSqliteJournalMode::Memory => "MEMORY",
+            ShuttleSqliteJournalMode::Wal => "WAL",
+            ShuttleSqliteJournalMode::Off => "OFF",
         }
     }
 }
 
-impl Default for SQLiteJournalMode {
+impl Default for ShuttleSqliteJournalMode {
     fn default() -> Self {
-        SQLiteJournalMode::Wal
+        ShuttleSqliteJournalMode::Wal
     }
 }
 
-impl FromStr for SQLiteJournalMode {
+impl FromStr for ShuttleSqliteJournalMode {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Error> {
         Ok(match &*s.to_ascii_lowercase() {
-            "delete" => SQLiteJournalMode::Delete,
-            "truncate" => SQLiteJournalMode::Truncate,
-            "persist" => SQLiteJournalMode::Persist,
-            "memory" => SQLiteJournalMode::Memory,
-            "wal" => SQLiteJournalMode::Wal,
-            "off" => SQLiteJournalMode::Off,
+            "delete" => ShuttleSqliteJournalMode::Delete,
+            "truncate" => ShuttleSqliteJournalMode::Truncate,
+            "persist" => ShuttleSqliteJournalMode::Persist,
+            "memory" => ShuttleSqliteJournalMode::Memory,
+            "wal" => ShuttleSqliteJournalMode::Wal,
+            "off" => ShuttleSqliteJournalMode::Off,
 
             _ => {
                 return Err(Error::Configuration(

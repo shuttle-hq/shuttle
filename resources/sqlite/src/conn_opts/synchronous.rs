@@ -5,39 +5,39 @@ use serde::{Deserialize, Serialize};
 use sqlx::error::Error;
 
 #[derive(Debug, Deserialize, Serialize)]
-pub enum SQLiteSynchronous {
+pub enum ShuttleSqliteSynchronous {
     Off,
     Normal,
     Full,
     Extra,
 }
 
-impl SQLiteSynchronous {
+impl ShuttleSqliteSynchronous {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
-            SQLiteSynchronous::Off => "OFF",
-            SQLiteSynchronous::Normal => "NORMAL",
-            SQLiteSynchronous::Full => "FULL",
-            SQLiteSynchronous::Extra => "EXTRA",
+            ShuttleSqliteSynchronous::Off => "OFF",
+            ShuttleSqliteSynchronous::Normal => "NORMAL",
+            ShuttleSqliteSynchronous::Full => "FULL",
+            ShuttleSqliteSynchronous::Extra => "EXTRA",
         }
     }
 }
 
-impl Default for SQLiteSynchronous {
+impl Default for ShuttleSqliteSynchronous {
     fn default() -> Self {
-        SQLiteSynchronous::Full
+        ShuttleSqliteSynchronous::Full
     }
 }
 
-impl FromStr for SQLiteSynchronous {
+impl FromStr for ShuttleSqliteSynchronous {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Error> {
         Ok(match &*s.to_ascii_lowercase() {
-            "off" => SQLiteSynchronous::Off,
-            "normal" => SQLiteSynchronous::Normal,
-            "full" => SQLiteSynchronous::Full,
-            "extra" => SQLiteSynchronous::Extra,
+            "off" => ShuttleSqliteSynchronous::Off,
+            "normal" => ShuttleSqliteSynchronous::Normal,
+            "full" => ShuttleSqliteSynchronous::Full,
+            "extra" => ShuttleSqliteSynchronous::Extra,
 
             _ => {
                 return Err(Error::Configuration(

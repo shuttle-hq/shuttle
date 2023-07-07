@@ -7,7 +7,7 @@
 //! ```ignore
 //! #[shuttle_runtime::main]
 //! async fn axum(
-//!     #[shuttle_sqlite::SQLite] pool: shuttle_sqlite::SqlitePool,
+//!     #[shuttle_sqlite::ShuttleSqlite] pool: shuttle_sqlite::SqlitePool,
 //! ) -> shuttle_axum::ShuttleAxum {
 //!     let _ = sqlx::query(
 //!         "CREATE TABLE IF NOT EXISTS users(id int, name varchar(128), email varchar(128));",
@@ -19,7 +19,7 @@
 //! ```
 //!
 //! ## Configuration
-//! The database can be configured using [`SQLiteConnOpts`] which mirrors sqlx's [`SqliteConnectOptions`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html) for the
+//! The database can be configured using [`ShuttleSqliteConnOpts`] which mirrors sqlx's [`SqliteConnectOptions`](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html) for the
 //! options it exposes.
 //!
 //! Construction of the full connection string is handled internally for security reasons and defaults to creating a
@@ -32,7 +32,7 @@
 //! ```ignore
 //! #[shuttle_runtime::main]
 //! async fn axum(
-//!     #[shuttle_sqlite::SQLite(opts = SQLiteConnOpts::new().filename("custom.sqlite"))] pool: shuttle_sqlite::SqlitePool,
+//!     #[shuttle_sqlite::ShuttleSqlite(opts = ShuttleSqliteConnOpts::new().filename("custom.sqlite"))] pool: shuttle_sqlite::SqlitePool,
 //! ) -> shuttle_axum::ShuttleAxum { /* ... */ }
 //! ```
 //! Note that Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`, `extension`,
@@ -51,12 +51,12 @@ pub use sqlx::SqlitePool;
 
 /// Builder struct used to configure the database, e.g. `SQLite(opts = SQLiteConnOpts::new())`.
 #[derive(Serialize)]
-pub struct SQLite {
-    opts: SQLiteConnOpts,
+pub struct ShuttleSqlite {
+    opts: ShuttleSqliteConnOpts,
 }
 
-impl SQLite {
-    pub fn opts(mut self, opts: SQLiteConnOpts) -> Self {
+impl ShuttleSqlite {
+    pub fn opts(mut self, opts: ShuttleSqliteConnOpts) -> Self {
         self.opts = opts;
         self
     }
@@ -68,7 +68,7 @@ impl SQLite {
 }
 
 #[async_trait]
-impl ResourceBuilder<sqlx::SqlitePool> for SQLite {
+impl ResourceBuilder<sqlx::SqlitePool> for ShuttleSqlite {
     /// The type of resource this creates
     const TYPE: Type = Type::EmbeddedDatabase;
 
@@ -76,12 +76,12 @@ impl ResourceBuilder<sqlx::SqlitePool> for SQLite {
     type Config = Self;
 
     /// The output type used to build this resource later
-    type Output = SQLiteConnOpts;
+    type Output = ShuttleSqliteConnOpts;
 
     /// Create a new instance of this resource builder
     fn new() -> Self {
         Self {
-            opts: SQLiteConnOpts::default(),
+            opts: ShuttleSqliteConnOpts::default(),
         }
     }
 
@@ -137,7 +137,7 @@ mod tests {
         opts_sqlx = opts_sqlx.create_if_missing(true); // Match our default setting
         let str_sqlx = format!("{:?}", opts_sqlx);
 
-        let ours = SQLiteConnOpts::new().filename(&filename);
+        let ours = ShuttleSqliteConnOpts::new().filename(&filename);
         let opts_from = SqliteConnectOptions::try_from(&ours).unwrap();
         let str_from = format!("{:?}", opts_from);
 
@@ -155,7 +155,7 @@ mod tests {
         opts_sqlx = opts_sqlx.create_if_missing(true); // Match our default setting
         let str_sqlx = format!("{:?}", opts_sqlx);
 
-        let ours = SQLiteConnOpts::new().in_memory(true);
+        let ours = ShuttleSqliteConnOpts::new().in_memory(true);
         let opts_from = SqliteConnectOptions::try_from(&ours).unwrap();
         let str_from = format!("{:?}", opts_from);
 

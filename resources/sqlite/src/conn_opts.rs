@@ -3,18 +3,11 @@ use std::str::FromStr;
 use std::time::Duration;
 use std::{borrow::Cow, path::PathBuf};
 
-use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteConnectOptions;
 
-mod auto_vacuum;
-pub use auto_vacuum::*;
-
 mod journal_mode;
 pub use journal_mode::*;
-
-mod locking_mode;
-pub use locking_mode::*;
 
 mod synchronous;
 pub use synchronous::*;
@@ -28,11 +21,13 @@ use tracing::debug;
 /// `in_memory` methods to configure the type of database created.
 ///
 /// Note that Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`, `extension`,
-/// `shared_cache` options.
+/// `shared_cache` options. The following options are internally controlled by pragmas and hence also not exposed: `foreign_keys`, `locking_mode`, `auto_vacuum`, `page_size`
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SQLiteConnOpts {
     // Used for constructing the full connection string internally in `try_from`.
     pub(crate) storage_path: PathBuf,
+    pub(crate) journal_mode: Option<SQLiteJournalMode>,
+    pub(crate) synchronous: Option<SQLiteSynchronous>,
     // Mirrored options from the original.
     pub(crate) filename: Cow<'static, Path>,
     pub(crate) in_memory: bool,
@@ -42,8 +37,6 @@ pub struct SQLiteConnOpts {
     pub(crate) busy_timeout: Duration,
     pub(crate) immutable: bool,
     pub(crate) vfs: Option<Cow<'static, str>>,
-
-    pub(crate) pragmas: IndexMap<Cow<'static, str>, Option<Cow<'static, str>>>,
 
     pub(crate) command_channel_size: usize,
     pub(crate) row_channel_size: usize,
@@ -59,41 +52,11 @@ impl Default for SQLiteConnOpts {
 
 impl SQLiteConnOpts {
     pub fn new() -> Self {
-        let mut pragmas: IndexMap<Cow<'static, str>, Option<Cow<'static, str>>> = IndexMap::new();
-
-        pragmas.insert("key".into(), None);
-
-        pragmas.insert("cipher_plaintext_header_size".into(), None);
-
-        pragmas.insert("cipher_salt".into(), None);
-
-        pragmas.insert("kdf_iter".into(), None);
-
-        pragmas.insert("cipher_kdf_algorithm".into(), None);
-
-        pragmas.insert("cipher_use_hmac".into(), None);
-
-        pragmas.insert("cipher_compatibility".into(), None);
-
-        pragmas.insert("cipher_page_size".into(), None);
-
-        pragmas.insert("cipher_hmac_algorithm".into(), None);
-
-        pragmas.insert("page_size".into(), None);
-
-        pragmas.insert("locking_mode".into(), None);
-
-        pragmas.insert("journal_mode".into(), None);
-
-        pragmas.insert("foreign_keys".into(), Some("ON".into()));
-
-        pragmas.insert("synchronous".into(), None);
-
-        pragmas.insert("auto_vacuum".into(), None);
-
         Self {
             storage_path: PathBuf::new(),
             filename: Cow::Borrowed(Path::new(":memory:")),
+            journal_mode: None,
+            synchronous: None,
             in_memory: false,
             read_only: false,
             // Different to what sqlx does.
@@ -102,7 +65,6 @@ impl SQLiteConnOpts {
             busy_timeout: Duration::from_secs(5),
             immutable: false,
             vfs: None,
-            pragmas,
             serialized: false,
             command_channel_size: 50,
             row_channel_size: 50,
@@ -121,19 +83,16 @@ impl SQLiteConnOpts {
         self
     }
 
-    /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.foreign_keys).
-    pub fn foreign_keys(self, on: bool) -> Self {
-        self.pragma("foreign_keys", if on { "ON" } else { "OFF" })
-    }
-
     /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.journal_mode).
-    pub fn journal_mode(self, mode: SQLiteJournalMode) -> Self {
-        self.pragma("journal_mode", mode.as_str())
+    pub fn journal_mode(mut self, journal_mode: SQLiteJournalMode) -> Self {
+        self.journal_mode = Some(journal_mode);
+        self
     }
 
-    /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.locking_mode).
-    pub fn locking_mode(self, mode: SQLiteLockingMode) -> Self {
-        self.pragma("locking_mode", mode.as_str())
+    /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.synchronous).
+    pub fn synchronous(mut self, synchronous: SQLiteSynchronous) -> Self {
+        self.synchronous = Some(synchronous);
+        self
     }
 
     /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.read_only).
@@ -158,30 +117,6 @@ impl SQLiteConnOpts {
     /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.busy_timeout).
     pub fn busy_timeout(mut self, timeout: Duration) -> Self {
         self.busy_timeout = timeout;
-        self
-    }
-
-    /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.synchronous).
-    pub fn synchronous(self, synchronous: SQLiteSynchronous) -> Self {
-        self.pragma("synchronous", synchronous.as_str())
-    }
-
-    /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.auto_vacuum).
-    pub fn auto_vacuum(self, auto_vacuum: SQLiteAutoVacuum) -> Self {
-        self.pragma("auto_vacuum", auto_vacuum.as_str())
-    }
-
-    /// See [sqlx docs](https://docs.rs/sqlx/latest/sqlx/sqlite/struct.SqliteConnectOptions.html#method.page_size).
-    pub fn page_size(self, page_size: u32) -> Self {
-        self.pragma("page_size", page_size.to_string())
-    }
-
-    pub(crate) fn pragma<K, V>(mut self, key: K, value: V) -> Self
-    where
-        K: Into<Cow<'static, str>>,
-        V: Into<Cow<'static, str>>,
-    {
-        self.pragmas.insert(key.into(), Some(value.into()));
         self
     }
 
@@ -223,6 +158,8 @@ impl TryFrom<&SQLiteConnOpts> for SqliteConnectOptions {
         let SQLiteConnOpts {
             storage_path,
             filename,
+            journal_mode,
+            synchronous,
             in_memory,
             read_only,
             create_if_missing,
@@ -255,6 +192,14 @@ impl TryFrom<&SQLiteConnOpts> for SqliteConnectOptions {
             .serialized(*serialized)
             .command_buffer_size(*command_channel_size)
             .row_buffer_size(*row_channel_size);
+
+        if let Some(journal_mode) = journal_mode {
+            opts = opts.pragma("journal_mode", journal_mode.as_str());
+        }
+
+        if let Some(synchronous) = synchronous {
+            opts = opts.pragma("synchronous", synchronous.as_str());
+        }
 
         if let Some(vfs) = vfs {
             opts = opts.vfs(vfs.clone());

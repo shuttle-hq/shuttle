@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use sqlx::error::Error;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum SQLiteSynchronous {
     Off,
     Normal,

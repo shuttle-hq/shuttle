@@ -40,7 +40,6 @@
 use async_trait::async_trait;
 use serde::Serialize;
 use shuttle_service::{Factory, ResourceBuilder, Type};
-// use tracing::debug;
 
 mod conn_opts;
 pub use conn_opts::*;
@@ -112,8 +111,8 @@ impl ResourceBuilder<sqlx::SqlitePool> for SQLite {
 
     /// Build this resource from its config output
     async fn build(build_data: &Self::Output) -> Result<sqlx::SqlitePool, shuttle_service::Error> {
-        let opts = SqliteConnectOptions::try_from(build_data).unwrap();
-        // debug!("{:#?}", opts);
+        // This should never fail if our `try_from` is implemented correctly, which is guaranteed by our tests.
+        let opts = SqliteConnectOptions::try_from(build_data)?;
 
         let pool = sqlx::SqlitePool::connect_with(opts)
             .await

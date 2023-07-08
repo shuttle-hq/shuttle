@@ -65,7 +65,7 @@ impl PersistInstance {
                     .file_stem()
                     .unwrap_or_default()
                     .to_str()
-                    .unwrap_or_else(|| "file name contains non-UTF-8 characters")
+                    .unwrap("file name contains non-UTF-8 characters")
                     .to_string(),
             );
         }
@@ -90,7 +90,7 @@ impl PersistInstance {
 
     /// remove method deletes a key from the PersistInstance
     pub fn remove(&self, key: &str) -> Result<(), PersistError> {
-        let file_path = self.get_storage_file(&key);
+        let file_path = self.get_storage_file(key);
         fs::remove_file(file_path).map_err(PersistError::RemoveFile)?;
         Ok(())
     }
@@ -199,7 +199,7 @@ mod tests {
         persist.save("test_remove", "test_key_remove").unwrap();
         assert!(persist.list().unwrap().len() == 1);
         persist.remove(persist.list().unwrap()[0].as_str()).unwrap();
-        assert!(persist.list().unwrap().len() == 0);
+        assert!(persist.list().unwrap().len().is_empty());
     }
 
     #[test]

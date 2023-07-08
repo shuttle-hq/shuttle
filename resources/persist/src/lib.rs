@@ -65,7 +65,7 @@ impl PersistInstance {
                     .file_stem()
                     .unwrap_or_default()
                     .to_str()
-                    .unwrap("file name contains non-UTF-8 characters")
+                    .unwrap_or("file name contains non-UTF-8 characters")
                     .to_string(),
             );
         }

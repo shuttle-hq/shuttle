@@ -16,6 +16,10 @@ pub enum PersistError {
     Open(std::io::Error),
     #[error("failed to create folder: {0}")]
     CreateFolder(std::io::Error),
+    #[error("failed to read folder contents: {0}")]
+    ReadFolder(std::io::Error),
+    #[error("failed to read the entry in the folder: {0}")]
+    ReadEntry(std::io::Error),
     #[error("failed to list contents of folder: {0}")]
     ListFolder(std::io::Error),
     #[error("failed to clear the folder: {0}")]
@@ -55,14 +59,14 @@ impl PersistInstance {
 
         let entries = fs::read_dir(storage_folder).map_err(PersistError::ListFolder)?;
         for entry in entries {
-            let dir = entry.map_err(PersistError::ListFolder)?;
+            let file = entry.map_err(PersistError::ListFolder)?;
             list.push(
-                dir.path()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap_or_else(|_| "path contains non-UTF-8 characters".to_string())
-                    .split(".bin")
-                    .collect::<String>(),
+                file.path()
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_str()
+                    .unwrap_or_else(|| "file name contains non-UTF-8 characters")
+                    .to_string(),
             );
         }
         Ok(list)
@@ -70,13 +74,22 @@ impl PersistInstance {
 
     /// clear method removes the storage folder from the PersistInstance
     pub fn clear(&self) -> Result<(), PersistError> {
-        let folder_path = self.get_storage_folder();
-        fs::remove_dir_all(folder_path).map_err(PersistError::ClearFolder)?;
+        let storage_folder = self.get_storage_folder();
+        let entries = fs::read_dir(storage_folder).map_err(PersistError::ReadFolder)?;
+
+        for entry in entries {
+            let entry = entry.map_err(PersistError::ReadEntry)?;
+            let path = entry.path();
+
+            if path.is_file() {
+                fs::remove_file(path).map_err(PersistError::RemoveFile)?;
+            }
+        }
         Ok(())
     }
 
     /// remove method deletes a key from the PersistInstance
-    pub fn remove(&self, key: String) -> Result<(), PersistError> {
+    pub fn remove(&self, key: &str) -> Result<(), PersistError> {
         let file_path = self.get_storage_file(&key);
         fs::remove_file(file_path).map_err(PersistError::RemoveFile)?;
         Ok(())
@@ -158,9 +171,9 @@ mod tests {
             service_name: ServiceName::from_str("test_list").unwrap(),
         };
 
-        persist.save("test_list", "test_list").unwrap();
+        persist.save("test_list", "test_key").unwrap();
 
-        let result = vec!["shuttle_persist/test_list/test_list".to_string()];
+        let result = vec!["test_list".to_string()];
         let list_result = persist.list().unwrap();
         assert_eq!(result, list_result);
     }
@@ -171,13 +184,10 @@ mod tests {
             service_name: ServiceName::from_str("test_clear").unwrap(),
         };
 
-        persist.save("test_clear", "test_clear").unwrap();
+        persist.save("test_clear", "test_key_clear").unwrap();
+        assert!(persist.list().unwrap().len() == 1);
         persist.clear().unwrap();
-        let clear_result = persist.list().unwrap_err();
-        assert_eq!(
-            clear_result.to_string(),
-            "failed to list contents of folder: No such file or directory (os error 2)"
-        );
+        assert!(persist.list().unwrap().is_empty());
     }
 
     #[test]
@@ -186,10 +196,10 @@ mod tests {
             service_name: ServiceName::from_str("test_remove").unwrap(),
         };
 
-        persist.save("test_remove", "test_remove").unwrap();
-        let list = persist.list().unwrap();
-        let _ = persist.remove(list[0].clone());
-        assert!(!list.contains(&"test_remove".to_string()));
+        persist.save("test_remove", "test_key_remove").unwrap();
+        assert!(persist.list().unwrap().len() == 1);
+        persist.remove(persist.list().unwrap()[0].as_str()).unwrap();
+        assert!(persist.list().unwrap().len() == 0);
     }
 
     #[test]

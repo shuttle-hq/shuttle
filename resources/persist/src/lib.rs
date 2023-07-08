@@ -199,7 +199,7 @@ mod tests {
         persist.save("test_remove", "test_key_remove").unwrap();
         assert!(persist.list().unwrap().len() == 1);
         persist.remove(persist.list().unwrap()[0].as_str()).unwrap();
-        assert!(persist.list().unwrap().len().is_empty());
+        assert!(persist.list().unwrap().is_empty());
     }
 
     #[test]

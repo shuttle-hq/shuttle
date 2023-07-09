@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 async-trait = { workspace = true }
-axum = { workspace = true, features = ["default", "headers"] }
+axum = { workspace = true, features = ["default", "headers", "http2"] }
 axum-server = { version = "0.4.4", features = ["tls-rustls"] }
 base64 = { workspace = true }
 bollard = "0.14.0"
@@ -16,7 +16,7 @@ clap = { workspace = true }
 fqdn = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
-hyper = { workspace = true, features = ["stream"] }
+hyper = { workspace = true, features = ["stream", "http2"] }
 hyper-reverse-proxy = { workspace = true }
 instant-acme = "0.2.0"
 lazy_static = "1.4.0"

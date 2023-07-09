@@ -13,6 +13,7 @@ use axum_server::tls_rustls::RustlsAcceptor;
 use fqdn::{fqdn, FQDN};
 use futures::future::{ready, Ready};
 use futures::prelude::*;
+use http::Version;
 use hyper::body::{Body, HttpBody};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
@@ -34,8 +35,11 @@ use crate::service::GatewayService;
 use crate::task::BoxedTask;
 use crate::{Error, ErrorKind};
 
-static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
+static H1_PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
+
+static H2_PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
+    Lazy::new(|| ReverseProxy::new(Client::builder().http2_only(true).build_http()));
 
 pub trait AsResponderTo<R> {
     fn as_responder_to(&self, req: R) -> Self;
@@ -103,14 +107,20 @@ impl UserProxy {
         task_sender: Sender<BoxedTask>,
         mut req: Request<Body>,
     ) -> Result<Response, Error> {
-        let span = debug_span!("proxy", http.method = %req.method(), http.host = ?req.headers().get("Host"), http.uri = %req.uri(), http.status_code = field::Empty, project = field::Empty);
+        let span = debug_span!("proxy", http.method = %req.method(), http.host = ?req.headers().get("Host"), http.uri = %req.uri(), http.status_code = field::Empty, http.version = ?req.version(), project = field::Empty);
         trace!(?req, "serving proxy request");
 
+        // First try to get the Host header. This header is not allowed in H2, so if we
+        // can't find it we try to get the host subcomponent from the URI authority.
         let fqdn = req
             .headers()
             .typed_get::<Host>()
             .map(|host| fqdn!(host.hostname()))
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))?;
+            .or_else(|| req.uri().host().map(|host| fqdn!(host)))
+            .ok_or_else(|| {
+                trace!("proxy request has no host header or URI authority host subcomponent");
+                Error::from_kind(ErrorKind::ProjectNotFound)
+            })?;
 
         let project_name =
             if fqdn.is_subdomain_of(&self.public) && fqdn.depth() - self.public.depth() == 1 {
@@ -151,10 +161,22 @@ impl UserProxy {
             propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
         });
 
-        let proxy = PROXY_CLIENT
-            .call(self.remote_addr.ip(), &target_url, req)
-            .await
-            .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
+        let proxy = match req.version() {
+            Version::HTTP_10 | Version::HTTP_11 => H1_PROXY_CLIENT
+                .call(self.remote_addr.ip(), &target_url, req)
+                .await
+                .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?,
+            Version::HTTP_2 => H2_PROXY_CLIENT
+                .call(self.remote_addr.ip(), &target_url, req)
+                .await
+                .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?,
+            protocol => {
+                return {
+                    trace!(protocol = ?protocol, "received request with unsupported protocol");
+                    Err(Error::from_kind(ErrorKind::ProjectUnavailable))
+                }
+            }
+        };
 
         let (parts, body) = proxy.into_parts();
         let body = <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();

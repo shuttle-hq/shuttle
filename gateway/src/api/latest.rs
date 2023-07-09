@@ -879,6 +879,7 @@ pub mod tests {
     use axum::headers::Authorization;
     use axum::http::Request;
     use futures::TryFutureExt;
+    use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
     use tokio::sync::mpsc::channel;
@@ -1124,27 +1125,19 @@ pub mod tests {
         router.call(create_project).await.unwrap();
 
         let resp = router.call(get_status()).await.unwrap();
-        let body = &hyper::body::to_bytes(resp.into_body())
-            .await
-            .unwrap()
-            .iter()
-            .cloned()
-            .collect::<Vec<u8>>();
+        let body = to_bytes(resp.into_body()).await.unwrap();
 
+        // The status check response will be a JSON array of objects.
         let resp: Value = serde_json::from_slice(&body).unwrap();
 
+        // The gateway health status will always be the first element in the array.
         assert_eq!(resp[0][1]["status"], "unhealthy".to_string());
 
         ctl_send.send(()).unwrap();
         done_recv.await.unwrap();
 
         let resp = router.call(get_status()).await.unwrap();
-        let body = &hyper::body::to_bytes(resp.into_body())
-            .await
-            .unwrap()
-            .iter()
-            .cloned()
-            .collect::<Vec<u8>>();
+        let body = to_bytes(resp.into_body()).await.unwrap();
 
         let resp: Value = serde_json::from_slice(&body).unwrap();
 
@@ -1154,12 +1147,7 @@ pub mod tests {
         let _ = worker.await;
 
         let resp = router.call(get_status()).await.unwrap();
-        let body = &hyper::body::to_bytes(resp.into_body())
-            .await
-            .unwrap()
-            .iter()
-            .cloned()
-            .collect::<Vec<u8>>();
+        let body = to_bytes(resp.into_body()).await.unwrap();
 
         let resp: Value = serde_json::from_slice(&body).unwrap();
 

@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 use std::future::Future;
 use std::io;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -27,7 +27,7 @@ use shuttle_common::backends::headers::XShuttleProject;
 use tokio::sync::mpsc::Sender;
 use tower::{Service, ServiceBuilder};
 use tower_sanitize_path::SanitizePath;
-use tracing::{debug_span, error, field, trace};
+use tracing::{debug_span, error, field, trace, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::{AcmeClient, ChallengeResponderLayer, CustomDomain};
@@ -153,38 +153,49 @@ impl UserProxy {
             .target_ip()?
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 
-        let target_url = format!("http://{}:{}", target_ip, 8000);
-
         let cx = span.context();
 
         global::get_text_map_propagator(|propagator| {
             propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
         });
 
-        let proxy = match req.version() {
-            Version::HTTP_10 | Version::HTTP_11 => H1_PROXY_CLIENT
-                .call(self.remote_addr.ip(), &target_url, req)
-                .await
-                .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?,
-            Version::HTTP_2 => H2_PROXY_CLIENT
-                .call(self.remote_addr.ip(), &target_url, req)
-                .await
-                .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?,
+        let client = match req.version() {
+            Version::HTTP_10 | Version::HTTP_11 => &H1_PROXY_CLIENT,
+            Version::HTTP_2 => &H2_PROXY_CLIENT,
             protocol => {
-                return {
-                    trace!(protocol = ?protocol, "received request with unsupported protocol");
-                    Err(Error::from_kind(ErrorKind::ProjectUnavailable))
-                }
+                trace!(protocol = ?protocol, "received request with unsupported protocol");
+                return Err(Error::from_kind(ErrorKind::ProjectUnavailable));
             }
         };
 
-        let (parts, body) = proxy.into_parts();
-        let body = <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();
-
-        span.record("http.status_code", parts.status.as_u16());
-
-        Ok(Response::from_parts(parts, body))
+        reverse_proxy(self.remote_addr.ip(), target_ip, req, client)
+            .instrument(span)
+            .await
     }
+}
+
+async fn reverse_proxy(
+    remote_ip: IpAddr,
+    target_ip: IpAddr,
+    req: Request<Body>,
+    client: &Lazy<ReverseProxy<HttpConnector<GaiResolver>>>,
+) -> Result<Response, Error> {
+    let target_url = format!("http://{}:{}", target_ip, 8000);
+
+    let response = client
+        .call(remote_ip, &target_url, req)
+        .await
+        .map_err(|error| {
+            trace!(error = ?error, "failed to proxy request to project");
+            Error::from_kind(ErrorKind::ProjectUnavailable)
+        })?;
+
+    let (parts, body) = response.into_parts();
+    let body = <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();
+
+    Span::current().record("http.status_code", parts.status.as_u16());
+
+    Ok(Response::from_parts(parts, body))
 }
 
 impl Service<Request<Body>> for UserProxy {

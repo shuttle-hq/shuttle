@@ -926,33 +926,81 @@ impl Shuttle {
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
-
+        let mut ctlr_c_notif =
+            tokio::signal::windows::ctrl_c().expect("Can not get the CtrlC signal receptor");
         // Start all the services.
         let mut runtimes: Vec<(
             Child,
             RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         )> = Vec::new();
+        let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {
-            Shuttle::add_runtime_info(
-                Shuttle::spin_local_runtime(
-                    &run_args,
-                    service,
-                    &provisioner_server,
-                    i as u16,
-                    provisioner_port,
-                )
-                .await?,
-                &mut runtimes,
-                &provisioner_server,
-            )
-            .await?;
+            signal_received = tokio::select! {
+                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
+                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &provisioner_server).await?;
+                    false
+                },
+                _ = ctlr_c_notif.recv() => {
+                    println!(
+                        "cargo-shuttle received Ctrl+C. Killing all the runtimes..."
+                    );
+                    true
+                }
+            };
+
+            if signal_received {
+                break;
+            }
         }
 
-        for (mut rt, _) in runtimes {
-            println!(
-                "a service future completed with exit status: {:?}",
-                rt.wait().await?.code()
-            );
+        // If prior signal received is set to true we must stop all the existing runtimes and
+        // exit the `local_run`.
+        if signal_received {
+            provisioner_server.abort();
+            for (mut rt, mut rt_client) in runtimes {
+                Shuttle::stop_runtime(&mut rt, &mut rt_client)
+                    .await
+                    .unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+            }
+            return Ok(());
+        }
+
+        // If no signal was received during runtimes initialization, then we must handle each runtime until
+        // completion and handle the signals during this time.
+        for (mut rt, mut rt_client) in runtimes {
+            // If we received a signal while waiting for any runtime we must stop the rest and exit
+            // the waiting loop.
+            if signal_received {
+                Shuttle::stop_runtime(&mut rt, &mut rt_client)
+                    .await
+                    .unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+                continue;
+            }
+
+            // Receiving a signal will stop the current runtime we're waiting for.
+            signal_received = tokio::select! {
+                res = rt.wait() => {
+                    println!(
+                        "a service future completed with exit status: {:?}",
+                        res.unwrap().code()
+                    );
+                    false
+                },
+                _ = ctlr_c_notif.recv() => {
+                    println!(
+                        "cargo-shuttle received Ctrl+C. Killing all the runtimes..."
+                    );
+                    provisioner_server.abort();
+                    Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+                    true
+                }
+            };
         }
 
         println!(

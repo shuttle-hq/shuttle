@@ -880,6 +880,7 @@ pub mod tests {
     use axum::http::Request;
     use futures::TryFutureExt;
     use hyper::StatusCode;
+    use serde_json::Value;
     use tokio::sync::mpsc::channel;
     use tokio::sync::oneshot;
     use tower::Service;
@@ -1123,18 +1124,45 @@ pub mod tests {
         router.call(create_project).await.unwrap();
 
         let resp = router.call(get_status()).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = &hyper::body::to_bytes(resp.into_body())
+            .await
+            .unwrap()
+            .iter()
+            .cloned()
+            .collect::<Vec<u8>>();
+
+        let resp: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(resp[0][1]["status"], "unhealthy".to_string());
 
         ctl_send.send(()).unwrap();
         done_recv.await.unwrap();
 
         let resp = router.call(get_status()).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
+        let body = &hyper::body::to_bytes(resp.into_body())
+            .await
+            .unwrap()
+            .iter()
+            .cloned()
+            .collect::<Vec<u8>>();
+
+        let resp: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(resp[0][1]["status"], "degraded".to_string());
 
         worker.abort();
         let _ = worker.await;
 
         let resp = router.call(get_status()).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = &hyper::body::to_bytes(resp.into_body())
+            .await
+            .unwrap()
+            .iter()
+            .cloned()
+            .collect::<Vec<u8>>();
+
+        let resp: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(resp[0][1]["status"], "unhealthy".to_string());
     }
 }

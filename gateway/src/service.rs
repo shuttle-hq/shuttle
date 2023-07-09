@@ -822,7 +822,7 @@ pub mod tests {
         );
 
         // Test project pagination, first create 20 test projects (including the one from above).
-        for p in (1..20).map(|p| format!("matrix-{p}")).into_iter() {
+        for p in (1..20).map(|p| format!("matrix-{p}")) {
             svc.create_project(ProjectName(p.clone()), neo.clone(), false, 0)
                 .await
                 .unwrap();

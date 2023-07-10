@@ -56,13 +56,11 @@ You can now start a local deployment of Shuttle and the required containers with
 USE_PANAMAX=disable make up
 ```
 
-<!-- markdownlint-disable no-blanks-blockquote -->
 > Note: `make up` does not start [panamax](https://github.com/panamax-rs/panamax) by default, if you do need to start panamax for local development, run this command with `make COMPOSE_PROFILES=panamax up`.
 
 > Note: `make up` can also be run with `SHUTTLE_DETACH=disable`, which means docker-compose will not be run with `--detach`. This is often desirable for local testing.
 
 > Note: Other useful commands can be found within the [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile).
-<!-- markdownlint-restore -->
 
 The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls.
 
@@ -400,4 +398,4 @@ git config --global core.autocrlf true
 
 After you run this command, you should be able to checkout projects that are maintained using CRLF (Windows) again.
 
-[^1]: <https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration#_core_autocrlf>
+[^1]: https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration#_core_autocrlf

@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use shuttle_common::models::deployment::CREATE_SERVICE_BODY_LIMIT;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     models::{
@@ -1000,6 +1001,12 @@ impl Shuttle {
         }
 
         deployment_req.data = self.make_archive()?;
+        if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
+            bail!(
+                "The project is too large - we have a {}MB project limit.",
+                CREATE_SERVICE_BODY_LIMIT / 1_000_000
+            );
+        }
 
         let deployment = client
             .deploy(self.ctx.project_name(), deployment_req)
@@ -1034,10 +1041,9 @@ impl Shuttle {
 
                             return Ok(CommandOutcome::DeploymentFailure);
                         }
-                        shuttle_common::deployment::State::Running
-                        | shuttle_common::deployment::State::Completed
-                        | shuttle_common::deployment::State::Stopped
-                        | shuttle_common::deployment::State::Unknown => {
+                        // Break on remaining end states: Running, Stopped, Completed or Unknown.
+                        end_state => {
+                            debug!(state = %end_state, "received end state, breaking deployment stream");
                             break;
                         }
                     };
@@ -1093,9 +1099,12 @@ impl Shuttle {
                         "State: Crashed - Deployment crashed after startup.".red()
                     );
                 }
-                _ => println!(
-                    "Deployment encountered an unexpected error - Please create a ticket to report this."
-                ),
+                state => {
+                    debug!("deployment logs stream received state: {state} when it expected to receive running state");
+                    println!(
+                    "Deployment entered an unexpected state - Please create a ticket to report this."
+                );
+                }
             }
 
             println!();
@@ -1123,7 +1132,7 @@ impl Shuttle {
             client,
         )
         .await?;
-        println!("Run `cargo shuttle deploy` to deploy your Shuttle service.");
+        println!("Run `cargo shuttle deploy --allow-dirty` to deploy your Shuttle service.");
 
         Ok(())
     }

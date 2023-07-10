@@ -821,65 +821,51 @@ pub mod tests {
             vec![matrix.clone()]
         );
 
-        let mut all_projects: Vec<ProjectName> = (1..60)
-            .map(|p| ProjectName(format!("matrix-{p}")))
-            .collect();
-        for p in &all_projects {
-            svc.create_project(p.clone(), neo.clone(), false, 0)
+        // Test project pagination, first create 20 test projects (including the one from above).
+        for p in (1..20).map(|p| format!("matrix-{p}")) {
+            svc.create_project(ProjectName(p.clone()), neo.clone(), false, 0)
                 .await
                 .unwrap();
         }
-        all_projects.insert(0, matrix.clone());
 
-        assert_eq!(
-            svc.iter_user_projects_detailed(&neo, 0, u32::MAX)
-                .await
-                .unwrap()
-                .map(|item| item.0)
-                .collect::<Vec<_>>(),
-            all_projects
-        );
-        assert_eq!(
-            svc.iter_user_projects_detailed(&neo, 0, 20)
-                .await
-                .unwrap()
-                .map(|item| item.0)
-                .collect::<Vec<_>>(),
-            all_projects[..20]
-        );
-        assert_eq!(
-            svc.iter_user_projects_detailed(&neo, 20, 20)
-                .await
-                .unwrap()
-                .map(|item| item.0)
-                .collect::<Vec<_>>(),
-            all_projects[20..40]
-        );
-        assert_eq!(
-            svc.iter_user_projects_detailed(&neo, 200, 20)
-                .await
-                .unwrap()
-                .map(|item| item.0)
-                .collect::<Vec<_>>(),
-            vec![]
-        );
+        // We need to fetch all of them from the DB since they are ordered by created_at and project_name,
+        // and created_at will be the same for some of them.
+        let all_projects = svc
+            .iter_user_projects_detailed(&neo, 0, u32::MAX)
+            .await
+            .unwrap()
+            .map(|item| item.0)
+            .collect::<Vec<_>>();
 
-        // assert_eq!(
-        //     svc.iter_user_projects_detailed_filtered(neo.clone(), "ready".to_string())
-        //         .await
-        //         .unwrap()
-        //         .next()
-        //         .expect("to get one project with its user and a valid Ready status"),
-        //     (matrix.clone(), project)
-        // );
+        assert_eq!(all_projects.len(), 20);
 
-        // assert_eq!(
-        //     svc.iter_user_projects_detailed_filtered(neo.clone(), "destroyed".to_string())
-        //         .await
-        //         .unwrap()
-        //         .next(),
-        //     None
-        // );
+        // Get first 5 projects.
+        let paginated = svc
+            .iter_user_projects_detailed(&neo, 0, 5)
+            .await
+            .unwrap()
+            .map(|item| item.0)
+            .collect::<Vec<_>>();
+
+        assert_eq!(all_projects[..5], paginated);
+
+        // Get 10 projects starting at an offset of 10.
+        let paginated = svc
+            .iter_user_projects_detailed(&neo, 10, 10)
+            .await
+            .unwrap()
+            .map(|item| item.0)
+            .collect::<Vec<_>>();
+        assert_eq!(all_projects[10..20], paginated);
+
+        // Get 20 projects starting at an offset of 200.
+        let paginated = svc
+            .iter_user_projects_detailed(&neo, 200, 20)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert!(paginated.is_empty());
 
         let mut work = svc
             .new_task()

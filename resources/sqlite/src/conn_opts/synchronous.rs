@@ -1,8 +1,6 @@
-use std::str::FromStr;
-
 use serde::{Deserialize, Serialize};
 
-use sqlx::error::Error;
+use sqlx::sqlite::SqliteSynchronous;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum ShuttleSqliteSynchronous {
@@ -12,38 +10,19 @@ pub enum ShuttleSqliteSynchronous {
     Extra,
 }
 
-impl ShuttleSqliteSynchronous {
-    pub(crate) fn as_str(&self) -> &'static str {
-        match self {
-            ShuttleSqliteSynchronous::Off => "OFF",
-            ShuttleSqliteSynchronous::Normal => "NORMAL",
-            ShuttleSqliteSynchronous::Full => "FULL",
-            ShuttleSqliteSynchronous::Extra => "EXTRA",
-        }
-    }
-}
-
 impl Default for ShuttleSqliteSynchronous {
     fn default() -> Self {
         ShuttleSqliteSynchronous::Full
     }
 }
 
-impl FromStr for ShuttleSqliteSynchronous {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Error> {
-        Ok(match &*s.to_ascii_lowercase() {
-            "off" => ShuttleSqliteSynchronous::Off,
-            "normal" => ShuttleSqliteSynchronous::Normal,
-            "full" => ShuttleSqliteSynchronous::Full,
-            "extra" => ShuttleSqliteSynchronous::Extra,
-
-            _ => {
-                return Err(Error::Configuration(
-                    format!("unknown value {:?} for `synchronous`", s).into(),
-                ));
-            }
-        })
+impl From<&ShuttleSqliteSynchronous> for SqliteSynchronous {
+    fn from(value: &ShuttleSqliteSynchronous) -> Self {
+        match value {
+            ShuttleSqliteSynchronous::Off => SqliteSynchronous::Off,
+            ShuttleSqliteSynchronous::Normal => SqliteSynchronous::Normal,
+            ShuttleSqliteSynchronous::Full => SqliteSynchronous::Full,
+            ShuttleSqliteSynchronous::Extra => SqliteSynchronous::Extra,
+        }
     }
 }

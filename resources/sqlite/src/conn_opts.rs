@@ -170,7 +170,6 @@ impl TryFrom<&ShuttleSqliteConnOpts> for SqliteConnectOptions {
             serialized,
             command_channel_size,
             row_channel_size,
-            ..
         } = opts;
 
         let db_path = storage_path.join(&filename);
@@ -194,11 +193,11 @@ impl TryFrom<&ShuttleSqliteConnOpts> for SqliteConnectOptions {
             .row_buffer_size(*row_channel_size);
 
         if let Some(journal_mode) = journal_mode {
-            opts = opts.pragma("journal_mode", journal_mode.as_str());
+            opts = opts.journal_mode(journal_mode.into());
         }
 
         if let Some(synchronous) = synchronous {
-            opts = opts.pragma("synchronous", synchronous.as_str());
+            opts = opts.synchronous(synchronous.into());
         }
 
         if let Some(vfs) = vfs {

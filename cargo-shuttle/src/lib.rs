@@ -1132,7 +1132,7 @@ impl Shuttle {
             client,
         )
         .await?;
-        println!("Run `cargo shuttle deploy` to deploy your Shuttle service.");
+        println!("Run `cargo shuttle deploy --allow-dirty` to deploy your Shuttle service.");
 
         Ok(())
     }

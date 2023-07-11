@@ -223,7 +223,6 @@ where
         );
         trace!("got factory");
 
-        // TODO: make an argument when starting runtime
         let destination = self.logger_uri.to_string();
         let logger = Logger::new(OtlpRecorder::new(&deployment_id, &destination));
 

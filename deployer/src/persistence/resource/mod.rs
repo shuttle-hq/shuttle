@@ -100,6 +100,7 @@ impl FromStr for Type {
                 "static_folder" => Ok(Self::StaticFolder),
                 "persist" => Ok(Self::Persist),
                 "turso" => Ok(Self::Turso),
+                "custom" => Ok(Self::Custom),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }

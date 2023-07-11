@@ -15,7 +15,7 @@ use shuttle_common::models::deployment::{
 };
 use shuttle_common::models::project::IDLE_MINUTES;
 use shuttle_common::models::resource::get_resources_table;
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::RawProjectName;
 use shuttle_common::{resource, ApiKey};
 use shuttle_proto::runtime::runtime_client::RuntimeClient;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, StopRequest};
@@ -1056,7 +1056,7 @@ impl Shuttle {
         &self,
         states_to_check: &[project::State],
         fut: Fut,
-        project_name: &'a ProjectName,
+        project_name: &'a RawProjectName,
         client: &'a Client,
     ) -> Result<(), anyhow::Error>
     where
@@ -1249,7 +1249,7 @@ pub enum CommandOutcome {
 #[cfg(test)]
 mod tests {
     use flate2::read::GzDecoder;
-    use shuttle_common::project::ProjectName;
+    use shuttle_common::project::RawProjectName;
     use tar::Archive;
     use tempfile::TempDir;
 
@@ -1372,7 +1372,7 @@ version = "0.1.0"
 
         let project_args = ProjectArgs {
             working_directory: working_directory.to_path_buf(),
-            name: Some(ProjectName::from_str("secret").unwrap()),
+            name: Some(RawProjectName::from_str("secret").unwrap()),
         };
 
         let mut entries = get_archive_entries(project_args);
@@ -1409,7 +1409,7 @@ version = "0.1.0"
 
         let project_args = ProjectArgs {
             working_directory: working_directory.to_path_buf(),
-            name: Some(ProjectName::from_str("exclude_target").unwrap()),
+            name: Some(RawProjectName::from_str("exclude_target").unwrap()),
         };
 
         let mut entries = get_archive_entries(project_args);

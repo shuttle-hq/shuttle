@@ -11,6 +11,9 @@ service Runtime {
   // Stop a started service
   rpc Stop(StopRequest) returns (StopResponse);
 
+  // Ping a service to check the health
+  rpc HealthCheck(Ping) returns (Pong);
+
   // Channel to notify a service has been stopped
   rpc SubscribeStop(SubscribeStopRequest) returns (stream SubscribeStopResponse);
 }
@@ -78,3 +81,6 @@ enum StopReason {
   // Service crashed
   Crash = 2;
 }
+
+message Ping {}
+message Pong {}

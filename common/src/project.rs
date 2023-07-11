@@ -16,9 +16,9 @@ use std::str::FromStr;
 /// - It does not contain profanity.
 /// - It is not a reserved word.
 #[derive(Clone, Serialize, Debug, Eq, PartialEq)]
-pub struct ProjectName(String);
+pub struct RawProjectName(String);
 
-impl<'de> Deserialize<'de> for ProjectName {
+impl<'de> Deserialize<'de> for RawProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -28,13 +28,13 @@ impl<'de> Deserialize<'de> for ProjectName {
     }
 }
 
-impl std::fmt::Display for ProjectName {
+impl std::fmt::Display for RawProjectName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl ProjectName {
+impl RawProjectName {
     pub fn is_valid(hostname: &str) -> bool {
         fn is_valid_char(byte: u8) -> bool {
             matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_')
@@ -70,18 +70,18 @@ impl ProjectName {
     }
 }
 
-impl AsRef<String> for ProjectName {
+impl AsRef<String> for RawProjectName {
     fn as_ref(&self) -> &String {
         &self.0
     }
 }
 
-impl FromStr for ProjectName {
+impl FromStr for RawProjectName {
     type Err = ProjectNameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match ProjectName::is_valid(s) {
-            true => Ok(ProjectName(s.to_string())),
+        match RawProjectName::is_valid(s) {
+            true => Ok(RawProjectName(s.to_string())),
             false => Err(ProjectNameError::InvalidName(s.to_string())),
         }
     }
@@ -135,7 +135,7 @@ pub mod tests {
             "myassets",
             "dachterrasse",
         ] {
-            let project_name = ProjectName::from_str(hostname);
+            let project_name = RawProjectName::from_str(hostname);
             assert!(project_name.is_ok(), "{:?} was err", hostname);
         }
     }
@@ -157,7 +157,7 @@ pub mod tests {
             "test-condom-condom",
             "shuttle.rs",
         ] {
-            let project_name = ProjectName::from_str(hostname);
+            let project_name = RawProjectName::from_str(hostname);
             assert!(project_name.is_err(), "{:?} was ok", hostname);
         }
     }

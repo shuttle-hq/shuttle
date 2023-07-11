@@ -1,7 +1,7 @@
 use std::{fs, io, path::PathBuf};
 
 use clap::{Error, Parser, Subcommand};
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::RawProjectName;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -54,7 +54,7 @@ pub enum AcmeCommand {
 
         /// Project to request certificate for
         #[arg(long)]
-        project: ProjectName,
+        project: RawProjectName,
 
         /// Path to acme credentials file
         /// This should have been created with `acme create-account`
@@ -70,7 +70,7 @@ pub enum AcmeCommand {
 
         /// Project to renew the certificate for
         #[arg(long)]
-        project: ProjectName,
+        project: RawProjectName,
 
         /// Path to acme credentials file
         /// This should have been created with `acme create-account`

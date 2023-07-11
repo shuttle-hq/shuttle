@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::RawProjectName;
 use shuttle_common::{ApiKey, ApiUrl, API_URL_DEFAULT};
 use tracing::trace;
 
@@ -147,7 +147,7 @@ impl GlobalConfig {
 /// Project-local config for things like customizing project name
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
-    pub name: Option<ProjectName>,
+    pub name: Option<RawProjectName>,
 }
 
 /// A handler for configuration files. The type parameter `M` is the [`ConfigManager`] which handles
@@ -374,7 +374,7 @@ impl RequestContext {
     ///
     /// # Panics
     /// Panics if the project configuration has not been loaded.
-    pub fn project_name(&self) -> &ProjectName {
+    pub fn project_name(&self) -> &RawProjectName {
         self.project
             .as_ref()
             .unwrap()
@@ -390,7 +390,7 @@ impl RequestContext {
 mod tests {
     use std::{path::PathBuf, str::FromStr};
 
-    use shuttle_common::project::ProjectName;
+    use shuttle_common::project::RawProjectName;
 
     use crate::{args::ProjectArgs, config::RequestContext};
 
@@ -434,7 +434,7 @@ mod tests {
     fn setting_name_overrides_name_in_config() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/"),
-            name: Some(ProjectName::from_str("my-fancy-project-name").unwrap()),
+            name: Some(RawProjectName::from_str("my-fancy-project-name").unwrap()),
         };
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();

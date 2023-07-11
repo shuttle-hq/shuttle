@@ -100,7 +100,7 @@ impl Builder for Service {
         &self,
         request: Request<BuildRequest>,
     ) -> Result<Response<BuildResponse>, Status> {
-        request.verify(Scope::DeploymentPush)?;
+        request.verify(Scope::DeploymentWrite)?;
 
         let BuildRequest {
             deployment_id,

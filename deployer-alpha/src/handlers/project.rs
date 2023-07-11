@@ -5,7 +5,7 @@ use axum::extract::{Extension, FromRequestParts, Path};
 use axum::http::request::Parts;
 use axum::RequestPartsExt;
 use hyper::StatusCode;
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::RawProjectName;
 use tracing::error;
 
 /// Gaurd to ensure request are for the project served by this deployer
@@ -37,14 +37,14 @@ where
         };
 
         // This extractor requires the ProjectName extension to be set
-        let Extension(expected_project_name) = match parts.extract::<Extension<ProjectName>>().await
-        {
-            Ok(expected) => expected,
-            Err(_) => {
-                error!("ProjectName extension is not set");
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
-            }
-        };
+        let Extension(expected_project_name) =
+            match parts.extract::<Extension<RawProjectName>>().await {
+                Ok(expected) => expected,
+                Err(_) => {
+                    error!("ProjectName extension is not set");
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            };
 
         if project_name == expected_project_name.as_str() {
             Ok(ProjectNameGuard)

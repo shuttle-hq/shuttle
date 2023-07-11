@@ -22,8 +22,8 @@ use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
         runtime_server::{Runtime, RuntimeServer},
-        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
-        StopResponse, SubscribeStopRequest, SubscribeStopResponse,
+        LoadRequest, LoadResponse, Ping, Pong, StartRequest, StartResponse, StopReason,
+        StopRequest, StopResponse, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
 use shuttle_service::{Environment, Factory, Service, ServiceName};
@@ -49,7 +49,7 @@ mod args;
 
 pub async fn start(loader: impl Loader<ProvisionerFactory, OtlpRecorder> + Send + 'static) {
     let args = Args::parse().expect("could not parse arguments");
-    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
+    let addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), args.port);
 
     let auth_client = shuttle_proto::auth::client(&args.auth_uri)
         .await
@@ -417,5 +417,12 @@ where
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
+    }
+
+    async fn health_check(
+        &self,
+        _request: tonic::Request<Ping>,
+    ) -> Result<tonic::Response<Pong>, tonic::Status> {
+        Ok(Response::new(Pong {}))
     }
 }

@@ -292,3 +292,7 @@ pub mod builder {
 pub mod logger {
     include!("generated/logger.rs");
 }
+
+pub mod deployer {
+    include!("generated/deployer.rs");
+}

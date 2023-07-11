@@ -70,7 +70,7 @@ pub use shuttle_codegen::main;
 #[cfg(feature = "builder")]
 pub mod builder;
 
-pub use shuttle_common::{deployment::Environment, project::ProjectName as ServiceName};
+pub use shuttle_common::{deployment::Environment, project::RawProjectName as ServiceName};
 
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///

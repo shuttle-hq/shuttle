@@ -705,12 +705,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "base16ct"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "349a06037c7bf932dd7e7d1f653678b2038b9ad46a74102f1fc7bd7872678cce"
-
-[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1688,7 +1682,16 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d07adf7be193b71cc36b193d0f5fe60b918a3a9db4dad0449f57bcfd519704a3"
 dependencies = [
- "derive_builder_macro",
+ "derive_builder_macro 0.11.2",
+]
+
+[[package]]
+name = "derive_builder"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d67778784b508018359cbc8696edb3db78160bab2c2a28ba7f56ef6932997f8"
+dependencies = [
+ "derive_builder_macro 0.12.0",
 ]
 
 [[package]]
@@ -1704,12 +1707,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive_builder_core"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c11bdc11a0c47bc7d37d582b5285da6849c96681023680b906673c5707af7b0f"
+dependencies = [
+ "darling 0.14.4",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "derive_builder_macro"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f0314b72bed045f3a68671b3c86328386762c93f82d98c65c3cb5e5f573dd68"
 dependencies = [
- "derive_builder_core",
+ "derive_builder_core 0.11.2",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "derive_builder_macro"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebcda35c7a396850a55ffeac740804b40ffec779b98fffbb1738f4033f0ee79e"
+dependencies = [
+ "derive_builder_core 0.12.0",
  "syn 1.0.109",
 ]
 
@@ -3632,7 +3657,7 @@ version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98135224dd4faeb24c05a2fac911ed53ea6b09ecb09d7cada1cb79963ab2ee34"
 dependencies = [
- "derive_builder",
+ "derive_builder 0.11.2",
  "getset",
  "serde",
  "serde_json",
@@ -5112,13 +5137,18 @@ dependencies = [
 name = "shuttle-builder"
 version = "0.18.0"
 dependencies = [
+ "async-recursion",
  "async-trait",
  "clap",
+ "dirs 5.0.1",
  "flate2",
  "hex",
  "nbuild-core",
+ "oci-spec",
  "portpicker",
  "pretty_assertions",
+ "regex",
+ "sha2",
  "shuttle-common",
  "shuttle-common-tests",
  "shuttle-proto",
@@ -5126,11 +5156,14 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-stream",
+ "tokio-tar",
  "toml 0.5.11",
  "tonic",
  "tracing",
  "tracing-subscriber",
  "ulid",
+ "url",
 ]
 
 [[package]]
@@ -5190,6 +5223,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "ttl_cache",
+ "ulid",
  "utoipa",
  "uuid",
 ]
@@ -5205,38 +5239,42 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.1.0"
+version = "0.18.0"
 dependencies = [
  "anyhow",
- "async-recursion",
+ "async-trait",
  "axum",
- "base16ct",
+ "bollard",
  "bytes",
+ "chrono",
  "clap",
- "dirs 5.0.1",
- "flate2",
+ "crossbeam-channel",
+ "derive_builder 0.12.0",
+ "fqdn",
  "futures",
+ "home",
  "http",
  "hyper",
  "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=master)",
- "oci-spec",
  "once_cell",
- "regex",
- "reqwest",
- "rmp-serde",
+ "opentelemetry",
+ "opentelemetry-http",
+ "rand",
  "serde",
  "serde_json",
- "sha2",
  "shuttle-common",
  "shuttle-proto",
+ "sqlx",
+ "strum",
  "thiserror",
  "tokio",
  "tokio-stream",
- "tokio-tar",
+ "tonic",
+ "tower",
  "tracing",
+ "tracing-opentelemetry",
  "tracing-subscriber",
- "ureq",
- "url",
+ "ulid",
  "utoipa",
  "uuid",
 ]
@@ -5251,7 +5289,6 @@ dependencies = [
  "axum-extra",
  "axum-server",
  "base64 0.13.1",
- "bollard",
  "chrono",
  "clap",
  "colored",
@@ -5263,7 +5300,6 @@ dependencies = [
  "instant-acme",
  "jsonwebtoken",
  "lazy_static",
- "num_cpus",
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",
@@ -5283,6 +5319,7 @@ dependencies = [
  "sqlx",
  "strum",
  "tempfile",
+ "thiserror",
  "tokio",
  "tonic",
  "tower",
@@ -6520,6 +6557,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13a3aaa69b04e5b66cc27309710a569ea23593612387d67daaf102e73aa974fd"
 dependencies = [
  "rand",
+ "serde",
+ "uuid",
 ]
 
 [[package]]
@@ -6593,24 +6632,6 @@ name = "untrusted"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
-
-[[package]]
-name = "ureq"
-version = "2.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "338b31dd1314f68f3aabf3ed57ab922df95ffcd902476ca7ba3c4ce7b908c46d"
-dependencies = [
- "base64 0.13.1",
- "flate2",
- "log",
- "once_cell",
- "rustls 0.20.8",
- "serde",
- "serde_json",
- "url",
- "webpki",
- "webpki-roots",
-]
 
 [[package]]
 name = "url"

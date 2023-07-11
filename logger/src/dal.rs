@@ -8,8 +8,9 @@ use opentelemetry_proto::tonic::{
 };
 use prost_types::Timestamp;
 use serde_json::Value;
-use shuttle_common::backends::tracing::{
-    from_any_value_kv_to_serde_json_map, from_any_value_to_serde_json_value,
+use shuttle_common::{
+    backends::tracing::{from_any_value_kv_to_serde_json_map, from_any_value_to_serde_json_value},
+    log,
 };
 use shuttle_proto::logger::{self, LogItem};
 use sqlx::{
@@ -152,32 +153,12 @@ impl From<LogLevel> for logger::LogLevel {
 
 impl From<SeverityNumber> for LogLevel {
     fn from(severity: SeverityNumber) -> Self {
-        match severity {
-            SeverityNumber::Unspecified => Self::Trace,
-            SeverityNumber::Trace
-            | SeverityNumber::Trace2
-            | SeverityNumber::Trace3
-            | SeverityNumber::Trace4 => Self::Trace,
-            SeverityNumber::Debug
-            | SeverityNumber::Debug2
-            | SeverityNumber::Debug3
-            | SeverityNumber::Debug4 => Self::Debug,
-            SeverityNumber::Info
-            | SeverityNumber::Info2
-            | SeverityNumber::Info3
-            | SeverityNumber::Info4 => Self::Info,
-            SeverityNumber::Warn
-            | SeverityNumber::Warn2
-            | SeverityNumber::Warn3
-            | SeverityNumber::Warn4 => Self::Warn,
-            SeverityNumber::Error
-            | SeverityNumber::Error2
-            | SeverityNumber::Error3
-            | SeverityNumber::Error4
-            | SeverityNumber::Fatal
-            | SeverityNumber::Fatal2
-            | SeverityNumber::Fatal3
-            | SeverityNumber::Fatal4 => Self::Error,
+        match severity.into() {
+            log::Level::Trace => Self::Trace,
+            log::Level::Debug => Self::Trace,
+            log::Level::Info => Self::Trace,
+            log::Level::Warn => Self::Trace,
+            log::Level::Error => Self::Trace,
         }
     }
 }

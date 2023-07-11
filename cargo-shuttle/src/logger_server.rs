@@ -7,11 +7,10 @@ use opentelemetry_proto::tonic::{
         logs_service_server::{LogsService, LogsServiceServer},
         ExportLogsServiceRequest, ExportLogsServiceResponse,
     },
-    logs::v1::{LogRecord, SeverityNumber},
+    logs::v1::LogRecord,
 };
 use shuttle_common::{
     backends::tracing::{from_any_value_kv_to_serde_json_map, from_any_value_to_serde_json_value},
-    log::Level,
     tracing::{FILEPATH_KEY, LINENO_KEY, MESSAGE_KEY, TARGET_KEY},
     LogItem,
 };
@@ -67,7 +66,7 @@ impl LogsService for LocalLogger {
 
 /// Try to get a [LogItem] from an OTLP [LogRecord]
 fn try_from_log_record(log_record: LogRecord) -> Option<LogItem> {
-    let level = from_severity_number_to_level(log_record.severity_number());
+    let level = log_record.severity_number().into();
     let naive = NaiveDateTime::from_timestamp_opt(
         (log_record.time_unix_nano / 1_000_000_000)
             .try_into()
@@ -98,34 +97,4 @@ fn try_from_log_record(log_record: LogRecord) -> Option<LogItem> {
             .unwrap_or_default(),
         fields: serde_json::to_vec(&serde_json::Value::Object(fields)).unwrap_or_default(),
     })
-}
-
-fn from_severity_number_to_level(severity_number: SeverityNumber) -> Level {
-    match severity_number {
-        SeverityNumber::Unspecified => Level::Trace,
-        SeverityNumber::Trace
-        | SeverityNumber::Trace2
-        | SeverityNumber::Trace3
-        | SeverityNumber::Trace4 => Level::Trace,
-        SeverityNumber::Debug
-        | SeverityNumber::Debug2
-        | SeverityNumber::Debug3
-        | SeverityNumber::Debug4 => Level::Debug,
-        SeverityNumber::Info
-        | SeverityNumber::Info2
-        | SeverityNumber::Info3
-        | SeverityNumber::Info4 => Level::Info,
-        SeverityNumber::Warn
-        | SeverityNumber::Warn2
-        | SeverityNumber::Warn3
-        | SeverityNumber::Warn4 => Level::Warn,
-        SeverityNumber::Error
-        | SeverityNumber::Error2
-        | SeverityNumber::Error3
-        | SeverityNumber::Error4
-        | SeverityNumber::Fatal
-        | SeverityNumber::Fatal2
-        | SeverityNumber::Fatal3
-        | SeverityNumber::Fatal4 => Level::Error,
-    }
 }

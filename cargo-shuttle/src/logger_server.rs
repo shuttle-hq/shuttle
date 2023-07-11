@@ -12,6 +12,7 @@ use opentelemetry_proto::tonic::{
 use shuttle_common::{
     backends::tracing::{from_any_value_kv_to_serde_json_map, from_any_value_to_serde_json_value},
     log::Level,
+    tracing::{FILEPATH_KEY, LINENO_KEY, MESSAGE_KEY, TARGET_KEY},
     LogItem,
 };
 use tokio::task::JoinHandle;
@@ -77,7 +78,7 @@ fn try_from_log_record(log_record: LogRecord) -> Option<LogItem> {
     let mut fields = from_any_value_kv_to_serde_json_map(log_record.attributes);
     let message = from_any_value_to_serde_json_value(log_record.body?);
 
-    fields.insert("message".to_string(), message);
+    fields.insert(MESSAGE_KEY.to_string(), message);
 
     Some(LogItem {
         id: Default::default(),
@@ -85,14 +86,14 @@ fn try_from_log_record(log_record: LogRecord) -> Option<LogItem> {
         state: shuttle_common::deployment::State::Running,
         level,
         file: fields
-            .remove("code.filepath")
+            .remove(FILEPATH_KEY)
             .and_then(|v| v.as_str().map(|s| s.to_string())),
         line: fields
-            .remove("code.lineno")
+            .remove(LINENO_KEY)
             .and_then(|v| v.as_u64())
             .map(|u| u as u32),
         target: fields
-            .remove("target")
+            .remove(TARGET_KEY)
             .and_then(|v| v.as_str().map(|s| s.to_string()))
             .unwrap_or_default(),
         fields: serde_json::to_vec(&serde_json::Value::Object(fields)).unwrap_or_default(),

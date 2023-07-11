@@ -19,7 +19,7 @@ tracing = { workspace = true }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["claims", "error", "service", "wasm", "models", "backend"]
+features = ["claims", "service", "wasm", "models", "backend"]
 
 [dev-dependencies]
 tonic-build = { workspace = true }

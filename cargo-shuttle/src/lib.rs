@@ -2,11 +2,13 @@ mod args;
 mod client;
 pub mod config;
 mod init;
+mod logger_server;
 mod provisioner_server;
 
 use args::DeployArgs;
 use args::LogoutArgs;
 use indicatif::ProgressBar;
+use logger_server::LocalLogger;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::deployment::{
     get_deployments_table, DeploymentRequest, GIT_STRINGS_MAX_LENGTH,
@@ -16,7 +18,7 @@ use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::RawProjectName;
 use shuttle_common::{resource, ApiKey};
 use shuttle_proto::runtime::runtime_client::RuntimeClient;
-use shuttle_proto::runtime::{self, LoadRequest, StartRequest, StopRequest, SubscribeLogsRequest};
+use shuttle_proto::runtime::{self, LoadRequest, StartRequest, StopRequest};
 
 use tokio::process::Child;
 use tokio::task::JoinHandle;
@@ -476,8 +478,10 @@ impl Shuttle {
         run_args: &RunArgs,
         service: &BuiltService,
         provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
-        i: u16,
         provisioner_port: u16,
+        logger_server: &JoinHandle<Result<(), tonic::transport::Error>>,
+        logger_port: u16,
+        i: u16,
     ) -> Result<
         Option<(
             Child,
@@ -566,6 +570,7 @@ impl Shuttle {
             is_wasm,
             runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{provisioner_port}"),
+            &format!("http://localhost:{logger_port}"),
             None,
             run_args.port - (1 + i),
             runtime_path,
@@ -573,11 +578,13 @@ impl Shuttle {
         .await
         .map_err(|err| {
             provisioner_server.abort();
+            logger_server.abort();
             err
         })?;
 
         let service_name = service.service_name()?;
         let load_request = tonic::Request::new(LoadRequest {
+            deployment_id: Default::default(),
             path: executable_path
                 .into_os_string()
                 .into_string()
@@ -592,6 +599,7 @@ impl Shuttle {
             .load(load_request)
             .or_else(|err| async {
                 provisioner_server.abort();
+                logger_server.abort();
                 runtime.kill().await?;
                 Err(err)
             })
@@ -610,23 +618,6 @@ impl Shuttle {
             .collect();
 
         println!("{}", get_resources_table(&resources, service_name.as_str()));
-
-        let mut stream = runtime_client
-            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
-            .or_else(|err| async {
-                provisioner_server.abort();
-                runtime.kill().await?;
-                Err(err)
-            })
-            .await?
-            .into_inner();
-
-        tokio::spawn(async move {
-            while let Ok(Some(log)) = stream.message().await {
-                let log: shuttle_common::LogItem = log.try_into().expect("to convert log");
-                println!("{log}");
-            }
-        });
 
         let addr = SocketAddr::new(
             if run_args.external {
@@ -654,6 +645,7 @@ impl Shuttle {
             .start(tonic::Request::new(start_request))
             .or_else(|err| async {
                 provisioner_server.abort();
+                logger_server.abort();
                 runtime.kill().await?;
                 Err(err)
             })
@@ -692,12 +684,15 @@ impl Shuttle {
             Child,
             RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         )>,
-        provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
+        extra_servers: &[&JoinHandle<Result<(), tonic::transport::Error>>],
     ) -> Result<(), Status> {
         match runtime {
             Some(inner) => existing_runtimes.push(inner),
             None => {
-                provisioner_server.abort();
+                for server in extra_servers {
+                    server.abort();
+                }
+
                 for rt_info in existing_runtimes {
                     let mut errored_out = false;
                     // Stopping all runtimes gracefully first, but if this errors out the function kills the runtime forcefully.
@@ -754,7 +749,7 @@ impl Shuttle {
     ) -> Result<(JoinHandle<Result<(), tonic::transport::Error>>, u16)> {
         let provisioner = LocalProvisioner::new()?;
         let provisioner_port =
-            portpicker::pick_unused_port().expect("unable to find available port");
+            portpicker::pick_unused_port().expect("unable to find available port for provisioner");
         let provisioner_server = provisioner.start(SocketAddr::new(
             Ipv4Addr::LOCALHOST.into(),
             provisioner_port,
@@ -763,10 +758,21 @@ impl Shuttle {
         Ok((provisioner_server, provisioner_port))
     }
 
+    async fn setup_local_logger() -> Result<(JoinHandle<Result<(), tonic::transport::Error>>, u16)>
+    {
+        let logger = LocalLogger::new();
+        let logger_port =
+            portpicker::pick_unused_port().expect("unable to find available port for logger");
+        let logger_server = logger.start(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), logger_port));
+
+        Ok((logger_server, logger_port))
+    }
+
     #[cfg(target_family = "unix")]
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         let services = Shuttle::pre_local_run(self, &run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
+        let (logger_server, logger_port) = Shuttle::setup_local_logger().await?;
         let mut sigterm_notif =
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
                 .expect("Can not get the SIGTERM signal receptor");
@@ -784,8 +790,8 @@ impl Shuttle {
             // We must cover the case of starting multiple workspace services and receiving a signal in parallel.
             // This must stop all the existing runtimes and creating new ones.
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
-                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &provisioner_server).await?;
+                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, provisioner_port, &logger_server, logger_port, i as u16) => {
+                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &[&provisioner_server, &logger_server]).await?;
                     false
                 },
                 _ = sigterm_notif.recv() => {
@@ -879,6 +885,7 @@ impl Shuttle {
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         let services = Shuttle::pre_local_run(&self, &run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
+        let (logger_server, logger_port) = Shuttle::setup_local_logger().await?;
 
         // Start all the services.
         let mut runtimes: Vec<(
@@ -891,8 +898,10 @@ impl Shuttle {
                     &run_args,
                     service,
                     &provisioner_server,
-                    i as u16,
                     provisioner_port,
+                    logger_server,
+                    logger_port,
+                    i as u16,
                 )
                 .await?,
                 &mut runtimes,

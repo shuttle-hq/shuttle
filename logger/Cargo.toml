@@ -9,7 +9,7 @@ repository.workspace = true
 async-trait = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-opentelemetry-proto = { version = "0.2.0", features = ["gen-tonic", "logs"] }
+opentelemetry-proto = { workspace = true, features = ["gen-tonic", "logs"] }
 prost-types = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = [

@@ -4,7 +4,7 @@ use anyhow::Context;
 use shuttle_common::claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer};
 use shuttle_proto::runtime::{
     runtime_client::{self, RuntimeClient},
-    Ping, StopRequest, SubscribeLogsRequest,
+    Ping, StopRequest,
 };
 use tonic::transport::{Channel, Endpoint};
 use tower::ServiceBuilder;
@@ -93,26 +93,5 @@ impl RuntimeManager {
             trace!("no client running");
             false
         }
-    }
-
-    pub async fn logs_subscribe(&self, service_id: &Ulid) -> anyhow::Result<()> {
-        let mut stream = self
-            .runtimes
-            .lock()
-            .await
-            .get_mut(service_id)
-            .context(format!("No runtime client for deployment {service_id}"))?
-            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
-            .await
-            .context("subscribing to runtime logs stream")?
-            .into_inner();
-
-        tokio::spawn(async move {
-            while let Ok(Some(log)) = stream.message().await {
-                println!("{log:?}");
-            }
-        });
-
-        Ok(())
     }
 }

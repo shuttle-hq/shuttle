@@ -77,7 +77,6 @@ pub async fn task<D: Dal + Sync + 'static>(
             .await
             .expect("to set up a runtime client against a ready deployment");
         let claim = runnable.claim.clone();
-        let runtime_manager = runtime_manager.clone();
         let dal = dal.clone();
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -87,15 +86,6 @@ pub async fn task<D: Dal + Sync + 'static>(
             span.set_parent(parent_cx);
 
             let deployment_id = runnable.deployment_id;
-
-            // We are subscribing to the runtime logs emitted during the load phase here.
-            if let Err(err) = runtime_manager
-                .logs_subscribe(&runnable.service_id)
-                .await
-                .map_err(|err| Error::PrepareRun(err.to_string()))
-            {
-                start_crashed_cleanup(&deployment_id, err);
-            }
 
             async move {
                 if let Err(err) = runnable.load_and_run(dal, runtime_client, claim).await {
@@ -213,7 +203,13 @@ impl RunnableDeployment {
         );
 
         // Execute loaded service
-        load(self.service_name.clone(), runtime_client.clone(), claim).await?;
+        load(
+            self.service_name.clone(),
+            runtime_client.clone(),
+            &self.deployment_id,
+            claim,
+        )
+        .await?;
 
         tokio::spawn(run(self.deployment_id, dal, runtime_client, address));
 
@@ -224,6 +220,7 @@ impl RunnableDeployment {
 async fn load(
     service_name: String,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+    deployment_id: &Ulid,
     claim: Option<Claim>,
 ) -> Result<()> {
     // For alpha this is the path to the users project with an embedded runtime.
@@ -234,6 +231,7 @@ async fn load(
     let mut load_request = tonic::Request::new(LoadRequest {
         path,
         service_name,
+        deployment_id: deployment_id.to_string(),
         resources: Vec::new(),
         secrets: HashMap::new(),
     });

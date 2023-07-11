@@ -276,7 +276,7 @@ mod provisioner_factory;
 mod resource_tracker;
 
 pub use alpha::{start, Alpha};
-pub use logger::Logger;
+pub use logger::{LogRecorder, Logger};
 #[cfg(feature = "next")]
 pub use next::{AxumWasm, NextArgs};
 pub use provisioner_factory::ProvisionerFactory;

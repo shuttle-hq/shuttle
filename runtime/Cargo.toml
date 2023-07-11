@@ -16,6 +16,7 @@ doctest = false
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
+opentelemetry-proto = { workspace = true }
 prost-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -58,6 +59,7 @@ crossbeam-channel = { workspace = true }
 portpicker = "0.1.1"
 futures = { workspace = true }
 shuttle-service = { workspace = true, features = ["builder"] }
+ulid = { workspace = true }
 
 [features]
 default = []

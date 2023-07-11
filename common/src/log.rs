@@ -122,6 +122,41 @@ impl From<&tracing::Level> for Level {
     }
 }
 
+#[cfg(feature = "backend")]
+impl From<opentelemetry_proto::tonic::logs::v1::SeverityNumber> for Level {
+    fn from(level: opentelemetry_proto::tonic::logs::v1::SeverityNumber) -> Self {
+        use opentelemetry_proto::tonic::logs::v1::SeverityNumber;
+
+        match level {
+            SeverityNumber::Unspecified => Level::Trace,
+            SeverityNumber::Trace
+            | SeverityNumber::Trace2
+            | SeverityNumber::Trace3
+            | SeverityNumber::Trace4 => Level::Trace,
+            SeverityNumber::Debug
+            | SeverityNumber::Debug2
+            | SeverityNumber::Debug3
+            | SeverityNumber::Debug4 => Level::Debug,
+            SeverityNumber::Info
+            | SeverityNumber::Info2
+            | SeverityNumber::Info3
+            | SeverityNumber::Info4 => Level::Info,
+            SeverityNumber::Warn
+            | SeverityNumber::Warn2
+            | SeverityNumber::Warn3
+            | SeverityNumber::Warn4 => Level::Warn,
+            SeverityNumber::Error
+            | SeverityNumber::Error2
+            | SeverityNumber::Error3
+            | SeverityNumber::Error4
+            | SeverityNumber::Fatal
+            | SeverityNumber::Fatal2
+            | SeverityNumber::Fatal3
+            | SeverityNumber::Fatal4 => Level::Error,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

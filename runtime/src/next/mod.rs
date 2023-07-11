@@ -17,10 +17,9 @@ use hyper::{Body, Request, Response};
 use shuttle_common::wasm::{Bytesable, Log, RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
-    self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
-    StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
+    LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest, StopResponse,
+    SubscribeStopRequest, SubscribeStopResponse,
 };
-use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
@@ -42,28 +41,16 @@ const BODY_FD: u32 = 4;
 
 pub struct AxumWasm {
     router: Mutex<Option<Router>>,
-    logs_rx: Mutex<Option<Receiver<Result<runtime::LogItem, Status>>>>,
-    logs_tx: Sender<Result<runtime::LogItem, Status>>,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     stopped_tx: broadcast::Sender<(StopReason, String)>,
 }
 
 impl AxumWasm {
     pub fn new() -> Self {
-        // Allow about 2^15 = 32k logs of backpressure
-        // We know the wasm currently handles about 16k requests per second (req / sec) so 16k seems to be a safe number
-        // As we make performance gains elsewhere this might eventually become the new bottleneck to increase :D
-        //
-        // Testing has shown that a number half the req / sec yields poor performance. A number the same as the req / sec
-        // seems acceptable so going with double the number for some headroom
-        let (tx, rx) = mpsc::channel(1 << 15);
-
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
             router: Mutex::new(None),
-            logs_rx: Mutex::new(Some(rx)),
-            logs_tx: tx,
             kill_tx: Mutex::new(None),
             stopped_tx,
         }
@@ -112,8 +99,6 @@ impl Runtime for AxumWasm {
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        let logs_tx = self.logs_tx.clone();
-
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
@@ -128,28 +113,11 @@ impl Runtime for AxumWasm {
 
         let stopped_tx = self.stopped_tx.clone();
 
-        tokio::spawn(run_until_stopped(
-            router, address, logs_tx, kill_rx, stopped_tx,
-        ));
+        tokio::spawn(run_until_stopped(router, address, kill_rx, stopped_tx));
 
         let message = StartResponse { success: true };
 
         Ok(tonic::Response::new(message))
-    }
-
-    type SubscribeLogsStream = ReceiverStream<Result<runtime::LogItem, Status>>;
-
-    async fn subscribe_logs(
-        &self,
-        _request: tonic::Request<SubscribeLogsRequest>,
-    ) -> Result<tonic::Response<Self::SubscribeLogsStream>, Status> {
-        let logs_rx = self.logs_rx.lock().unwrap().deref_mut().take();
-
-        if let Some(logs_rx) = logs_rx {
-            Ok(tonic::Response::new(ReceiverStream::new(logs_rx)))
-        } else {
-            Err(Status::internal("logs have already been subscribed to"))
-        }
     }
 
     async fn stop(
@@ -252,7 +220,6 @@ impl Router {
     async fn handle_request(
         &mut self,
         req: hyper::Request<Body>,
-        logs_tx: Sender<Result<runtime::LogItem, Status>>,
     ) -> anyhow::Result<Response<Body>> {
         let wasi = WasiCtxBuilder::new()
             .inherit_stdio()
@@ -288,8 +255,8 @@ impl Router {
         tokio::task::spawn_blocking(move || {
             let mut iter = logs_stream.bytes().filter_map(Result::ok);
 
-            while let Some(log) = Log::from_bytes(&mut iter) {
-                logs_tx.blocking_send(Ok(log.into())).expect("to send log");
+            while let Some(_log) = Log::from_bytes(&mut iter) {
+                // TODO: send to the log server here
             }
         });
 
@@ -373,19 +340,16 @@ impl Router {
 async fn run_until_stopped(
     router: Router,
     address: SocketAddr,
-    logs_tx: Sender<Result<runtime::LogItem, Status>>,
     kill_rx: tokio::sync::oneshot::Receiver<String>,
     stopped_tx: broadcast::Sender<(StopReason, String)>,
 ) {
     let make_service = make_service_fn(move |_conn| {
         let router = router.clone();
-        let logs_tx = logs_tx.clone();
         async move {
             Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
                 let mut router = router.clone();
-                let logs_tx = logs_tx.clone();
                 async move {
-                    Ok::<_, Infallible>(match router.handle_request(req, logs_tx).await {
+                    Ok::<_, Infallible>(match router.handle_request(req).await {
                         Ok(res) => res,
                         Err(err) => {
                             error!("error sending request: {}", err);
@@ -455,14 +419,6 @@ pub mod tests {
             .build()
             .unwrap();
 
-        let (tx, mut rx) = mpsc::channel(1);
-
-        tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
-                println!("{log:?}");
-            }
-        });
-
         // GET /hello
         let request: Request<Body> = Request::builder()
             .method(Method::GET)
@@ -471,11 +427,7 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = router
-            .clone()
-            .handle_request(request, tx.clone())
-            .await
-            .unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -498,11 +450,7 @@ pub mod tests {
             .body(Body::from("Goodbye world body"))
             .unwrap();
 
-        let res = router
-            .clone()
-            .handle_request(request, tx.clone())
-            .await
-            .unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -525,11 +473,7 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = router
-            .clone()
-            .handle_request(request, tx.clone())
-            .await
-            .unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
 
@@ -542,7 +486,7 @@ pub mod tests {
             .body("this should be uppercased".into())
             .unwrap();
 
-        let res = router.clone().handle_request(request, tx).await.unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(

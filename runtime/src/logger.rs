@@ -1,36 +1,125 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::SystemTime,
+use opentelemetry_proto::tonic::{
+    collector::logs::v1::{logs_service_client::LogsServiceClient, ExportLogsServiceRequest},
+    common::v1::InstrumentationScope,
+    logs::v1::{ResourceLogs, ScopeLogs},
 };
-
-use chrono::Utc;
-use prost_types::Timestamp;
-use shuttle_common::{deployment::State, tracing::JsonVisitor};
-use shuttle_proto::runtime::{LogItem, LogLevel};
-use tokio::sync::mpsc::UnboundedSender;
+use shuttle_common::{
+    backends::tracing::{into_log_record, serde_json_map_to_key_value_list},
+    tracing::JsonVisitor,
+};
+use tokio::sync::mpsc;
 use tracing::{
+    error,
     span::{Attributes, Id},
-    Level, Subscriber,
+    Level, Metadata, Subscriber,
 };
 use tracing_subscriber::Layer;
 
-pub struct Logger {
-    tx: UnboundedSender<LogItem>,
-    state: Arc<Mutex<State>>,
+/// Record a single log
+pub trait LogRecorder: Send + Sync {
+    fn record_log(&self, visitor: JsonVisitor, metadata: &Metadata);
 }
 
-impl Logger {
-    pub fn new(tx: UnboundedSender<LogItem>) -> Self {
+/// Recorder to send logs over OTLP
+pub struct OtlpRecorder {
+    tx: mpsc::UnboundedSender<ScopeLogs>,
+    deployment_id: String,
+}
+
+impl OtlpRecorder {
+    /// Send deployment logs to `destination`. Also mark all logs as belonging to this `deployment_id`
+    pub fn new(deployment_id: &str, destination: &str) -> Self {
+        let destination = destination.to_string();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+
+        let resource_attributes = vec![("deployment_id".into(), deployment_id.into())];
+        let resource_attributes =
+            serde_json_map_to_key_value_list(serde_json::Map::from_iter(resource_attributes));
+
+        let resource = Some(opentelemetry_proto::tonic::resource::v1::Resource {
+            attributes: resource_attributes,
+            ..Default::default()
+        });
+
+        tokio::spawn(async move {
+            match LogsServiceClient::connect(destination).await {
+                Ok(mut otlp_client) => {
+                    while let Some(scope_logs) = rx.recv().await {
+                        let resource_log = ResourceLogs {
+                            scope_logs: vec![scope_logs],
+                            resource: resource.clone(),
+                            ..Default::default()
+                        };
+                        let request = tonic::Request::new(ExportLogsServiceRequest {
+                            resource_logs: vec![resource_log],
+                        });
+
+                        if let Err(error) = otlp_client.export(request).await {
+                            error!(
+                        error = &error as &dyn std::error::Error,
+                        "Otlp deployment log recorder encountered error while exporting the logs"
+                    );
+                        };
+                    }
+                }
+                Err(error) => {
+                    error!(
+                        error = &error as &dyn std::error::Error,
+                        "Could not connect to OTLP collector for logs. No logs will be send"
+                    );
+
+                    // Consume the logs so that the channel does not overflow
+                    while let Some(_scope_logs) = rx.recv().await {}
+                }
+            };
+        });
         Self {
             tx,
-            state: Arc::new(Mutex::new(State::Loading)),
+            deployment_id: deployment_id.to_string(),
         }
     }
 }
 
-impl<S> Layer<S> for Logger
+impl LogRecorder for OtlpRecorder {
+    fn record_log(&self, visitor: JsonVisitor, metadata: &Metadata) {
+        let log_record = into_log_record(visitor, metadata);
+
+        let scope_attributes = vec![("deployment_id".into(), self.deployment_id.clone().into())];
+        let scope_attributes =
+            serde_json_map_to_key_value_list(serde_json::Map::from_iter(scope_attributes));
+
+        let scope_logs = ScopeLogs {
+            scope: Some(InstrumentationScope {
+                attributes: scope_attributes,
+                ..Default::default()
+            }),
+            log_records: vec![log_record],
+            ..Default::default()
+        };
+
+        if let Err(error) = self.tx.send(scope_logs) {
+            error!(
+                error = &error as &dyn std::error::Error,
+                "Failed to send deployment log in recorder"
+            );
+        }
+    }
+}
+
+pub struct Logger<R> {
+    recorder: R,
+}
+
+impl<R> Logger<R> {
+    pub fn new(recorder: R) -> Self {
+        Self { recorder }
+    }
+}
+
+impl<S, R> Layer<S> for Logger<R>
 where
     S: Subscriber,
+    R: LogRecorder + Send + Sync + 'static,
 {
     fn on_new_span(
         &self,
@@ -38,45 +127,25 @@ where
         _id: &Id,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        let datetime = Utc::now();
+        let metadata = attrs.metadata();
+        let level = metadata.level();
 
-        let item = {
-            let metadata = attrs.metadata();
-            let level = metadata.level();
+        // Ignore span logs from the default level for #[instrument] (INFO) and below (greater than).
+        // TODO: make this configurable
+        if level >= &Level::INFO {
+            return;
+        }
 
-            // Ignore span logs from the default level for #[instrument] (INFO) and below (greater than).
-            // TODO: make this configurable
-            if level >= &Level::INFO {
-                return;
-            }
+        let mut visitor = JsonVisitor::default();
+        attrs.record(&mut visitor);
 
-            let mut visitor = JsonVisitor::default();
-            attrs.record(&mut visitor);
+        // Make the span name the log message
+        visitor.fields.insert(
+            "message".to_string(),
+            format!("[span] {}", metadata.name()).into(),
+        );
 
-            // Make the span name the log message
-            visitor.fields.insert(
-                "message".to_string(),
-                format!("[span] {}", metadata.name()).into(),
-            );
-
-            LogItem {
-                level: LogLevel::from(level) as i32,
-                timestamp: Some(Timestamp::from(SystemTime::from(datetime))),
-                file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
-                line: visitor.line.or_else(|| metadata.line()),
-                target: visitor
-                    .target
-                    .unwrap_or_else(|| metadata.target().to_string()),
-                fields: serde_json::to_vec(&visitor.fields).unwrap(),
-                state: self
-                    .state
-                    .lock()
-                    .expect("state lock should not be poisoned")
-                    .to_string(),
-            }
-        };
-
-        self.tx.send(item).expect("sending log should succeed");
+        self.recorder.record_log(visitor, metadata);
     }
 
     fn on_event(
@@ -84,53 +153,50 @@ where
         event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        if event.metadata().name() == "start" {
-            *self
-                .state
-                .lock()
-                .expect("state lock should not be poisoned") = State::Running;
-        }
-        let datetime = Utc::now();
+        let mut visitor = JsonVisitor::default();
 
-        let item = {
-            let metadata = event.metadata();
-            let mut visitor = JsonVisitor::default();
+        event.record(&mut visitor);
+        let metadata = event.metadata();
 
-            event.record(&mut visitor);
-
-            LogItem {
-                level: LogLevel::from(metadata.level()) as i32,
-                timestamp: Some(Timestamp::from(SystemTime::from(datetime))),
-                file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
-                line: visitor.line.or_else(|| metadata.line()),
-                target: visitor
-                    .target
-                    .unwrap_or_else(|| metadata.target().to_string()),
-                fields: serde_json::to_vec(&visitor.fields).unwrap(),
-                state: self
-                    .state
-                    .lock()
-                    .expect("state lock should not be poisoned")
-                    .to_string(),
-            }
-        };
-
-        self.tx.send(item).expect("sending log should succeed");
+        self.recorder.record_log(visitor, metadata);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        collections::VecDeque,
+        sync::{Arc, Mutex},
+    };
+
     use super::*;
 
-    use tokio::sync::mpsc;
     use tracing_subscriber::prelude::*;
+
+    #[derive(Default, Clone)]
+    struct DummyRecorder {
+        lines: Arc<Mutex<VecDeque<(Level, String)>>>,
+    }
+
+    impl LogRecorder for DummyRecorder {
+        fn record_log(&self, visitor: JsonVisitor, metadata: &Metadata) {
+            self.lines.lock().unwrap().push_back((
+                *metadata.level(),
+                visitor
+                    .fields
+                    .get("message")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            ));
+        }
+    }
 
     #[test]
     fn logging() {
-        let (s, mut r) = mpsc::unbounded_channel();
-
-        let logger = Logger::new(s);
+        let recorder = DummyRecorder::default();
+        let logger = Logger::new(recorder.clone());
 
         let _guard = tracing_subscriber::registry().with(logger).set_default();
 
@@ -146,36 +212,24 @@ mod tests {
         });
 
         assert_eq!(
-            r.blocking_recv().map(to_tuple),
-            Some(("this is".to_string(), LogLevel::Debug as i32))
+            recorder.lines.lock().unwrap().pop_front(),
+            Some((Level::DEBUG, "this is".to_string()))
         );
         assert_eq!(
-            r.blocking_recv().map(to_tuple),
-            Some(("hi".to_string(), LogLevel::Info as i32))
+            recorder.lines.lock().unwrap().pop_front(),
+            Some((Level::INFO, "hi".to_string()))
         );
         assert_eq!(
-            r.blocking_recv().map(to_tuple),
-            Some((
-                "[span] this is a warn span".to_string(),
-                LogLevel::Warn as i32
-            ))
+            recorder.lines.lock().unwrap().pop_front(),
+            Some((Level::WARN, "[span] this is a warn span".to_string()))
         );
         assert_eq!(
-            r.blocking_recv().map(to_tuple),
-            Some(("from".to_string(), LogLevel::Warn as i32))
+            recorder.lines.lock().unwrap().pop_front(),
+            Some((Level::WARN, "from".to_string()))
         );
         assert_eq!(
-            r.blocking_recv().map(to_tuple),
-            Some(("logger".to_string(), LogLevel::Error as i32))
+            recorder.lines.lock().unwrap().pop_front(),
+            Some((Level::ERROR, "logger".to_string()))
         );
-    }
-
-    fn to_tuple(log: LogItem) -> (String, i32) {
-        let fields: serde_json::Map<String, serde_json::Value> =
-            serde_json::from_slice(&log.fields).unwrap();
-
-        let message = fields["message"].as_str().unwrap().to_owned();
-
-        (message, log.level)
     }
 }

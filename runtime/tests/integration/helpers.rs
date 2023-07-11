@@ -6,6 +6,9 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
+use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::{
+    LogsService, LogsServiceServer,
+};
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
     provisioner::{
@@ -20,11 +23,13 @@ use tonic::{
     transport::{Channel, Server},
     Request, Response, Status,
 };
+use ulid::Ulid;
 
 pub struct TestRuntime {
     pub runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     pub bin_path: String,
     pub service_name: String,
+    pub deployment_id: Ulid,
     pub runtime_address: SocketAddr,
     pub secrets: HashMap<String, String>,
     pub runtime: Child,
@@ -32,6 +37,10 @@ pub struct TestRuntime {
 
 pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<TestRuntime> {
     let provisioner_address = SocketAddr::new(
+        Ipv4Addr::LOCALHOST.into(),
+        portpicker::pick_unused_port().unwrap(),
+    );
+    let logger_address = SocketAddr::new(
         Ipv4Addr::LOCALHOST.into(),
         portpicker::pick_unused_port().unwrap(),
     );
@@ -50,6 +59,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
     } = runtimes[0].clone();
 
     start_provisioner(DummyProvisioner, provisioner_address);
+    start_log_service(DummyLogService, logger_address);
 
     // TODO: update this to work with shuttle-next projects, see cargo-shuttle local run
     let runtime_path = || executable_path.clone();
@@ -58,6 +68,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
         is_wasm,
         runtime::StorageManagerType::WorkingDir(PathBuf::from(project_path.clone())),
         &format!("http://{}", provisioner_address),
+        &format!("http://{}", logger_address),
         None,
         runtime_port,
         runtime_path,
@@ -71,6 +82,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
             .into_string()
             .expect("to convert path to string"),
         service_name: service_name.to_string(),
+        deployment_id: Ulid::new(),
         runtime_address,
         secrets,
         runtime,
@@ -105,8 +117,34 @@ impl Provisioner for DummyProvisioner {
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("did not expect any runtime test to delete dbs")
     }
+}
 
-    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
-        panic!("did not expect any runtime test to do a provisioner health check")
+/// A dummy log service for tests, a log service connection is required
+/// to start a project runtime.
+pub struct DummyLogService;
+
+fn start_log_service(log_service: DummyLogService, address: SocketAddr) {
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(LogsServiceServer::new(log_service))
+            .serve(address)
+            .await
+    });
+}
+
+#[async_trait]
+impl LogsService for DummyLogService {
+    async fn export(
+        &self,
+        request: tonic::Request<
+            opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceRequest,
+        >,
+    ) -> std::result::Result<
+        tonic::Response<opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceResponse>,
+        tonic::Status,
+    > {
+        println!("request: {request:?}");
+
+        Ok(tonic::Response::new(Default::default()))
     }
 }

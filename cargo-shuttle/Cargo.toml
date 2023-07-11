@@ -29,6 +29,7 @@ indicatif = "0.17.3"
 ignore = "0.4.20"
 indoc = "2.0.1"
 openssl = { version = "0.10", optional = true }
+opentelemetry-proto = { workspace = true, features = ["gen-tonic", "logs"] }
 portpicker = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = "0.2.0"

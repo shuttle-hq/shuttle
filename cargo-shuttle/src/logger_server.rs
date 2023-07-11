@@ -45,16 +45,11 @@ impl LogsService for LocalLogger {
     ) -> Result<Response<ExportLogsServiceResponse>, Status> {
         let request = request.into_inner();
 
-        let logs = request
-            .resource_logs
-            .into_iter()
-            .map(|logs| {
-                logs.scope_logs
-                    .into_iter()
-                    .map(|scope| scope.log_records.into_iter().flat_map(try_from_log_record))
-                    .flatten()
-            })
-            .flatten();
+        let logs = request.resource_logs.into_iter().flat_map(|logs| {
+            logs.scope_logs
+                .into_iter()
+                .flat_map(|scope| scope.log_records.into_iter().flat_map(try_from_log_record))
+        });
 
         for log in logs {
             println!("{log}");

@@ -181,7 +181,7 @@ mod tests {
     impl LogRecorder for DummyRecorder {
         fn record_log(&self, visitor: JsonVisitor, metadata: &Metadata) {
             self.lines.lock().unwrap().push_back((
-                metadata.level().clone(),
+                *metadata.level(),
                 visitor
                     .fields
                     .get("message")

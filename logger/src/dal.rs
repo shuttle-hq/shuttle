@@ -3,11 +3,15 @@ use std::{path::Path, str::FromStr, time::SystemTime};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use opentelemetry_proto::tonic::{
-    common::v1::{any_value, AnyValue, KeyValue},
+    common::v1::{any_value, KeyValue},
     logs::v1::{LogRecord, ResourceLogs, ScopeLogs, SeverityNumber},
 };
 use prost_types::Timestamp;
 use serde_json::Value;
+use shuttle_common::{
+    backends::tracing::{from_any_value_kv_to_serde_json_map, from_any_value_to_serde_json_value},
+    log,
+};
 use shuttle_proto::logger::{self, LogItem};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
@@ -149,32 +153,12 @@ impl From<LogLevel> for logger::LogLevel {
 
 impl From<SeverityNumber> for LogLevel {
     fn from(severity: SeverityNumber) -> Self {
-        match severity {
-            SeverityNumber::Unspecified => Self::Trace,
-            SeverityNumber::Trace
-            | SeverityNumber::Trace2
-            | SeverityNumber::Trace3
-            | SeverityNumber::Trace4 => Self::Trace,
-            SeverityNumber::Debug
-            | SeverityNumber::Debug2
-            | SeverityNumber::Debug3
-            | SeverityNumber::Debug4 => Self::Debug,
-            SeverityNumber::Info
-            | SeverityNumber::Info2
-            | SeverityNumber::Info3
-            | SeverityNumber::Info4 => Self::Info,
-            SeverityNumber::Warn
-            | SeverityNumber::Warn2
-            | SeverityNumber::Warn3
-            | SeverityNumber::Warn4 => Self::Warn,
-            SeverityNumber::Error
-            | SeverityNumber::Error2
-            | SeverityNumber::Error3
-            | SeverityNumber::Error4
-            | SeverityNumber::Fatal
-            | SeverityNumber::Fatal2
-            | SeverityNumber::Fatal3
-            | SeverityNumber::Fatal4 => Self::Error,
+        match severity.into() {
+            log::Level::Trace => Self::Trace,
+            log::Level::Debug => Self::Trace,
+            log::Level::Info => Self::Trace,
+            log::Level::Warn => Self::Trace,
+            log::Level::Error => Self::Trace,
         }
     }
 }
@@ -267,43 +251,4 @@ fn get_attribute(attributes: Vec<KeyValue>, key: &str) -> Option<String> {
         any_value::Value::StringValue(s) => Some(s),
         _ => None,
     }
-}
-
-fn from_any_value_to_serde_json_value(any_value: AnyValue) -> Value {
-    let Some(value) = any_value.value else {
-        return Value::Null
-    };
-
-    match value {
-        any_value::Value::StringValue(s) => Value::String(s),
-        any_value::Value::BoolValue(b) => Value::Bool(b),
-        any_value::Value::IntValue(i) => Value::Number(i.into()),
-        any_value::Value::DoubleValue(f) => {
-            let Some(number) = serde_json::Number::from_f64(f) else {return Value::Null};
-            Value::Number(number)
-        }
-        any_value::Value::ArrayValue(a) => {
-            let values = a
-                .values
-                .into_iter()
-                .map(from_any_value_to_serde_json_value)
-                .collect();
-
-            Value::Array(values)
-        }
-        any_value::Value::KvlistValue(kv) => {
-            let map = from_any_value_kv_to_serde_json_map(kv.values);
-
-            Value::Object(map)
-        }
-        any_value::Value::BytesValue(_) => Value::Null,
-    }
-}
-
-fn from_any_value_kv_to_serde_json_map(kv_list: Vec<KeyValue>) -> serde_json::Map<String, Value> {
-    let iter = kv_list
-        .into_iter()
-        .flat_map(|kv| Some((kv.key, from_any_value_to_serde_json_value(kv.value?))));
-
-    serde_json::Map::from_iter(iter)
 }

@@ -12,7 +12,7 @@ use clap::{
     Parser, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::{models::project::IDLE_MINUTES, project::ProjectName};
+use shuttle_common::{models::project::IDLE_MINUTES, project::RawProjectName};
 use uuid::Uuid;
 
 use crate::init::Template;
@@ -47,7 +47,7 @@ pub struct ProjectArgs {
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
     #[arg(global = true, long)]
-    pub name: Option<ProjectName>,
+    pub name: Option<RawProjectName>,
 }
 
 impl ProjectArgs {
@@ -62,7 +62,7 @@ impl ProjectArgs {
         Ok(path)
     }
 
-    pub fn project_name(&self) -> anyhow::Result<ProjectName> {
+    pub fn project_name(&self) -> anyhow::Result<RawProjectName> {
         let workspace_path = self.workspace_path()?;
 
         let meta = MetadataCommand::new()

@@ -17,7 +17,7 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
-    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
+    let addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), args.port);
 
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))

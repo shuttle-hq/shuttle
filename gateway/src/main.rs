@@ -1,26 +1,17 @@
 use clap::Parser;
-use futures::prelude::*;
 
 use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_gateway::acme::{AcmeClient, CustomDomain};
-use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
-use shuttle_gateway::args::StartArgs;
-use shuttle_gateway::args::{Args, Commands, UseTls};
+use shuttle_gateway::api::latest::ApiBuilder;
+use shuttle_gateway::args::{Args, UseTls};
+use shuttle_gateway::dal::Sqlite;
 use shuttle_gateway::proxy::UserServiceBuilder;
-use shuttle_gateway::service::{GatewayService, MIGRATIONS};
-use shuttle_gateway::task;
+use shuttle_gateway::service::GatewayService;
 use shuttle_gateway::tls::make_tls_acceptor;
-use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
-use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
-use sqlx::{Sqlite, SqlitePool};
 use std::io::{self, Cursor};
 
-use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Duration;
-use tracing::{debug, error, info, info_span, trace, warn, Instrument};
+use tracing::{debug, error, trace, warn};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> io::Result<()> {
@@ -31,122 +22,27 @@ async fn main() -> io::Result<()> {
     setup_tracing(tracing_subscriber::registry(), "gateway");
 
     let db_path = args.state.join("gateway.sqlite");
-    let db_uri = db_path.to_str().unwrap();
 
-    if !db_path.exists() {
-        Sqlite::create_database(db_uri).await.unwrap();
-    }
+    let sqlite = Sqlite::new(db_path.to_str().unwrap()).await;
 
-    info!(
-        "state db: {}",
-        std::fs::canonicalize(&args.state)
-            .unwrap()
-            .to_string_lossy()
-    );
-
-    let sqlite_options = SqliteConnectOptions::from_str(db_uri)
-        .unwrap()
-        .journal_mode(SqliteJournalMode::Wal)
-        .synchronous(SqliteSynchronous::Normal);
-
-    let db = SqlitePool::connect_with(sqlite_options).await.unwrap();
-    MIGRATIONS.run(&db).await.unwrap();
-
-    match args.command {
-        Commands::Start(start_args) => start(db, args.state, start_args).await,
-    }
+    start(sqlite, args).await
 }
 
-async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
-    let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await);
-
-    let worker = Worker::new();
-
-    let sender = worker.sender();
-
-    let worker_handle = tokio::spawn(
-        worker
-            .start()
-            .map_ok(|_| info!("worker terminated successfully"))
-            .map_err(|err| error!("worker error: {}", err)),
-    );
-
-    for (project_name, _) in gateway
-        .iter_projects()
-        .await
-        .expect("could not list projects")
-    {
-        gateway
-            .clone()
-            .new_task()
-            .project(project_name)
-            .and_then(task::refresh())
-            .send(&sender)
-            .await
-            .expect("to refresh old projects");
-    }
-
-    // Every 60 secs go over all `::Ready` projects and check their health.
-    let ambulance_handle = tokio::spawn({
-        let gateway = Arc::clone(&gateway);
-        let sender = sender.clone();
-        async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
-            interval.tick().await; // first tick is immediate
-
-            loop {
-                interval.tick().await;
-
-                if sender.capacity() < WORKER_QUEUE_SIZE - SVC_DEGRADED_THRESHOLD {
-                    // If degraded, don't stack more health checks.
-                    warn!(
-                        sender.capacity = sender.capacity(),
-                        "skipping health checks"
-                    );
-                    continue;
-                }
-
-                if let Ok(projects) = gateway.iter_projects().await {
-                    let span = info_span!(
-                        "running health checks",
-                        healthcheck.num_projects = projects.len()
-                    );
-
-                    let gateway = gateway.clone();
-                    let sender = sender.clone();
-                    async move {
-                        for (project_name, _) in projects {
-                            if let Ok(handle) = gateway
-                                .new_task()
-                                .project(project_name)
-                                .and_then(task::check_health())
-                                .send(&sender)
-                                .await
-                            {
-                                // We wait for the check to be done before
-                                // queuing up the next one.
-                                handle.await
-                            }
-                        }
-                    }
-                    .instrument(span)
-                    .await;
-                }
-            }
-        }
-    });
+async fn start(db: Sqlite, args: Args) -> io::Result<()> {
+    let gateway_service =
+        Arc::new(GatewayService::init(db.clone(), args.state, args.proxy_fqdn.clone()).await);
 
     let acme_client = AcmeClient::new();
 
     let mut api_builder = ApiBuilder::new()
-        .with_service(Arc::clone(&gateway))
-        .with_sender(sender.clone())
+        .with_service(gateway_service.clone())
         .binding_to(args.control);
 
+    let proxy_fqdn = args.proxy_fqdn.clone();
+
     let mut user_builder = UserServiceBuilder::new()
-        .with_service(Arc::clone(&gateway))
-        .with_task_sender(sender)
-        .with_public(args.context.proxy_fqdn.clone())
+        .with_dal(db)
+        .with_public(proxy_fqdn)
         .with_user_proxy_binding_to(args.user)
         .with_bouncer(args.bouncer);
 
@@ -164,7 +60,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
             certificate,
             private_key,
             ..
-        } in gateway.iter_custom_domains().await.unwrap()
+        } in gateway_service.iter_custom_domains().await.unwrap()
         {
             let mut buf = Vec::new();
             buf.extend(certificate.as_bytes());
@@ -177,8 +73,8 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
         tokio::spawn(async move {
             // Make sure we have a certificate for ourselves.
-            let certs = gateway
-                .fetch_certificate(&acme_client, gateway.credentials())
+            let certs = gateway_service
+                .fetch_certificate(&acme_client, gateway_service.credentials())
                 .await;
             resolver
                 .serve_default_der(certs)
@@ -191,7 +87,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
     let api_handle = api_builder
         .with_default_routes()
-        .with_auth_service(&args.context.auth_uri)
+        .with_auth_service(&args.auth_uri)
         .await
         .with_default_traces()
         .serve();
@@ -201,10 +97,8 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     debug!("starting up all services");
 
     tokio::select!(
-        _ = worker_handle => info!("worker handle finished"),
         _ = api_handle => error!("api handle finished"),
         _ = user_handle => error!("user handle finished"),
-        _ = ambulance_handle => error!("ambulance handle finished"),
     );
 
     Ok(())

@@ -7,7 +7,7 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use cargo_generate::{GenerateArgs, TemplatePath, Vcs};
 use indoc::indoc;
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::RawProjectName;
 use toml_edit::{value, Document};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum::Display, strum::EnumIter)]
@@ -198,7 +198,7 @@ impl ShuttleInit for ShuttleInitNoOp {
     }
 }
 
-pub fn cargo_generate(path: PathBuf, name: &ProjectName, framework: Template) -> Result<()> {
+pub fn cargo_generate(path: PathBuf, name: &RawProjectName, framework: Template) -> Result<()> {
     let config = framework.init_config();
 
     println!(r#"    Creating project "{name}" in {path:?}"#);

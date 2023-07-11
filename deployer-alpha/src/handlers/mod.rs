@@ -19,7 +19,7 @@ use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
 use shuttle_common::models::secret;
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::RawProjectName;
 use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
@@ -78,7 +78,7 @@ pub async fn make_router(
     proxy_fqdn: FQDN,
     admin_secret: String,
     auth_uri: Uri,
-    project_name: ProjectName,
+    project_name: RawProjectName,
 ) -> Router {
     Router::new()
         // TODO: The `/swagger-ui` responds with a 303 See Other response which is followed in

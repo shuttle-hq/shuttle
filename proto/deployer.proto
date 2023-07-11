@@ -1,0 +1,51 @@
+syntax = "proto3";
+package deployer;
+
+service Deployer {
+  rpc Deploy(DeployRequest) returns (DeployResponse);
+  rpc DestroyDeployment(DestroyDeploymentRequest) returns (DestroyDeploymentResponse);
+  rpc SubscribeProjects(SubscribeProjectsRequest) returns (stream ProjectEvent);
+  rpc UnsubscribeProjects(UnsubscribeProjectsRequest) returns (UnsubscribeProjectsResponse);
+}
+
+message Deployment {
+  string service_id = 1;
+  string project_id = 2;
+  string service_name = 3;
+  bool is_next = 4;
+  uint32 idle_minutes = 5;
+  string image_name = 6;
+  optional string git_commit_message = 7;
+  optional string git_commit_hash = 8;
+  optional string git_branch = 9;
+  optional bool git_dirty = 10;
+}
+
+message DeployRequest {
+  Deployment deployment = 1;
+}
+
+message DeployResponse {
+  string deployment_id = 2;
+}
+
+message DestroyDeploymentRequest {
+  // Deployment id we wish to destroy.
+  string deployment_id = 1;
+}
+
+message DestroyDeploymentResponse {}
+message SubscribeProjectsRequest {}
+message UnsubscribeProjectsRequest {}
+message UnsubscribeProjectsResponse {}
+
+message ProjectChange {
+  string state_variant = 1;
+  optional string socket_addr = 2;
+}
+
+message ProjectEvent {
+  string service_id = 1;
+  string project_id = 2;
+  ProjectChange change = 3;
+}

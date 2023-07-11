@@ -7,7 +7,7 @@ use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::deployment::DeploymentRequest;
 use shuttle_common::models::{deployment, project, secret, service, ToJson};
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::RawProjectName;
 use shuttle_common::{resource, ApiKey, ApiUrl, LogItem};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -35,7 +35,7 @@ impl Client {
 
     pub async fn deploy(
         &self,
-        project: &ProjectName,
+        project: &RawProjectName,
         deployment_req: DeploymentRequest,
     ) -> Result<deployment::Response> {
         let path = format!(
@@ -59,7 +59,7 @@ impl Client {
             .await
     }
 
-    pub async fn stop_service(&self, project: &ProjectName) -> Result<service::Summary> {
+    pub async fn stop_service(&self, project: &RawProjectName) -> Result<service::Summary> {
         let path = format!(
             "/projects/{}/services/{}",
             project.as_str(),
@@ -69,7 +69,7 @@ impl Client {
         self.delete(path).await
     }
 
-    pub async fn get_service(&self, project: &ProjectName) -> Result<service::Summary> {
+    pub async fn get_service(&self, project: &RawProjectName) -> Result<service::Summary> {
         let path = format!(
             "/projects/{}/services/{}",
             project.as_str(),
@@ -81,7 +81,7 @@ impl Client {
 
     pub async fn get_service_resources(
         &self,
-        project: &ProjectName,
+        project: &RawProjectName,
     ) -> Result<Vec<resource::Response>> {
         let path = format!(
             "/projects/{}/services/{}/resources",
@@ -98,7 +98,7 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_secrets(&self, project: &ProjectName) -> Result<Vec<secret::Response>> {
+    pub async fn get_secrets(&self, project: &RawProjectName) -> Result<Vec<secret::Response>> {
         let path = format!(
             "/projects/{}/secrets/{}",
             project.as_str(),
@@ -110,7 +110,7 @@ impl Client {
 
     pub async fn get_logs(
         &self,
-        project: &ProjectName,
+        project: &RawProjectName,
         deployment_id: &Uuid,
     ) -> Result<Vec<LogItem>> {
         let path = format!(
@@ -124,7 +124,7 @@ impl Client {
 
     pub async fn get_logs_ws(
         &self,
-        project: &ProjectName,
+        project: &RawProjectName,
         deployment_id: &Uuid,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let path = format!(
@@ -138,7 +138,7 @@ impl Client {
 
     pub async fn get_deployments(
         &self,
-        project: &ProjectName,
+        project: &RawProjectName,
         page: u32,
         limit: u32,
     ) -> Result<Vec<deployment::Response>> {
@@ -154,7 +154,7 @@ impl Client {
 
     pub async fn get_deployment_details(
         &self,
-        project: &ProjectName,
+        project: &RawProjectName,
         deployment_id: &Uuid,
     ) -> Result<deployment::Response> {
         let path = format!(

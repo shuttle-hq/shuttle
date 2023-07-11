@@ -5,11 +5,9 @@ use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
 use serde_json::{json, Value};
 use shuttle_common::{
-    backends::tracing::{
-        DeploymentLayer, OtlpDeploymentLogRecorder, FILEPATH_KEY, LINENO_KEY, NAMESPACE_KEY,
-        TARGET_KEY,
-    },
+    backends::tracing::{DeploymentLayer, OtlpDeploymentLogRecorder},
     claims::Scope,
+    tracing::{FILEPATH_KEY, LINENO_KEY, NAMESPACE_KEY, TARGET_KEY},
 };
 use shuttle_common_tests::JwtScopesLayer;
 use shuttle_logger::{Service, ShuttleLogsOtlp, Sqlite};

@@ -3,7 +3,6 @@ use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use axum::headers::{HeaderMapExt, Host};
@@ -23,15 +22,13 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::XShuttleProject;
-use tokio::sync::mpsc::Sender;
 use tower::{Service, ServiceBuilder};
 use tower_sanitize_path::SanitizePath;
 use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::{AcmeClient, ChallengeResponderLayer, CustomDomain};
-use crate::service::GatewayService;
-use crate::task::BoxedTask;
+use crate::dal::Dal;
 use crate::{Error, ErrorKind};
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -70,14 +67,19 @@ where
 }
 
 #[derive(Clone)]
-pub struct UserProxy {
-    gateway: Arc<GatewayService>,
-    task_sender: Sender<BoxedTask>,
+pub struct UserProxy<D>
+where
+    D: Dal,
+{
+    dal: D,
     remote_addr: SocketAddr,
     public: FQDN,
 }
 
-impl<'r> AsResponderTo<&'r AddrStream> for UserProxy {
+impl<'r, D> AsResponderTo<&'r AddrStream> for UserProxy<D>
+where
+    D: Dal,
+{
     fn as_responder_to(&self, addr_stream: &'r AddrStream) -> Self {
         let mut responder = self.clone();
         responder.remote_addr = addr_stream.remote_addr();
@@ -97,12 +99,11 @@ where
     }
 }
 
-impl UserProxy {
-    async fn proxy(
-        self,
-        task_sender: Sender<BoxedTask>,
-        mut req: Request<Body>,
-    ) -> Result<Response, Error> {
+impl<D> UserProxy<D>
+where
+    D: Dal,
+{
+    async fn proxy(self, mut req: Request<Body>) -> Result<Response, Error> {
         let span = debug_span!("proxy", http.method = %req.method(), http.host = ?req.headers().get("Host"), http.uri = %req.uri(), http.status_code = field::Empty, project = field::Empty);
         trace!(?req, "serving proxy request");
 
@@ -121,7 +122,7 @@ impl UserProxy {
                     .parse()
                     .map_err(|_| Error::from_kind(ErrorKind::ProjectNotFound))?
             } else if let Ok(CustomDomain { project_name, .. }) =
-                self.gateway.project_details_for_custom_domain(&fqdn).await
+                self.dal.project_details_for_custom_domain(&fqdn).await
             {
                 project_name
             } else {
@@ -131,17 +132,14 @@ impl UserProxy {
         req.headers_mut()
             .typed_insert(XShuttleProject(project_name.to_string()));
 
-        let project = self
-            .gateway
-            .find_or_start_project(&project_name, task_sender)
-            .await?;
+        // TODO: get the IP of the project to proxy to from the new deployer.
+        let _project = self.dal.get_project(&project_name).await?;
 
         // Record current project for tracing purposes
         span.record("project", &project_name.to_string());
 
-        let target_ip = project
-            .target_ip()?
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
+        // TODO: get ip from state (the gateway state will get it from deployer)
+        let target_ip = "127.0.0.1";
 
         let target_url = format!("http://{}:{}", target_ip, 8000);
 
@@ -165,7 +163,10 @@ impl UserProxy {
     }
 }
 
-impl Service<Request<Body>> for UserProxy {
+impl<D> Service<Request<Body>> for UserProxy<D>
+where
+    D: Dal + 'static,
+{
     type Response = Response;
     type Error = Error;
     type Future =
@@ -176,27 +177,35 @@ impl Service<Request<Body>> for UserProxy {
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let task_sender = self.task_sender.clone();
         self.clone()
-            .proxy(task_sender, req)
+            .proxy(req)
             .or_else(|err: Error| future::ready(Ok(err.into_response())))
             .boxed()
     }
 }
 
 #[derive(Clone)]
-pub struct Bouncer {
-    gateway: Arc<GatewayService>,
+pub struct Bouncer<D>
+where
+    D: Dal,
+{
+    dal: D,
     public: FQDN,
 }
 
-impl<'r> AsResponderTo<&'r AddrStream> for Bouncer {
+impl<'r, D> AsResponderTo<&'r AddrStream> for Bouncer<D>
+where
+    D: Dal,
+{
     fn as_responder_to(&self, _req: &'r AddrStream) -> Self {
         self.clone()
     }
 }
 
-impl Bouncer {
+impl<D> Bouncer<D>
+where
+    D: Dal,
+{
     async fn bounce(self, req: Request<Body>) -> Result<Response, Error> {
         let mut resp = Response::builder();
 
@@ -208,7 +217,7 @@ impl Bouncer {
 
         if fqdn.is_subdomain_of(&self.public)
             || self
-                .gateway
+                .dal
                 .project_details_for_custom_domain(&fqdn)
                 .await
                 .is_ok()
@@ -226,7 +235,10 @@ impl Bouncer {
     }
 }
 
-impl Service<Request<Body>> for Bouncer {
+impl<D> Service<Request<Body>> for Bouncer<D>
+where
+    D: Dal + 'static,
+{
     type Response = Response;
     type Error = Error;
     type Future =
@@ -241,9 +253,11 @@ impl Service<Request<Body>> for Bouncer {
     }
 }
 
-pub struct UserServiceBuilder {
-    service: Option<Arc<GatewayService>>,
-    task_sender: Option<Sender<BoxedTask>>,
+pub struct UserServiceBuilder<D>
+where
+    D: Dal,
+{
+    dal: Option<D>,
     acme: Option<AcmeClient>,
     tls_acceptor: Option<RustlsAcceptor<DefaultAcceptor>>,
     bouncer_binds_to: Option<SocketAddr>,
@@ -251,17 +265,22 @@ pub struct UserServiceBuilder {
     public: Option<FQDN>,
 }
 
-impl Default for UserServiceBuilder {
+impl<D> Default for UserServiceBuilder<D>
+where
+    D: Dal + 'static,
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl UserServiceBuilder {
+impl<D> UserServiceBuilder<D>
+where
+    D: Dal + 'static,
+{
     pub fn new() -> Self {
         Self {
-            service: None,
-            task_sender: None,
+            dal: None,
             public: None,
             acme: None,
             tls_acceptor: None,
@@ -275,13 +294,8 @@ impl UserServiceBuilder {
         self
     }
 
-    pub fn with_service(mut self, service: Arc<GatewayService>) -> Self {
-        self.service = Some(service);
-        self
-    }
-
-    pub fn with_task_sender(mut self, task_sender: Sender<BoxedTask>) -> Self {
-        self.task_sender = Some(task_sender);
+    pub fn with_dal(mut self, dal: D) -> Self {
+        self.dal = Some(dal);
         self
     }
 
@@ -306,23 +320,21 @@ impl UserServiceBuilder {
     }
 
     pub fn serve(self) -> impl Future<Output = Result<(), io::Error>> {
-        let service = self.service.expect("a GatewayService is required");
-        let task_sender = self.task_sender.expect("a task sender is required");
+        let dal = self.dal.expect("a DAL is required");
         let public = self.public.expect("a public FQDN is required");
         let user_binds_to = self
             .user_binds_to
             .expect("a socket address to bind to is required");
 
         let user_proxy = SanitizePath::sanitize_paths(UserProxy {
-            gateway: service.clone(),
-            task_sender,
+            dal: dal.clone(),
             remote_addr: "127.0.0.1:80".parse().unwrap(),
             public: public.clone(),
         })
         .into_make_service();
 
         let bouncer = self.bouncer_binds_to.as_ref().map(|_| Bouncer {
-            gateway: service.clone(),
+            dal: dal.clone(),
             public: public.clone(),
         });
 

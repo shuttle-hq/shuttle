@@ -1,47 +1,59 @@
 [package]
 name = "shuttle-deployer"
-version = "0.1.0"
+version = "0.18.0"
 edition.workspace = true
 license.workspace = true
 description = "Service to execute the deployment of projects on shuttle"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = { workspace = true }
-async-recursion = "1.0.4"
+async-trait = { workspace = true }
 axum = { workspace = true, features = ["headers", "json", "query", "ws"] }
-base16ct = { version = "0.1.1", features = ["alloc"] }
+bollard = "0.14.0"
 bytes = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true }
-dirs = { workspace = true }
-flate2 = { workspace = true }
+crossbeam-channel = { workspace = true }
+derive_builder = "0.12.0"
+fqdn = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
+home = { workspace = true }
 hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
-oci-spec = "0.5.7"
 once_cell = { workspace = true }
-rmp-serde = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-http = { workspace = true }
+rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10.2"
-regex = "1.5.6"
-reqwest = { workspace = true , features = ["json"]}
-tokio-stream = "0.1.14"
-tokio-tar = "0.3.0"
+sqlx = { workspace = true, features = [
+    "chrono",
+    "migrate",
+    "runtime-tokio-rustls",
+    "sqlite",
+    "json",
+] }
+strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }
+tokio-stream = { workspace = true }
+tonic = { workspace = true }
+tower = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-ureq = { version = "2.5.0", features = ["json"] }
-url = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+tracing-subscriber = { workspace = true, features = [
+  "default",
+  "env-filter",
+  "fmt",
+] }
 utoipa = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
+ulid = { workspace = true, features = ["serde", "uuid"] }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["backend", "models", "openapi"]
+features = ["backend", "models", "claims", "tonic"]
 
 [dependencies.shuttle-proto]
 workspace = true

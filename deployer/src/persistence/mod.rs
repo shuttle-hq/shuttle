@@ -376,7 +376,7 @@ impl ResourceManager for Persistence {
             "INSERT OR REPLACE INTO resources (service_id, type, config, data) VALUES (?, ?, ?, ?)",
         )
         .bind(resource.service_id)
-        .bind(resource.r#type)
+        .bind(resource.r#type.clone())
         .bind(&resource.config)
         .bind(&resource.data)
         .execute(&self.pool)

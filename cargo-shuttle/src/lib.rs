@@ -200,7 +200,7 @@ impl Shuttle {
 
         // 5. Initialize locally
         init::cargo_generate(
-            path.clone(),
+            path,
             project_args
                 .name
                 .as_ref()

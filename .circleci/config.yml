@@ -646,6 +646,7 @@ workflows:
                   "shuttle-deployer",
                   "shuttle-proto",
                   "shuttle-provisioner",
+                  "shuttle-resource-recorder",
                   "shuttle-runtime",
                   "shuttle-service",
                 ]

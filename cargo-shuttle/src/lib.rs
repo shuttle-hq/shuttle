@@ -922,12 +922,51 @@ impl Shuttle {
         Ok(())
     }
 
+
+    #[cfg(target_family = "windows")]
+    async fn handle_signals() -> bool {
+        let mut ctrl_break_notif = tokio::signal::windows::ctrl_break()
+            .expect("Can not get the CtrlBreak signal receptor");
+        let mut ctrl_c_notif =
+            tokio::signal::windows::ctrl_c().expect("Can not get the CtrlC signal receptor");
+        let mut ctrl_close_notif = tokio::signal::windows::ctrl_close()
+            .expect("Can not get the CtrlClose signal receptor");
+        let mut ctrl_logoff_notif = tokio::signal::windows::ctrl_logoff()
+            .expect("Can not get the CtrlLogoff signal receptor");
+        let mut ctrl_shutdown_notif = tokio::signal::windows::ctrl_shutdown()
+            .expect("Can not get the CtrlShutdown signal receptor");
+
+        tokio::select! {
+            _ = ctrl_break_notif.recv() => {
+                println!("cargo-shuttle received ctrl-break.");
+                true
+            },
+            _ = ctrl_c_notif.recv() => {
+                println!("cargo-shuttle received ctrl-c.");
+                true
+            },
+            _ = ctrl_close_notif.recv() => {
+                println!("cargo-shuttle received ctrl-close.");
+                true
+            },
+            _ = ctrl_logoff_notif.recv() => {
+                println!("cargo-shuttle received ctrl-logoff.");
+                true
+            },
+            _ = ctrl_shutdown_notif.recv() => {
+                println!("cargo-shuttle received ctrl-shutdown.");
+                true
+            }
+            else => {
+                false
+            }
+        }
+    }
+
     #[cfg(target_family = "windows")]
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
-        let mut ctlr_c_notif =
-            tokio::signal::windows::ctrl_c().expect("Can not get the CtrlC signal receptor");
         // Start all the services.
         let mut runtimes: Vec<(
             Child,
@@ -940,9 +979,9 @@ impl Shuttle {
                     Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &provisioner_server).await?;
                     false
                 },
-                _ = ctlr_c_notif.recv() => {
+                _ = Shuttle::handle_signals() => {
                     println!(
-                        "cargo-shuttle received Ctrl+C. Killing all the runtimes..."
+                        "Killing all the runtimes..."
                     );
                     true
                 }
@@ -990,9 +1029,9 @@ impl Shuttle {
                     );
                     false
                 },
-                _ = ctlr_c_notif.recv() => {
+                _ = Shuttle::handle_signals() => {
                     println!(
-                        "cargo-shuttle received Ctrl+C. Killing all the runtimes..."
+                        "Killing all the runtimes..."
                     );
                     provisioner_server.abort();
                     Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {

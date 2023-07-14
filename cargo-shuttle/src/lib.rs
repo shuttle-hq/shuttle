@@ -922,7 +922,6 @@ impl Shuttle {
         Ok(())
     }
 
-
     #[cfg(target_family = "windows")]
     async fn handle_signals() -> bool {
         let mut ctrl_break_notif = tokio::signal::windows::ctrl_break()

@@ -50,6 +50,14 @@ use self::args::Args;
 mod args;
 
 pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
+    // `--version` overrides any other arguments.
+    if std::env::args().find(|arg| arg == "--version").is_some() {
+        let name = env!("CARGO_PKG_NAME");
+        let version = env!("CARGO_PKG_VERSION");
+        println!("{name} {version}");
+        return;
+    }
+
     let args = match Args::parse() {
         Ok(args) => args,
         Err(e) => {

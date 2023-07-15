@@ -604,6 +604,18 @@ impl Shuttle {
                 runtime_path
             } else {
                 trace!(path = ?executable_path, "using alpha runtime");
+                if let Err(err) = check_version(&executable_path) {
+                    println!("Warning: {}.", err);
+                    println!(
+                        "[HINT]: cargo-shuttle is on version {VERSION}. \
+                        Check this project's Cargo.toml if shuttle-runtime matches this."
+                    );
+                    println!(
+                        "[HINT]: If cargo-shuttle was installed \
+                        using cargo, you can get the latest version \
+                        by running `cargo install cargo-shuttle`."
+                    );
+                }
                 executable_path.clone()
             }
         };

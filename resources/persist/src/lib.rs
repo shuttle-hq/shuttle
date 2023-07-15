@@ -59,15 +59,15 @@ impl PersistInstance {
 
         let entries = fs::read_dir(storage_folder).map_err(PersistError::ListFolder)?;
         for entry in entries {
-            let file = entry.map_err(PersistError::ListFolder)?;
-            list.push(
-                file.path()
-                    .file_stem()
-                    .unwrap_or_default()
-                    .to_str()
-                    .unwrap_or("file name contains non-UTF-8 characters")
-                    .to_string(),
-            );
+            let key = entry.map_err(PersistError::ListFolder)?;
+            let key_name = key
+                .path()
+                .file_stem()
+                .unwrap_or_default()
+                .to_str()
+                .unwrap_or("file name contains non-UTF-8 characters")
+                .to_string();
+            list.push(key_name);
         }
         Ok(list)
     }
@@ -93,6 +93,24 @@ impl PersistInstance {
         let file_path = self.get_storage_file(key);
         fs::remove_file(file_path).map_err(PersistError::RemoveFile)?;
         Ok(())
+    }
+
+    /// size method determines the size of all keys stored within a folder, within the PersistInstance
+    pub fn size(&self) -> Result<u64, PersistError> {
+        let storage_folder = self.get_storage_folder();
+        let mut size = 0;
+
+        let entries = fs::read_dir(storage_folder).map_err(PersistError::ReadFolder)?;
+
+        for entry in entries {
+            let entry = entry.map_err(PersistError::ReadEntry)?;
+            let path = entry.path();
+
+            if path.is_file() {
+                size += fs::metadata(&path).map_err(PersistError::ReadEntry)?.len();
+            }
+        }
+        Ok(size)
     }
 
     pub fn load<T>(&self, key: &str) -> Result<T, PersistError>
@@ -152,7 +170,14 @@ impl ResourceBuilder<PersistInstance> for Persist {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::Rng;
     use std::str::FromStr;
+
+    fn get_range() -> usize {
+        let mut rng = rand::thread_rng();
+        let num_keys = rng.gen_range(1..=20);
+        num_keys
+    }
 
     #[test]
     fn test_save_and_load() {
@@ -170,12 +195,16 @@ mod tests {
         let persist = PersistInstance {
             service_name: ServiceName::from_str("test_list").unwrap(),
         };
+        let list_length = get_range();
+        for list_key in 1..=list_length {
+            let key_name = format!("list_key_{}", list_key);
+            let key_value = format!("list_key_value_{}", list_key);
+            persist.save(&key_name, &key_value).unwrap();
+        }
 
-        persist.save("test_list", "test_key").unwrap();
-
-        let result = vec!["test_list".to_string()];
-        let list_result = persist.list().unwrap();
-        assert_eq!(result, list_result);
+        let length = persist.list().unwrap().len();
+        assert_eq!(length, list_length);
+        persist.clear().unwrap();
     }
 
     #[test]
@@ -184,10 +213,15 @@ mod tests {
             service_name: ServiceName::from_str("test_clear").unwrap(),
         };
 
-        persist.save("test_clear", "test_key_clear").unwrap();
-        assert!(persist.list().unwrap().len() == 1);
+        let list_length = get_range();
+        for clear_key in 1..=list_length {
+            let key_name = format!("clear_key_{}", clear_key);
+            let key_value = format!("clear_key_value_{}", clear_key);
+            persist.save(&key_name, &key_value).unwrap();
+        }
         persist.clear().unwrap();
-        assert!(persist.list().unwrap().is_empty());
+        let actual_length = persist.list().unwrap().len();
+        assert_eq!(actual_length, 0);
     }
 
     #[test]
@@ -196,10 +230,39 @@ mod tests {
             service_name: ServiceName::from_str("test_remove").unwrap(),
         };
 
-        persist.save("test_remove", "test_key_remove").unwrap();
-        assert!(persist.list().unwrap().len() == 1);
-        persist.remove(persist.list().unwrap()[0].as_str()).unwrap();
-        assert!(persist.list().unwrap().is_empty());
+        let list_length = get_range();
+        for remove_key in 1..=list_length {
+            let key_name = format!("remove_key_{}", remove_key);
+            let key_value = format!("remove_key_value_{}", remove_key);
+            persist.save(&key_name, &key_value).unwrap();
+        }
+        persist
+            .remove(persist.list().unwrap()[list_length - 1].as_str())
+            .unwrap();
+        let actual_length = persist.list().unwrap().len();
+        assert_eq!(actual_length, list_length - 1);
+        persist.clear().unwrap();
+    }
+
+    #[test]
+    fn test_size() {
+        let persist = PersistInstance {
+            service_name: ServiceName::from_str("test_size").unwrap(),
+        };
+
+        let mut expected_size = 0;
+        let list_length = get_range();
+        for size_key in 1..=list_length {
+            let key_name = format!("size_key_{}", size_key);
+            let key_value = format!("size_key_value_{}", size_key);
+            persist.save(&key_name, &key_value).unwrap();
+            expected_size += fs::metadata(persist.get_storage_file(&key_name))
+                .unwrap()
+                .len();
+        }
+        let actual_size = persist.size().unwrap();
+        assert_eq!(expected_size, actual_size);
+        persist.clear().unwrap();
     }
 
     #[test]

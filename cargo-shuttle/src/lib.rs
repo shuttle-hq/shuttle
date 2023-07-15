@@ -1397,11 +1397,11 @@ fn check_version(runtime_path: &Path) -> Result<()> {
 /// nonzero digit is the same."
 fn semvers_are_compatible(a: &semver::Version, b: &semver::Version) -> bool {
     if a.major != 0 || b.major != 0 {
-        return a.major == b.major;
+        a.major == b.major
     } else if a.minor != 0 || b.minor != 0 {
-        return a.minor == b.minor;
+        a.minor == b.minor
     } else {
-        return a.patch == b.patch;
+        a.patch == b.patch
     }
 }
 
@@ -1630,7 +1630,6 @@ version = "0.1.0"
             ("1.0.0", "1.0.0", true),
             ("1.8.0", "1.0.0", true),
             ("0.1.0", "0.2.1", false),
-            ("0.9.0", "0.2.0", false),
             ("0.9.0", "0.2.0", false),
         ];
         for (version_a, version_b, are_compatible) in semver_tests {

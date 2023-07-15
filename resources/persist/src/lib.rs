@@ -175,8 +175,7 @@ mod tests {
 
     fn get_range() -> usize {
         let mut rng = rand::thread_rng();
-        let num_keys = rng.gen_range(1..=20);
-        num_keys
+        rng.gen_range(1..=20) as usize
     }
 
     #[test]

@@ -605,16 +605,27 @@ impl Shuttle {
             } else {
                 trace!(path = ?executable_path, "using alpha runtime");
                 if let Err(err) = check_version(&executable_path) {
-                    println!("Warning: {}.", err);
-                    println!(
-                        "[HINT]: cargo-shuttle is on version {VERSION}. \
-                        Check this project's Cargo.toml if shuttle-runtime matches this."
-                    );
-                    println!(
-                        "[HINT]: If cargo-shuttle was installed \
-                        using cargo, you can get the latest version \
-                        by running `cargo install cargo-shuttle`."
-                    );
+                    warn!("{}", err);
+                    if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
+                        println!("Warning: {}.", mismatch);
+                        if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
+                            // The runtime is newer than cargo-shuttle so we
+                            // should help the user to update cargo-shuttle.
+                            println!(
+                                "[HINT]: You should update cargo-shuttle. \
+                                If cargo-shuttle was installed using cargo, \
+                                you can get the latest version by running \
+                                `cargo install cargo-shuttle`."
+                            );
+                        } else {
+                            println!(
+                                "[HINT]: You should update shuttle-runtime. \
+                                Change its version to {} in this project's \
+                                Cargo.toml to use a compatible version.",
+                                mismatch.cargo_shuttle
+                            );
+                        }
+                    }
                 }
                 executable_path.clone()
             }
@@ -1345,8 +1356,7 @@ impl Shuttle {
 
 fn check_version(runtime_path: &Path) -> Result<()> {
     let valid_version = semver::Version::from_str(VERSION)
-        .context("failed to convert runtime version to semver")?
-        .to_string();
+        .context("failed to convert runtime version to semver")?;
 
     if !runtime_path.try_exists()? {
         bail!("shuttle-runtime is not installed");
@@ -1369,15 +1379,49 @@ fn check_version(runtime_path: &Path) -> Result<()> {
             .1
             .trim(),
     )
-    .context("failed to convert runtime version to semver")?
-    .to_string();
+    .context("failed to convert runtime version to semver")?;
 
-    if runtime_version == valid_version {
+    if semvers_are_compatible(&valid_version, &runtime_version) {
         Ok(())
     } else {
-        bail!("shuttle-runtime and cargo-shuttle are not the same version")
+        Err(VersionMismatchError {
+            shuttle_runtime: runtime_version,
+            cargo_shuttle: valid_version,
+        })
+        .context("shuttle-runtime and cargo-shuttle have incompatible versions")
     }
 }
+
+/// Check if two versions are compatible based on the rule used by
+/// cargo: "Versions `a` and `b` are compatible if their left-most
+/// nonzero digit is the same."
+fn semvers_are_compatible(a: &semver::Version, b: &semver::Version) -> bool {
+    if a.major != 0 || b.major != 0 {
+        return a.major == b.major;
+    } else if a.minor != 0 || b.minor != 0 {
+        return a.minor == b.minor;
+    } else {
+        return a.patch == b.patch;
+    }
+}
+
+#[derive(Debug)]
+struct VersionMismatchError {
+    shuttle_runtime: semver::Version,
+    cargo_shuttle: semver::Version,
+}
+
+impl std::fmt::Display for VersionMismatchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "shuttle-runtime {} and cargo-shuttle {} are incompatible",
+            self.shuttle_runtime, self.cargo_shuttle
+        )
+    }
+}
+
+impl std::error::Error for VersionMismatchError {}
 
 fn create_spinner() -> ProgressBar {
     let pb = indicatif::ProgressBar::new_spinner();
@@ -1578,5 +1622,24 @@ version = "0.1.0"
         entries.sort();
 
         assert_eq!(entries, vec!["Cargo.lock", "Cargo.toml", "src/main.rs"]);
+    }
+
+    #[test]
+    fn semver_compatibility_check_works() {
+        let semver_tests = &[
+            ("1.0.0", "1.0.0", true),
+            ("1.8.0", "1.0.0", true),
+            ("0.1.0", "0.2.1", false),
+            ("0.9.0", "0.2.0", false),
+            ("0.9.0", "0.2.0", false),
+        ];
+        for (version_a, version_b, are_compatible) in semver_tests {
+            let version_a = semver::Version::from_str(version_a).unwrap();
+            let version_b = semver::Version::from_str(version_b).unwrap();
+            assert_eq!(
+                super::semvers_are_compatible(&version_a, &version_b),
+                *are_compatible
+            );
+        }
     }
 }

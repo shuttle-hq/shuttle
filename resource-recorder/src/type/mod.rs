@@ -10,6 +10,7 @@ pub enum Type {
     Secrets,
     StaticFolder,
     Persist,
+    Turso,
 }
 
 impl Display for Type {
@@ -19,6 +20,7 @@ impl Display for Type {
             Type::Secrets => write!(f, "secrets"),
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
+            Type::Turso => write!(f, "turso"),
         }
     }
 }
@@ -37,6 +39,7 @@ impl FromStr for Type {
                 "secrets" => Ok(Self::Secrets),
                 "static_folder" => Ok(Self::StaticFolder),
                 "persist" => Ok(Self::Persist),
+                "turso" => Ok(Self::Turso),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }
@@ -90,6 +93,7 @@ mod tests {
             Type::Secrets,
             Type::StaticFolder,
             Type::Persist,
+            Type::Turso,
         ];
 
         for input in inputs {

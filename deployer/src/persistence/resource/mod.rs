@@ -1,5 +1,6 @@
 pub mod database;
 
+use shuttle_proto::resource_recorder::{record_request, ResourcesResponse, ResultResponse};
 use sqlx::{
     sqlite::{SqliteArgumentValue, SqliteRow, SqliteValueRef},
     Database, FromRow, Row, Sqlite,
@@ -14,8 +15,16 @@ pub use self::database::Type as DatabaseType;
 pub trait ResourceManager: Clone + Send + Sync + 'static {
     type Err: std::error::Error;
 
-    async fn insert_resource(&self, resource: &Resource) -> Result<(), Self::Err>;
-    async fn get_resources(&self, service_id: &Ulid) -> Result<Vec<Resource>, Self::Err>;
+    async fn insert_resource(
+        &self,
+        resource: &record_request::Resource,
+        service_id: &ulid::Ulid,
+        project_id: &ulid::Ulid,
+    ) -> Result<ResultResponse, Self::Err>;
+    async fn get_service_resources(
+        &self,
+        service_id: &ulid::Ulid,
+    ) -> Result<ResourcesResponse, Self::Err>;
 }
 
 #[derive(Debug, Eq, PartialEq)]

@@ -5552,6 +5552,7 @@ dependencies = [
  "home",
  "prost",
  "prost-types",
+ "serde_json",
  "shuttle-common",
  "tokio",
  "tonic",

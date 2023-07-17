@@ -15,7 +15,7 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
-    let (persistence, _) = Persistence::new(&args.state).await;
+    let (persistence, _) = Persistence::new(&args.state, &args.resource_recorder).await;
     setup_tracing(
         tracing_subscriber::registry().with(DeployLayer::new(persistence.clone())),
         "deployer",

@@ -424,6 +424,37 @@ where
     }
 }
 
+pub trait VerifyClaim {
+    type Error;
+
+    fn verify(&self, required_scope: Scope) -> Result<(), Self::Error>;
+}
+
+#[cfg(feature = "tonic")]
+impl<B> VerifyClaim for tonic::Request<B> {
+    type Error = tonic::Status;
+
+    fn verify(&self, required_scope: Scope) -> Result<(), Self::Error> {
+        use strum::EnumMessage;
+
+        let claim = self
+            .extensions()
+            .get::<Claim>()
+            .ok_or_else(|| tonic::Status::internal("could not get claim"))?;
+
+        if claim.scopes.contains(&required_scope) {
+            Ok(())
+        } else {
+            Err(tonic::Status::permission_denied(format!(
+                "don't have permisson to: {}",
+                required_scope
+                    .get_documentation()
+                    .unwrap_or("perform this operation")
+            )))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use axum::{routing::get, Extension, Router};

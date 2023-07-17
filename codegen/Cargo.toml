@@ -16,7 +16,7 @@ quote = "1.0.21"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
 
 [dev-dependencies]
-pretty_assertions = "1.3.0"
+pretty_assertions = { workspace = true }
 trybuild = "1.0.72"
 
 [features]

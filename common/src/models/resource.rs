@@ -153,9 +153,6 @@ fn get_persist_table(persist_instances: &[&Response], service_name: &str) -> Str
             .add_attribute(Attribute::Bold)]);
 
     for _ in persist_instances {
-        // TODO: add some information that would make the persist resource identifiable.
-        // This requires changing the backend resource list response to include a resource identifier
-        // that can be used to query for more info related to a resource.
         table.add_row(vec!["Instance"]);
     }
 

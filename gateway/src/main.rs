@@ -47,7 +47,11 @@ async fn main() -> io::Result<()> {
     let sqlite_options = SqliteConnectOptions::from_str(db_uri)
         .unwrap()
         .journal_mode(SqliteJournalMode::Wal)
-        .synchronous(SqliteSynchronous::Normal);
+        .synchronous(SqliteSynchronous::Normal)
+        // Set the ulid0 extension for generating ULID's in migrations.
+        // This uses the ulid0.so file in the crate root, with the
+        // LD_LIBRARY_PATH env set in build.rs.
+        .extension("ulid0");
 
     let db = SqlitePool::connect_with(sqlite_options).await.unwrap();
     MIGRATIONS.run(&db).await.unwrap();

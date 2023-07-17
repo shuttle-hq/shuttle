@@ -11,6 +11,7 @@ pub enum Type {
     StaticFolder,
     Persist,
     Turso,
+    Custom,
 }
 
 impl Display for Type {
@@ -21,6 +22,7 @@ impl Display for Type {
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
             Type::Turso => write!(f, "turso"),
+            Type::Custom => write!(f, "custom"),
         }
     }
 }
@@ -40,6 +42,7 @@ impl FromStr for Type {
                 "static_folder" => Ok(Self::StaticFolder),
                 "persist" => Ok(Self::Persist),
                 "turso" => Ok(Self::Turso),
+                "custom" => Ok(Self::Custom),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }

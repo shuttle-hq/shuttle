@@ -35,6 +35,10 @@ pub struct Args {
     #[clap(long, default_value = "http://gateway:8001")]
     pub gateway_uri: Uri,
 
+    /// Address to reach resource-recorder service at
+    #[clap(long, default_value = "http://resource-recorder:8001")]
+    pub resource_recorder: Uri,
+
     /// Project being served by this deployer
     #[clap(long)]
     pub project: ProjectName,

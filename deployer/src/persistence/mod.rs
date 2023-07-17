@@ -11,7 +11,15 @@ use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
 use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 use error::{Error, Result};
+use hyper::Uri;
+use shuttle_common::claims::{ClaimLayer, InjectPropagationLayer};
+use shuttle_proto::resource_recorder::resource_recorder_client::ResourceRecorderClient;
+use shuttle_proto::resource_recorder::{
+    record_request, RecordRequest, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
+};
 use sqlx::QueryBuilder;
+use tonic::transport::Endpoint;
+use tower::ServiceBuilder;
 use ulid::Ulid;
 
 use std::net::SocketAddr;
@@ -32,7 +40,7 @@ use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentState, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
-pub use self::resource::{Resource, ResourceManager, Type as ResourceType};
+pub use self::resource::{ResourceManager, Type as ResourceType};
 pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
 pub use self::state::State;
@@ -45,6 +53,11 @@ pub struct Persistence {
     pool: SqlitePool,
     log_send: crossbeam_channel::Sender<deploy_layer::Log>,
     stream_log_send: Sender<deploy_layer::Log>,
+    resource_recorder_client: ResourceRecorderClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >,
 }
 
 impl Persistence {
@@ -52,7 +65,7 @@ impl Persistence {
     /// function creates all necessary tables and sets up a database connection
     /// pool - new connections should be made by cloning [`Persistence`] rather
     /// than repeatedly calling [`Persistence::new`].
-    pub async fn new(path: &str) -> (Self, JoinHandle<()>) {
+    pub async fn new(path: &str, resource_recorder_uri: Uri) -> (Self, JoinHandle<()>) {
         if !Path::new(path).exists() {
             Sqlite::create_database(path).await.unwrap();
         }
@@ -80,7 +93,7 @@ impl Persistence {
 
         let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
 
-        Self::from_pool(pool).await
+        Self::from_pool(pool, resource_recorder_uri.to_string()).await
     }
 
     #[allow(dead_code)]
@@ -98,7 +111,7 @@ impl Persistence {
         Self::from_pool(pool).await
     }
 
-    async fn from_pool(pool: SqlitePool) -> (Self, JoinHandle<()>) {
+    async fn from_pool(pool: SqlitePool, resource_recorder_uri: String) -> (Self, JoinHandle<()>) {
         MIGRATIONS.run(&pool).await.unwrap();
 
         let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
@@ -173,10 +186,24 @@ impl Persistence {
             }
         });
 
+        let channel = Endpoint::from_shared(resource_recorder_uri.to_string())
+            .expect("failed to convert resource recorder uri to a string")
+            .connect()
+            .await
+            .expect("failed to connect to provisioner");
+
+        let channel = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
+
+        let resource_recorder_client = ResourceRecorderClient::new(channel);
+
         let persistence = Self {
             pool,
             log_send,
             stream_log_send,
+            resource_recorder_client,
         };
 
         (persistence, handle)
@@ -415,26 +442,34 @@ impl LogRecorder for Persistence {
 impl ResourceManager for Persistence {
     type Err = Error;
 
-    async fn insert_resource(&self, resource: &Resource) -> Result<()> {
-        sqlx::query(
-            "INSERT OR REPLACE INTO resources (service_id, type, config, data) VALUES (?, ?, ?, ?)",
-        )
-        .bind(resource.service_id.to_string())
-        .bind(resource.r#type.clone())
-        .bind(&resource.config)
-        .bind(&resource.data)
-        .execute(&self.pool)
-        .await
-        .map(|_| ())
-        .map_err(Error::from)
-    }
-
-    async fn get_resources(&self, service_id: &Ulid) -> Result<Vec<Resource>> {
-        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
-            .bind(service_id.to_string())
-            .fetch_all(&self.pool)
+    async fn insert_resource(
+        &self,
+        resource: &record_request::Resource,
+        service_id: &Ulid,
+        project_id: &Ulid,
+    ) -> Result<ResultResponse> {
+        let resources = vec![resource.clone()];
+        let record_request = RecordRequest {
+            project_id: project_id.to_string(),
+            service_id: service_id.to_string(),
+            resources,
+        };
+        self.resource_recorder_client
+            .record_resources(record_request)
             .await
             .map_err(Error::from)
+            .map(|res| res.into_inner())
+    }
+
+    async fn get_service_resources(&self, service_id: &Ulid) -> Result<ResourcesResponse> {
+        let service_resources_req = ServiceResourcesRequest {
+            service_id: service_id.to_string(),
+        };
+        self.resource_recorder_client
+            .get_service_resources(service_resources_req)
+            .await
+            .map_err(Error::from)
+            .map(|res| res.into_inner())
     }
 }
 
@@ -1147,55 +1182,6 @@ mod tests {
                 ..Default::default()
             }
         );
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn deployment_resources() {
-        let (p, _) = Persistence::new_in_memory().await;
-        let service_id = add_service(&p.pool).await.unwrap();
-        let service_id2 = add_service(&p.pool).await.unwrap();
-
-        let resource1 = Resource {
-            service_id,
-            r#type: ResourceType::Database(resource::DatabaseType::Shared(
-                resource::database::SharedType::Postgres,
-            )),
-            config: json!({"reset": true}),
-            data: json!({"username": "root"}),
-        };
-        let resource2 = Resource {
-            service_id,
-            r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
-                resource::database::AwsRdsType::MariaDB,
-            )),
-            config: json!({"scale": 4}),
-            data: json!({"uri": "postgres://localhost"}),
-        };
-        let resource3 = Resource {
-            service_id: service_id2,
-            r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
-                resource::database::AwsRdsType::Postgres,
-            )),
-            config: json!({"scale": 2}),
-            data: json!({"username": "admin"}),
-        };
-        // This makes sure only the last instance of a type is saved (clashes with [resource1])
-        let resource4 = Resource {
-            service_id,
-            r#type: ResourceType::Database(resource::DatabaseType::Shared(
-                resource::database::SharedType::Postgres,
-            )),
-            config: json!({"local": true}),
-            data: json!({"username": "foo"}),
-        };
-
-        for resource in [&resource1, &resource2, &resource3, &resource4] {
-            p.insert_resource(resource).await.unwrap();
-        }
-
-        let resources = p.get_resources(&service_id).await.unwrap();
-
-        assert_eq!(resources, vec![resource2, resource4]);
     }
 
     #[tokio::test(flavor = "multi_thread")]

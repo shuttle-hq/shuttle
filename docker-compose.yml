@@ -102,8 +102,6 @@ services:
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
     depends_on:
-      - postgres
-      - mongodb
       - auth
     environment:
       - RUST_LOG=${RUST_LOG}

@@ -20,8 +20,9 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use serde_json::Value;
-use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
+use shuttle_common::backends::headers::{
+    XShuttleAccountName, XShuttleAdminSecret, XShuttleProjectId,
+};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
@@ -247,6 +248,7 @@ impl GatewayService {
         &self,
         project: &Project,
         project_name: &ProjectName,
+        project_id: String,
         account_name: &AccountName,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
@@ -263,6 +265,7 @@ impl GatewayService {
         let headers = req.headers_mut();
         headers.typed_insert(XShuttleAccountName(account_name.to_string()));
         headers.typed_insert(XShuttleAdminSecret(control_key));
+        headers.typed_insert(XShuttleProjectId(project_id));
 
         let cx = Span::current().context();
         global::get_text_map_propagator(|propagator| {
@@ -758,6 +761,17 @@ impl GatewayService {
         Ok(project)
     }
 
+    /// Get project id of a project, by name.
+    pub async fn project_id(self: &Arc<Self>, project_name: &ProjectName) -> Result<String, Error> {
+        Ok(
+            query("SELECT project_id FROM projects WHERE project_name = ?1")
+                .bind(project_name)
+                .fetch_one(&self.db)
+                .await?
+                .get::<String, _>("project_id"),
+        )
+    }
+
     pub fn task_router(&self) -> TaskRouter<BoxedTask> {
         self.task_router.clone()
     }
@@ -818,7 +832,7 @@ impl GatewayContext {
             let body = hyper::body::to_bytes(resp.into_body())
                 .await
                 .unwrap_or_default();
-            let convert: Value = serde_json::from_slice(&body).unwrap_or_default();
+            let convert: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
 
             trace!(?convert, "got jwt response");
 

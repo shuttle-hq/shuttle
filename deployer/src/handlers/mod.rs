@@ -16,12 +16,12 @@ use axum::Json;
 use bytes::Bytes;
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
-use hyper::{Request, StatusCode, Uri};
+use hyper::{HeaderMap, Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
 use shuttle_common::backends::auth::{
     AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
 };
-use shuttle_common::backends::headers::XShuttleAccountName;
+use shuttle_common::backends::headers::{XShuttleAccountName, X_SHUTTLE_PROJECT_ID};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
 use shuttle_common::models::deployment::{
@@ -289,10 +289,12 @@ pub async fn get_service(
 pub async fn get_service_resources(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, service_name)): Path<(String, String)>,
+    headers: HeaderMap,
 ) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
+    let project_id = headers.get(X_SHUTTLE_PROJECT_ID);
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let resources = persistence
-            .get_resources(&service.id)
+            .get_service_resources(&service.id)
             .await?
             .into_iter()
             .map(Into::into)

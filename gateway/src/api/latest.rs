@@ -247,9 +247,15 @@ async fn route_project(
 ) -> Result<Response<Body>, Error> {
     let project_name = scoped_user.scope;
     let project = service.find_or_start_project(&project_name, sender).await?;
-
+    let project_id = service.project_id(&project_name).await?;
     service
-        .route(&project, &project_name, &scoped_user.user.name, req)
+        .route(
+            &project,
+            &project_name,
+            project_id,
+            &scoped_user.user.name,
+            req,
+        )
         .await
 }
 

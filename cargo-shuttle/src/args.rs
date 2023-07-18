@@ -260,7 +260,7 @@ pub struct InitArgs {
 #[derive(ValueEnum, Clone, Debug, strum::Display, strum::EnumIter)]
 #[strum(serialize_all = "kebab-case")]
 pub enum InitTemplateArg {
-    /// Actix-web framework
+    /// Actix Web framework
     ActixWeb,
     /// Axum web framework
     Axum,

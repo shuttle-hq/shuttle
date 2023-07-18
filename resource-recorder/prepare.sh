@@ -10,12 +10,4 @@ if [ "$1" = "--after-src" ]; then
     exit 0
 fi
 
-# Patch crates to be on same versions
-mkdir -p $CARGO_HOME
-touch $CARGO_HOME/config.toml
-if [[ $PROD != "true" ]]; then
-    echo '
-    [patch.crates-io]
-    shuttle-common = { path = "/usr/src/shuttle/common" }
-    shuttle-proto = { path = "/usr/src/shuttle/proto" }' > $CARGO_HOME/config.toml
-fi
+# Nothing to prepare in container image here

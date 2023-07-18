@@ -1,11 +1,11 @@
 pub mod database;
 
 use sqlx::{
-    sqlite::{SqliteArgumentValue, SqliteValueRef},
-    Database, Sqlite,
+    sqlite::{SqliteArgumentValue, SqliteRow, SqliteValueRef},
+    Database, FromRow, Row, Sqlite,
 };
 use std::{borrow::Cow, fmt::Display, str::FromStr};
-use uuid::Uuid;
+use ulid::Ulid;
 
 pub use self::database::Type as DatabaseType;
 
@@ -15,15 +15,27 @@ pub trait ResourceManager: Clone + Send + Sync + 'static {
     type Err: std::error::Error;
 
     async fn insert_resource(&self, resource: &Resource) -> Result<(), Self::Err>;
-    async fn get_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>, Self::Err>;
+    async fn get_resources(&self, service_id: &Ulid) -> Result<Vec<Resource>, Self::Err>;
 }
 
-#[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Resource {
-    pub service_id: Uuid,
+    pub service_id: Ulid,
     pub r#type: Type,
     pub data: serde_json::Value,
     pub config: serde_json::Value,
+}
+
+impl FromRow<'_, SqliteRow> for Resource {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            service_id: Ulid::from_string(row.try_get("service_id")?)
+                .expect("to have a valid ulid string"),
+            r#type: row.try_get("type")?,
+            data: row.try_get("")?,
+            config: row.try_get("is_next")?,
+        })
+    }
 }
 
 impl From<Resource> for shuttle_common::resource::Response {

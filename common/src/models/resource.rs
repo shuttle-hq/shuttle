@@ -22,6 +22,7 @@ pub fn get_resources_table(resources: &Vec<Response>, service_name: &str) -> Str
                 Type::StaticFolder => "Static Folder",
                 Type::Persist => "Persist",
                 Type::Turso => "Turso",
+                Type::Custom => "Custom",
             };
 
             let elements = acc.entry(title).or_insert(Vec::new());
@@ -46,6 +47,10 @@ pub fn get_resources_table(resources: &Vec<Response>, service_name: &str) -> Str
 
         if let Some(persist) = resource_groups.get("Persist") {
             output.push(get_persist_table(persist, service_name));
+        };
+
+        if let Some(custom) = resource_groups.get("Custom") {
+            output.push(get_custom_resources_table(custom, service_name));
         };
 
         output.join("\n")
@@ -156,6 +161,35 @@ fn get_persist_table(persist_instances: &[&Response], service_name: &str) -> Str
 {table}
 "#,
         "persist instances".bold(),
+        service_name
+    )
+}
+
+fn get_custom_resources_table(
+    custom_resource_instances: &[&Response],
+    service_name: &str,
+) -> String {
+    let mut table = Table::new();
+
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_header(vec![Cell::new("Instances")
+            .set_alignment(CellAlignment::Center)
+            .add_attribute(Attribute::Bold)]);
+
+    for (idx, _) in custom_resource_instances.iter().enumerate() {
+        // TODO: add some information that would make the custom resources identifiable.
+        // This requires changing the backend resource list response to include a resource identifier
+        // that can be used to query for more info related to a resource.
+        table.add_row(vec![format!("custom-resource-{}", idx.to_string())]);
+    }
+
+    format!(
+        r#"These {} are linked to {}
+{table}
+"#,
+        "custom resource instances".bold(),
         service_name
     )
 }

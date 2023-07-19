@@ -554,6 +554,7 @@ mod tests {
                     &mut factory,
                     &mut resource_tracker,
                 ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
+                std::mem::drop(vars);
 
                 complex(pool).await
             }

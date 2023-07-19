@@ -1,8 +1,9 @@
+#[cfg(feature = "openapi")]
+use crate::ulid_type;
 use crossterm::style::{Color, Stylize};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::str::FromStr;
-use ulid::Ulid;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
@@ -12,8 +13,8 @@ use crate::models::deployment;
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::service::Response))]
 pub struct Response {
-    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
-    pub id: Ulid,
+    #[cfg_attr(feature = "openapi", schema(schema_with = ulid_type))]
+    pub id: String,
     pub name: String,
 }
 

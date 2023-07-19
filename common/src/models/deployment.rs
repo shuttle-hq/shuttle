@@ -1,4 +1,6 @@
 use crate::deployment::State;
+#[cfg(feature = "openapi")]
+use crate::ulid_type;
 use chrono::{DateTime, Utc};
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Attribute, Cell, CellAlignment, Color,
@@ -7,24 +9,9 @@ use comfy_table::{
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, str::FromStr};
-use ulid::Ulid;
 #[cfg(feature = "openapi")]
-use utoipa::{
-    openapi::{Object, ObjectBuilder},
-    ToSchema,
-};
+use utoipa::ToSchema;
 use uuid::Uuid;
-
-#[cfg(feature = "openapi")]
-fn ulid_type() -> Object {
-    ObjectBuilder::new()
-        .schema_type(utoipa::openapi::SchemaType::String)
-        .format(Some(utoipa::openapi::SchemaFormat::Custom(
-            "ulid".to_string(),
-        )))
-        .description(Some("String represention of an Ulid according to the spec found here: https://github.com/ulid/spec."))
-        .build()
-}
 
 #[derive(Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
@@ -33,7 +20,7 @@ pub struct Response {
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
     pub id: Uuid,
     #[cfg_attr(feature = "openapi", schema(schema_with = ulid_type))]
-    pub service_id: Ulid,
+    pub service_id: String,
     #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::deployment::State))]
     pub state: State,
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]

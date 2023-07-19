@@ -85,7 +85,16 @@ impl Persistence {
 
     #[allow(dead_code)]
     async fn new_in_memory() -> (Self, JoinHandle<()>) {
-        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let pool = SqlitePool::connect_with(
+            SqliteConnectOptions::from_str("sqlite::memory:")
+                .unwrap()
+                // Set the ulid0 extension for generating ULID's in migrations.
+                // This uses the ulid0.so file in the crate root, with the
+                // LD_LIBRARY_PATH env set in build.rs.
+                .extension("ulid0"),
+        )
+        .await
+        .unwrap();
         Self::from_pool(pool).await
     }
 

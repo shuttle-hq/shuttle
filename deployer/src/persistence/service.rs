@@ -11,7 +11,7 @@ pub struct Service {
 impl From<Service> for service::Response {
     fn from(service: Service) -> Self {
         Self {
-            id: service.id,
+            id: service.id.to_string(),
             name: service.name,
         }
     }

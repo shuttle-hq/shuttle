@@ -72,7 +72,11 @@ impl Persistence {
         // longer present.
         let sqlite_options = SqliteConnectOptions::from_str(path)
             .unwrap()
-            .journal_mode(SqliteJournalMode::Wal);
+            .journal_mode(SqliteJournalMode::Wal)
+            // Set the ulid0 extension for converting UUIDs to ULID's in migrations.
+            // This uses the ulid0.so file in the crate root, with the
+            // LD_LIBRARY_PATH env set in build.rs.
+            .extension("ulid0");
 
         let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
 

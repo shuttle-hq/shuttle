@@ -59,7 +59,7 @@ impl From<Deployment> for shuttle_common::models::deployment::Response {
     fn from(deployment: Deployment) -> Self {
         shuttle_common::models::deployment::Response {
             id: deployment.id,
-            service_id: deployment.service_id,
+            service_id: deployment.service_id.to_string(),
             state: deployment.state.into(),
             last_update: deployment.last_update,
             git_commit_id: deployment.git_commit_id,

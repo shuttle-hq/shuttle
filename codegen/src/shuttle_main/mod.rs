@@ -12,7 +12,7 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let loader = Loader::from_item_fn(&mut fn_decl);
 
-    let expanded = quote! {
+    quote! {
         #[tokio::main]
         async fn main() {
             shuttle_runtime::start(loader).await;
@@ -21,9 +21,8 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #loader
 
         #fn_decl
-    };
-
-    expanded.into()
+    }
+    .into()
 }
 
 struct Loader {
@@ -104,7 +103,7 @@ impl Loader {
                 FnArg::Typed(typed) => Some(typed),
             })
             .filter_map(|typed| match typed.pat.as_ref() {
-                Pat::Ident(ident) => Some((ident, typed.attrs.drain(..).collect())),
+                Pat::Ident(ident) => Some((ident, typed.attrs.clone())),
                 _ => None,
             })
             .filter_map(|(pat_ident, attrs)| {
@@ -183,9 +182,9 @@ impl ToTokens for Loader {
 
         let return_type = &self.fn_return;
 
-        let mut fn_inputs: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
-        let mut fn_inputs_builder: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
-        let mut fn_inputs_builder_options: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
+        let mut fn_inputs = Vec::with_capacity(self.fn_inputs.len());
+        let mut fn_inputs_builder = Vec::with_capacity(self.fn_inputs.len());
+        let mut fn_inputs_builder_options = Vec::with_capacity(self.fn_inputs.len());
 
         let mut needs_vars = false;
 
@@ -236,12 +235,24 @@ impl ToTokens for Loader {
             ))
         };
 
-        let vars: Option<Stmt> = if needs_vars {
-            Some(parse_quote!(
-                let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
-            ))
+        // variables for string interpolating secrets into the attribute macros
+        let (vars, drop_vars): (Option<Stmt>, Option<Stmt>) = if needs_vars {
+            (
+                Some(parse_quote!(
+                    let vars = std::collections::HashMap::from_iter(
+                        factory
+                            .get_secrets()
+                            .await?
+                            .into_iter()
+                            .map(|(key, value)| (format!("secrets.{}", key), value))
+                    );
+                )),
+                Some(parse_quote!(
+                    std::mem::drop(vars);
+                )),
+            )
         } else {
-            None
+            (None, None)
         };
 
         let loader = quote! {
@@ -271,6 +282,8 @@ impl ToTokens for Loader {
                     &mut #resource_tracker_ident,
                 )
                 .await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
+
+                #drop_vars
 
                 #fn_ident(#(#fn_inputs),*).await
             }

@@ -22,6 +22,7 @@ pub mod wasm;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fmt::Display;
+#[cfg(feature = "openapi")]
 use utoipa::openapi::{Object, ObjectBuilder};
 
 use anyhow::bail;

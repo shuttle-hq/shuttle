@@ -1,13 +1,15 @@
 -- Copy current service table. Keep the old table around because
 -- the rest of the tables are still having an FK on service_id.
 CREATE TABLE IF NOT EXISTS services_copy (
-    id TEXT PRIMARY KEY, -- Identifier of the service.
-    name TEXT UNIQUE     -- Name of the service.
+    id TEXT PRIMARY KEY,  -- Ulid identifier of the service.
+    uuid TEXT,     -- Old Uuid identifier of the service.
+    name TEXT UNIQUE      -- Name of the service.
 );
 
-INSERT INTO services_copy (id, name)
+INSERT INTO services_copy (id, uuid, name)
 SELECT
-  uuid_to_ulid(services.id),
+  ulid_with_datetime(strftime('%Y-%m-%d %H:%M:%f', datetime('2023-06-01'))) as id,
+  services.id as uuid,
   services.name
 FROM services;
 
@@ -28,7 +30,7 @@ CREATE TABLE IF NOT EXISTS deployments_copy (
 INSERT INTO deployments_copy (id, service_id, state, last_update, address, is_next, git_commit_id, git_commit_msg, git_branch, git_dirty)
 SELECT
   deployments.id,
-  uuid_to_ulid(deployments.service_id),
+  services_copy.id as service_id, -- Copy the generated ulid from the related services_copy row.
   deployments.state,
   deployments.last_update,
   deployments.address,
@@ -37,7 +39,8 @@ SELECT
   deployments.git_commit_msg,
   deployments.git_branch,
   deployments.git_dirty
-FROM deployments;
+FROM deployments
+JOIN services_copy ON services_copy.uuid = deployments.service_id;
 
 -- Copy current resource table without the FK service_id constraint.
 CREATE TABLE IF NOT EXISTS resources_copy (
@@ -49,11 +52,12 @@ CREATE TABLE IF NOT EXISTS resources_copy (
 );
 INSERT INTO resources_copy (service_id, type, data, config)
 SELECT
-  uuid_to_ulid(resources.service_id),
+  services_copy.id as service_id,
   resources.type,
   resources.data,
   resources.config
-FROM resources;
+FROM resources
+JOIN services_copy ON services_copy.uuid = resources.service_id;
 
 -- Copy current secrets table without the FK service_id constraint.
 CREATE TABLE IF NOT EXISTS secrets_copy (
@@ -65,11 +69,15 @@ CREATE TABLE IF NOT EXISTS secrets_copy (
 );
 INSERT INTO secrets_copy (service_id, key, value, last_update)
 SELECT
-  uuid_to_ulid(secrets.service_id),
+  services_copy.id as service_id, -- Copy the generated ulid from the related services_copy row.
   secrets.key,
   secrets.value,
   secrets.last_update
-FROM secrets;
+FROM secrets
+JOIN services_copy ON services_copy.uuid = secrets.service_id;
+
+-- We can safely drop the uuid column now, since we don't need it anymore.
+ALTER TABLE services_copy DROP COLUMN uuid;
 
 -- Recreate the deployments table with an FK constraint on the service_id.
 DROP TABLE deployments;

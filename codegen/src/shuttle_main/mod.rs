@@ -1,4 +1,5 @@
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
 use syn::{
@@ -84,15 +85,11 @@ impl Parse for BuilderOption {
 
 impl Loader {
     pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Option<Self> {
-        let fn_ident = item_fn.sig.ident.clone();
-
-        if fn_ident.to_string().as_str() == "main" {
-            emit_error!(
-                fn_ident,
-                "shuttle_runtime::main functions cannot be named `main`"
-            );
-            return None;
-        }
+        // rename function to allow any name, such as 'main'
+        item_fn.sig.ident = Ident::new(
+            &format!("__shuttle_{}", item_fn.sig.ident),
+            Span::call_site(),
+        );
 
         let inputs: Vec<_> = item_fn
             .sig
@@ -103,7 +100,7 @@ impl Loader {
                 FnArg::Typed(typed) => Some(typed),
             })
             .filter_map(|typed| match typed.pat.as_ref() {
-                Pat::Ident(ident) => Some((ident, typed.attrs.clone())),
+                Pat::Ident(ident) => Some((ident, typed.attrs.drain(..).collect())),
                 _ => None,
             })
             .filter_map(|(pat_ident, attrs)| {
@@ -121,7 +118,7 @@ impl Loader {
             .collect();
 
         check_return_type(item_fn.sig.clone()).map(|type_path| Self {
-            fn_ident: fn_ident.clone(),
+            fn_ident: item_fn.sig.ident.clone(),
             fn_inputs: inputs,
             fn_return: type_path,
         })
@@ -297,7 +294,7 @@ impl ToTokens for Loader {
 mod tests {
     use pretty_assertions::assert_eq;
     use quote::quote;
-    use syn::{parse_quote, Ident};
+    use syn::{parse_quote, Ident, TypePath};
 
     use super::{Builder, BuilderOptions, Input, Loader};
 
@@ -308,10 +305,24 @@ mod tests {
         );
 
         let actual = Loader::from_item_fn(&mut input).unwrap();
-        let expected_ident: Ident = parse_quote!(simple);
+        let expected_ident: Ident = parse_quote!(__shuttle_simple);
+        let expected_return: TypePath = parse_quote!(ShuttleAxum);
 
         assert_eq!(actual.fn_ident, expected_ident);
         assert_eq!(actual.fn_inputs, Vec::<Input>::new());
+        assert_eq!(actual.fn_return, expected_return);
+    }
+
+    #[test]
+    fn from_with_main() {
+        let mut input = parse_quote!(
+            async fn main() -> ShuttleAxum {}
+        );
+
+        let actual = Loader::from_item_fn(&mut input).unwrap();
+        let expected_ident: Ident = parse_quote!(__shuttle_main);
+
+        assert_eq!(actual.fn_ident, expected_ident);
     }
 
     #[test]
@@ -356,7 +367,7 @@ mod tests {
         );
 
         let actual = Loader::from_item_fn(&mut input).unwrap();
-        let expected_ident: Ident = parse_quote!(complex);
+        let expected_ident: Ident = parse_quote!(__shuttle_complex);
         let expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
             builder: Builder {
@@ -383,7 +394,7 @@ mod tests {
     #[test]
     fn output_with_inputs() {
         let input = Loader {
-            fn_ident: parse_quote!(complex),
+            fn_ident: parse_quote!(__shuttle_complex),
             fn_inputs: vec![
                 Input {
                     ident: parse_quote!(pool),
@@ -435,7 +446,7 @@ mod tests {
                     &mut resource_tracker,
                 ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?;
 
-                complex(pool, redis).await
+                __shuttle_complex(pool, redis).await
             }
         };
 
@@ -478,7 +489,7 @@ mod tests {
         );
 
         let actual = Loader::from_item_fn(&mut input).unwrap();
-        let expected_ident: Ident = parse_quote!(complex);
+        let expected_ident: Ident = parse_quote!(__shuttle_complex);
         let mut expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
             builder: Builder {

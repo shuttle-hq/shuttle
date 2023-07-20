@@ -32,8 +32,8 @@ impl FromRow<'_, SqliteRow> for Resource {
             service_id: Ulid::from_string(row.try_get("service_id")?)
                 .expect("to have a valid ulid string"),
             r#type: row.try_get("type")?,
-            data: row.try_get("")?,
-            config: row.try_get("is_next")?,
+            data: row.try_get("data")?,
+            config: row.try_get("config")?,
         })
     }
 }

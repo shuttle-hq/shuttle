@@ -2,9 +2,9 @@ use crossterm::style::{Color, Stylize};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::str::FromStr;
+use ulid::Ulid;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 use crate::models::deployment;
 
@@ -13,7 +13,7 @@ use crate::models::deployment;
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::service::Response))]
 pub struct Response {
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
-    pub id: Uuid,
+    pub id: Ulid,
     pub name: String,
 }
 

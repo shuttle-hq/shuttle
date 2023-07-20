@@ -31,6 +31,7 @@ use tokio::sync::mpsc::Sender;
 use tonic::transport::Endpoint;
 use tracing::{debug, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use ulid::Ulid;
 use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
 use x509_parser::prelude::parse_x509_pem;
@@ -62,6 +63,7 @@ pub struct ContainerSettingsBuilder {
     auth_uri: Option<String>,
     network_name: Option<String>,
     fqdn: Option<String>,
+    project_id: Option<Ulid>,
 }
 
 impl Default for ContainerSettingsBuilder {
@@ -79,6 +81,7 @@ impl ContainerSettingsBuilder {
             auth_uri: None,
             network_name: None,
             fqdn: None,
+            project_id: None,
         }
     }
 
@@ -112,6 +115,11 @@ impl ContainerSettingsBuilder {
         self
     }
 
+    pub fn project_id(mut self, id: Ulid) -> Self {
+        self.project_id = Some(id);
+        self
+    }
+
     pub fn provisioner_host<S: ToString>(mut self, host: S) -> Self {
         self.provisioner = Some(host.to_string());
         self
@@ -140,6 +148,7 @@ impl ContainerSettingsBuilder {
 
         let network_name = self.network_name.take().unwrap();
         let fqdn = self.fqdn.take().unwrap();
+        let project_id = self.project_id.take().unwrap();
 
         ContainerSettings {
             prefix,
@@ -148,6 +157,7 @@ impl ContainerSettingsBuilder {
             auth_uri,
             network_name,
             fqdn,
+            project_id,
         }
     }
 }
@@ -160,6 +170,7 @@ pub struct ContainerSettings {
     pub auth_uri: String,
     pub network_name: String,
     pub fqdn: String,
+    pub project_id: Ulid,
 }
 
 impl ContainerSettings {
@@ -423,6 +434,12 @@ impl GatewayService {
                 // But is in `::Destroyed` state, recreate it
                 let mut creating = ProjectCreating::new_with_random_initial_key(
                     project_name.clone(),
+                    Ulid::from_string(project_id.as_str()).map_err(|err| {
+                        Error::custom(
+                            ErrorKind::Internal,
+                            format!("The project id of the destroyed project is not a valid ULID: {err}"),
+                        )
+                    })?,
                     idle_minutes,
                 );
                 // Restore previous custom domain, if any
@@ -451,7 +468,7 @@ impl GatewayService {
                 // Otherwise attempt to create a new one. This will fail
                 // outright if the project already exists (this happens if
                 // it belongs to another account).
-                self.insert_project(project_name, account_name, idle_minutes)
+                self.insert_project(project_name, Ulid::new(), account_name, idle_minutes)
                     .await
             } else {
                 Err(Error::from_kind(ErrorKind::InvalidProjectName))
@@ -462,11 +479,16 @@ impl GatewayService {
     pub async fn insert_project(
         &self,
         project_name: ProjectName,
+        project_id: Ulid,
         account_name: AccountName,
         idle_minutes: u64,
     ) -> Result<Project, Error> {
         let project = SqlxJson(Project::Creating(
-            ProjectCreating::new_with_random_initial_key(project_name.clone(), idle_minutes),
+            ProjectCreating::new_with_random_initial_key(
+                project_name.clone(),
+                project_id,
+                idle_minutes,
+            ),
         ));
 
         query("INSERT INTO projects (project_id, project_name, account_name, initial_key, project_state) VALUES (ulid(), ?1, ?2, ?3, ?4)")

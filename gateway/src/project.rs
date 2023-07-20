@@ -26,6 +26,7 @@ use shuttle_common::models::project::{idle_minutes, IDLE_MINUTES};
 use shuttle_common::models::service;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument, trace};
+use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::service::ContainerSettings;
@@ -101,6 +102,15 @@ pub trait ContainerInspectResponseExt {
             .to_string()
             .parse::<ProjectName>()
             .map_err(|_| ProjectError::internal("invalid project name"))
+    }
+
+    fn project_id(&self) -> Result<Ulid, ProjectError> {
+        let container = self.container();
+        Ulid::from_string(safe_unwrap!(container
+            .config
+            .labels
+            .get("shuttle.project_id")))
+        .map_err(|_| ProjectError::internal("invalid project id"))
     }
 
     fn idle_minutes(&self) -> u64 {
@@ -573,6 +583,8 @@ where
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectCreating {
     project_name: ProjectName,
+    /// The project id which this deployer is created for
+    project_id: Ulid,
     /// The admin secret with which the start deployer
     initial_key: String,
     /// Override the default fqdn (`${project_name}.${public}`)
@@ -591,9 +603,15 @@ pub struct ProjectCreating {
 }
 
 impl ProjectCreating {
-    pub fn new(project_name: ProjectName, initial_key: String, idle_minutes: u64) -> Self {
+    pub fn new(
+        project_name: ProjectName,
+        project_id: Ulid,
+        initial_key: String,
+        idle_minutes: u64,
+    ) -> Self {
         Self {
             project_name,
+            project_id,
             initial_key,
             fqdn: None,
             image: None,
@@ -608,11 +626,13 @@ impl ProjectCreating {
         recreate_count: usize,
     ) -> Result<Self, ProjectError> {
         let project_name = container.project_name()?;
+        let project_id = container.project_id()?;
         let idle_minutes = container.idle_minutes();
         let initial_key = container.initial_key()?;
 
         Ok(Self {
             project_name,
+            project_id,
             initial_key,
             fqdn: None,
             image: None,
@@ -632,9 +652,13 @@ impl ProjectCreating {
         self
     }
 
-    pub fn new_with_random_initial_key(project_name: ProjectName, idle_minutes: u64) -> Self {
+    pub fn new_with_random_initial_key(
+        project_name: ProjectName,
+        project_id: Ulid,
+        idle_minutes: u64,
+    ) -> Self {
         let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
-        Self::new(project_name, initial_key, idle_minutes)
+        Self::new(project_name, project_id, initial_key, idle_minutes)
     }
 
     pub fn with_image(mut self, image: String) -> Self {
@@ -672,6 +696,7 @@ impl ProjectCreating {
             provisioner_host,
             auth_uri,
             fqdn: public,
+            project_id,
             ..
         } = ctx.container_settings();
 
@@ -721,6 +746,8 @@ impl ProjectCreating {
                         "/opt/shuttle/deployer.sqlite",
                         "--auth-uri",
                         auth_uri,
+                        "--project-id",
+                        project_id
                     ],
                     "Env": [
                         "RUST_LOG=debug,shuttle=trace,h2=warn",
@@ -1727,6 +1754,7 @@ pub mod tests {
             ctx,
             Project::Creating(ProjectCreating {
                 project_name: "my-project-test".parse().unwrap(),
+                project_id: Ulid::new(),
                 initial_key: "test".to_string(),
                 fqdn: None,
                 image: None,

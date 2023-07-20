@@ -508,6 +508,10 @@ async fn request_custom_domain_acme_certificate(
         .await?;
 
     let project = service.find_project(&project_name).await?;
+    let project_id =
+        project.container().unwrap().project_id().map_err(|_| {
+            Error::custom(ErrorKind::Internal, "Missing project_id from the container")
+        })?;
     let idle_minutes = project.container().unwrap().idle_minutes();
 
     // Destroy and recreate the project with the new domain.
@@ -523,6 +527,7 @@ async fn request_custom_domain_acme_certificate(
                 async move {
                     let creating = ProjectCreating::new_with_random_initial_key(
                         ctx.project_name,
+                        project_id,
                         idle_minutes,
                     )
                     .with_fqdn(fqdn);

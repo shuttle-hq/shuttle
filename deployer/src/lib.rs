@@ -51,6 +51,7 @@ pub async fn start(
             id: existing_deployment.id,
             service_name: existing_deployment.service_name,
             service_id: existing_deployment.service_id,
+            project_id: args.project_id,
             tracing_context: Default::default(),
             is_next: existing_deployment.is_next,
             claim: None, // This will cause us to read the resource info from past provisions
@@ -63,6 +64,7 @@ pub async fn start(
         deployment_manager,
         args.proxy_fqdn,
         args.project,
+        args.project_id,
         args.auth_uri,
     );
 

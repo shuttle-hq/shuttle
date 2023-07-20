@@ -16,12 +16,12 @@ use axum::Json;
 use bytes::Bytes;
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
-use hyper::{HeaderMap, Request, StatusCode, Uri};
+use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
 use shuttle_common::backends::auth::{
     AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
 };
-use shuttle_common::backends::headers::{XShuttleAccountName, X_SHUTTLE_PROJECT_ID};
+use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
 use shuttle_common::models::deployment::{
@@ -33,6 +33,7 @@ use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
 use tracing::{error, field, instrument, trace, warn};
+use ulid::Ulid;
 use utoipa::{IntoParams, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
@@ -97,6 +98,7 @@ impl RouterBuilder {
         deployment_manager: DeploymentManager,
         proxy_fqdn: FQDN,
         project_name: ProjectName,
+        project_id: Ulid,
         auth_uri: Uri,
     ) -> Self {
         let router = Router::new()
@@ -115,7 +117,7 @@ impl RouterBuilder {
                 get(get_service.layer(ScopedLayer::new(vec![Scope::Service])))
                     .post(
                         create_service
-                            // Set the body size limit for this endpoint to 50MB
+                            .layer(Extension(project_id))
                             .layer(DefaultBodyLimit::max(CREATE_SERVICE_BODY_LIMIT))
                             .layer(ScopedLayer::new(vec![Scope::ServiceCreate])),
                     )
@@ -287,15 +289,14 @@ pub async fn get_service(
     )
 )]
 pub async fn get_service_resources(
-    Extension(persistence): Extension<Persistence>,
+    Extension(mut persistence): Extension<Persistence>,
     Path((project_name, service_name)): Path<(String, String)>,
-    headers: HeaderMap,
 ) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
-    let project_id = headers.get(X_SHUTTLE_PROJECT_ID);
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let resources = persistence
-            .get_service_resources(&service.id)
+            .get_resources(&service.id)
             .await?
+            .resources
             .into_iter()
             .map(Into::into)
             .collect();
@@ -324,6 +325,7 @@ pub async fn create_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
+    Extension(project_id): Extension<Ulid>,
     Path((project_name, service_name)): Path<(String, String)>,
     Rmp(deployment_req): Rmp<DeploymentRequest>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
@@ -348,11 +350,11 @@ pub async fn create_service(
     };
 
     persistence.insert_deployment(deployment.clone()).await?;
-
     let queued = Queued {
         id: deployment.id,
         service_name: service.name,
-        service_id: deployment.service_id,
+        service_id: service.id,
+        project_id,
         data: deployment_req.data,
         will_run_tests: !deployment_req.no_test,
         tracing_context: Default::default(),

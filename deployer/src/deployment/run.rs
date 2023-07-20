@@ -14,9 +14,12 @@ use shuttle_common::{
     storage_manager::ArtifactsStorageManager,
 };
 
-use shuttle_proto::runtime::{
-    runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
-    SubscribeStopResponse,
+use shuttle_proto::{
+    resource_recorder::record_request,
+    runtime::{
+        runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
+        SubscribeStopResponse,
+    },
 };
 use tokio::{
     sync::Mutex,
@@ -28,10 +31,10 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use super::{RunReceiver, State};
+use super::{RunReceiver, ServiceInfo, State};
 use crate::{
     error::{Error, Result},
-    persistence::{DeploymentUpdater, Resource, ResourceManager, SecretGetter},
+    persistence::{DeploymentUpdater, ResourceManager, SecretGetter},
     RuntimeManager,
 };
 
@@ -202,9 +205,10 @@ pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
 
 #[derive(Clone, Debug)]
 pub struct Built {
-    pub id: Uuid,
+    pub id: Uuid, // Deployment id
     pub service_name: String,
     pub service_id: Ulid,
+    pub project_id: Ulid,
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
     pub claim: Option<Claim>,
@@ -254,11 +258,13 @@ impl Built {
             .map_err(Error::Runtime)?;
 
         kill_old_deployments.await?;
-
         // Execute loaded service
         load(
-            self.service_name.clone(),
-            self.service_id,
+            ServiceInfo {
+                service_name: self.service_name.clone(),
+                service_id: self.service_id,
+                project_id: self.project_id,
+            },
             executable_path.clone(),
             secret_getter,
             resource_manager,
@@ -281,11 +287,10 @@ impl Built {
 }
 
 async fn load(
-    service_name: String,
-    service_id: Ulid,
+    service_info: ServiceInfo,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
-    resource_manager: impl ResourceManager,
+    mut resource_manager: impl ResourceManager,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Option<Claim>,
 ) -> Result<()> {
@@ -301,9 +306,10 @@ async fn load(
     // Get resources from cache when a claim is not set (ie an idl project is started)
     let resources = if claim.is_none() {
         resource_manager
-            .get_resources(&service_id)
+            .get_resources(&service_info.service_id)
             .await
             .unwrap()
+            .resources
             .into_iter()
             .map(resource::Response::from)
             .map(resource::Response::into_bytes)
@@ -313,7 +319,7 @@ async fn load(
     };
 
     let secrets = secret_getter
-        .get_secrets(&service_id)
+        .get_secrets(&service_info.service_id)
         .await
         .map_err(|e| Error::SecretsGet(Box::new(e)))?
         .into_iter()
@@ -325,7 +331,7 @@ async fn load(
             .into_os_string()
             .into_string()
             .unwrap_or_default(),
-        service_name: service_name.clone(),
+        service_name: service_info.service_name.clone(),
         resources,
         secrets,
     });
@@ -334,10 +340,10 @@ async fn load(
         load_request.extensions_mut().insert(claim);
     }
 
-    debug!(service_name = %service_name, "loading service");
+    debug!(service_name = %service_info.service_name, "loading service");
     let response = runtime_client.load(load_request).await;
 
-    debug!(service_name = %service_name, "service loaded");
+    debug!(service_name = %service_info.service_name, "service loaded");
     match response {
         Ok(response) => {
             let response = response.into_inner();
@@ -348,14 +354,17 @@ async fn load(
 
             for resource in response.resources {
                 let resource: resource::Response = serde_json::from_slice(&resource).unwrap();
-                let resource = Resource {
-                    service_id,
-                    r#type: resource.r#type.into(),
-                    config: resource.config,
-                    data: resource.data,
+                let req_resource = record_request::Resource {
+                    r#type: resource.r#type.to_string(),
+                    config: resource.config.to_string().into_bytes(),
+                    data: resource.data.to_string().into_bytes(),
                 };
                 resource_manager
-                    .insert_resource(&resource)
+                    .insert_resource(
+                        &req_resource,
+                        &service_info.service_id,
+                        &service_info.project_id,
+                    )
                     .await
                     .expect("to add resource to persistence");
             }
@@ -446,6 +455,7 @@ mod tests {
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
         },
+        resource_recorder::{ResourcesResponse, ResultResponse},
         runtime::{StopReason, SubscribeStopResponse},
     };
     use tempfile::Builder;
@@ -458,7 +468,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        persistence::{DeploymentUpdater, Resource, ResourceManager, Secret, SecretGetter},
+        persistence::{DeploymentUpdater, ResourceManager, Secret, SecretGetter},
         RuntimeManager,
     };
 
@@ -548,11 +558,26 @@ mod tests {
     impl ResourceManager for StubResourceManager {
         type Err = std::io::Error;
 
-        async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
-            Ok(())
+        async fn insert_resource(
+            &mut self,
+            _resource: &shuttle_proto::resource_recorder::record_request::Resource,
+            _service_id: &ulid::Ulid,
+            _project_id: &ulid::Ulid,
+        ) -> Result<ResultResponse, Self::Err> {
+            Ok(ResultResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+            })
         }
-        async fn get_resources(&self, _service_id: &Ulid) -> Result<Vec<Resource>, Self::Err> {
-            Ok(Vec::new())
+        async fn get_resources(
+            &mut self,
+            _service_id: &ulid::Ulid,
+        ) -> Result<ResourcesResponse, Self::Err> {
+            Ok(ResourcesResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+                resources: Vec::new(),
+            })
         }
     }
 
@@ -749,6 +774,7 @@ mod tests {
                 id,
                 service_name: crate_name.to_string(),
                 service_id: Ulid::new(),
+                project_id: Ulid::new(),
                 tracing_context: Default::default(),
                 is_next: false,
                 claim: None,

@@ -53,6 +53,7 @@ tracing-subscriber = { workspace = true, features = [
 ] }
 utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
+ulid = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]

@@ -25,6 +25,7 @@ use tokio::{
 use tonic::{transport::Channel, Code};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use ulid::Ulid;
 use uuid::Uuid;
 
 use super::{RunReceiver, State};
@@ -138,7 +139,7 @@ pub async fn task(
 
 #[instrument(skip(active_deployment_getter, runtime_manager))]
 async fn kill_old_deployments(
-    service_id: Uuid,
+    service_id: Ulid,
     deployment_id: Uuid,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
@@ -195,7 +196,7 @@ pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
 
     async fn get_active_deployments(
         &self,
-        service_id: &Uuid,
+        service_id: &Ulid,
     ) -> std::result::Result<Vec<Uuid>, Self::Err>;
 }
 
@@ -203,7 +204,7 @@ pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
 pub struct Built {
     pub id: Uuid,
     pub service_name: String,
-    pub service_id: Uuid,
+    pub service_id: Ulid,
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
     pub claim: Claim,
@@ -281,7 +282,7 @@ impl Built {
 
 async fn load(
     service_name: String,
-    service_id: Uuid,
+    service_id: Ulid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
     resource_manager: impl ResourceManager,
@@ -446,6 +447,7 @@ mod tests {
         time::sleep,
     };
     use tonic::transport::Server;
+    use ulid::Ulid;
     use uuid::Uuid;
 
     use crate::{
@@ -527,7 +529,7 @@ mod tests {
     impl SecretGetter for StubSecretGetter {
         type Err = std::io::Error;
 
-        async fn get_secrets(&self, _service_id: &Uuid) -> Result<Vec<Secret>, Self::Err> {
+        async fn get_secrets(&self, _service_id: &Ulid) -> Result<Vec<Secret>, Self::Err> {
             Ok(Default::default())
         }
     }
@@ -542,7 +544,7 @@ mod tests {
         async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
             Ok(())
         }
-        async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
+        async fn get_resources(&self, _service_id: &Ulid) -> Result<Vec<Resource>, Self::Err> {
             Ok(Vec::new())
         }
     }
@@ -739,7 +741,7 @@ mod tests {
             Built {
                 id,
                 service_name: crate_name.to_string(),
-                service_id: Uuid::new_v4(),
+                service_id: Ulid::new(),
                 tracing_context: Default::default(),
                 is_next: false,
                 claim: Default::default(),

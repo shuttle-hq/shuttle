@@ -327,6 +327,7 @@ mod tests {
     use tokio::{select, time::sleep};
     use tonic::transport::Server;
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+    use ulid::Ulid;
     use uuid::Uuid;
 
     use crate::{
@@ -486,7 +487,7 @@ mod tests {
 
         async fn insert_secret(
             &self,
-            _service_id: &Uuid,
+            _service_id: &Ulid,
             _key: &str,
             _value: &str,
         ) -> Result<(), Self::Err> {
@@ -525,7 +526,7 @@ mod tests {
 
         async fn get_active_deployments(
             &self,
-            _service_id: &Uuid,
+            _service_id: &Ulid,
         ) -> std::result::Result<Vec<Uuid>, Self::Err> {
             Ok(vec![])
         }
@@ -558,7 +559,7 @@ mod tests {
     impl SecretGetter for StubSecretGetter {
         type Err = std::io::Error;
 
-        async fn get_secrets(&self, _service_id: &Uuid) -> Result<Vec<Secret>, Self::Err> {
+        async fn get_secrets(&self, _service_id: &Ulid) -> Result<Vec<Secret>, Self::Err> {
             Ok(Default::default())
         }
     }
@@ -573,7 +574,7 @@ mod tests {
         async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
             Ok(())
         }
-        async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
+        async fn get_resources(&self, _service_id: &Ulid) -> Result<Vec<Resource>, Self::Err> {
             Ok(Vec::new())
         }
     }
@@ -825,7 +826,7 @@ mod tests {
             .run_push(Built {
                 id,
                 service_name: "run-test".to_string(),
-                service_id: Uuid::new_v4(),
+                service_id: Ulid::new(),
                 tracing_context: Default::default(),
                 is_next: false,
                 claim: Default::default(),
@@ -868,7 +869,7 @@ mod tests {
             .queue_push(Queued {
                 id,
                 service_name: "nil_id".to_string(),
-                service_id: Uuid::new_v4(),
+                service_id: Ulid::new(),
                 data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
                 tracing_context: Default::default(),
@@ -927,7 +928,7 @@ mod tests {
         Queued {
             id: Uuid::new_v4(),
             service_name: format!("deploy-layer-{name}"),
-            service_id: Uuid::new_v4(),
+            service_id: Ulid::new(),
             data: bytes,
             will_run_tests: false,
             tracing_context: Default::default(),

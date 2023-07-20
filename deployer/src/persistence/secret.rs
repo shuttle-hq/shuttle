@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
+use sqlx::{sqlite::SqliteRow, FromRow, Row};
+use ulid::Ulid;
 
 #[async_trait::async_trait]
 /// Record a secret value for a service with name
@@ -8,7 +9,7 @@ pub trait SecretRecorder: Clone + Send + Sync + 'static {
 
     async fn insert_secret(
         &self,
-        service_id: &Uuid,
+        service_id: &Ulid,
         key: &str,
         value: &str,
     ) -> Result<(), Self::Err>;
@@ -19,12 +20,12 @@ pub trait SecretRecorder: Clone + Send + Sync + 'static {
 pub trait SecretGetter: Clone + Send + Sync + 'static {
     type Err: std::error::Error + Send + Sync;
 
-    async fn get_secrets(&self, service_id: &Uuid) -> Result<Vec<Secret>, Self::Err>;
+    async fn get_secrets(&self, service_id: &Ulid) -> Result<Vec<Secret>, Self::Err>;
 }
 
-#[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Secret {
-    pub service_id: Uuid,
+    pub service_id: Ulid,
     pub key: String,
     pub value: String,
     pub last_update: DateTime<Utc>,
@@ -36,5 +37,17 @@ impl From<Secret> for shuttle_common::models::secret::Response {
             key: secret.key,
             last_update: secret.last_update,
         }
+    }
+}
+
+impl FromRow<'_, SqliteRow> for Secret {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            service_id: Ulid::from_string(row.try_get("service_id")?)
+                .expect("to have a valid ulid string"),
+            key: row.try_get("key")?,
+            value: row.try_get("value")?,
+            last_update: row.try_get("last_update")?,
+        })
     }
 }

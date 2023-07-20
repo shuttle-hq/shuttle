@@ -5422,6 +5422,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "ttl_cache",
+ "ulid",
  "utoipa",
  "uuid",
 ]
@@ -5480,6 +5481,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "ulid",
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
@@ -6898,6 +6900,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13a3aaa69b04e5b66cc27309710a569ea23593612387d67daaf102e73aa974fd"
 dependencies = [
  "rand",
+ "serde",
 ]
 
 [[package]]

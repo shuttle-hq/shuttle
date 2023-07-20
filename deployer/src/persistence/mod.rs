@@ -12,6 +12,7 @@ use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 use error::{Error, Result};
 use sqlx::QueryBuilder;
+use ulid::Ulid;
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -173,7 +174,7 @@ impl Persistence {
 
         sqlx::query("INSERT INTO deployments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(deployment.id)
-            .bind(deployment.service_id)
+            .bind(deployment.service_id.to_string())
             .bind(deployment.state)
             .bind(deployment.last_update)
             .bind(deployment.address.map(|socket| socket.to_string()))
@@ -194,14 +195,14 @@ impl Persistence {
 
     pub async fn get_deployments(
         &self,
-        service_id: &Uuid,
+        service_id: &Ulid,
         offset: u32,
         limit: u32,
     ) -> Result<Vec<Deployment>> {
         let mut query = QueryBuilder::new("SELECT * FROM deployments WHERE service_id = ");
 
         query
-            .push_bind(service_id)
+            .push_bind(service_id.to_string())
             .push(" ORDER BY last_update DESC LIMIT ")
             .push_bind(limit);
 
@@ -216,9 +217,9 @@ impl Persistence {
             .map_err(Error::from)
     }
 
-    pub async fn get_active_deployment(&self, service_id: &Uuid) -> Result<Option<Deployment>> {
+    pub async fn get_active_deployment(&self, service_id: &Ulid) -> Result<Option<Deployment>> {
         sqlx::query_as("SELECT * FROM deployments WHERE service_id = ? AND state = ?")
-            .bind(service_id)
+            .bind(service_id.to_string())
             .bind(State::Running)
             .fetch_optional(&self.pool)
             .await
@@ -244,12 +245,12 @@ impl Persistence {
             Ok(service)
         } else {
             let service = Service {
-                id: Uuid::new_v4(),
+                id: Ulid::new(),
                 name: name.to_string(),
             };
 
             sqlx::query("INSERT INTO services (id, name) VALUES (?, ?)")
-                .bind(service.id)
+                .bind(service.id.to_string())
                 .bind(&service.name)
                 .execute(&self.pool)
                 .await?;
@@ -266,9 +267,9 @@ impl Persistence {
             .map_err(Error::from)
     }
 
-    pub async fn delete_service(&self, id: &Uuid) -> Result<()> {
+    pub async fn delete_service(&self, id: &Ulid) -> Result<()> {
         sqlx::query("DELETE FROM services WHERE id = ?")
-            .bind(id)
+            .bind(id.to_string())
             .execute(&self.pool)
             .await
             .map(|_| ())
@@ -405,7 +406,7 @@ impl ResourceManager for Persistence {
         sqlx::query(
             "INSERT OR REPLACE INTO resources (service_id, type, config, data) VALUES (?, ?, ?, ?)",
         )
-        .bind(resource.service_id)
+        .bind(resource.service_id.to_string())
         .bind(resource.r#type.clone())
         .bind(&resource.config)
         .bind(&resource.data)
@@ -415,9 +416,9 @@ impl ResourceManager for Persistence {
         .map_err(Error::from)
     }
 
-    async fn get_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>> {
+    async fn get_resources(&self, service_id: &Ulid) -> Result<Vec<Resource>> {
         sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
-            .bind(service_id)
+            .bind(service_id.to_string())
             .fetch_all(&self.pool)
             .await
             .map_err(Error::from)
@@ -428,11 +429,11 @@ impl ResourceManager for Persistence {
 impl SecretRecorder for Persistence {
     type Err = Error;
 
-    async fn insert_secret(&self, service_id: &Uuid, key: &str, value: &str) -> Result<()> {
+    async fn insert_secret(&self, service_id: &Ulid, key: &str, value: &str) -> Result<()> {
         sqlx::query(
             "INSERT OR REPLACE INTO secrets (service_id, key, value, last_update) VALUES (?, ?, ?, ?)",
         )
-        .bind(service_id)
+        .bind(service_id.to_string())
         .bind(key)
         .bind(value)
         .bind(Utc::now())
@@ -447,9 +448,9 @@ impl SecretRecorder for Persistence {
 impl SecretGetter for Persistence {
     type Err = Error;
 
-    async fn get_secrets(&self, service_id: &Uuid) -> Result<Vec<Secret>> {
+    async fn get_secrets(&self, service_id: &Ulid) -> Result<Vec<Secret>> {
         sqlx::query_as("SELECT * FROM secrets WHERE service_id = ? ORDER BY key")
-            .bind(service_id)
+            .bind(service_id.to_string())
             .fetch_all(&self.pool)
             .await
             .map_err(Error::from)
@@ -522,12 +523,12 @@ impl ActiveDeploymentsGetter for Persistence {
 
     async fn get_active_deployments(
         &self,
-        service_id: &Uuid,
+        service_id: &Ulid,
     ) -> std::result::Result<Vec<Uuid>, Self::Err> {
         let ids: Vec<_> = sqlx::query_as::<_, Deployment>(
             "SELECT * FROM deployments WHERE service_id = ? AND state = ?",
         )
-        .bind(service_id)
+        .bind(service_id.to_string())
         .bind(State::Running)
         .fetch_all(&self.pool)
         .await
@@ -1268,19 +1269,19 @@ mod tests {
         )
         // This running item should match
         .bind(Uuid::new_v4())
-        .bind(service_id)
+        .bind(service_id.to_string())
         .bind(State::Running)
         .bind(Utc::now())
         .bind("10.0.0.5:12356")
         // A stopped item should not match
         .bind(Uuid::new_v4())
-        .bind(service_id)
+        .bind(service_id.to_string())
         .bind(State::Stopped)
         .bind(Utc::now())
         .bind("10.0.0.5:9876")
         // Another service should not match
         .bind(Uuid::new_v4())
-        .bind(service_other_id)
+        .bind(service_other_id.to_string())
         .bind(State::Running)
         .bind(Utc::now())
         .bind("10.0.0.5:5678")
@@ -1367,7 +1368,7 @@ mod tests {
             "INSERT INTO deployments (id, service_id, state, last_update) VALUES (?, ?, ?, ?)",
         )
         .bind(deployment_id)
-        .bind(service_id)
+        .bind(service_id.to_string())
         .bind(State::Running)
         .bind(Utc::now())
         .execute(pool)
@@ -1376,15 +1377,15 @@ mod tests {
         Ok(deployment_id)
     }
 
-    async fn add_service(pool: &SqlitePool) -> Result<Uuid> {
+    async fn add_service(pool: &SqlitePool) -> Result<Ulid> {
         add_service_named(pool, &get_random_name()).await
     }
 
-    async fn add_service_named(pool: &SqlitePool, name: &str) -> Result<Uuid> {
-        let service_id = Uuid::new_v4();
+    async fn add_service_named(pool: &SqlitePool, name: &str) -> Result<Ulid> {
+        let service_id = Ulid::new();
 
         sqlx::query("INSERT INTO services (id, name) VALUES (?, ?)")
-            .bind(service_id)
+            .bind(service_id.to_string())
             .bind(name)
             .execute(pool)
             .await?;

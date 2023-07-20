@@ -311,7 +311,7 @@ mod tests {
     };
 
     use crate::{
-        persistence::{DeploymentUpdater, Resource, ResourceManager},
+        persistence::{DeploymentUpdater, ResourceManager},
         RuntimeManager,
     };
     use async_trait::async_trait;
@@ -319,9 +319,12 @@ mod tests {
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use portpicker::pick_unused_port;
-    use shuttle_proto::provisioner::{
-        provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+    use shuttle_proto::{
+        provisioner::{
+            provisioner_server::{Provisioner, ProvisionerServer},
+            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+        },
+        resource_recorder::{ResourcesResponse, ResultResponse},
     };
     use tempfile::Builder;
     use tokio::{select, time::sleep};
@@ -567,15 +570,30 @@ mod tests {
     #[derive(Clone)]
     struct StubResourceManager;
 
-    #[async_trait::async_trait]
+    #[async_trait]
     impl ResourceManager for StubResourceManager {
         type Err = std::io::Error;
 
-        async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
-            Ok(())
+        async fn insert_resource(
+            &mut self,
+            _resource: &shuttle_proto::resource_recorder::record_request::Resource,
+            _service_id: &ulid::Ulid,
+            _project_id: &ulid::Ulid,
+        ) -> Result<ResultResponse, Self::Err> {
+            Ok(ResultResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+            })
         }
-        async fn get_resources(&self, _service_id: &Ulid) -> Result<Vec<Resource>, Self::Err> {
-            Ok(Vec::new())
+        async fn get_resources(
+            &mut self,
+            _service_id: &ulid::Ulid,
+        ) -> Result<ResourcesResponse, Self::Err> {
+            Ok(ResourcesResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+                resources: Vec::new(),
+            })
         }
     }
 
@@ -827,6 +845,7 @@ mod tests {
                 id,
                 service_name: "run-test".to_string(),
                 service_id: Ulid::new(),
+                project_id: Ulid::new(),
                 tracing_context: Default::default(),
                 is_next: false,
                 claim: Default::default(),
@@ -870,6 +889,7 @@ mod tests {
                 id,
                 service_name: "nil_id".to_string(),
                 service_id: Ulid::new(),
+                project_id: Ulid::new(),
                 data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
                 tracing_context: Default::default(),
@@ -929,6 +949,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_name: format!("deploy-layer-{name}"),
             service_id: Ulid::new(),
+            project_id: Ulid::new(),
             data: bytes,
             will_run_tests: false,
             tracing_context: Default::default(),

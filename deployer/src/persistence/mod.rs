@@ -53,9 +53,11 @@ pub struct Persistence {
     pool: SqlitePool,
     log_send: crossbeam_channel::Sender<deploy_layer::Log>,
     stream_log_send: Sender<deploy_layer::Log>,
-    resource_recorder_client: ResourceRecorderClient<
-        shuttle_common::claims::ClaimService<
-            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+    resource_recorder_client: Option<
+        ResourceRecorderClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
         >,
     >,
 }
@@ -65,7 +67,7 @@ impl Persistence {
     /// function creates all necessary tables and sets up a database connection
     /// pool - new connections should be made by cloning [`Persistence`] rather
     /// than repeatedly calling [`Persistence::new`].
-    pub async fn new(path: &str, resource_recorder_uri: Uri) -> (Self, JoinHandle<()>) {
+    pub async fn new(path: &str, resource_recorder_uri: &Uri) -> (Self, JoinHandle<()>) {
         if !Path::new(path).exists() {
             Sqlite::create_database(path).await.unwrap();
         }
@@ -93,10 +95,10 @@ impl Persistence {
 
         let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
 
-        Self::from_pool(pool, resource_recorder_uri.to_string()).await
+        Self::from_pool_with_resource_recorder(pool, resource_recorder_uri.to_string()).await
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     async fn new_in_memory() -> (Self, JoinHandle<()>) {
         let pool = SqlitePool::connect_with(
             SqliteConnectOptions::from_str("sqlite::memory:")
@@ -111,7 +113,10 @@ impl Persistence {
         Self::from_pool(pool).await
     }
 
-    async fn from_pool(pool: SqlitePool, resource_recorder_uri: String) -> (Self, JoinHandle<()>) {
+    async fn from_pool_with_resource_recorder(
+        pool: SqlitePool,
+        resource_recorder_uri: String,
+    ) -> (Self, JoinHandle<()>) {
         MIGRATIONS.run(&pool).await.unwrap();
 
         let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
@@ -203,7 +208,93 @@ impl Persistence {
             pool,
             log_send,
             stream_log_send,
-            resource_recorder_client,
+            resource_recorder_client: Some(resource_recorder_client),
+        };
+
+        (persistence, handle)
+    }
+
+    #[cfg(test)]
+    async fn from_pool(pool: SqlitePool) -> (Self, JoinHandle<()>) {
+        MIGRATIONS.run(&pool).await.unwrap();
+
+        let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
+            crossbeam_channel::bounded(0);
+
+        let (stream_log_send, _) = broadcast::channel(1);
+        let stream_log_send_clone = stream_log_send.clone();
+
+        let pool_cloned = pool.clone();
+
+        // The logs are received on a non-async thread.
+        // This moves them to an async thread
+        let handle = tokio::spawn(async move {
+            while let Ok(log) = log_recv.recv() {
+                trace!(?log, "persistence received got log");
+                match log.r#type {
+                    LogType::Event => {
+                        insert_log(&pool_cloned, log.clone())
+                            .await
+                            .unwrap_or_else(|error| {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to insert event log"
+                                )
+                            });
+                    }
+                    LogType::State => {
+                        insert_log(
+                            &pool_cloned,
+                            Log {
+                                id: log.id,
+                                timestamp: log.timestamp,
+                                state: log.state,
+                                level: log.level.clone(),
+                                file: log.file.clone(),
+                                line: log.line,
+                                target: String::new(),
+                                fields: json!(STATE_MESSAGE),
+                            },
+                        )
+                        .await
+                        .unwrap_or_else(|error| {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to insert state log"
+                            )
+                        });
+                        update_deployment(&pool_cloned, log.clone())
+                            .await
+                            .unwrap_or_else(|error| {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to update deployment state"
+                                )
+                            });
+                    }
+                };
+
+                let receiver_count = stream_log_send_clone.receiver_count();
+                trace!(?log, receiver_count, "sending log to broadcast stream");
+
+                if receiver_count > 0 {
+                    stream_log_send_clone.send(log).unwrap_or_else(|error| {
+                        error!(
+                            error = &error as &dyn std::error::Error,
+                            "failed to broadcast log"
+                        );
+
+                        0
+                    });
+                }
+            }
+        });
+
+        let persistence = Self {
+            pool,
+            log_send,
+            stream_log_send,
+            resource_recorder_client: None,
         };
 
         (persistence, handle)
@@ -443,7 +534,7 @@ impl ResourceManager for Persistence {
     type Err = Error;
 
     async fn insert_resource(
-        &self,
+        &mut self,
         resource: &record_request::Resource,
         service_id: &Ulid,
         project_id: &Ulid,
@@ -455,17 +546,21 @@ impl ResourceManager for Persistence {
             resources,
         };
         self.resource_recorder_client
+            .as_mut()
+            .expect("to have the resource recorder set up")
             .record_resources(record_request)
             .await
             .map_err(Error::from)
             .map(|res| res.into_inner())
     }
 
-    async fn get_service_resources(&self, service_id: &Ulid) -> Result<ResourcesResponse> {
+    async fn get_resources(&mut self, service_id: &Ulid) -> Result<ResourcesResponse> {
         let service_resources_req = ServiceResourcesRequest {
             service_id: service_id.to_string(),
         };
         self.resource_recorder_client
+            .as_mut()
+            .expect("to have the resource recorder set up")
             .get_service_resources(service_resources_req)
             .await
             .map_err(Error::from)

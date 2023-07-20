@@ -60,6 +60,7 @@ pub async fn start(
         deployment_manager,
         args.proxy_fqdn,
         args.project,
+        args.project_id,
         args.auth_uri,
     );
 

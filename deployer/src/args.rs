@@ -5,6 +5,7 @@ use fqdn::FQDN;
 use hyper::Uri;
 use shuttle_common::project::ProjectName;
 use tonic::transport::Endpoint;
+use ulid::Ulid;
 
 /// Program to handle the deploys for a single project
 /// Handling includes, building, testing, and running each service
@@ -42,6 +43,10 @@ pub struct Args {
     /// Project being served by this deployer
     #[clap(long)]
     pub project: ProjectName,
+
+    /// Project id of the project of this deployer
+    #[clap(long)]
+    pub project_id: Ulid,
 
     /// Secret that will be used to perform admin tasks on this deployer
     #[clap(long)]

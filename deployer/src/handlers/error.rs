@@ -25,6 +25,8 @@ pub enum Error {
     NotFound(String),
     #[error("Custom error: {0}")]
     Custom(#[from] anyhow::Error),
+    #[error("Missing header: {0}")]
+    MissingHeader(String),
 }
 
 impl Serialize for Error {

@@ -28,6 +28,7 @@ TAG?=$(shell git describe --tags --abbrev=0)
 BACKEND_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
 PROVISIONER_TAG?=$(TAG)
+RESOURCE_RECORDER_TAG?=$(TAG)
 
 DOCKER_BUILD?=docker buildx build
 
@@ -85,6 +86,7 @@ DOCKER_COMPOSE_ENV=\
 	BACKEND_TAG=$(BACKEND_TAG)\
 	DEPLOYER_TAG=$(DEPLOYER_TAG)\
 	PROVISIONER_TAG=$(PROVISIONER_TAG)\
+	RESOURCE_RECORDER_TAG=$(RESOURCE_RECORDER_TAG)\
 	POSTGRES_TAG=${POSTGRES_TAG}\
 	PANAMAX_TAG=${PANAMAX_TAG}\
 	OTEL_TAG=${OTEL_TAG}\
@@ -106,7 +108,7 @@ clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgres panamax otel
+images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth shuttle-resource-recorder postgres panamax otel
 
 postgres:
 	$(DOCKER_BUILD) \

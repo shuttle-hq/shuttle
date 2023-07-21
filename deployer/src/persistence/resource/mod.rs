@@ -16,11 +16,10 @@ pub use self::database::Type as DatabaseType;
 pub trait ResourceManager: Clone + Send + Sync + 'static {
     type Err: std::error::Error;
 
-    async fn insert_resource(
+    async fn insert_resources(
         &mut self,
-        resource: &record_request::Resource,
+        resources: Vec<record_request::Resource>,
         service_id: &ulid::Ulid,
-        project_id: &ulid::Ulid,
         claim: Claim,
     ) -> Result<ResultResponse, Self::Err>;
     async fn get_resources(

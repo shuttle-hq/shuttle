@@ -10,7 +10,6 @@ pub use run::{ActiveDeploymentsGetter, Built};
 use shuttle_common::storage_manager::ArtifactsStorageManager;
 use tracing::{instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use ulid::Ulid;
 
 use crate::{
     persistence::{DeploymentUpdater, ResourceManager, SecretGetter, SecretRecorder, State},
@@ -230,9 +229,3 @@ type QueueReceiver = mpsc::Receiver<queue::Queued>;
 
 type RunSender = mpsc::Sender<run::Built>;
 type RunReceiver = mpsc::Receiver<run::Built>;
-
-struct ServiceInfo {
-    service_name: String,
-    service_id: Ulid,
-    project_id: Ulid,
-}

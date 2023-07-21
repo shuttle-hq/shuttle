@@ -575,11 +575,10 @@ mod tests {
     impl ResourceManager for StubResourceManager {
         type Err = std::io::Error;
 
-        async fn insert_resource(
+        async fn insert_resources(
             &mut self,
-            _resource: &shuttle_proto::resource_recorder::record_request::Resource,
+            _resource: Vec<shuttle_proto::resource_recorder::record_request::Resource>,
             _service_id: &ulid::Ulid,
-            _project_id: &ulid::Ulid,
             _claim: Claim,
         ) -> Result<ResultResponse, Self::Err> {
             Ok(ResultResponse {

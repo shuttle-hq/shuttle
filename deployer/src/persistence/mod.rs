@@ -18,6 +18,7 @@ use shuttle_proto::resource_recorder::{
     record_request, RecordRequest, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
 };
 use sqlx::QueryBuilder;
+use std::result::Result as StdResult;
 use tonic::transport::Endpoint;
 use tower::ServiceBuilder;
 use ulid::Ulid;
@@ -40,6 +41,7 @@ use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentState, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
+use self::resource::Resource;
 pub use self::resource::{ResourceManager, Type as ResourceType};
 pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
@@ -60,6 +62,7 @@ pub struct Persistence {
             >,
         >,
     >,
+    project_id: Ulid,
 }
 
 impl Persistence {
@@ -67,7 +70,11 @@ impl Persistence {
     /// function creates all necessary tables and sets up a database connection
     /// pool - new connections should be made by cloning [`Persistence`] rather
     /// than repeatedly calling [`Persistence::new`].
-    pub async fn new(path: &str, resource_recorder_uri: &Uri) -> (Self, JoinHandle<()>) {
+    pub async fn new(
+        path: &str,
+        resource_recorder_uri: &Uri,
+        project_id: Ulid,
+    ) -> (Self, JoinHandle<()>) {
         if !Path::new(path).exists() {
             Sqlite::create_database(path).await.unwrap();
         }
@@ -95,7 +102,7 @@ impl Persistence {
 
         let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
 
-        Self::from_pool_with_resource_recorder(pool, resource_recorder_uri.to_string()).await
+        Self::configure(pool, resource_recorder_uri.to_string(), project_id).await
     }
 
     #[cfg(test)]
@@ -113,9 +120,10 @@ impl Persistence {
         Self::from_pool(pool).await
     }
 
-    async fn from_pool_with_resource_recorder(
+    async fn configure(
         pool: SqlitePool,
         resource_recorder_uri: String,
+        project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
         MIGRATIONS.run(&pool).await.unwrap();
 
@@ -209,6 +217,7 @@ impl Persistence {
             log_send,
             stream_log_send,
             resource_recorder_client: Some(resource_recorder_client),
+            project_id,
         };
 
         (persistence, handle)
@@ -295,6 +304,7 @@ impl Persistence {
             log_send,
             stream_log_send,
             resource_recorder_client: None,
+            project_id: Ulid::new(),
         };
 
         (persistence, handle)
@@ -533,26 +543,24 @@ impl LogRecorder for Persistence {
 impl ResourceManager for Persistence {
     type Err = Error;
 
-    async fn insert_resource(
+    async fn insert_resources(
         &mut self,
-        resource: &record_request::Resource,
+        resources: Vec<record_request::Resource>,
         service_id: &Ulid,
-        project_id: &Ulid,
         claim: Claim,
     ) -> Result<ResultResponse> {
-        let resources = vec![resource.clone()];
-        let mut record_request = tonic::Request::new(RecordRequest {
-            project_id: project_id.to_string(),
+        let mut record_req: tonic::Request<RecordRequest> = tonic::Request::new(RecordRequest {
+            project_id: self.project_id.to_string(),
             service_id: service_id.to_string(),
             resources,
         });
 
-        record_request.extensions_mut().insert(claim);
+        record_req.extensions_mut().insert(claim);
 
         self.resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
-            .record_resources(record_request)
+            .record_resources(record_req)
             .await
             .map_err(Error::from)
             .map(|res| res.into_inner())
@@ -567,15 +575,77 @@ impl ResourceManager for Persistence {
             service_id: service_id.to_string(),
         });
 
-        service_resources_req.extensions_mut().insert(claim);
+        service_resources_req.extensions_mut().insert(claim.clone());
 
-        self.resource_recorder_client
+        let res = self
+            .resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
             .get_service_resources(service_resources_req)
             .await
             .map_err(Error::from)
-            .map(|res| res.into_inner())
+            .map(|res| res.into_inner())?;
+
+        // If the resources list is empty
+        if res.resources.is_empty() {
+            // Check if there are cached resources on the local persistence.
+            let resources: StdResult<Vec<Resource>, sqlx::Error> =
+                sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
+                    .bind(service_id.to_string())
+                    .fetch_all(&self.pool)
+                    .await;
+
+            // If there are cached resources
+            if let Ok(inner) = resources {
+                // Return early if the local persistence is empty.
+                if inner.is_empty() {
+                    return Ok(res);
+                }
+
+                // Insert local resources in the resource-recorder.
+                let local_resources = inner
+                    .into_iter()
+                    .map(|res| record_request::Resource {
+                        r#type: res.r#type.to_string(),
+                        config: res.config.to_string().into_bytes(),
+                        data: res.data.to_string().into_bytes(),
+                    })
+                    .collect();
+
+                self.insert_resources(local_resources, service_id, claim.clone())
+                    .await?;
+
+                // Get the resources the second time. This should happen only once. Ideally,
+                // we would remove the local persisted resources cache too. We don't do this
+                // because:
+                // 1) It is not fail proof logic. Deleting the resources from the local persistence
+                //   can fail (even with retry logic), which means that the resources can live
+                //   both in resource-recorder and local persistence.
+                // 2) The first point will cause problems only if we'll remove the resources of a
+                //   service from the resource-recorder, which will trigger again the synchronization
+                //   with local persistence, which isn't necessarily what we want.
+                // 3) Our assumption is that 2) shouldn't happen to soon. It is pending project removal.
+                //   We should make sure that if we'll ever need to manually delete the resources (e.g for
+                //   account deletion) from the resource-recorder, we will first remove the rows of
+                //   resources table and then remove the resource-recorder's resources.
+                let mut service_resources_req = tonic::Request::new(ServiceResourcesRequest {
+                    service_id: service_id.to_string(),
+                });
+
+                service_resources_req.extensions_mut().insert(claim);
+
+                return self
+                    .resource_recorder_client
+                    .as_mut()
+                    .expect("to have the resource recorder set up")
+                    .get_service_resources(service_resources_req)
+                    .await
+                    .map_err(Error::from)
+                    .map(|res| res.into_inner());
+            }
+        }
+
+        Ok(res)
     }
 }
 

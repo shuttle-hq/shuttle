@@ -31,7 +31,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use super::{RunReceiver, ServiceInfo, State};
+use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
     persistence::{DeploymentUpdater, ResourceManager, SecretGetter},
@@ -260,11 +260,8 @@ impl Built {
         kill_old_deployments.await?;
         // Execute loaded service
         load(
-            ServiceInfo {
-                service_name: self.service_name.clone(),
-                service_id: self.service_id,
-                project_id: self.project_id,
-            },
+            self.service_name.clone(),
+            self.service_id,
             executable_path.clone(),
             secret_getter,
             resource_manager,
@@ -287,7 +284,8 @@ impl Built {
 }
 
 async fn load(
-    service_info: ServiceInfo,
+    service_name: String,
+    service_id: Ulid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
     mut resource_manager: impl ResourceManager,
@@ -304,7 +302,7 @@ async fn load(
     );
 
     let resources = resource_manager
-        .get_resources(&service_info.service_id, claim.clone())
+        .get_resources(&service_id, claim.clone())
         .await
         .unwrap()
         .resources
@@ -314,7 +312,7 @@ async fn load(
         .collect();
 
     let secrets = secret_getter
-        .get_secrets(&service_info.service_id)
+        .get_secrets(&service_id)
         .await
         .map_err(|e| Error::SecretsGet(Box::new(e)))?
         .into_iter()
@@ -326,17 +324,17 @@ async fn load(
             .into_os_string()
             .into_string()
             .unwrap_or_default(),
-        service_name: service_info.service_name.clone(),
+        service_name: service_name.clone(),
         resources,
         secrets,
     });
 
     load_request.extensions_mut().insert(claim.clone());
 
-    debug!(service_name = %service_info.service_name, "loading service");
+    debug!(service_name = %service_name, "loading service");
     let response = runtime_client.load(load_request).await;
 
-    debug!(service_name = %service_info.service_name, "service loaded");
+    debug!(service_name = %service_name, "service loaded");
     match response {
         Ok(response) => {
             let response = response.into_inner();
@@ -344,24 +342,22 @@ async fn load(
             // Make sure to not log the entire response, the resources field is likely to contain
             // secrets.
             info!(success = %response.success, "loading response");
-
-            for resource in response.resources {
-                let resource: resource::Response = serde_json::from_slice(&resource).unwrap();
-                let req_resource = record_request::Resource {
-                    r#type: resource.r#type.to_string(),
-                    config: resource.config.to_string().into_bytes(),
-                    data: resource.data.to_string().into_bytes(),
-                };
-                resource_manager
-                    .insert_resource(
-                        &req_resource,
-                        &service_info.service_id,
-                        &service_info.project_id,
-                        claim.clone(),
-                    )
-                    .await
-                    .expect("to add resource to persistence");
-            }
+            let resources = response
+                .resources
+                .into_iter()
+                .map(|res| {
+                    let resource: resource::Response = serde_json::from_slice(&res).unwrap();
+                    record_request::Resource {
+                        r#type: resource.r#type.to_string(),
+                        config: resource.config.to_string().into_bytes(),
+                        data: resource.data.to_string().into_bytes(),
+                    }
+                })
+                .collect();
+            resource_manager
+                .insert_resources(resources, &service_id, claim.clone())
+                .await
+                .expect("to add resource to persistence");
 
             if response.success {
                 Ok(())
@@ -552,11 +548,10 @@ mod tests {
     impl ResourceManager for StubResourceManager {
         type Err = std::io::Error;
 
-        async fn insert_resource(
+        async fn insert_resources(
             &mut self,
-            _resource: &shuttle_proto::resource_recorder::record_request::Resource,
+            _resources: Vec<shuttle_proto::resource_recorder::record_request::Resource>,
             _service_id: &ulid::Ulid,
-            _project_id: &ulid::Ulid,
             _claim: Claim,
         ) -> Result<ResultResponse, Self::Err> {
             Ok(ResultResponse {

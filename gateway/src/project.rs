@@ -751,6 +751,7 @@ impl ProjectCreating {
                     ],
                     "Env": [
                         "RUST_LOG=debug,shuttle=trace,h2=warn",
+                        "LD_LIBRARY_PATH=/usr/src/shuttle/deployer"
                     ]
                 })
             });

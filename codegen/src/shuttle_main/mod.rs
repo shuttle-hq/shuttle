@@ -282,8 +282,7 @@ impl ToTokens for Loader {
                         .unwrap();
 
                 let registry = shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger);
+                    .with(logger.with_filter(filter_layer));
 
                 #inject_tracing_layer
 
@@ -327,7 +326,7 @@ impl Parse for MainArgs {
                     let equal_sign = input.parse::<Punct>()?;
 
                     if equal_sign.as_char() != '=' {
-                        panic!("`tracing_layer` must be followed by a `=`.");
+                        emit_error!(ident, "must be followed by a `=`.");
                     }
 
                     let value = input.parse()?;
@@ -339,7 +338,7 @@ impl Parse for MainArgs {
                     });
                 }
 
-                attr_ident => panic!("Unknown attribute `{attr_ident}`."),
+                attr_ident => emit_error!(attr_ident, "Unknown attribute."),
             };
         }
 

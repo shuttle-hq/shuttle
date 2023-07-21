@@ -286,6 +286,16 @@ pub use shuttle_service::{CustomError, Error, Factory, ResourceBuilder, Service}
 
 pub use async_trait::async_trait;
 
+/// The default tracing registry used by shuttle.
+pub type Registry = tracing_subscriber::layer::Layered<
+    tracing_subscriber::filter::Filtered<
+        crate::Logger,
+        tracing_subscriber::EnvFilter,
+        tracing_subscriber::Registry,
+    >,
+    tracing_subscriber::Registry,
+>;
+
 // Dependencies required by the codegen
 pub use anyhow::Context;
 pub use strfmt::strfmt;

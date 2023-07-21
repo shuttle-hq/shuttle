@@ -692,7 +692,6 @@ impl ProjectCreating {
             provisioner_host,
             auth_uri,
             fqdn: public,
-            project_id,
             ..
         } = ctx.container_settings();
 
@@ -743,7 +742,7 @@ impl ProjectCreating {
                         "--auth-uri",
                         auth_uri,
                         "--project-id",
-                        project_id
+                        self.project_id
                     ],
                     "Env": [
                         "RUST_LOG=debug,shuttle=trace,h2=warn",

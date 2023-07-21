@@ -63,7 +63,6 @@ pub struct ContainerSettingsBuilder {
     auth_uri: Option<String>,
     network_name: Option<String>,
     fqdn: Option<String>,
-    project_id: Option<Ulid>,
 }
 
 impl Default for ContainerSettingsBuilder {
@@ -81,7 +80,6 @@ impl ContainerSettingsBuilder {
             auth_uri: None,
             network_name: None,
             fqdn: None,
-            project_id: None,
         }
     }
 
@@ -115,11 +113,6 @@ impl ContainerSettingsBuilder {
         self
     }
 
-    pub fn project_id(mut self, id: Ulid) -> Self {
-        self.project_id = Some(id);
-        self
-    }
-
     pub fn provisioner_host<S: ToString>(mut self, host: S) -> Self {
         self.provisioner = Some(host.to_string());
         self
@@ -148,7 +141,6 @@ impl ContainerSettingsBuilder {
 
         let network_name = self.network_name.take().unwrap();
         let fqdn = self.fqdn.take().unwrap();
-        let project_id = self.project_id.take().unwrap();
 
         ContainerSettings {
             prefix,
@@ -157,7 +149,6 @@ impl ContainerSettingsBuilder {
             auth_uri,
             network_name,
             fqdn,
-            project_id,
         }
     }
 }
@@ -170,7 +161,6 @@ pub struct ContainerSettings {
     pub auth_uri: String,
     pub network_name: String,
     pub fqdn: String,
-    pub project_id: Ulid,
 }
 
 impl ContainerSettings {

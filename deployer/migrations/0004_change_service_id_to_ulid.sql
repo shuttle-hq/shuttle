@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS logs_copy (
     line INTEGER,      -- The line log took place on
     target TEXT,       -- The module log took place in
     fields TEXT,       -- Log fields object.
-    PRIMARY KEY (id, timestamp),
+    PRIMARY KEY (id, timestamp)
 );
 INSERT INTO logs_copy (id, timestamp, state, level, file, line, target, fields)
 SELECT

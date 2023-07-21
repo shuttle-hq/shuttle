@@ -79,7 +79,32 @@ JOIN services_copy ON services_copy.uuid = secrets.service_id;
 -- We can safely drop the uuid column now, since we don't need it anymore.
 ALTER TABLE services_copy DROP COLUMN uuid;
 
+-- Make a logs_copy first which will take the new deployments FK.
+CREATE TABLE IF NOT EXISTS logs_copy (
+    id TEXT,           -- The deployment that this log line pertains to.
+    timestamp INTEGER, -- Unix epoch timestamp.
+    state TEXT,        -- The state of the deployment at the time at which the log text was produced.
+    level TEXT,        -- The log level
+    file TEXT,         -- The file log took place in
+    line INTEGER,      -- The line log took place on
+    target TEXT,       -- The module log took place in
+    fields TEXT,       -- Log fields object.
+    PRIMARY KEY (id, timestamp),
+);
+INSERT INTO logs_copy (id, timestamp, state, level, file, line, target, fields)
+SELECT
+  logs.id,
+  logs.timestamp,
+  logs.state,
+  logs.level,
+  logs.file,
+  logs.line,
+  logs.target,
+  logs.fields
+FROM logs;
+
 -- Recreate the deployments table with an FK constraint on the service_id.
+DROP TABLE logs;
 DROP TABLE deployments;
 CREATE TABLE IF NOT EXISTS deployments (
     id TEXT PRIMARY KEY, -- Identifier of the deployment.
@@ -96,6 +121,22 @@ CREATE TABLE IF NOT EXISTS deployments (
 );
 INSERT INTO deployments SELECT * FROM deployments_copy;
 DROP TABLE deployments_copy;
+
+-- Recreate logs table with FK on deployments ID.
+CREATE TABLE IF NOT EXISTS logs (
+    id TEXT,           -- The deployment that this log line pertains to.
+    timestamp INTEGER, -- Unix epoch timestamp.
+    state TEXT,        -- The state of the deployment at the time at which the log text was produced.
+    level TEXT,        -- The log level
+    file TEXT,         -- The file log took place in
+    line INTEGER,      -- The line log took place on
+    target TEXT,       -- The module log took place in
+    fields TEXT,       -- Log fields object.
+    PRIMARY KEY (id, timestamp),
+    FOREIGN KEY(id) REFERENCES deployments(id)
+);
+INSERT INTO logs SELECT * FROM logs_copy;
+DROP TABLE logs_copy;
 
 -- Recreate the resources table with an FK constraint on the service_id.
 DROP TABLE resources;
@@ -117,7 +158,7 @@ CREATE TABLE IF NOT EXISTS secrets (
     key TEXT,             -- Key / name of this secret.
     value TEXT,           -- The actual secret.
     last_update INTEGER,  -- Unix epoch of the last secret update
-    PRIMARY KEY (service_id, key)
+    PRIMARY KEY (service_id, key),
     FOREIGN KEY(service_id) REFERENCES services_copy(id)
 );
 INSERT INTO secrets SELECT * FROM secrets_copy;

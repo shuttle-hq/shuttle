@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS deployments_copy (
     state TEXT,          -- Enum indicating the current state of the deployment.
     last_update INTEGER, -- Unix epoch of the last status update
     address TEXT,        -- Address a running deployment is active on
-    is_next BOOLEAN,     -- Whether the deployment is for a shuttle-next runtime
+    is_next BOOLEAN DEFAULT 0 NOT NULL,     -- Whether the deployment is for a shuttle-next runtime
     git_commit_id TEXT,  -- Deployment git commit id
     git_commit_msg TEXT, -- Deployment last git commit msg
     git_branch TEXT,     -- Deployment git branch
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     state TEXT,          -- Enum indicating the current state of the deployment.
     last_update INTEGER, -- Unix epoch of the last status update
     address TEXT,        -- Address a running deployment is active on
-    is_next BOOLEAN,     -- Whether the deployment is for a shuttle-next runtime
+    is_next BOOLEAN DEFAULT 0 NOT NULL,     -- Whether the deployment is for a shuttle-next runtime
     git_commit_id TEXT,  -- Deployment git commit id
     git_commit_msg TEXT, -- Deployment last git commit msg
     git_branch TEXT,     -- Deployment git branch

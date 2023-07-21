@@ -746,7 +746,7 @@ impl ProjectCreating {
                         "--auth-uri",
                         auth_uri,
                         "--project-id",
-                        self.project_id
+                        self.project_id.to_string()
                     ],
                     "Env": [
                         "RUST_LOG=debug,shuttle=trace,h2=warn",

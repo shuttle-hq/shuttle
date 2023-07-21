@@ -135,7 +135,11 @@ impl RouterBuilder {
                 "/projects/:project_name/deployments/:deployment_id",
                 get(get_deployment.layer(ScopedLayer::new(vec![Scope::Deployment])))
                     .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush])))
-                    .put(start_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
+                    .put(
+                        start_deployment
+                            .layer(Extension(project_id))
+                            .layer(ScopedLayer::new(vec![Scope::DeploymentPush])),
+                    ),
             )
             .route(
                 "/projects/:project_name/ws/deployments/:deployment_id/logs",
@@ -514,6 +518,7 @@ pub async fn start_deployment(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
+    Extension(project_id): Extension<Ulid>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<()> {
     if let Some(deployment) = persistence.get_runnable_deployment(&deployment_id).await? {
@@ -521,6 +526,7 @@ pub async fn start_deployment(
             id: deployment.id,
             service_name: deployment.service_name,
             service_id: deployment.service_id,
+            project_id,
             tracing_context: Default::default(),
             is_next: deployment.is_next,
             claim,

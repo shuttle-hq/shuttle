@@ -198,6 +198,7 @@ services:
     environment:
       - DD_API_KEY=${DD_API_KEY}
       - DD_ENV=${DD_ENV}
+      - HONEYCOMB_API_KEY=${HONEYCOMB_API_KEY}
     deploy:
       placement:
         constraints:

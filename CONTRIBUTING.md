@@ -60,6 +60,8 @@ USE_PANAMAX=disable make up
 
 > Note: `make up` can also be run with `SHUTTLE_DETACH=disable`, which means docker-compose will not be run with `--detach`. This is often desirable for local testing.
 
+> Note: `make up` can also be run with `HONEYCOMB_API_KEY=<api_key>` if you have a honeycomb.io account and want to test the instrumentation of the services. This is mostly used only by the internal team.
+
 > Note: Other useful commands can be found within the [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile).
 
 The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls.

@@ -326,10 +326,9 @@ pub async fn create_service(
     Rmp(deployment_req): Rmp<DeploymentRequest>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     let service = persistence.get_or_create_service(&service_name).await?;
-    let id = Uuid::new_v4();
 
     let deployment = Deployment {
-        id,
+        id: Uuid::new_v4(),
         service_id: service.id,
         state: State::Queued,
         last_update: Utc::now(),
@@ -350,7 +349,7 @@ pub async fn create_service(
     persistence.insert_deployment(deployment.clone()).await?;
 
     let queued = Queued {
-        id,
+        id: deployment.id,
         service_name: service.name,
         service_id: service.id,
         data: deployment_req.data,

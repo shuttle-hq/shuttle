@@ -183,7 +183,7 @@ impl Persistence {
     }
 
     pub async fn insert_deployment(&self, deployment: impl Into<Deployment>) -> Result<()> {
-        let deployment = deployment.into();
+        let deployment: Deployment = deployment.into();
 
         sqlx::query("INSERT INTO deployments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(deployment.id)

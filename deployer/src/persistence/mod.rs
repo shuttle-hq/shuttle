@@ -12,7 +12,7 @@ use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 use error::{Error, Result};
 use hyper::Uri;
-use shuttle_common::claims::{ClaimLayer, InjectPropagationLayer};
+use shuttle_common::claims::{Claim, ClaimLayer, InjectPropagationLayer};
 use shuttle_proto::resource_recorder::resource_recorder_client::ResourceRecorderClient;
 use shuttle_proto::resource_recorder::{
     record_request, RecordRequest, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
@@ -538,13 +538,17 @@ impl ResourceManager for Persistence {
         resource: &record_request::Resource,
         service_id: &Ulid,
         project_id: &Ulid,
+        claim: Claim,
     ) -> Result<ResultResponse> {
         let resources = vec![resource.clone()];
-        let record_request = RecordRequest {
+        let mut record_request = tonic::Request::new(RecordRequest {
             project_id: project_id.to_string(),
             service_id: service_id.to_string(),
             resources,
-        };
+        });
+
+        record_request.extensions_mut().insert(claim);
+
         self.resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
@@ -554,10 +558,17 @@ impl ResourceManager for Persistence {
             .map(|res| res.into_inner())
     }
 
-    async fn get_resources(&mut self, service_id: &Ulid) -> Result<ResourcesResponse> {
-        let service_resources_req = ServiceResourcesRequest {
+    async fn get_resources(
+        &mut self,
+        service_id: &Ulid,
+        claim: Claim,
+    ) -> Result<ResourcesResponse> {
+        let mut service_resources_req = tonic::Request::new(ServiceResourcesRequest {
             service_id: service_id.to_string(),
-        };
+        });
+
+        service_resources_req.extensions_mut().insert(claim);
+
         self.resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")

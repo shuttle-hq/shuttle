@@ -1,5 +1,6 @@
 pub mod database;
 
+use shuttle_common::claims::Claim;
 use shuttle_proto::resource_recorder::{record_request, ResourcesResponse, ResultResponse};
 use sqlx::{
     sqlite::{SqliteArgumentValue, SqliteRow, SqliteValueRef},
@@ -20,10 +21,12 @@ pub trait ResourceManager: Clone + Send + Sync + 'static {
         resource: &record_request::Resource,
         service_id: &ulid::Ulid,
         project_id: &ulid::Ulid,
+        claim: Claim,
     ) -> Result<ResultResponse, Self::Err>;
     async fn get_resources(
         &mut self,
         service_id: &ulid::Ulid,
+        claim: Claim,
     ) -> Result<ResourcesResponse, Self::Err>;
 }
 

@@ -319,6 +319,7 @@ mod tests {
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use portpicker::pick_unused_port;
+    use shuttle_common::claims::Claim;
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
@@ -579,6 +580,7 @@ mod tests {
             _resource: &shuttle_proto::resource_recorder::record_request::Resource,
             _service_id: &ulid::Ulid,
             _project_id: &ulid::Ulid,
+            _claim: Claim,
         ) -> Result<ResultResponse, Self::Err> {
             Ok(ResultResponse {
                 success: true,
@@ -588,6 +590,7 @@ mod tests {
         async fn get_resources(
             &mut self,
             _service_id: &ulid::Ulid,
+            _claim: Claim,
         ) -> Result<ResourcesResponse, Self::Err> {
             Ok(ResourcesResponse {
                 success: true,

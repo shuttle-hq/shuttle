@@ -304,9 +304,10 @@ async fn load(
     );
 
     let resources = resource_manager
-        .get_resources(&service_id)
+        .get_resources(&service_info.service_id, claim.clone())
         .await
         .unwrap()
+        .resources
         .into_iter()
         .map(resource::Response::from)
         .map(resource::Response::into_bytes)
@@ -330,7 +331,7 @@ async fn load(
         secrets,
     });
 
-    load_request.extensions_mut().insert(claim);
+    load_request.extensions_mut().insert(claim.clone());
 
     debug!(service_name = %service_info.service_name, "loading service");
     let response = runtime_client.load(load_request).await;
@@ -356,6 +357,7 @@ async fn load(
                         &req_resource,
                         &service_info.service_id,
                         &service_info.project_id,
+                        claim.clone(),
                     )
                     .await
                     .expect("to add resource to persistence");
@@ -441,7 +443,7 @@ mod tests {
 
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
-    use shuttle_common::storage_manager::ArtifactsStorageManager;
+    use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
@@ -555,6 +557,7 @@ mod tests {
             _resource: &shuttle_proto::resource_recorder::record_request::Resource,
             _service_id: &ulid::Ulid,
             _project_id: &ulid::Ulid,
+            _claim: Claim,
         ) -> Result<ResultResponse, Self::Err> {
             Ok(ResultResponse {
                 success: true,
@@ -564,6 +567,7 @@ mod tests {
         async fn get_resources(
             &mut self,
             _service_id: &ulid::Ulid,
+            _claim: Claim,
         ) -> Result<ResourcesResponse, Self::Err> {
             Ok(ResourcesResponse {
                 success: true,

@@ -294,11 +294,12 @@ pub async fn get_service(
 )]
 pub async fn get_service_resources(
     Extension(mut persistence): Extension<Persistence>,
+    Extension(claim): Extension<Claim>,
     Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let resources = persistence
-            .get_resources(&service.id)
+            .get_resources(&service.id, claim)
             .await?
             .resources
             .into_iter()

@@ -306,7 +306,7 @@ async fn load(
     // Get resources from cache when a claim is not set (ie an idl project is started)
     let resources = if claim.is_none() {
         resource_manager
-            .get_resources(&service_info.service_id)
+            .get_resources(&service_info.service_id, claim.clone())
             .await
             .unwrap()
             .resources
@@ -336,8 +336,8 @@ async fn load(
         secrets,
     });
 
-    if let Some(claim) = claim {
-        load_request.extensions_mut().insert(claim);
+    if let Some(claim) = claim.as_ref() {
+        load_request.extensions_mut().insert(claim.clone());
     }
 
     debug!(service_name = %service_info.service_name, "loading service");
@@ -364,6 +364,7 @@ async fn load(
                         &req_resource,
                         &service_info.service_id,
                         &service_info.project_id,
+                        claim.clone(),
                     )
                     .await
                     .expect("to add resource to persistence");
@@ -449,7 +450,7 @@ mod tests {
 
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
-    use shuttle_common::storage_manager::ArtifactsStorageManager;
+    use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
@@ -563,6 +564,7 @@ mod tests {
             _resource: &shuttle_proto::resource_recorder::record_request::Resource,
             _service_id: &ulid::Ulid,
             _project_id: &ulid::Ulid,
+            _claim: Option<Claim>,
         ) -> Result<ResultResponse, Self::Err> {
             Ok(ResultResponse {
                 success: true,
@@ -572,6 +574,7 @@ mod tests {
         async fn get_resources(
             &mut self,
             _service_id: &ulid::Ulid,
+            _claim: Option<Claim>,
         ) -> Result<ResourcesResponse, Self::Err> {
             Ok(ResourcesResponse {
                 success: true,

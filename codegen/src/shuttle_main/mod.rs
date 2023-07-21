@@ -424,8 +424,7 @@ mod tests {
                         .unwrap();
 
                 let registry = shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger);
+                    .with(logger.with_filter(filter_layer));
 
 
                 registry.init();
@@ -509,8 +508,7 @@ mod tests {
                         .unwrap();
 
                 let registry = shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger);
+                    .with(logger.with_filter(filter_layer));
 
 
                 registry.init();
@@ -636,8 +634,7 @@ mod tests {
                         .unwrap();
 
                 let registry = shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger);
+                    .with(logger.with_filter(filter_layer));
 
 
                 registry.init();

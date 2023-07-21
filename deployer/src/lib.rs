@@ -13,6 +13,7 @@ use proxy::AddressGetter;
 pub use runtime_manager::RuntimeManager;
 use tokio::sync::Mutex;
 use tracing::{error, info};
+use ulid::Ulid;
 
 use crate::deployment::gateway_client::GatewayClient;
 
@@ -46,12 +47,14 @@ pub async fn start(
 
     let runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
     info!(count = %runnable_deployments.len(), "enqueuing runnable deployments");
+    let project_id = Ulid::from_string(args.project_id.as_str())
+        .expect("to have a valid ULID as project_id arg");
     for existing_deployment in runnable_deployments {
         let built = Built {
             id: existing_deployment.id,
             service_name: existing_deployment.service_name,
             service_id: existing_deployment.service_id,
-            project_id: args.project_id,
+            project_id,
             tracing_context: Default::default(),
             is_next: existing_deployment.is_next,
             claim: None, // This will cause us to read the resource info from past provisions
@@ -64,7 +67,7 @@ pub async fn start(
         deployment_manager,
         args.proxy_fqdn,
         args.project,
-        args.project_id,
+        project_id,
         args.auth_uri,
     );
 

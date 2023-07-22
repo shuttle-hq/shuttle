@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS services_copy (
 
 INSERT INTO services_copy (id, uuid, name)
 SELECT
-  ulid_with_datetime(strftime('%Y-%m-%d %H:%M:%f', datetime('2023-06-01'))) as id,
+  upper(ulid_with_datetime(strftime('%Y-%m-%d %H:%M:%f', datetime('2023-06-01')))) as id,
   services.id as uuid,
   services.name
 FROM services;

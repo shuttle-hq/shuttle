@@ -358,7 +358,7 @@ pub async fn create_service(
     let queued = Queued {
         id: deployment.id,
         service_name: service.name,
-        service_id: service.id,
+        service_id: deployment.service_id,
         project_id,
         data: deployment_req.data,
         will_run_tests: !deployment_req.no_test,

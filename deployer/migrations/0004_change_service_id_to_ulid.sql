@@ -2,7 +2,7 @@
 -- the rest of the tables are still having an FK on service_id.
 CREATE TABLE IF NOT EXISTS services_copy (
     id TEXT PRIMARY KEY,  -- Ulid identifier of the service.
-    uuid TEXT,     -- Old Uuid identifier of the service.
+    uuid TEXT,            -- Old Uuid identifier of the service.
     name TEXT UNIQUE      -- Name of the service.
 );
 
@@ -79,7 +79,7 @@ JOIN services_copy ON services_copy.uuid = secrets.service_id;
 -- We can safely drop the uuid column now, since we don't need it anymore.
 ALTER TABLE services_copy DROP COLUMN uuid;
 
--- Make a logs_copy first which will take the new deployments FK.
+-- Make a logs_copy first without the deployments FK.
 CREATE TABLE IF NOT EXISTS logs_copy (
     id TEXT,           -- The deployment that this log line pertains to.
     timestamp INTEGER, -- Unix epoch timestamp.

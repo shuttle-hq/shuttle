@@ -143,11 +143,10 @@ shuttle-runtime = { path = "[base]/shuttle/runtime" }
 shuttle-service = { path = "[base]/shuttle/service" }
 
 shuttle-aws-rds = { path = "[base]/shuttle/resources/aws-rds" }
+shuttle-metadata = { path = "[base]/shuttle/resources/metadata" }
 shuttle-persist = { path = "[base]/shuttle/resources/persist" }
 shuttle-shared-db = { path = "[base]/shuttle/resources/shared-db" }
 shuttle-secrets = { path = "[base]/shuttle/resources/secrets" }
-shuttle-static-folder = { path = "[base]/shuttle/resources/static-folder" }
-shuttle-metadata = { path = "[base]/shuttle/resources/metadata" }
 shuttle-turso = { path = "[base]/shuttle/resources/turso" }
 
 shuttle-axum = { path = "[base]/shuttle/services/shuttle-axum" }

@@ -52,72 +52,14 @@ pub trait Factory: Send + Sync {
 /// This is mainly meant for consumption by our code generator and should generally not be called by users.
 ///
 /// ## Creating your own managed resource
-/// You may want to create your own managed resource by implementing this trait for some builder `B` to construct resource `T`. [`Factory`] can be used to provision resources
-/// on shuttle's servers if your resource will need any.
 ///
-/// Your resource will be available on a [shuttle_runtime::main][main] function as follow:
-/// ```
-/// #[shuttle_runtime::main]
-/// async fn my_service(
-///     [custom_resource_crate::namespace::B] custom_resource: T,
-/// ) -> shuttle_axum::ShuttleAxum {}
-/// ```
+/// You may want to create your own managed resource by implementing this trait for some builder `B` to construct resource `T`.
+/// [`Factory`] can be used to provision resources on Shuttle's servers if your service will need any.
 ///
-/// Here `custom_resource_crate::namespace` is the crate and namespace to a builder `B` that implements [`ResourceBuilder`] to create resource `T`.
+/// Please refer to `shuttle-examples/custom-resource` for examples of how to create custom resource. For more advanced provisioning
+/// of custom resources, please [get in touch](https://discord.gg/shuttle) and detail your use case. We'll be interested to see what you
+/// want to provision and how to do it on your behalf on the fly.
 ///
-/// ### Example
-/// ```
-/// pub struct Builder {
-///     name: String,
-/// }
-///
-/// pub struct Resource {
-///     name: String,
-/// }
-///
-/// impl Builder {
-///     /// Name to give resource
-///     pub fn name(self, name: &str) -> Self {
-///         self.name = name.to_string();
-///
-///         self
-///     }
-/// }
-///
-/// #[async_trait]
-/// impl ResourceBuilder<Resource> for Builder {
-///     const TYPE: Type = Type::Custom;
-///
-///     type Config = Self;
-///
-///     type Output = String;
-///
-///     fn new() -> Self {
-///         Self {
-///             name: String::new(),
-///         }
-///     }
-///
-///     fn config(&self) -> &Self::Config {
-///         self
-///     }
-///
-///     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, shuttle_service::Error> {
-///         Ok(self.name)
-///     }
-///
-///     async fn build(build_data: &Self::Output) -> Result<Resource, shuttle_service::Error> {
-///         Ok(Resource { name: build_data })
-///     }
-/// }
-/// ```
-///
-/// Then using this resource in a service:
-/// ```
-/// #[shuttle_runtime::main]
-/// async fn my_service(
-///     [custom_resource_crate::Builder(name = "John")] resource: custom_resource_crate::Resource
-/// ) -> shuttle_axum::ShuttleAxum {}
 /// ```
 #[async_trait]
 pub trait ResourceBuilder<T> {

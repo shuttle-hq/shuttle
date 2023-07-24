@@ -5,6 +5,7 @@ volumes:
   postgres-vol:
   panamax-crates-vol:
   panamax-io-index-vol:
+  resource-recorder-vol:
 networks:
   user-net:
     attachable: true
@@ -129,6 +130,35 @@ services:
       - "--internal-pg-address=postgres"
       - "--fqdn=${DB_FQDN}"
       - "--auth-uri=http://auth:8000"
+  resource-recorder:
+    image: "${CONTAINER_REGISTRY}/resource-recorder:${RESOURCE_RECORDER_TAG}"
+    depends_on:
+      - auth
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    networks:
+      user-net:
+    volumes:
+      - resource-recorder-vol:/var/lib/shuttle
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==controller
+    command:
+      - "--address=0.0.0.0:8000"
+      - "--state=/var/lib/shuttle"
+      - "--auth-uri=http://auth:8000"
   postgres:
     image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
     restart: always
@@ -168,6 +198,7 @@ services:
     environment:
       - DD_API_KEY=${DD_API_KEY}
       - DD_ENV=${DD_ENV}
+      - HONEYCOMB_API_KEY=${HONEYCOMB_API_KEY}
     deploy:
       placement:
         constraints:

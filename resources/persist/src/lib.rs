@@ -40,9 +40,7 @@ pub struct PersistInstance {
 
 impl PersistInstance {
     pub fn new(service_name: ServiceName) -> Self {
-        Self {
-            service_name,
-        }
+        Self { service_name }
     }
 
     pub fn save<T: Serialize>(&self, key: &str, struc: T) -> Result<(), PersistError> {

@@ -39,13 +39,15 @@ pub struct PersistInstance {
 }
 
 impl PersistInstance {
-    pub fn new(service_name: ServiceName) -> Self {
-        Self { service_name }
+    pub fn new(service_name: ServiceName) -> Result<Self, PersistError<'static>> {
+        let instance = Self { service_name };
+        let storage_folder = instance.get_storage_folder();
+        fs::create_dir_all(storage_folder).map_err(PersistError::CreateFolder)?;
+
+        Ok(instance)
     }
 
     pub fn save<T: Serialize>(&self, key: &str, struc: T) -> Result<(), PersistError> {
-        let storage_folder = self.get_storage_folder();
-        fs::create_dir_all(storage_folder).map_err(PersistError::CreateFolder)?;
         let file_path = self.get_storage_file(key);
         let file = File::create(file_path).map_err(PersistError::Open)?;
         let mut writer = BufWriter::new(file);
@@ -155,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_save_and_load() {
-        let persist = PersistInstance::new(ServiceName::from_str("test").unwrap());
+        let persist = PersistInstance::new(ServiceName::from_str("test").unwrap()).unwrap();
 
         persist.save("test", "test").unwrap();
         let result: String = persist.load("test").unwrap();
@@ -164,7 +166,7 @@ mod tests {
 
     #[test]
     fn test_list_and_size() {
-        let persist = PersistInstance::new(ServiceName::from_str("test1").unwrap());
+        let persist = PersistInstance::new(ServiceName::from_str("test1").unwrap()).unwrap();
 
         persist.save("test", "test").unwrap();
         let list_result = persist.list().unwrap().len();
@@ -174,20 +176,8 @@ mod tests {
     }
 
     #[test]
-    fn test_list_error() {
-        let persist = PersistInstance::new(ServiceName::from_str("test2").unwrap());
-
-        // unwrap error
-        let result = persist.list().unwrap_err();
-        assert_eq!(
-            result.to_string(),
-            "failed to list contents of folder: No such file or directory (os error 2)"
-        );
-    }
-
-    #[test]
     fn test_remove() {
-        let persist = PersistInstance::new(ServiceName::from_str("test3").unwrap());
+        let persist = PersistInstance::new(ServiceName::from_str("test3").unwrap()).unwrap();
 
         persist.save("test", "test").unwrap();
         persist.save("test2", "test2").unwrap();
@@ -200,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_remove_error() {
-        let persist = PersistInstance::new(ServiceName::from_str("test4").unwrap());
+        let persist = PersistInstance::new(ServiceName::from_str("test4").unwrap()).unwrap();
 
         // unwrap error
         let result = persist.remove("test4").unwrap_err();
@@ -212,7 +202,7 @@ mod tests {
 
     #[test]
     fn test_clear() {
-        let persist = PersistInstance::new(ServiceName::from_str("test5").unwrap());
+        let persist = PersistInstance::new(ServiceName::from_str("test5").unwrap()).unwrap();
 
         persist.save("test5", "test5").unwrap();
         persist.clear().unwrap();
@@ -221,20 +211,8 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_error() {
-        let persist = PersistInstance::new(ServiceName::from_str("test6").unwrap());
-
-        // unwrap error
-        let result = persist.clear().unwrap_err();
-        assert_eq!(
-            result.to_string(),
-            "failed to clear folder: No such file or directory (os error 2)"
-        );
-    }
-
-    #[test]
     fn test_load_error() {
-        let persist = PersistInstance::new(ServiceName::from_str("test").unwrap());
+        let persist = PersistInstance::new(ServiceName::from_str("test").unwrap()).unwrap();
 
         // unwrap error
         let result = persist.load::<String>("error").unwrap_err();

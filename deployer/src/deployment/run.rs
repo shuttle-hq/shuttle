@@ -406,7 +406,8 @@ async fn run(
             info!(response = ?response.into_inner(),  "start client response: ");
 
             // Wait for stop reason
-            let reason = stream.message().await.expect("message from tonic stream");
+            let reason: Option<SubscribeStopResponse> =
+                stream.message().await.expect("message from tonic stream");
 
             cleanup(reason);
         }

@@ -70,3 +70,17 @@ impl From<shuttle_common::deployment::State> for State {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use crate::persistence::State;
+
+    #[test]
+    fn test_state_deser() {
+        assert_eq!(State::Building, State::from_str("builDing").unwrap());
+        assert_eq!(State::Queued, State::from_str("queued").unwrap());
+        assert_eq!(State::Stopped, State::from_str("Stopped").unwrap());
+    }
+}

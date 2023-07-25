@@ -27,3 +27,18 @@ pub enum Environment {
     Local,
     Production,
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use crate::deployment::State;
+
+    #[test]
+    fn test_state_deser() {
+        println!("bla");
+        assert_eq!(State::Queued, State::from_str("Queued").unwrap());
+        assert_eq!(State::Unknown, State::from_str("unKnown").unwrap());
+        assert_eq!(State::Built, State::from_str("built").unwrap());
+    }
+}

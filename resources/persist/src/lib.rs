@@ -11,13 +11,15 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum PersistError {
+pub enum PersistError<'a> {
     #[error("failed to open file: {0}")]
     Open(std::io::Error),
     #[error("failed to create folder: {0}")]
     CreateFolder(std::io::Error),
     #[error("failed to list contents of folder: {0}")]
     ListFolder(std::io::Error),
+    #[error("failed to list the file name: {0}")]
+    ListName(&'a str),
     #[error("failed to clear folder: {0}")]
     RemoveFolder(std::io::Error),
     #[error("failed to remove file: {0}")]
@@ -37,10 +39,15 @@ pub struct PersistInstance {
 }
 
 impl PersistInstance {
+    pub fn new(service_name: ServiceName) -> Self {
+        Self {
+            service_name,
+        }
+    }
+
     pub fn save<T: Serialize>(&self, key: &str, struc: T) -> Result<(), PersistError> {
         let storage_folder = self.get_storage_folder();
         fs::create_dir_all(storage_folder).map_err(PersistError::CreateFolder)?;
-
         let file_path = self.get_storage_file(key);
         let file = File::create(file_path).map_err(PersistError::Open)?;
         let mut writer = BufWriter::new(file);
@@ -61,7 +68,8 @@ impl PersistInstance {
                 .file_stem()
                 .unwrap_or_default()
                 .to_str()
-                .unwrap_or("file name contains non-UTF-8 characters")
+                .ok_or("the file name contains invalid characters")
+                .map_err(PersistError::ListName)?
                 .to_string();
             list.push(key_name);
         }
@@ -149,9 +157,7 @@ mod tests {
 
     #[test]
     fn test_save_and_load() {
-        let persist = PersistInstance {
-            service_name: ServiceName::from_str("test").unwrap(),
-        };
+        let persist = PersistInstance::new(ServiceName::from_str("test").unwrap());
 
         persist.save("test", "test").unwrap();
         let result: String = persist.load("test").unwrap();
@@ -160,9 +166,7 @@ mod tests {
 
     #[test]
     fn test_list_and_size() {
-        let persist = PersistInstance {
-            service_name: ServiceName::from_str("test1").unwrap(),
-        };
+        let persist = PersistInstance::new(ServiceName::from_str("test1").unwrap());
 
         persist.save("test", "test").unwrap();
         let list_result = persist.list().unwrap().len();
@@ -173,9 +177,7 @@ mod tests {
 
     #[test]
     fn test_list_error() {
-        let persist = PersistInstance {
-            service_name: ServiceName::from_str("test2").unwrap(),
-        };
+        let persist = PersistInstance::new(ServiceName::from_str("test2").unwrap());
 
         // unwrap error
         let result = persist.list().unwrap_err();
@@ -187,9 +189,7 @@ mod tests {
 
     #[test]
     fn test_remove() {
-        let persist = PersistInstance {
-            service_name: ServiceName::from_str("test3").unwrap(),
-        };
+        let persist = PersistInstance::new(ServiceName::from_str("test3").unwrap());
 
         persist.save("test", "test").unwrap();
         persist.save("test2", "test2").unwrap();
@@ -202,9 +202,7 @@ mod tests {
 
     #[test]
     fn test_remove_error() {
-        let persist = PersistInstance {
-            service_name: ServiceName::from_str("test4").unwrap(),
-        };
+        let persist = PersistInstance::new(ServiceName::from_str("test4").unwrap());
 
         // unwrap error
         let result = persist.remove("test4").unwrap_err();
@@ -216,9 +214,7 @@ mod tests {
 
     #[test]
     fn test_clear() {
-        let persist = PersistInstance {
-            service_name: ServiceName::from_str("test5").unwrap(),
-        };
+        let persist = PersistInstance::new(ServiceName::from_str("test5").unwrap());
 
         persist.save("test5", "test5").unwrap();
         persist.clear().unwrap();
@@ -228,9 +224,7 @@ mod tests {
 
     #[test]
     fn test_clear_error() {
-        let persist = PersistInstance {
-            service_name: ServiceName::from_str("test6").unwrap(),
-        };
+        let persist = PersistInstance::new(ServiceName::from_str("test6").unwrap());
 
         // unwrap error
         let result = persist.clear().unwrap_err();
@@ -242,9 +236,7 @@ mod tests {
 
     #[test]
     fn test_load_error() {
-        let persist = PersistInstance {
-            service_name: ServiceName::from_str("test").unwrap(),
-        };
+        let persist = PersistInstance::new(ServiceName::from_str("test").unwrap());
 
         // unwrap error
         let result = persist.load::<String>("error").unwrap_err();

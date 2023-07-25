@@ -3,6 +3,7 @@ use utoipa::ToSchema;
 
 /// States a deployment can be in
 #[derive(sqlx::Type, Debug, Display, Clone, Copy, EnumString, PartialEq, Eq, ToSchema)]
+#[strum(ascii_case_insensitive)]
 pub enum State {
     /// Deployment is queued to be build
     Queued,

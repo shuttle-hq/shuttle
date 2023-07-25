@@ -522,7 +522,7 @@ impl Shuttle {
         run_args: &RunArgs,
         service: &BuiltService,
         provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
-        i: u16,
+        idx: u16,
         provisioner_port: u16,
     ) -> Result<
         Option<(
@@ -614,7 +614,7 @@ impl Shuttle {
             StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{provisioner_port}"),
             None,
-            run_args.port - i - 1,
+            run_args.port - idx - 1,
             runtime_path,
         )
         .await
@@ -682,7 +682,7 @@ impl Shuttle {
                 Ipv4Addr::LOCALHOST
             }
             .into(),
-            run_args.port + i,
+            run_args.port + idx,
         );
 
         println!(

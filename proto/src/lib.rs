@@ -98,6 +98,7 @@ pub mod runtime {
     use std::{
         convert::TryFrom,
         path::PathBuf,
+        str::FromStr,
         time::{Duration, SystemTime},
     };
 
@@ -140,7 +141,7 @@ pub mod runtime {
             Ok(Self {
                 id: Default::default(),
                 timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap_or_default())?),
-                state: shuttle_common::deployment::State::Running,
+                state: State::from_str(&log.state).unwrap_or(State::Unknown),
                 level: LogLevel::from_i32(log.level).unwrap_or_default().into(),
                 file: log.file,
                 line: log.line,

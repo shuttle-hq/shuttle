@@ -36,7 +36,6 @@ mod tests {
 
     #[test]
     fn test_state_deser() {
-        println!("bla");
         assert_eq!(State::Queued, State::from_str("Queued").unwrap());
         assert_eq!(State::Unknown, State::from_str("unKnown").unwrap());
         assert_eq!(State::Built, State::from_str("built").unwrap());

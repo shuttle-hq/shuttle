@@ -5,7 +5,7 @@ use shuttle_common::backends::tracing::setup_tracing;
 use sqlx::migrate::Migrator;
 use tracing::{info, trace};
 
-use shuttle_auth::{init, sqlite_init, start, Args, Commands};
+use shuttle_auth::{init, sqlite_init, start, AccountTier, Args, Commands};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -32,6 +32,7 @@ async fn main() -> io::Result<()> {
 
     match args.command {
         Commands::Start(args) => start(pool, args).await,
-        Commands::Init(args) => init(pool, args).await,
+        Commands::InitAdmin(args) => init(pool, args, AccountTier::Admin).await,
+        Commands::InitDeployer(args) => init(pool, args, AccountTier::Deployer).await,
     }
 }

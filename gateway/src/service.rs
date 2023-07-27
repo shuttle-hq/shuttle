@@ -289,7 +289,7 @@ impl GatewayService {
 
         query
             .push_bind(account_name)
-            .push(" ORDER BY created_at DESC NULLS LAST, project_name LIMIT ")
+            .push(" ORDER BY project_id DESC, project_name LIMIT ")
             .push_bind(limit);
 
         if offset > 0 {
@@ -398,7 +398,7 @@ impl GatewayService {
     ) -> Result<Project, Error> {
         if let Some(row) = query(
             r#"
-        SELECT project_name, account_name, initial_key, project_state
+        SELECT project_name, project_id, account_name, initial_key, project_state
         FROM projects
         WHERE (project_name = ?1)
         AND (account_name = ?2 OR ?3)
@@ -412,6 +412,7 @@ impl GatewayService {
         {
             // If the project already exists and belongs to this account
             let project = row.get::<SqlxJson<Project>, _>("project_state").0;
+            let project_id = row.get::<String, _>("project_id");
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
                 let mut creating = ProjectCreating::new_with_random_initial_key(
@@ -419,7 +420,7 @@ impl GatewayService {
                     idle_minutes,
                 );
                 // Restore previous custom domain, if any
-                match self.find_custom_domain_for_project(&project_name).await {
+                match self.find_custom_domain_for_project(&project_id).await {
                     Ok(custom_domain) => {
                         creating = creating.with_fqdn(custom_domain.fqdn.to_string());
                     }
@@ -462,7 +463,7 @@ impl GatewayService {
             ProjectCreating::new_with_random_initial_key(project_name.clone(), idle_minutes),
         ));
 
-        query("INSERT INTO projects (project_name, account_name, initial_key, project_state, created_at) VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP)")
+        query("INSERT INTO projects (project_id, project_name, account_name, initial_key, project_state) VALUES (ulid(), ?1, ?2, ?3, ?4)")
             .bind(&project_name)
             .bind(&account_name)
             .bind(project.initial_key().unwrap())
@@ -473,7 +474,7 @@ impl GatewayService {
                 // If the error is a broken PK constraint, this is a
                 // project name clash
                 if let Some(db_err_code) = err.as_database_error().and_then(DatabaseError::code) {
-                    if db_err_code == "1555" {  // SQLITE_CONSTRAINT_PRIMARYKEY
+                    if db_err_code == "2067" {  // SQLITE_CONSTRAINT_UNIQUE
                         return Error::from_kind(ErrorKind::ProjectAlreadyExists)
                     }
                 }
@@ -493,9 +494,15 @@ impl GatewayService {
         certs: &str,
         private_key: &str,
     ) -> Result<(), Error> {
-        query("INSERT OR REPLACE INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
-            .bind(fqdn.to_string())
+        let project_id = query("SELECT project_id FROM projects WHERE project_name = ?1")
             .bind(project_name)
+            .fetch_one(&self.db)
+            .await?
+            .get::<String, _>("project_id");
+
+        query("INSERT OR REPLACE INTO custom_domains (fqdn, project_id, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
+            .bind(fqdn.to_string())
+            .bind(project_id)
             .bind(certs)
             .bind(private_key)
             .execute(&self.db)
@@ -505,7 +512,7 @@ impl GatewayService {
     }
 
     pub async fn iter_custom_domains(&self) -> Result<impl Iterator<Item = CustomDomain>, Error> {
-        query("SELECT fqdn, project_name, certificate, private_key FROM custom_domains")
+        query("SELECT fqdn, project_name, certificate, private_key FROM custom_domains AS cd JOIN projects AS p ON cd.project_id = p.project_id")
             .fetch_all(&self.db)
             .await
             .map(|res| {
@@ -519,14 +526,14 @@ impl GatewayService {
             .map_err(|_| Error::from_kind(ErrorKind::Internal))
     }
 
-    pub async fn find_custom_domain_for_project(
+    async fn find_custom_domain_for_project(
         &self,
-        project_name: &ProjectName,
+        project_id: &str,
     ) -> Result<CustomDomain, Error> {
         let custom_domain = query(
-            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains WHERE project_name = ?1",
+            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains AS cd JOIN projects AS p ON cd.project_id = p.project_id WHERE p.project_id = ?1",
         )
-        .bind(project_name.to_string())
+        .bind(project_id)
         .fetch_optional(&self.db)
         .await?
         .map(|row| CustomDomain {
@@ -544,7 +551,7 @@ impl GatewayService {
         fqdn: &Fqdn,
     ) -> Result<CustomDomain, Error> {
         let custom_domain = query(
-            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains WHERE fqdn = ?1",
+            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains AS cd JOIN projects AS p ON cd.project_id = p.project_id WHERE fqdn = ?1",
         )
         .bind(fqdn.to_string())
         .fetch_optional(&self.db)
@@ -821,65 +828,51 @@ pub mod tests {
             vec![matrix.clone()]
         );
 
-        let mut all_projects: Vec<ProjectName> = (1..60)
-            .map(|p| ProjectName(format!("matrix-{p}")))
-            .collect();
-        for p in &all_projects {
-            svc.create_project(p.clone(), neo.clone(), false, 0)
+        // Test project pagination, first create 20 test projects (including the one from above).
+        for p in (1..20).map(|p| format!("matrix-{p}")) {
+            svc.create_project(ProjectName(p.clone()), neo.clone(), false, 0)
                 .await
                 .unwrap();
         }
-        all_projects.insert(0, matrix.clone());
 
-        assert_eq!(
-            svc.iter_user_projects_detailed(&neo, 0, u32::MAX)
-                .await
-                .unwrap()
-                .map(|item| item.0)
-                .collect::<Vec<_>>(),
-            all_projects
-        );
-        assert_eq!(
-            svc.iter_user_projects_detailed(&neo, 0, 20)
-                .await
-                .unwrap()
-                .map(|item| item.0)
-                .collect::<Vec<_>>(),
-            all_projects[..20]
-        );
-        assert_eq!(
-            svc.iter_user_projects_detailed(&neo, 20, 20)
-                .await
-                .unwrap()
-                .map(|item| item.0)
-                .collect::<Vec<_>>(),
-            all_projects[20..40]
-        );
-        assert_eq!(
-            svc.iter_user_projects_detailed(&neo, 200, 20)
-                .await
-                .unwrap()
-                .map(|item| item.0)
-                .collect::<Vec<_>>(),
-            vec![]
-        );
+        // We need to fetch all of them from the DB since they are ordered by created_at (in the id) and project_name,
+        // and created_at will be the same for some of them.
+        let all_projects = svc
+            .iter_user_projects_detailed(&neo, 0, u32::MAX)
+            .await
+            .unwrap()
+            .map(|item| item.0)
+            .collect::<Vec<_>>();
 
-        // assert_eq!(
-        //     svc.iter_user_projects_detailed_filtered(neo.clone(), "ready".to_string())
-        //         .await
-        //         .unwrap()
-        //         .next()
-        //         .expect("to get one project with its user and a valid Ready status"),
-        //     (matrix.clone(), project)
-        // );
+        assert_eq!(all_projects.len(), 20);
 
-        // assert_eq!(
-        //     svc.iter_user_projects_detailed_filtered(neo.clone(), "destroyed".to_string())
-        //         .await
-        //         .unwrap()
-        //         .next(),
-        //     None
-        // );
+        // Get first 5 projects.
+        let paginated = svc
+            .iter_user_projects_detailed(&neo, 0, 5)
+            .await
+            .unwrap()
+            .map(|item| item.0)
+            .collect::<Vec<_>>();
+
+        assert_eq!(all_projects[..5], paginated);
+
+        // Get 10 projects starting at an offset of 10.
+        let paginated = svc
+            .iter_user_projects_detailed(&neo, 10, 10)
+            .await
+            .unwrap()
+            .map(|item| item.0)
+            .collect::<Vec<_>>();
+        assert_eq!(all_projects[10..20], paginated);
+
+        // Get 20 projects starting at an offset of 200.
+        let paginated = svc
+            .iter_user_projects_detailed(&neo, 200, 20)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert!(paginated.is_empty());
 
         let mut work = svc
             .new_task()

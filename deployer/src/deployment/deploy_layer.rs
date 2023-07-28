@@ -828,7 +828,7 @@ mod tests {
                 service_id: Uuid::new_v4(),
                 tracing_context: Default::default(),
                 is_next: false,
-                claim: None,
+                claim: Default::default(),
             })
             .await;
 
@@ -872,7 +872,7 @@ mod tests {
                 data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
                 tracing_context: Default::default(),
-                claim: None,
+                claim: Default::default(),
             })
             .await;
 
@@ -931,7 +931,7 @@ mod tests {
             data: bytes,
             will_run_tests: false,
             tracing_context: Default::default(),
-            claim: None,
+            claim: Default::default(),
         }
     }
 }

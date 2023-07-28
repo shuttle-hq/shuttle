@@ -206,7 +206,7 @@ pub struct Built {
     pub service_id: Uuid,
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
-    pub claim: Option<Claim>,
+    pub claim: Claim,
 }
 
 impl Built {
@@ -286,7 +286,7 @@ async fn load(
     secret_getter: impl SecretGetter,
     resource_manager: impl ResourceManager,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
-    claim: Option<Claim>,
+    claim: Claim,
 ) -> Result<()> {
     info!(
         "loading project from: {}",
@@ -297,19 +297,14 @@ async fn load(
             .unwrap_or_default()
     );
 
-    // Get resources from cache when a claim is not set (ie an idl project is started)
-    let resources = if claim.is_none() {
-        resource_manager
-            .get_resources(&service_id)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(resource::Response::from)
-            .map(resource::Response::into_bytes)
-            .collect()
-    } else {
-        Default::default()
-    };
+    let resources = resource_manager
+        .get_resources(&service_id)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(resource::Response::from)
+        .map(resource::Response::into_bytes)
+        .collect();
 
     let secrets = secret_getter
         .get_secrets(&service_id)
@@ -329,9 +324,7 @@ async fn load(
         secrets,
     });
 
-    if let Some(claim) = claim {
-        load_request.extensions_mut().insert(claim);
-    }
+    load_request.extensions_mut().insert(claim);
 
     debug!(service_name = %service_name, "loading service");
     let response = runtime_client.load(load_request).await;
@@ -749,7 +742,7 @@ mod tests {
                 service_id: Uuid::new_v4(),
                 tracing_context: Default::default(),
                 is_next: false,
-                claim: None,
+                claim: Default::default(),
             },
             storage_manager,
         )

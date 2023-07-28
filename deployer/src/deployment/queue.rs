@@ -165,7 +165,7 @@ pub struct Queued {
     pub data: Vec<u8>,
     pub will_run_tests: bool,
     pub tracing_context: HashMap<String, String>,
-    pub claim: Option<Claim>,
+    pub claim: Claim,
 }
 
 impl Queued {

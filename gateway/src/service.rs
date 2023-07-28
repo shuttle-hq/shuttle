@@ -193,6 +193,7 @@ pub struct GatewayService {
     // We store these because we'll need them for the health checks
     provisioner_host: Endpoint,
     auth_host: Uri,
+    api_key: String,
 }
 
 impl GatewayService {
@@ -216,6 +217,7 @@ impl GatewayService {
             provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
                 .expect("to have a valid provisioner endpoint"),
             auth_host: args.auth_uri,
+            api_key: args.deploys_api_key,
         }
     }
 
@@ -721,6 +723,7 @@ impl GatewayService {
                 .project(project_name.clone())
                 .and_then(task::start())
                 .and_then(task::run_until_done())
+                .and_then(task::start_idle_deploys())
                 .and_then(task::check_health())
                 .send(&task_sender)
                 .await?;
@@ -755,6 +758,9 @@ impl GatewayService {
     }
     pub fn auth_uri(&self) -> &Uri {
         &self.auth_host
+    }
+    pub fn api_key(&self) -> String {
+        self.api_key.clone()
     }
 }
 

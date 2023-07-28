@@ -33,16 +33,21 @@ pub enum PersistError<'a> {
 #[derive(Serialize)]
 pub struct Persist;
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PersistInstance {
     service_name: ServiceName,
 }
 
 impl PersistInstance {
-    pub fn new(service_name: ServiceName) -> Result<Self, PersistError<'static>> {
+    
+    /// new method constructs a new PersistInstance along with its associated storage folder
+    pub fn new(service_name: ServiceName) -> Result<Self, shuttle_service::Error> {
         let instance = Self { service_name };
         let storage_folder = instance.get_storage_folder();
-        fs::create_dir_all(storage_folder).map_err(PersistError::CreateFolder)?;
+        match fs::create_dir_all(storage_folder) {
+            Ok(_) => &instance,
+            Err(e) => return Err(shuttle_service::Error::Custom(PersistError::CreateFolder(e).into())),
+        };
 
         Ok(instance)
     }
@@ -154,7 +159,7 @@ impl ResourceBuilder<PersistInstance> for Persist {
 mod tests {
     use super::*;
     use std::str::FromStr;
-
+    
     #[test]
     fn test_save_and_load() {
         let persist = PersistInstance::new(ServiceName::from_str("test").unwrap()).unwrap();

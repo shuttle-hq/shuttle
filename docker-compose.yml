@@ -88,6 +88,7 @@ services:
       - "--network-name=${STACK}_user-net"
       - "--docker-host=/var/run/docker.sock"
       - "--auth-uri=http://auth:8000"
+      - "--deploys-api-key=${DEPLOYS_API_KEY}"
       - "--provisioner-host=provisioner"
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"

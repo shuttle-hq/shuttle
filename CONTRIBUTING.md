@@ -113,7 +113,6 @@ Finally, before gateway will be able to work with some projects, we need to crea
 The following command inserts a gateway user into the `auth` state with deployer privileges:
 
 ```bash
-# the --key needs to be 16 alphanumeric characters
 docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init-deployer --name gateway --key gateway4deployes
 ```
 

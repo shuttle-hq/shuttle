@@ -39,14 +39,17 @@ pub struct PersistInstance {
 }
 
 impl PersistInstance {
-    
     /// new method constructs a new PersistInstance along with its associated storage folder
     pub fn new(service_name: ServiceName) -> Result<Self, shuttle_service::Error> {
         let instance = Self { service_name };
         let storage_folder = instance.get_storage_folder();
         match fs::create_dir_all(storage_folder) {
             Ok(_) => &instance,
-            Err(e) => return Err(shuttle_service::Error::Custom(PersistError::CreateFolder(e).into())),
+            Err(e) => {
+                return Err(shuttle_service::Error::Custom(
+                    PersistError::CreateFolder(e).into(),
+                ))
+            }
         };
 
         Ok(instance)
@@ -159,7 +162,7 @@ impl ResourceBuilder<PersistInstance> for Persist {
 mod tests {
     use super::*;
     use std::str::FromStr;
-    
+
     #[test]
     fn test_save_and_load() {
         let persist = PersistInstance::new(ServiceName::from_str("test").unwrap()).unwrap();

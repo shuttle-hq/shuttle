@@ -40,17 +40,10 @@ pub struct PersistInstance {
 
 impl PersistInstance {
     /// new method constructs a new PersistInstance along with its associated storage folder
-    pub fn new(service_name: ServiceName) -> Result<Self, shuttle_service::Error> {
+    pub fn new(service_name: ServiceName) -> Result<Self, PersistError<'static>> {
         let instance = Self { service_name };
         let storage_folder = instance.get_storage_folder();
-        match fs::create_dir_all(storage_folder) {
-            Ok(_) => &instance,
-            Err(e) => {
-                return Err(shuttle_service::Error::Custom(
-                    PersistError::CreateFolder(e).into(),
-                ))
-            }
-        };
+        fs::create_dir_all(storage_folder).map_err(PersistError::CreateFolder)?;
 
         Ok(instance)
     }
@@ -148,9 +141,11 @@ impl ResourceBuilder<PersistInstance> for Persist {
         self,
         factory: &mut dyn Factory,
     ) -> Result<Self::Output, shuttle_service::Error> {
-        Ok(PersistInstance {
-            service_name: factory.get_service_name(),
-        })
+        let persist_instance = match PersistInstance::new(factory.get_service_name()) {
+            Ok(persist_instance) => persist_instance,
+            Err(e) => return Err(shuttle_service::Error::Custom(e.into())),
+        };
+        Ok(persist_instance)
     }
 
     async fn build(build_data: &Self::Output) -> Result<PersistInstance, shuttle_service::Error> {

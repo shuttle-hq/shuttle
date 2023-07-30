@@ -113,10 +113,13 @@ async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
+    let project = service.find_project(&scope).await?;
+    let idle_minutes = project.container().map(|cir| cir.idle_minutes());
     let state = service.find_project(&scope).await?.into();
     let response = project::Response {
         name: scope.to_string(),
         state,
+        idle_minutes,
     };
 
     Ok(AxumJson(response))
@@ -146,6 +149,7 @@ async fn get_projects_list(
         .await?
         .map(|project| project::Response {
             name: project.0.to_string(),
+            idle_minutes: project.1.idle_minutes(),
             state: project.1.into(),
         })
         .collect();
@@ -153,7 +157,7 @@ async fn get_projects_list(
     Ok(AxumJson(projects))
 }
 
-#[instrument(skip_all, fields(%project))]
+#[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(
     post,
     path = "/projects/{project_name}",
@@ -170,30 +174,36 @@ async fn create_project(
         service, sender, ..
     }): State<RouterState>,
     User { name, claim, .. }: User,
-    Path(project): Path<ProjectName>,
+    Path(project_name): Path<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
     let is_admin = claim.scopes.contains(&Scope::Admin);
-
-    let state = service
-        .create_project(project.clone(), name.clone(), is_admin, config.idle_minutes)
+    let project = service
+        .create_project(
+            project_name.clone(),
+            name.clone(),
+            is_admin,
+            config.idle_minutes,
+        )
         .await?;
+    let idle_minutes = project.idle_minutes();
 
     service
         .new_task()
-        .project(project.clone())
+        .project(project_name.clone())
         .send(&sender)
         .await?;
 
     let response = project::Response {
-        name: project.to_string(),
-        state: state.into(),
+        name: project_name.to_string(),
+        state: project.into(),
+        idle_minutes,
     };
 
     Ok(AxumJson(response))
 }
 
-#[instrument(skip_all, fields(%project))]
+#[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(
     delete,
     path = "/projects/{project_name}",
@@ -209,13 +219,18 @@ async fn destroy_project(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
-    ScopedUser { scope: project, .. }: ScopedUser,
+    ScopedUser {
+        scope: project_name,
+        ..
+    }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let state = service.find_project(&project).await?;
+    let project = service.find_project(&project_name).await?;
+    let idle_minutes = project.idle_minutes();
 
     let mut response = project::Response {
-        name: project.to_string(),
-        state: state.into(),
+        name: project_name.to_string(),
+        state: project.into(),
+        idle_minutes,
     };
 
     if response.state == shuttle_common::models::project::State::Destroyed {
@@ -225,7 +240,7 @@ async fn destroy_project(
     // if project exists and isn't `Destroyed`, send destroy task
     service
         .new_task()
-        .project(project)
+        .project(project_name)
         .and_then(task::destroy())
         .send(&sender)
         .await?;

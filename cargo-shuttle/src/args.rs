@@ -12,7 +12,7 @@ use clap::{
     Parser, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::{models::project::IDLE_MINUTES, project::ProjectName};
+use shuttle_common::{models::project::DEFAULT_IDLE_MINUTES, project::ProjectName};
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -192,7 +192,7 @@ pub enum ProjectCommand {
 
 #[derive(Parser, Debug)]
 pub struct ProjectStartArgs {
-    #[arg(long, default_value_t = IDLE_MINUTES)]
+    #[arg(long, default_value_t = DEFAULT_IDLE_MINUTES)]
     /// How long to wait before putting the project in an idle state due to inactivity.
     /// 0 means the project will never idle
     pub idle_minutes: u64,

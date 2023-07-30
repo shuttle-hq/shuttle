@@ -325,7 +325,7 @@ impl InitTemplateArg {
             Tide => "tide/hello-world",
             Tower => "tower/hello-world",
             Warp => "warp/hello-world",
-            None => "custom/none",
+            None => "custom-service/none",
         };
 
         TemplateLocation {
@@ -408,7 +408,7 @@ mod tests {
             init_args.git_template().unwrap(),
             Some(TemplateLocation {
                 auto_path: EXAMPLES_REPO.into(),
-                subfolder: Some("custom/none".into())
+                subfolder: Some("custom-service/none".into())
             })
         );
 

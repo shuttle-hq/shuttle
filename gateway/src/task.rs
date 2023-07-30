@@ -135,6 +135,21 @@ pub fn start() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     })
 }
 
+pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+    run(|ctx| async move {
+        match ctx.state.refresh(&ctx.gateway).await {
+            Ok(Project::Ready(mut ready)) => {
+                let api_key = ctx.api_key;
+
+                ready.start_last_deploy(api_key).await;
+                TaskResult::Done(Project::Ready(ready))
+            }
+            Ok(update) => TaskResult::Done(update),
+            Err(err) => TaskResult::Err(err),
+        }
+    })
+}
+
 pub fn check_health() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     run(|ctx| async move {
         match ctx.state.refresh(&ctx.gateway).await {
@@ -423,6 +438,8 @@ pub struct ProjectContext {
     pub gateway: GatewayContext,
     /// The last known state of the project
     pub state: Project,
+    /// The api key for this machine
+    pub api_key: String,
 }
 
 pub type BoxedTask<Ctx = (), O = ()> = Box<dyn Task<Ctx, Output = O, Error = Error>>;
@@ -462,6 +479,7 @@ where
             account_name: account_name.clone(),
             gateway: ctx,
             state: project,
+            api_key: self.service.api_key(),
         };
 
         let span = info_span!(

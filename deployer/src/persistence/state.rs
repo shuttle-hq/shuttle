@@ -3,6 +3,7 @@ use utoipa::ToSchema;
 
 /// States a deployment can be in
 #[derive(sqlx::Type, Debug, Display, Clone, Copy, EnumString, PartialEq, Eq, ToSchema)]
+#[strum(ascii_case_insensitive)]
 pub enum State {
     /// Deployment is queued to be build
     Queued,
@@ -67,5 +68,19 @@ impl From<shuttle_common::deployment::State> for State {
             shuttle_common::deployment::State::Crashed => Self::Crashed,
             shuttle_common::deployment::State::Unknown => Self::Unknown,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use crate::persistence::State;
+
+    #[test]
+    fn test_state_deser() {
+        assert_eq!(State::Building, State::from_str("builDing").unwrap());
+        assert_eq!(State::Queued, State::from_str("queued").unwrap());
+        assert_eq!(State::Stopped, State::from_str("Stopped").unwrap());
     }
 }

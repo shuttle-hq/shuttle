@@ -315,8 +315,6 @@ where
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        let _logs_tx = self.logs_tx.clone();
-
         trace!(%service_address, "starting");
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();

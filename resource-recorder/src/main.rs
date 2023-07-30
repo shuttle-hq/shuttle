@@ -25,7 +25,8 @@ async fn main() {
         )))
         .layer(ExtractPropagationLayer);
 
-    let svc = Service::new(Sqlite::new(&args.state.display().to_string()).await);
+    let db_path = args.state.join("resource-recorder.sqlite");
+    let svc = Service::new(Sqlite::new(db_path.display().to_string().as_str()).await);
     let svc = ResourceRecorderServer::new(svc);
     let router = server_builder.add_service(svc);
 

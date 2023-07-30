@@ -193,6 +193,7 @@ pub struct GatewayService {
     // We store these because we'll need them for the health checks
     provisioner_host: Endpoint,
     auth_host: Uri,
+    api_key: String,
 }
 
 impl GatewayService {
@@ -216,6 +217,7 @@ impl GatewayService {
             provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
                 .expect("to have a valid provisioner endpoint"),
             auth_host: args.auth_uri,
+            api_key: args.deploys_api_key,
         }
     }
 
@@ -289,7 +291,7 @@ impl GatewayService {
 
         query
             .push_bind(account_name)
-            .push(" ORDER BY created_at DESC NULLS LAST, project_name LIMIT ")
+            .push(" ORDER BY project_id DESC, project_name LIMIT ")
             .push_bind(limit);
 
         if offset > 0 {
@@ -398,7 +400,7 @@ impl GatewayService {
     ) -> Result<Project, Error> {
         if let Some(row) = query(
             r#"
-        SELECT project_name, account_name, initial_key, project_state
+        SELECT project_name, project_id, account_name, initial_key, project_state
         FROM projects
         WHERE (project_name = ?1)
         AND (account_name = ?2 OR ?3)
@@ -412,6 +414,7 @@ impl GatewayService {
         {
             // If the project already exists and belongs to this account
             let project = row.get::<SqlxJson<Project>, _>("project_state").0;
+            let project_id = row.get::<String, _>("project_id");
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
                 let mut creating = ProjectCreating::new_with_random_initial_key(
@@ -419,7 +422,7 @@ impl GatewayService {
                     idle_minutes,
                 );
                 // Restore previous custom domain, if any
-                match self.find_custom_domain_for_project(&project_name).await {
+                match self.find_custom_domain_for_project(&project_id).await {
                     Ok(custom_domain) => {
                         creating = creating.with_fqdn(custom_domain.fqdn.to_string());
                     }
@@ -462,7 +465,7 @@ impl GatewayService {
             ProjectCreating::new_with_random_initial_key(project_name.clone(), idle_minutes),
         ));
 
-        query("INSERT INTO projects (project_name, account_name, initial_key, project_state, created_at) VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP)")
+        query("INSERT INTO projects (project_id, project_name, account_name, initial_key, project_state) VALUES (ulid(), ?1, ?2, ?3, ?4)")
             .bind(&project_name)
             .bind(&account_name)
             .bind(project.initial_key().unwrap())
@@ -473,7 +476,7 @@ impl GatewayService {
                 // If the error is a broken PK constraint, this is a
                 // project name clash
                 if let Some(db_err_code) = err.as_database_error().and_then(DatabaseError::code) {
-                    if db_err_code == "1555" {  // SQLITE_CONSTRAINT_PRIMARYKEY
+                    if db_err_code == "2067" {  // SQLITE_CONSTRAINT_UNIQUE
                         return Error::from_kind(ErrorKind::ProjectAlreadyExists)
                     }
                 }
@@ -493,9 +496,15 @@ impl GatewayService {
         certs: &str,
         private_key: &str,
     ) -> Result<(), Error> {
-        query("INSERT OR REPLACE INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
-            .bind(fqdn.to_string())
+        let project_id = query("SELECT project_id FROM projects WHERE project_name = ?1")
             .bind(project_name)
+            .fetch_one(&self.db)
+            .await?
+            .get::<String, _>("project_id");
+
+        query("INSERT OR REPLACE INTO custom_domains (fqdn, project_id, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
+            .bind(fqdn.to_string())
+            .bind(project_id)
             .bind(certs)
             .bind(private_key)
             .execute(&self.db)
@@ -505,7 +514,7 @@ impl GatewayService {
     }
 
     pub async fn iter_custom_domains(&self) -> Result<impl Iterator<Item = CustomDomain>, Error> {
-        query("SELECT fqdn, project_name, certificate, private_key FROM custom_domains")
+        query("SELECT fqdn, project_name, certificate, private_key FROM custom_domains AS cd JOIN projects AS p ON cd.project_id = p.project_id")
             .fetch_all(&self.db)
             .await
             .map(|res| {
@@ -519,14 +528,14 @@ impl GatewayService {
             .map_err(|_| Error::from_kind(ErrorKind::Internal))
     }
 
-    pub async fn find_custom_domain_for_project(
+    async fn find_custom_domain_for_project(
         &self,
-        project_name: &ProjectName,
+        project_id: &str,
     ) -> Result<CustomDomain, Error> {
         let custom_domain = query(
-            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains WHERE project_name = ?1",
+            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains AS cd JOIN projects AS p ON cd.project_id = p.project_id WHERE p.project_id = ?1",
         )
-        .bind(project_name.to_string())
+        .bind(project_id)
         .fetch_optional(&self.db)
         .await?
         .map(|row| CustomDomain {
@@ -544,7 +553,7 @@ impl GatewayService {
         fqdn: &Fqdn,
     ) -> Result<CustomDomain, Error> {
         let custom_domain = query(
-            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains WHERE fqdn = ?1",
+            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains AS cd JOIN projects AS p ON cd.project_id = p.project_id WHERE fqdn = ?1",
         )
         .bind(fqdn.to_string())
         .fetch_optional(&self.db)
@@ -714,6 +723,7 @@ impl GatewayService {
                 .project(project_name.clone())
                 .and_then(task::start())
                 .and_then(task::run_until_done())
+                .and_then(task::start_idle_deploys())
                 .and_then(task::check_health())
                 .send(&task_sender)
                 .await?;
@@ -748,6 +758,9 @@ impl GatewayService {
     }
     pub fn auth_uri(&self) -> &Uri {
         &self.auth_host
+    }
+    pub fn api_key(&self) -> String {
+        self.api_key.clone()
     }
 }
 
@@ -828,7 +841,7 @@ pub mod tests {
                 .unwrap();
         }
 
-        // We need to fetch all of them from the DB since they are ordered by created_at and project_name,
+        // We need to fetch all of them from the DB since they are ordered by created_at (in the id) and project_name,
         // and created_at will be the same for some of them.
         let all_projects = svc
             .iter_user_projects_detailed(&neo, 0, u32::MAX)

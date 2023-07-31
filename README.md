@@ -67,8 +67,10 @@ which will automatically install the correct target for your system.
 To install with `cargo-binstall`, run:
 
 ```sh
-cargo install binstall
+# cargo-binstall can also be installed directly as a binary to skip the compilation time: https://github.com/cargo-bins/cargo-binstall#installation
+cargo install cargo-binstall
 cargo binstall cargo-shuttle
+# If installing binstall or cargo-shuttle fails, try adding `--locked` to the install command
 ```
 
 Although a bit slower, you can also install directly with cargo:
@@ -76,8 +78,6 @@ Although a bit slower, you can also install directly with cargo:
 ```sh
 cargo install cargo-shuttle
 ```
-
-*If installing binstall or cargo-shuttle fails, try adding `--locked` to the install command.*
 
 After installing, log in with:
 
@@ -88,33 +88,29 @@ cargo shuttle login
 To initialize your project, simply write:
 
 ```bash
-cargo shuttle init --axum hello-world
+cargo shuttle init --template axum hello-world
+# Choose a unique project name!
 ```
-
-> Note: if you use [sparse registries](https://blog.rust-lang.org/inside-rust/2023/01/30/cargo-sparse-protocol.html) (which is enabled by default on `nightly`), you may encounter [this bug](https://github.com/shuttle-hq/shuttle/issues/821) when running the `init` command. To resolve this, see [this comment](https://github.com/shuttle-hq/shuttle/issues/821#issuecomment-1525317860).
 
 And to deploy it, write:
 
 ```bash
 cd hello-world
 cargo shuttle project start  # Only needed if project has not already been created during init
-cargo shuttle deploy
+cargo shuttle deploy --allow-dirty
 ```
 
-And that's... it.
+And... that's it!
 
-```bash
-$ cargo shuttle deploy
-   Finished release [optimized + debuginfo] target(s) in 1m 01s
-
-        Project:            hello-world
-        Deployment Id:      3d08ac34-ad63-41c1-836b-99afdc90af9f
-        Deployment Status:  DEPLOYED
-        Host:               hello-world.shuttleapp.rs
-        Created At:         2022-04-01 08:32:34.412602556 UTC
+```text
+Service Name:  hello-world
+Deployment ID: 3d08ac34-ad63-41c1-836b-99afdc90af9f
+Status:        running
+Last Updated:  2022-04-01T08:32:34Z
+URI:           https://hello-world.shuttleapp.rs
 ```
 
-Feel free to build on-top of the generated `hello-world` boilerplate or take a stab at one of our [examples](https://docs.shuttle.rs/examples/axum).
+Feel free to build on top of the generated `hello-world` boilerplate or take a stab at one of our [examples](https://github.com/shuttle-hq/shuttle-examples).
 
 For the full documentation, visit [our docs](https://docs.shuttle.rs).
 
@@ -122,33 +118,26 @@ For the full documentation, visit [our docs](https://docs.shuttle.rs).
 
 Contributing to Shuttle is highly encouraged!
 
-If you want to setup a local environment to test code changes to core `Shuttle` packages, or want to contribute to the project check out [our docs](https://docs.shuttle.rs/community/contribute).
+If you want to setup a local environment to test code changes to core Shuttle packages, or want to contribute to the project check out [our docs](https://docs.shuttle.rs/community/contribute).
 
-Even if you are not planning to submit any code; joining our [Discord server](https://discord.gg/shuttle) and providing feedback helps us a lot!
-
-## Roadmap
-
-For a comprehensive view of the Shuttle roadmap check out this [project board](https://github.com/orgs/shuttle-hq/projects/4).
-
-If you have any requests or suggestions feel free to open an issue.
+Even if you are not planning to submit any code, joining our [Discord server](https://discord.gg/shuttle) and providing feedback helps us a lot!
 
 ## Community & Support
 
-- [Community Forum](https://github.com/shuttle-hq/shuttle/discussions). Best for: help with building, discussion about best practices.
 - [GitHub Issues](https://github.com/shuttle-hq/shuttle/issues). Best for: bugs and errors you encounter using Shuttle.
-- [Discord](https://discord.gg/shuttle). Best for: sharing your applications and hanging out with the community.
 - [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements and releases.
+- [Discord](https://discord.gg/shuttle). Best for: *ALL OF THE ABOVE* + help, support, sharing your applications and hanging out with the community.
 
 ## Status
+
+We are currently in Public Beta. Watch "releases" of this repo to get
+notified of major updates!
 
 - [x] Alpha: We are testing Shuttle, API and deployments may be unstable
 - [x] Public Alpha: Anyone can sign up, but go easy on us,
   there are a few kinks
-- [ ] Public Beta: Stable enough for most non-enterprise use-cases
+- [x] Public Beta: Stable enough for most non-enterprise use-cases
 - [ ] Public: Production-ready!
-
-We are currently in Public Alpha. Watch "releases" of this repo to get
-notified of major updates!
 
 ## Contributors ✨
 

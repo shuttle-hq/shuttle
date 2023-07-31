@@ -329,7 +329,7 @@ impl Persistence {
         self.log_send.clone()
     }
 
-    pub async fn update_deployment_stopped(&self, deployable: DeploymentRunnable) -> Result<()> {
+    pub async fn stop_running_deployment(&self, deployable: DeploymentRunnable) -> Result<()> {
         update_deployment(
             &self.pool,
             DeploymentState {

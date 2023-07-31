@@ -48,7 +48,7 @@ pub async fn start(
     info!(count = %runnable_deployments.len(), "stopping all but last running deploy");
     for existing_deployment in runnable_deployments.into_iter().skip(1) {
         persistence
-            .update_deployment_stopped(existing_deployment)
+            .stop_running_deployment(existing_deployment)
             .await
             .unwrap();
     }

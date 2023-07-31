@@ -296,6 +296,24 @@ impl Persistence {
         .map_err(Error::from)
     }
 
+    /// Gets a deployment if it is runnable
+    pub async fn get_runnable_deployment(&self, id: &Uuid) -> Result<Option<DeploymentRunnable>> {
+        sqlx::query_as(
+            r#"SELECT d.id, service_id, s.name AS service_name, d.is_next
+                FROM deployments AS d
+                JOIN services AS s ON s.id = d.service_id
+                WHERE state IN (?, ?, ?)
+                AND d.id = ?"#,
+        )
+        .bind(State::Running)
+        .bind(State::Stopped)
+        .bind(State::Completed)
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Error::from)
+    }
+
     pub(crate) async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
         // TODO: stress this a bit
         get_deployment_logs(&self.pool, id).await
@@ -846,6 +864,7 @@ mod tests {
         let id_1 = Uuid::new_v4();
         let id_2 = Uuid::new_v4();
         let id_3 = Uuid::new_v4();
+        let id_crashed = Uuid::new_v4();
 
         for deployment in [
             Deployment {
@@ -876,7 +895,7 @@ mod tests {
                 ..Default::default()
             },
             Deployment {
-                id: Uuid::new_v4(),
+                id: id_crashed,
                 service_id: service_id2,
                 state: State::Crashed,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
@@ -896,6 +915,20 @@ mod tests {
         ] {
             p.insert_deployment(deployment).await.unwrap();
         }
+
+        let runnable = p.get_runnable_deployment(&id_1).await.unwrap();
+        assert_eq!(
+            runnable,
+            Some(DeploymentRunnable {
+                id: id_1,
+                service_name: "foo".to_string(),
+                service_id: foo_id,
+                is_next: false,
+            })
+        );
+
+        let runnable = p.get_runnable_deployment(&id_crashed).await.unwrap();
+        assert_eq!(runnable, None);
 
         let runnable = p.get_all_runnable_deployments().await.unwrap();
         assert_eq!(

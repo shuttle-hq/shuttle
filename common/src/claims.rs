@@ -131,7 +131,7 @@ impl ScopeBuilder {
 
     /// Extend the current scopes with those needed by a deployer machine / user.
     pub fn with_deploy_rights(mut self) -> Self {
-        self.0.extend(vec![Scope::Resources]);
+        self.0.extend(vec![Scope::DeploymentPush, Scope::Resources]);
         self
     }
 

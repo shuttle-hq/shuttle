@@ -586,6 +586,11 @@ pub mod tests {
             let auth_uri: Uri = format!("http://{auth}").parse().unwrap();
 
             let auth_service = AuthService::new(auth);
+            auth_service
+                .lock()
+                .unwrap()
+                .users
+                .insert("gateway".to_string(), vec![Scope::Resources]);
 
             let prefix = format!(
                 "shuttle_test_{}_",
@@ -615,6 +620,7 @@ pub mod tests {
                     auth_uri: auth_uri.clone(),
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
+                    deploys_api_key: "gateway".to_string(),
                 },
             };
 

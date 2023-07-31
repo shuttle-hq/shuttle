@@ -376,7 +376,7 @@ mod tests {
         fn deployer_machine() {
             let scopes: Vec<Scope> = AccountTier::Deployer.into();
 
-            assert_eq!(scopes, vec![Scope::Resources]);
+            assert_eq!(scopes, vec![Scope::DeploymentPush, Scope::Resources]);
         }
     }
 }

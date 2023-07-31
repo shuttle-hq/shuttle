@@ -1177,6 +1177,10 @@ impl ProjectReady {
     pub async fn is_healthy(&mut self) -> bool {
         self.service.is_healthy().await
     }
+
+    pub async fn start_last_deploy(&mut self, api_key: String) {
+        self.service.start_last_deploy(api_key).await
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1233,6 +1237,10 @@ impl Service {
         let is_healthy = matches!(resp, Ok(Ok(res)) if res.status().is_success());
         self.last_check = Some(HealthCheckRecord::new(is_healthy));
         is_healthy
+    }
+
+    pub async fn start_last_deploy(&mut self, _api_key: String) {
+        // TODO: convert the key to a JWT, get last deployment and start it (ENG-816)
     }
 }
 

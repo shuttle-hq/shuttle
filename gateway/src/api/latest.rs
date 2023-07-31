@@ -182,6 +182,8 @@ async fn create_project(
     service
         .new_task()
         .project(project.clone())
+        .and_then(task::run_until_done())
+        .and_then(task::start_idle_deploys())
         .send(&sender)
         .await?;
 
@@ -291,11 +293,7 @@ async fn get_status(
 
     // Compute auth status.
     let auth_status = {
-        let response = AUTH_CLIENT
-            .get_or_init(reqwest::Client::new)
-            .get(service.auth_uri().to_string())
-            .send()
-            .await;
+        let response = AUTH_CLIENT.get(service.auth_uri().clone()).await;
         match response {
             Ok(response) if response.status() == 200 => StatusResponse::healthy(),
             Ok(_) | Err(_) => StatusResponse::unhealthy(),

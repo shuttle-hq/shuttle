@@ -44,6 +44,15 @@ pub async fn start(
 
     persistence.cleanup_invalid_states().await.unwrap();
 
+    let runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
+    info!(count = %runnable_deployments.len(), "stopping all but last running deploy");
+    for existing_deployment in runnable_deployments.into_iter().skip(1) {
+        persistence
+            .update_deployment_stopped(existing_deployment)
+            .await
+            .unwrap();
+    }
+
     let mut builder = handlers::RouterBuilder::new(
         persistence,
         deployment_manager,

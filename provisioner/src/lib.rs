@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::time::Duration;
 
 pub use args::Args;
@@ -173,7 +174,13 @@ impl MyProvisioner {
 
             // Make sure database can't see other databases or other users
             // For #557
-            let options = self.pool.connect_options().clone().database(&database_name);
+            let options = self
+                .pool
+                .connect_options()
+                .deref()
+                .clone()
+                .database(&database_name);
+
             let mut conn = options.connect().await?;
 
             let stmts = vec![

@@ -121,7 +121,7 @@ impl Dal for Sqlite {
 
         sqlx::query("UPDATE resources SET is_active = false WHERE service_id = ?")
             .bind(service_id.to_string())
-            .execute(&mut transaction)
+            .execute(&mut *transaction)
             .await?;
 
         // Making mutliple DB "connections" is fine since the sqlite is on the same machine
@@ -150,7 +150,7 @@ impl Dal for Sqlite {
             .bind(resource.data)
             .bind(resource.is_active)
             .bind(now)
-            .execute(&mut transaction)
+            .execute(&mut *transaction)
             .await?;
         }
 

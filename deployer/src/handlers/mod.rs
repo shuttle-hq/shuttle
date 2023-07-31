@@ -1,6 +1,6 @@
 mod error;
 
-use crate::deployment::{DeploymentManager, Queued};
+use crate::deployment::{Built, DeploymentManager, Queued};
 use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGetter, State};
 use async_trait::async_trait;
 use axum::extract::{
@@ -132,7 +132,8 @@ impl RouterBuilder {
             .route(
                 "/projects/:project_name/deployments/:deployment_id",
                 get(get_deployment.layer(ScopedLayer::new(vec![Scope::Deployment])))
-                    .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
+                    .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush])))
+                    .put(start_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
             )
             .route(
                 "/projects/:project_name/ws/deployments/:deployment_id/logs",
@@ -488,6 +489,43 @@ pub async fn delete_deployment(
         deployment_manager.kill(deployment.id).await;
 
         Ok(Json(deployment.into()))
+    } else {
+        Err(Error::NotFound("deployment not found".to_string()))
+    }
+}
+
+#[instrument(skip_all, fields(%project_name, %deployment_id))]
+#[utoipa::path(
+    put,
+    path = "/projects/{project_name}/deployments/{deployment_id}",
+    responses(
+        (status = 200, description = "Started a specific deployment.", body = shuttle_common::models::deployment::Response),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Could not find deployment to start", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
+        ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
+    )
+)]
+pub async fn start_deployment(
+    Extension(persistence): Extension<Persistence>,
+    Extension(deployment_manager): Extension<DeploymentManager>,
+    Extension(claim): Extension<Claim>,
+    Path((project_name, deployment_id)): Path<(String, Uuid)>,
+) -> Result<()> {
+    if let Some(deployment) = persistence.get_runnable_deployment(&deployment_id).await? {
+        let built = Built {
+            id: deployment.id,
+            service_name: deployment.service_name,
+            service_id: deployment.service_id,
+            tracing_context: Default::default(),
+            is_next: deployment.is_next,
+            claim: Some(claim),
+        };
+        deployment_manager.run_push(built).await;
+
+        Ok(())
     } else {
         Err(Error::NotFound("deployment not found".to_string()))
     }

@@ -522,7 +522,7 @@ impl Shuttle {
         run_args: &RunArgs,
         service: &BuiltService,
         provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
-        i: u16,
+        idx: u16,
         provisioner_port: u16,
     ) -> Result<
         Option<(
@@ -614,7 +614,7 @@ impl Shuttle {
             StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{provisioner_port}"),
             None,
-            run_args.port - i - 1,
+            run_args.port - idx - 1,
             runtime_path,
         )
         .await
@@ -682,7 +682,7 @@ impl Shuttle {
                 Ipv4Addr::LOCALHOST
             }
             .into(),
-            run_args.port + i,
+            run_args.port + idx,
         );
 
         println!(
@@ -923,36 +923,122 @@ impl Shuttle {
     }
 
     #[cfg(target_family = "windows")]
+    async fn handle_signals() -> bool {
+        let mut ctrl_break_notif = tokio::signal::windows::ctrl_break()
+            .expect("Can not get the CtrlBreak signal receptor");
+        let mut ctrl_c_notif =
+            tokio::signal::windows::ctrl_c().expect("Can not get the CtrlC signal receptor");
+        let mut ctrl_close_notif = tokio::signal::windows::ctrl_close()
+            .expect("Can not get the CtrlClose signal receptor");
+        let mut ctrl_logoff_notif = tokio::signal::windows::ctrl_logoff()
+            .expect("Can not get the CtrlLogoff signal receptor");
+        let mut ctrl_shutdown_notif = tokio::signal::windows::ctrl_shutdown()
+            .expect("Can not get the CtrlShutdown signal receptor");
+
+        tokio::select! {
+            _ = ctrl_break_notif.recv() => {
+                println!("cargo-shuttle received ctrl-break.");
+                true
+            },
+            _ = ctrl_c_notif.recv() => {
+                println!("cargo-shuttle received ctrl-c.");
+                true
+            },
+            _ = ctrl_close_notif.recv() => {
+                println!("cargo-shuttle received ctrl-close.");
+                true
+            },
+            _ = ctrl_logoff_notif.recv() => {
+                println!("cargo-shuttle received ctrl-logoff.");
+                true
+            },
+            _ = ctrl_shutdown_notif.recv() => {
+                println!("cargo-shuttle received ctrl-shutdown.");
+                true
+            }
+            else => {
+                false
+            }
+        }
+    }
+
+    #[cfg(target_family = "windows")]
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
-
         // Start all the services.
         let mut runtimes: Vec<(
             Child,
             RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         )> = Vec::new();
+        let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {
-            Shuttle::add_runtime_info(
-                Shuttle::spin_local_runtime(
-                    &run_args,
-                    service,
-                    &provisioner_server,
-                    i as u16,
-                    provisioner_port,
-                )
-                .await?,
-                &mut runtimes,
-                &provisioner_server,
-            )
-            .await?;
+            signal_received = tokio::select! {
+                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
+                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &provisioner_server).await?;
+                    false
+                },
+                _ = Shuttle::handle_signals() => {
+                    println!(
+                        "Killing all the runtimes..."
+                    );
+                    true
+                }
+            };
+
+            if signal_received {
+                break;
+            }
         }
 
-        for (mut rt, _) in runtimes {
-            println!(
-                "a service future completed with exit status: {:?}",
-                rt.wait().await?.code()
-            );
+        // If prior signal received is set to true we must stop all the existing runtimes and
+        // exit the `local_run`.
+        if signal_received {
+            provisioner_server.abort();
+            for (mut rt, mut rt_client) in runtimes {
+                Shuttle::stop_runtime(&mut rt, &mut rt_client)
+                    .await
+                    .unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+            }
+            return Ok(());
+        }
+
+        // If no signal was received during runtimes initialization, then we must handle each runtime until
+        // completion and handle the signals during this time.
+        for (mut rt, mut rt_client) in runtimes {
+            // If we received a signal while waiting for any runtime we must stop the rest and exit
+            // the waiting loop.
+            if signal_received {
+                Shuttle::stop_runtime(&mut rt, &mut rt_client)
+                    .await
+                    .unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+                continue;
+            }
+
+            // Receiving a signal will stop the current runtime we're waiting for.
+            signal_received = tokio::select! {
+                res = rt.wait() => {
+                    println!(
+                        "a service future completed with exit status: {:?}",
+                        res.unwrap().code()
+                    );
+                    false
+                },
+                _ = Shuttle::handle_signals() => {
+                    println!(
+                        "Killing all the runtimes..."
+                    );
+                    provisioner_server.abort();
+                    Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+                    true
+                }
+            };
         }
 
         println!(

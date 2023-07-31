@@ -36,6 +36,7 @@ pub enum Type {
     StaticFolder,
     Persist,
     Turso,
+    Custom,
 }
 
 impl Response {
@@ -60,6 +61,7 @@ impl Display for Type {
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
             Type::Turso => write!(f, "turso"),
+            Type::Custom => write!(f, "custom"),
         }
     }
 }

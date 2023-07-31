@@ -39,7 +39,7 @@ sqlx = { workspace = true, features = [
 strum = { workspace = true }
 tar = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["fs", "process"] }
+tokio = { workspace = true, features = ["fs", "process", "rt-multi-thread"] }
 toml = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true, features = ["make"] }

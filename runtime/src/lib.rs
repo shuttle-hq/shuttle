@@ -114,7 +114,7 @@
 //!
 //! ```toml
 //! shuttle-shared-db = { version = "0.22.0", features = ["postgres"] }
-//! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
+//! sqlx = { version = "0.7.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
 //! Now update the `#[shuttle_runtime::main]` function to take in a `PgPool`:

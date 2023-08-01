@@ -37,6 +37,8 @@
 //! ```
 //! Note that Shuttle does currently not support the `collation`, `thread_name`, `log_settings`, `pragma`, `extension`,
 //! `shared_cache` options.
+use std::path::Path;
+
 use async_trait::async_trait;
 use serde::Serialize;
 use shuttle_service::{Factory, ResourceBuilder, Type};
@@ -45,9 +47,6 @@ mod conn_opts;
 pub use conn_opts::*;
 
 use sqlx::sqlite::SqliteConnectOptions;
-/// The [`sqlx::SqlitePool`](https://docs.rs/sqlx/latest/sqlx/type.SqlitePool.html) that is being returned to the user.
-///
-pub use sqlx::SqlitePool;
 
 /// Builder struct used to configure the database, e.g. `SQLite(opts = SQLiteConnOpts::new())`.
 #[derive(Serialize)]
@@ -61,6 +60,11 @@ impl ShuttleSqlite {
         self
     }
 
+    pub fn filename(mut self, filename: impl AsRef<Path>) -> Self {
+        self.opts = self.opts.filename(filename);
+        self
+    }
+
     pub fn in_memory(mut self, on: bool) -> Self {
         self.opts.in_memory = on;
         self
@@ -69,36 +73,22 @@ impl ShuttleSqlite {
 
 #[async_trait]
 impl ResourceBuilder<sqlx::SqlitePool> for ShuttleSqlite {
-    /// The type of resource this creates
     const TYPE: Type = Type::EmbeddedDatabase;
 
-    /// The internal config being constructed by this builder. This will be used to find cached [Self::Output].
     type Config = Self;
 
-    /// The output type used to build this resource later
     type Output = ShuttleSqliteConnOpts;
 
-    /// Create a new instance of this resource builder
     fn new() -> Self {
         Self {
             opts: ShuttleSqliteConnOpts::default(),
         }
     }
 
-    /// Get the internal config state of the builder
-    ///
-    /// If the exact same config was returned by a previous deployement that used this resource, then [Self::output()]
-    /// will not be called to get the builder output again. Rather the output state of the previous deployment
-    /// will be passed to [Self::build()].
     fn config(&self) -> &Self::Config {
         &self
     }
 
-    /// Get the config output of this builder
-    ///
-    /// This method is where the actual resource provisioning should take place and is expected to take the longest. It
-    /// can at times even take minutes. That is why the output of this method is cached and calling this method can be
-    /// skipped as explained in [Self::config()].
     async fn output(
         mut self,
         factory: &mut dyn Factory,
@@ -109,7 +99,6 @@ impl ResourceBuilder<sqlx::SqlitePool> for ShuttleSqlite {
         Ok(self.opts)
     }
 
-    /// Build this resource from its config output
     async fn build(build_data: &Self::Output) -> Result<sqlx::SqlitePool, shuttle_service::Error> {
         // This should never fail if our `try_from` is implemented correctly, which is guaranteed by our tests.
         let opts = SqliteConnectOptions::try_from(build_data)?;
@@ -124,10 +113,10 @@ impl ResourceBuilder<sqlx::SqlitePool> for ShuttleSqlite {
 
 #[cfg(test)]
 mod tests {
-    use assert_json_diff::assert_json_eq;
-
     use super::*;
     use std::str::FromStr;
+
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn try_from_file_based() {
@@ -141,10 +130,7 @@ mod tests {
         let opts_from = SqliteConnectOptions::try_from(&ours).unwrap();
         let str_from = format!("{:?}", opts_from);
 
-        let json_sqlx = serde_json::json!(str_sqlx);
-        let json_from = serde_json::json!(str_from);
-
-        assert_json_eq!(json_sqlx, json_from);
+        assert_eq!(str_sqlx, str_from);
     }
 
     #[test]
@@ -163,9 +149,6 @@ mod tests {
         let str_sqlx = re.replace(&str_sqlx, "filename: ");
         let str_from = re.replace(&str_from, "filename: ");
 
-        let json_sqlx = serde_json::json!(str_sqlx);
-        let json_from = serde_json::json!(str_from);
-
-        assert_json_eq!(json_sqlx, json_from);
+        assert_eq!(str_sqlx, str_from);
     }
 }

@@ -1177,6 +1177,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shuttle-common",
+ "shuttle-common-tests",
  "shuttle-proto",
  "shuttle-service",
  "sqlx",
@@ -5462,8 +5463,12 @@ dependencies = [
 name = "shuttle-common-tests"
 version = "0.23.0"
 dependencies = [
+ "cargo-shuttle",
  "hyper",
+ "portpicker",
+ "reqwest",
  "shuttle-common",
+ "tokio",
  "tower",
 ]
 

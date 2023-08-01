@@ -191,6 +191,7 @@ pub enum AccountTier {
     Pro,
     Team,
     Admin,
+    Deployer,
 }
 
 impl From<AccountTier> for Vec<Scope> {
@@ -199,6 +200,12 @@ impl From<AccountTier> for Vec<Scope> {
 
         if tier == AccountTier::Admin {
             builder = builder.with_admin()
+        }
+
+        if tier == AccountTier::Deployer {
+            builder = builder.with_deploy_rights();
+        } else {
+            builder = builder.with_basic();
         }
 
         builder.build()
@@ -259,6 +266,117 @@ where
             Ok(Self { user })
         } else {
             Err(Error::Forbidden)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    mod convert_tiers {
+        use shuttle_common::claims::Scope;
+
+        use crate::user::AccountTier;
+
+        #[test]
+        fn basic() {
+            let scopes: Vec<Scope> = AccountTier::Basic.into();
+
+            assert_eq!(
+                scopes,
+                vec![
+                    Scope::Deployment,
+                    Scope::DeploymentPush,
+                    Scope::Logs,
+                    Scope::Service,
+                    Scope::ServiceCreate,
+                    Scope::Project,
+                    Scope::ProjectCreate,
+                    Scope::Resources,
+                    Scope::ResourcesWrite,
+                    Scope::Secret,
+                    Scope::SecretWrite,
+                ]
+            );
+        }
+
+        #[test]
+        fn pro() {
+            let scopes: Vec<Scope> = AccountTier::Pro.into();
+
+            assert_eq!(
+                scopes,
+                vec![
+                    Scope::Deployment,
+                    Scope::DeploymentPush,
+                    Scope::Logs,
+                    Scope::Service,
+                    Scope::ServiceCreate,
+                    Scope::Project,
+                    Scope::ProjectCreate,
+                    Scope::Resources,
+                    Scope::ResourcesWrite,
+                    Scope::Secret,
+                    Scope::SecretWrite,
+                ]
+            );
+        }
+
+        #[test]
+        fn team() {
+            let scopes: Vec<Scope> = AccountTier::Team.into();
+
+            assert_eq!(
+                scopes,
+                vec![
+                    Scope::Deployment,
+                    Scope::DeploymentPush,
+                    Scope::Logs,
+                    Scope::Service,
+                    Scope::ServiceCreate,
+                    Scope::Project,
+                    Scope::ProjectCreate,
+                    Scope::Resources,
+                    Scope::ResourcesWrite,
+                    Scope::Secret,
+                    Scope::SecretWrite,
+                ]
+            );
+        }
+
+        #[test]
+        fn admin() {
+            let scopes: Vec<Scope> = AccountTier::Admin.into();
+
+            assert_eq!(
+                scopes,
+                vec![
+                    Scope::User,
+                    Scope::UserCreate,
+                    Scope::AcmeCreate,
+                    Scope::CustomDomainCreate,
+                    Scope::CustomDomainCertificateRenew,
+                    Scope::GatewayCertificateRenew,
+                    Scope::Admin,
+                    Scope::Deployment,
+                    Scope::DeploymentPush,
+                    Scope::Logs,
+                    Scope::Service,
+                    Scope::ServiceCreate,
+                    Scope::Project,
+                    Scope::ProjectCreate,
+                    Scope::Resources,
+                    Scope::ResourcesWrite,
+                    Scope::Secret,
+                    Scope::SecretWrite,
+                ]
+            );
+        }
+
+        #[test]
+        fn deployer_machine() {
+            let scopes: Vec<Scope> = AccountTier::Deployer.into();
+
+            assert_eq!(scopes, vec![Scope::DeploymentPush, Scope::Resources]);
         }
     }
 }

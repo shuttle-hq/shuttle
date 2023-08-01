@@ -37,6 +37,7 @@ pub enum Type {
     Persist,
     Turso,
     EmbeddedDatabase,
+    Custom,
 }
 
 impl Response {
@@ -62,6 +63,7 @@ impl Display for Type {
             Type::Persist => write!(f, "persist"),
             Type::Turso => write!(f, "turso"),
             Type::EmbeddedDatabase => write!(f, "embedded_database"),
+            Type::Custom => write!(f, "custom"),
         }
     }
 }

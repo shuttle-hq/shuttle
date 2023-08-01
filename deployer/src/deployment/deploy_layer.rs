@@ -118,7 +118,7 @@ impl TryFrom<runtime::LogItem> for Log {
     fn try_from(log: runtime::LogItem) -> Result<Self, Self::Error> {
         Ok(Self {
             id: Default::default(),
-            state: State::from_str(&log.state).map_err(|err| ParseError::State(err.to_string()))?,
+            state: State::from_str(&log.state).unwrap_or_default(),
             level: runtime::LogLevel::from_i32(log.level)
                 .unwrap_or_default()
                 .into(),

@@ -30,10 +30,10 @@ use shuttle_proto::{
     },
 };
 use shuttle_service::{Environment, Factory, Service, ServiceName};
-use tokio::sync::{broadcast, oneshot};
 use tokio::sync::{
-    broadcast::Sender,
+    broadcast::{self, Sender},
     mpsc::{self, UnboundedReceiver, UnboundedSender},
+    oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
@@ -314,8 +314,6 @@ where
         let service_address = SocketAddr::from_str(&ip)
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
-
-        let _logs_tx = self.logs_tx.clone();
 
         trace!(%service_address, "starting");
 

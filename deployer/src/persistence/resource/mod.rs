@@ -36,7 +36,7 @@ impl From<Resource> for shuttle_common::resource::Response {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Type {
     Database(DatabaseType),
     Secrets,
@@ -44,6 +44,7 @@ pub enum Type {
     Persist,
     Turso,
     EmbeddedDatabase,
+    Custom,
 }
 
 impl From<Type> for shuttle_common::resource::Type {
@@ -55,6 +56,7 @@ impl From<Type> for shuttle_common::resource::Type {
             Type::Persist => Self::Persist,
             Type::Turso => Self::Turso,
             Type::EmbeddedDatabase => Self::EmbeddedDatabase,
+            Type::Custom => Self::Custom,
         }
     }
 }
@@ -68,6 +70,7 @@ impl From<shuttle_common::resource::Type> for Type {
             shuttle_common::resource::Type::Persist => Self::Persist,
             shuttle_common::resource::Type::Turso => Self::Turso,
             shuttle_common::resource::Type::EmbeddedDatabase => Self::EmbeddedDatabase,
+            shuttle_common::resource::Type::Custom => Self::Custom,
         }
     }
 }
@@ -81,6 +84,7 @@ impl Display for Type {
             Type::Persist => write!(f, "persist"),
             Type::Turso => write!(f, "turso"),
             Type::EmbeddedDatabase => write!(f, "embedded_database"),
+            Type::Custom => write!(f, "custom"),
         }
     }
 }
@@ -100,6 +104,7 @@ impl FromStr for Type {
                 "static_folder" => Ok(Self::StaticFolder),
                 "persist" => Ok(Self::Persist),
                 "turso" => Ok(Self::Turso),
+                "custom" => Ok(Self::Custom),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }
@@ -150,6 +155,7 @@ mod tests {
             Type::Persist,
             Type::Turso,
             Type::EmbeddedDatabase,
+            Type::Custom,
         ];
 
         for input in inputs {

@@ -60,6 +60,8 @@ USE_PANAMAX=disable make up
 
 > Note: `make up` can also be run with `SHUTTLE_DETACH=disable`, which means docker-compose will not be run with `--detach`. This is often desirable for local testing.
 
+> Note: `make up` can also be run with `HONEYCOMB_API_KEY=<api_key>` if you have a honeycomb.io account and want to test the instrumentation of the services. This is mostly used only by the internal team.
+
 > Note: Other useful commands can be found within the [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile).
 
 The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls.
@@ -97,7 +99,7 @@ The following command inserts a user into the `auth` state with admin privileges
 
 ```bash
 # the --key needs to be 16 alphanumeric characters
-docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key dh9z58jttoes3qvt
+docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init-admin --name admin --key dh9z58jttoes3qvt
 ```
 
 Login to Shuttle service in a new terminal window from the root of the Shuttle directory:
@@ -105,6 +107,13 @@ Login to Shuttle service in a new terminal window from the root of the Shuttle d
 ```bash
 # the --api-kei should be the same one you inserted in the auth state
 cargo run --bin cargo-shuttle -- login --api-key "dh9z58jttoes3qvt"
+```
+
+Finally, before gateway will be able to work with some projects, we need to create a user for it.
+The following command inserts a gateway user into the `auth` state with deployer privileges:
+
+```bash
+docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init-deployer --name gateway --key gateway4deployes
 ```
 
 The [shuttle examples](https://github.com/shuttle-hq/shuttle-examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:
@@ -165,14 +174,14 @@ docker compose -f docker-compose.rendered.yml up provisioner
 
 This starts the provisioner and the auth service, while preventing `gateway` from starting up.
 Next up we need to insert an admin user into the `auth` state using the ID of the `auth`
-container and the auth CLI `init` command:
+container and the auth CLI `init-admin` command:
 
 ```bash
 AUTH_CONTAINER_ID=$(docker ps -qf "name=auth")
 
 docker exec $AUTH_CONTAINER_ID ./usr/local/bin/service \
     --state=/var/lib/shuttle-auth \
-    init --name admin --key dh9z58jttoes3qvt
+    init-admin --name admin --key dh9z58jttoes3qvt
 ```
 
 > Note: if you have done this already for this container you will get a "UNIQUE constraint failed"

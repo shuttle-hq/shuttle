@@ -135,11 +135,12 @@ For the full documentation, visit [our docs](https://docs.shuttle.rs).
 
 | Name | Description |  |  |
 |-|-|-|-|
-| [shuttle](https://github.com/shuttle-hq/shuttle) (This repo) | The core Shuttle product. Contains all crates that users interact with. | [Issues](https://github.com/shuttle-hq/shuttle/issues) | [PRs](https://github.com/shuttle-hq/shuttle/pulls)
-| [shuttle-examples](https://github.com/shuttle-hq/shuttle-examples) | Officially maintained examples of projects that can be deployed on Shuttle. Also has a list of [community examples](https://github.com/shuttle-hq/shuttle-examples#community-examples). | [Issues](https://github.com/shuttle-hq/shuttle-examples/issues) | [PRs](https://github.com/shuttle-hq/shuttle-examples/pulls)
-| [shuttle-docs](https://github.com/shuttle-hq/shuttle-docs) | Documentation hosted on [docs.shuttle.rs](https://docs.shuttle.rs/). | [Issues](https://github.com/shuttle-hq/shuttle-docs/issues) | [PRs](https://github.com/shuttle-hq/shuttle-docs/pulls)
-| [www](https://github.com/shuttle-hq/www) | Our website [shuttle.rs](https://www.shuttle.rs/), including the [blog](https://www.shuttle.rs/blog/tags/all) and [Launchpad newsletter](https://www.shuttle.rs/launchpad). | [Issues](https://github.com/shuttle-hq/www/issues) | [PRs](https://github.com/shuttle-hq/www/pulls)
-| [deploy-action](https://github.com/shuttle-hq/deploy-action) | GitHub Action for continuous deployments. | [Issues](https://github.com/shuttle-hq/deploy-action/issues) | [PRs](https://github.com/shuttle-hq/deploy-action/pulls)
+| [shuttle](https://github.com/shuttle-hq/shuttle) 🚀 (This repo) | The core Shuttle product. Contains all crates that users interact with. | [Issues](https://github.com/shuttle-hq/shuttle/issues) | [PRs](https://github.com/shuttle-hq/shuttle/pulls)
+| [shuttle-examples](https://github.com/shuttle-hq/shuttle-examples) 👨‍🏫 | Officially maintained examples of projects that can be deployed on Shuttle. Also has a list of [community examples](https://github.com/shuttle-hq/shuttle-examples#community-examples). | [Issues](https://github.com/shuttle-hq/shuttle-examples/issues) | [PRs](https://github.com/shuttle-hq/shuttle-examples/pulls)
+| [shuttle-docs](https://github.com/shuttle-hq/shuttle-docs) 📃 | Documentation hosted on [docs.shuttle.rs](https://docs.shuttle.rs/). | [Issues](https://github.com/shuttle-hq/shuttle-docs/issues) | [PRs](https://github.com/shuttle-hq/shuttle-docs/pulls)
+| [www](https://github.com/shuttle-hq/www) 🌍 | Our website [shuttle.rs](https://www.shuttle.rs/), including the [blog](https://www.shuttle.rs/blog/tags/all) and [Launchpad newsletter](https://www.shuttle.rs/launchpad). | [Issues](https://github.com/shuttle-hq/www/issues) | [PRs](https://github.com/shuttle-hq/www/pulls)
+| [deploy-action](https://github.com/shuttle-hq/deploy-action) ⚙ | GitHub Action for continuous deployments. | [Issues](https://github.com/shuttle-hq/deploy-action/issues) | [PRs](https://github.com/shuttle-hq/deploy-action/pulls)
+| [awesome-shuttle](https://github.com/shuttle-hq/awesome-shuttle) 🌟 | An awesome list of Shuttle-hosted projects and resources that users can add to. | [Issues](https://github.com/shuttle-hq/awesome-shuttle/issues) | [PRs](https://github.com/shuttle-hq/awesome-shuttle/pulls)
 
 ## Contributing to Shuttle
 

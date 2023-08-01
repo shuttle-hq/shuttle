@@ -334,7 +334,7 @@ impl Persistence {
             &self.pool,
             DeploymentState {
                 id: deployable.id,
-                last_update: Default::default(),
+                last_update: Utc::now(),
                 state: State::Stopped,
             },
         )

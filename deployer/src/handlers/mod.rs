@@ -356,7 +356,7 @@ pub async fn create_service(
         data: deployment_req.data,
         will_run_tests: !deployment_req.no_test,
         tracing_context: Default::default(),
-        claim: Some(claim),
+        claim,
     };
 
     deployment_manager.queue_push(queued).await;
@@ -521,7 +521,7 @@ pub async fn start_deployment(
             service_id: deployment.service_id,
             tracing_context: Default::default(),
             is_next: deployment.is_next,
-            claim: Some(claim),
+            claim,
         };
         deployment_manager.run_push(built).await;
 

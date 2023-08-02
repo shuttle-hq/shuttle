@@ -10,6 +10,7 @@ use axum::http::Request;
 use axum::response::Response;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use fqdn::{Fqdn, FQDN};
+use http::header::AUTHORIZATION;
 use http::Uri;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
@@ -19,6 +20,7 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
+use serde_json::Value;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
@@ -26,8 +28,9 @@ use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, QueryBuilder, Row};
 use tokio::sync::mpsc::Sender;
+use tokio::time::timeout;
 use tonic::transport::Endpoint;
-use tracing::{debug, trace, warn, Span};
+use tracing::{debug, instrument, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
@@ -36,11 +39,13 @@ use x509_parser::time::ASN1Time;
 
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
 use crate::args::ContextArgs;
-use crate::project::{Project, ProjectCreating};
+use crate::project::{Project, ProjectCreating, IS_HEALTHY_TIMEOUT};
 use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::TaskRouter;
-use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName};
+use crate::{
+    AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName, AUTH_CLIENT,
+};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -169,17 +174,31 @@ impl ContainerSettings {
 pub struct GatewayContextProvider {
     docker: Docker,
     settings: ContainerSettings,
+    api_key: String,
+    auth_key_uri: Uri,
 }
 
 impl GatewayContextProvider {
-    pub fn new(docker: Docker, settings: ContainerSettings) -> Self {
-        Self { docker, settings }
+    pub fn new(
+        docker: Docker,
+        settings: ContainerSettings,
+        api_key: String,
+        auth_key_uri: Uri,
+    ) -> Self {
+        Self {
+            docker,
+            settings,
+            api_key,
+            auth_key_uri,
+        }
     }
 
     pub fn context(&self) -> GatewayContext {
         GatewayContext {
             docker: self.docker.clone(),
             settings: self.settings.clone(),
+            api_key: self.api_key.clone(),
+            auth_key_uri: self.auth_key_uri.clone(),
         }
     }
 }
@@ -193,7 +212,6 @@ pub struct GatewayService {
     // We store these because we'll need them for the health checks
     provisioner_host: Endpoint,
     auth_host: Uri,
-    api_key: String,
 }
 
 impl GatewayService {
@@ -206,7 +224,12 @@ impl GatewayService {
 
         let container_settings = ContainerSettings::builder().from_args(&args).await;
 
-        let provider = GatewayContextProvider::new(docker, container_settings);
+        let provider = GatewayContextProvider::new(
+            docker,
+            container_settings,
+            args.deploys_api_key,
+            format!("{}auth/key", args.auth_uri).parse().unwrap(),
+        );
 
         let task_router = TaskRouter::new();
         Self {
@@ -217,7 +240,6 @@ impl GatewayService {
             provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
                 .expect("to have a valid provisioner endpoint"),
             auth_host: args.auth_uri,
-            api_key: args.deploys_api_key,
         }
     }
 
@@ -759,15 +781,14 @@ impl GatewayService {
     pub fn auth_uri(&self) -> &Uri {
         &self.auth_host
     }
-    pub fn api_key(&self) -> String {
-        self.api_key.clone()
-    }
 }
 
 #[derive(Clone)]
 pub struct GatewayContext {
     docker: Docker,
     settings: ContainerSettings,
+    api_key: String,
+    auth_key_uri: Uri,
 }
 
 impl DockerContext for GatewayContext {
@@ -777,6 +798,34 @@ impl DockerContext for GatewayContext {
 
     fn container_settings(&self) -> &ContainerSettings {
         &self.settings
+    }
+}
+
+impl GatewayContext {
+    #[instrument(skip(self), fields(auth_key_uri = %self.auth_key_uri, api_key = self.api_key))]
+    pub async fn get_jwt(&self) -> String {
+        let req = Request::builder()
+            .uri(self.auth_key_uri.clone())
+            .header(AUTHORIZATION, format!("Bearer {}", self.api_key))
+            .body(Body::empty())
+            .unwrap();
+
+        trace!("getting jwt");
+
+        let resp = timeout(IS_HEALTHY_TIMEOUT, AUTH_CLIENT.request(req)).await;
+
+        if let Ok(Ok(resp)) = resp {
+            let body = hyper::body::to_bytes(resp.into_body())
+                .await
+                .unwrap_or_default();
+            let convert: Value = serde_json::from_slice(&body).unwrap_or_default();
+
+            trace!(?convert, "got jwt response");
+
+            convert["token"].as_str().unwrap_or_default().to_string()
+        } else {
+            Default::default()
+        }
     }
 }
 

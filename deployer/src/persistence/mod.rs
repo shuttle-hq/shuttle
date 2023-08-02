@@ -288,7 +288,7 @@ impl Persistence {
                 FROM deployments AS d
                 JOIN services AS s ON s.id = d.service_id
                 WHERE state = ?
-                ORDER BY last_update"#,
+                ORDER BY last_update DESC"#,
         )
         .bind(State::Running)
         .fetch_all(&self.pool)
@@ -327,6 +327,18 @@ impl Persistence {
     /// Returns a sender for sending logs to persistence storage
     pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
         self.log_send.clone()
+    }
+
+    pub async fn stop_running_deployment(&self, deployable: DeploymentRunnable) -> Result<()> {
+        update_deployment(
+            &self.pool,
+            DeploymentState {
+                id: deployable.id,
+                last_update: Utc::now(),
+                state: State::Stopped,
+            },
+        )
+        .await
     }
 }
 
@@ -935,7 +947,7 @@ mod tests {
             runnable,
             [
                 DeploymentRunnable {
-                    id: id_1,
+                    id: id_3,
                     service_name: "foo".to_string(),
                     service_id: foo_id,
                     is_next: false,
@@ -947,7 +959,7 @@ mod tests {
                     is_next: true,
                 },
                 DeploymentRunnable {
-                    id: id_3,
+                    id: id_1,
                     service_name: "foo".to_string(),
                     service_id: foo_id,
                     is_next: false,

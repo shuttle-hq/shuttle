@@ -32,7 +32,7 @@ INSERT INTO custom_domains_copy (fqdn, project_id, certificate, private_key)
 SELECT 
   custom_domains.fqdn,
   projects_copy.project_id, -- Copy the generated ulid from the related projects_copy row.
-  custom_domains.fqdn,
+  custom_domains.certificate,
   custom_domains.private_key
 FROM custom_domains
 JOIN projects_copy ON projects_copy.project_name = custom_domains.project_name;

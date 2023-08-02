@@ -27,9 +27,9 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.21.0"
+//! shuttle-runtime = "0.22.0"
 //! axum = "0.6.10"
-//! shuttle-axum = "0.21.0"
+//! shuttle-axum = "0.22.0"
 //! tokio = "1.26"
 //! ```
 //!
@@ -113,8 +113,8 @@
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.21.0", features = ["postgres"] }
-//! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
+//! shuttle-shared-db = { version = "0.22.0", features = ["postgres"] }
+//! sqlx = { version = "0.7.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
 //! Now update the `#[shuttle_runtime::main]` function to take in a `PgPool`:

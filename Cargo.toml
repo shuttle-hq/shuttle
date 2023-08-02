@@ -23,18 +23,18 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.21.0"
+version = "0.22.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/shuttle-hq/shuttle"
 
 # https://doc.rust-lang.org/cargo/reference/workspaces.html#the-workspacedependencies-table
 [workspace.dependencies]
-shuttle-codegen = { path = "codegen", version = "0.21.0" }
-shuttle-common = { path = "common", version = "0.21.0" }
-shuttle-common-tests = { path = "common-tests", version = "0.21.0" }
-shuttle-proto = { path = "proto", version = "0.21.0" }
-shuttle-service = { path = "service", version = "0.21.0" }
+shuttle-codegen = { path = "codegen", version = "0.22.0" }
+shuttle-common = { path = "common", version = "0.22.0" }
+shuttle-common-tests = { path = "common-tests", version = "0.22.0" }
+shuttle-proto = { path = "proto", version = "0.22.0" }
+shuttle-service = { path = "service", version = "0.22.0" }
 
 anyhow = "1.0.66"
 async-trait = "0.1.58"
@@ -76,7 +76,7 @@ ring = "0.16.20"
 rmp-serde = "1.1.1"
 serde = { version = "1.0.148", default-features = false }
 serde_json = "1.0.89"
-sqlx = "0.6.3"
+sqlx = "0.7.1"
 strfmt = "0.2.2"
 strum = { version = "0.24.1", features = ["derive"] }
 tempfile = "3.4.0"

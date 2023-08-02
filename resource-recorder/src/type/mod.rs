@@ -11,6 +11,7 @@ pub enum Type {
     StaticFolder,
     Persist,
     Turso,
+    Embedded,
     Custom,
 }
 
@@ -22,6 +23,7 @@ impl Display for Type {
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
             Type::Turso => write!(f, "turso"),
+            Type::Embedded => write!(f, "embedded"),
             Type::Custom => write!(f, "custom"),
         }
     }
@@ -42,6 +44,7 @@ impl FromStr for Type {
                 "static_folder" => Ok(Self::StaticFolder),
                 "persist" => Ok(Self::Persist),
                 "turso" => Ok(Self::Turso),
+                "embedded" => Ok(Self::Embedded),
                 "custom" => Ok(Self::Custom),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
@@ -96,6 +99,7 @@ mod tests {
             Type::Secrets,
             Type::StaticFolder,
             Type::Persist,
+            Type::Embedded,
             Type::Turso,
         ];
 

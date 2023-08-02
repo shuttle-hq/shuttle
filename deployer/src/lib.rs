@@ -44,9 +44,7 @@ pub async fn start(
 
     persistence.cleanup_invalid_states().await.unwrap();
 
-    let mut runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
-    runnable_deployments.reverse();
-
+    let runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
     info!(count = %runnable_deployments.len(), "stopping all but last running deploy");
 
     // Make sure we don't stop the last running deploy. This works because they are returned in descending order.

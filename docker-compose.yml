@@ -6,6 +6,7 @@ volumes:
   panamax-crates-vol:
   panamax-io-index-vol:
   resource-recorder-vol:
+  mongodb-vol:
 networks:
   user-net:
     attachable: true

@@ -184,7 +184,7 @@ services:
     networks:
       user-net:
     volumes:
-      - mongodb-vol:/var/lib/mongodb/data
+      - mongodb-vol:/data/db
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}

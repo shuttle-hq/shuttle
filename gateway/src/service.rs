@@ -31,7 +31,7 @@ use sqlx::{query, Error as SqlxError, QueryBuilder, Row};
 use tokio::sync::mpsc::Sender;
 use tokio::time::timeout;
 use tonic::transport::Endpoint;
-use tracing::{debug, instrument, trace, warn, Span};
+use tracing::{debug, error, instrument, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use x509_parser::nom::AsBytes;
@@ -41,7 +41,7 @@ use x509_parser::time::ASN1Time;
 
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
 use crate::args::ContextArgs;
-use crate::project::{Project, ProjectCreating, IS_HEALTHY_TIMEOUT};
+use crate::project::{Project, ProjectCreating, ProjectError, IS_HEALTHY_TIMEOUT};
 use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::TaskRouter;
@@ -332,7 +332,15 @@ impl GatewayService {
             .map(|row| {
                 (
                     row.get("project_name"),
-                    row.get::<SqlxJson<Project>, _>("project_state").0,
+                    // This can be invalid JSON if it refers to an outdated Project state
+                    row.try_get::<SqlxJson<Project>, _>("project_state")
+                        .map(|p| p.0)
+                        .unwrap_or_else(|e| {
+                            error!("Failed to deser `project_state`: {:?}", e);
+                            Project::Errored(ProjectError::internal(
+                                "Error when trying to deserialize state of project.",
+                            ))
+                        }),
                 )
             });
         Ok(iter)

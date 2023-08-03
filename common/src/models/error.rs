@@ -132,6 +132,7 @@ impl From<StatusCode> for ApiError {
             },
             StatusCode::BAD_GATEWAY => {
                 warn!("got a bad response from a deployer");
+                // Gateway's default response when a request handler panicks is a 502 with some HTML.
                 "response from deployer is invalid. Please create a ticket to report this"
             },
             _ => {

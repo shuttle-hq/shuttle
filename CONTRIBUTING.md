@@ -27,11 +27,10 @@ are always appreciated!
 
 We use the [Angular Commit Guidelines](https://github.com/angular/angular/blob/master/CONTRIBUTING.md#commit). We expect all commits to conform to these guidelines.
 
-Before committing:
+Before committing in Rust repositories:
 
 - Make sure your commits don't trigger any warnings from Clippy by running: `cargo clippy --tests --all-targets --all-features`. If you have a good reason to contradict Clippy, insert an `#[allow(clippy::<lint>)]` macro, so that it won't complain.
 - Make sure your code is correctly formatted: `cargo fmt --all --check`.
-- If you've made changes to examples, make sure the above commands are ran there as well.
 
 ## Opening a Pull Request
 

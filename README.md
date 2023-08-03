@@ -152,7 +152,12 @@ For development of this repo, check the [development docs](./DEVELOPING.md).
 
 Even if you are not planning to submit any code, joining our [Discord server](https://discord.gg/shuttle) and providing feedback helps us a lot!
 
-## Community & Support
+### Algora Bounties 💰
+
+To offload work from the engineering team on low-priority issues, we will sometimes add a cash bounty to issues.
+Sign up to the [Algora Console](https://console.algora.io/org/shuttle/bounties?status=open) to find open issues with bounties.
+
+## Community and Support
 
 - [GitHub Issues](https://github.com/shuttle-hq/shuttle/issues). Best for: bugs and errors you encounter using Shuttle.
 - [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements, releases, collaborations and other events.

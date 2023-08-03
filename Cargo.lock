@@ -5406,7 +5406,12 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "shuttle-common-tests",
  "syn 2.0.28",
+ "tokio",
  "trybuild",
 ]
 

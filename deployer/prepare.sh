@@ -5,17 +5,6 @@
 # service might need some extra preparation steps for its final image         #
 ###############################################################################
 
-
-# Stuff that depends on local source files
-if [ "$1" = "--after-src" ]; then
-
-    # Install the shuttle runtime
-    cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" --bin shuttle-next --features next
-
-    exit 0
-fi
-
-
 # Patch crates to be on same versions
 mkdir -p $CARGO_HOME
 touch $CARGO_HOME/config.toml
@@ -48,6 +37,9 @@ fi
 
 # Add the wasm32-wasi target
 rustup target add wasm32-wasi
+
+# Install the shuttle-next runtime for shuttle-next services.
+cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" --bin shuttle-next --features next
 
 while getopts "p," o; do
     case $o in

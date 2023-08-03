@@ -36,6 +36,7 @@ pub enum Type {
     StaticFolder,
     Persist,
     Turso,
+    ServiceInfo,
     Custom,
 }
 
@@ -82,6 +83,7 @@ impl Display for Type {
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
             Type::Turso => write!(f, "turso"),
+            Type::ServiceInfo => write!(f, "service_info"),
             Type::Custom => write!(f, "custom"),
         }
     }

@@ -82,6 +82,13 @@ impl Shuttle {
     pub async fn run(mut self, mut args: ShuttleArgs) -> Result<CommandOutcome> {
         trace!("running local client");
 
+        if args.api_url.as_ref().is_some_and(|s| s.ends_with("/")) {
+            println!(
+                "WARNING: API URL is probably incorrect. Ends with '/': {}",
+                args.api_url.clone().unwrap()
+            );
+        }
+
         // All commands that need to know which project is being handled
         if matches!(
             args.cmd,

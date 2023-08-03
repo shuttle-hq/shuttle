@@ -4,6 +4,13 @@
 # This file is used by our common Containerfile incase the container for this #
 # service might need some extra preparation steps for its final image         #
 ###############################################################################
+if [ "$1" = "--after-src" ]; then
+    # Install the shuttle-next runtime for shuttle-next services.
+    cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" --bin shuttle-next --features next --registry crates-io
+
+    exit 0
+fi
+
 
 # Patch crates to be on same versions
 mkdir -p $CARGO_HOME
@@ -37,9 +44,6 @@ fi
 
 # Add the wasm32-wasi target
 rustup target add wasm32-wasi
-
-# Install the shuttle-next runtime for shuttle-next services.
-cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" --bin shuttle-next --features next
 
 while getopts "p," o; do
     case $o in

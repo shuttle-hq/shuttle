@@ -167,7 +167,8 @@ Sign up to the [Algora Console](https://console.algora.io/org/shuttle/bounties?s
 
 Check for any outages and incidents on [Shuttle Status](https://status.shuttle.rs/).
 
-We are currently in Public Beta. Watch "releases" of this repo to get notified of major updates!
+We are currently in Public Beta (check out the Roadmap [here](https://www.shuttle.rs/beta#06)).
+Watch "releases" of this repo to get notified of major updates!
 
 - [x] Alpha: We are testing Shuttle, API and deployments may be unstable
 - [x] Public Alpha: Anyone can sign up, but go easy on us,

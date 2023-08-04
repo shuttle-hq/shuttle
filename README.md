@@ -163,12 +163,13 @@ Sign up to the [Algora Console](https://console.algora.io/org/shuttle/bounties?s
 - [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements, releases, collaborations and other events.
 - [Discord](https://discord.gg/shuttle). Best for: *ALL OF THE ABOVE* + help, support, sharing your applications and hanging out with the community.
 
-## Project Status and Roadmap
+## Project Status
 
 Check for any outages and incidents on [Shuttle Status](https://status.shuttle.rs/).
 
-We are currently in Public Beta (check out the Roadmap [here](https://www.shuttle.rs/beta#06)).
+We are currently in Public Beta.
 Watch "releases" of this repo to get notified of major updates!
+Also, check out the [Beta announcement](https://www.shuttle.rs/beta#06) for features we are looking forward to.
 
 - [x] Alpha: We are testing Shuttle, API and deployments may be unstable
 - [x] Public Alpha: Anyone can sign up, but go easy on us,

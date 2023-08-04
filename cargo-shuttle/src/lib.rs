@@ -619,9 +619,8 @@ impl Shuttle {
                             );
                         } else {
                             println!(
-                                "[HINT]: You should update shuttle-runtime. \
-                                Change its version to {} in this project's \
-                                Cargo.toml to use a compatible version.",
+                                "[HINT]: A newer version of shuttle-runtime is available. \
+                                Change its version to {} in this project's Cargo.toml to update it.",
                                 mismatch.cargo_shuttle
                             );
                         }

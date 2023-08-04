@@ -135,6 +135,7 @@ impl ScopeBuilder {
             Scope::DeploymentPush, // To start an idle deploy
             Scope::Resources,      // To get past resources for an idle deploy
             Scope::Service,        // To get the running deploy for a service
+            Scope::ResourcesWrite,
         ]);
         self
     }

@@ -130,7 +130,6 @@ impl RuntimeManager {
             while let Ok(Some(log)) = stream.message().await {
                 if let Ok(mut log) = deploy_layer::Log::try_from(log) {
                     log.id = id;
-
                     sender.send(log).expect("to send log to persistence");
                 }
             }

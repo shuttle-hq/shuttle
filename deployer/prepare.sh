@@ -5,16 +5,27 @@
 # service might need some extra preparation steps for its final image         #
 ###############################################################################
 
-
 # Stuff that depends on local source files
 if [ "$1" = "--after-src" ]; then
+    # Install the shuttle-next runtime for shuttle-next services.
+    cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" --bin shuttle-next --features next || exit 1
 
-    # Install the shuttle runtime
-    cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" --bin shuttle-next --features next
-
+    while getopts "p," o; do
+    case $o in
+        "p") # if panamax is used, the '-p' parameter is passed
+            # Make future crates requests to our own mirror
+            echo '
+[source.shuttle-crates-io-mirror]
+registry = "sparse+http://panamax:8080/index/"
+[source.crates-io]
+replace-with = "shuttle-crates-io-mirror"' >> $CARGO_HOME/config.toml
+                ;;
+            *)
+                ;;
+        esac
+    done
     exit 0
 fi
-
 
 # Patch crates to be on same versions
 mkdir -p $CARGO_HOME
@@ -48,21 +59,6 @@ fi
 
 # Add the wasm32-wasi target
 rustup target add wasm32-wasi
-
-while getopts "p," o; do
-    case $o in
-        "p") # if panamax is used, the '-p' parameter is passed
-            # Make future crates requests to our own mirror
-            echo '
-[source.shuttle-crates-io-mirror]
-registry = "sparse+http://panamax:8080/index/"
-[source.crates-io]
-replace-with = "shuttle-crates-io-mirror"' >> $CARGO_HOME/config.toml
-            ;;
-        *)
-            ;;
-    esac
-done
 
 # Install common build tools for external crates
 # The image should already have these: https://github.com/docker-library/buildpack-deps/blob/65d69325ad741cea6dee20781c1faaab2e003d87/debian/buster/Dockerfile

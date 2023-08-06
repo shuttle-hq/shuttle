@@ -135,6 +135,20 @@ pub fn start() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     })
 }
 
+pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+    run(|ctx| async move {
+        match ctx.state {
+            Project::Ready(mut ready) => {
+                ready
+                    .start_last_deploy(ctx.gateway.get_jwt().await, ctx.admin_secret.clone())
+                    .await;
+                TaskResult::Done(Project::Ready(ready))
+            }
+            other => TaskResult::Done(other),
+        }
+    })
+}
+
 pub fn check_health() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     run(|ctx| async move {
         match ctx.state.refresh(&ctx.gateway).await {
@@ -423,6 +437,8 @@ pub struct ProjectContext {
     pub gateway: GatewayContext,
     /// The last known state of the project
     pub state: Project,
+    /// The secret needed to communicate with the project
+    pub admin_secret: String,
 }
 
 pub type BoxedTask<Ctx = (), O = ()> = Box<dyn Task<Ctx, Output = O, Error = Error>>;
@@ -456,12 +472,21 @@ where
             Ok(account_name) => account_name,
             Err(err) => return TaskResult::Err(err),
         };
+        let admin_secret = match self
+            .service
+            .control_key_from_project_name(&self.project_name)
+            .await
+        {
+            Ok(account_name) => account_name,
+            Err(err) => return TaskResult::Err(err),
+        };
 
         let project_ctx = ProjectContext {
             project_name: self.project_name.clone(),
             account_name: account_name.clone(),
             gateway: ctx,
             state: project,
+            admin_secret,
         };
 
         let span = info_span!(

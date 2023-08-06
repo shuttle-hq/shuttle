@@ -288,10 +288,28 @@ impl Persistence {
                 FROM deployments AS d
                 JOIN services AS s ON s.id = d.service_id
                 WHERE state = ?
-                ORDER BY last_update"#,
+                ORDER BY last_update DESC"#,
         )
         .bind(State::Running)
         .fetch_all(&self.pool)
+        .await
+        .map_err(Error::from)
+    }
+
+    /// Gets a deployment if it is runnable
+    pub async fn get_runnable_deployment(&self, id: &Uuid) -> Result<Option<DeploymentRunnable>> {
+        sqlx::query_as(
+            r#"SELECT d.id, service_id, s.name AS service_name, d.is_next
+                FROM deployments AS d
+                JOIN services AS s ON s.id = d.service_id
+                WHERE state IN (?, ?, ?)
+                AND d.id = ?"#,
+        )
+        .bind(State::Running)
+        .bind(State::Stopped)
+        .bind(State::Completed)
+        .bind(id)
+        .fetch_optional(&self.pool)
         .await
         .map_err(Error::from)
     }
@@ -309,6 +327,18 @@ impl Persistence {
     /// Returns a sender for sending logs to persistence storage
     pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
         self.log_send.clone()
+    }
+
+    pub async fn stop_running_deployment(&self, deployable: DeploymentRunnable) -> Result<()> {
+        update_deployment(
+            &self.pool,
+            DeploymentState {
+                id: deployable.id,
+                last_update: Utc::now(),
+                state: State::Stopped,
+            },
+        )
+        .await
     }
 }
 
@@ -376,7 +406,7 @@ impl ResourceManager for Persistence {
             "INSERT OR REPLACE INTO resources (service_id, type, config, data) VALUES (?, ?, ?, ?)",
         )
         .bind(resource.service_id)
-        .bind(resource.r#type)
+        .bind(resource.r#type.clone())
         .bind(&resource.config)
         .bind(&resource.data)
         .execute(&self.pool)
@@ -846,6 +876,7 @@ mod tests {
         let id_1 = Uuid::new_v4();
         let id_2 = Uuid::new_v4();
         let id_3 = Uuid::new_v4();
+        let id_crashed = Uuid::new_v4();
 
         for deployment in [
             Deployment {
@@ -876,7 +907,7 @@ mod tests {
                 ..Default::default()
             },
             Deployment {
-                id: Uuid::new_v4(),
+                id: id_crashed,
                 service_id: service_id2,
                 state: State::Crashed,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
@@ -897,12 +928,26 @@ mod tests {
             p.insert_deployment(deployment).await.unwrap();
         }
 
+        let runnable = p.get_runnable_deployment(&id_1).await.unwrap();
+        assert_eq!(
+            runnable,
+            Some(DeploymentRunnable {
+                id: id_1,
+                service_name: "foo".to_string(),
+                service_id: foo_id,
+                is_next: false,
+            })
+        );
+
+        let runnable = p.get_runnable_deployment(&id_crashed).await.unwrap();
+        assert_eq!(runnable, None);
+
         let runnable = p.get_all_runnable_deployments().await.unwrap();
         assert_eq!(
             runnable,
             [
                 DeploymentRunnable {
-                    id: id_1,
+                    id: id_3,
                     service_name: "foo".to_string(),
                     service_id: foo_id,
                     is_next: false,
@@ -914,7 +959,7 @@ mod tests {
                     is_next: true,
                 },
                 DeploymentRunnable {
-                    id: id_3,
+                    id: id_1,
                     service_name: "foo".to_string(),
                     service_id: foo_id,
                     is_next: false,

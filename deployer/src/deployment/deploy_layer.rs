@@ -118,7 +118,7 @@ impl TryFrom<runtime::LogItem> for Log {
     fn try_from(log: runtime::LogItem) -> Result<Self, Self::Error> {
         Ok(Self {
             id: Default::default(),
-            state: State::from_str(&log.state).map_err(|err| ParseError::State(err.to_string()))?,
+            state: State::from_str(&log.state).unwrap_or_default(),
             level: runtime::LogLevel::from_i32(log.level)
                 .unwrap_or_default()
                 .into(),
@@ -828,7 +828,7 @@ mod tests {
                 service_id: Uuid::new_v4(),
                 tracing_context: Default::default(),
                 is_next: false,
-                claim: None,
+                claim: Default::default(),
             })
             .await;
 
@@ -872,7 +872,7 @@ mod tests {
                 data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
                 tracing_context: Default::default(),
-                claim: None,
+                claim: Default::default(),
             })
             .await;
 
@@ -931,7 +931,7 @@ mod tests {
             data: bytes,
             will_run_tests: false,
             tracing_context: Default::default(),
-            claim: None,
+            claim: Default::default(),
         }
     }
 }

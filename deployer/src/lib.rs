@@ -2,7 +2,7 @@ use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 
 pub use args::Args;
 pub use deployment::deploy_layer::DeployLayer;
-use deployment::{Built, DeploymentManager};
+use deployment::DeploymentManager;
 use fqdn::FQDN;
 use hyper::{
     server::conn::AddrStream,
@@ -45,17 +45,14 @@ pub async fn start(
     persistence.cleanup_invalid_states().await.unwrap();
 
     let runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
-    info!(count = %runnable_deployments.len(), "enqueuing runnable deployments");
-    for existing_deployment in runnable_deployments {
-        let built = Built {
-            id: existing_deployment.id,
-            service_name: existing_deployment.service_name,
-            service_id: existing_deployment.service_id,
-            tracing_context: Default::default(),
-            is_next: existing_deployment.is_next,
-            claim: None, // This will cause us to read the resource info from past provisions
-        };
-        deployment_manager.run_push(built).await;
+    info!(count = %runnable_deployments.len(), "stopping all but last running deploy");
+
+    // Make sure we don't stop the last running deploy. This works because they are returned in descending order.
+    for existing_deployment in runnable_deployments.into_iter().skip(1) {
+        persistence
+            .stop_running_deployment(existing_deployment)
+            .await
+            .unwrap();
     }
 
     let mut builder = handlers::RouterBuilder::new(

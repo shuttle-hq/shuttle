@@ -15,7 +15,8 @@ pub struct Args {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     Start(StartArgs),
-    Init(InitArgs),
+    InitAdmin(InitArgs),
+    InitDeployer(InitArgs),
 }
 
 #[derive(clap::Args, Debug, Clone)]

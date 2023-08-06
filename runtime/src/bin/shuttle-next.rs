@@ -5,7 +5,7 @@ use std::{
 
 use shuttle_common::backends::tracing::{setup_tracing, ExtractPropagationLayer};
 use shuttle_proto::runtime::runtime_server::RuntimeServer;
-use shuttle_runtime::{AxumWasm, NextArgs};
+use shuttle_runtime::{print_version, AxumWasm, NextArgs};
 use tonic::transport::Server;
 use tracing::trace;
 
@@ -35,12 +35,4 @@ async fn main() {
     let router = server_builder.add_service(svc);
 
     router.serve(addr).await.unwrap();
-}
-
-fn print_version() {
-    // same way `clap` gets these
-    let name = env!("CARGO_PKG_NAME");
-    let version = env!("CARGO_PKG_VERSION");
-
-    println!("{name} {version}");
 }

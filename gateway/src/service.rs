@@ -20,7 +20,6 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use serde_json::Value;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
@@ -30,8 +29,9 @@ use sqlx::{query, Error as SqlxError, QueryBuilder, Row};
 use tokio::sync::mpsc::Sender;
 use tokio::time::timeout;
 use tonic::transport::Endpoint;
-use tracing::{debug, instrument, trace, warn, Span};
+use tracing::{debug, error, instrument, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use ulid::Ulid;
 use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
 use x509_parser::prelude::parse_x509_pem;
@@ -39,7 +39,7 @@ use x509_parser::time::ASN1Time;
 
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
 use crate::args::ContextArgs;
-use crate::project::{Project, ProjectCreating, IS_HEALTHY_TIMEOUT};
+use crate::project::{Project, ProjectCreating, ProjectError, IS_HEALTHY_TIMEOUT};
 use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::TaskRouter;
@@ -328,7 +328,15 @@ impl GatewayService {
             .map(|row| {
                 (
                     row.get("project_name"),
-                    row.get::<SqlxJson<Project>, _>("project_state").0,
+                    // This can be invalid JSON if it refers to an outdated Project state
+                    row.try_get::<SqlxJson<Project>, _>("project_state")
+                        .map(|p| p.0)
+                        .unwrap_or_else(|e| {
+                            error!("Failed to deser `project_state`: {:?}", e);
+                            Project::Errored(ProjectError::internal(
+                                "Error when trying to deserialize state of project.",
+                            ))
+                        }),
                 )
             });
         Ok(iter)
@@ -441,6 +449,12 @@ impl GatewayService {
                 // But is in `::Destroyed` state, recreate it
                 let mut creating = ProjectCreating::new_with_random_initial_key(
                     project_name.clone(),
+                    Ulid::from_string(project_id.as_str()).map_err(|err| {
+                        Error::custom(
+                            ErrorKind::Internal,
+                            format!("The project id of the destroyed project is not a valid ULID: {err}"),
+                        )
+                    })?,
                     idle_minutes,
                 );
                 // Restore previous custom domain, if any
@@ -469,7 +483,7 @@ impl GatewayService {
                 // Otherwise attempt to create a new one. This will fail
                 // outright if the project already exists (this happens if
                 // it belongs to another account).
-                self.insert_project(project_name, account_name, idle_minutes)
+                self.insert_project(project_name, Ulid::new(), account_name, idle_minutes)
                     .await
             } else {
                 Err(Error::from_kind(ErrorKind::InvalidProjectName))
@@ -480,11 +494,16 @@ impl GatewayService {
     pub async fn insert_project(
         &self,
         project_name: ProjectName,
+        project_id: Ulid,
         account_name: AccountName,
         idle_minutes: u64,
     ) -> Result<Project, Error> {
         let project = SqlxJson(Project::Creating(
-            ProjectCreating::new_with_random_initial_key(project_name.clone(), idle_minutes),
+            ProjectCreating::new_with_random_initial_key(
+                project_name.clone(),
+                project_id,
+                idle_minutes,
+            ),
         ));
 
         query("INSERT INTO projects (project_id, project_name, account_name, initial_key, project_state) VALUES (ulid(), ?1, ?2, ?3, ?4)")
@@ -758,6 +777,17 @@ impl GatewayService {
         Ok(project)
     }
 
+    /// Get project id of a project, by name.
+    pub async fn project_id(self: &Arc<Self>, project_name: &ProjectName) -> Result<String, Error> {
+        Ok(
+            query("SELECT project_id FROM projects WHERE project_name = ?1")
+                .bind(project_name)
+                .fetch_one(&self.db)
+                .await?
+                .get::<String, _>("project_id"),
+        )
+    }
+
     pub fn task_router(&self) -> TaskRouter<BoxedTask> {
         self.task_router.clone()
     }
@@ -818,7 +848,7 @@ impl GatewayContext {
             let body = hyper::body::to_bytes(resp.into_body())
                 .await
                 .unwrap_or_default();
-            let convert: Value = serde_json::from_slice(&body).unwrap_or_default();
+            let convert: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
 
             trace!(?convert, "got jwt response");
 

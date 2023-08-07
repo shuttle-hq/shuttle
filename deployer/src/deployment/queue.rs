@@ -16,6 +16,7 @@ use tokio::task::JoinSet;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use ulid::Ulid;
 use uuid::Uuid;
 
 use std::collections::{BTreeMap, HashMap};
@@ -161,7 +162,8 @@ async fn promote_to_run(mut built: Built, run_send: RunSender) {
 pub struct Queued {
     pub id: Uuid,
     pub service_name: String,
-    pub service_id: Uuid,
+    pub service_id: Ulid,
+    pub project_id: Ulid,
     pub data: Vec<u8>,
     pub will_run_tests: bool,
     pub tracing_context: HashMap<String, String>,
@@ -262,6 +264,7 @@ impl Queued {
             id: self.id,
             service_name: self.service_name,
             service_id: self.service_id,
+            project_id: self.project_id,
             tracing_context: Default::default(),
             is_next,
             claim: self.claim,
@@ -302,7 +305,7 @@ async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
 #[instrument(skip(secrets, service_id, secret_recorder))]
 async fn set_secrets(
     secrets: BTreeMap<String, String>,
-    service_id: &Uuid,
+    service_id: &Ulid,
     secret_recorder: impl SecretRecorder,
 ) -> Result<()> {
     for (key, value) in secrets.into_iter() {

@@ -53,6 +53,7 @@ uuid = { workspace = true, features = ["v4"] }
 x509-parser = "0.14.0"
 tonic = { workspace = true }
 tower-sanitize-path = "0.2.0"
+ulid = { workspace = true, features = ["serde"] }
 
 [dependencies.shuttle-common]
 workspace = true

@@ -13,6 +13,7 @@ use proxy::AddressGetter;
 pub use runtime_manager::RuntimeManager;
 use tokio::sync::Mutex;
 use tracing::{error, info};
+use ulid::Ulid;
 
 use crate::deployment::gateway_client::GatewayClient;
 
@@ -48,6 +49,8 @@ pub async fn start(
     info!(count = %runnable_deployments.len(), "stopping all but last running deploy");
 
     // Make sure we don't stop the last running deploy. This works because they are returned in descending order.
+    let project_id = Ulid::from_string(args.project_id.as_str())
+        .expect("to have a valid ULID as project_id arg");
     for existing_deployment in runnable_deployments.into_iter().skip(1) {
         persistence
             .stop_running_deployment(existing_deployment)
@@ -60,6 +63,7 @@ pub async fn start(
         deployment_manager,
         args.proxy_fqdn,
         args.project,
+        project_id,
         args.auth_uri,
     );
 

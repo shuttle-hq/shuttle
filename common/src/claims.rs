@@ -135,6 +135,12 @@ impl ScopeBuilder {
             Scope::DeploymentPush, // To start an idle deploy
             Scope::Resources,      // To get past resources for an idle deploy
             Scope::Service,        // To get the running deploy for a service
+            // To add the locally persisted resources from the older deployers
+            // to the resource-recorder the first time the old deployer is updated
+            // to the new deployer (based on resource-recorder). After this moment
+            // all requests are routed to the resource-recorder instead of local
+            // persistence.
+            Scope::ResourcesWrite,
         ]);
         self
     }

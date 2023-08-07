@@ -247,7 +247,6 @@ async fn route_project(
 ) -> Result<Response<Body>, Error> {
     let project_name = scoped_user.scope;
     let project = service.find_or_start_project(&project_name, sender).await?;
-
     service
         .route(&project, &project_name, &scoped_user.user.name, req)
         .await
@@ -502,6 +501,10 @@ async fn request_custom_domain_acme_certificate(
         .await?;
 
     let project = service.find_project(&project_name).await?;
+    let project_id =
+        project.container().unwrap().project_id().map_err(|_| {
+            Error::custom(ErrorKind::Internal, "Missing project_id from the container")
+        })?;
     let idle_minutes = project.container().unwrap().idle_minutes();
 
     // Destroy and recreate the project with the new domain.
@@ -517,6 +520,7 @@ async fn request_custom_domain_acme_certificate(
                 async move {
                     let creating = ProjectCreating::new_with_random_initial_key(
                         ctx.project_name,
+                        project_id,
                         idle_minutes,
                     )
                     .with_fqdn(fqdn);

@@ -27,9 +27,9 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.22.0"
+//! shuttle-runtime = "0.23.0"
 //! axum = "0.6.10"
-//! shuttle-axum = "0.22.0"
+//! shuttle-axum = "0.23.0"
 //! tokio = "1.26"
 //! ```
 //!
@@ -113,7 +113,7 @@
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.22.0", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.23.0", features = ["postgres"] }
 //! sqlx = { version = "0.7.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
@@ -291,3 +291,11 @@ pub use anyhow::Context;
 pub use strfmt::strfmt;
 pub use tracing;
 pub use tracing_subscriber;
+
+// Print the version of the runtime.
+pub fn print_version() {
+    let name = env!("CARGO_PKG_NAME");
+    let version = env!("CARGO_PKG_VERSION");
+
+    println!("{name} {version}");
+}

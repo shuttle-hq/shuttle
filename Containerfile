@@ -57,7 +57,8 @@ RUN /prepare.sh "${prepare_args}"
 
 COPY --from=cache /build /usr/src/shuttle/
 
-# Any prepare steps that depend on the COPY from src cache
+# Any prepare steps that depend on the COPY from src cache.
+# In the deployer shuttle-next is installed and the panamax mirror config is added in this step.
 RUN /prepare.sh --after-src "${prepare_args}"
 
 COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-${folder} /usr/local/bin/service

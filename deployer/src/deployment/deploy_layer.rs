@@ -311,7 +311,7 @@ mod tests {
     };
 
     use crate::{
-        persistence::{DeploymentUpdater, Resource, ResourceManager},
+        persistence::{DeploymentUpdater, ResourceManager},
         RuntimeManager,
     };
     use async_trait::async_trait;
@@ -319,14 +319,19 @@ mod tests {
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use portpicker::pick_unused_port;
-    use shuttle_proto::provisioner::{
-        provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+    use shuttle_common::claims::Claim;
+    use shuttle_proto::{
+        provisioner::{
+            provisioner_server::{Provisioner, ProvisionerServer},
+            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+        },
+        resource_recorder::{ResourcesResponse, ResultResponse},
     };
     use tempfile::Builder;
     use tokio::{select, time::sleep};
     use tonic::transport::Server;
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+    use ulid::Ulid;
     use uuid::Uuid;
 
     use crate::{
@@ -486,7 +491,7 @@ mod tests {
 
         async fn insert_secret(
             &self,
-            _service_id: &Uuid,
+            _service_id: &Ulid,
             _key: &str,
             _value: &str,
         ) -> Result<(), Self::Err> {
@@ -525,7 +530,7 @@ mod tests {
 
         async fn get_active_deployments(
             &self,
-            _service_id: &Uuid,
+            _service_id: &Ulid,
         ) -> std::result::Result<Vec<Uuid>, Self::Err> {
             Ok(vec![])
         }
@@ -558,7 +563,7 @@ mod tests {
     impl SecretGetter for StubSecretGetter {
         type Err = std::io::Error;
 
-        async fn get_secrets(&self, _service_id: &Uuid) -> Result<Vec<Secret>, Self::Err> {
+        async fn get_secrets(&self, _service_id: &Ulid) -> Result<Vec<Secret>, Self::Err> {
             Ok(Default::default())
         }
     }
@@ -566,15 +571,31 @@ mod tests {
     #[derive(Clone)]
     struct StubResourceManager;
 
-    #[async_trait::async_trait]
+    #[async_trait]
     impl ResourceManager for StubResourceManager {
         type Err = std::io::Error;
 
-        async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
-            Ok(())
+        async fn insert_resources(
+            &mut self,
+            _resource: Vec<shuttle_proto::resource_recorder::record_request::Resource>,
+            _service_id: &ulid::Ulid,
+            _claim: Claim,
+        ) -> Result<ResultResponse, Self::Err> {
+            Ok(ResultResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+            })
         }
-        async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
-            Ok(Vec::new())
+        async fn get_resources(
+            &mut self,
+            _service_id: &ulid::Ulid,
+            _claim: Claim,
+        ) -> Result<ResourcesResponse, Self::Err> {
+            Ok(ResourcesResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+                resources: Vec::new(),
+            })
         }
     }
 
@@ -825,10 +846,11 @@ mod tests {
             .run_push(Built {
                 id,
                 service_name: "run-test".to_string(),
-                service_id: Uuid::new_v4(),
+                service_id: Ulid::new(),
+                project_id: Ulid::new(),
                 tracing_context: Default::default(),
                 is_next: false,
-                claim: None,
+                claim: Default::default(),
             })
             .await;
 
@@ -868,11 +890,12 @@ mod tests {
             .queue_push(Queued {
                 id,
                 service_name: "nil_id".to_string(),
-                service_id: Uuid::new_v4(),
+                service_id: Ulid::new(),
+                project_id: Ulid::new(),
                 data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
                 tracing_context: Default::default(),
-                claim: None,
+                claim: Default::default(),
             })
             .await;
 
@@ -927,11 +950,12 @@ mod tests {
         Queued {
             id: Uuid::new_v4(),
             service_name: format!("deploy-layer-{name}"),
-            service_id: Uuid::new_v4(),
+            service_id: Ulid::new(),
+            project_id: Ulid::new(),
             data: bytes,
             will_run_tests: false,
             tracing_context: Default::default(),
-            claim: None,
+            claim: Default::default(),
         }
     }
 }

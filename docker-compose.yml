@@ -6,6 +6,7 @@ volumes:
   panamax-crates-vol:
   panamax-io-index-vol:
   resource-recorder-vol:
+  mongodb-vol:
 networks:
   user-net:
     attachable: true
@@ -182,6 +183,8 @@ services:
     restart: always
     networks:
       user-net:
+    volumes:
+      - mongodb-vol:/data/db
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}

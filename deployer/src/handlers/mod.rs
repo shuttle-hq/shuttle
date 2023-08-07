@@ -33,6 +33,7 @@ use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
 use tracing::{error, field, instrument, trace, warn};
+use ulid::Ulid;
 use utoipa::{IntoParams, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
@@ -97,6 +98,7 @@ impl RouterBuilder {
         deployment_manager: DeploymentManager,
         proxy_fqdn: FQDN,
         project_name: ProjectName,
+        project_id: Ulid,
         auth_uri: Uri,
     ) -> Self {
         let router = Router::new()
@@ -115,7 +117,7 @@ impl RouterBuilder {
                 get(get_service.layer(ScopedLayer::new(vec![Scope::Service])))
                     .post(
                         create_service
-                            // Set the body size limit for this endpoint to 50MB
+                            .layer(Extension(project_id))
                             .layer(DefaultBodyLimit::max(CREATE_SERVICE_BODY_LIMIT))
                             .layer(ScopedLayer::new(vec![Scope::ServiceCreate])),
                     )
@@ -133,7 +135,11 @@ impl RouterBuilder {
                 "/projects/:project_name/deployments/:deployment_id",
                 get(get_deployment.layer(ScopedLayer::new(vec![Scope::Deployment])))
                     .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush])))
-                    .put(start_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
+                    .put(
+                        start_deployment
+                            .layer(Extension(project_id))
+                            .layer(ScopedLayer::new(vec![Scope::DeploymentPush])),
+                    ),
             )
             .route(
                 "/projects/:project_name/ws/deployments/:deployment_id/logs",
@@ -287,13 +293,15 @@ pub async fn get_service(
     )
 )]
 pub async fn get_service_resources(
-    Extension(persistence): Extension<Persistence>,
+    Extension(mut persistence): Extension<Persistence>,
+    Extension(claim): Extension<Claim>,
     Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let resources = persistence
-            .get_resources(&service.id)
+            .get_resources(&service.id, claim)
             .await?
+            .resources
             .into_iter()
             .map(Into::into)
             .collect();
@@ -326,10 +334,8 @@ pub async fn create_service(
     Rmp(deployment_req): Rmp<DeploymentRequest>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     let service = persistence.get_or_create_service(&service_name).await?;
-    let id = Uuid::new_v4();
-
     let deployment = Deployment {
-        id,
+        id: Uuid::new_v4(),
         service_id: service.id,
         state: State::Queued,
         last_update: Utc::now(),
@@ -348,15 +354,15 @@ pub async fn create_service(
     };
 
     persistence.insert_deployment(deployment.clone()).await?;
-
     let queued = Queued {
-        id,
+        id: deployment.id,
         service_name: service.name,
-        service_id: service.id,
+        service_id: deployment.service_id,
+        project_id: persistence.project_id(),
         data: deployment_req.data,
         will_run_tests: !deployment_req.no_test,
         tracing_context: Default::default(),
-        claim: Some(claim),
+        claim,
     };
 
     deployment_manager.queue_push(queued).await;
@@ -512,6 +518,7 @@ pub async fn start_deployment(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
+    Extension(project_id): Extension<Ulid>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<()> {
     if let Some(deployment) = persistence.get_runnable_deployment(&deployment_id).await? {
@@ -519,9 +526,10 @@ pub async fn start_deployment(
             id: deployment.id,
             service_name: deployment.service_name,
             service_id: deployment.service_id,
+            project_id,
             tracing_context: Default::default(),
             is_next: deployment.is_next,
-            claim: Some(claim),
+            claim,
         };
         deployment_manager.run_push(built).await;
 

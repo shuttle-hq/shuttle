@@ -1,4 +1,6 @@
 use crate::deployment::State;
+#[cfg(feature = "openapi")]
+use crate::ulid_type;
 use chrono::{DateTime, Utc};
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Attribute, Cell, CellAlignment, Color,
@@ -17,8 +19,8 @@ use uuid::Uuid;
 pub struct Response {
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
     pub id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
-    pub service_id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(schema_with = ulid_type))]
+    pub service_id: String,
     #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::deployment::State))]
     pub state: State,
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]

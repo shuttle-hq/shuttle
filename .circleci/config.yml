@@ -341,6 +341,9 @@ jobs:
       honeycomb-api-key:
         description: "Shuttle honeycomb api key for observability based on environment"
         type: env_var_name
+      deploys-api-key:
+        description: "Shuttle api key used by the gateway to authorise starting idle deployments"
+        type: env_var_name
       production:
         description: "Push and deploy to production"
         type: boolean
@@ -365,6 +368,7 @@ jobs:
             MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
             TAG=$TAG \
             HONEYCOMB_API_KEY=${<< parameters.honeycomb-api-key >>} \
+            DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             make deploy
       - when:
           condition: << parameters.production >>
@@ -637,8 +641,6 @@ workflows:
                 - "-F postgres-rustls"
       - platform-test:
           name: << matrix.crate >>
-          requires:
-            - workspace
           matrix:
             parameters:
               crate:
@@ -682,6 +684,7 @@ workflows:
           postgres-password: DEV_POSTGRES_PASSWORD
           mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
           honeycomb-api-key: DEV_HONEYCOMB_API_KEY
+          deploys-api-key: DEV_DEPLOYS_API_KEY
           requires:
             - build-and-push-unstable
   release:
@@ -760,6 +763,7 @@ workflows:
           postgres-password: PROD_POSTGRES_PASSWORD
           mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
           honeycomb-api-key: PROD_HONEYCOMB_API_KEY
+          deploys-api-key: PROD_DEPLOYS_API_KEY
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
           ssh-config-script: production-ssh-config.sh
           ssh-host: shuttle.prod.internal

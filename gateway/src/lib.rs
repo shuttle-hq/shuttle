@@ -7,13 +7,15 @@ use std::fmt::Formatter;
 use std::io;
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::OnceLock;
 
 use acme::AcmeClientError;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bollard::Docker;
 use futures::prelude::*;
+use hyper::client::HttpConnector;
+use hyper::Client;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
@@ -31,7 +33,7 @@ pub mod task;
 pub mod tls;
 pub mod worker;
 
-static AUTH_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+static AUTH_CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 
 /// Server-side errors that do not have to do with the user runtime
 /// should be [`Error`]s.

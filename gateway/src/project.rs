@@ -13,16 +13,21 @@ use bollard::network::{ConnectNetworkOptions, DisconnectNetworkOptions};
 use bollard::system::EventsOptions;
 use fqdn::FQDN;
 use futures::prelude::*;
+use http::header::AUTHORIZATION;
 use http::uri::InvalidUri;
-use http::Uri;
+use http::{Method, Request, Uri};
 use hyper::client::HttpConnector;
-use hyper::Client;
+use hyper::{Body, Client};
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
+use shuttle_common::backends::headers::{X_SHUTTLE_ACCOUNT_NAME, X_SHUTTLE_ADMIN_SECRET};
 use shuttle_common::models::project::{idle_minutes, IDLE_MINUTES};
+use shuttle_common::models::service;
 use tokio::time::{sleep, timeout};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, trace};
+use ulid::Ulid;
+use uuid::Uuid;
 
 use crate::service::ContainerSettings;
 use crate::{
@@ -72,7 +77,7 @@ const MAX_REBOOTS: usize = 3;
 // Client used for health checks
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 // Health check must succeed within 10 seconds
-static IS_HEALTHY_TIMEOUT: Duration = Duration::from_secs(10);
+pub static IS_HEALTHY_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[async_trait]
 impl<Ctx> Refresh<Ctx> for ContainerInspectResponse
@@ -97,6 +102,15 @@ pub trait ContainerInspectResponseExt {
             .to_string()
             .parse::<ProjectName>()
             .map_err(|_| ProjectError::internal("invalid project name"))
+    }
+
+    fn project_id(&self) -> Result<Ulid, ProjectError> {
+        let container = self.container();
+        Ulid::from_string(safe_unwrap!(container
+            .config
+            .labels
+            .get("shuttle.project_id")))
+        .map_err(|_| ProjectError::internal("invalid project id"))
     }
 
     fn idle_minutes(&self) -> u64 {
@@ -569,6 +583,8 @@ where
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectCreating {
     project_name: ProjectName,
+    /// The project id which this deployer is created for
+    project_id: Ulid,
     /// The admin secret with which the start deployer
     initial_key: String,
     /// Override the default fqdn (`${project_name}.${public}`)
@@ -587,9 +603,15 @@ pub struct ProjectCreating {
 }
 
 impl ProjectCreating {
-    pub fn new(project_name: ProjectName, initial_key: String, idle_minutes: u64) -> Self {
+    pub fn new(
+        project_name: ProjectName,
+        project_id: Ulid,
+        initial_key: String,
+        idle_minutes: u64,
+    ) -> Self {
         Self {
             project_name,
+            project_id,
             initial_key,
             fqdn: None,
             image: None,
@@ -604,11 +626,13 @@ impl ProjectCreating {
         recreate_count: usize,
     ) -> Result<Self, ProjectError> {
         let project_name = container.project_name()?;
+        let project_id = container.project_id()?;
         let idle_minutes = container.idle_minutes();
         let initial_key = container.initial_key()?;
 
         Ok(Self {
             project_name,
+            project_id,
             initial_key,
             fqdn: None,
             image: None,
@@ -628,9 +652,13 @@ impl ProjectCreating {
         self
     }
 
-    pub fn new_with_random_initial_key(project_name: ProjectName, idle_minutes: u64) -> Self {
+    pub fn new_with_random_initial_key(
+        project_name: ProjectName,
+        project_id: Ulid,
+        idle_minutes: u64,
+    ) -> Self {
         let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
-        Self::new(project_name, initial_key, idle_minutes)
+        Self::new(project_name, project_id, initial_key, idle_minutes)
     }
 
     pub fn with_image(mut self, image: String) -> Self {
@@ -717,9 +745,12 @@ impl ProjectCreating {
                         "/opt/shuttle/deployer.sqlite",
                         "--auth-uri",
                         auth_uri,
+                        "--project-id",
+                        self.project_id.to_string()
                     ],
                     "Env": [
                         "RUST_LOG=debug,shuttle=trace,h2=warn",
+                        "LD_LIBRARY_PATH=/usr/src/shuttle/deployer"
                     ]
                 })
             });
@@ -1178,8 +1209,10 @@ impl ProjectReady {
         self.service.is_healthy().await
     }
 
-    pub async fn start_last_deploy(&mut self, api_key: String) {
-        self.service.start_last_deploy(api_key).await
+    pub async fn start_last_deploy(&mut self, jwt: String, admin_secret: String) {
+        if let Err(error) = self.service.start_last_deploy(jwt, admin_secret).await {
+            error!(error, "failed to start last running deploy");
+        };
     }
 }
 
@@ -1239,8 +1272,64 @@ impl Service {
         is_healthy
     }
 
-    pub async fn start_last_deploy(&mut self, _api_key: String) {
-        // TODO: convert the key to a JWT, get last deployment and start it (ENG-816)
+    pub async fn start_last_deploy(
+        &mut self,
+        jwt: String,
+        admin_secret: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        trace!(jwt, "getting last deploy");
+
+        let running_id = self.get_running_deploy(&jwt, &admin_secret).await?;
+
+        trace!(?running_id, "starting deploy");
+
+        if let Some(running_id) = running_id {
+            // Start this deployment
+            let uri = self.uri(format!(
+                "/projects/{}/deployments/{}",
+                self.name, running_id
+            ))?;
+
+            let req = Request::builder()
+                .method(Method::PUT)
+                .uri(uri)
+                .header(AUTHORIZATION, format!("Bearer {}", jwt))
+                .header(X_SHUTTLE_ACCOUNT_NAME.clone(), "gateway")
+                .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
+                .body(Body::empty())?;
+
+            let _ = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await;
+        }
+
+        Ok(())
+    }
+
+    /// Get the last running deployment
+    async fn get_running_deploy(
+        &self,
+        jwt: &str,
+        admin_secret: &str,
+    ) -> Result<Option<Uuid>, Box<dyn std::error::Error>> {
+        let uri = self.uri(format!("/projects/{}/services/{}", self.name, self.name))?;
+
+        let req = Request::builder()
+            .uri(uri)
+            .header(AUTHORIZATION, format!("Bearer {}", jwt))
+            .header(X_SHUTTLE_ACCOUNT_NAME.clone(), "gateway")
+            .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
+            .body(Body::empty())?;
+
+        let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await??;
+
+        let body = hyper::body::to_bytes(resp.into_body()).await?;
+
+        let service: service::Summary = serde_json::from_slice(&body)?;
+
+        if let Some(deployment) = service.deployment {
+            Ok(Some(deployment.id))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -1665,6 +1754,7 @@ pub mod tests {
             ctx,
             Project::Creating(ProjectCreating {
                 project_name: "my-project-test".parse().unwrap(),
+                project_id: Ulid::new(),
                 initial_key: "test".to_string(),
                 fqdn: None,
                 image: None,

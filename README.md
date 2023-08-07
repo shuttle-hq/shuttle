@@ -3,18 +3,32 @@
 <img width="300" src="https://raw.githubusercontent.com/shuttle-hq/shuttle/master/assets/logo-rectangle-transparent.png"/>
 </p>
 <br>
-<p align=center>
-  <a href="https://docs.rs/shuttle-runtime">
-    <img alt="docs" src="https://img.shields.io/badge/docs-reference-orange">
-  </a>
+<p align="center">
   <a href="https://github.com/shuttle-hq/shuttle/search?l=rust">
     <img alt="language" src="https://img.shields.io/badge/language-Rust-orange.svg">
+  </a>
+  <a href="https://docs.shuttle.rs/">
+    <img alt="docs" src="https://img.shields.io/badge/docs-shuttle.rs-orange">
+  </a>
+  <a href="https://docs.rs/shuttle-runtime">
+    <img alt="crate-docs" src="https://img.shields.io/badge/docs-docs.rs-orange">
+  </a>
+  <a href="https://status.shuttle.rs/">
+    <img alt="status" src="https://img.shields.io/badge/status-blue">
   </a>
   <a href="https://circleci.com/gh/shuttle-hq/shuttle/">
     <img alt="build status" src="https://circleci.com/gh/shuttle-hq/shuttle.svg?style=shield"/>
   </a>
+</p>
+<p align="center">
+  <a href="https://crates.io/crates/cargo-shuttle">
+    <img alt="crates" src="https://img.shields.io/crates/d/cargo-shuttle">
+  </a>
   <a href="https://discord.gg/shuttle">
     <img alt="discord" src="https://img.shields.io/discord/803236282088161321?logo=discord"/>
+  </a>
+  <a href="https://twitter.com/shuttle_dev">
+    <img alt="Twitter Follow" src="https://img.shields.io/twitter/follow/shuttle_dev">
   </a>
 </p>
 <p align="center">
@@ -50,10 +64,13 @@ Shuttle is built for productivity, reliability and performance:
 
 ![star](https://i.imgur.com/kLWmThm.gif)
 
-## Console Sneak Peek (gif)
+## (NEW) Shuttle Console
 
-![console-sneak-peek](https://i.imgur.com/1qdWipP.gif)
-*The gif above demonstrates the ease of adding/managing resources to your project(s) in our upcoming console. Bear in mind that the ease of adding resources is already there, albeit without the visualization coming from the console.*
+Your projects can now be viewed on the brand new [Shuttle Console](https://console.shuttle.rs/)!
+The CLI is still used for most tasks.
+
+![console-preview](https://i.imgur.com/1qdWipP.gif)
+*The GIF above visualizes the ease of adding resources to your project(s), along with how they are displayed in the console.*
 
 ## Getting Started
 
@@ -114,24 +131,45 @@ Feel free to build on top of the generated `hello-world` boilerplate or take a s
 
 For the full documentation, visit [our docs](https://docs.shuttle.rs).
 
+## Repositories
+
+| Name | Description |  |  |
+|-|-|-|-|
+| [shuttle](https://github.com/shuttle-hq/shuttle) 🚀 (This repo) | The core Shuttle product. Contains all crates that users interact with. | [Issues](https://github.com/shuttle-hq/shuttle/issues) | [PRs](https://github.com/shuttle-hq/shuttle/pulls)
+| [shuttle-examples](https://github.com/shuttle-hq/shuttle-examples) 👨‍🏫 | Officially maintained examples of projects that can be deployed on Shuttle. Also has a list of [community examples](https://github.com/shuttle-hq/shuttle-examples#community-examples). | [Issues](https://github.com/shuttle-hq/shuttle-examples/issues) | [PRs](https://github.com/shuttle-hq/shuttle-examples/pulls)
+| [shuttle-docs](https://github.com/shuttle-hq/shuttle-docs) 📃 | Documentation hosted on [docs.shuttle.rs](https://docs.shuttle.rs/). | [Issues](https://github.com/shuttle-hq/shuttle-docs/issues) | [PRs](https://github.com/shuttle-hq/shuttle-docs/pulls)
+| [www](https://github.com/shuttle-hq/www) 🌍 | Our website [shuttle.rs](https://www.shuttle.rs/), including the [blog](https://www.shuttle.rs/blog/tags/all) and [Launchpad newsletter](https://www.shuttle.rs/launchpad). | [Issues](https://github.com/shuttle-hq/www/issues) | [PRs](https://github.com/shuttle-hq/www/pulls)
+| [deploy-action](https://github.com/shuttle-hq/deploy-action) ⚙ | GitHub Action for continuous deployments. | [Issues](https://github.com/shuttle-hq/deploy-action/issues) | [PRs](https://github.com/shuttle-hq/deploy-action/pulls)
+| [awesome-shuttle](https://github.com/shuttle-hq/awesome-shuttle) 🌟 | An awesome list of Shuttle-hosted projects and resources that users can add to. | [Issues](https://github.com/shuttle-hq/awesome-shuttle/issues) | [PRs](https://github.com/shuttle-hq/awesome-shuttle/pulls)
+
 ## Contributing to Shuttle
 
 Contributing to Shuttle is highly encouraged!
 
-If you want to setup a local environment to test code changes to core Shuttle packages, or want to contribute to the project check out [our docs](https://docs.shuttle.rs/community/contribute).
+Check out our [contributing docs](./CONTRIBUTING.md) and find the appropriate repo above to contribute to.
+
+For development of this repo, check the [development docs](./DEVELOPING.md).
 
 Even if you are not planning to submit any code, joining our [Discord server](https://discord.gg/shuttle) and providing feedback helps us a lot!
 
-## Community & Support
+### Algora Bounties 💰
+
+To offload work from the engineering team on low-priority issues, we will sometimes add a cash bounty to issues.
+Sign up to the [Algora Console](https://console.algora.io/org/shuttle/bounties?status=open) to find open issues with bounties.
+
+## Community and Support
 
 - [GitHub Issues](https://github.com/shuttle-hq/shuttle/issues). Best for: bugs and errors you encounter using Shuttle.
-- [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements and releases.
+- [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements, releases, collaborations and other events.
 - [Discord](https://discord.gg/shuttle). Best for: *ALL OF THE ABOVE* + help, support, sharing your applications and hanging out with the community.
 
-## Status
+## Project Status
 
-We are currently in Public Beta. Watch "releases" of this repo to get
-notified of major updates!
+Check for any outages and incidents on [Shuttle Status](https://status.shuttle.rs/).
+
+We are currently in Public Beta.
+Watch "releases" of this repo to get notified of major updates!
+Also, check out the [Beta announcement](https://www.shuttle.rs/beta#06) for features we are looking forward to.
 
 - [x] Alpha: We are testing Shuttle, API and deployments may be unstable
 - [x] Public Alpha: Anyone can sign up, but go easy on us,

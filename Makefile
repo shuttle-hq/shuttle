@@ -32,6 +32,10 @@ RESOURCE_RECORDER_TAG?=$(TAG)
 
 DOCKER_BUILD?=docker buildx build
 
+ifeq ($(CI),true)
+DOCKER_BUILD+= --progress plain
+endif
+
 DOCKER_COMPOSE=$(shell which docker-compose)
 ifeq ($(DOCKER_COMPOSE),)
 DOCKER_COMPOSE=docker compose

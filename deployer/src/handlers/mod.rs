@@ -330,7 +330,6 @@ pub async fn create_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
-    Extension(project_id): Extension<Ulid>,
     Path((project_name, service_name)): Path<(String, String)>,
     Rmp(deployment_req): Rmp<DeploymentRequest>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
@@ -359,7 +358,7 @@ pub async fn create_service(
         id: deployment.id,
         service_name: service.name,
         service_id: deployment.service_id,
-        project_id,
+        project_id: persistence.project_id(),
         data: deployment_req.data,
         will_run_tests: !deployment_req.no_test,
         tracing_context: Default::default(),

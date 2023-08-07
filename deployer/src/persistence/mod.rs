@@ -310,6 +310,10 @@ impl Persistence {
         (persistence, handle)
     }
 
+    pub fn project_id(&self) -> Ulid {
+        self.project_id
+    }
+
     pub async fn insert_deployment(&self, deployment: impl Into<Deployment>) -> Result<()> {
         let deployment: Deployment = deployment.into();
 

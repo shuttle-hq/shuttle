@@ -20,9 +20,7 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use shuttle_common::backends::headers::{
-    XShuttleAccountName, XShuttleAdminSecret, XShuttleProjectId,
-};
+use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
@@ -249,7 +247,6 @@ impl GatewayService {
         &self,
         project: &Project,
         project_name: &ProjectName,
-        project_id: String,
         account_name: &AccountName,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
@@ -266,7 +263,6 @@ impl GatewayService {
         let headers = req.headers_mut();
         headers.typed_insert(XShuttleAccountName(account_name.to_string()));
         headers.typed_insert(XShuttleAdminSecret(control_key));
-        headers.typed_insert(XShuttleProjectId(project_id));
 
         let cx = Span::current().context();
         global::get_text_map_propagator(|propagator| {

@@ -117,14 +117,25 @@ impl Persistence {
         )
         .await
         .unwrap();
-        Self::from_pool(pool).await
+        let (log_send, stream_log_send, handle) = Self::from_pool(pool.clone()).await;
+        let persistence = Self {
+            pool,
+            log_send,
+            stream_log_send,
+            resource_recorder_client: None,
+            project_id: Ulid::new(),
+        };
+
+        (persistence, handle)
     }
 
-    async fn configure(
+    async fn from_pool(
         pool: SqlitePool,
-        resource_recorder_uri: String,
-        project_id: Ulid,
-    ) -> (Self, JoinHandle<()>) {
+    ) -> (
+        crossbeam_channel::Sender<deploy_layer::Log>,
+        broadcast::Sender<deploy_layer::Log>,
+        JoinHandle<()>,
+    ) {
         MIGRATIONS.run(&pool).await.unwrap();
 
         let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
@@ -199,6 +210,14 @@ impl Persistence {
             }
         });
 
+        (log_send, stream_log_send, handle)
+    }
+
+    async fn configure(
+        pool: SqlitePool,
+        resource_recorder_uri: String,
+        project_id: Ulid,
+    ) -> (Self, JoinHandle<()>) {
         let channel = Endpoint::from_shared(resource_recorder_uri.to_string())
             .expect("failed to convert resource recorder uri to a string")
             .connect()
@@ -211,100 +230,13 @@ impl Persistence {
             .service(channel);
 
         let resource_recorder_client = ResourceRecorderClient::new(channel);
-
+        let (log_send, stream_log_send, handle) = Self::from_pool(pool.clone()).await;
         let persistence = Self {
             pool,
             log_send,
             stream_log_send,
             resource_recorder_client: Some(resource_recorder_client),
             project_id,
-        };
-
-        (persistence, handle)
-    }
-
-    #[cfg(test)]
-    async fn from_pool(pool: SqlitePool) -> (Self, JoinHandle<()>) {
-        MIGRATIONS.run(&pool).await.unwrap();
-
-        let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
-            crossbeam_channel::bounded(0);
-
-        let (stream_log_send, _) = broadcast::channel(1);
-        let stream_log_send_clone = stream_log_send.clone();
-
-        let pool_cloned = pool.clone();
-
-        // The logs are received on a non-async thread.
-        // This moves them to an async thread
-        let handle = tokio::spawn(async move {
-            while let Ok(log) = log_recv.recv() {
-                trace!(?log, "persistence received got log");
-                match log.r#type {
-                    LogType::Event => {
-                        insert_log(&pool_cloned, log.clone())
-                            .await
-                            .unwrap_or_else(|error| {
-                                error!(
-                                    error = &error as &dyn std::error::Error,
-                                    "failed to insert event log"
-                                )
-                            });
-                    }
-                    LogType::State => {
-                        insert_log(
-                            &pool_cloned,
-                            Log {
-                                id: log.id,
-                                timestamp: log.timestamp,
-                                state: log.state,
-                                level: log.level.clone(),
-                                file: log.file.clone(),
-                                line: log.line,
-                                target: String::new(),
-                                fields: json!(STATE_MESSAGE),
-                            },
-                        )
-                        .await
-                        .unwrap_or_else(|error| {
-                            error!(
-                                error = &error as &dyn std::error::Error,
-                                "failed to insert state log"
-                            )
-                        });
-                        update_deployment(&pool_cloned, log.clone())
-                            .await
-                            .unwrap_or_else(|error| {
-                                error!(
-                                    error = &error as &dyn std::error::Error,
-                                    "failed to update deployment state"
-                                )
-                            });
-                    }
-                };
-
-                let receiver_count = stream_log_send_clone.receiver_count();
-                trace!(?log, receiver_count, "sending log to broadcast stream");
-
-                if receiver_count > 0 {
-                    stream_log_send_clone.send(log).unwrap_or_else(|error| {
-                        error!(
-                            error = &error as &dyn std::error::Error,
-                            "failed to broadcast log"
-                        );
-
-                        0
-                    });
-                }
-            }
-        });
-
-        let persistence = Self {
-            pool,
-            log_send,
-            stream_log_send,
-            resource_recorder_client: None,
-            project_id: Ulid::new(),
         };
 
         (persistence, handle)

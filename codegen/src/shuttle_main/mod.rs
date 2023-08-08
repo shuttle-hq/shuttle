@@ -253,10 +253,10 @@ impl ToTokens for Loader {
         };
 
         let loader = quote! {
-            async fn loader(
+            async fn loader<R: shuttle_runtime::LogRecorder + 'static>(
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory,
                 mut #resource_tracker_ident: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
+                logger: shuttle_runtime::Logger<R>,
             ) -> #return_type {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
@@ -335,10 +335,10 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader(
+            async fn loader<R: shuttle_runtime::LogRecorder + 'static>(
                 mut _factory: shuttle_runtime::ProvisionerFactory,
                 mut _resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
+                logger: shuttle_runtime::Logger<R>,
             ) -> ShuttleSimple {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
@@ -416,10 +416,10 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader(
+            async fn loader<R: shuttle_runtime::LogRecorder + 'static>(
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 mut resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
+                logger: shuttle_runtime::Logger<R>,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
@@ -540,10 +540,10 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader(
+            async fn loader<R: shuttle_runtime::LogRecorder + 'static>(
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 mut resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
+                logger: shuttle_runtime::Logger<R>,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;

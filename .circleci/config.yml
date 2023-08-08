@@ -169,6 +169,8 @@ commands:
           paths:
             - << parameters.target >>/*
             - << parameters.target >>.env
+      - store_artifacts:
+          path: artifacts
 
 jobs:
   workspace:

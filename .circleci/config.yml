@@ -658,6 +658,7 @@ workflows:
                   "shuttle-resource-recorder",
                   "shuttle-runtime",
                   "shuttle-service",
+                  "shuttle-logger",
                 ]
       - e2e-test:
           requires:

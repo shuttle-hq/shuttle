@@ -4,6 +4,7 @@ orbs:
   docker-buildx: sensu/docker-buildx@1.1.1
   aws-ecr: circleci/aws-ecr@8.2.1
   win: circleci/windows@5.0
+  macos: circleci/macos@2.3.6
 
 executors:
   docker-rust:
@@ -444,10 +445,12 @@ jobs:
           suffix: ".exe"
   build-binaries-mac:
     macos:
-      xcode: 12.5.1
-    resource_class: medium
+      xcode: 14.2.0
+    resource_class: macos.m1.medium.gen1
     steps:
       - checkout
+      # Necessary to build for Intel targets on m1.
+      - macos/install-rosetta
       - run:
           name: Install Rust
           command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.70.0 --target x86_64-apple-darwin

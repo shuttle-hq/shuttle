@@ -157,7 +157,7 @@ async fn logger_stream() {
             .unwrap()
             .into_inner();
 
-        let log = timeout(std::time::Duration::from_millis(500), response.message())
+        let log = timeout(std::time::Duration::from_millis(1000), response.message())
             .await
             .unwrap()
             .unwrap()

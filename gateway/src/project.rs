@@ -724,6 +724,7 @@ impl ProjectCreating {
                     "Labels": {
                         "shuttle.prefix": prefix,
                         "shuttle.project": project_name,
+                        "shuttle.project_id": self.project_id.to_string(),
                         "shuttle.idle_minutes": format!("{idle_minutes}"),
                     },
                     "Cmd": [

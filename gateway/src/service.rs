@@ -301,10 +301,7 @@ impl GatewayService {
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
 
-    pub async fn find_project_id(
-        &self,
-        project_name: &ProjectName,
-    ) -> Result<Option<String>, Error> {
+    pub async fn find_project_id(&self, project_name: &ProjectName) -> Result<String, Error> {
         query("SELECT project_id FROM projects WHERE project_name=?1")
             .bind(project_name)
             .fetch_optional(&self.db)
@@ -440,7 +437,7 @@ impl GatewayService {
         account_name: AccountName,
         is_admin: bool,
         idle_minutes: u64,
-    ) -> Result<Project, Error> {
+    ) -> Result<(String, Project), Error> {
         if let Some(row) = query(
             r#"
         SELECT project_name, project_id, account_name, initial_key, project_state
@@ -482,7 +479,7 @@ impl GatewayService {
                 }
                 let project = Project::Creating(creating);
                 self.update_project(&project_name, &project).await?;
-                Ok(project)
+                Ok((project_id, project))
             } else {
                 // Otherwise it already exists
                 Err(Error::from_kind(ErrorKind::ProjectAlreadyExists))
@@ -510,7 +507,7 @@ impl GatewayService {
         project_id: Ulid,
         account_name: AccountName,
         idle_minutes: u64,
-    ) -> Result<Project, Error> {
+    ) -> Result<(String, Project), Error> {
         let project = SqlxJson(Project::Creating(
             ProjectCreating::new_with_random_initial_key(
                 project_name.clone(),
@@ -540,7 +537,7 @@ impl GatewayService {
 
         let project = project.0;
 
-        Ok(project)
+        Ok((project_id.to_string(), project))
     }
 
     pub async fn create_custom_domain(
@@ -903,9 +900,9 @@ pub mod tests {
             .await
             .unwrap();
 
-        assert!(creating_same_project_name(&project, &matrix));
+        assert!(creating_same_project_name(&project.1, &matrix));
 
-        assert_eq!(svc.find_project(&matrix).await.unwrap(), project);
+        assert_eq!(svc.find_project(&matrix).await.unwrap(), project.1);
         assert_eq!(
             svc.iter_projects_detailed()
                 .await
@@ -1000,7 +997,7 @@ pub mod tests {
         // If recreated by the same user
         assert!(matches!(
             svc.create_project(matrix.clone(), neo, false, 0).await,
-            Ok(Project::Creating(_))
+            Ok((matrix, Project::Creating(_)))
         ));
 
         let mut work = svc
@@ -1021,7 +1018,7 @@ pub mod tests {
         // If recreated by an admin
         assert!(matches!(
             svc.create_project(matrix, trinity, true, 0).await,
-            Ok(Project::Creating(_))
+            Ok((matrix, Project::Creating(_)))
         ));
 
         Ok(())
@@ -1176,7 +1173,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let Project::Creating(creating) = recreated_project else {
+        let Project::Creating(creating) = recreated_project.1 else {
             panic!("Project should be Creating");
         };
         assert_eq!(creating.fqdn(), &Some(domain.to_string()));

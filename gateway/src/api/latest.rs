@@ -113,12 +113,11 @@ async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let id = service.find_project_id(&scope).await?;
-    let uppercase_id = id.map(|s| s.to_uppercase());
+    let id = service.find_project_id(&scope).await?.to_uppercase();
 
     let state = service.find_project(&scope).await?.into();
     let response = project::Response {
-        id: uppercase_id,
+        id,
         name: scope.to_string(),
         state,
     };
@@ -149,7 +148,7 @@ async fn get_projects_list(
         .iter_user_projects_detailed(&name, limit * page, limit)
         .await?
         .map(|project| project::Response {
-            id: Some(project.0.to_string().to_uppercase()),
+            id: project.0.to_string().to_uppercase(),
             name: project.1.to_string(),
             state: project.2.into(),
         })
@@ -193,9 +192,9 @@ async fn create_project(
         .await?;
 
     let response = project::Response {
-        id: None,
+        id: state.0.to_string().to_uppercase(),
         name: project.to_string(),
-        state: state.into(),
+        state: state.1.into(),
     };
 
     Ok(AxumJson(response))
@@ -219,10 +218,11 @@ async fn destroy_project(
     }): State<RouterState>,
     ScopedUser { scope: project, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
+    let id = service.find_project_id(&project).await?.to_uppercase();
     let state = service.find_project(&project).await?;
 
     let mut response = project::Response {
-        id: None,
+        id,
         name: project.to_string(),
         state: state.into(),
     };

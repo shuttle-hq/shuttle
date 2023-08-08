@@ -117,6 +117,10 @@ impl Provisioner for DummyProvisioner {
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("did not expect any runtime test to delete dbs")
     }
+
+    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        panic!("did not expect any runtime test to do a provisioner health check")
+    }
 }
 
 /// A dummy log service for tests, a log service connection is required

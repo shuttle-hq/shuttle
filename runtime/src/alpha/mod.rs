@@ -31,7 +31,7 @@ use shuttle_proto::{
 use shuttle_service::{Environment, Factory, Service, ServiceName};
 use tokio::sync::{
     broadcast::{self, Sender},
-    mpsc::{self, UnboundedReceiver, UnboundedSender},
+    mpsc::{self},
     oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;

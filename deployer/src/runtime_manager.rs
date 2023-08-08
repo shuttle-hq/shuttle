@@ -2,15 +2,11 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use anyhow::Context;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
-use shuttle_proto::runtime::{
-    self, runtime_client::RuntimeClient, StopRequest, SubscribeLogsRequest,
-};
+use shuttle_proto::runtime::{self, runtime_client::RuntimeClient, StopRequest};
 use tokio::{process, sync::Mutex};
 use tonic::transport::Channel;
 use tracing::{debug, info, trace};
 use uuid::Uuid;
-
-use crate::deployment::deploy_layer;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -33,23 +29,23 @@ pub struct RuntimeManager {
     runtimes: Runtimes,
     artifacts_path: PathBuf,
     provisioner_address: String,
+    logger_uri: String,
     auth_uri: Option<String>,
-    log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
 }
 
 impl RuntimeManager {
     pub fn new(
         artifacts_path: PathBuf,
         provisioner_address: String,
+        logger_uri: String,
         auth_uri: Option<String>,
-        log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
     ) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             runtimes: Default::default(),
             artifacts_path,
             provisioner_address,
+            logger_uri,
             auth_uri,
-            log_sender,
         }))
     }
 
@@ -111,29 +107,13 @@ impl RuntimeManager {
             is_next,
             runtime::StorageManagerType::Artifacts(self.artifacts_path.clone()),
             &self.provisioner_address,
+            &self.logger_uri,
             self.auth_uri.as_ref(),
             port,
             get_runtime_executable,
         )
         .await
         .context("failed to start shuttle runtime")?;
-
-        let sender = self.log_sender.clone();
-        let mut stream = runtime_client
-            .clone()
-            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
-            .await
-            .context("subscribing to runtime logs stream")?
-            .into_inner();
-
-        tokio::spawn(async move {
-            while let Ok(Some(log)) = stream.message().await {
-                if let Ok(mut log) = deploy_layer::Log::try_from(log) {
-                    log.id = id;
-                    sender.send(log).expect("to send log to persistence");
-                }
-            }
-        });
 
         self.runtimes
             .lock()

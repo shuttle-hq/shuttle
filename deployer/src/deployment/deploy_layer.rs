@@ -21,9 +21,8 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use shuttle_common::{tracing::JsonVisitor, ParseError, STATE_MESSAGE};
-use shuttle_proto::runtime;
-use std::{convert::TryFrom, str::FromStr, time::SystemTime};
+use shuttle_common::{tracing::JsonVisitor, STATE_MESSAGE};
+use std::str::FromStr;
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
@@ -108,38 +107,6 @@ impl From<Log> for DeploymentState {
             id: log.id,
             state: log.state,
             last_update: log.timestamp,
-        }
-    }
-}
-
-impl TryFrom<runtime::LogItem> for Log {
-    type Error = ParseError;
-
-    fn try_from(log: runtime::LogItem) -> Result<Self, Self::Error> {
-        Ok(Self {
-            id: Default::default(),
-            state: State::from_str(&log.state).unwrap_or_default(),
-            level: runtime::LogLevel::from_i32(log.level)
-                .unwrap_or_default()
-                .into(),
-            timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap_or_default())?),
-            file: log.file,
-            line: log.line,
-            target: log.target,
-            fields: serde_json::from_slice(&log.fields)?,
-            r#type: LogType::Event,
-        })
-    }
-}
-
-impl From<runtime::LogLevel> for LogLevel {
-    fn from(level: runtime::LogLevel) -> Self {
-        match level {
-            runtime::LogLevel::Trace => Self::Trace,
-            runtime::LogLevel::Debug => Self::Debug,
-            runtime::LogLevel::Info => Self::Info,
-            runtime::LogLevel::Warn => Self::Warn,
-            runtime::LogLevel::Error => Self::Error,
         }
     }
 }
@@ -468,6 +435,7 @@ mod tests {
     fn get_runtime_manager() -> Arc<tokio::sync::Mutex<RuntimeManager>> {
         let provisioner_addr =
             SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
+        let logger_uri = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
         let mock = ProvisionerMock;
 
         tokio::spawn(async move {
@@ -480,9 +448,13 @@ mod tests {
 
         let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
-        let (tx, _rx) = crossbeam_channel::unbounded();
 
-        RuntimeManager::new(path, format!("http://{}", provisioner_addr), None, tx)
+        RuntimeManager::new(
+            path,
+            format!("http://{}", provisioner_addr),
+            format!("http://{}", logger_uri),
+            None,
+        )
     }
 
     #[async_trait::async_trait]

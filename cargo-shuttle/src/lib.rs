@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use logger_server::LocalLogger;
 use shuttle_common::models::deployment::CREATE_SERVICE_BODY_LIMIT;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
@@ -26,8 +27,7 @@ use shuttle_common::{
 };
 use shuttle_common::{project::ProjectName, resource, ApiKey};
 use shuttle_proto::runtime::{
-    self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest,
-    StorageManagerType, SubscribeLogsRequest,
+    self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest, StorageManagerType,
 };
 use shuttle_service::builder::{build_workspace, BuiltService};
 
@@ -865,7 +865,7 @@ impl Shuttle {
             // We must cover the case of starting multiple workspace services and receiving a signal in parallel.
             // This must stop all the existing runtimes and creating new ones.
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, provisioner_port, &logger_server, logger_port, i as u16) => {
+                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port, &logger_server, logger_port) => {
                     Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &[&provisioner_server, &logger_server]).await?;
                     false
                 },

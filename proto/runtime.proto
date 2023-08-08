@@ -15,6 +15,9 @@ service Runtime {
 
   // Channel to notify a service has been stopped
   rpc SubscribeStop(SubscribeStopRequest) returns (stream SubscribeStopResponse);
+  
+  // Subscribe to runtime logs
+  rpc SubscribeLogs(SubscribeLogsRequest) returns (stream LogItem);
 }
 
 message LoadRequest {
@@ -80,6 +83,8 @@ enum StopReason {
   // Service crashed
   Crash = 2;
 }
+
+message SubscribeLogsRequest {}
 
 message LogItem {
   google.protobuf.Timestamp timestamp = 2;

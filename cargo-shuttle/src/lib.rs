@@ -24,9 +24,9 @@ use shuttle_common::{
     },
 };
 use shuttle_common::{project::ProjectName, resource, ApiKey};
+use shuttle_proto::runtime::SubscribeLogsRequest;
 use shuttle_proto::runtime::{
-    self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest,
-    StorageManagerType, SubscribeLogsRequest,
+    self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest, StorageManagerType,
 };
 use shuttle_service::builder::{build_workspace, BuiltService};
 
@@ -638,10 +638,12 @@ impl Shuttle {
         };
 
         // Child process and gRPC client for sending requests to it
+        // TODO: depends on adding the logger service
         let (mut runtime, mut runtime_client) = runtime::start(
             is_wasm,
             StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{provisioner_port}"),
+            "http://localhost:TODO",
             None,
             run_args.port - idx - 1,
             runtime_path,
@@ -659,6 +661,7 @@ impl Shuttle {
                 .into_string()
                 .expect("to convert path to string"),
             service_name: service_name.to_string(),
+            deployment_id: Uuid::new_v4().to_string(),
             resources: Default::default(),
             secrets,
         });

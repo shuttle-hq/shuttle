@@ -1,16 +1,22 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::SystemTime,
+};
 
+use chrono::Utc;
 use opentelemetry_proto::tonic::{
     collector::logs::v1::{logs_service_client::LogsServiceClient, ExportLogsServiceRequest},
     common::v1::InstrumentationScope,
     logs::v1::{ResourceLogs, ScopeLogs},
 };
+use prost_types::Timestamp;
 use shuttle_common::{
     backends::tracing::{into_log_record, serde_json_map_to_key_value_list},
     deployment::State,
     tracing::JsonVisitor,
 };
-use tokio::sync::mpsc;
+use shuttle_proto::runtime::{LogItem, LogLevel};
+use tokio::sync::mpsc::{self, UnboundedSender};
 use tracing::{
     error,
     span::{Attributes, Id},
@@ -111,13 +117,15 @@ impl LogRecorder for OtlpRecorder {
 
 pub struct Logger<R> {
     recorder: R,
+    tx: UnboundedSender<LogItem>,
     state: Arc<Mutex<State>>,
 }
 impl<R> Logger<R> {
-    pub fn new(recorder: R) -> Self {
+    pub fn new(recorder: R, logs_tx: UnboundedSender<LogItem>) -> Self {
         Self {
             recorder,
             state: Arc::new(Mutex::new(State::Loading)),
+            tx: logs_tx,
         }
     }
 }
@@ -133,6 +141,7 @@ where
         _id: &Id,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
+        let datetime = Utc::now();
         let metadata = attrs.metadata();
         let level = metadata.level();
 
@@ -151,6 +160,27 @@ where
             format!("[span] {}", metadata.name()).into(),
         );
 
+        let item = LogItem {
+            level: LogLevel::from(level) as i32,
+            timestamp: Some(Timestamp::from(SystemTime::from(datetime))),
+            file: visitor
+                .file
+                .clone()
+                .or_else(|| metadata.file().map(str::to_string)),
+            line: visitor.line.or_else(|| metadata.line()),
+            target: visitor
+                .target
+                .clone()
+                .unwrap_or_else(|| metadata.target().to_string()),
+            fields: serde_json::to_vec(&visitor.fields).unwrap(),
+            state: self
+                .state
+                .lock()
+                .expect("state lock should not be poisoned")
+                .to_string(),
+        };
+        self.tx.send(item).expect("sending log should succeed");
+
         self.recorder.record_log(visitor, metadata);
     }
 
@@ -165,10 +195,34 @@ where
                 .lock()
                 .expect("state lock should not be poisoned") = State::Running;
         }
+
         let mut visitor = JsonVisitor::default();
 
         event.record(&mut visitor);
         let metadata = event.metadata();
+
+        // TODO: remove this after fully integrating the logger
+        let datetime = Utc::now();
+        let item = LogItem {
+            level: LogLevel::from(metadata.level()) as i32,
+            timestamp: Some(Timestamp::from(SystemTime::from(datetime))),
+            file: visitor
+                .file
+                .clone()
+                .or_else(|| metadata.file().map(str::to_string)),
+            line: visitor.line.or_else(|| metadata.line()),
+            target: visitor
+                .target
+                .clone()
+                .unwrap_or_else(|| metadata.target().to_string()),
+            fields: serde_json::to_vec(&visitor.fields).unwrap(),
+            state: self
+                .state
+                .lock()
+                .expect("state lock should not be poisoned")
+                .to_string(),
+        };
+        self.tx.send(item).expect("sending log should succeed");
 
         self.recorder.record_log(visitor, metadata);
     }
@@ -205,7 +259,8 @@ mod tests {
     #[test]
     fn logging() {
         let recorder = DummyRecorder::default();
-        let logger = Logger::new(recorder.clone());
+        let (s, mut r) = mpsc::unbounded_channel();
+        let logger = Logger::new(recorder.clone(), s);
 
         let _guard = tracing_subscriber::registry().with(logger).set_default();
 
@@ -221,24 +276,56 @@ mod tests {
         });
 
         assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("this is".to_string(), LogLevel::Debug as i32))
+        );
+        assert_eq!(
             recorder.lines.lock().unwrap().pop_front(),
             Some((Level::DEBUG, "this is".to_string()))
+        );
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("hi".to_string(), LogLevel::Info as i32))
         );
         assert_eq!(
             recorder.lines.lock().unwrap().pop_front(),
             Some((Level::INFO, "hi".to_string()))
         );
         assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some((
+                "[span] this is a warn span".to_string(),
+                LogLevel::Warn as i32
+            ))
+        );
+        assert_eq!(
             recorder.lines.lock().unwrap().pop_front(),
             Some((Level::WARN, "[span] this is a warn span".to_string()))
+        );
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("from".to_string(), LogLevel::Warn as i32))
         );
         assert_eq!(
             recorder.lines.lock().unwrap().pop_front(),
             Some((Level::WARN, "from".to_string()))
         );
         assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("logger".to_string(), LogLevel::Error as i32))
+        );
+        assert_eq!(
             recorder.lines.lock().unwrap().pop_front(),
             Some((Level::ERROR, "logger".to_string()))
         );
+    }
+
+    fn to_tuple(log: LogItem) -> (String, i32) {
+        let fields: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_slice(&log.fields).unwrap();
+
+        let message = fields["message"].as_str().unwrap().to_owned();
+
+        (message, log.level)
     }
 }

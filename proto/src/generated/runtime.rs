@@ -15,8 +15,10 @@ pub struct LoadRequest {
     pub resources: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     /// Secrets that belong to this deployment
     #[prost(map = "string, string", tag = "20")]
-    pub secrets:
-        ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+    pub secrets: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -103,8 +105,8 @@ impl StopReason {
 /// Generated client implementations.
 pub mod runtime_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
-    use tonic::codegen::http::Uri;
     use tonic::codegen::*;
+    use tonic::codegen::http::Uri;
     #[derive(Debug, Clone)]
     pub struct RuntimeClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -148,8 +150,9 @@ pub mod runtime_client {
                     <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
-                Into<StdError> + Send + Sync,
+            <T as tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+            >>::Error: Into<StdError> + Send + Sync,
         {
             RuntimeClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -173,12 +176,15 @@ pub mod runtime_client {
             &mut self,
             request: impl tonic::IntoRequest<super::LoadRequest>,
         ) -> Result<tonic::Response<super::LoadResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/runtime.Runtime/Load");
             self.inner.unary(request.into_request(), path, codec).await
@@ -188,12 +194,15 @@ pub mod runtime_client {
             &mut self,
             request: impl tonic::IntoRequest<super::StartRequest>,
         ) -> Result<tonic::Response<super::StartResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/runtime.Runtime/Start");
             self.inner.unary(request.into_request(), path, codec).await
@@ -203,12 +212,15 @@ pub mod runtime_client {
             &mut self,
             request: impl tonic::IntoRequest<super::StopRequest>,
         ) -> Result<tonic::Response<super::StopResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/runtime.Runtime/Stop");
             self.inner.unary(request.into_request(), path, codec).await
@@ -221,17 +233,20 @@ pub mod runtime_client {
             tonic::Response<tonic::codec::Streaming<super::SubscribeStopResponse>>,
             tonic::Status,
         > {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/runtime.Runtime/SubscribeStop");
             self.inner
-                .server_streaming(request.into_request(), path, codec)
+                .ready()
                 .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/runtime.Runtime/SubscribeStop",
+            );
+            self.inner.server_streaming(request.into_request(), path, codec).await
         }
     }
 }
@@ -258,7 +273,9 @@ pub mod runtime_server {
             request: tonic::Request<super::StopRequest>,
         ) -> Result<tonic::Response<super::StopResponse>, tonic::Status>;
         /// Server streaming response type for the SubscribeStop method.
-        type SubscribeStopStream: futures_core::Stream<Item = Result<super::SubscribeStopResponse, tonic::Status>>
+        type SubscribeStopStream: futures_core::Stream<
+                Item = Result<super::SubscribeStopResponse, tonic::Status>,
+            >
             + Send
             + 'static;
         /// Channel to notify a service has been stopped
@@ -286,7 +303,10 @@ pub mod runtime_server {
                 send_compression_encodings: Default::default(),
             }
         }
-        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(
+            inner: T,
+            interceptor: F,
+        ) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -314,7 +334,10 @@ pub mod runtime_server {
         type Response = http::Response<tonic::body::BoxBody>;
         type Error = std::convert::Infallible;
         type Future = BoxFuture<Self::Response, Self::Error>;
-        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(
+            &mut self,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
@@ -323,9 +346,13 @@ pub mod runtime_server {
                 "/runtime.Runtime/Load" => {
                     #[allow(non_camel_case_types)]
                     struct LoadSvc<T: Runtime>(pub Arc<T>);
-                    impl<T: Runtime> tonic::server::UnaryService<super::LoadRequest> for LoadSvc<T> {
+                    impl<T: Runtime> tonic::server::UnaryService<super::LoadRequest>
+                    for LoadSvc<T> {
                         type Response = super::LoadResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::LoadRequest>,
@@ -342,10 +369,11 @@ pub mod runtime_server {
                         let inner = inner.0;
                         let method = LoadSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
-                            accept_compression_encodings,
-                            send_compression_encodings,
-                        );
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -354,9 +382,13 @@ pub mod runtime_server {
                 "/runtime.Runtime/Start" => {
                     #[allow(non_camel_case_types)]
                     struct StartSvc<T: Runtime>(pub Arc<T>);
-                    impl<T: Runtime> tonic::server::UnaryService<super::StartRequest> for StartSvc<T> {
+                    impl<T: Runtime> tonic::server::UnaryService<super::StartRequest>
+                    for StartSvc<T> {
                         type Response = super::StartResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::StartRequest>,
@@ -373,10 +405,11 @@ pub mod runtime_server {
                         let inner = inner.0;
                         let method = StartSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
-                            accept_compression_encodings,
-                            send_compression_encodings,
-                        );
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -385,9 +418,13 @@ pub mod runtime_server {
                 "/runtime.Runtime/Stop" => {
                     #[allow(non_camel_case_types)]
                     struct StopSvc<T: Runtime>(pub Arc<T>);
-                    impl<T: Runtime> tonic::server::UnaryService<super::StopRequest> for StopSvc<T> {
+                    impl<T: Runtime> tonic::server::UnaryService<super::StopRequest>
+                    for StopSvc<T> {
                         type Response = super::StopResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::StopRequest>,
@@ -404,10 +441,11 @@ pub mod runtime_server {
                         let inner = inner.0;
                         let method = StopSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
-                            accept_compression_encodings,
-                            send_compression_encodings,
-                        );
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -416,20 +454,24 @@ pub mod runtime_server {
                 "/runtime.Runtime/SubscribeStop" => {
                     #[allow(non_camel_case_types)]
                     struct SubscribeStopSvc<T: Runtime>(pub Arc<T>);
-                    impl<T: Runtime>
-                        tonic::server::ServerStreamingService<super::SubscribeStopRequest>
-                        for SubscribeStopSvc<T>
-                    {
+                    impl<
+                        T: Runtime,
+                    > tonic::server::ServerStreamingService<super::SubscribeStopRequest>
+                    for SubscribeStopSvc<T> {
                         type Response = super::SubscribeStopResponse;
                         type ResponseStream = T::SubscribeStopStream;
-                        type Future =
-                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::SubscribeStopRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move { (*inner).subscribe_stop(request).await };
+                            let fut = async move {
+                                (*inner).subscribe_stop(request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -440,23 +482,28 @@ pub mod runtime_server {
                         let inner = inner.0;
                         let method = SubscribeStopSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
-                            accept_compression_encodings,
-                            send_compression_encodings,
-                        );
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)
                 }
-                _ => Box::pin(async move {
-                    Ok(http::Response::builder()
-                        .status(200)
-                        .header("grpc-status", "12")
-                        .header("content-type", "application/grpc")
-                        .body(empty_body())
-                        .unwrap())
-                }),
+                _ => {
+                    Box::pin(async move {
+                        Ok(
+                            http::Response::builder()
+                                .status(200)
+                                .header("grpc-status", "12")
+                                .header("content-type", "application/grpc")
+                                .body(empty_body())
+                                .unwrap(),
+                        )
+                    })
+                }
             }
         }
     }

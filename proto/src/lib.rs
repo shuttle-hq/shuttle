@@ -122,99 +122,11 @@ pub mod runtime {
 
     include!("generated/runtime.rs");
 
-    impl From<shuttle_common::log::Level> for LogLevel {
-        fn from(level: shuttle_common::log::Level) -> Self {
-            match level {
-                shuttle_common::log::Level::Trace => Self::Trace,
-                shuttle_common::log::Level::Debug => Self::Debug,
-                shuttle_common::log::Level::Info => Self::Info,
-                shuttle_common::log::Level::Warn => Self::Warn,
-                shuttle_common::log::Level::Error => Self::Error,
-            }
-        }
-    }
-
-    impl TryFrom<LogItem> for shuttle_common::LogItem {
-        type Error = ParseError;
-
-        fn try_from(log: LogItem) -> Result<Self, Self::Error> {
-            Ok(Self {
-                id: Default::default(),
-                timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap_or_default())?),
-                state: State::from_str(&log.state).unwrap_or(State::Unknown),
-                level: LogLevel::from_i32(log.level).unwrap_or_default().into(),
-                file: log.file,
-                line: log.line,
-                target: log.target,
-                fields: log.fields,
-            })
-        }
-    }
-
-    impl From<LogLevel> for shuttle_common::log::Level {
-        fn from(level: LogLevel) -> Self {
-            match level {
-                LogLevel::Trace => Self::Trace,
-                LogLevel::Debug => Self::Debug,
-                LogLevel::Info => Self::Info,
-                LogLevel::Warn => Self::Warn,
-                LogLevel::Error => Self::Error,
-            }
-        }
-    }
-
-    impl From<shuttle_common::wasm::Log> for LogItem {
-        fn from(log: shuttle_common::wasm::Log) -> Self {
-            let file = if log.file.is_empty() {
-                None
-            } else {
-                Some(log.file)
-            };
-
-            let line = if log.line == 0 { None } else { Some(log.line) };
-
-            Self {
-                timestamp: Some(Timestamp::from(SystemTime::from(log.timestamp))),
-                level: LogLevel::from(log.level) as i32,
-                file,
-                line,
-                target: log.target,
-                fields: log.fields,
-                // We can safely assume the state received from shuttle-next to be running,
-                // it will not currently load any resources.
-                state: State::Running.to_string(),
-            }
-        }
-    }
-
-    impl From<shuttle_common::wasm::Level> for LogLevel {
-        fn from(level: shuttle_common::wasm::Level) -> Self {
-            match level {
-                shuttle_common::wasm::Level::Trace => Self::Trace,
-                shuttle_common::wasm::Level::Debug => Self::Debug,
-                shuttle_common::wasm::Level::Info => Self::Info,
-                shuttle_common::wasm::Level::Warn => Self::Warn,
-                shuttle_common::wasm::Level::Error => Self::Error,
-            }
-        }
-    }
-
-    impl From<&tracing::Level> for LogLevel {
-        fn from(level: &tracing::Level) -> Self {
-            match *level {
-                tracing::Level::TRACE => Self::Trace,
-                tracing::Level::DEBUG => Self::Debug,
-                tracing::Level::INFO => Self::Info,
-                tracing::Level::WARN => Self::Warn,
-                tracing::Level::ERROR => Self::Error,
-            }
-        }
-    }
-
     pub async fn start(
         wasm: bool,
         storage_manager_type: StorageManagerType,
         provisioner_address: &str,
+        logger_uri: &str,
         auth_uri: Option<&String>,
         port: u16,
         get_runtime_executable: impl FnOnce() -> PathBuf,
@@ -239,6 +151,8 @@ pub mod runtime {
                 port,
                 "--provisioner-address",
                 provisioner_address,
+                "--logger-uri",
+                logger_uri,
                 "--storage-manager-type",
                 storage_manager_type,
                 "--storage-manager-path",

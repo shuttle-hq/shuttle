@@ -707,12 +707,10 @@ mod tests {
 
     use chrono::{Duration, TimeZone, Utc};
     use rand::Rng;
-    use serde_json::json;
 
     use super::*;
     use crate::persistence::{
         deployment::{Deployment, DeploymentRunnable, DeploymentState},
-        log::{Level, Log},
         state::State,
     };
 
@@ -1302,23 +1300,6 @@ mod tests {
         let actual = p.get_active_deployments(&service_id).await.unwrap();
 
         assert_eq!(actual, vec![id_1, id_2]);
-    }
-
-    async fn add_deployment(pool: &SqlitePool) -> Result<Uuid> {
-        let service_id = add_service(pool).await?;
-        let deployment_id = Uuid::new_v4();
-
-        sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update) VALUES (?, ?, ?, ?)",
-        )
-        .bind(deployment_id)
-        .bind(service_id.to_string())
-        .bind(State::Running)
-        .bind(Utc::now())
-        .execute(pool)
-        .await?;
-
-        Ok(deployment_id)
     }
 
     async fn add_service(pool: &SqlitePool) -> Result<Ulid> {

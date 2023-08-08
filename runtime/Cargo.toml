@@ -16,7 +16,7 @@ doctest = false
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
-opentelemetry-proto = { workspace = true }
+opentelemetry-proto = { workspace = true, features = ["logs"] }
 prost-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

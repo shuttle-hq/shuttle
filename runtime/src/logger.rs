@@ -115,6 +115,9 @@ impl LogRecorder for OtlpRecorder {
     }
 }
 
+// This is a combination of both log recorder interface and the old runtime logger.
+// We can keep both until the testing ends: e.g. logs sent to the deployer state are
+// the less or equal to the ones sent to the logger service.
 pub struct Logger<R> {
     recorder: R,
     tx: UnboundedSender<LogItem>,

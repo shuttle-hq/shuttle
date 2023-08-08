@@ -468,6 +468,7 @@ mod tests {
     fn get_runtime_manager() -> Arc<tokio::sync::Mutex<RuntimeManager>> {
         let provisioner_addr =
             SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
+        let logger_uri = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
         let mock = ProvisionerMock;
 
         tokio::spawn(async move {
@@ -482,7 +483,13 @@ mod tests {
         let path = tmp_dir.into_path();
         let (tx, _rx) = crossbeam_channel::unbounded();
 
-        RuntimeManager::new(path, format!("http://{}", provisioner_addr), None, tx)
+        RuntimeManager::new(
+            path,
+            format!("http://{}", provisioner_addr),
+            format!("http://{}", logger_uri),
+            None,
+            tx,
+        )
     }
 
     #[async_trait::async_trait]

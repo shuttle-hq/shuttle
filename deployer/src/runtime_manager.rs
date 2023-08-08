@@ -33,6 +33,7 @@ pub struct RuntimeManager {
     runtimes: Runtimes,
     artifacts_path: PathBuf,
     provisioner_address: String,
+    logger_uri: String,
     auth_uri: Option<String>,
     log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
 }
@@ -41,6 +42,7 @@ impl RuntimeManager {
     pub fn new(
         artifacts_path: PathBuf,
         provisioner_address: String,
+        logger_uri: String,
         auth_uri: Option<String>,
         log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
     ) -> Arc<Mutex<Self>> {
@@ -49,13 +51,14 @@ impl RuntimeManager {
             artifacts_path,
             provisioner_address,
             auth_uri,
+            logger_uri,
             log_sender,
         }))
     }
 
     pub async fn get_runtime_client(
         &mut self,
-        id: Uuid,
+        deployment_id: Uuid,
         alpha_runtime_path: Option<PathBuf>,
     ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
         trace!("making new client");
@@ -111,6 +114,7 @@ impl RuntimeManager {
             is_next,
             runtime::StorageManagerType::Artifacts(self.artifacts_path.clone()),
             &self.provisioner_address,
+            &self.logger_uri,
             self.auth_uri.as_ref(),
             port,
             get_runtime_executable,
@@ -118,6 +122,7 @@ impl RuntimeManager {
         .await
         .context("failed to start shuttle runtime")?;
 
+        // TODO: subscribe to logs from logger service for the `deployment_id` instead of subscribing to the runtime
         let sender = self.log_sender.clone();
         let mut stream = runtime_client
             .clone()
@@ -129,7 +134,7 @@ impl RuntimeManager {
         tokio::spawn(async move {
             while let Ok(Some(log)) = stream.message().await {
                 if let Ok(mut log) = deploy_layer::Log::try_from(log) {
-                    log.id = id;
+                    log.id = deployment_id;
                     sender.send(log).expect("to send log to persistence");
                 }
             }
@@ -138,7 +143,7 @@ impl RuntimeManager {
         self.runtimes
             .lock()
             .unwrap()
-            .insert(id, (process, runtime_client.clone()));
+            .insert(deployment_id, (process, runtime_client.clone()));
 
         Ok(runtime_client)
     }

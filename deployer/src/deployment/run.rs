@@ -284,6 +284,8 @@ impl Built {
     }
 }
 
+// TODO: refactor this and remove clippy allow.
+#[allow(clippy::too_many_arguments)]
 async fn load(
     service_name: String,
     service_id: Ulid,

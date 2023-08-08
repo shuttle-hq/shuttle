@@ -301,14 +301,26 @@ impl GatewayService {
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
 
+    pub async fn find_project_id(
+        &self,
+        project_name: &ProjectName,
+    ) -> Result<Option<String>, Error> {
+        query("SELECT project_id FROM projects WHERE project_name=?1")
+            .bind(project_name)
+            .fetch_optional(&self.db)
+            .await?
+            .map(|r| r.get("project_id"))
+            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
+    }
+
     pub async fn iter_user_projects_detailed(
         &self,
         account_name: &AccountName,
         offset: u32,
         limit: u32,
-    ) -> Result<impl Iterator<Item = (ProjectName, Project)>, Error> {
+    ) -> Result<impl Iterator<Item = (String, ProjectName, Project)>, Error> {
         let mut query = QueryBuilder::new(
-            "SELECT project_name, project_state FROM projects WHERE account_name = ",
+            "SELECT project_id, project_name, project_state FROM projects WHERE account_name = ",
         );
 
         query
@@ -327,6 +339,7 @@ impl GatewayService {
             .into_iter()
             .map(|row| {
                 (
+                    row.get("project_id"),
                     row.get("project_name"),
                     // This can be invalid JSON if it refers to an outdated Project state
                     row.try_get::<SqlxJson<Project>, _>("project_state")
@@ -908,7 +921,7 @@ pub mod tests {
             svc.iter_user_projects_detailed(&neo, 0, u32::MAX)
                 .await
                 .unwrap()
-                .map(|item| item.0)
+                .map(|item| item.1)
                 .collect::<Vec<_>>(),
             vec![matrix.clone()]
         );

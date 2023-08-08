@@ -5547,7 +5547,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-logger"
-version = "0.18.0"
+version = "0.23.0"
 dependencies = [
  "async-trait",
  "chrono",

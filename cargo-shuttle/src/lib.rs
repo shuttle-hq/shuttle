@@ -1010,7 +1010,7 @@ impl Shuttle {
         let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port, logger_server,
+                res = Shuttle::spin_local_runtime(&run_args, service, &[&provisioner_server, &logger_server], i as u16, provisioner_port, logger_server,
                     logger_port,) => {
                     Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &provisioner_server).await?;
                     false

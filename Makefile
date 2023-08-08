@@ -1,4 +1,4 @@
-SRC_CRATES=auth builder cargo-shuttle codegen common deployer gateway logger proto provisioner resource-recorder service
+SRC_CRATES=auth cargo-shuttle codegen common deployer gateway logger proto provisioner resource-recorder service
 SRC=$(shell find $(SRC_CRATES) -name "*.rs" -type f -not -path "**/target/*")
 
 COMMIT_SHA ?= $(shell git rev-parse --short HEAD)
@@ -26,7 +26,6 @@ RUSTUP_TOOLCHAIN=1.70.0
 
 TAG?=$(shell git describe --tags --abbrev=0)
 AUTH_TAG?=$(TAG)
-BUILDER_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
 GATEWAY_TAG?=$(TAG)
 LOGGER_TAG?=$(TAG)
@@ -91,7 +90,6 @@ endif
 DOCKER_COMPOSE_ENV=\
 	STACK=$(STACK)\
 	AUTH_TAG=$(AUTH_TAG)\
-	BUILDER_TAG=$(BUILDER_TAG)\
 	DEPLOYER_TAG=$(DEPLOYER_TAG)\
 	GATEWAY_TAG=$(GATEWAY_TAG)\
 	LOGGER_TAG=$(LOGGER_TAG)\

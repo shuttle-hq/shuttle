@@ -50,20 +50,10 @@ pub struct AxumWasm {
 
 impl AxumWasm {
     pub fn new() -> Self {
-        // Allow about 2^15 = 32k logs of backpressure
-        // We know the wasm currently handles about 16k requests per second (req / sec) so 16k seems to be a safe number
-        // As we make performance gains elsewhere this might eventually become the new bottleneck to increase :D
-        //
-        // Testing has shown that a number half the req / sec yields poor performance. A number the same as the req / sec
-        // seems acceptable so going with double the number for some headroom
-        let (tx, rx) = mpsc::channel(1 << 15);
-
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
             router: Mutex::new(None),
-            logs_rx: Mutex::new(Some(rx)),
-            logs_tx: tx,
             kill_tx: Mutex::new(None),
             stopped_tx,
         }
@@ -112,8 +102,6 @@ impl Runtime for AxumWasm {
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        let logs_tx = self.logs_tx.clone();
-
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
@@ -128,28 +116,11 @@ impl Runtime for AxumWasm {
 
         let stopped_tx = self.stopped_tx.clone();
 
-        tokio::spawn(run_until_stopped(
-            router, address, logs_tx, kill_rx, stopped_tx,
-        ));
+        tokio::spawn(run_until_stopped(router, address, kill_rx, stopped_tx));
 
         let message = StartResponse { success: true };
 
         Ok(tonic::Response::new(message))
-    }
-
-    type SubscribeLogsStream = ReceiverStream<Result<runtime::LogItem, Status>>;
-
-    async fn subscribe_logs(
-        &self,
-        _request: tonic::Request<SubscribeLogsRequest>,
-    ) -> Result<tonic::Response<Self::SubscribeLogsStream>, Status> {
-        let logs_rx = self.logs_rx.lock().unwrap().deref_mut().take();
-
-        if let Some(logs_rx) = logs_rx {
-            Ok(tonic::Response::new(ReceiverStream::new(logs_rx)))
-        } else {
-            Err(Status::internal("logs have already been subscribed to"))
-        }
     }
 
     async fn stop(
@@ -288,8 +259,8 @@ impl Router {
         tokio::task::spawn_blocking(move || {
             let mut iter = logs_stream.bytes().filter_map(Result::ok);
 
-            while let Some(log) = Log::from_bytes(&mut iter) {
-                logs_tx.blocking_send(Ok(log.into())).expect("to send log");
+            while let Some(_log) = Log::from_bytes(&mut iter) {
+                // TODO: send to the logs server here
             }
         });
 

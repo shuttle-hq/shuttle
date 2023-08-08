@@ -11,6 +11,7 @@ async fn bind_panic() {
         service_name,
         secrets,
         mut runtime_client,
+        deployment_id,
         runtime_address,
         runtime: _runtime, // Keep it to not be dropped and have the process killed.
     } = spawn_runtime(project_path, "bind-panic").await.unwrap();
@@ -18,6 +19,7 @@ async fn bind_panic() {
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
         service_name,
+        deployment_id: deployment_id.to_string(),
         resources: Default::default(),
         secrets,
     });
@@ -59,6 +61,7 @@ async fn bind_panic_owned() {
         secrets,
         mut runtime_client,
         runtime_address,
+        deployment_id,
         runtime: _runtime, // Keep it to not be dropped and have the process killed.
     } = spawn_runtime(project_path, "bind-panic-owned")
         .await
@@ -67,6 +70,7 @@ async fn bind_panic_owned() {
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
         service_name,
+        deployment_id: deployment_id.to_string(),
         resources: Default::default(),
         secrets,
     });
@@ -107,12 +111,14 @@ async fn loader_panic() {
         secrets,
         mut runtime_client,
         runtime_address: _,
+        deployment_id,
         runtime: _runtime, // Keep it to not be dropped and have the process killed.
     } = spawn_runtime(project_path, "loader-panic").await.unwrap();
 
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
         service_name,
+        deployment_id: deployment_id.to_string(),
         resources: Default::default(),
         secrets,
     });
@@ -136,6 +142,7 @@ async fn loader_panic_owned() {
         secrets,
         mut runtime_client,
         runtime_address: _,
+        deployment_id,
         runtime: _runtime, // Keep it to not be dropped and have the process killed.
     } = spawn_runtime(project_path, "loader-panic-owned")
         .await
@@ -145,6 +152,7 @@ async fn loader_panic_owned() {
         path: bin_path,
         service_name,
         resources: Default::default(),
+        deployment_id: deployment_id.to_string(),
         secrets,
     });
 

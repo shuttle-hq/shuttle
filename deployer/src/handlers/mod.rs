@@ -566,10 +566,11 @@ pub async fn get_logs(
     logs_request.extensions_mut().insert(claim);
 
     if let Ok(logs) = deployment_manager
-        .log_fetcher()
+        .logs_fetcher()
         .get_logs(logs_request)
         .await
     {
+        // TODO: awaits on the From impl for `shuttle_proto::logger::LogItem` -> `shuttle_common::LogItem`.
         Ok(Json(logs.into_inner().log_items))
     } else {
         Err(Error::NotFound("deployment not found".to_string()))
@@ -588,17 +589,34 @@ pub async fn get_logs(
     )
 )]
 pub async fn get_logs_subscribe(
-    Extension(persistence): Extension<Persistence>,
+    Extension(deployment_manager): Extension<DeploymentManager>,
+    Extension(claim): Extension<Claim>,
     Path((_project_name, deployment_id)): Path<(String, Uuid)>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    ws_upgrade.on_upgrade(move |s| logs_websocket_handler(s, persistence, deployment_id))
+    ws_upgrade
+        .on_upgrade(move |s| logs_websocket_handler(s, deployment_manager, deployment_id, claim))
 }
 
-async fn logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid) {
-    let mut log_recv = persistence.get_log_subscriber();
-    let backlog = match persistence.get_deployment_logs(&id).await {
-        Ok(backlog) => backlog,
+async fn logs_websocket_handler(
+    mut s: WebSocket,
+    deployment_manager: DeploymentManager,
+    deployment_id: Uuid,
+    claim: Claim,
+) {
+    let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
+        deployment_id: deployment_id.to_string(),
+    });
+
+    logs_request.extensions_mut().insert(claim);
+
+    let log_stream_response = deployment_manager
+        .logs_fetcher()
+        .get_logs_stream(logs_request)
+        .await;
+
+    let stream = match log_stream_response {
+        Ok(inner_response) => inner_response.into_inner()
         Err(error) => {
             error!(
                 error = &error as &dyn std::error::Error,
@@ -613,34 +631,35 @@ async fn logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: 
         }
     };
 
-    // Unwrap is safe because it only returns None for out of range numbers or invalid nanosecond
-    let mut last_timestamp = Utc.timestamp_opt(0, 0).unwrap();
+    loop {
+        match stream.message().await {
+            Ok(None) => {
+                trace!("The logs stream was closed gracefully.");
+                let _ = s
+                    .send(ws::Message::Text("the logs stream was closed gracefully.".to_string()))
+                    .await;
+                break;
+            },
+            Ok(Some(log)) => { // TODO: awaits on the From impl for `shuttle_proto::logger::LogItem` -> `shuttle_common::LogItem`.
+                trace!(?log, "received log from broadcast channel");
+                if log.id == deployment_id && log.timestamp > last_timestamp {
+                    if let Some(log_item) = Option::<LogItem>::from(Log::from(log)) {
+                        let msg = serde_json::to_string(&log_item).expect("to convert log item to json");
+                        let sent = s.send(ws::Message::Text(msg)).await;
 
-    for log in backlog.into_iter() {
-        last_timestamp = log.timestamp;
-        if let Some(log_item) = Option::<LogItem>::from(log) {
-            let msg = serde_json::to_string(&log_item).expect("to convert log item to json");
-            let sent = s.send(ws::Message::Text(msg)).await;
-
-            // Client disconnected?
-            if sent.is_err() {
-                return;
-            }
-        }
-    }
-
-    while let Ok(log) = log_recv.recv().await {
-        trace!(?log, "received log from broadcast channel");
-
-        if log.id == id && log.timestamp > last_timestamp {
-            if let Some(log_item) = Option::<LogItem>::from(Log::from(log)) {
-                let msg = serde_json::to_string(&log_item).expect("to convert log item to json");
-                let sent = s.send(ws::Message::Text(msg)).await;
-
-                // Client disconnected?
-                if sent.is_err() {
-                    return;
+                        // Client disconnected?
+                        if sent.is_err() {
+                            return;
+                        }
+                    }
                 }
+            },
+            Err(error) => {
+                trace!(?error, "the logs stream was closed by Shuttle");
+                let _ = s
+                    .send(ws::Message::Text("The logs stream was closed by Shuttle because of an internal error".to_string()))
+                    .await;
+                break;
             }
         }
     }

@@ -253,7 +253,7 @@ impl DeploymentManager {
         self.storage_manager.clone()
     }
 
-    pub fn log_fetcher(
+    pub fn logs_fetcher(
         &self,
     ) -> &LoggerClient<
         shuttle_common::claims::ClaimService<

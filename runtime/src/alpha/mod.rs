@@ -63,6 +63,7 @@ pub async fn start(loader: impl Loader<ProvisionerFactory, OtlpRecorder> + Send 
     let args = match Args::parse() {
         Ok(args) => args,
         Err(e) => {
+            println!("runtime received malformed or incorrect args, {e}");
             error!("{e}");
             let help_str = "[HINT]: Run shuttle with `cargo shuttle run`";
             let wrapper_str = "-".repeat(help_str.len());

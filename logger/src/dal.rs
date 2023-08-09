@@ -22,7 +22,6 @@ use sqlx::{
 use thiserror::Error;
 use tokio::sync::broadcast;
 use tracing::info;
-use uuid::Uuid;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -35,7 +34,7 @@ pub enum DalError {
 #[async_trait]
 pub trait Dal {
     /// Get logs for a deployment
-    async fn get_logs(&self, deployment_id: Uuid) -> Result<Vec<Log>, DalError>;
+    async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError>;
 }
 
 pub struct Sqlite {
@@ -111,9 +110,9 @@ impl Sqlite {
 
 #[async_trait]
 impl Dal for Sqlite {
-    async fn get_logs(&self, deployment_id: Uuid) -> Result<Vec<Log>, DalError> {
+    async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError> {
         let result = sqlx::query_as("SELECT * FROM logs WHERE deployment_id = ?")
-            .bind(deployment_id.to_string())
+            .bind(deployment_id)
             .fetch_all(&self.pool)
             .await?;
 

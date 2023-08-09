@@ -18,7 +18,6 @@ use tokio::{select, time::timeout};
 use tonic::{transport::Server, Request};
 use tracing::{debug, error, info, instrument, trace, warn};
 use tracing_subscriber::prelude::*;
-use uuid::Uuid;
 
 #[tokio::test]
 async fn logger() {
@@ -52,17 +51,17 @@ async fn logger() {
 
         let mut client = LoggerClient::connect(dst).await.unwrap();
 
-        let deployment_id = Uuid::new_v4();
+        let deployment_id = String::from("test_deployment_id");
 
         // Generate some logs
-        deploy(deployment_id);
+        deploy(deployment_id.clone());
 
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
         // Get the generated logs
         let response = client
             .get_logs(Request::new(LogsRequest {
-                deployment_id: deployment_id.to_string(),
+                deployment_id: deployment_id.clone(),
             }))
             .await
             .unwrap()
@@ -79,7 +78,7 @@ async fn logger() {
             },
             MinLogItem {
                 level: LogLevel::Info,
-                fields: json!({"message": "info", "deployment_id": deployment_id.to_string()}),
+                fields: json!({"message": "info", "deployment_id": deployment_id}),
             },
             MinLogItem {
                 level: LogLevel::Debug,
@@ -139,17 +138,17 @@ async fn logger_stream() {
 
         let mut client = LoggerClient::connect(dst).await.unwrap();
 
-        let deployment_id = Uuid::new_v4();
+        let deployment_id = String::from("test_deployment_id");
 
         // Generate some logs
-        foo(deployment_id);
+        foo(deployment_id.clone());
 
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
         // Subscribe to stream
         let mut response = client
             .get_logs_stream(Request::new(LogsRequest {
-                deployment_id: deployment_id.to_string(),
+                deployment_id: deployment_id.clone(),
             }))
             .await
             .unwrap()
@@ -196,7 +195,7 @@ async fn logger_stream() {
 }
 
 #[instrument(fields(%deployment_id))]
-fn deploy(deployment_id: Uuid) {
+fn deploy(deployment_id: String) {
     error!("error");
     warn!("warn");
     info!(%deployment_id, "info");
@@ -205,12 +204,12 @@ fn deploy(deployment_id: Uuid) {
 }
 
 #[instrument(fields(%deployment_id))]
-fn foo(deployment_id: Uuid) {
+fn foo(deployment_id: String) {
     trace!("foo");
 }
 
 #[instrument(fields(%deployment_id))]
-fn bar(deployment_id: Uuid) {
+fn bar(deployment_id: String) {
     trace!("bar");
 }
 

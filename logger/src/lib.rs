@@ -18,9 +18,6 @@ pub use dal::Sqlite;
 /// A wrapper to capture any error possible with this service
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("could not parse id: {0}")]
-    Uuid(#[from] uuid::Error),
-
     #[error("failed to interact with database: {0}")]
     Dal(#[from] DalError),
 }
@@ -81,7 +78,7 @@ where
     }
 
     async fn get_logs(&self, deployment_id: String) -> Result<Vec<LogItem>, Error> {
-        let logs = self.dal.get_logs(deployment_id.parse()?).await?;
+        let logs = self.dal.get_logs(deployment_id).await?;
 
         Ok(logs.into_iter().map(Into::into).collect())
     }

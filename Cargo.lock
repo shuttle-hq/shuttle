@@ -5567,7 +5567,6 @@ dependencies = [
  "tonic",
  "tracing",
  "tracing-subscriber",
- "ulid",
 ]
 
 [[package]]
@@ -5667,7 +5666,7 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
- "ulid",
+ "uuid",
  "wasi-common",
  "wasmtime",
  "wasmtime-wasi",

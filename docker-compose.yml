@@ -76,7 +76,6 @@ services:
       # This image needs to run highly privileged in order to
       # orchestrate user runtimes safely
       - ${DOCKER_SOCK}:/var/run/docker.sock
-      - gateway-vol:/var/lib
     environment:
       - RUST_LOG=${RUST_LOG}
       - LD_LIBRARY_PATH=/usr/src/shuttle/gateway
@@ -120,6 +119,8 @@ services:
       placement:
         constraints:
           - node.hostname==controller
+    networks:
+      user-net:
     volumes:
       - logger-vol:/var/lib
     environment:

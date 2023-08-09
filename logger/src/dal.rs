@@ -155,10 +155,10 @@ impl From<SeverityNumber> for LogLevel {
     fn from(severity: SeverityNumber) -> Self {
         match severity.into() {
             log::Level::Trace => Self::Trace,
-            log::Level::Debug => Self::Trace,
-            log::Level::Info => Self::Trace,
-            log::Level::Warn => Self::Trace,
-            log::Level::Error => Self::Trace,
+            log::Level::Debug => Self::Debug,
+            log::Level::Info => Self::Info,
+            log::Level::Warn => Self::Warn,
+            log::Level::Error => Self::Error,
         }
     }
 }

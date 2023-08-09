@@ -9,7 +9,6 @@ use thiserror::Error;
 use tokio::sync::{broadcast, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use ulid::DecodeError;
 
 pub mod args;
 mod dal;
@@ -19,8 +18,8 @@ pub use dal::Sqlite;
 /// A wrapper to capture any error possible with this service
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("could not decode id: {0}")]
-    UlidDecode(#[from] DecodeError),
+    #[error("could not parse id: {0}")]
+    Uuid(#[from] uuid::Error),
 
     #[error("failed to interact with database: {0}")]
     Dal(#[from] DalError),

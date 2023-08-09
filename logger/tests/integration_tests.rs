@@ -18,7 +18,7 @@ use tokio::{select, time::timeout};
 use tonic::{transport::Server, Request};
 use tracing::{debug, error, info, instrument, trace, warn};
 use tracing_subscriber::prelude::*;
-use ulid::Ulid;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn logger() {
@@ -52,7 +52,7 @@ async fn logger() {
 
         let mut client = LoggerClient::connect(dst).await.unwrap();
 
-        let deployment_id = Ulid::new();
+        let deployment_id = Uuid::new_v4();
 
         // Generate some logs
         deploy(deployment_id);
@@ -139,7 +139,7 @@ async fn logger_stream() {
 
         let mut client = LoggerClient::connect(dst).await.unwrap();
 
-        let deployment_id = Ulid::new();
+        let deployment_id = Uuid::new_v4();
 
         // Generate some logs
         foo(deployment_id);
@@ -196,7 +196,7 @@ async fn logger_stream() {
 }
 
 #[instrument(fields(%deployment_id))]
-fn deploy(deployment_id: Ulid) {
+fn deploy(deployment_id: Uuid) {
     error!("error");
     warn!("warn");
     info!(%deployment_id, "info");
@@ -205,12 +205,12 @@ fn deploy(deployment_id: Ulid) {
 }
 
 #[instrument(fields(%deployment_id))]
-fn foo(deployment_id: Ulid) {
+fn foo(deployment_id: Uuid) {
     trace!("foo");
 }
 
 #[instrument(fields(%deployment_id))]
-fn bar(deployment_id: Ulid) {
+fn bar(deployment_id: Uuid) {
     trace!("bar");
 }
 

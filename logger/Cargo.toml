@@ -25,7 +25,7 @@ tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default"] }
-ulid = { workspace = true }
+uuid = { workspace = true }
 
 [dependencies.shuttle-common]
 workspace = true

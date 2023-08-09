@@ -59,7 +59,7 @@ crossbeam-channel = { workspace = true }
 portpicker = "0.1.1"
 futures = { workspace = true }
 shuttle-service = { workspace = true, features = ["builder"] }
-ulid = { workspace = true }
+uuid = { workspace = true }
 
 [features]
 default = []

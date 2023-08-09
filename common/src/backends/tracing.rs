@@ -246,7 +246,7 @@ impl DeploymentLogRecorder for OtlpDeploymentLogRecorder {
 
 /// Tracing layer to capture logs that relate to a deployment task.
 ///
-/// This causes any functions instrumented with the `deployment_id` attribute to have its logs accosiated with the
+/// This causes any functions instrumented with the `deployment_id` attribute to have its logs associated with the
 /// deployment. Thus, the instrument span acts as the context for logs to capture.
 ///
 /// # Example

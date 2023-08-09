@@ -288,25 +288,22 @@ impl GatewayService {
         Ok(iter)
     }
 
-    pub async fn find_project(&self, project_name: &ProjectName) -> Result<Project, Error> {
-        query("SELECT project_state FROM projects WHERE project_name=?1")
+    pub async fn find_project(
+        &self,
+        project_name: &ProjectName,
+    ) -> Result<(String, Project), Error> {
+        query("SELECT project_id, project_state FROM projects WHERE project_name=?1")
             .bind(project_name)
             .fetch_optional(&self.db)
             .await?
             .map(|r| {
-                r.try_get::<SqlxJson<Project>, _>("project_state")
-                    .unwrap()
-                    .0
+                (
+                    r.get("project_id"),
+                    r.try_get::<SqlxJson<Project>, _>("project_state")
+                        .unwrap()
+                        .0,
+                )
             })
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
-    }
-
-    pub async fn find_project_id(&self, project_name: &ProjectName) -> Result<String, Error> {
-        query("SELECT project_id FROM projects WHERE project_name=?1")
-            .bind(project_name)
-            .fetch_optional(&self.db)
-            .await?
-            .map(|r| r.get("project_id"))
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
 
@@ -762,11 +759,11 @@ impl GatewayService {
         self: &Arc<Self>,
         project_name: &ProjectName,
         task_sender: Sender<BoxedTask>,
-    ) -> Result<Project, Error> {
+    ) -> Result<(String, Project), Error> {
         let mut project = self.find_project(project_name).await?;
 
         // Start the project if it is idle
-        if project.is_stopped() {
+        if project.1.is_stopped() {
             trace!(%project_name, "starting up idle project");
 
             let handle = self
@@ -902,7 +899,7 @@ pub mod tests {
 
         assert!(creating_same_project_name(&project.1, &matrix));
 
-        assert_eq!(svc.find_project(&matrix).await.unwrap(), project.1);
+        assert_eq!(svc.find_project(&matrix).await.unwrap(), project);
         assert_eq!(
             svc.iter_projects_detailed()
                 .await
@@ -981,7 +978,7 @@ pub mod tests {
         // After project has been destroyed...
         assert!(matches!(
             svc.find_project(&matrix).await,
-            Ok(Project::Destroyed(_))
+            Ok((_, Project::Destroyed(_)))
         ));
 
         // If recreated by a different user
@@ -997,7 +994,7 @@ pub mod tests {
         // If recreated by the same user
         assert!(matches!(
             svc.create_project(matrix.clone(), neo, false, 0).await,
-            Ok((matrix, Project::Creating(_)))
+            Ok((_matrix, Project::Creating(_)))
         ));
 
         let mut work = svc
@@ -1012,13 +1009,13 @@ pub mod tests {
         // After project has been destroyed again...
         assert!(matches!(
             svc.find_project(&matrix).await,
-            Ok(Project::Destroyed(_))
+            Ok((_, Project::Destroyed(_)))
         ));
 
         // If recreated by an admin
         assert!(matches!(
             svc.create_project(matrix, trinity, true, 0).await,
-            Ok((matrix, Project::Creating(_)))
+            Ok((_matrix, Project::Creating(_)))
         ));
 
         Ok(())
@@ -1044,9 +1041,9 @@ pub mod tests {
 
         let project = svc.find_project(&matrix).await.unwrap();
         println!("{:?}", project);
-        assert!(project.is_ready());
+        assert!(project.1.is_ready());
 
-        let container = project.container().unwrap();
+        let container = project.1.container().unwrap();
         svc.context()
             .docker()
             .kill_container::<String>(container.name.unwrap().strip_prefix('/').unwrap(), None)
@@ -1066,7 +1063,7 @@ pub mod tests {
 
         let project = svc.find_project(&matrix).await.unwrap();
         println!("{:?}", project);
-        assert!(!project.is_ready());
+        assert!(!project.1.is_ready());
 
         // the subsequent will trigger a restart task
         while let TaskResult::Pending(_) = ambulance_task.poll(()).await {
@@ -1075,7 +1072,7 @@ pub mod tests {
 
         let project = svc.find_project(&matrix).await.unwrap();
         println!("{:?}", project);
-        assert!(project.is_ready());
+        assert!(project.1.is_ready());
 
         Ok(())
     }

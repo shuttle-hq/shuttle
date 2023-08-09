@@ -196,6 +196,7 @@ pub struct DeploymentManager {
     _join_set: Arc<Mutex<JoinSet<()>>>,
 }
 
+// let provisioner_client = ProvisionerClient::new(channel);
 /// ```no-test
 /// queue channel   all deployments here are State::Queued until the get a slot from gateway
 ///       |

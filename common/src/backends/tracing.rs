@@ -251,7 +251,7 @@ impl DeploymentLogRecorder for OtlpDeploymentLogRecorder {
 ///
 /// # Example
 /// ```
-/// use shuttle_common::backends::tracing::{DeploymentLayer, DeploymentLogRecorder};
+/// use shuttle_common::backends::tracing::{DeploymentLayer, DeploymentLogRecorder, DeploymentDetails};
 /// use shuttle_common::tracing::JsonVisitor;
 /// use std::sync::{Arc, Mutex};
 /// use tracing::instrument;
@@ -263,7 +263,7 @@ impl DeploymentLogRecorder for OtlpDeploymentLogRecorder {
 /// }
 ///
 /// impl DeploymentLogRecorder for RecorderMock {
-///     fn record_log(&self, _deployment_id: &str, visitor: JsonVisitor, _metadata: &tracing::Metadata) {
+///     fn record_log(&self, _details: &DeploymentDetails, visitor: JsonVisitor, _metadata: &tracing::Metadata) {
 ///         self.lines.lock().unwrap().push(
 ///             visitor
 ///                 .fields

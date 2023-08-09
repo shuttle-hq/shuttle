@@ -31,6 +31,7 @@ use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
+use shuttle_proto::logger::LogsRequest;
 use shuttle_service::builder::clean_crate;
 use tracing::{error, field, instrument, trace, warn};
 use ulid::Ulid;
@@ -554,18 +555,22 @@ pub async fn start_deployment(
     )
 )]
 pub async fn get_logs(
-    Extension(persistence): Extension<Persistence>,
+    Extension(deployment_manager): Extension<DeploymentManager>,
+    Extension(claim): Extension<Claim>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<Json<Vec<LogItem>>> {
-    if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
-        Ok(Json(
-            persistence
-                .get_deployment_logs(&deployment.id)
-                .await?
-                .into_iter()
-                .filter_map(Into::into)
-                .collect(),
-        ))
+    let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
+        deployment_id: deployment_id.to_string(),
+    });
+
+    logs_request.extensions_mut().insert(claim);
+
+    if let Ok(logs) = deployment_manager
+        .log_fetcher()
+        .get_logs(logs_request)
+        .await
+    {
+        Ok(Json(logs.into_inner().log_items))
     } else {
         Err(Error::NotFound("deployment not found".to_string()))
     }

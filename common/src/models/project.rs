@@ -1,3 +1,4 @@
+#[cfg(feature = "openapi")]
 use crate::ulid_type;
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, Color,

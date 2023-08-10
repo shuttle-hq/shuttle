@@ -1,7 +1,7 @@
 mod error;
 
 use crate::deployment::{Built, DeploymentManager, Queued};
-use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGetter, State};
+use crate::persistence::{Deployment, Persistence, ResourceManager, SecretGetter, State};
 use async_trait::async_trait;
 use axum::extract::{
     ws::{self, WebSocket},
@@ -14,7 +14,7 @@ use axum::middleware::{self, from_extractor};
 use axum::routing::{get, post, Router};
 use axum::Json;
 use bytes::Bytes;
-use chrono::{TimeZone, Utc};
+use chrono::Utc;
 use fqdn::FQDN;
 use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
@@ -565,13 +565,16 @@ pub async fn get_logs(
 
     logs_request.extensions_mut().insert(claim);
 
-    if let Ok(logs) = deployment_manager
-        .logs_fetcher()
-        .get_logs(logs_request)
-        .await
-    {
+    let mut client = deployment_manager.logs_fetcher().clone();
+    if let Ok(logs) = client.get_logs(logs_request).await {
         // TODO: awaits on the From impl for `shuttle_proto::logger::LogItem` -> `shuttle_common::LogItem`.
-        Ok(Json(logs.into_inner().log_items))
+        Ok(Json(
+            logs.into_inner()
+                .log_items
+                .into_iter()
+                .map(shuttle_common::LogItem::from)
+                .collect(),
+        ))
     } else {
         Err(Error::NotFound("deployment not found".to_string()))
     }
@@ -610,13 +613,11 @@ async fn logs_websocket_handler(
 
     logs_request.extensions_mut().insert(claim);
 
-    let log_stream_response = deployment_manager
-        .logs_fetcher()
-        .get_logs_stream(logs_request)
-        .await;
+    let mut client = deployment_manager.logs_fetcher().clone();
+    let log_stream_response = client.get_logs_stream(logs_request).await;
 
-    let stream = match log_stream_response {
-        Ok(inner_response) => inner_response.into_inner()
+    let mut stream = match log_stream_response {
+        Ok(inner_response) => inner_response.into_inner(),
         Err(error) => {
             error!(
                 error = &error as &dyn std::error::Error,
@@ -636,28 +637,32 @@ async fn logs_websocket_handler(
             Ok(None) => {
                 trace!("The logs stream was closed gracefully.");
                 let _ = s
-                    .send(ws::Message::Text("the logs stream was closed gracefully.".to_string()))
+                    .send(ws::Message::Text(
+                        "the logs stream was closed gracefully.".to_string(),
+                    ))
                     .await;
                 break;
-            },
-            Ok(Some(log)) => { // TODO: awaits on the From impl for `shuttle_proto::logger::LogItem` -> `shuttle_common::LogItem`.
+            }
+            Ok(Some(proto_log)) => {
+                let log = LogItem::from(proto_log);
                 trace!(?log, "received log from broadcast channel");
-                if log.id == deployment_id && log.timestamp > last_timestamp {
-                    if let Some(log_item) = Option::<LogItem>::from(Log::from(log)) {
-                        let msg = serde_json::to_string(&log_item).expect("to convert log item to json");
-                        let sent = s.send(ws::Message::Text(msg)).await;
+                if log.id == deployment_id {
+                    let msg = serde_json::to_string(&log).expect("to convert log item to json");
+                    let sent = s.send(ws::Message::Text(msg)).await;
 
-                        // Client disconnected?
-                        if sent.is_err() {
-                            return;
-                        }
+                    // Client disconnected?
+                    if sent.is_err() {
+                        return;
                     }
                 }
-            },
+            }
             Err(error) => {
                 trace!(?error, "the logs stream was closed by Shuttle");
                 let _ = s
-                    .send(ws::Message::Text("The logs stream was closed by Shuttle because of an internal error".to_string()))
+                    .send(ws::Message::Text(
+                        "The logs stream was closed by Shuttle because of an internal error"
+                            .to_string(),
+                    ))
                     .await;
                 break;
             }

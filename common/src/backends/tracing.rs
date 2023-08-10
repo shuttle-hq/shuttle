@@ -34,7 +34,7 @@ use crate::tracing::{
 };
 
 const OTLP_ADDRESS: &str = "http://otel-collector:4317";
-const LOGGER_URI: &str = "http://127.0.0.1:8080";
+const LOGGER_URI: &str = "http://logger:8000";
 
 pub fn setup_tracing<S>(subscriber: S, service_name: &str)
 where
@@ -66,6 +66,8 @@ where
 
     let deployment_layer = if service_name != "logger" {
         let logger_address = std::env::var("LOGGER_URI").unwrap_or(LOGGER_URI.to_string());
+
+        println!("connecting to logger at address: {logger_address}");
 
         Some(DeploymentLayer::new(OtlpDeploymentLogRecorder::new(
             service_name,

@@ -34,7 +34,7 @@ use crate::tracing::{
 };
 
 const OTLP_ADDRESS: &str = "http://otel-collector:4317";
-const LOGGER_URI: &str = "http://logger:8000";
+const LOGGER_URI: &str = "http://logger:8009";
 
 pub fn setup_tracing<S>(subscriber: S, service_name: &str)
 where

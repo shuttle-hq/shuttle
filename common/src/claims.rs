@@ -15,6 +15,7 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
+use strum::EnumMessage;
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -28,7 +29,7 @@ const ISS: &str = "shuttle";
 
 /// The scope of operations that can be performed on shuttle
 /// Every scope defaults to read and will use a suffix for updating tasks
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, EnumMessage)]
 #[serde(rename_all = "snake_case")]
 pub enum Scope {
     /// Read the details, such as status and address, of a deployment
@@ -93,19 +94,7 @@ pub struct ScopeBuilder(Vec<Scope>);
 impl ScopeBuilder {
     /// Create a builder with the standard scopes for new users.
     pub fn new() -> Self {
-        Self(vec![
-            Scope::Deployment,
-            Scope::DeploymentPush,
-            Scope::Logs,
-            Scope::Service,
-            Scope::ServiceCreate,
-            Scope::Project,
-            Scope::ProjectCreate,
-            Scope::Resources,
-            Scope::ResourcesWrite,
-            Scope::Secret,
-            Scope::SecretWrite,
-        ])
+        Self(Default::default())
     }
 
     /// Extend the current scopes with admin scopes.
@@ -122,6 +111,40 @@ impl ScopeBuilder {
         self
     }
 
+    /// Extend the current scopes with basic rights needed by a user.
+    pub fn with_basic(mut self) -> Self {
+        self.0.extend(vec![
+            Scope::Deployment,
+            Scope::DeploymentPush,
+            Scope::Logs,
+            Scope::Service,
+            Scope::ServiceCreate,
+            Scope::Project,
+            Scope::ProjectCreate,
+            Scope::Resources,
+            Scope::ResourcesWrite,
+            Scope::Secret,
+            Scope::SecretWrite,
+        ]);
+        self
+    }
+
+    /// Extend the current scopes with those needed by a deployer machine / user.
+    pub fn with_deploy_rights(mut self) -> Self {
+        self.0.extend(vec![
+            Scope::DeploymentPush, // To start an idle deploy
+            Scope::Resources,      // To get past resources for an idle deploy
+            Scope::Service,        // To get the running deploy for a service
+            // To add the locally persisted resources from the older deployers
+            // to the resource-recorder the first time the old deployer is updated
+            // to the new deployer (based on resource-recorder). After this moment
+            // all requests are routed to the resource-recorder instead of local
+            // persistence.
+            Scope::ResourcesWrite,
+        ]);
+        self
+    }
+
     pub fn build(self) -> Vec<Scope> {
         self.0
     }
@@ -133,7 +156,7 @@ impl Default for ScopeBuilder {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).
     pub exp: usize,

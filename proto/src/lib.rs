@@ -98,6 +98,7 @@ pub mod runtime {
     use std::{
         convert::TryFrom,
         path::PathBuf,
+        str::FromStr,
         time::{Duration, SystemTime},
     };
 
@@ -106,6 +107,7 @@ pub mod runtime {
     use prost_types::Timestamp;
     use shuttle_common::{
         claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer},
+        deployment::State,
         ParseError,
     };
     use tokio::process;
@@ -139,7 +141,7 @@ pub mod runtime {
             Ok(Self {
                 id: Default::default(),
                 timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap_or_default())?),
-                state: shuttle_common::deployment::State::Running,
+                state: State::from_str(&log.state).unwrap_or(State::Unknown),
                 level: LogLevel::from_i32(log.level).unwrap_or_default().into(),
                 file: log.file,
                 line: log.line,
@@ -178,6 +180,9 @@ pub mod runtime {
                 line,
                 target: log.target,
                 fields: log.fields,
+                // We can safely assume the state received from shuttle-next to be running,
+                // it will not currently load any resources.
+                state: State::Running.to_string(),
             }
         }
     }
@@ -287,5 +292,35 @@ pub mod runtime {
         let runtime_client = runtime_client::RuntimeClient::new(channel);
 
         Ok((runtime, runtime_client))
+    }
+}
+
+pub mod resource_recorder {
+    use std::str::FromStr;
+
+    include!("generated/resource_recorder.rs");
+
+    impl From<record_request::Resource> for shuttle_common::resource::Response {
+        fn from(resource: record_request::Resource) -> Self {
+            shuttle_common::resource::Response {
+                r#type: shuttle_common::resource::Type::from_str(resource.r#type.as_str())
+                    .expect("to have a valid resource string"),
+                config: serde_json::from_slice(&resource.config)
+                    .expect("to have JSON valid config"),
+                data: serde_json::from_slice(&resource.data).expect("to have JSON valid data"),
+            }
+        }
+    }
+
+    impl From<Resource> for shuttle_common::resource::Response {
+        fn from(resource: Resource) -> Self {
+            shuttle_common::resource::Response {
+                r#type: shuttle_common::resource::Type::from_str(resource.r#type.as_str())
+                    .expect("to have a valid resource string"),
+                config: serde_json::from_slice(&resource.config)
+                    .expect("to have JSON valid config"),
+                data: serde_json::from_slice(&resource.data).expect("to have JSON valid data"),
+            }
+        }
     }
 }

@@ -131,8 +131,9 @@ impl From<StatusCode> for ApiError {
                 "we don't serve this resource"
             },
             StatusCode::BAD_GATEWAY => {
-                warn!("got a bad response from a deployer");
-                "response from deployer is invalid. Please create a ticket to report this"
+                warn!("got a bad response from the gateway");
+                // Gateway's default response when a request handler panicks is a 502 with some HTML.
+                "response from gateway is invalid. Please create a ticket to report this"
             },
             _ => {
                 error!(%code, "got an unexpected status code");

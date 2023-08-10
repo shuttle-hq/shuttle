@@ -4,6 +4,7 @@ orbs:
   docker-buildx: sensu/docker-buildx@1.1.1
   aws-ecr: circleci/aws-ecr@8.2.1
   win: circleci/windows@5.0
+  macos: circleci/macos@2.3.6
 
 executors:
   docker-rust:
@@ -338,6 +339,12 @@ jobs:
       mongodb-password:
         description: "Shuttle shared mongodb password"
         type: env_var_name
+      honeycomb-api-key:
+        description: "Shuttle honeycomb api key for observability based on environment"
+        type: env_var_name
+      deploys-api-key:
+        description: "Shuttle api key used by the gateway to authorise starting idle deployments"
+        type: env_var_name
       production:
         description: "Push and deploy to production"
         type: boolean
@@ -361,6 +368,8 @@ jobs:
             POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
             MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
             TAG=$TAG \
+            HONEYCOMB_API_KEY=${<< parameters.honeycomb-api-key >>} \
+            DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             make deploy
       - when:
           condition: << parameters.production >>
@@ -436,10 +445,12 @@ jobs:
           suffix: ".exe"
   build-binaries-mac:
     macos:
-      xcode: 12.5.1
-    resource_class: medium
+      xcode: 14.2.0
+    resource_class: macos.m1.medium.gen1
     steps:
       - checkout
+      # Necessary to build for Intel targets on m1.
+      - macos/install-rosetta
       - run:
           name: Install Rust
           command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.70.0 --target x86_64-apple-darwin
@@ -633,8 +644,6 @@ workflows:
                 - "-F postgres-rustls"
       - platform-test:
           name: << matrix.crate >>
-          requires:
-            - workspace
           matrix:
             parameters:
               crate:
@@ -646,6 +655,7 @@ workflows:
                   "shuttle-deployer",
                   "shuttle-proto",
                   "shuttle-provisioner",
+                  "shuttle-resource-recorder",
                   "shuttle-runtime",
                   "shuttle-service",
                 ]
@@ -676,6 +686,8 @@ workflows:
           name: Deploy images to unstable
           postgres-password: DEV_POSTGRES_PASSWORD
           mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
+          honeycomb-api-key: DEV_HONEYCOMB_API_KEY
+          deploys-api-key: DEV_DEPLOYS_API_KEY
           requires:
             - build-and-push-unstable
   release:
@@ -753,6 +765,8 @@ workflows:
           name: deploy-images-to-production
           postgres-password: PROD_POSTGRES_PASSWORD
           mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
+          honeycomb-api-key: PROD_HONEYCOMB_API_KEY
+          deploys-api-key: PROD_DEPLOYS_API_KEY
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
           ssh-config-script: production-ssh-config.sh
           ssh-host: shuttle.prod.internal

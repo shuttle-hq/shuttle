@@ -182,6 +182,8 @@ async fn create_project(
     service
         .new_task()
         .project(project.clone())
+        .and_then(task::run_until_done())
+        .and_then(task::start_idle_deploys())
         .send(&sender)
         .await?;
 
@@ -245,7 +247,6 @@ async fn route_project(
 ) -> Result<Response<Body>, Error> {
     let project_name = scoped_user.scope;
     let project = service.find_or_start_project(&project_name, sender).await?;
-
     service
         .route(&project, &project_name, &scoped_user.user.name, req)
         .await
@@ -291,11 +292,7 @@ async fn get_status(
 
     // Compute auth status.
     let auth_status = {
-        let response = AUTH_CLIENT
-            .get_or_init(reqwest::Client::new)
-            .get(service.auth_uri().to_string())
-            .send()
-            .await;
+        let response = AUTH_CLIENT.get(service.auth_uri().clone()).await;
         match response {
             Ok(response) if response.status() == 200 => StatusResponse::healthy(),
             Ok(_) | Err(_) => StatusResponse::unhealthy(),
@@ -504,6 +501,10 @@ async fn request_custom_domain_acme_certificate(
         .await?;
 
     let project = service.find_project(&project_name).await?;
+    let project_id =
+        project.container().unwrap().project_id().map_err(|_| {
+            Error::custom(ErrorKind::Internal, "Missing project_id from the container")
+        })?;
     let idle_minutes = project.container().unwrap().idle_minutes();
 
     // Destroy and recreate the project with the new domain.
@@ -519,6 +520,7 @@ async fn request_custom_domain_acme_certificate(
                 async move {
                     let creating = ProjectCreating::new_with_random_initial_key(
                         ctx.project_name,
+                        project_id,
                         idle_minutes,
                     )
                     .with_fqdn(fqdn);
@@ -879,7 +881,9 @@ pub mod tests {
     use axum::headers::Authorization;
     use axum::http::Request;
     use futures::TryFutureExt;
+    use hyper::body::to_bytes;
     use hyper::StatusCode;
+    use serde_json::Value;
     use tokio::sync::mpsc::channel;
     use tokio::sync::oneshot;
     use tower::Service;
@@ -1123,18 +1127,32 @@ pub mod tests {
         router.call(create_project).await.unwrap();
 
         let resp = router.call(get_status()).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(resp.into_body()).await.unwrap();
+
+        // The status check response will be a JSON array of objects.
+        let resp: Value = serde_json::from_slice(&body).unwrap();
+
+        // The gateway health status will always be the first element in the array.
+        assert_eq!(resp[0][1]["status"], "unhealthy".to_string());
 
         ctl_send.send(()).unwrap();
         done_recv.await.unwrap();
 
         let resp = router.call(get_status()).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
+        let body = to_bytes(resp.into_body()).await.unwrap();
+
+        let resp: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(resp[0][1]["status"], "degraded".to_string());
 
         worker.abort();
         let _ = worker.await;
 
         let resp = router.call(get_status()).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(resp.into_body()).await.unwrap();
+
+        let resp: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(resp[0][1]["status"], "unhealthy".to_string());
     }
 }

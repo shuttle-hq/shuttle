@@ -24,12 +24,17 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 # ensuring all user crates are compiled with the same rustc toolchain
 RUSTUP_TOOLCHAIN=1.70.0
 
-TAG?=$(shell git describe --tags)
+TAG?=$(shell git describe --tags --abbrev=0)
 BACKEND_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
 PROVISIONER_TAG?=$(TAG)
+RESOURCE_RECORDER_TAG?=$(TAG)
 
 DOCKER_BUILD?=docker buildx build
+
+ifeq ($(CI),true)
+DOCKER_BUILD+= --progress plain
+endif
 
 DOCKER_COMPOSE=$(shell which docker-compose)
 ifeq ($(DOCKER_COMPOSE),)
@@ -51,7 +56,6 @@ CONTAINER_REGISTRY=public.ecr.aws/shuttle
 DD_ENV=production
 # make sure we only ever go to production with `--tls=enable`
 USE_TLS=enable
-CARGO_PROFILE=release
 RUST_LOG=debug
 else
 DOCKER_COMPOSE_FILES=docker-compose.yml docker-compose.dev.yml
@@ -61,8 +65,8 @@ DB_FQDN=db.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 DD_ENV=unstable
 USE_TLS?=disable
-CARGO_PROFILE=debug
 RUST_LOG?=shuttle=trace,debug
+DEPLOYS_API_KEY?=gateway4deployes
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres
@@ -85,6 +89,7 @@ DOCKER_COMPOSE_ENV=\
 	BACKEND_TAG=$(BACKEND_TAG)\
 	DEPLOYER_TAG=$(DEPLOYER_TAG)\
 	PROVISIONER_TAG=$(PROVISIONER_TAG)\
+	RESOURCE_RECORDER_TAG=$(RESOURCE_RECORDER_TAG)\
 	POSTGRES_TAG=${POSTGRES_TAG}\
 	PANAMAX_TAG=${PANAMAX_TAG}\
 	OTEL_TAG=${OTEL_TAG}\
@@ -92,6 +97,7 @@ DOCKER_COMPOSE_ENV=\
 	DB_FQDN=$(DB_FQDN)\
 	POSTGRES_PASSWORD=$(POSTGRES_PASSWORD)\
 	RUST_LOG=$(RUST_LOG)\
+	DEPLOYS_API_KEY=$(DEPLOYS_API_KEY)\
 	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY)\
 	MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME)\
 	MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD)\
@@ -106,7 +112,7 @@ clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgres panamax otel
+images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth shuttle-resource-recorder postgres panamax otel
 
 postgres:
 	$(DOCKER_BUILD) \
@@ -158,7 +164,6 @@ shuttle-%: ${SRC} Cargo.lock
 		--build-arg prepare_args=$(PREPARE_ARGS) \
 		--build-arg PROD=$(PROD) \
 		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
-		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
 		--tag $(CONTAINER_REGISTRY)/$(*):latest \

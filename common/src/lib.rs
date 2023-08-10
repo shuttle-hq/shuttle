@@ -22,6 +22,8 @@ pub mod wasm;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fmt::Display;
+#[cfg(feature = "openapi")]
+use utoipa::openapi::{Object, ObjectBuilder};
 
 use anyhow::bail;
 #[cfg(feature = "service")]
@@ -108,6 +110,8 @@ pub enum ParseError {
     Timestamp(#[from] prost_types::TimestampError),
     #[error("failed to parse serde: {0}")]
     Serde(#[from] serde_json::Error),
+    #[error("failed to parse state: {0}")]
+    State(String),
 }
 
 /// Holds the input for a DB resource
@@ -201,6 +205,17 @@ impl IntoIterator for SecretStore {
     fn into_iter(self) -> Self::IntoIter {
         self.secrets.into_iter()
     }
+}
+
+#[cfg(feature = "openapi")]
+pub fn ulid_type() -> Object {
+    ObjectBuilder::new()
+        .schema_type(utoipa::openapi::SchemaType::String)
+        .format(Some(utoipa::openapi::SchemaFormat::Custom(
+            "ulid".to_string(),
+        )))
+        .description(Some("String represention of an Ulid according to the spec found here: https://github.com/ulid/spec."))
+        .build()
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -36,6 +36,28 @@ pub enum Type {
     StaticFolder,
     Persist,
     Turso,
+    Custom,
+}
+
+impl FromStr for Type {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((prefix, rest)) = s.split_once("::") {
+            match prefix {
+                "database" => Ok(Self::Database(database::Type::from_str(rest)?)),
+                _ => Err(format!("'{prefix}' is an unknown resource type")),
+            }
+        } else {
+            match s {
+                "secrets" => Ok(Self::Secrets),
+                "static_folder" => Ok(Self::StaticFolder),
+                "persist" => Ok(Self::Persist),
+                "turso" => Ok(Self::Turso),
+                _ => Err(format!("'{s}' is an unknown resource type")),
+            }
+        }
+    }
 }
 
 impl Response {
@@ -60,6 +82,7 @@ impl Display for Type {
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
             Type::Turso => write!(f, "turso"),
+            Type::Custom => write!(f, "custom"),
         }
     }
 }

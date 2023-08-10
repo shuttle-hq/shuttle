@@ -260,7 +260,7 @@ pub struct InitArgs {
 #[derive(ValueEnum, Clone, Debug, strum::Display, strum::EnumIter)]
 #[strum(serialize_all = "kebab-case")]
 pub enum InitTemplateArg {
-    /// Actix-web framework
+    /// Actix Web framework
     ActixWeb,
     /// Axum web framework
     Axum,
@@ -325,7 +325,7 @@ impl InitTemplateArg {
             Tide => "tide/hello-world",
             Tower => "tower/hello-world",
             Warp => "warp/hello-world",
-            None => "custom/none",
+            None => "custom-service/none",
         };
 
         TemplateLocation {
@@ -408,7 +408,7 @@ mod tests {
             init_args.git_template().unwrap(),
             Some(TemplateLocation {
                 auto_path: EXAMPLES_REPO.into(),
-                subfolder: Some("custom/none".into())
+                subfolder: Some("custom-service/none".into())
             })
         );
 

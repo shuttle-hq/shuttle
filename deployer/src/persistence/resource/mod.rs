@@ -1,11 +1,13 @@
 pub mod database;
 
+use shuttle_common::claims::Claim;
+use shuttle_proto::resource_recorder::{record_request, ResourcesResponse, ResultResponse};
 use sqlx::{
-    sqlite::{SqliteArgumentValue, SqliteValueRef},
-    Database, Sqlite,
+    sqlite::{SqliteArgumentValue, SqliteRow, SqliteValueRef},
+    Database, FromRow, Row, Sqlite,
 };
 use std::{borrow::Cow, fmt::Display, str::FromStr};
-use uuid::Uuid;
+use ulid::Ulid;
 
 pub use self::database::Type as DatabaseType;
 
@@ -14,16 +16,37 @@ pub use self::database::Type as DatabaseType;
 pub trait ResourceManager: Clone + Send + Sync + 'static {
     type Err: std::error::Error;
 
-    async fn insert_resource(&self, resource: &Resource) -> Result<(), Self::Err>;
-    async fn get_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>, Self::Err>;
+    async fn insert_resources(
+        &mut self,
+        resources: Vec<record_request::Resource>,
+        service_id: &ulid::Ulid,
+        claim: Claim,
+    ) -> Result<ResultResponse, Self::Err>;
+    async fn get_resources(
+        &mut self,
+        service_id: &ulid::Ulid,
+        claim: Claim,
+    ) -> Result<ResourcesResponse, Self::Err>;
 }
 
-#[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Resource {
-    pub service_id: Uuid,
+    pub service_id: Ulid,
     pub r#type: Type,
     pub data: serde_json::Value,
     pub config: serde_json::Value,
+}
+
+impl FromRow<'_, SqliteRow> for Resource {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            service_id: Ulid::from_string(row.try_get("service_id")?)
+                .expect("to have a valid ulid string"),
+            r#type: row.try_get("type")?,
+            data: row.try_get("data")?,
+            config: row.try_get("config")?,
+        })
+    }
 }
 
 impl From<Resource> for shuttle_common::resource::Response {
@@ -36,13 +59,14 @@ impl From<Resource> for shuttle_common::resource::Response {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Type {
     Database(DatabaseType),
     Secrets,
     StaticFolder,
     Persist,
     Turso,
+    Custom,
 }
 
 impl From<Type> for shuttle_common::resource::Type {
@@ -53,6 +77,7 @@ impl From<Type> for shuttle_common::resource::Type {
             Type::StaticFolder => Self::StaticFolder,
             Type::Persist => Self::Persist,
             Type::Turso => Self::Turso,
+            Type::Custom => Self::Custom,
         }
     }
 }
@@ -65,6 +90,7 @@ impl From<shuttle_common::resource::Type> for Type {
             shuttle_common::resource::Type::StaticFolder => Self::StaticFolder,
             shuttle_common::resource::Type::Persist => Self::Persist,
             shuttle_common::resource::Type::Turso => Self::Turso,
+            shuttle_common::resource::Type::Custom => Self::Custom,
         }
     }
 }
@@ -77,6 +103,7 @@ impl Display for Type {
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
             Type::Turso => write!(f, "turso"),
+            Type::Custom => write!(f, "custom"),
         }
     }
 }
@@ -96,6 +123,7 @@ impl FromStr for Type {
                 "static_folder" => Ok(Self::StaticFolder),
                 "persist" => Ok(Self::Persist),
                 "turso" => Ok(Self::Turso),
+                "custom" => Ok(Self::Custom),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }
@@ -145,6 +173,7 @@ mod tests {
             Type::StaticFolder,
             Type::Persist,
             Type::Turso,
+            Type::Custom,
         ];
 
         for input in inputs {

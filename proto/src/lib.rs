@@ -117,7 +117,6 @@ pub mod runtime {
         wasm: bool,
         storage_manager_type: StorageManagerType,
         provisioner_address: &str,
-        logger_uri: &str,
         auth_uri: Option<&String>,
         port: u16,
         get_runtime_executable: impl FnOnce() -> PathBuf,
@@ -232,7 +231,7 @@ pub mod resource_recorder {
 }
 
 pub mod logger {
-    use chrono::{naive::serde, DateTime, NaiveDateTime, Utc};
+    use chrono::{DateTime, NaiveDateTime, Utc};
     use shuttle_common::tracing::{FILEPATH_KEY, LINENO_KEY, TARGET_KEY};
     use tracing::error;
 

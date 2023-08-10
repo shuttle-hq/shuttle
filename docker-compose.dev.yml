@@ -1,5 +1,9 @@
 version: "3"
 
+volumes:
+  logger-postgres-vol:
+
+
 services:
   provisioner:
     entrypoint:
@@ -38,3 +42,32 @@ services:
   deck-chores:
     profiles:
       - panamax
+  logger:
+    depends_on:
+      - auth
+      - logger-postgres
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        until </dev/tcp/logger-postgres/5432
+        do
+          >&2 echo "PG is not available yet - sleeping"
+          sleep 1
+        done
+
+        >&2 echo "DBs are available - starting shuttle-logger"
+
+        exec /usr/local/bin/service "$${@:0}"
+  logger-postgres:
+    image: "${CONTAINER_REGISTRY}/logger-postgres:${LOGGER_POSTGRES_TAG}"
+    restart: always
+    networks:
+      user-net:
+    environment:
+      POSTGRES_PASSWORD: ${LOGGER_POSTGRES_PASSWORD}
+    volumes:
+      - logger-postgres-vol:/var/lib/postgresql/data
+    ports:
+      - 8003:8000
+      - 5432:5432

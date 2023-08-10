@@ -15,8 +15,7 @@ use tonic::{Request, Response, Status};
 pub mod args;
 mod dal;
 
-pub use dal::Sqlite;
-use tracing::error;
+pub use dal::postgres::Postgres;
 
 /// A wrapper to capture any error possible with this service
 #[derive(Error, Debug)]

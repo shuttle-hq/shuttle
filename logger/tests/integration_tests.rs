@@ -5,6 +5,23 @@ use std::{
 
 use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use serde_json::{json, Value};
+use shuttle_common::{
+    backends::tracing::{DeploymentLayer, OtlpDeploymentLogRecorder},
+    tracing::{FILEPATH_KEY, LINENO_KEY, NAMESPACE_KEY, TARGET_KEY},
+};
+use shuttle_proto::logger::{logger_client::LoggerClient, LogItem, LogLevel, LogsRequest};
+use sqlx::__rt::timeout;
+use tonic::Request;
+use tracing::{debug, error, info, instrument, trace, warn};
+use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+
+mod local_postgres;
+use local_postgres::LocalPostgresWrapper;
+
+// static HOST_PORT: Lazy<Option<u16>> = Lazy::new(pick_unused_port);
+// static POSTGRES_WRAPPER: Lazy<LocalPostgresWrapper> = Lazy::new(LocalPostgresWrapper::default);
 use prost_types::Timestamp;
 use shuttle_common::claims::Scope;
 use shuttle_common_tests::JwtScopesLayer;
@@ -143,6 +160,19 @@ async fn get_stream_logs() {
             .unwrap()
             .unwrap();
         assert_eq!(expected_stored_logs[0].clone().log_line.unwrap(), log);
+
+        assert_eq!(
+            MinLogItem::from(log),
+            MinLogItem {
+                level: LogLevel::Trace,
+                fields: json!({"message": "foo"}),
+            },
+        );
+
+        // Generate some more logs
+        bar(deployment_id);
+
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
         let log = timeout(std::time::Duration::from_millis(500), response.message())
             .await

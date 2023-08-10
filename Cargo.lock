@@ -3637,6 +3637,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "native-tls"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07226173c32f2926027b63cce4bcd8076c3552846cbe7925f3aaffeac0a3b92e"
+dependencies = [
+ "lazy_static",
+ "libc",
+ "log",
+ "openssl",
+ "openssl-probe",
+ "openssl-sys",
+ "schannel",
+ "security-framework",
+ "security-framework-sys",
+ "tempfile",
+]
+
+[[package]]
 name = "ndk-context"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5602,12 +5620,15 @@ version = "0.24.0"
 dependencies = [
  "async-broadcast",
  "async-trait",
+ "bollard",
  "chrono",
  "clap",
+ "once_cell",
  "opentelemetry-proto",
  "portpicker",
  "pretty_assertions",
  "prost-types",
+ "rand",
  "serde_json",
  "shuttle-common",
  "shuttle-common-tests",
@@ -5928,6 +5949,7 @@ dependencies = [
  "indexmap 2.0.0",
  "log",
  "memchr",
+ "native-tls",
  "once_cell",
  "paste",
  "percent-encoding",

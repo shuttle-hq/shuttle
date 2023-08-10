@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
-use tracing::{error, info_span, trace, warn};
+use tracing::{error, trace, trace_span, warn};
 use uuid::Uuid;
 
 use crate::project::*;
@@ -489,7 +489,7 @@ where
             admin_secret,
         };
 
-        let span = info_span!(
+        let span = trace_span!(
             "polling project",
             ctx.project = ?project_ctx.project_name,
             ctx.account = ?project_ctx.account_name,

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::task::{BoxedTask, TaskResult};
 use crate::{Error, ProjectName};
@@ -66,7 +66,7 @@ impl Worker<BoxedTask> {
                     TaskResult::Done(_) | TaskResult::Cancelled => break,
                     TaskResult::Pending(_) | TaskResult::TryAgain => continue,
                     TaskResult::Err(err) => {
-                        info!("task failed: {err}");
+                        warn!("task failed: {err}");
                         break;
                     }
                 }

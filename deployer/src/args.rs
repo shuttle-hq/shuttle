@@ -20,7 +20,7 @@ pub struct Args {
     pub provisioner_address: Endpoint,
 
     /// Address to connect to the logger service
-    #[clap(long, default_value = "http://logger:8009")]
+    #[clap(long, default_value = "http://logger:8000")]
     pub logger_uri: Endpoint,
 
     /// FQDN where the proxy can be reached at

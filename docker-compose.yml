@@ -122,10 +122,9 @@ services:
           - node.hostname==controller
     networks:
       user-net:
+      default:
     volumes:
       - logger-vol:/var/lib
-    ports:
-      - 8009:8000
     environment:
       - RUST_LOG=${RUST_LOG}
     command:

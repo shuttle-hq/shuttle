@@ -81,6 +81,11 @@ endif
 POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=14
 
+LOGGER_POSTGRES_EXTRA_PATH?=./extras/logger-postgres
+LOGGER_POSTGRES_TAG?=14
+LOGGER_POSTGRES_HOST?=logger-postgres
+LOGGER_POSTGRES_PASSWORD?=postgres
+
 PANAMAX_EXTRA_PATH?=./extras/panamax
 PANAMAX_TAG?=1.0.12
 
@@ -108,6 +113,9 @@ DOCKER_COMPOSE_ENV=\
 	PROVISIONER_TAG=$(PROVISIONER_TAG)\
 	RESOURCE_RECORDER_TAG=$(RESOURCE_RECORDER_TAG)\
 	POSTGRES_TAG=${POSTGRES_TAG}\
+	LOGGER_POSTGRES_TAG=${LOGGER_POSTGRES_TAG}\
+	LOGGER_POSTGRES_PASSWORD=${LOGGER_POSTGRES_PASSWORD}\
+	LOGGER_POSTGRES_HOST=${LOGGER_POSTGRES_HOST}\
 	PANAMAX_TAG=${PANAMAX_TAG}\
 	OTEL_TAG=${OTEL_TAG}\
 	APPS_FQDN=$(APPS_FQDN)\
@@ -157,6 +165,14 @@ postgres:
 		-f $(POSTGRES_EXTRA_PATH)/Containerfile \
 		$(POSTGRES_EXTRA_PATH)
 
+logger-postgres:
+	$(DOCKER_BUILD) \
+		--build-arg LOGGER_POSTGRES_TAG=$(LOGGER_POSTGRES_TAG) \
+		--tag $(CONTAINER_REGISTRY)/logger-postgres:$(LOGGER_POSTGRES_TAG) \
+		$(BUILDX_FLAGS) \
+		-f $(LOGGER_POSTGRES_EXTRA_PATH)/Containerfile \
+		$(LOGGER_POSTGRES_EXTRA_PATH)
+
 panamax:
 	if [ $(USE_PANAMAX) = "enable" ]; then \
 		$(DOCKER_BUILD) \
@@ -182,7 +198,7 @@ test:
 	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test $(CARGO_TEST_FLAGS) -- --nocapture
 
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
-	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@
+	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.local.yml $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@
 
 # Start the containers locally. This does not start panamax by default,
 # to start panamax locally run this command with an override for the profiles:

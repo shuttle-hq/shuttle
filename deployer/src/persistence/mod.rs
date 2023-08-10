@@ -222,7 +222,7 @@ impl Persistence {
             .expect("failed to convert resource recorder uri to a string")
             .connect()
             .await
-            .expect("failed to connect to provisioner");
+            .expect("failed to connect to resource recorder");
 
         let channel = ServiceBuilder::new()
             .layer(ClaimLayer)

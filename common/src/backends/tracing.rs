@@ -34,6 +34,7 @@ use crate::tracing::{
 };
 
 const OTLP_ADDRESS: &str = "http://otel-collector:4317";
+const LOGGER_URI: &str = "http://127.0.0.1:8080";
 
 pub fn setup_tracing<S>(subscriber: S, service_name: &str)
 where
@@ -62,8 +63,17 @@ where
         .install_batch(Tokio)
         .unwrap();
     let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-    let deployment_layer =
-        DeploymentLayer::new(OtlpDeploymentLogRecorder::new(service_name, OTLP_ADDRESS));
+
+    let deployment_layer = if service_name == "logger" {
+        let logger_address = std::env::var("LOGGER_URI").unwrap_or(LOGGER_URI.to_string());
+
+        Some(DeploymentLayer::new(OtlpDeploymentLogRecorder::new(
+            service_name,
+            &logger_address,
+        )))
+    } else {
+        None
+    };
 
     subscriber
         .with(filter_layer)

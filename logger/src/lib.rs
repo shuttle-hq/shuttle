@@ -46,14 +46,17 @@ impl LogsService for ShuttleLogsOtlp {
     ) -> Result<Response<ExportLogsServiceResponse>, Status> {
         let request = request.into_inner();
 
-        let logs = request
+        let logs: Vec<_> = request
             .resource_logs
             .into_iter()
             .flat_map(Log::try_from)
             .flatten()
             .collect();
 
-        self.tx.send(logs).expect("to send log to storage");
+        // TODO: consider sending different response for this case.
+        if !logs.is_empty() {
+            self.tx.send(logs).expect("to send log to storage");
+        }
 
         Ok(Response::new(ExportLogsServiceResponse {
             partial_success: None,

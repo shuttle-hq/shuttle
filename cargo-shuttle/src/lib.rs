@@ -892,6 +892,7 @@ impl Shuttle {
         // exit the `local_run`.
         if signal_received {
             provisioner_server.abort();
+            logger_server.abort();
             for (mut rt, mut rt_client) in runtimes {
                 Shuttle::stop_runtime(&mut rt, &mut rt_client)
                     .await

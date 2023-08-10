@@ -32,7 +32,10 @@ impl OtlpRecorder {
         let destination = destination.to_string();
         let (tx, mut rx) = mpsc::unbounded_channel();
 
-        let resource_attributes = vec![("deployment_id".into(), deployment_id.into())];
+        let resource_attributes = vec![
+            ("deployment_id".into(), deployment_id.into()),
+            ("service.name".into(), "shuttle-runtime".into()),
+        ];
         let resource_attributes =
             serde_json_map_to_key_value_list(serde_json::Map::from_iter(resource_attributes));
 
@@ -42,6 +45,7 @@ impl OtlpRecorder {
         });
 
         tokio::spawn(async move {
+            // TODO: implement retry-logic, investigate tokio retry-wrapper
             match LogsServiceClient::connect(destination).await {
                 Ok(mut otlp_client) => {
                     while let Some(scope_logs) = rx.recv().await {
@@ -55,19 +59,15 @@ impl OtlpRecorder {
                         });
 
                         if let Err(error) = otlp_client.export(request).await {
-                            error!(
-                        error = &error as &dyn std::error::Error,
-                        "Otlp deployment log recorder encountered error while exporting the logs"
-                    );
+                            println!("Otlp deployment log recorder encountered error while exporting the logs: {}", error);
                         };
                     }
                 }
                 Err(error) => {
-                    error!(
-                        error = &error as &dyn std::error::Error,
-                        "Could not connect to OTLP collector for logs. No logs will be send"
+                    println!(
+                        "Could not connect to OTLP collector for logs. No logs will be sent: {}",
+                        error
                     );
-
                     // Consume the logs so that the channel does not overflow
                     while let Some(_scope_logs) = rx.recv().await {}
                 }

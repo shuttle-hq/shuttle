@@ -64,7 +64,7 @@ where
         .unwrap();
     let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    let deployment_layer = if service_name == "logger" {
+    let deployment_layer = if service_name != "logger" {
         let logger_address = std::env::var("LOGGER_URI").unwrap_or(LOGGER_URI.to_string());
 
         Some(DeploymentLayer::new(OtlpDeploymentLogRecorder::new(

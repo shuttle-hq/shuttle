@@ -6,6 +6,7 @@ use chrono::NaiveDateTime;
 use opentelemetry_proto::tonic::{
     common::v1::{any_value, KeyValue},
     logs::v1::{LogRecord, ResourceLogs, ScopeLogs, SeverityNumber},
+    trace::v1::{ResourceSpans, ScopeSpans, Span},
 };
 use prost_types::Timestamp;
 use serde_json::Value;
@@ -141,6 +142,20 @@ pub enum LogLevel {
     Error,
 }
 
+// TODO: do this properly
+impl From<&str> for LogLevel {
+    fn from(value: &str) -> Self {
+        match value {
+            "TRACE" => Self::Trace,
+            "DEBUG" => Self::Debug,
+            "INFO" => Self::Info,
+            "WARN" => Self::Warn,
+            "ERROR" => Self::Error,
+            other => unreachable!("invalid level: {other}"),
+        }
+    }
+}
+
 impl From<LogLevel> for logger::LogLevel {
     fn from(level: LogLevel) -> Self {
         match level {
@@ -228,6 +243,72 @@ impl Log {
             level,
             fields: Value::Object(fields),
         })
+    }
+
+    /// Try to get a log from an OTLP [ResourceSpans]
+    pub fn try_from_scope_span(spans: ResourceSpans) -> Option<Vec<Self>> {
+        let ResourceSpans {
+            resource,
+            scope_spans,
+            schema_url: _,
+        } = spans;
+
+        let shuttle_service_name = get_attribute(resource?.attributes, "service.name")?;
+
+        let logs = scope_spans
+            .into_iter()
+            .flat_map(|scope_spans| {
+                let ScopeSpans {
+                    spans,
+                    schema_url: _,
+                    ..
+                } = scope_spans;
+
+                let events: Vec<Log> = spans
+                    .into_iter()
+                    .flat_map(|span| Self::try_from_span(span, &shuttle_service_name))
+                    .collect();
+
+                Some(events)
+            })
+            .flatten()
+            .collect();
+
+        Some(logs)
+    }
+
+    /// Try to get self from an OTLP [Span]. Also enrich it with the shuttle service name and deployment id.
+    /// TODO: remove unwraps
+    fn try_from_span(span: Span, shuttle_service_name: &str) -> Vec<Self> {
+        let deployment_id = get_attribute(span.attributes, "deployment_id").unwrap();
+
+        span.events
+            .into_iter()
+            .map(|event| {
+                let message = event.name;
+
+                let mut fields = from_any_value_kv_to_serde_json_map(event.attributes);
+                fields.insert("message".to_string(), message.into());
+
+                let severity = fields.get("level").unwrap().as_str().unwrap();
+
+                let naive = NaiveDateTime::from_timestamp_opt(
+                    (event.time_unix_nano / 1_000_000_000)
+                        .try_into()
+                        .unwrap_or_default(),
+                    (event.time_unix_nano % 1_000_000_000) as u32,
+                )
+                .unwrap_or_default();
+
+                Log {
+                    shuttle_service_name: shuttle_service_name.to_string(),
+                    deployment_id: deployment_id.clone(),
+                    timestamp: DateTime::from_utc(naive, Utc),
+                    level: severity.into(),
+                    fields: Value::Object(fields),
+                }
+            })
+            .collect()
     }
 }
 

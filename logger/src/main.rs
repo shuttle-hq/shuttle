@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsServiceServer;
+use opentelemetry_proto::tonic::collector::trace::v1::trace_service_server::TraceServiceServer;
 use shuttle_common::backends::{
     auth::{AuthPublicKey, JwtAuthenticationLayer},
     tracing::{setup_tracing, ExtractPropagationLayer},
@@ -30,7 +30,7 @@ async fn main() {
 
     let sqlite = Sqlite::new(&db_path.display().to_string()).await;
     let svc = ShuttleLogsOtlp::new(sqlite.get_sender());
-    let svc = LogsServiceServer::new(svc);
+    let svc = TraceServiceServer::new(svc);
     let router = server_builder
         .add_service(svc)
         .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)));

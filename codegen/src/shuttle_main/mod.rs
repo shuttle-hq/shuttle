@@ -16,6 +16,38 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     quote! {
         #[tokio::main]
         async fn main() {
+            // TODO: clean up here, this is for testing purposes.
+            use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
+            use shuttle_runtime::tracing_subscriber::prelude::*;
+
+            let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
+                .unwrap();
+            let fmt_layer = shuttle_runtime::tracing_subscriber::fmt::layer();
+
+            let tracer = shuttle_runtime::opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_exporter(
+                    shuttle_runtime::opentelemetry_otlp::new_exporter()
+                        .tonic()
+                        .with_endpoint("http://127.0.0.1:8080"),
+                )
+                .with_trace_config(
+                    shuttle_runtime::opentelemetry::sdk::trace::config().with_resource(shuttle_runtime::opentelemetry::sdk::Resource::new(vec![shuttle_runtime::opentelemetry::KeyValue::new(
+                        "service.name",
+                        "shuttle-runtime",
+                    )])),
+                )
+                .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
+                .unwrap();
+            let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
+
+            shuttle_runtime::tracing_subscriber::registry()
+                .with(filter_layer)
+                .with(fmt_layer)
+                .with(otel_layer)
+                .init();
+
             shuttle_runtime::start(loader).await;
         }
 
@@ -253,24 +285,13 @@ impl ToTokens for Loader {
         };
 
         let loader = quote! {
-            async fn loader<R: shuttle_runtime::LogRecorder + 'static>(
+            async fn loader(
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory,
                 mut #resource_tracker_ident: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger<R>,
             ) -> #return_type {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
                 #extra_imports
-
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
-
-                shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger)
-                    .init();
 
                 #vars
                 #(let #fn_inputs = shuttle_runtime::get_resource(

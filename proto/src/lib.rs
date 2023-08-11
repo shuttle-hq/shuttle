@@ -142,8 +142,6 @@ pub mod runtime {
                 port,
                 "--provisioner-address",
                 provisioner_address,
-                "--logger-uri",
-                logger_uri,
                 "--storage-manager-type",
                 storage_manager_type,
                 "--storage-manager-path",

@@ -1,8 +1,13 @@
 use async_broadcast::Sender;
 use async_trait::async_trait;
 use dal::{Dal, DalError, Log};
-use opentelemetry_proto::tonic::collector::logs::v1::{
-    logs_service_server::LogsService, ExportLogsServiceRequest, ExportLogsServiceResponse,
+use opentelemetry_proto::tonic::collector::{
+    logs::v1::{
+        logs_service_server::LogsService, ExportLogsServiceRequest, ExportLogsServiceResponse,
+    },
+    trace::v1::{
+        trace_service_server::TraceService, ExportTraceServiceRequest, ExportTraceServiceResponse,
+    },
 };
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
 use shuttle_proto::logger::{logger_server::Logger, LogItem, LogsRequest, LogsResponse};
@@ -47,6 +52,7 @@ impl LogsService for ShuttleLogsOtlp {
     ) -> Result<Response<ExportLogsServiceResponse>, Status> {
         let request = request.into_inner();
 
+        println!("received request: {:?}", request);
         let logs: Vec<_> = request
             .resource_logs
             .into_iter()
@@ -62,6 +68,36 @@ impl LogsService for ShuttleLogsOtlp {
         }
 
         Ok(Response::new(ExportLogsServiceResponse {
+            partial_success: None,
+        }))
+    }
+}
+
+#[async_trait]
+impl TraceService for ShuttleLogsOtlp {
+    async fn export(
+        &self,
+        request: Request<ExportTraceServiceRequest>,
+    ) -> std::result::Result<tonic::Response<ExportTraceServiceResponse>, tonic::Status> {
+        let request = request.into_inner();
+
+        println!("trace service received request: \n{:#?}", request);
+        let logs: Vec<_> = request
+            .resource_spans
+            .into_iter()
+            .flat_map(Log::try_from_scope_span)
+            .flatten()
+            .collect();
+
+        println!("flattened logs: {:#?}", logs);
+        // TODO: consider sending different response for this case.
+        if !logs.is_empty() {
+            _ = self.tx.broadcast(logs).await.map_err(|err| {
+                println!("failed to send log to storage: {}", err);
+            });
+        }
+
+        Ok(Response::new(ExportTraceServiceResponse {
             partial_success: None,
         }))
     }

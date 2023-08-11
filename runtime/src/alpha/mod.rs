@@ -36,24 +36,19 @@ use tokio::sync::{
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
-    transport::{Endpoint, Server, Uri},
+    transport::{Endpoint, Server},
     Request, Response, Status,
 };
 use tower::ServiceBuilder;
 use tracing::{error, info, trace, warn};
 
-use crate::{
-    logger::{LogRecorder, OtlpRecorder},
-    print_version,
-    provisioner_factory::ProvisionerFactory,
-    Logger, ResourceTracker,
-};
+use crate::{print_version, provisioner_factory::ProvisionerFactory, ResourceTracker};
 
 use self::args::Args;
 
 mod args;
 
-pub async fn start(loader: impl Loader<ProvisionerFactory, OtlpRecorder> + Send + 'static) {
+pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     // `--version` overrides any other arguments.
     if std::env::args().any(|arg| &arg == "--version") {
         print_version();
@@ -75,7 +70,6 @@ pub async fn start(loader: impl Loader<ProvisionerFactory, OtlpRecorder> + Send 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
     let provisioner_address = args.provisioner_address;
-    let logger_uri = args.logger_uri;
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
         .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
@@ -100,13 +94,7 @@ pub async fn start(loader: impl Loader<ProvisionerFactory, OtlpRecorder> + Send 
         };
 
     let router = {
-        let alpha = Alpha::new(
-            provisioner_address,
-            logger_uri,
-            loader,
-            storage_manager,
-            env,
-        );
+        let alpha = Alpha::new(provisioner_address, loader, storage_manager, env);
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
@@ -122,7 +110,6 @@ pub struct Alpha<L, S> {
     // Mutexes are for interior mutability
     stopped_tx: Sender<(StopReason, String)>,
     provisioner_address: Endpoint,
-    logger_uri: Uri,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     storage_manager: Arc<dyn StorageManager>,
     loader: Mutex<Option<L>>,
@@ -133,7 +120,6 @@ pub struct Alpha<L, S> {
 impl<L, S> Alpha<L, S> {
     pub fn new(
         provisioner_address: Endpoint,
-        logger_uri: Uri,
         loader: L,
         storage_manager: Arc<dyn StorageManager>,
         env: Environment,
@@ -144,7 +130,6 @@ impl<L, S> Alpha<L, S> {
             stopped_tx,
             kill_tx: Mutex::new(None),
             provisioner_address,
-            logger_uri,
             storage_manager,
             loader: Mutex::new(Some(loader)),
             service: Mutex::new(None),
@@ -154,10 +139,9 @@ impl<L, S> Alpha<L, S> {
 }
 
 #[async_trait]
-pub trait Loader<Fac, R>
+pub trait Loader<Fac>
 where
     Fac: Factory,
-    R: LogRecorder,
 {
     type Service: Service;
 
@@ -165,18 +149,16 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
-        logger: Logger<R>,
     ) -> Result<Self::Service, shuttle_service::Error>;
 }
 
 #[async_trait]
-impl<F, O, Fac, S, R> Loader<Fac, R> for F
+impl<F, O, Fac, S> Loader<Fac> for F
 where
-    F: FnOnce(Fac, ResourceTracker, Logger<R>) -> O + Send,
+    F: FnOnce(Fac, ResourceTracker) -> O + Send,
     O: Future<Output = Result<S, shuttle_service::Error>> + Send,
     Fac: Factory + 'static,
     S: Service,
-    R: LogRecorder + 'static,
 {
     type Service = S;
 
@@ -184,16 +166,15 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
-        logger: Logger<R>,
     ) -> Result<Self::Service, shuttle_service::Error> {
-        (self)(factory, resource_tracker, logger).await
+        (self)(factory, resource_tracker).await
     }
 }
 
 #[async_trait]
 impl<L, S> Runtime for Alpha<L, S>
 where
-    L: Loader<ProvisionerFactory, OtlpRecorder, Service = S> + Send + 'static,
+    L: Loader<ProvisionerFactory, Service = S> + Send + 'static,
     S: Service + Send + 'static,
 {
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
@@ -204,7 +185,7 @@ where
             resources,
             secrets,
             service_name,
-            deployment_id,
+            ..
         } = request.into_inner();
         trace!(path, "loading alpha project");
 
@@ -244,12 +225,9 @@ where
         );
         trace!("got factory");
 
-        let destination = self.logger_uri.to_string();
-        let logger = Logger::new(OtlpRecorder::new(&deployment_id, &destination));
-
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
-        let service = match tokio::spawn(loader.load(factory, resource_tracker, logger)).await {
+        let service = match tokio::spawn(loader.load(factory, resource_tracker)).await {
             Ok(res) => match res {
                 Ok(service) => service,
                 Err(error) => {

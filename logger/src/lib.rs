@@ -1,3 +1,4 @@
+use async_broadcast::Sender;
 use async_trait::async_trait;
 use dal::{Dal, DalError, Log};
 use opentelemetry_proto::tonic::collector::logs::v1::{
@@ -6,7 +7,7 @@ use opentelemetry_proto::tonic::collector::logs::v1::{
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
 use shuttle_proto::logger::{logger_server::Logger, LogItem, LogsRequest, LogsResponse};
 use thiserror::Error;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
@@ -29,11 +30,11 @@ impl From<Error> for Status {
 }
 
 pub struct ShuttleLogsOtlp {
-    tx: broadcast::Sender<Vec<Log>>,
+    tx: Sender<Vec<Log>>,
 }
 
 impl ShuttleLogsOtlp {
-    pub fn new(tx: broadcast::Sender<Vec<Log>>) -> Self {
+    pub fn new(tx: Sender<Vec<Log>>) -> Self {
         Self { tx }
     }
 }
@@ -55,7 +56,9 @@ impl LogsService for ShuttleLogsOtlp {
 
         // TODO: consider sending different response for this case.
         if !logs.is_empty() {
-            self.tx.send(logs).expect("to send log to storage");
+            _ = self.tx.broadcast(logs).await.map_err(|err| {
+                println!("failed to send log to storage: {}", err);
+            });
         }
 
         Ok(Response::new(ExportLogsServiceResponse {
@@ -66,14 +69,14 @@ impl LogsService for ShuttleLogsOtlp {
 
 pub struct Service<D> {
     dal: D,
-    logs_tx: broadcast::Sender<Vec<Log>>,
+    logs_tx: Sender<Vec<Log>>,
 }
 
 impl<D> Service<D>
 where
     D: Dal + Send + Sync + 'static,
 {
-    pub fn new(logs_rx: broadcast::Sender<Vec<Log>>, dal: D) -> Self {
+    pub fn new(logs_rx: Sender<Vec<Log>>, dal: D) -> Self {
         Self {
             dal,
             logs_tx: logs_rx,
@@ -114,7 +117,7 @@ where
         request.verify(Scope::Logs)?;
 
         // Subscribe as soon as possible
-        let mut logs_rx = self.logs_tx.subscribe();
+        let mut logs_rx = self.logs_tx.new_receiver();
         let request = request.into_inner();
         let (tx, rx) = mpsc::channel(1);
         let logs = self.get_logs(request.deployment_id).await?;

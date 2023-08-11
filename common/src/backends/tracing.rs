@@ -194,36 +194,43 @@ impl OtlpDeploymentLogRecorder {
             ..Default::default()
         });
 
-        tokio::spawn(async move {
-            let mut otlp_client = match LogsServiceClient::connect(destination).await {
-                Ok(client) => client,
-                Err(error) => {
-                    error!(
+        std::thread::spawn(move || {
+            // TODO: implement retry-logic, investigate tokio retry-wrapper
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    let mut otlp_client = match LogsServiceClient::connect(destination).await {
+                        Ok(client) => client,
+                        Err(error) => {
+                            error!(
                         error = &error as &dyn std::error::Error,
                         "Could not connect to OTLP collector for logs. No logs will be sent"
                     );
 
-                    return;
-                }
-            };
+                            return;
+                        }
+                    };
 
-            while let Some(scope_logs) = rx.recv().await {
-                let resource_log = ResourceLogs {
-                    scope_logs: vec![scope_logs],
-                    resource: resource.clone(),
-                    ..Default::default()
-                };
-                let request = tonic::Request::new(ExportLogsServiceRequest {
-                    resource_logs: vec![resource_log],
-                });
+                    while let Some(scope_logs) = rx.recv().await {
+                        let resource_log = ResourceLogs {
+                            scope_logs: vec![scope_logs],
+                            resource: resource.clone(),
+                            ..Default::default()
+                        };
+                        let request = tonic::Request::new(ExportLogsServiceRequest {
+                            resource_logs: vec![resource_log],
+                        });
 
-                if let Err(error) = otlp_client.export(request).await {
-                    error!(
+                        if let Err(error) = otlp_client.export(request).await {
+                            error!(
                         error = &error as &dyn std::error::Error,
                         "Otlp deployment log recorder encountered error while exporting the logs"
                     );
-                };
-            }
+                        };
+                    }
+                });
         });
         Self { tx }
     }

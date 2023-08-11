@@ -44,34 +44,66 @@ impl OtlpRecorder {
             ..Default::default()
         });
 
-        tokio::spawn(async move {
-            // TODO: implement retry-logic, investigate tokio retry-wrapper
-            match LogsServiceClient::connect(destination).await {
-                Ok(mut otlp_client) => {
-                    while let Some(scope_logs) = rx.recv().await {
-                        let resource_log = ResourceLogs {
-                            scope_logs: vec![scope_logs],
-                            resource: resource.clone(),
-                            ..Default::default()
-                        };
-                        let request = tonic::Request::new(ExportLogsServiceRequest {
-                            resource_logs: vec![resource_log],
-                        });
+        // tokio::spawn(async move {
+        //     // TODO: implement retry-logic, investigate tokio retry-wrapper
+        //     match LogsServiceClient::connect(destination).await {
+        //         Ok(mut otlp_client) => {
+        //             while let Some(scope_logs) = rx.recv().await {
+        //                 let resource_log = ResourceLogs {
+        //                     scope_logs: vec![scope_logs],
+        //                     resource: resource.clone(),
+        //                     ..Default::default()
+        //                 };
+        //                 let request = tonic::Request::new(ExportLogsServiceRequest {
+        //                     resource_logs: vec![resource_log],
+        //                 });
 
-                        if let Err(error) = otlp_client.export(request).await {
-                            println!("Otlp deployment log recorder encountered error while exporting the logs: {}", error);
-                        };
+        //                 if let Err(error) = otlp_client.export(request).await {
+        //                     println!("Otlp deployment log recorder encountered error while exporting the logs: {}", error);
+        //                 };
+        //             }
+        //         }
+        //         Err(error) => {
+        //             println!(
+        //                 "Could not connect to OTLP collector for logs. No logs will be sent: {}",
+        //                 error
+        //             );
+        //             // Consume the logs so that the channel does not overflow
+        //             while let Some(_scope_logs) = rx.recv().await {}
+        //         }
+        //     };
+        // });
+        println!("spawning LogsServiceClient thread");
+        std::thread::spawn(move || {
+            // TODO: implement retry-logic, investigate tokio retry-wrapper
+            tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap().block_on(async {
+                match LogsServiceClient::connect(destination).await {
+                    Ok(mut otlp_client) => {
+                        while let Some(scope_logs) = rx.recv().await {
+                            let resource_log = ResourceLogs {
+                                scope_logs: vec![scope_logs],
+                                resource: resource.clone(),
+                                ..Default::default()
+                            };
+                            let request = tonic::Request::new(ExportLogsServiceRequest {
+                                resource_logs: vec![resource_log],
+                            });
+    
+                            if let Err(error) = otlp_client.export(request).await {
+                                println!("Otlp deployment log recorder encountered error while exporting the logs: {}", error);
+                            };
+                        }
                     }
-                }
-                Err(error) => {
-                    println!(
-                        "Could not connect to OTLP collector for logs. No logs will be sent: {}",
-                        error
-                    );
-                    // Consume the logs so that the channel does not overflow
-                    while let Some(_scope_logs) = rx.recv().await {}
-                }
-            };
+                    Err(error) => {
+                        println!(
+                            "Could not connect to OTLP collector for logs. No logs will be sent: {}",
+                            error
+                        );
+                        // Consume the logs so that the channel does not overflow
+                        while let Some(_scope_logs) = rx.recv().await {}
+                    }
+                };
+            })
         });
         Self {
             tx,
@@ -97,6 +129,8 @@ impl LogRecorder for OtlpRecorder {
             ..Default::default()
         };
 
+        // TODO: try to extract tracing context here
+        // See if we can reproduce the loop in the tests
         if let Err(error) = self.tx.send(scope_logs) {
             error!(
                 error = &error as &dyn std::error::Error,
@@ -167,12 +201,15 @@ mod tests {
     use std::{
         collections::VecDeque,
         sync::{Arc, Mutex},
+        time::Duration,
     };
 
     use super::*;
 
+    use tracing::{info};
     use tracing_subscriber::prelude::*;
 
+    // TODO: output info or debug log and see if tests still pass
     #[derive(Default, Clone)]
     struct DummyRecorder {
         lines: Arc<Mutex<VecDeque<(Level, String)>>>,
@@ -180,6 +217,15 @@ mod tests {
 
     impl LogRecorder for DummyRecorder {
         fn record_log(&self, visitor: JsonVisitor, metadata: &Metadata) {
+            info!("loop log");
+            println!("no capture");
+            // tokio::task::spawn(async {tracing::info!("hello from spawn")});
+            std::thread::spawn(move || {
+                // TODO: implement retry-logic, investigate tokio retry-wrapper
+                tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap().block_on(async {
+                    tracing::info!("hello from new thread");
+                })
+            });
             self.lines.lock().unwrap().push_back((
                 *metadata.level(),
                 visitor
@@ -193,12 +239,19 @@ mod tests {
         }
     }
 
-    #[test]
-    fn logging() {
+    #[tokio::test]
+    async fn logging() {
         let recorder = DummyRecorder::default();
         let logger = Logger::new(recorder.clone());
 
         let _guard = tracing_subscriber::registry().with(logger).set_default();
+
+        
+        // std::thread::spawn(|| {
+        //     tracing::info!("hello from new thread");
+        // })
+        // .join()
+        // .unwrap();
 
         let span = tracing::info_span!("this is an info span");
         span.in_scope(|| {
@@ -231,5 +284,7 @@ mod tests {
             recorder.lines.lock().unwrap().pop_front(),
             Some((Level::ERROR, "logger".to_string()))
         );
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        assert_eq!(recorder.lines.lock().unwrap().pop_front(), None);
     }
 }

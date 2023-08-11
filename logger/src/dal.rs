@@ -1,5 +1,6 @@
 use std::{path::Path, str::FromStr, time::SystemTime};
 
+use async_broadcast::{broadcast, Sender};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use opentelemetry_proto::tonic::{
@@ -20,8 +21,7 @@ use sqlx::{
     FromRow, QueryBuilder, SqlitePool,
 };
 use thiserror::Error;
-use tokio::sync::broadcast;
-use tracing::info;
+use tracing::{error, info};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -39,7 +39,7 @@ pub trait Dal {
 
 pub struct Sqlite {
     pool: SqlitePool,
-    tx: broadcast::Sender<Vec<Log>>,
+    tx: Sender<Vec<Log>>,
 }
 
 impl Sqlite {
@@ -80,11 +80,12 @@ impl Sqlite {
     async fn from_pool(pool: SqlitePool) -> Self {
         MIGRATIONS.run(&pool).await.unwrap();
 
-        let (tx, mut rx): (broadcast::Sender<Vec<Log>>, _) = broadcast::channel(256);
+        let (tx, mut rx): (Sender<Vec<Log>>, _) = broadcast(1000);
         let pool_spawn = pool.clone();
 
         tokio::spawn(async move {
             while let Ok(logs) = rx.recv().await {
+                println!("received logs: {:#?}", logs);
                 let mut builder = QueryBuilder::new("INSERT INTO logs (deployment_id, shuttle_service_name, timestamp, level, fields)");
                 builder.push_values(logs, |mut b, log| {
                     b.push_bind(log.deployment_id)
@@ -95,7 +96,9 @@ impl Sqlite {
                 });
                 let query = builder.build();
 
-                query.execute(&pool_spawn).await.unwrap();
+                _ = query.execute(&pool_spawn).await.map_err(|err| {
+                    error!(error = %err, "failed to insert logs");
+                });
             }
         });
 
@@ -103,7 +106,7 @@ impl Sqlite {
     }
 
     /// Get the sender to broadcast logs into
-    pub fn get_sender(&self) -> broadcast::Sender<Vec<Log>> {
+    pub fn get_sender(&self) -> Sender<Vec<Log>> {
         self.tx.clone()
     }
 }

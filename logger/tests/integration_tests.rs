@@ -20,7 +20,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use tracing_subscriber::prelude::*;
 
 #[tokio::test]
-async fn fetch_logs() {
+async fn generate_and_get_logs() {
     let port = pick_unused_port().unwrap();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
     const DEPLOYMENT_ID: &str = "fetch-logs-deployment-id";
@@ -48,7 +48,6 @@ async fn fetch_logs() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
     let dst = format!("http://localhost:{port}");
 
     let mut client = LoggerClient::connect(dst).await.unwrap();
@@ -93,10 +92,35 @@ async fn fetch_logs() {
             .collect::<Vec<_>>(),
         expected
     );
+
+    // Generate some logs with a fn not instrumented with deployment_id.
+    tokio::task::spawn_blocking(move || {
+        generate_logs(port, DEPLOYMENT_ID.into(), missing_deployment_id_field)
+    })
+    .await
+    .unwrap();
+
+    let response = client
+        .get_logs(Request::new(LogsRequest {
+            deployment_id: DEPLOYMENT_ID.into(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+
+    // Check that no more logs have been recorded.
+    assert_eq!(
+        response
+            .log_items
+            .into_iter()
+            .map(MinLogItem::from)
+            .collect::<Vec<_>>(),
+        expected
+    );
 }
 
 #[tokio::test]
-async fn stream_logs() {
+async fn generate_and_stream_logs() {
     let port = pick_unused_port().unwrap();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
     const DEPLOYMENT_ID: &str = "stream-logs-deployment-id";
@@ -178,6 +202,11 @@ fn deploy(deployment_id: String) {
     info!(%deployment_id, "info");
     debug!("debug");
     trace!("trace");
+}
+
+#[instrument]
+fn missing_deployment_id_field(deployment_id: String) {
+    error!("error");
 }
 
 #[instrument(fields(%deployment_id))]

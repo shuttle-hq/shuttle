@@ -30,6 +30,8 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 pub enum DalError {
     #[error("database request failed: {0}")]
     Sqlx(#[from] sqlx::Error),
+    #[error("parsing log failed: {0}")]
+    Parsing(String),
 }
 
 #[async_trait]
@@ -141,16 +143,16 @@ pub enum LogLevel {
     Error,
 }
 
-// TODO: do this properly
-impl From<String> for LogLevel {
-    fn from(value: String) -> Self {
-        match value.as_str() {
-            "TRACE" => Self::Trace,
-            "DEBUG" => Self::Debug,
-            "INFO" => Self::Info,
-            "WARN" => Self::Warn,
-            "ERROR" => Self::Error,
-            other => unreachable!("invalid level: {other}"),
+impl FromStr for LogLevel {
+    type Err = DalError;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "TRACE" => Ok(Self::Trace),
+            "DEBUG" => Ok(Self::Debug),
+            "INFO" => Ok(Self::Info),
+            "WARN" => Ok(Self::Warn),
+            "ERROR" => Ok(Self::Error),
+            other => Err(DalError::Parsing(format!("invalid log level: {other}"))),
         }
     }
 }
@@ -278,25 +280,21 @@ impl Log {
     }
 
     /// Try to get self from an OTLP [Span]. Also enrich it with the shuttle service name and deployment id.
-    /// TODO: remove unwraps
     fn try_from_span(span: Span, shuttle_service_name: &str) -> Option<Vec<Self>> {
         let deployment_id = get_attribute(span.attributes, "deployment_id")?;
 
-        let events = span
+        let logs = span
             .events
             .into_iter()
-            .map(|event| {
+            .flat_map(|event| {
                 let message = event.name;
 
                 let mut fields = from_any_value_kv_to_serde_json_map(event.attributes);
                 fields.insert("message".to_string(), message.into());
 
-                let severity = fields
-                    .remove("level")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .to_string();
+                // Every event should have a level field, but we store it in the level column,
+                // so we can remove it from the event fields.
+                let level = fields.remove("level")?;
 
                 let naive = NaiveDateTime::from_timestamp_opt(
                     (event.time_unix_nano / 1_000_000_000)
@@ -306,17 +304,17 @@ impl Log {
                 )
                 .unwrap_or_default();
 
-                Log {
+                Some(Log {
                     shuttle_service_name: shuttle_service_name.to_string(),
                     deployment_id: deployment_id.clone(),
                     timestamp: DateTime::from_utc(naive, Utc),
-                    level: severity.into(),
+                    level: level.as_str()?.parse().ok()?,
                     fields: Value::Object(fields),
-                }
+                })
             })
             .collect();
 
-        Some(events)
+        Some(logs)
     }
 }
 

@@ -80,7 +80,7 @@ impl TraceService for ShuttleLogsOtlp {
     ) -> std::result::Result<tonic::Response<ExportTraceServiceResponse>, tonic::Status> {
         let request = request.into_inner();
         // println!("received logs");
-        println!("trace service received request: \n{:#?}", request);
+        // println!("trace service received request: \n{:#?}", request);
         let logs: Vec<_> = request
             .resource_spans
             .into_iter()
@@ -157,13 +157,11 @@ where
         let (tx, rx) = mpsc::channel(1);
         let logs = self.get_logs(request.deployment_id).await?;
 
-        println!("got logs in stream: {:?}", logs);
         tokio::spawn(async move {
             let mut last = Default::default();
 
             for log in logs {
                 last = log.timestamp.clone().unwrap_or_default();
-                println!("last: {}", last);
                 if let Err(error) = tx.send(Ok(log)).await {
                     println!("error sending log: {}", error);
                 };

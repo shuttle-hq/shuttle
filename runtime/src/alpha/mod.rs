@@ -36,7 +36,7 @@ use tokio::sync::{
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
-    transport::{Endpoint, Server},
+    transport::{Endpoint, Server, Uri},
     Request, Response, Status,
 };
 use tower::ServiceBuilder;
@@ -94,7 +94,13 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         };
 
     let router = {
-        let alpha = Alpha::new(provisioner_address, loader, storage_manager, env);
+        let alpha = Alpha::new(
+            provisioner_address,
+            loader,
+            storage_manager,
+            env,
+            args.logger_uri,
+        );
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
@@ -115,6 +121,7 @@ pub struct Alpha<L, S> {
     loader: Mutex<Option<L>>,
     service: Mutex<Option<S>>,
     env: Environment,
+    logger_uri: Uri,
 }
 
 impl<L, S> Alpha<L, S> {
@@ -123,6 +130,7 @@ impl<L, S> Alpha<L, S> {
         loader: L,
         storage_manager: Arc<dyn StorageManager>,
         env: Environment,
+        logger_address: Uri,
     ) -> Self {
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
@@ -134,6 +142,7 @@ impl<L, S> Alpha<L, S> {
             loader: Mutex::new(Some(loader)),
             service: Mutex::new(None),
             env,
+            logger_uri: logger_address,
         }
     }
 }
@@ -149,13 +158,14 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
+        logger_uri: String,
     ) -> Result<Self::Service, shuttle_service::Error>;
 }
 
 #[async_trait]
 impl<F, O, Fac, S> Loader<Fac> for F
 where
-    F: FnOnce(Fac, ResourceTracker) -> O + Send,
+    F: FnOnce(Fac, ResourceTracker, String) -> O + Send,
     O: Future<Output = Result<S, shuttle_service::Error>> + Send,
     Fac: Factory + 'static,
     S: Service,
@@ -166,8 +176,9 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
+        logger_uri: String,
     ) -> Result<Self::Service, shuttle_service::Error> {
-        (self)(factory, resource_tracker).await
+        (self)(factory, resource_tracker, logger_uri).await
     }
 }
 
@@ -227,7 +238,15 @@ where
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
-        let service = match tokio::spawn(loader.load(factory, resource_tracker)).await {
+        let logger_uri = self.logger_uri.clone();
+
+        let service = match tokio::spawn(loader.load(
+            factory,
+            resource_tracker,
+            logger_uri.to_string(),
+        ))
+        .await
+        {
             Ok(res) => match res {
                 Ok(service) => service,
                 Err(error) => {

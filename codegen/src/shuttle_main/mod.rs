@@ -16,40 +16,6 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     quote! {
         #[tokio::main]
         async fn main() {
-            // TODO: clean up here, this is for testing purposes.
-            use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
-            use shuttle_runtime::tracing_subscriber::prelude::*;
-
-            shuttle_runtime::opentelemetry::global::set_text_map_propagator(shuttle_runtime::opentelemetry::sdk::propagation::TraceContextPropagator::new());
-
-            let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
-                .unwrap();
-            let fmt_layer = shuttle_runtime::tracing_subscriber::fmt::layer();
-
-            let tracer = shuttle_runtime::opentelemetry_otlp::new_pipeline()
-                .tracing()
-                .with_exporter(
-                    shuttle_runtime::opentelemetry_otlp::new_exporter()
-                        .tonic()
-                        .with_endpoint("http://127.0.0.1:8080"),
-                )
-                .with_trace_config(
-                    shuttle_runtime::opentelemetry::sdk::trace::config().with_resource(shuttle_runtime::opentelemetry::sdk::Resource::new(vec![shuttle_runtime::opentelemetry::KeyValue::new(
-                        "service.name",
-                        "shuttle-runtime",
-                    )])),
-                )
-                .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
-                .unwrap();
-            let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
-
-            shuttle_runtime::tracing_subscriber::registry()
-                .with(filter_layer)
-                .with(fmt_layer)
-                .with(otel_layer)
-                .init();
-
             shuttle_runtime::start(loader).await;
         }
 
@@ -290,10 +256,42 @@ impl ToTokens for Loader {
             async fn loader(
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory,
                 mut #resource_tracker_ident: shuttle_runtime::ResourceTracker,
+                logger_uri: String,
             ) -> #return_type {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
+                use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
                 #extra_imports
+
+                shuttle_runtime::opentelemetry::global::set_text_map_propagator(shuttle_runtime::opentelemetry::sdk::propagation::TraceContextPropagator::new());
+
+                let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                    .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
+                    .unwrap();
+                let fmt_layer = shuttle_runtime::tracing_subscriber::fmt::layer();
+
+                let tracer = shuttle_runtime::opentelemetry_otlp::new_pipeline()
+                    .tracing()
+                    .with_exporter(
+                        shuttle_runtime::opentelemetry_otlp::new_exporter()
+                            .tonic()
+                            .with_endpoint(logger_uri),
+                    )
+                    .with_trace_config(
+                        shuttle_runtime::opentelemetry::sdk::trace::config().with_resource(shuttle_runtime::opentelemetry::sdk::Resource::new(vec![shuttle_runtime::opentelemetry::KeyValue::new(
+                            "service.name",
+                            "shuttle-runtime",
+                        )])),
+                    )
+                    .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
+                    .unwrap();
+                let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
+
+                shuttle_runtime::tracing_subscriber::registry()
+                    .with(filter_layer)
+                    .with(fmt_layer)
+                    .with(otel_layer)
+                    .init();
 
                 #vars
                 #(let #fn_inputs = shuttle_runtime::get_resource(
@@ -358,22 +356,43 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader<R: shuttle_runtime::LogRecorder + 'static>(
+            async fn loader(
                 mut _factory: shuttle_runtime::ProvisionerFactory,
                 mut _resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger<R>,
+                logger_uri: String,
             ) -> ShuttleSimple {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
+                use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
 
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
+                shuttle_runtime::opentelemetry::global::set_text_map_propagator(shuttle_runtime::opentelemetry::sdk::propagation::TraceContextPropagator::new());
+
+                let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                    .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
+                    .unwrap();
+                let fmt_layer = shuttle_runtime::tracing_subscriber::fmt::layer();
+
+                let tracer = shuttle_runtime::opentelemetry_otlp::new_pipeline()
+                    .tracing()
+                    .with_exporter(
+                        shuttle_runtime::opentelemetry_otlp::new_exporter()
+                            .tonic()
+                            .with_endpoint(logger_uri),
+                    )
+                    .with_trace_config(
+                        shuttle_runtime::opentelemetry::sdk::trace::config().with_resource(shuttle_runtime::opentelemetry::sdk::Resource::new(vec![shuttle_runtime::opentelemetry::KeyValue::new(
+                            "service.name",
+                            "shuttle-runtime",
+                        )])),
+                    )
+                    .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
+                    .unwrap();
+                let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
 
                 shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
-                    .with(logger)
+                    .with(fmt_layer)
+                    .with(otel_layer)
                     .init();
 
                 simple().await
@@ -439,23 +458,44 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader<R: shuttle_runtime::LogRecorder + 'static>(
+            async fn loader(
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 mut resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger<R>,
+                logger_uri: String,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
+                use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
                 use shuttle_runtime::{Factory, ResourceBuilder};
 
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
+                shuttle_runtime::opentelemetry::global::set_text_map_propagator(shuttle_runtime::opentelemetry::sdk::propagation::TraceContextPropagator::new());
+
+                let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                    .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
+                    .unwrap();
+                let fmt_layer = shuttle_runtime::tracing_subscriber::fmt::layer();
+
+                let tracer = shuttle_runtime::opentelemetry_otlp::new_pipeline()
+                    .tracing()
+                    .with_exporter(
+                        shuttle_runtime::opentelemetry_otlp::new_exporter()
+                            .tonic()
+                            .with_endpoint(logger_uri),
+                    )
+                    .with_trace_config(
+                        shuttle_runtime::opentelemetry::sdk::trace::config().with_resource(shuttle_runtime::opentelemetry::sdk::Resource::new(vec![shuttle_runtime::opentelemetry::KeyValue::new(
+                            "service.name",
+                            "shuttle-runtime",
+                        )])),
+                    )
+                    .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
+                    .unwrap();
+                let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
 
                 shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
-                    .with(logger)
+                    .with(fmt_layer)
+                    .with(otel_layer)
                     .init();
 
                 let pool = shuttle_runtime::get_resource(
@@ -563,23 +603,44 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader<R: shuttle_runtime::LogRecorder + 'static>(
+            async fn loader(
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 mut resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger<R>,
+                logger_uri: String,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
+                use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
                 use shuttle_runtime::{Factory, ResourceBuilder};
 
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
+                shuttle_runtime::opentelemetry::global::set_text_map_propagator(shuttle_runtime::opentelemetry::sdk::propagation::TraceContextPropagator::new());
+
+                let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                    .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
+                    .unwrap();
+                let fmt_layer = shuttle_runtime::tracing_subscriber::fmt::layer();
+
+                let tracer = shuttle_runtime::opentelemetry_otlp::new_pipeline()
+                    .tracing()
+                    .with_exporter(
+                        shuttle_runtime::opentelemetry_otlp::new_exporter()
+                            .tonic()
+                            .with_endpoint(logger_uri),
+                    )
+                    .with_trace_config(
+                        shuttle_runtime::opentelemetry::sdk::trace::config().with_resource(shuttle_runtime::opentelemetry::sdk::Resource::new(vec![shuttle_runtime::opentelemetry::KeyValue::new(
+                            "service.name",
+                            "shuttle-runtime",
+                        )])),
+                    )
+                    .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
+                    .unwrap();
+                let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
 
                 shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
-                    .with(logger)
+                    .with(fmt_layer)
+                    .with(otel_layer)
                     .init();
 
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));

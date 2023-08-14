@@ -18,7 +18,7 @@ async-trait = { workspace = true }
 chrono = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-proto = { workspace = true, features = ["gen-tonic", "logs"] }
-opentelemetry-otlp = { version = "0.12.0" }
+opentelemetry-otlp = {  workspace = true }
 prost-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -190,7 +190,7 @@ fn bar(deployment_id: String) {
     trace!("bar");
 }
 
-/// Helper function to setup a tracing subscriber and run an instrumented function to produce logs.
+/// Helper function to setup a tracing subscriber and run an instrumented fn to produce logs.
 fn generate_logs(port: u16, deployment_id: String, generator: fn(String)) {
     // Set up tracing subscriber connected to the logger server.
     let tracer = opentelemetry_otlp::new_pipeline()

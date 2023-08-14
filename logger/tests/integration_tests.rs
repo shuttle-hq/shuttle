@@ -44,9 +44,7 @@ async fn generate_and_get_logs() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Start a subscriber and generate some logs.
-    tokio::task::spawn_blocking(move || generate_logs(port, DEPLOYMENT_ID.into(), deploy))
-        .await
-        .unwrap();
+    generate_logs(port, DEPLOYMENT_ID.into(), deploy);
 
     let dst = format!("http://localhost:{port}");
 
@@ -94,11 +92,7 @@ async fn generate_and_get_logs() {
     );
 
     // Generate some logs with a fn not instrumented with deployment_id.
-    tokio::task::spawn_blocking(move || {
-        generate_logs(port, DEPLOYMENT_ID.into(), missing_deployment_id_field)
-    })
-    .await
-    .unwrap();
+    generate_logs(port, DEPLOYMENT_ID.into(), missing_deployment_id_field);
 
     let response = client
         .get_logs(Request::new(LogsRequest {
@@ -144,9 +138,7 @@ async fn generate_and_stream_logs() {
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
     // Start a subscriber and generate some logs.
-    tokio::task::spawn_blocking(move || generate_logs(port, DEPLOYMENT_ID.into(), foo))
-        .await
-        .unwrap();
+    generate_logs(port, DEPLOYMENT_ID.into(), foo);
 
     // Connect to the logger server so we can fetch logs.
     let dst = format!("http://localhost:{port}");
@@ -176,9 +168,7 @@ async fn generate_and_stream_logs() {
     );
 
     // Start a subscriber and generate some more logs.
-    tokio::task::spawn_blocking(move || generate_logs(port, DEPLOYMENT_ID.into(), bar))
-        .await
-        .unwrap();
+    generate_logs(port, DEPLOYMENT_ID.into(), bar);
 
     let log = timeout(std::time::Duration::from_millis(500), response.message())
         .await

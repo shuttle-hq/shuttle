@@ -1,3 +1,5 @@
+#[cfg(feature = "openapi")]
+use crate::ulid_type;
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, Color,
     ContentArrangement, Table,
@@ -22,6 +24,8 @@ pub const fn idle_minutes() -> u64 {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::Response))]
 pub struct Response {
+    #[cfg_attr(feature = "openapi", schema(schema_with = ulid_type))]
+    pub id: String,
     pub name: String,
     #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::models::project::State))]
     pub state: State,

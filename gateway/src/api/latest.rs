@@ -519,7 +519,9 @@ async fn request_custom_domain_acme_certificate(
         .unwrap()
         .project_id()
         .map_err(|_| Error::custom(ErrorKind::Internal, "Missing project_id from the container"))?;
-    let idle_minutes = project.state.container().unwrap().idle_minutes();
+
+    let container = project.state.container().unwrap();
+    let idle_minutes = container.idle_minutes();
 
     // Destroy and recreate the project with the new domain.
     service

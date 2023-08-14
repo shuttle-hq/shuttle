@@ -14,25 +14,10 @@ use shuttle_logger::{Service, ShuttleLogsOtlp, Sqlite};
 use shuttle_proto::logger::{
     logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogLevel, LogsRequest,
 };
-use tokio::{select, time::timeout};
+use tokio::time::timeout;
 use tonic::{transport::Server, Request};
-use tracing::{
-    debug, error, info, instrument,
-    span::{self, Attributes},
-    trace, warn, Id, Subscriber,
-};
-use tracing_subscriber::Layer;
-use tracing_subscriber::{layer::Context, prelude::*, registry::LookupSpan};
-
-// struct DeployLayer;
-// impl<S> Layer<S> for DeployLayer
-// where
-//     S: Subscriber + for<'lookup> LookupSpan<'lookup>,
-// {
-//     fn on_new_span(&self, attrs: &Attributes<'_>, id: &Id, ctx: Context<'_, S>) {
-
-//     }
-// }
+use tracing::{debug, error, info, instrument, trace, warn};
+use tracing_subscriber::prelude::*;
 
 #[tokio::test]
 async fn fetch_logs() {
@@ -40,7 +25,8 @@ async fn fetch_logs() {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
     const DEPLOYMENT_ID: &str = "fetch-logs-deployment-id";
 
-    let server_future = async move {
+    // Start the logger server in the background.
+    tokio::task::spawn(async move {
         let sqlite = Sqlite::new_in_memory().await;
 
         Server::builder()
@@ -52,40 +38,15 @@ async fn fetch_logs() {
             .serve(addr)
             .await
             .unwrap()
-    };
+    });
 
-    tokio::task::spawn(server_future);
+    // Ensure the logger server has time to start.
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    let test_future = async move {
-        // Make sure the server starts first
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-        let tracer = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(
-                opentelemetry_otlp::new_exporter()
-                    .tonic()
-                    .with_endpoint(format!("http://127.0.0.1:{port}")),
-            )
-            .with_trace_config(opentelemetry::sdk::trace::config().with_resource(
-                opentelemetry::sdk::Resource::new(vec![opentelemetry::KeyValue::new(
-                    "service.name",
-                    "test",
-                )]),
-            ))
-            .install_simple()
-            .unwrap();
-        let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-
-        let _guard = tracing_subscriber::registry()
-            .with(otel_layer)
-            .set_default();
-
-        // Generate some logs
-        deploy(DEPLOYMENT_ID.into());
-    };
-
-    tokio::task::spawn(test_future);
+    // Start a subscriber and generate some logs.
+    tokio::task::spawn_blocking(move || generate_logs(port, DEPLOYMENT_ID.into(), deploy))
+        .await
+        .unwrap();
 
     tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
     let dst = format!("http://localhost:{port}");
@@ -140,7 +101,8 @@ async fn stream_logs() {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
     const DEPLOYMENT_ID: &str = "stream-logs-deployment-id";
 
-    let server_future = async move {
+    // Start the logger server in the background.
+    tokio::spawn(async move {
         let sqlite = Sqlite::new_in_memory().await;
 
         Server::builder()
@@ -152,47 +114,19 @@ async fn stream_logs() {
             .serve(addr)
             .await
             .unwrap()
-    };
+    });
 
-    tokio::spawn(server_future);
+    // Ensure the server has started.
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
-    let test_future = async move {
-        // Make sure the server starts first
-        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    // Start a subscriber and generate some logs.
+    tokio::task::spawn_blocking(move || generate_logs(port, DEPLOYMENT_ID.into(), foo))
+        .await
+        .unwrap();
 
-        let tracer = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(
-                opentelemetry_otlp::new_exporter()
-                    .tonic()
-                    .with_endpoint(format!("http://127.0.0.1:{port}")),
-            )
-            .with_trace_config(opentelemetry::sdk::trace::config().with_resource(
-                opentelemetry::sdk::Resource::new(vec![opentelemetry::KeyValue::new(
-                    "service.name",
-                    "test",
-                )]),
-            ))
-            .install_simple()
-            .unwrap();
-        let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-
-        let _guard = tracing_subscriber::registry()
-            .with(otel_layer)
-            .set_default();
-
-        // Generate some logs
-        foo(DEPLOYMENT_ID.into());
-    };
-
-    tokio::spawn(test_future);
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
+    // Connect to the logger server so we can fetch logs.
     let dst = format!("http://localhost:{port}");
-
     let mut client = LoggerClient::connect(dst).await.unwrap();
-
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Subscribe to stream
     let mut response = client
@@ -217,35 +151,10 @@ async fn stream_logs() {
         },
     );
 
-    // Generate some more logs
-    let test_future = async move {
-        let tracer = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(
-                opentelemetry_otlp::new_exporter()
-                    .tonic()
-                    .with_endpoint(format!("http://127.0.0.1:{port}")),
-            )
-            .with_trace_config(opentelemetry::sdk::trace::config().with_resource(
-                opentelemetry::sdk::Resource::new(vec![opentelemetry::KeyValue::new(
-                    "service.name",
-                    "test",
-                )]),
-            ))
-            .install_simple()
-            .unwrap();
-        let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-
-        let _guard = tracing_subscriber::registry()
-            .with(otel_layer)
-            .set_default();
-
-        // Generate some logs
-        bar(DEPLOYMENT_ID.into());
-    };
-
-    tokio::spawn(test_future);
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Start a subscriber and generate some more logs.
+    tokio::task::spawn_blocking(move || generate_logs(port, DEPLOYMENT_ID.into(), bar))
+        .await
+        .unwrap();
 
     let log = timeout(std::time::Duration::from_millis(500), response.message())
         .await
@@ -279,6 +188,34 @@ fn foo(deployment_id: String) {
 #[instrument(fields(%deployment_id))]
 fn bar(deployment_id: String) {
     trace!("bar");
+}
+
+/// Helper function to setup a tracing subscriber and run an instrumented function to produce logs.
+fn generate_logs(port: u16, deployment_id: String, generator: fn(String)) {
+    // Set up tracing subscriber connected to the logger server.
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(format!("http://127.0.0.1:{port}")),
+        )
+        .with_trace_config(opentelemetry::sdk::trace::config().with_resource(
+            opentelemetry::sdk::Resource::new(vec![opentelemetry::KeyValue::new(
+                "service.name",
+                "test",
+            )]),
+        ))
+        .install_simple()
+        .unwrap();
+    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    let _guard = tracing_subscriber::registry()
+        .with(otel_layer)
+        .set_default();
+
+    // Generate some logs.
+    generator(deployment_id);
 }
 
 #[derive(Debug, Eq, PartialEq)]

@@ -86,7 +86,6 @@ impl Sqlite {
 
         tokio::spawn(async move {
             while let Ok(logs) = rx.recv().await {
-                println!("received logs: {:#?}", logs);
                 let mut builder = QueryBuilder::new("INSERT INTO logs (deployment_id, shuttle_service_name, timestamp, level, fields)");
                 builder.push_values(logs, |mut b, log| {
                     b.push_bind(log.deployment_id)
@@ -97,9 +96,9 @@ impl Sqlite {
                 });
                 let query = builder.build();
 
-                _ = query.execute(&pool_spawn).await.map_err(|err| {
-                    error!(error = %err, "failed to insert logs");
-                });
+                if let Err(error) = query.execute(&pool_spawn).await {
+                    error!(error = %error, "failed to insert logs");
+                };
             }
         });
 
@@ -143,9 +142,9 @@ pub enum LogLevel {
 }
 
 // TODO: do this properly
-impl From<&str> for LogLevel {
-    fn from(value: &str) -> Self {
-        match value {
+impl From<String> for LogLevel {
+    fn from(value: String) -> Self {
+        match value.as_str() {
             "TRACE" => Self::Trace,
             "DEBUG" => Self::Debug,
             "INFO" => Self::Info,
@@ -246,12 +245,12 @@ impl Log {
     }
 
     /// Try to get a log from an OTLP [ResourceSpans]
-    pub fn try_from_scope_span(spans: ResourceSpans) -> Option<Vec<Self>> {
+    pub fn try_from_scope_span(resource_spans: ResourceSpans) -> Option<Vec<Self>> {
         let ResourceSpans {
             resource,
             scope_spans,
             schema_url: _,
-        } = spans;
+        } = resource_spans;
 
         let shuttle_service_name = get_attribute(resource?.attributes, "service.name")?;
 
@@ -264,9 +263,10 @@ impl Log {
                     ..
                 } = scope_spans;
 
-                let events: Vec<Log> = spans
+                let events: Vec<_> = spans
                     .into_iter()
                     .flat_map(|span| Self::try_from_span(span, &shuttle_service_name))
+                    .flatten()
                     .collect();
 
                 Some(events)
@@ -279,10 +279,11 @@ impl Log {
 
     /// Try to get self from an OTLP [Span]. Also enrich it with the shuttle service name and deployment id.
     /// TODO: remove unwraps
-    fn try_from_span(span: Span, shuttle_service_name: &str) -> Vec<Self> {
-        let deployment_id = get_attribute(span.attributes, "deployment_id").unwrap();
+    fn try_from_span(span: Span, shuttle_service_name: &str) -> Option<Vec<Self>> {
+        let deployment_id = get_attribute(span.attributes, "deployment_id")?;
 
-        span.events
+        let events = span
+            .events
             .into_iter()
             .map(|event| {
                 let message = event.name;
@@ -290,7 +291,12 @@ impl Log {
                 let mut fields = from_any_value_kv_to_serde_json_map(event.attributes);
                 fields.insert("message".to_string(), message.into());
 
-                let severity = fields.get("level").unwrap().as_str().unwrap();
+                let severity = fields
+                    .remove("level")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string();
 
                 let naive = NaiveDateTime::from_timestamp_opt(
                     (event.time_unix_nano / 1_000_000_000)
@@ -308,7 +314,9 @@ impl Log {
                     fields: Value::Object(fields),
                 }
             })
-            .collect()
+            .collect();
+
+        Some(events)
     }
 }
 

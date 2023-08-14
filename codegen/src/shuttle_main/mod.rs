@@ -20,6 +20,8 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
             use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
             use shuttle_runtime::tracing_subscriber::prelude::*;
 
+            shuttle_runtime::opentelemetry::global::set_text_map_propagator(shuttle_runtime::opentelemetry::sdk::propagation::TraceContextPropagator::new());
+
             let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
                 .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
                 .unwrap();

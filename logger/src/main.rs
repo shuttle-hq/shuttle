@@ -30,9 +30,9 @@ async fn main() {
 
     let sqlite = Sqlite::new(&db_path.display().to_string()).await;
     let svc = ShuttleLogsOtlp::new(sqlite.get_sender());
-    let svc = TraceServiceServer::new(svc);
+    let trace_svc = TraceServiceServer::new(svc);
     let router = server_builder
-        .add_service(svc)
+        .add_service(trace_svc)
         .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)));
 
     router.serve(args.address).await.unwrap();

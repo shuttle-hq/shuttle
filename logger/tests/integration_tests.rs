@@ -6,7 +6,6 @@ use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
 use serde_json::{json, Value};
 use shuttle_common::{
-    backends::tracing::{DeploymentLayer, OtlpDeploymentLogRecorder},
     claims::Scope,
     tracing::{FILEPATH_KEY, LINENO_KEY, NAMESPACE_KEY, TARGET_KEY},
 };
@@ -17,15 +16,31 @@ use shuttle_proto::logger::{
 };
 use tokio::{select, time::timeout};
 use tonic::{transport::Server, Request};
-use tracing::{debug, error, info, instrument, trace, warn};
-use tracing_subscriber::prelude::*;
+use tracing::{
+    debug, error, info, instrument,
+    span::{self, Attributes},
+    trace, warn, Id, Subscriber,
+};
+use tracing_subscriber::Layer;
+use tracing_subscriber::{layer::Context, prelude::*, registry::LookupSpan};
+
+// struct DeployLayer;
+// impl<S> Layer<S> for DeployLayer
+// where
+//     S: Subscriber + for<'lookup> LookupSpan<'lookup>,
+// {
+//     fn on_new_span(&self, attrs: &Attributes<'_>, id: &Id, ctx: Context<'_, S>) {
+
+//     }
+// }
 
 #[tokio::test]
-async fn logger() {
+async fn fetch_logs() {
     let port = pick_unused_port().unwrap();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+    const DEPLOYMENT_ID: &str = "fetch-logs-deployment-id";
 
-    let server_future = async {
+    let server_future = async move {
         let sqlite = Sqlite::new_in_memory().await;
 
         Server::builder()
@@ -39,7 +54,9 @@ async fn logger() {
             .unwrap()
     };
 
-    let test_future = async {
+    tokio::task::spawn(server_future);
+
+    let test_future = async move {
         // Make sure the server starts first
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
@@ -64,72 +81,66 @@ async fn logger() {
             .with(otel_layer)
             .set_default();
 
-        let dst = format!("http://localhost:{port}");
-
-        let mut client = LoggerClient::connect(dst).await.unwrap();
-
-        let deployment_id = String::from("test_deployment_id");
-
         // Generate some logs
-        deploy(deployment_id.clone());
-
-        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-
-        // Get the generated logs
-        let response = client
-            .get_logs(Request::new(LogsRequest {
-                deployment_id: deployment_id.clone(),
-            }))
-            .await
-            .unwrap()
-            .into_inner();
-
-        let expected = vec![
-            MinLogItem {
-                level: LogLevel::Error,
-                fields: json!({"message": "error"}),
-            },
-            MinLogItem {
-                level: LogLevel::Warn,
-                fields: json!({"message": "warn"}),
-            },
-            MinLogItem {
-                level: LogLevel::Info,
-                fields: json!({"message": "info", "deployment_id": deployment_id}),
-            },
-            MinLogItem {
-                level: LogLevel::Debug,
-                fields: json!({"message": "debug"}),
-            },
-            MinLogItem {
-                level: LogLevel::Trace,
-                fields: json!({"message": "trace"}),
-            },
-        ];
-
-        assert_eq!(
-            response
-                .log_items
-                .into_iter()
-                .map(MinLogItem::from)
-                .collect::<Vec<_>>(),
-            expected
-        );
+        deploy(DEPLOYMENT_ID.into());
     };
 
-    select! {
-        _ = server_future => panic!("server finished first"),
-        _ = test_future => {},
-    }
+    tokio::task::spawn(test_future);
+
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    let dst = format!("http://localhost:{port}");
+
+    let mut client = LoggerClient::connect(dst).await.unwrap();
+
+    // Get the generated logs
+    let response = client
+        .get_logs(Request::new(LogsRequest {
+            deployment_id: DEPLOYMENT_ID.into(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+
+    let expected = vec![
+        MinLogItem {
+            level: LogLevel::Error,
+            fields: json!({"message": "error"}),
+        },
+        MinLogItem {
+            level: LogLevel::Warn,
+            fields: json!({"message": "warn"}),
+        },
+        MinLogItem {
+            level: LogLevel::Info,
+            fields: json!({"message": "info", "deployment_id": DEPLOYMENT_ID.to_string()}),
+        },
+        MinLogItem {
+            level: LogLevel::Debug,
+            fields: json!({"message": "debug"}),
+        },
+        MinLogItem {
+            level: LogLevel::Trace,
+            fields: json!({"message": "trace"}),
+        },
+    ];
+
+    assert_eq!(
+        response
+            .log_items
+            .into_iter()
+            .map(MinLogItem::from)
+            .collect::<Vec<_>>(),
+        expected
+    );
 }
 
-#[ignore]
 #[tokio::test]
-async fn logger_stream() {
+async fn stream_logs() {
     let port = pick_unused_port().unwrap();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+    const DEPLOYMENT_ID: &str = "stream-logs-deployment-id";
 
-    let server_future = async {
+    let server_future = async move {
         let sqlite = Sqlite::new_in_memory().await;
 
         Server::builder()
@@ -143,73 +154,112 @@ async fn logger_stream() {
             .unwrap()
     };
 
-    let test_future = async {
+    tokio::spawn(server_future);
+
+    let test_future = async move {
         // Make sure the server starts first
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
-        let dst = format!("http://localhost:{port}");
+        let tracer = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .tonic()
+                    .with_endpoint(format!("http://127.0.0.1:{port}")),
+            )
+            .with_trace_config(opentelemetry::sdk::trace::config().with_resource(
+                opentelemetry::sdk::Resource::new(vec![opentelemetry::KeyValue::new(
+                    "service.name",
+                    "test",
+                )]),
+            ))
+            .install_simple()
+            .unwrap();
+        let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
-        let subscriber = tracing_subscriber::registry().with(DeploymentLayer::new(
-            OtlpDeploymentLogRecorder::new("test", &dst),
-        ));
-        let _guard = tracing::subscriber::set_default(subscriber);
-
-        let mut client = LoggerClient::connect(dst).await.unwrap();
-
-        let deployment_id = String::from("test_deployment_id");
+        let _guard = tracing_subscriber::registry()
+            .with(otel_layer)
+            .set_default();
 
         // Generate some logs
-        foo(deployment_id.clone());
-
-        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-
-        // Subscribe to stream
-        let mut response = client
-            .get_logs_stream(Request::new(LogsRequest {
-                deployment_id: deployment_id.clone(),
-            }))
-            .await
-            .unwrap()
-            .into_inner();
-
-        let log = timeout(std::time::Duration::from_millis(1000), response.message())
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(
-            MinLogItem::from(log),
-            MinLogItem {
-                level: LogLevel::Trace,
-                fields: json!({"message": "foo"}),
-            },
-        );
-
-        // Generate some more logs
-        bar(deployment_id);
-
-        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-
-        let log = timeout(std::time::Duration::from_millis(500), response.message())
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(
-            MinLogItem::from(log),
-            MinLogItem {
-                level: LogLevel::Trace,
-                fields: json!({"message": "bar"}),
-            },
-        );
+        foo(DEPLOYMENT_ID.into());
     };
 
-    select! {
-        _ = server_future => panic!("server finished first"),
-        _ = test_future => {},
-    }
+    tokio::spawn(test_future);
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    let dst = format!("http://localhost:{port}");
+
+    let mut client = LoggerClient::connect(dst).await.unwrap();
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Subscribe to stream
+    let mut response = client
+        .get_logs_stream(Request::new(LogsRequest {
+            deployment_id: DEPLOYMENT_ID.into(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+
+    let log = timeout(std::time::Duration::from_millis(500), response.message())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        MinLogItem::from(log),
+        MinLogItem {
+            level: LogLevel::Trace,
+            fields: json!({"message": "foo"}),
+        },
+    );
+
+    // Generate some more logs
+    let test_future = async move {
+        let tracer = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .tonic()
+                    .with_endpoint(format!("http://127.0.0.1:{port}")),
+            )
+            .with_trace_config(opentelemetry::sdk::trace::config().with_resource(
+                opentelemetry::sdk::Resource::new(vec![opentelemetry::KeyValue::new(
+                    "service.name",
+                    "test",
+                )]),
+            ))
+            .install_simple()
+            .unwrap();
+        let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+
+        let _guard = tracing_subscriber::registry()
+            .with(otel_layer)
+            .set_default();
+
+        // Generate some logs
+        bar(DEPLOYMENT_ID.into());
+    };
+
+    tokio::spawn(test_future);
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let log = timeout(std::time::Duration::from_millis(500), response.message())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        MinLogItem::from(log),
+        MinLogItem {
+            level: LogLevel::Trace,
+            fields: json!({"message": "bar"}),
+        },
+    );
 }
 
 #[instrument(fields(%deployment_id))]

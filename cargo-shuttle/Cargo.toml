@@ -77,3 +77,4 @@ tempfile = { workspace = true }
 test-context = "0.1.4"
 # Tmp until this branch is merged and released
 tokiotest-httpserver = { git = "https://github.com/shuttle-hq/tokiotest-httpserver", branch = "feat/body" }
+shuttle-common-tests = { path = "../common-tests" }

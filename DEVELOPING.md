@@ -227,11 +227,7 @@ USE_PANAMAX=disable make images
 make docker-compose.rendered.yml
 
 # then run
-docker compose -f docker-compose.rendered.yml up provisioner
-
-# followed by
-docker compose -f docker-compose.rendered.yml up resource-recorder
-
+docker compose -f docker-compose.rendered.yml up provisioner resource-recorder
 ```
 
 This starts the provisioner and the auth service, while preventing `gateway` from starting up.

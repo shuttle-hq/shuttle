@@ -23,6 +23,9 @@ services:
         exec /usr/local/bin/service "$${@:0}"
     ports:
       - 3000:8000
+  resource-recorder:
+    ports:
+      - 8007:8000
   panamax:
     profiles:
       - panamax

@@ -226,8 +226,12 @@ USE_PANAMAX=disable make images
 # then generate the local docker-compose file
 make docker-compose.rendered.yml
 
-# then run it
+# then run
 docker compose -f docker-compose.rendered.yml up provisioner
+
+# followed by
+docker compose -f docker-compose.rendered.yml up resource-recorder
+
 ```
 
 This starts the provisioner and the auth service, while preventing `gateway` from starting up.
@@ -255,7 +259,7 @@ cargo shuttle login --api-key dh9z58jttoes3qvt
 We're now ready to start a local run of the deployer:
 
 ```bash
-cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --proxy-fqdn local.rs --admin-secret dh9z58jttoes3qvt --local --project <project_name>
+cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --resource-recorder http://localhost:8007 --proxy-fqdn local.rs --admin-secret dh9z58jttoes3qvt --local --project-id "01H7WHDK23XYGSESCBG6XWJ1V0" --project <name>
 ```
 
 The `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.

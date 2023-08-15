@@ -5,15 +5,12 @@ use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use opentelemetry_proto::tonic::{
     common::v1::{any_value, KeyValue},
-    logs::v1::{LogRecord, ResourceLogs, ScopeLogs, SeverityNumber},
+    logs::v1::SeverityNumber,
     trace::v1::{ResourceSpans, ScopeSpans, Span},
 };
 use prost_types::Timestamp;
 use serde_json::Value;
-use shuttle_common::{
-    backends::tracing::{from_any_value_kv_to_serde_json_map, from_any_value_to_serde_json_value},
-    log,
-};
+use shuttle_common::{backends::tracing::from_any_value_kv_to_serde_json_map, log};
 use shuttle_proto::logger::{self, LogItem};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
@@ -182,70 +179,6 @@ impl From<SeverityNumber> for LogLevel {
 }
 
 impl Log {
-    /// Try to get a log from an OTLP [ResourceLogs]
-    pub fn try_from(logs: ResourceLogs) -> Option<Vec<Self>> {
-        let ResourceLogs {
-            resource,
-            scope_logs,
-            schema_url: _,
-        } = logs;
-
-        let shuttle_service_name = get_attribute(resource?.attributes, "service.name")?;
-
-        let logs = scope_logs
-            .into_iter()
-            .flat_map(|log| {
-                let ScopeLogs {
-                    scope,
-                    log_records,
-                    schema_url: _,
-                } = log;
-
-                let deployment_id = get_attribute(scope?.attributes, "deployment_id")?;
-
-                let logs: Vec<_> = log_records
-                    .into_iter()
-                    .flat_map(|log_record| {
-                        Self::try_from_log_record(log_record, &shuttle_service_name, &deployment_id)
-                    })
-                    .collect();
-
-                Some(logs)
-            })
-            .flatten()
-            .collect();
-
-        Some(logs)
-    }
-
-    /// Try to get self from an OTLP [LogRecord]. Also enrich it with the shuttle service name and deployment id.
-    fn try_from_log_record(
-        log_record: LogRecord,
-        shuttle_service_name: &str,
-        deployment_id: &str,
-    ) -> Option<Self> {
-        let level = log_record.severity_number().into();
-        let naive = NaiveDateTime::from_timestamp_opt(
-            (log_record.time_unix_nano / 1_000_000_000)
-                .try_into()
-                .unwrap_or_default(),
-            (log_record.time_unix_nano % 1_000_000_000) as u32,
-        )
-        .unwrap_or_default();
-        let mut fields = from_any_value_kv_to_serde_json_map(log_record.attributes);
-        let message = from_any_value_to_serde_json_value(log_record.body?);
-
-        fields.insert("message".to_string(), message);
-
-        Some(Self {
-            shuttle_service_name: shuttle_service_name.to_string(),
-            deployment_id: deployment_id.to_string(),
-            timestamp: DateTime::from_utc(naive, Utc),
-            level,
-            fields: Value::Object(fields),
-        })
-    }
-
     /// Try to get a log from an OTLP [ResourceSpans]
     pub fn try_from_scope_span(resource_spans: ResourceSpans) -> Option<Vec<Self>> {
         let ResourceSpans {

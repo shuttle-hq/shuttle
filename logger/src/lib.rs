@@ -1,13 +1,8 @@
 use async_broadcast::Sender;
 use async_trait::async_trait;
 use dal::{Dal, DalError, Log};
-use opentelemetry_proto::tonic::collector::{
-    logs::v1::{
-        logs_service_server::LogsService, ExportLogsServiceRequest, ExportLogsServiceResponse,
-    },
-    trace::v1::{
-        trace_service_server::TraceService, ExportTraceServiceRequest, ExportTraceServiceResponse,
-    },
+use opentelemetry_proto::tonic::collector::trace::v1::{
+    trace_service_server::TraceService, ExportTraceServiceRequest, ExportTraceServiceResponse,
 };
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
 use shuttle_proto::logger::{logger_server::Logger, LogItem, LogsRequest, LogsResponse};
@@ -41,34 +36,6 @@ pub struct ShuttleLogsOtlp {
 impl ShuttleLogsOtlp {
     pub fn new(tx: Sender<Vec<Log>>) -> Self {
         Self { tx }
-    }
-}
-
-#[async_trait]
-impl LogsService for ShuttleLogsOtlp {
-    async fn export(
-        &self,
-        request: Request<ExportLogsServiceRequest>,
-    ) -> Result<Response<ExportLogsServiceResponse>, Status> {
-        let request = request.into_inner();
-
-        let logs: Vec<_> = request
-            .resource_logs
-            .into_iter()
-            .flat_map(Log::try_from)
-            .flatten()
-            .collect();
-
-        // TODO: consider sending different response for this case.
-        if !logs.is_empty() {
-            _ = self.tx.broadcast(logs).await.map_err(|err| {
-                println!("failed to send log to storage: {}", err);
-            });
-        }
-
-        Ok(Response::new(ExportLogsServiceResponse {
-            partial_success: None,
-        }))
     }
 }
 

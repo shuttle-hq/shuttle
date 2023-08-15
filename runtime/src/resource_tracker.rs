@@ -27,6 +27,14 @@ impl ResourceTracker {
 
     /// Get the output of a resource that has been constructed in the past if it exists
     pub fn get_cached_output(&self, r#type: Type, config: &Value) -> Option<Value> {
+        // Secrets are returning unit configs, which deserialised come as a serde_json::Value::Null`.
+        // We always return the cached output for them, even if they change from a previous deployment.
+        // We have to always call `output()` on them to get the latest secrets, since we don't track a
+        // config for them that can change if secrets changed.
+        if config.is_null() {
+            return None;
+        }
+
         self.past_resources
             .iter()
             .find(|resource| resource.r#type == r#type && resource.config == *config)

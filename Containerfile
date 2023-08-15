@@ -3,8 +3,7 @@
 
 # Base image for builds and cache
 ARG RUSTUP_TOOLCHAIN
-FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-build
-RUN cargo install cargo-chef --locked
+FROM lukemathwalker/cargo-chef:latest-rust-${RUSTUP_TOOLCHAIN}-buster as shuttle-build
 WORKDIR /build
 
 

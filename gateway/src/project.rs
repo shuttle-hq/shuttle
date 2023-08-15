@@ -1628,7 +1628,7 @@ pub mod exec {
             .await
             .expect("could not list projects")
         {
-            match gateway.find_project(&project_name).await.unwrap() {
+            match gateway.find_project(&project_name).await.unwrap().state {
                 Project::Errored(ProjectError { ctx: Some(ctx), .. }) => {
                     if let Some(container) = ctx.container() {
                         if let Ok(container) = gateway

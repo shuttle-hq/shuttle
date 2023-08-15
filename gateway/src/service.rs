@@ -288,15 +288,20 @@ impl GatewayService {
         Ok(iter)
     }
 
-    pub async fn find_project(&self, project_name: &ProjectName) -> Result<Project, Error> {
-        query("SELECT project_state FROM projects WHERE project_name=?1")
+    pub async fn find_project(
+        &self,
+        project_name: &ProjectName,
+    ) -> Result<FindProjectPayload, Error> {
+        query("SELECT project_id, project_state FROM projects WHERE project_name=?1")
             .bind(project_name)
             .fetch_optional(&self.db)
             .await?
-            .map(|r| {
-                r.try_get::<SqlxJson<Project>, _>("project_state")
+            .map(|r| FindProjectPayload {
+                project_id: r.get("project_id"),
+                state: r
+                    .try_get::<SqlxJson<Project>, _>("project_state")
                     .unwrap()
-                    .0
+                    .0,
             })
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
@@ -306,9 +311,9 @@ impl GatewayService {
         account_name: &AccountName,
         offset: u32,
         limit: u32,
-    ) -> Result<impl Iterator<Item = (ProjectName, Project)>, Error> {
+    ) -> Result<impl Iterator<Item = (String, ProjectName, Project)>, Error> {
         let mut query = QueryBuilder::new(
-            "SELECT project_name, project_state FROM projects WHERE account_name = ",
+            "SELECT project_id, project_name, project_state FROM projects WHERE account_name = ",
         );
 
         query
@@ -327,6 +332,7 @@ impl GatewayService {
             .into_iter()
             .map(|row| {
                 (
+                    row.get("project_id"),
                     row.get("project_name"),
                     // This can be invalid JSON if it refers to an outdated Project state
                     row.try_get::<SqlxJson<Project>, _>("project_state")
@@ -427,7 +433,7 @@ impl GatewayService {
         account_name: AccountName,
         is_admin: bool,
         idle_minutes: u64,
-    ) -> Result<Project, Error> {
+    ) -> Result<FindProjectPayload, Error> {
         if let Some(row) = query(
             r#"
         SELECT project_name, project_id, account_name, initial_key, project_state
@@ -469,7 +475,10 @@ impl GatewayService {
                 }
                 let project = Project::Creating(creating);
                 self.update_project(&project_name, &project).await?;
-                Ok(project)
+                Ok(FindProjectPayload {
+                    project_id,
+                    state: project,
+                })
             } else {
                 // Otherwise it already exists
                 Err(Error::from_kind(ErrorKind::ProjectAlreadyExists))
@@ -497,7 +506,7 @@ impl GatewayService {
         project_id: Ulid,
         account_name: AccountName,
         idle_minutes: u64,
-    ) -> Result<Project, Error> {
+    ) -> Result<FindProjectPayload, Error> {
         let project = SqlxJson(Project::Creating(
             ProjectCreating::new_with_random_initial_key(
                 project_name.clone(),
@@ -527,7 +536,10 @@ impl GatewayService {
 
         let project = project.0;
 
-        Ok(project)
+        Ok(FindProjectPayload {
+            project_id: project_id.to_string(),
+            state: project,
+        })
     }
 
     pub async fn create_custom_domain(
@@ -752,11 +764,11 @@ impl GatewayService {
         self: &Arc<Self>,
         project_name: &ProjectName,
         task_sender: Sender<BoxedTask>,
-    ) -> Result<Project, Error> {
+    ) -> Result<FindProjectPayload, Error> {
         let mut project = self.find_project(project_name).await?;
 
         // Start the project if it is idle
-        if project.is_stopped() {
+        if project.state.is_stopped() {
             trace!(%project_name, "starting up idle project");
 
             let handle = self
@@ -859,6 +871,11 @@ impl GatewayContext {
     }
 }
 
+pub struct FindProjectPayload {
+    pub project_id: String,
+    pub state: Project,
+}
+
 #[cfg(test)]
 pub mod tests {
     use fqdn::FQDN;
@@ -890,9 +907,12 @@ pub mod tests {
             .await
             .unwrap();
 
-        assert!(creating_same_project_name(&project, &matrix));
+        assert!(creating_same_project_name(&project.state, &matrix));
 
-        assert_eq!(svc.find_project(&matrix).await.unwrap(), project);
+        assert_eq!(
+            svc.find_project(&matrix).await.unwrap().state,
+            project.state
+        );
         assert_eq!(
             svc.iter_projects_detailed()
                 .await
@@ -908,7 +928,7 @@ pub mod tests {
             svc.iter_user_projects_detailed(&neo, 0, u32::MAX)
                 .await
                 .unwrap()
-                .map(|item| item.0)
+                .map(|item| item.1)
                 .collect::<Vec<_>>(),
             vec![matrix.clone()]
         );
@@ -971,7 +991,10 @@ pub mod tests {
         // After project has been destroyed...
         assert!(matches!(
             svc.find_project(&matrix).await,
-            Ok(Project::Destroyed(_))
+            Ok(FindProjectPayload {
+                project_id: _,
+                state: Project::Destroyed(_),
+            })
         ));
 
         // If recreated by a different user
@@ -987,7 +1010,10 @@ pub mod tests {
         // If recreated by the same user
         assert!(matches!(
             svc.create_project(matrix.clone(), neo, false, 0).await,
-            Ok(Project::Creating(_))
+            Ok(FindProjectPayload {
+                project_id: _,
+                state: Project::Creating(_),
+            })
         ));
 
         let mut work = svc
@@ -1002,13 +1028,19 @@ pub mod tests {
         // After project has been destroyed again...
         assert!(matches!(
             svc.find_project(&matrix).await,
-            Ok(Project::Destroyed(_))
+            Ok(FindProjectPayload {
+                project_id: _,
+                state: Project::Destroyed(_),
+            })
         ));
 
         // If recreated by an admin
         assert!(matches!(
             svc.create_project(matrix, trinity, true, 0).await,
-            Ok(Project::Creating(_))
+            Ok(FindProjectPayload {
+                project_id: _,
+                state: Project::Creating(_),
+            })
         ));
 
         Ok(())
@@ -1033,10 +1065,10 @@ pub mod tests {
         }
 
         let project = svc.find_project(&matrix).await.unwrap();
-        println!("{:?}", project);
-        assert!(project.is_ready());
+        println!("{:?}", project.state);
+        assert!(project.state.is_ready());
 
-        let container = project.container().unwrap();
+        let container = project.state.container().unwrap();
         svc.context()
             .docker()
             .kill_container::<String>(container.name.unwrap().strip_prefix('/').unwrap(), None)
@@ -1055,8 +1087,8 @@ pub mod tests {
         let _ = ambulance_task.poll(()).await;
 
         let project = svc.find_project(&matrix).await.unwrap();
-        println!("{:?}", project);
-        assert!(!project.is_ready());
+        println!("{:?}", project.state);
+        assert!(!project.state.is_ready());
 
         // the subsequent will trigger a restart task
         while let TaskResult::Pending(_) = ambulance_task.poll(()).await {
@@ -1064,8 +1096,8 @@ pub mod tests {
         }
 
         let project = svc.find_project(&matrix).await.unwrap();
-        println!("{:?}", project);
-        assert!(project.is_ready());
+        println!("{:?}", project.state);
+        assert!(project.state.is_ready());
 
         Ok(())
     }
@@ -1163,7 +1195,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let Project::Creating(creating) = recreated_project else {
+        let Project::Creating(creating) = recreated_project.state else {
             panic!("Project should be Creating");
         };
         assert_eq!(creating.fqdn(), &Some(domain.to_string()));

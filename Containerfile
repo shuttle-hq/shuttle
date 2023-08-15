@@ -34,6 +34,15 @@ COPY --from=planner /build/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
 COPY --from=cache /build .
+ARG SCCACHE_VERSION
+ARG SCCACHE_HASH
+RUN wget -q -O sccache.tar.gz "https://github.com/mozilla/sccache/releases/download/v$SCCACHE_VERSION/sccache-v$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz" \
+    && echo "$SCCACHE_HASH sccache.tar.gz" | sha256sum -c - \
+    && tar -xf sccache.tar.gz \
+    && mv sccache-v$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache /usr/local/bin/ \
+    && chmod +x /usr/local/bin/sccache \
+    && rm -r sccache*
+ENV RUSTC_WRAPPER=/usr/local/bin/sccache
 RUN cargo build --bin shuttle-${folder} --release
 
 

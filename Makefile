@@ -24,6 +24,9 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 # ensuring all user crates are compiled with the same rustc toolchain
 RUSTUP_TOOLCHAIN=1.70.0
 
+SCCACHE_VERSION=0.5.4
+SCCACHE_HASH=4bf3ce366aa02599019093584a5cbad4df783f8d6e3610548c2044daa595d40b
+
 TAG?=$(shell git describe --tags --abbrev=0)
 BACKEND_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
@@ -164,6 +167,8 @@ shuttle-%: ${SRC} Cargo.lock
 		--build-arg prepare_args=$(PREPARE_ARGS) \
 		--build-arg PROD=$(PROD) \
 		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+		--build-arg SCCACHE_VERSION=$(SCCACHE_VERSION) \
+		--build-arg SCCACHE_HASH=$(SCCACHE_HASH) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
 		--tag $(CONTAINER_REGISTRY)/$(*):latest \

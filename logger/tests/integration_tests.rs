@@ -45,6 +45,7 @@ async fn generate_and_get_logs() {
 
     // Start a subscriber and generate some logs.
     generate_logs(port, DEPLOYMENT_ID.into(), deploy);
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     let dst = format!("http://localhost:{port}");
 
@@ -60,6 +61,10 @@ async fn generate_and_get_logs() {
         .into_inner();
 
     let expected = vec![
+        MinLogItem {
+            level: LogLevel::Trace,
+            fields: json!({"message": "foo"}),
+        },
         MinLogItem {
             level: LogLevel::Error,
             fields: json!({"message": "error"}),
@@ -82,6 +87,15 @@ async fn generate_and_get_logs() {
         },
     ];
 
+    println!(
+        "received: {:#?}",
+        response
+            .log_items
+            .clone()
+            .into_iter()
+            .map(MinLogItem::from)
+            .collect::<Vec<_>>()
+    );
     assert_eq!(
         response
             .log_items
@@ -192,6 +206,8 @@ fn deploy(deployment_id: String) {
     info!(%deployment_id, "info");
     debug!("debug");
     trace!("trace");
+    // This tests that we handle nested spans.
+    foo(deployment_id);
 }
 
 #[instrument]

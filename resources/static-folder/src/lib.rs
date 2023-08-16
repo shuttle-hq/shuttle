@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use fs_extra::dir::{copy, CopyOptions};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleServiceError},
     Factory, ResourceBuilder, Type,
@@ -20,6 +20,16 @@ pub enum Error {
     Copy(fs_extra::error::Error),
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Paths {
+    // Build storage, where service files including assets are downloaded into
+    input: PathBuf,
+    // The service storage, used at runtime
+    output: PathBuf,
+    // The relative path against both the service storage
+    assets: PathBuf,
+}
+
 impl<'a> StaticFolder<'a> {
     pub fn folder(mut self, folder: &'a str) -> Self {
         self.folder = folder;
@@ -34,7 +44,7 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
 
     type Config = &'a str;
 
-    type Output = (PathBuf, PathBuf, PathBuf);
+    type Output = Paths;
 
     fn new() -> Self {
         Self { folder: "static" }
@@ -80,12 +90,16 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
 
         trace!(output_directory = ?output_dir, "got output directory");
 
-        Ok((input_dir, output_dir, folder.to_path_buf()))
+        Ok(Paths {
+            input: input_dir,
+            output: output_dir,
+            assets: folder.to_path_buf(),
+        })
     }
 
     async fn build(build_data: &Self::Output) -> Result<PathBuf, shuttle_service::Error> {
-        let input_dir = &build_data.0;
-        let output_dir = build_data.1.join(&build_data.2.clone());
+        let input_dir = &build_data.input;
+        let output_dir = build_data.output.join(&build_data.assets.clone());
 
         if &output_dir == input_dir {
             return Ok(output_dir);
@@ -93,7 +107,7 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
 
         let copy_options = CopyOptions::new().overwrite(true);
 
-        match copy(&input_dir, &build_data.1, &copy_options) {
+        match copy(&input_dir, &build_data.output, &copy_options) {
             Ok(_) => Ok(output_dir),
             Err(error) => {
                 error!(

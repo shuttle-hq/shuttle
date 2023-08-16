@@ -51,7 +51,7 @@ processors:
 
 exporters:
   logging:
-    loglevel: debug
+    loglevel: error
 #   datadog:
 #     api:
 #       site: datadoghq.eu
@@ -60,12 +60,17 @@ exporters:
     # endpoint: "api.honeycomb.io:443"
     # headers:
     #   "x-honeycomb-team": ${env:HONEYCOMB_API_KEY}
+  otlp:
+    endpoint: "logger:8000"
+    tls: 
+      insecure: true
+    compression: none
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [attributes, batch]
-      exporters: [logging]
+      exporters: [logging, otlp]
     logs:
       receivers: [otlp]
       processors: [attributes, batch]

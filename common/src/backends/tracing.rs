@@ -32,8 +32,8 @@ use crate::tracing::{
     JsonVisitor, FILEPATH_KEY, LINENO_KEY, MESSAGE_KEY, NAMESPACE_KEY, TARGET_KEY,
 };
 
-const OTLP_ADDRESS: &str = "http://otel-collector:4317";
-const LOGGER_URI: &str = "http://logger:8000";
+// TODO: change to otel-collector:4317
+const OTLP_ADDRESS: &str = "http://127.0.0.1:4317";
 
 pub fn setup_tracing<S>(subscriber: S, service_name: &str)
 where
@@ -64,38 +64,10 @@ where
 
     let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    let deployment_layer = if service_name != "logger" {
-        let logger_address = std::env::var("LOGGER_URI").unwrap_or(LOGGER_URI.to_string());
-
-        println!("connecting to logger at address: {logger_address}");
-
-        let tracer = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(
-                opentelemetry_otlp::new_exporter()
-                    .tonic()
-                    .with_endpoint(logger_address),
-            )
-            .with_trace_config(opentelemetry::sdk::trace::config().with_resource(
-                opentelemetry::sdk::Resource::new(vec![opentelemetry::KeyValue::new(
-                    "service.name",
-                    service_name.to_string(),
-                )]),
-            ))
-            .install_batch(opentelemetry::runtime::Tokio)
-            .unwrap();
-
-        // TODO: add a layer checks for deployment ID here? The logger will not store logs without deployment-id so we shouldn't send them.
-        Some(tracing_opentelemetry::layer().with_tracer(tracer))
-    } else {
-        None
-    };
-
     subscriber
         .with(filter_layer)
         .with(fmt_layer)
         .with(otel_layer)
-        .with(deployment_layer)
         .init();
 }
 

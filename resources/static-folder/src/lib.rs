@@ -34,7 +34,7 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
 
     type Config = &'a str;
 
-    type Output = PathBuf;
+    type Output = (PathBuf, PathBuf, PathBuf);
 
     fn new() -> Self {
         Self { folder: "static" }
@@ -80,13 +80,21 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
 
         trace!(output_directory = ?output_dir, "got output directory");
 
-        if output_dir.join(self.folder) == input_dir {
-            return Ok(output_dir.join(self.folder));
+        Ok((input_dir, output_dir, folder.to_path_buf()))
+    }
+
+    async fn build(build_data: &Self::Output) -> Result<PathBuf, shuttle_service::Error> {
+        let input_dir = &build_data.0;
+        let output_dir = build_data.1.join(&build_data.2.clone());
+
+        if &output_dir == input_dir {
+            return Ok(output_dir);
         }
 
         let copy_options = CopyOptions::new().overwrite(true);
-        match copy(&input_dir, &output_dir, &copy_options) {
-            Ok(_) => Ok(output_dir.join(self.folder)),
+
+        match copy(&input_dir, &build_data.1, &copy_options) {
+            Ok(_) => Ok(output_dir),
             Err(error) => {
                 error!(
                     error = &error as &dyn std::error::Error,
@@ -96,10 +104,6 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
                 Err(Error::Copy(error))?
             }
         }
-    }
-
-    async fn build(build_data: &Self::Output) -> Result<PathBuf, shuttle_service::Error> {
-        Ok(build_data.clone())
     }
 }
 

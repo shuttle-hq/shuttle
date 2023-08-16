@@ -99,7 +99,7 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
 
     async fn build(build_data: &Self::Output) -> Result<PathBuf, shuttle_service::Error> {
         let input_dir = &build_data.input;
-        let output_dir = build_data.output.join(&build_data.assets.clone());
+        let output_dir = build_data.output.join(&build_data.assets);
 
         if &output_dir == input_dir {
             return Ok(output_dir);

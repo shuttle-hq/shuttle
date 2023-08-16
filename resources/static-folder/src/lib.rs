@@ -107,7 +107,7 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
 
         let copy_options = CopyOptions::new().overwrite(true);
 
-        match copy(&input_dir, &build_data.output, &copy_options) {
+        match copy(input_dir, &build_data.output, &copy_options) {
             Ok(_) => Ok(output_dir),
             Err(error) => {
                 error!(

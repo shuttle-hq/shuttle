@@ -159,13 +159,14 @@ where
         factory: Fac,
         resource_tracker: ResourceTracker,
         logger_uri: String,
+        deployment_id: String,
     ) -> Result<Self::Service, shuttle_service::Error>;
 }
 
 #[async_trait]
 impl<F, O, Fac, S> Loader<Fac> for F
 where
-    F: FnOnce(Fac, ResourceTracker, String) -> O + Send,
+    F: FnOnce(Fac, ResourceTracker, String, String) -> O + Send,
     O: Future<Output = Result<S, shuttle_service::Error>> + Send,
     Fac: Factory + 'static,
     S: Service,
@@ -177,8 +178,9 @@ where
         factory: Fac,
         resource_tracker: ResourceTracker,
         logger_uri: String,
+        deployment_id: String,
     ) -> Result<Self::Service, shuttle_service::Error> {
-        (self)(factory, resource_tracker, logger_uri).await
+        (self)(factory, resource_tracker, logger_uri, deployment_id).await
     }
 }
 
@@ -196,7 +198,7 @@ where
             resources,
             secrets,
             service_name,
-            ..
+            deployment_id,
         } = request.into_inner();
         trace!(path, "loading alpha project");
 
@@ -244,6 +246,7 @@ where
             factory,
             resource_tracker,
             logger_uri.to_string(),
+            deployment_id,
         ))
         .await
         {

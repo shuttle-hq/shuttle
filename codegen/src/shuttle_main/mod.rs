@@ -257,6 +257,7 @@ impl ToTokens for Loader {
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory,
                 mut #resource_tracker_ident: shuttle_runtime::ResourceTracker,
                 logger_uri: String,
+                deployment_id: String,
             ) -> #return_type {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
@@ -288,7 +289,7 @@ impl ToTokens for Loader {
                                         ),
                                         shuttle_runtime::opentelemetry::KeyValue::new(
                                             "deployment_id",
-                                            "runtime-deployment-id",
+                                            deployment_id,
                                         )
                                     ]
                                 )

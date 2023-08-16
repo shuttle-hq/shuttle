@@ -190,7 +190,10 @@ impl Log {
         // TODO: we should get both in the same function and avoid this clone.
         let resource = resource?;
         let shuttle_service_name = get_attribute(resource.clone().attributes, "service.name")?;
-        let deployment_id = get_attribute(resource.attributes, "deployment_id")?;
+
+        // Try to get the deployment_id from the resource attributes, this will be the case for the runtimes,
+        // they add the deployment_id to the otlp tracer config.
+        let deployment_id = get_attribute(resource.attributes, "deployment_id");
 
         let logs = scope_spans
             .into_iter()
@@ -204,7 +207,7 @@ impl Log {
                 let events: Vec<_> = spans
                     .into_iter()
                     .flat_map(|span| {
-                        Self::try_from_span(span, &shuttle_service_name, &deployment_id)
+                        Self::try_from_span(span, &shuttle_service_name, deployment_id.clone())
                     })
                     .flatten()
                     .collect();
@@ -221,8 +224,11 @@ impl Log {
     fn try_from_span(
         span: Span,
         shuttle_service_name: &str,
-        deployment_id: &str,
+        deployment_id: Option<String>,
     ) -> Option<Vec<Self>> {
+        // If we didn't find the id in the resource span, check the inner spans.
+        let deployment_id = deployment_id.or(get_attribute(span.attributes, "deployment_id"))?;
+
         let logs = span
             .events
             .into_iter()

@@ -19,11 +19,13 @@ use tonic::{transport::Server, Request};
 use tracing::{debug, error, info, instrument, trace, warn};
 use tracing_subscriber::prelude::*;
 
+// TODO: find out why these tests affect one-another. If running them together setting the timeouts
+// low will cause them to fail spuriously. If running single tests they always pass.
 #[tokio::test]
-async fn generate_and_get_logs() {
+async fn generate_and_get_runtime_logs() {
     let port = pick_unused_port().unwrap();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-    const DEPLOYMENT_ID: &str = "fetch-logs-deployment-id";
+    const DEPLOYMENT_ID: &str = "runtime-fetch-logs-deployment-id";
 
     // Start the logger server in the background.
     tokio::task::spawn(async move {
@@ -44,7 +46,7 @@ async fn generate_and_get_logs() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Start a subscriber and generate some logs.
-    generate_logs(port, DEPLOYMENT_ID.into(), deploy);
+    generate_logs(port, DEPLOYMENT_ID.into(), deploy, true);
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     let dst = format!("http://localhost:{port}");
@@ -87,15 +89,103 @@ async fn generate_and_get_logs() {
         },
     ];
 
-    println!(
-        "received: {:#?}",
+    assert_eq!(
         response
             .log_items
-            .clone()
             .into_iter()
             .map(MinLogItem::from)
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>(),
+        expected
     );
+
+    // Generate some logs with a fn not instrumented with deployment_id, and the
+    // ID not added to the tracer attributes.
+    generate_logs(port, DEPLOYMENT_ID.into(), deploy, false);
+
+    let response = client
+        .get_logs(Request::new(LogsRequest {
+            deployment_id: DEPLOYMENT_ID.into(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+
+    // Check that no more logs have been recorded.
+    assert_eq!(
+        response
+            .log_items
+            .into_iter()
+            .map(MinLogItem::from)
+            .collect::<Vec<_>>(),
+        expected
+    );
+}
+
+#[tokio::test]
+async fn generate_and_get_service_logs() {
+    let port = pick_unused_port().unwrap();
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+    const DEPLOYMENT_ID: &str = "service-fetch-logs-deployment-id";
+
+    // Start the logger server in the background.
+    tokio::task::spawn(async move {
+        let sqlite = Sqlite::new_in_memory().await;
+
+        Server::builder()
+            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
+            .add_service(TraceServiceServer::new(ShuttleLogsOtlp::new(
+                sqlite.get_sender(),
+            )))
+            .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)))
+            .serve(addr)
+            .await
+            .unwrap()
+    });
+
+    // Ensure the logger server has time to start.
+    // TODO: find out why setting this lower causes spurious failures of these tests.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    // Start a subscriber and generate some logs using an instrumented deploy function.
+    generate_logs(port, DEPLOYMENT_ID.into(), deploy_instrumented, false);
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let dst = format!("http://localhost:{port}");
+
+    let mut client = LoggerClient::connect(dst).await.unwrap();
+
+    // Get the generated logs
+    let response = client
+        .get_logs(Request::new(LogsRequest {
+            deployment_id: DEPLOYMENT_ID.into(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+
+    let expected = vec![
+        MinLogItem {
+            level: LogLevel::Error,
+            fields: json!({"message": "error"}),
+        },
+        MinLogItem {
+            level: LogLevel::Warn,
+            fields: json!({"message": "warn"}),
+        },
+        MinLogItem {
+            level: LogLevel::Info,
+            fields: json!({"message": "info", "deployment_id": DEPLOYMENT_ID.to_string()}),
+        },
+        MinLogItem {
+            level: LogLevel::Debug,
+            fields: json!({"message": "debug"}),
+        },
+        MinLogItem {
+            level: LogLevel::Trace,
+            fields: json!({"message": "trace"}),
+        },
+    ];
+
     assert_eq!(
         response
             .log_items
@@ -106,7 +196,7 @@ async fn generate_and_get_logs() {
     );
 
     // Generate some logs with a fn not instrumented with deployment_id.
-    generate_logs(port, DEPLOYMENT_ID.into(), missing_deployment_id_field);
+    generate_logs(port, DEPLOYMENT_ID.into(), deploy, false);
 
     let response = client
         .get_logs(Request::new(LogsRequest {
@@ -152,7 +242,7 @@ async fn generate_and_stream_logs() {
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
     // Start a subscriber and generate some logs.
-    generate_logs(port, DEPLOYMENT_ID.into(), foo);
+    generate_logs(port, DEPLOYMENT_ID.into(), foo, true);
 
     // Connect to the logger server so we can fetch logs.
     let dst = format!("http://localhost:{port}");
@@ -182,7 +272,7 @@ async fn generate_and_stream_logs() {
     );
 
     // Start a subscriber and generate some more logs.
-    generate_logs(port, DEPLOYMENT_ID.into(), bar);
+    generate_logs(port, DEPLOYMENT_ID.into(), bar, true);
 
     let log = timeout(std::time::Duration::from_millis(500), response.message())
         .await
@@ -199,7 +289,45 @@ async fn generate_and_stream_logs() {
     );
 }
 
-// TODO: add test with function instrumented with deployment-id and the
+/// Helper function to setup a tracing subscriber and run an instrumented fn to produce logs.
+/// The runtime flag determines if we add the deployment_id as an attribute in the tracer config,
+/// which the shuttle-runtime will do, this way all traces from runtime are recorded. If we set
+/// it to false, only spans instrumented with the deployment_id field will be captured.
+fn generate_logs(port: u16, deployment_id: String, generator: fn(String), runtime: bool) {
+    let mut resources = vec![opentelemetry::KeyValue::new("service.name", "test")];
+
+    // For the shuttle-runtime, add a deployment_id attribute to the tracer config.
+    if runtime {
+        resources.push(opentelemetry::KeyValue::new(
+            "deployment_id",
+            deployment_id.clone(),
+        ))
+    }
+
+    // Set up tracing subscriber connected to the logger server.
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(format!("http://127.0.0.1:{port}")),
+        )
+        .with_trace_config(
+            opentelemetry::sdk::trace::config()
+                .with_resource(opentelemetry::sdk::Resource::new(resources)),
+        )
+        .install_simple()
+        .unwrap();
+    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    let _guard = tracing_subscriber::registry()
+        .with(otel_layer)
+        .set_default();
+
+    // Generate some logs.
+    generator(deployment_id);
+}
+
 // deployment_id attribute not set.
 #[instrument]
 fn deploy(deployment_id: String) {
@@ -212,9 +340,13 @@ fn deploy(deployment_id: String) {
     foo(deployment_id);
 }
 
-#[instrument]
-fn missing_deployment_id_field(deployment_id: String) {
+#[instrument(fields(%deployment_id))]
+fn deploy_instrumented(deployment_id: String) {
     error!("error");
+    warn!("warn");
+    info!(%deployment_id, "info");
+    debug!("debug");
+    trace!("trace");
 }
 
 #[instrument]
@@ -225,34 +357,6 @@ fn foo(deployment_id: String) {
 #[instrument]
 fn bar(deployment_id: String) {
     trace!("bar");
-}
-
-/// Helper function to setup a tracing subscriber and run an instrumented fn to produce logs.
-fn generate_logs(port: u16, deployment_id: String, generator: fn(String)) {
-    // Set up tracing subscriber connected to the logger server.
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint(format!("http://127.0.0.1:{port}")),
-        )
-        .with_trace_config(opentelemetry::sdk::trace::config().with_resource(
-            opentelemetry::sdk::Resource::new(vec![
-                opentelemetry::KeyValue::new("service.name", "test"),
-                opentelemetry::KeyValue::new("deployment_id", deployment_id.clone()),
-            ]),
-        ))
-        .install_simple()
-        .unwrap();
-    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-
-    let _guard = tracing_subscriber::registry()
-        .with(otel_layer)
-        .set_default();
-
-    // Generate some logs.
-    generator(deployment_id);
 }
 
 #[derive(Debug, Eq, PartialEq)]

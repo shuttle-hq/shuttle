@@ -278,11 +278,22 @@ impl ToTokens for Loader {
                             .with_endpoint(logger_uri),
                     )
                     .with_trace_config(
-                        shuttle_runtime::opentelemetry::sdk::trace::config().with_resource(shuttle_runtime::opentelemetry::sdk::Resource::new(vec![shuttle_runtime::opentelemetry::KeyValue::new(
-                            "service.name",
-                            "shuttle-runtime",
-                        )])),
-                    )
+                        shuttle_runtime::opentelemetry::sdk::trace::config()
+                            .with_resource(
+                                shuttle_runtime::opentelemetry::sdk::Resource::new(
+                                    vec![
+                                        shuttle_runtime::opentelemetry::KeyValue::new(
+                                            "service.name",
+                                            "shuttle-runtime",
+                                        ),
+                                        shuttle_runtime::opentelemetry::KeyValue::new(
+                                            "deployment_id",
+                                            "runtime-deployment-id",
+                                        )
+                                    ]
+                                )
+                            ),
+                        )
                     .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
                     .unwrap();
                 let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);

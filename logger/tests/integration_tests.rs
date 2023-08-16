@@ -199,7 +199,9 @@ async fn generate_and_stream_logs() {
     );
 }
 
-#[instrument(fields(%deployment_id))]
+// TODO: add test with function instrumented with deployment-id and the
+// deployment_id attribute not set.
+#[instrument]
 fn deploy(deployment_id: String) {
     error!("error");
     warn!("warn");
@@ -215,12 +217,12 @@ fn missing_deployment_id_field(deployment_id: String) {
     error!("error");
 }
 
-#[instrument(fields(%deployment_id))]
+#[instrument]
 fn foo(deployment_id: String) {
     trace!("foo");
 }
 
-#[instrument(fields(%deployment_id))]
+#[instrument]
 fn bar(deployment_id: String) {
     trace!("bar");
 }
@@ -236,10 +238,10 @@ fn generate_logs(port: u16, deployment_id: String, generator: fn(String)) {
                 .with_endpoint(format!("http://127.0.0.1:{port}")),
         )
         .with_trace_config(opentelemetry::sdk::trace::config().with_resource(
-            opentelemetry::sdk::Resource::new(vec![opentelemetry::KeyValue::new(
-                "service.name",
-                "test",
-            )]),
+            opentelemetry::sdk::Resource::new(vec![
+                opentelemetry::KeyValue::new("service.name", "test"),
+                opentelemetry::KeyValue::new("deployment_id", deployment_id.clone()),
+            ]),
         ))
         .install_simple()
         .unwrap();

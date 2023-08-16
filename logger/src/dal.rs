@@ -187,7 +187,10 @@ impl Log {
             schema_url: _,
         } = resource_spans;
 
-        let shuttle_service_name = get_attribute(resource?.attributes, "service.name")?;
+        // TODO: we should get both in the same function and avoid this clone.
+        let resource = resource?;
+        let shuttle_service_name = get_attribute(resource.clone().attributes, "service.name")?;
+        let deployment_id = get_attribute(resource.attributes, "deployment_id")?;
 
         let logs = scope_spans
             .into_iter()
@@ -200,7 +203,9 @@ impl Log {
 
                 let events: Vec<_> = spans
                     .into_iter()
-                    .flat_map(|span| Self::try_from_span(span, &shuttle_service_name))
+                    .flat_map(|span| {
+                        Self::try_from_span(span, &shuttle_service_name, &deployment_id)
+                    })
                     .flatten()
                     .collect();
 
@@ -213,9 +218,11 @@ impl Log {
     }
 
     /// Try to get self from an OTLP [Span]. Also enrich it with the shuttle service name and deployment id.
-    fn try_from_span(span: Span, shuttle_service_name: &str) -> Option<Vec<Self>> {
-        let deployment_id = get_attribute(span.attributes, "deployment_id")?;
-
+    fn try_from_span(
+        span: Span,
+        shuttle_service_name: &str,
+        deployment_id: &str,
+    ) -> Option<Vec<Self>> {
         let logs = span
             .events
             .into_iter()
@@ -239,7 +246,7 @@ impl Log {
 
                 Some(Log {
                     shuttle_service_name: shuttle_service_name.to_string(),
-                    deployment_id: deployment_id.clone(),
+                    deployment_id: deployment_id.to_string(),
                     timestamp: DateTime::from_utc(naive, Utc),
                     level: level.as_str()?.parse().ok()?,
                     fields: Value::Object(fields),

@@ -10,3 +10,7 @@ publish = false
 hyper = { workspace = true }
 shuttle-common = { workspace = true }
 tower = { workspace = true }
+cargo-shuttle = { path = "../cargo-shuttle" }
+portpicker = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }

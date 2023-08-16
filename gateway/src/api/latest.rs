@@ -113,10 +113,11 @@ async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let state = service.find_project(&scope).await?.into();
+    let project = service.find_project(&scope).await?;
     let response = project::Response {
+        id: project.project_id.to_uppercase(),
         name: scope.to_string(),
-        state,
+        state: project.state.into(),
     };
 
     Ok(AxumJson(response))
@@ -145,15 +146,16 @@ async fn get_projects_list(
         .iter_user_projects_detailed(&name, limit * page, limit)
         .await?
         .map(|project| project::Response {
-            name: project.0.to_string(),
-            state: project.1.into(),
+            id: project.0.to_string().to_uppercase(),
+            name: project.1.to_string(),
+            state: project.2.into(),
         })
         .collect();
 
     Ok(AxumJson(projects))
 }
 
-#[instrument(skip_all, fields(%project))]
+#[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(
     post,
     path = "/projects/{project_name}",
@@ -170,32 +172,38 @@ async fn create_project(
         service, sender, ..
     }): State<RouterState>,
     User { name, claim, .. }: User,
-    Path(project): Path<ProjectName>,
+    Path(project_name): Path<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
     let is_admin = claim.scopes.contains(&Scope::Admin);
 
-    let state = service
-        .create_project(project.clone(), name.clone(), is_admin, config.idle_minutes)
+    let project = service
+        .create_project(
+            project_name.clone(),
+            name.clone(),
+            is_admin,
+            config.idle_minutes,
+        )
         .await?;
 
     service
         .new_task()
-        .project(project.clone())
+        .project(project_name.clone())
         .and_then(task::run_until_done())
         .and_then(task::start_idle_deploys())
         .send(&sender)
         .await?;
 
     let response = project::Response {
-        name: project.to_string(),
-        state: state.into(),
+        id: project.project_id.to_string().to_uppercase(),
+        name: project_name.to_string(),
+        state: project.state.into(),
     };
 
     Ok(AxumJson(response))
 }
 
-#[instrument(skip_all, fields(%project))]
+#[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(
     delete,
     path = "/projects/{project_name}",
@@ -211,13 +219,17 @@ async fn destroy_project(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
-    ScopedUser { scope: project, .. }: ScopedUser,
+    ScopedUser {
+        scope: project_name,
+        ..
+    }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let state = service.find_project(&project).await?;
+    let project = service.find_project(&project_name).await?;
 
     let mut response = project::Response {
-        name: project.to_string(),
-        state: state.into(),
+        id: project.project_id.to_uppercase(),
+        name: project_name.to_string(),
+        state: project.state.into(),
     };
 
     if response.state == shuttle_common::models::project::State::Destroyed {
@@ -227,7 +239,7 @@ async fn destroy_project(
     // if project exists and isn't `Destroyed`, send destroy task
     service
         .new_task()
-        .project(project)
+        .project(project_name)
         .and_then(task::destroy())
         .send(&sender)
         .await?;
@@ -248,7 +260,7 @@ async fn route_project(
     let project_name = scoped_user.scope;
     let project = service.find_or_start_project(&project_name, sender).await?;
     service
-        .route(&project, &project_name, &scoped_user.user.name, req)
+        .route(&project.state, &project_name, &scoped_user.user.name, req)
         .await
 }
 
@@ -501,11 +513,15 @@ async fn request_custom_domain_acme_certificate(
         .await?;
 
     let project = service.find_project(&project_name).await?;
-    let project_id =
-        project.container().unwrap().project_id().map_err(|_| {
-            Error::custom(ErrorKind::Internal, "Missing project_id from the container")
-        })?;
-    let idle_minutes = project.container().unwrap().idle_minutes();
+    let project_id = project
+        .state
+        .container()
+        .unwrap()
+        .project_id()
+        .map_err(|_| Error::custom(ErrorKind::Internal, "Missing project_id from the container"))?;
+
+    let container = project.state.container().unwrap();
+    let idle_minutes = container.idle_minutes();
 
     // Destroy and recreate the project with the new domain.
     service

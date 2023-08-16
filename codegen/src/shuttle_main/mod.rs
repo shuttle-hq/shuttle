@@ -372,6 +372,7 @@ mod tests {
                 mut _factory: shuttle_runtime::ProvisionerFactory,
                 mut _resource_tracker: shuttle_runtime::ResourceTracker,
                 logger_uri: String,
+                deployment_id: String,
             ) -> ShuttleSimple {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
@@ -392,11 +393,22 @@ mod tests {
                             .with_endpoint(logger_uri),
                     )
                     .with_trace_config(
-                        shuttle_runtime::opentelemetry::sdk::trace::config().with_resource(shuttle_runtime::opentelemetry::sdk::Resource::new(vec![shuttle_runtime::opentelemetry::KeyValue::new(
-                            "service.name",
-                            "shuttle-runtime",
-                        )])),
-                    )
+                        shuttle_runtime::opentelemetry::sdk::trace::config()
+                            .with_resource(
+                                shuttle_runtime::opentelemetry::sdk::Resource::new(
+                                    vec![
+                                        shuttle_runtime::opentelemetry::KeyValue::new(
+                                            "service.name",
+                                            "shuttle-runtime",
+                                        ),
+                                        shuttle_runtime::opentelemetry::KeyValue::new(
+                                            "deployment_id",
+                                            deployment_id,
+                                        )
+                                    ]
+                                )
+                            ),
+                        )
                     .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
                     .unwrap();
                 let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
@@ -474,6 +486,7 @@ mod tests {
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 mut resource_tracker: shuttle_runtime::ResourceTracker,
                 logger_uri: String,
+                deployment_id: String,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
@@ -495,11 +508,22 @@ mod tests {
                             .with_endpoint(logger_uri),
                     )
                     .with_trace_config(
-                        shuttle_runtime::opentelemetry::sdk::trace::config().with_resource(shuttle_runtime::opentelemetry::sdk::Resource::new(vec![shuttle_runtime::opentelemetry::KeyValue::new(
-                            "service.name",
-                            "shuttle-runtime",
-                        )])),
-                    )
+                        shuttle_runtime::opentelemetry::sdk::trace::config()
+                            .with_resource(
+                                shuttle_runtime::opentelemetry::sdk::Resource::new(
+                                    vec![
+                                        shuttle_runtime::opentelemetry::KeyValue::new(
+                                            "service.name",
+                                            "shuttle-runtime",
+                                        ),
+                                        shuttle_runtime::opentelemetry::KeyValue::new(
+                                            "deployment_id",
+                                            deployment_id,
+                                        )
+                                    ]
+                                )
+                            ),
+                        )
                     .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
                     .unwrap();
                 let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
@@ -619,6 +643,7 @@ mod tests {
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 mut resource_tracker: shuttle_runtime::ResourceTracker,
                 logger_uri: String,
+                deployment_id: String,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
@@ -640,11 +665,22 @@ mod tests {
                             .with_endpoint(logger_uri),
                     )
                     .with_trace_config(
-                        shuttle_runtime::opentelemetry::sdk::trace::config().with_resource(shuttle_runtime::opentelemetry::sdk::Resource::new(vec![shuttle_runtime::opentelemetry::KeyValue::new(
-                            "service.name",
-                            "shuttle-runtime",
-                        )])),
-                    )
+                        shuttle_runtime::opentelemetry::sdk::trace::config()
+                            .with_resource(
+                                shuttle_runtime::opentelemetry::sdk::Resource::new(
+                                    vec![
+                                        shuttle_runtime::opentelemetry::KeyValue::new(
+                                            "service.name",
+                                            "shuttle-runtime",
+                                        ),
+                                        shuttle_runtime::opentelemetry::KeyValue::new(
+                                            "deployment_id",
+                                            deployment_id,
+                                        )
+                                    ]
+                                )
+                            ),
+                        )
                     .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
                     .unwrap();
                 let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);

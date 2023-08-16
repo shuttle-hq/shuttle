@@ -161,7 +161,10 @@ mod tests {
     impl MockFactory {
         fn new() -> Self {
             Self {
-                temp_dir: Builder::new().prefix("static_folder").tempdir().unwrap(),
+                temp_dir: Builder::new()
+                    .prefix("static_folder")
+                    .tempdir_in("./")
+                    .unwrap(),
             }
         }
 
@@ -234,10 +237,12 @@ mod tests {
         // Call plugin
         let static_folder = StaticFolder::new();
 
-        let actual_folder = static_folder.output(&mut factory).await.unwrap();
+        let paths = static_folder.output(&mut factory).await.unwrap();
+        // Should copy the files.
+        StaticFolder::build(&paths).await.unwrap();
 
         assert_eq!(
-            actual_folder,
+            paths.output.join(paths.assets),
             factory.storage_path().join("static"),
             "expect path to the static folder"
         );

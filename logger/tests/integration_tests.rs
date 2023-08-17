@@ -46,7 +46,7 @@ async fn generate_and_get_runtime_logs() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Start a subscriber and generate some logs.
-    generate_logs(port, DEPLOYMENT_ID.into(), deploy, true);
+    generate_runtime_logs(port, DEPLOYMENT_ID.into(), deploy);
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     let dst = format!("http://localhost:{port}");
@@ -100,7 +100,7 @@ async fn generate_and_get_runtime_logs() {
 
     // Generate some logs with a fn not instrumented with deployment_id, and the
     // ID not added to the tracer attributes.
-    generate_logs(port, DEPLOYMENT_ID.into(), deploy, false);
+    generate_service_logs(port, DEPLOYMENT_ID.into(), deploy);
 
     let response = client
         .get_logs(Request::new(LogsRequest {
@@ -147,7 +147,7 @@ async fn generate_and_get_service_logs() {
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Start a subscriber and generate some logs using an instrumented deploy function.
-    generate_logs(port, DEPLOYMENT_ID.into(), deploy_instrumented, false);
+    generate_service_logs(port, DEPLOYMENT_ID.into(), deploy_instrumented);
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     let dst = format!("http://localhost:{port}");
@@ -196,7 +196,7 @@ async fn generate_and_get_service_logs() {
     );
 
     // Generate some logs with a fn not instrumented with deployment_id.
-    generate_logs(port, DEPLOYMENT_ID.into(), deploy, false);
+    generate_service_logs(port, DEPLOYMENT_ID.into(), deploy);
 
     let response = client
         .get_logs(Request::new(LogsRequest {
@@ -242,7 +242,7 @@ async fn generate_and_stream_logs() {
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
     // Start a subscriber and generate some logs.
-    generate_logs(port, DEPLOYMENT_ID.into(), foo, true);
+    generate_runtime_logs(port, DEPLOYMENT_ID.into(), foo);
 
     // Connect to the logger server so we can fetch logs.
     let dst = format!("http://localhost:{port}");
@@ -272,7 +272,7 @@ async fn generate_and_stream_logs() {
     );
 
     // Start a subscriber and generate some more logs.
-    generate_logs(port, DEPLOYMENT_ID.into(), bar, true);
+    generate_runtime_logs(port, DEPLOYMENT_ID.into(), bar);
 
     let log = timeout(std::time::Duration::from_millis(500), response.message())
         .await
@@ -287,6 +287,14 @@ async fn generate_and_stream_logs() {
             fields: json!({"message": "bar"}),
         },
     );
+}
+
+fn generate_service_logs(port: u16, deployment_id: String, generator: fn(String)) {
+    generate_logs(port, deployment_id, generator, false);
+}
+
+fn generate_runtime_logs(port: u16, deployment_id: String, generator: fn(String)) {
+    generate_logs(port, deployment_id, generator, true);
 }
 
 /// Helper function to setup a tracing subscriber and run an instrumented fn to produce logs.

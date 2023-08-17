@@ -288,14 +288,12 @@ pub use tracing_opentelemetry;
 
 pub use async_trait::async_trait;
 
-/// The default tracing registry used by shuttle.
-pub type Registry = tracing_subscriber::layer::Layered<
-    tracing_subscriber::filter::Filtered<
-        crate::Logger,
-        tracing_subscriber::EnvFilter,
-        tracing_subscriber::Registry,
+pub type Registry<S> = tracing_subscriber::layer::Layered<
+    tracing_opentelemetry::OpenTelemetryLayer<
+        tracing_subscriber::layer::Layered<tracing_subscriber::EnvFilter, S>,
+        opentelemetry::sdk::trace::Tracer,
     >,
-    tracing_subscriber::Registry,
+    tracing_subscriber::layer::Layered<tracing_subscriber::EnvFilter, S>,
 >;
 
 // Dependencies required by the codegen

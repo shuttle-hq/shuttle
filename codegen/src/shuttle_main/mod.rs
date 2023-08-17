@@ -761,8 +761,6 @@ mod tests {
                     .with(filter_layer)
                     .with(otel_layer);
 
-                #inject_tracing_layer
-
                 registry.init();
 
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));

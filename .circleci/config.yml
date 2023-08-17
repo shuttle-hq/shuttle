@@ -368,7 +368,6 @@ jobs:
             TAG=$TAG \
             PROD=<< parameters.production >> \
             USE_TLS=enable \
-            USE_PANAMAX=enable \
             POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
             MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
             DD_API_KEY=$DD_API_KEY \

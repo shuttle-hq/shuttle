@@ -108,24 +108,22 @@ You should now be ready to setup a local environment to test code changes to cor
 From the root of the Shuttle repo, build the required images with:
 
 ```bash
-make images
+USE_PANAMAX=disable make images
 ```
 
-> Note: The stack uses [panamax](https://github.com/panamax-rs/panamax) in production to mirror crates.io content.
+> Note: The stack uses [panamax](https://github.com/panamax-rs/panamax) by default to mirror crates.io content.
 > We do this in order to avoid overloading upstream mirrors and hitting rate limits.
-> For local testing, run `USE_PANAMAX=enable make images` instead.
 > After syncing the cache, expect to see the panamax volume take about 100GiB of space.
+> This may not be desirable for local testing. Therefore `USE_PANAMAX=disable make images` is recommended.
 
 The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straight away.
 
 You can now start a local deployment of Shuttle and the required containers with:
 
 ```bash
-make up
+USE_PANAMAX=disable make up
 ```
 
-> Note: `make up` does not start [panamax](https://github.com/panamax-rs/panamax) by default, if you do need to start panamax for local development, run this command with `make COMPOSE_PROFILES=panamax up`.
->
 > Note: `make up` can also be run with `SHUTTLE_DETACH=disable`, which means docker-compose will not be run with `--detach`. This is often desirable for local testing.
 >
 > Note: `make up` can also be run with `HONEYCOMB_API_KEY=<api_key>` if you have a honeycomb.io account and want to test the instrumentation of the services. This is mostly used only by the internal team.
@@ -220,7 +218,7 @@ The steps outlined above starts all the services used by Shuttle locally (ie. bo
 
 ```bash
 # if you didn't do this already, make the images
-make images
+USE_PANAMAX=disable make images
 
 # then generate the local docker-compose file
 make docker-compose.rendered.yml

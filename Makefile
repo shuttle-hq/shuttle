@@ -78,7 +78,7 @@ PANAMAX_TAG?=1.0.12
 OTEL_EXTRA_PATH?=./extras/otel
 OTEL_TAG?=0.72.0
 
-USE_PANAMAX?=disable
+USE_PANAMAX?=enable
 ifeq ($(USE_PANAMAX), enable)
 PREPARE_ARGS+=-p
 COMPOSE_PROFILES+=panamax

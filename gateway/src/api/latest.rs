@@ -544,6 +544,7 @@ async fn request_custom_domain_acme_certificate(
                 }
             }
         }))
+        .and_then(task::run_until_done())
         .and_then(task::start_idle_deploys())
         .send(&sender)
         .await?;

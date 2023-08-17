@@ -39,7 +39,7 @@ pub struct PersistInstance {
 }
 
 impl PersistInstance {
-    /// new method constructs a new PersistInstance along with its associated storage folder
+    /// Constructs a new PersistInstance along with its associated storage folder
     pub fn new(service_name: ServiceName) -> Result<Self, PersistError<'static>> {
         let instance = Self { service_name };
         let storage_folder = instance.get_storage_folder();
@@ -55,7 +55,7 @@ impl PersistInstance {
         Ok(serialize_into(&mut writer, &struc).map_err(PersistError::Serialize))?
     }
 
-    /// list method returns a vector of strings containing all the keys associated with a PersistInstance
+    /// Returns a vector of strings containing all the keys associated with a PersistInstance
     pub fn list(&self) -> Result<Vec<String>, PersistError> {
         let storage_folder = self.get_storage_folder();
 
@@ -77,7 +77,7 @@ impl PersistInstance {
         Ok(list)
     }
 
-    /// clear method removes the keys within the PersistInstance
+    /// Removes the keys within the PersistInstance
     pub fn clear(&self) -> Result<(), PersistError> {
         let storage_folder = self.get_storage_folder();
         fs::remove_dir_all(&storage_folder).map_err(PersistError::RemoveFolder)?;
@@ -85,12 +85,12 @@ impl PersistInstance {
         Ok(())
     }
 
-    /// size method returns the number of keys in a folder within a PersistInstance
+    /// Returns the number of keys in a folder within a PersistInstance
     pub fn size(&self) -> Result<usize, PersistError> {
         Ok(self.list()?.len())
     }
 
-    /// remove method deletes a key from the PersistInstance
+    /// Deletes a key from the PersistInstance
     pub fn remove(&self, key: &str) -> Result<(), PersistError> {
         let file_path = self.get_storage_file(key);
         fs::remove_file(file_path).map_err(PersistError::RemoveFile)?;

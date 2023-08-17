@@ -231,8 +231,9 @@ impl Log {
                 let mut fields = from_any_value_kv_to_serde_json_map(event.attributes);
                 fields.insert(MESSAGE_KEY.to_string(), message.into());
 
-                // Every event should have a level field, but we store it in the level column,
-                // so we can remove it from the event fields.
+                // Since we store the "level" in the level column in the database, we remove it
+                // from the event fields so it is not duplicated there.
+                // Note: this should never fail, a tracing event should always have a level.
                 let level = fields.remove("level")?;
 
                 let naive = NaiveDateTime::from_timestamp_opt(

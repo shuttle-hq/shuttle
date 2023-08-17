@@ -14,6 +14,7 @@
 //!     Ok(router.into())
 //! }
 //! ```
+use axum::routing::get;
 use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
@@ -25,10 +26,7 @@ impl shuttle_runtime::Service for AxumService {
     /// Takes the router that is returned by the user in their [shuttle_runtime::main] function
     /// and binds to an address passed in by shuttle.
     async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
-        self.0 = self.0.route(
-            "/healthz",
-            axum::routing::get(|| async { axum::http::StatusCode::OK }),
-        );
+        self.0 = self.0.route("/_shuttle/healthz", get(|| async {}));
 
         axum::Server::bind(&addr)
             .serve(self.0.into_make_service())

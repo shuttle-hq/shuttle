@@ -318,9 +318,11 @@ impl ToTokens for App {
             async fn __app(request: shuttle_next::Request<shuttle_next::body::BoxBody>,) -> shuttle_next::response::Response
             {
                 use shuttle_next::Service;
+                use shuttle_next::routing::get;
 
                 let mut router = shuttle_next::Router::new()
-                    #(#endpoint_chains)*;
+                    #(#endpoint_chains)*
+                    .route("/_shuttle/healthz", get(|| async {}));
 
                 let response = router.call(request).await.unwrap();
 

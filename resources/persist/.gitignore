@@ -1,0 +1,2 @@
+# output files from tests
+shuttle_persist/**/*.bin

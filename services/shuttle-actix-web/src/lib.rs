@@ -33,15 +33,13 @@ where
     F: FnOnce(&mut actix_web::web::ServiceConfig) + Send + Clone + 'static,
 {
     async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::Error> {
-        // Start a worker for each cpu, but no more than 4.
-        let worker_count = num_cpus::get().min(4);
-
         let server = actix_web::HttpServer::new(move || {
             actix_web::App::new()
                 .configure(self.0.clone())
-                .route("/healthz", web::get().to(HttpResponse::Ok))
+                .route("/_shuttle/healthz", web::get().to(HttpResponse::Ok))
         })
-        .workers(worker_count)
+        // Start a worker for each cpu, but no more than 4.
+        .workers(num_cpus::get().min(4))
         .bind(addr)?
         .run();
 

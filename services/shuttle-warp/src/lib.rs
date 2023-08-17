@@ -29,7 +29,8 @@ where
         use warp::Filter;
 
         let app_filter = (*self).clone();
-        let health = warp::path("healthz")
+        let health = warp::path("_shuttle")
+            .and(warp::path("healthz"))
             .and(warp::get())
             .and(warp::path::end())
             .map(warp::reply);

@@ -113,7 +113,7 @@ where
     }
 
     fn call(&mut self, req: hyper::Request<hyper::Body>) -> Self::Future {
-        if req.uri().path() == "/healthz" {
+        if req.uri().path() == "/_shuttle/healthz" {
             let resp = hyper::Response::builder()
                 .status(hyper::StatusCode::OK)
                 .body(hyper::Body::empty())

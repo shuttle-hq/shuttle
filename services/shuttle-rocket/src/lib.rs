@@ -25,7 +25,7 @@ use std::net::SocketAddr;
 /// A wrapper type for [rocket::Rocket<rocket::Build>] so we can implement [shuttle_runtime::Service] for it.
 pub struct RocketService(pub rocket::Rocket<rocket::Build>);
 
-#[rocket::get("/healthz")]
+#[rocket::get("/_shuttle/healthz")]
 fn health_check() -> status::Custom<()> {
     status::Custom(Status::Ok, ())
 }

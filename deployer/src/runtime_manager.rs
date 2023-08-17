@@ -65,48 +65,46 @@ impl RuntimeManager {
         let port = portpicker::pick_unused_port().context("failed to find available port")?;
         let is_next = alpha_runtime_path.is_none();
 
-        let get_runtime_executable = || {
-            if let Some(alpha_runtime) = alpha_runtime_path {
-                debug!(
-                    "Starting alpha runtime at: {}",
-                    alpha_runtime
-                        .clone()
-                        .into_os_string()
-                        .into_string()
-                        .unwrap_or_default()
-                );
+        let runtime_executable = if let Some(alpha_runtime) = alpha_runtime_path {
+            debug!(
+                "Starting alpha runtime at: {}",
                 alpha_runtime
-            } else {
-                if cfg!(debug_assertions) {
-                    debug!("Installing shuttle-next runtime in debug mode from local source");
-                    // If we're running deployer natively, install shuttle-runtime using the
-                    // version of runtime from the calling repo.
-                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"));
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap_or_default()
+            );
+            alpha_runtime
+        } else {
+            if cfg!(debug_assertions) {
+                debug!("Installing shuttle-next runtime in debug mode from local source");
+                // If we're running deployer natively, install shuttle-runtime using the
+                // version of runtime from the calling repo.
+                let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"));
 
-                    // The path will not be valid if we are in a deployer container, in which
-                    // case we don't try to install and use the one installed in deploy.sh.
-                    if let Ok(path) = path {
-                        std::process::Command::new("cargo")
-                            .arg("install")
-                            .arg("shuttle-runtime")
-                            .arg("--path")
-                            .arg(path)
-                            .arg("--bin")
-                            .arg("shuttle-next")
-                            .arg("--features")
-                            .arg("next")
-                            .output()
-                            .expect("failed to install the local version of shuttle-runtime");
-                    }
+                // The path will not be valid if we are in a deployer container, in which
+                // case we don't try to install and use the one installed in deploy.sh.
+                if let Ok(path) = path {
+                    std::process::Command::new("cargo")
+                        .arg("install")
+                        .arg("shuttle-runtime")
+                        .arg("--path")
+                        .arg(path)
+                        .arg("--bin")
+                        .arg("shuttle-next")
+                        .arg("--features")
+                        .arg("next")
+                        .output()
+                        .expect("failed to install the local version of shuttle-runtime");
                 }
-
-                debug!("Returning path to shuttle-next runtime");
-                // If we're in a deployer built with the containerfile, the runtime will have
-                // been installed in deploy.sh.
-                home::cargo_home()
-                    .expect("failed to find path to cargo home")
-                    .join("bin/shuttle-next")
             }
+
+            debug!("Returning path to shuttle-next runtime");
+            // If we're in a deployer built with the containerfile, the runtime will have
+            // been installed in deploy.sh.
+            home::cargo_home()
+                .expect("failed to find path to cargo home")
+                .join("bin/shuttle-next")
         };
 
         let (process, runtime_client) = runtime::start(
@@ -115,7 +113,7 @@ impl RuntimeManager {
             &self.provisioner_address,
             self.auth_uri.as_ref(),
             port,
-            get_runtime_executable,
+            runtime_executable,
             project_path,
         )
         .await

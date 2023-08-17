@@ -559,77 +559,75 @@ impl Shuttle {
             Default::default()
         };
 
-        let get_runtime_executable = || {
-            if service.is_wasm {
-                let runtime_path = home::cargo_home()
-                    .expect("failed to find cargo home dir")
-                    .join("bin/shuttle-next");
+        let runtime_executable = if service.is_wasm {
+            let runtime_path = home::cargo_home()
+                .expect("failed to find cargo home dir")
+                .join("bin/shuttle-next");
 
-                println!("Installing shuttle-next runtime. This can take a while...");
+            println!("Installing shuttle-next runtime. This can take a while...");
 
-                if cfg!(debug_assertions) {
-                    // Canonicalized path to shuttle-runtime for dev to work on windows
+            if cfg!(debug_assertions) {
+                // Canonicalized path to shuttle-runtime for dev to work on windows
 
-                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
-                        .expect("path to shuttle-runtime does not exist or is invalid");
+                let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
+                    .expect("path to shuttle-runtime does not exist or is invalid");
 
+                std::process::Command::new("cargo")
+                    .arg("install")
+                    .arg("shuttle-runtime")
+                    .arg("--path")
+                    .arg(path)
+                    .arg("--bin")
+                    .arg("shuttle-next")
+                    .arg("--features")
+                    .arg("next")
+                    .output()
+                    .expect("failed to install the shuttle runtime");
+            } else {
+                // If the version of cargo-shuttle is different from shuttle-runtime,
+                // or it isn't installed, try to install shuttle-runtime from crates.io.
+                if let Err(err) = check_version(&runtime_path) {
+                    warn!("{}", err);
+
+                    trace!("installing shuttle-runtime");
                     std::process::Command::new("cargo")
                         .arg("install")
                         .arg("shuttle-runtime")
-                        .arg("--path")
-                        .arg(path)
                         .arg("--bin")
                         .arg("shuttle-next")
                         .arg("--features")
                         .arg("next")
                         .output()
                         .expect("failed to install the shuttle runtime");
-                } else {
-                    // If the version of cargo-shuttle is different from shuttle-runtime,
-                    // or it isn't installed, try to install shuttle-runtime from crates.io.
-                    if let Err(err) = check_version(&runtime_path) {
-                        warn!("{}", err);
-
-                        trace!("installing shuttle-runtime");
-                        std::process::Command::new("cargo")
-                            .arg("install")
-                            .arg("shuttle-runtime")
-                            .arg("--bin")
-                            .arg("shuttle-next")
-                            .arg("--features")
-                            .arg("next")
-                            .output()
-                            .expect("failed to install the shuttle runtime");
-                    };
                 };
+            };
 
-                runtime_path
-            } else {
-                trace!(path = ?service.executable_path, "using alpha runtime");
-                if let Err(err) = check_version(&service.executable_path) {
-                    warn!("{}", err);
-                    if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
-                        println!("Warning: {}.", mismatch);
-                        if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
-                            // The runtime is newer than cargo-shuttle so we
-                            // should help the user to update cargo-shuttle.
-                            println!(
-                                "[HINT]: You should update cargo-shuttle. \
+            runtime_path
+        } else {
+            trace!(path = ?service.executable_path, "using alpha runtime");
+            if let Err(err) = check_version(&service.executable_path) {
+                warn!("{}", err);
+                if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
+                    println!("Warning: {}.", mismatch);
+                    if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
+                        // The runtime is newer than cargo-shuttle so we
+                        // should help the user to update cargo-shuttle.
+                        println!(
+                            "[HINT]: You should update cargo-shuttle. \
                                 If cargo-shuttle was installed using cargo, \
                                 you can get the latest version by running \
                                 `cargo install cargo-shuttle`."
-                            );
-                        } else {
-                            println!(
+                        );
+                    } else {
+                        println!(
                                 "[HINT]: A newer version of shuttle-runtime is available. \
                                 Change its version to {} in this project's Cargo.toml to update it.",
                                 mismatch.cargo_shuttle
                             );
-                        }
                     }
                 }
-                service.executable_path.clone()
             }
+            service.executable_path.clone()
         };
 
         // Child process and gRPC client for sending requests to it
@@ -639,7 +637,7 @@ impl Shuttle {
             &format!("http://localhost:{provisioner_port}"),
             None,
             run_args.port - idx - 1,
-            get_runtime_executable,
+            runtime_executable,
             service.workspace_path.as_path(),
         )
         .await

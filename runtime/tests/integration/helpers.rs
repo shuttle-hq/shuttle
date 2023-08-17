@@ -47,7 +47,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
     start_provisioner(DummyProvisioner, provisioner_address);
 
     // TODO: update this to work with shuttle-next projects, see cargo-shuttle local run
-    let get_runtime_executable = || service.executable_path.clone();
+    let runtime_executable = service.executable_path.clone();
 
     let (runtime, runtime_client) = runtime::start(
         service.is_wasm,
@@ -55,7 +55,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
         &format!("http://{}", provisioner_address),
         None,
         runtime_port,
-        get_runtime_executable,
+        runtime_executable,
         Path::new(&project_path),
     )
     .await?;

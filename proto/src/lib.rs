@@ -212,14 +212,13 @@ pub mod runtime {
         provisioner_address: &str,
         auth_uri: Option<&String>,
         port: u16,
-        get_runtime_executable: impl FnOnce() -> PathBuf,
+        runtime_executable: PathBuf,
         project_path: &Path,
     ) -> anyhow::Result<(
         process::Child,
         runtime_client::RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     )> {
         let port = &port.to_string();
-        let runtime_executable_path = get_runtime_executable();
 
         let args = if wasm {
             vec!["--port", port]
@@ -242,11 +241,11 @@ pub mod runtime {
 
         trace!(
             "Spawning runtime process {:?} {:?}",
-            runtime_executable_path,
+            runtime_executable,
             args
         );
         let runtime = process::Command::new(
-            std::fs::canonicalize(runtime_executable_path)
+            std::fs::canonicalize(runtime_executable)
                 .context("canonicalize path the renamed executable")?,
         )
         .current_dir(project_path)

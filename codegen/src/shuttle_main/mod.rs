@@ -278,8 +278,6 @@ impl ToTokens for Loader {
                 use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
                 #extra_imports
 
-                shuttle_runtime::opentelemetry::global::set_text_map_propagator(shuttle_runtime::opentelemetry::sdk::propagation::TraceContextPropagator::new());
-
                 let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
                     .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
                     .unwrap();
@@ -451,8 +449,6 @@ mod tests {
                 use shuttle_runtime::tracing_subscriber::prelude::*;
                 use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
 
-                shuttle_runtime::opentelemetry::global::set_text_map_propagator(shuttle_runtime::opentelemetry::sdk::propagation::TraceContextPropagator::new());
-
                 let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
                     .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
                     .unwrap();
@@ -565,8 +561,6 @@ mod tests {
                 use shuttle_runtime::tracing_subscriber::prelude::*;
                 use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
                 use shuttle_runtime::{Factory, ResourceBuilder};
-
-                shuttle_runtime::opentelemetry::global::set_text_map_propagator(shuttle_runtime::opentelemetry::sdk::propagation::TraceContextPropagator::new());
 
                 let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
                     .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
@@ -722,8 +716,6 @@ mod tests {
                 use shuttle_runtime::tracing_subscriber::prelude::*;
                 use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
                 use shuttle_runtime::{Factory, ResourceBuilder};
-
-                shuttle_runtime::opentelemetry::global::set_text_map_propagator(shuttle_runtime::opentelemetry::sdk::propagation::TraceContextPropagator::new());
 
                 let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
                     .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))

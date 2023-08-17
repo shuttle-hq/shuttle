@@ -260,23 +260,18 @@ publish-resources: publish-resources/aws-rds \
 
 publish-cargo-shuttle: publish-resources/secrets
 	cd cargo-shuttle; cargo publish
-	sleep 10 # Wait for crates.io to update
 
 publish-service: publish-codegen publish-common
 	cd service; cargo publish
-	sleep 10 # Wait for crates.io to update
 
 publish-codegen:
 	cd codegen; cargo publish
-	sleep 10 # Wait for crates.io to update
 
 publish-common:
 	cd common; cargo publish
-	sleep 10 # Wait for crates.io to update
 
 publish-resources/%: publish-service
 	cd resources/$(*); cargo publish
-	sleep 10 # Wait for crates.io to update
 
 --validate-version:
 	echo "$(version)" | rg -q "\d+\.\d+\.\d+" || { echo "version argument must be in the form x.y.z"; exit 1; }

@@ -5,13 +5,12 @@ use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use opentelemetry_proto::tonic::{
     common::v1::{any_value, KeyValue},
-    logs::v1::SeverityNumber,
     trace::v1::{ResourceSpans, ScopeSpans, Span},
 };
 use prost_types::Timestamp;
 use serde_json::Value;
 use shuttle_common::{
-    backends::tracing::from_any_value_kv_to_serde_json_map, log, tracing::MESSAGE_KEY,
+    backends::tracing::from_any_value_kv_to_serde_json_map, tracing::MESSAGE_KEY,
 };
 use shuttle_proto::logger::{self, LogItem};
 use sqlx::{
@@ -146,6 +145,7 @@ pub enum LogLevel {
 
 impl FromStr for LogLevel {
     type Err = DalError;
+
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "TRACE" => Ok(Self::Trace),
@@ -166,18 +166,6 @@ impl From<LogLevel> for logger::LogLevel {
             LogLevel::Info => Self::Info,
             LogLevel::Warn => Self::Warn,
             LogLevel::Error => Self::Error,
-        }
-    }
-}
-
-impl From<SeverityNumber> for LogLevel {
-    fn from(severity: SeverityNumber) -> Self {
-        match severity.into() {
-            log::Level::Trace => Self::Trace,
-            log::Level::Debug => Self::Debug,
-            log::Level::Info => Self::Info,
-            log::Level::Warn => Self::Warn,
-            log::Level::Error => Self::Error,
         }
     }
 }

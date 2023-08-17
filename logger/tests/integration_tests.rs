@@ -1,5 +1,6 @@
 use std::net::{Ipv4Addr, SocketAddr};
 
+use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_proto::tonic::collector::trace::v1::trace_service_server::TraceServiceServer;
 use portpicker::pick_unused_port;
@@ -289,29 +290,39 @@ async fn generate_and_stream_logs() {
     );
 }
 
+/// For the service logs the deployment id will be retrieved from the spans of functions
+/// instrumented with the deployment_id field, this way we can choose which spans we want
+/// to associate with a deployment and record in the logger.
 fn generate_service_logs(port: u16, deployment_id: String, generator: fn(String)) {
-    generate_logs(port, deployment_id, generator, false);
+    generate_logs(
+        port,
+        deployment_id,
+        generator,
+        vec![KeyValue::new("service.name", "test")],
+    );
 }
 
+/// For the shuttle-runtime logs we want to add the deployment id to the top level attributes,
+/// this way we can associate any logs coming from a runtime with a deployment.
 fn generate_runtime_logs(port: u16, deployment_id: String, generator: fn(String)) {
-    generate_logs(port, deployment_id, generator, true);
+    generate_logs(
+        port,
+        deployment_id.clone(),
+        generator,
+        vec![
+            KeyValue::new("service.name", "test"),
+            KeyValue::new("deployment_id", deployment_id),
+        ],
+    );
 }
 
 /// Helper function to setup a tracing subscriber and run an instrumented fn to produce logs.
-/// The runtime flag determines if we add the deployment_id as an attribute in the tracer config,
-/// which the shuttle-runtime will do, this way all traces from runtime are recorded. If we set
-/// it to false, only spans instrumented with the deployment_id field will be captured.
-fn generate_logs(port: u16, deployment_id: String, generator: fn(String), runtime: bool) {
-    let mut resources = vec![opentelemetry::KeyValue::new("service.name", "test")];
-
-    // For the shuttle-runtime, add a deployment_id attribute to the tracer config.
-    if runtime {
-        resources.push(opentelemetry::KeyValue::new(
-            "deployment_id",
-            deployment_id.clone(),
-        ))
-    }
-
+fn generate_logs(
+    port: u16,
+    deployment_id: String,
+    generator: fn(String),
+    resources: Vec<KeyValue>,
+) {
     // Set up tracing subscriber connected to the logger server.
     let tracer = opentelemetry_otlp::new_pipeline()
         .tracing()

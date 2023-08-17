@@ -591,6 +591,8 @@ async fn renew_custom_domain_acme_certificate(
             private_key,
             ..
         }) => {
+            certificate.push('\n');
+            certificate.push('\n');
             certificate.push_str(private_key.as_str());
             let (_, pem) = parse_x509_pem(certificate.as_bytes()).map_err(|err| {
                 Error::custom(

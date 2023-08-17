@@ -5,13 +5,13 @@ use shuttle_service::{error::Error, Factory, ResourceBuilder, Type};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ServiceInfo {
     /// The Shuttle service name.
-    name: String,
+    service_name: String,
 }
 
 impl ServiceInfo {
     /// Get the Shuttle service name.
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn service_name(&self) -> &str {
+        &self.service_name
     }
 }
 
@@ -35,7 +35,7 @@ impl ResourceBuilder<ServiceInfo> for ShuttleServiceInfo {
 
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, Error> {
         Ok(ServiceInfo {
-            name: factory.get_service_name().to_string(),
+            service_name: factory.get_service_name().to_string(),
         })
     }
 

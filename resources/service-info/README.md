@@ -4,4 +4,4 @@ This plugin allows applications to obtain certain information about their runtim
 
 ## Usage
 
-Add `shuttle-service-info` to the dependencies for your service. You can get this resource using the `shuttle-service-info::ServiceInfo` attribute to get a `ServiceInfo`. This struct will contain information such as the Shuttle service name.
+Add `shuttle-service-info` to the dependencies for your service. You can get this resource using the `shuttle-service-info::ShuttleServiceInfo` attribute to get a `ServiceInfo`. This struct will contain information such as the Shuttle service name.

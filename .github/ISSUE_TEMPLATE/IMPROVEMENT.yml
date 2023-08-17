@@ -1,7 +1,7 @@
 name: Improvement suggestion
 description: Suggest an improvement to an existing feature
 title: "[Improvement]: "
-labels: ["improvement"]
+labels: ["S-Triage", "T-Improvement"]
 body:
   - type: markdown
     attributes:

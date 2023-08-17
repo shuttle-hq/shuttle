@@ -279,7 +279,6 @@ pub use alpha::{start, Alpha};
 pub use next::{AxumWasm, NextArgs};
 pub use opentelemetry;
 pub use opentelemetry_otlp;
-pub use opentelemetry_proto;
 pub use provisioner_factory::ProvisionerFactory;
 pub use resource_tracker::{get_resource, ResourceTracker};
 pub use shuttle_common::storage_manager::StorageManager;

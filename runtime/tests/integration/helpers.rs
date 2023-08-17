@@ -6,8 +6,9 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
-use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::{
-    LogsService, LogsServiceServer,
+use opentelemetry_proto::tonic::collector::trace::v1::{
+    trace_service_server::{TraceService, TraceServiceServer},
+    ExportTraceServiceRequest, ExportTraceServiceResponse,
 };
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
@@ -130,25 +131,20 @@ pub struct DummyLogService;
 fn start_log_service(log_service: DummyLogService, address: SocketAddr) {
     tokio::spawn(async move {
         Server::builder()
-            .add_service(LogsServiceServer::new(log_service))
+            .add_service(TraceServiceServer::new(log_service))
             .serve(address)
             .await
     });
 }
 
 #[async_trait]
-impl LogsService for DummyLogService {
+impl TraceService for DummyLogService {
     async fn export(
         &self,
-        request: tonic::Request<
-            opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceRequest,
-        >,
-    ) -> std::result::Result<
-        tonic::Response<opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceResponse>,
-        tonic::Status,
-    > {
+        request: tonic::Request<ExportTraceServiceRequest>,
+    ) -> std::result::Result<tonic::Response<ExportTraceServiceResponse>, tonic::Status> {
         println!("request: {request:?}");
 
-        Ok(tonic::Response::new(Default::default()))
+        Ok(Response::new(Default::default()))
     }
 }

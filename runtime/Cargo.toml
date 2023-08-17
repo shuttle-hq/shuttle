@@ -17,7 +17,6 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 opentelemetry = { workspace = true }
-opentelemetry-proto = { workspace = true, features = ["gen-tonic", "logs"] }
 opentelemetry-otlp = {  workspace = true }
 prost-types = { workspace = true }
 serde = { workspace = true }
@@ -59,6 +58,7 @@ workspace = true
 
 [dev-dependencies]
 crossbeam-channel = { workspace = true }
+opentelemetry-proto = { workspace = true }
 portpicker = "0.1.1"
 futures = { workspace = true }
 shuttle-service = { workspace = true, features = ["builder"] }

@@ -1191,7 +1191,6 @@ dependencies = [
  "shuttle-common-tests",
  "shuttle-proto",
  "shuttle-service",
- "sqlx",
  "strum",
  "tar",
  "tempfile",
@@ -5599,7 +5598,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-logger"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "async-broadcast",
  "async-trait",

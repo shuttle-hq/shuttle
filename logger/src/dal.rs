@@ -10,7 +10,9 @@ use opentelemetry_proto::tonic::{
 };
 use prost_types::Timestamp;
 use serde_json::Value;
-use shuttle_common::{backends::tracing::from_any_value_kv_to_serde_json_map, log};
+use shuttle_common::{
+    backends::tracing::from_any_value_kv_to_serde_json_map, log, tracing::MESSAGE_KEY,
+};
 use shuttle_proto::logger::{self, LogItem};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
@@ -239,7 +241,7 @@ impl Log {
                 let message = event.name;
 
                 let mut fields = from_any_value_kv_to_serde_json_map(event.attributes);
-                fields.insert("message".to_string(), message.into());
+                fields.insert(MESSAGE_KEY.to_string(), message.into());
 
                 // Every event should have a level field, but we store it in the level column,
                 // so we can remove it from the event fields.

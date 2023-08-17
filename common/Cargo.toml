@@ -54,7 +54,6 @@ backend = [
     "hyper/client",
     "opentelemetry-otlp",
     "opentelemetry-proto/gen-tonic",
-    "opentelemetry-proto/logs",
     "thiserror",
     "tokio",
     "tonic",

@@ -335,8 +335,10 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
     // Clear directory first
     let mut entries = fs::read_dir(&dest).await?;
     while let Some(entry) = entries.next_entry().await? {
-        // Ignore the build cache directory
-        if ["target", "Cargo.lock"].contains(&entry.file_name().to_string_lossy().as_ref()) {
+        // Ignore the previous binaries build cache directory
+        if [EXECUTABLE_DIRNAME, "target", "Cargo.lock"]
+            .contains(&entry.file_name().to_string_lossy().as_ref())
+        {
             continue;
         }
 

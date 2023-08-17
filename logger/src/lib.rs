@@ -46,7 +46,7 @@ impl TraceService for ShuttleLogsOtlp {
         request: Request<ExportTraceServiceRequest>,
     ) -> std::result::Result<tonic::Response<ExportTraceServiceResponse>, tonic::Status> {
         let request = request.into_inner();
-        // println!("received logs");
+
         // println!("trace service received request: \n{:#?}", request);
         let logs: Vec<_> = request
             .resource_spans
@@ -56,7 +56,7 @@ impl TraceService for ShuttleLogsOtlp {
             .collect();
 
         // println!("flattened logs: {:#?}", logs);
-        // TODO: consider sending different response for this case.
+        // TODO: consider returning different response for this case.
         if !logs.is_empty() {
             _ = self.tx.broadcast(logs).await.map_err(|err| {
                 println!("failed to send log to storage: {}", err);

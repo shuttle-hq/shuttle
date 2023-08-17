@@ -80,6 +80,8 @@ impl Sqlite {
     async fn from_pool(pool: SqlitePool) -> Self {
         MIGRATIONS.run(&pool).await.unwrap();
 
+        // TODO: we switched to async_broadcast to resolve the infinite loop bug, but it wasn't related.
+        // Should we switch back to tokio::broadcast?
         let (tx, mut rx): (Sender<Vec<Log>>, _) = broadcast(1000);
         let pool_spawn = pool.clone();
 
@@ -187,12 +189,13 @@ impl Log {
             schema_url: _,
         } = resource_spans;
 
-        // TODO: we should get both in the same function and avoid this clone.
+        // TODO: we should get both of these attributes in the same function and avoid this clone.
         let resource = resource?;
         let shuttle_service_name = get_attribute(resource.clone().attributes, "service.name")?;
 
         // Try to get the deployment_id from the resource attributes, this will be the case for the runtimes,
         // they add the deployment_id to the otlp tracer config.
+        // TODO: should this be named "deployment.id" to conform to otlp standard?
         let deployment_id = get_attribute(resource.attributes, "deployment_id");
 
         let logs = scope_spans

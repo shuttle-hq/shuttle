@@ -244,6 +244,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-broadcast"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c48ccdbf6ca6b121e0f586cbc0e73ae440e56c67c30fa0873b4e110d9c26d2b"
+dependencies = [
+ "event-listener",
+ "futures-core",
+]
+
+[[package]]
 name = "async-lock"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5549,9 +5559,12 @@ dependencies = [
 name = "shuttle-logger"
 version = "0.23.0"
 dependencies = [
+ "async-broadcast",
  "async-trait",
  "chrono",
  "clap",
+ "opentelemetry",
+ "opentelemetry-otlp",
  "opentelemetry-proto",
  "portpicker",
  "pretty_assertions",
@@ -5566,6 +5579,7 @@ dependencies = [
  "tokio-stream",
  "tonic",
  "tracing",
+ "tracing-opentelemetry",
  "tracing-subscriber",
 ]
 
@@ -5648,6 +5662,8 @@ dependencies = [
  "crossbeam-channel",
  "futures",
  "hyper",
+ "opentelemetry",
+ "opentelemetry-otlp",
  "opentelemetry-proto",
  "portpicker",
  "prost-types",
@@ -5665,6 +5681,7 @@ dependencies = [
  "tonic",
  "tower",
  "tracing",
+ "tracing-opentelemetry",
  "tracing-subscriber",
  "uuid",
  "wasi-common",

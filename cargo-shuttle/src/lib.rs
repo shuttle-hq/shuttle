@@ -66,7 +66,7 @@ use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
-const SHUTTLE_LOGIN_URL: &str = "https://shuttle.rs/login";
+const SHUTTLE_LOGIN_URL: &str = "https://console.shuttle.rs/new-project";
 const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
 const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/introduction/shuttle-commands";
 

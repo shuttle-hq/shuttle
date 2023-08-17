@@ -25,7 +25,7 @@ services:
       - 3000:8000
   resource-recorder:
     ports:
-      - 6000:8000
+      - 8007:8000
   otel-collector:
     ports:
       - 4317:4317

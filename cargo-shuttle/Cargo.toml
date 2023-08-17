@@ -36,7 +36,6 @@ reqwest-retry = "0.2.0"
 rmp-serde = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres"] }
 strum = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal"] }

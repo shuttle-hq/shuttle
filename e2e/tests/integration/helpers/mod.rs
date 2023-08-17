@@ -46,6 +46,7 @@ shuttle-persist = {{ path = "{}" }}
 shuttle-shared-db = {{ path = "{}" }}
 shuttle-secrets = {{ path = "{}" }}
 shuttle-static-folder = {{ path = "{}" }}
+shuttle-service-info = {{ path = "{}" }}
 
 shuttle-axum = {{ path = "{}" }}
 shuttle-actix-web = {{ path = "{}" }}
@@ -68,6 +69,10 @@ shuttle-warp = {{ path = "{}" }}"#,
                     WORKSPACE_ROOT
                         .join("resources")
                         .join("static-folder")
+                        .display(),
+                    WORKSPACE_ROOT
+                        .join("resources")
+                        .join("service-info")
                         .display(),
                     WORKSPACE_ROOT
                         .join("services")

@@ -47,7 +47,6 @@ impl TraceService for ShuttleLogsOtlp {
     ) -> std::result::Result<tonic::Response<ExportTraceServiceResponse>, tonic::Status> {
         let request = request.into_inner();
 
-        // println!("trace service received request: \n{:#?}", request);
         let logs: Vec<_> = request
             .resource_spans
             .into_iter()
@@ -55,7 +54,6 @@ impl TraceService for ShuttleLogsOtlp {
             .flatten()
             .collect();
 
-        // println!("flattened logs: {:#?}", logs);
         // TODO: consider returning different response for this case.
         if !logs.is_empty() {
             _ = self.tx.broadcast(logs).await.map_err(|err| {

@@ -544,6 +544,8 @@ async fn request_custom_domain_acme_certificate(
                 }
             }
         }))
+        .and_then(task::run_until_done())
+        .and_then(task::start_idle_deploys())
         .send(&sender)
         .await?;
 
@@ -584,27 +586,38 @@ async fn renew_custom_domain_acme_certificate(
         .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
     // Try retrieve the current certificate if any.
     match service.project_details_for_custom_domain(&fqdn).await {
-        Ok(CustomDomain { certificate, .. }) => {
-            let (_, pem) = parse_x509_pem(certificate.as_bytes()).unwrap_or_else(|_| {
-                panic!(
-                    "Malformed existing PEM certificate for {} project.",
-                    project_name
+        Ok(CustomDomain {
+            mut certificate,
+            private_key,
+            ..
+        }) => {
+            certificate.push('\n');
+            certificate.push('\n');
+            certificate.push_str(private_key.as_str());
+            let (_, pem) = parse_x509_pem(certificate.as_bytes()).map_err(|err| {
+                Error::custom(
+                    ErrorKind::Internal,
+                    format!("Error while parsing the pem certificate for {project_name}: {err}"),
                 )
-            });
-            let (_, x509_cert_chain) = parse_x509_certificate(pem.contents.as_bytes())
-                .unwrap_or_else(|_| {
-                    panic!(
-                        "Malformed existing X509 certificate for {} project.",
-                        project_name
+            })?;
+
+            let (_, x509_cert_chain) =
+                parse_x509_certificate(pem.contents.as_bytes()).map_err(|err| {
+                    Error::custom(
+                        ErrorKind::Internal,
+                        format!(
+                            "Error while parsing the certificate chain for {project_name}: {err}"
+                        ),
                     )
-                });
+                })?;
+
             let diff = x509_cert_chain
                 .validity()
                 .not_after
                 .sub(ASN1Time::now())
-                .unwrap();
+                .unwrap_or_default();
 
-            // If current certificate validity less_or_eq than 30 days, attempt renewal.
+            // Renew only when the difference is `None` (meaning certificate expired) or we're within the last 30 days of validity.
             if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
                 return match acme_client
                     .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)

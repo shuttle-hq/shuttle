@@ -364,10 +364,13 @@ jobs:
       - run:
           name: Deploy images
           command: |
-            DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> USE_TLS=enable PROD=<< parameters.production >> DD_API_KEY=$DD_API_KEY \
+            DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> \
+            TAG=$TAG \
+            PROD=<< parameters.production >> \
+            USE_TLS=enable \
             POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
             MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
-            TAG=$TAG \
+            DD_API_KEY=$DD_API_KEY \
             HONEYCOMB_API_KEY=${<< parameters.honeycomb-api-key >>} \
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             make deploy

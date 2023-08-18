@@ -543,7 +543,7 @@ pub async fn start_deployment(
 #[instrument(skip_all, fields(%project_name, %deployment_id))]
 #[utoipa::path(
     get,
-    path = "/projects/{project_name}/ws/deployments/{deployment_id}/logs",
+    path = "/projects/{project_name}/deployments/{deployment_id}/logs",
     responses(
         (status = 200, description = "Gets the logs a specific deployment.", body = [shuttle_common::log::Item]),
         (status = 500, description = "Database or streaming error.", body = String),
@@ -582,7 +582,7 @@ pub async fn get_logs(
 
 #[utoipa::path(
     get,
-    path = "/projects/{project_name}/deployments/{deployment_id}/logs",
+    path = "/projects/{project_name}/ws/deployments/{deployment_id}/logs",
     responses(
         (status = 200, description = "Subscribes to a specific deployment logs.")
     ),

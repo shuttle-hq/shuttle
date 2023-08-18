@@ -231,7 +231,7 @@ pub mod resource_recorder {
 }
 
 pub mod logger {
-    use chrono::{naive::serde, DateTime, NaiveDateTime, Utc};
+    use chrono::{DateTime, NaiveDateTime, Utc};
     use shuttle_common::tracing::{FILEPATH_KEY, LINENO_KEY, TARGET_KEY};
     use tracing::error;
 

@@ -244,6 +244,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-broadcast"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c48ccdbf6ca6b121e0f586cbc0e73ae440e56c67c30fa0873b4e110d9c26d2b"
+dependencies = [
+ "event-listener",
+ "futures-core",
+]
+
+[[package]]
 name = "async-lock"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1167,6 +1177,7 @@ dependencies = [
  "indicatif",
  "indoc",
  "openssl",
+ "opentelemetry-proto",
  "portpicker",
  "reqwest",
  "reqwest-middleware",
@@ -1180,7 +1191,6 @@ dependencies = [
  "shuttle-common-tests",
  "shuttle-proto",
  "shuttle-service",
- "sqlx",
  "strum",
  "tar",
  "tempfile",
@@ -5438,9 +5448,9 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-otlp",
+ "opentelemetry-proto",
  "pin-project",
  "proptest",
- "prost-types",
  "rand",
  "reqwest",
  "ring",
@@ -5587,6 +5597,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-logger"
+version = "0.24.0"
+dependencies = [
+ "async-broadcast",
+ "async-trait",
+ "chrono",
+ "clap",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry-proto",
+ "portpicker",
+ "pretty_assertions",
+ "prost-types",
+ "serde_json",
+ "shuttle-common",
+ "shuttle-common-tests",
+ "shuttle-proto",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "shuttle-proto"
 version = "0.24.0"
 dependencies = [
@@ -5665,6 +5703,9 @@ dependencies = [
  "crossbeam-channel",
  "futures",
  "hyper",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry-proto",
  "portpicker",
  "prost-types",
  "rmp-serde",
@@ -5681,7 +5722,9 @@ dependencies = [
  "tonic",
  "tower",
  "tracing",
+ "tracing-opentelemetry",
  "tracing-subscriber",
+ "uuid",
  "wasi-common",
  "wasmtime",
  "wasmtime-wasi",

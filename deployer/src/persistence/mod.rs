@@ -7,8 +7,8 @@ pub mod service;
 mod state;
 mod user;
 
-use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
-use crate::deployment::ActiveDeploymentsGetter;
+use crate::deployment::deploy_layer::{LogRecorder, LogType};
+use crate::deployment::{deploy_layer, ActiveDeploymentsGetter};
 use crate::proxy::AddressGetter;
 use error::{Error, Result};
 use hyper::Uri;
@@ -222,7 +222,7 @@ impl Persistence {
             .expect("failed to convert resource recorder uri to a string")
             .connect()
             .await
-            .expect("failed to connect to provisioner");
+            .expect("failed to connect to resource recorder");
 
         let channel = ServiceBuilder::new()
             .layer(ClaimLayer)
@@ -707,12 +707,10 @@ mod tests {
 
     use chrono::{Duration, TimeZone, Utc};
     use rand::Rng;
-    use serde_json::json;
 
     use super::*;
     use crate::persistence::{
         deployment::{Deployment, DeploymentRunnable, DeploymentState},
-        log::{Level, Log},
         state::State,
     };
 
@@ -1130,173 +1128,6 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn log_insert() {
-        let (p, _) = Persistence::new_in_memory().await;
-        let deployment_id = add_deployment(&p.pool).await.unwrap();
-
-        let log = Log {
-            id: deployment_id,
-            timestamp: Utc::now(),
-            state: State::Queued,
-            level: Level::Info,
-            file: Some("queue.rs".to_string()),
-            line: Some(12),
-            target: "tests::log_insert".to_string(),
-            fields: json!({"message": "job queued"}),
-        };
-
-        insert_log(&p.pool, log.clone()).await.unwrap();
-
-        let logs = p.get_deployment_logs(&deployment_id).await.unwrap();
-        assert!(!logs.is_empty(), "there should be one log");
-
-        assert_eq!(logs.first().unwrap(), &log);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn logs_for_deployment() {
-        let (p, _) = Persistence::new_in_memory().await;
-        let deployment_a = add_deployment(&p.pool).await.unwrap();
-        let deployment_b = add_deployment(&p.pool).await.unwrap();
-
-        let log_a1 = Log {
-            id: deployment_a,
-            timestamp: Utc::now(),
-            state: State::Queued,
-            level: Level::Info,
-            file: Some("file.rs".to_string()),
-            line: Some(5),
-            target: "tests::logs_for_deployment".to_string(),
-            fields: json!({"message": "job queued"}),
-        };
-        let log_b = Log {
-            id: deployment_b,
-            timestamp: Utc::now(),
-            state: State::Queued,
-            level: Level::Info,
-            file: Some("file.rs".to_string()),
-            line: Some(5),
-            target: "tests::logs_for_deployment".to_string(),
-            fields: json!({"message": "job queued"}),
-        };
-        let log_a2 = Log {
-            id: deployment_a,
-            timestamp: Utc::now(),
-            state: State::Building,
-            level: Level::Warn,
-            file: None,
-            line: None,
-            target: String::new(),
-            fields: json!({"message": "unused Result"}),
-        };
-
-        for log in [log_a1.clone(), log_b, log_a2.clone()] {
-            insert_log(&p.pool, log).await.unwrap();
-        }
-
-        let logs = p.get_deployment_logs(&deployment_a).await.unwrap();
-        assert!(!logs.is_empty(), "there should be two logs");
-
-        assert_eq!(logs, vec![log_a1, log_a2]);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn log_recorder_event() {
-        let (p, handle) = Persistence::new_in_memory().await;
-        let deployment_id = add_deployment(&p.pool).await.unwrap();
-
-        let event = deploy_layer::Log {
-            id: deployment_id,
-            timestamp: Utc::now(),
-            state: State::Queued,
-            level: Level::Info,
-            file: Some("file.rs".to_string()),
-            line: Some(5),
-            target: "tests::log_recorder_event".to_string(),
-            fields: json!({"message": "job queued"}),
-            r#type: deploy_layer::LogType::Event,
-        };
-
-        p.record(event);
-
-        // Drop channel and wait for it to finish
-        drop(p.log_send);
-        assert!(handle.await.is_ok());
-
-        let logs = get_deployment_logs(&p.pool, &deployment_id).await.unwrap();
-
-        assert!(!logs.is_empty(), "there should be one log");
-
-        let log = logs.first().unwrap();
-        assert_eq!(log.id, deployment_id);
-        assert_eq!(log.state, State::Queued);
-        assert_eq!(log.level, Level::Info);
-        assert_eq!(log.file, Some("file.rs".to_string()));
-        assert_eq!(log.line, Some(5));
-        assert_eq!(log.fields, json!({"message": "job queued"}));
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn log_recorder_state() {
-        let (p, handle) = Persistence::new_in_memory().await;
-
-        let id = Uuid::new_v4();
-        let service_id = add_service(&p.pool).await.unwrap();
-
-        p.insert_deployment(Deployment {
-            id,
-            service_id,
-            state: State::Queued, // Should be different from the state recorded below
-            last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 39).unwrap(),
-            address: None,
-            is_next: false,
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-        let state = deploy_layer::Log {
-            id,
-            timestamp: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 59).unwrap(),
-            state: State::Running,
-            level: Level::Info,
-            file: None,
-            line: None,
-            target: String::new(),
-            fields: serde_json::Value::Null,
-            r#type: deploy_layer::LogType::State,
-        };
-
-        p.record(state);
-
-        // Drop channel and wait for it to finish
-        drop(p.log_send);
-        assert!(handle.await.is_ok());
-
-        let logs = get_deployment_logs(&p.pool, &id).await.unwrap();
-
-        assert!(!logs.is_empty(), "state change should be logged");
-
-        let log = logs.first().unwrap();
-        assert_eq!(log.id, id);
-        assert_eq!(log.state, State::Running);
-        assert_eq!(log.level, Level::Info);
-        assert_eq!(log.fields, json!("NEW STATE"));
-
-        assert_eq!(
-            get_deployment(&p.pool, &id).await.unwrap().unwrap(),
-            Deployment {
-                id,
-                service_id,
-                state: State::Running,
-                last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 59).unwrap(),
-                address: None,
-                is_next: false,
-                ..Default::default()
-            }
-        );
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
     async fn secrets() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -1469,23 +1300,6 @@ mod tests {
         let actual = p.get_active_deployments(&service_id).await.unwrap();
 
         assert_eq!(actual, vec![id_1, id_2]);
-    }
-
-    async fn add_deployment(pool: &SqlitePool) -> Result<Uuid> {
-        let service_id = add_service(pool).await?;
-        let deployment_id = Uuid::new_v4();
-
-        sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update) VALUES (?, ?, ?, ?)",
-        )
-        .bind(deployment_id)
-        .bind(service_id.to_string())
-        .bind(State::Running)
-        .bind(Utc::now())
-        .execute(pool)
-        .await?;
-
-        Ok(deployment_id)
     }
 
     async fn add_service(pool: &SqlitePool) -> Result<Ulid> {

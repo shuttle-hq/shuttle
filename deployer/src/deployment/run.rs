@@ -262,6 +262,7 @@ impl Built {
         load(
             self.service_name.clone(),
             self.service_id,
+            self.id,
             executable_path.clone(),
             secret_getter,
             resource_manager,
@@ -283,9 +284,12 @@ impl Built {
     }
 }
 
+// TODO: refactor this and remove clippy allow.
+#[allow(clippy::too_many_arguments)]
 async fn load(
     service_name: String,
     service_id: Ulid,
+    deployment_id: Uuid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
     mut resource_manager: impl ResourceManager,
@@ -325,6 +329,7 @@ async fn load(
             .into_string()
             .unwrap_or_default(),
         service_name: service_name.clone(),
+        deployment_id: deployment_id.to_string(),
         resources,
         secrets,
     });
@@ -373,7 +378,8 @@ async fn load(
     }
 }
 
-#[instrument(skip(runtime_client, deployment_updater, cleanup), fields(state = %State::Running))]
+// TODO: add ticket to add deployment_id to more functions that need to be instrumented in deployer.
+#[instrument(skip(runtime_client, deployment_updater, cleanup), fields(deployment_id = %id, state = %State::Running))]
 async fn run(
     id: Uuid,
     service_name: String,
@@ -506,6 +512,7 @@ mod tests {
     fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
         let provisioner_addr =
             SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
+        let logger_uri = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
         let mock = ProvisionerMock;
 
         tokio::spawn(async move {
@@ -518,15 +525,13 @@ mod tests {
 
         let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
-        let (tx, rx) = crossbeam_channel::unbounded();
 
-        tokio::runtime::Handle::current().spawn_blocking(move || {
-            while let Ok(log) = rx.recv() {
-                println!("test log: {log:?}");
-            }
-        });
-
-        RuntimeManager::new(path, format!("http://{}", provisioner_addr), None, tx)
+        RuntimeManager::new(
+            path,
+            format!("http://{}", provisioner_addr),
+            format!("http://{}", logger_uri),
+            None,
+        )
     }
 
     #[derive(Clone)]

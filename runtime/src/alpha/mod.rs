@@ -23,27 +23,26 @@ use shuttle_common::{
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
-        self,
         runtime_server::{Runtime, RuntimeServer},
-        LoadRequest, LoadResponse, LogItem, StartRequest, StartResponse, StopReason, StopRequest,
-        StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
+        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
+        StopResponse, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
 use shuttle_service::{Environment, Factory, Service, ServiceName};
 use tokio::sync::{
     broadcast::{self, Sender},
-    mpsc::{self, UnboundedReceiver, UnboundedSender},
+    mpsc::{self},
     oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
-    transport::{Endpoint, Server},
+    transport::{Endpoint, Server, Uri},
     Request, Response, Status,
 };
 use tower::ServiceBuilder;
 use tracing::{error, info, trace, warn};
 
-use crate::{print_version, provisioner_factory::ProvisionerFactory, Logger, ResourceTracker};
+use crate::{print_version, provisioner_factory::ProvisionerFactory, ResourceTracker};
 
 use self::args::Args;
 
@@ -59,6 +58,7 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let args = match Args::parse() {
         Ok(args) => args,
         Err(e) => {
+            println!("runtime received malformed or incorrect args, {e}");
             error!("{e}");
             let help_str = "[HINT]: Run shuttle with `cargo shuttle run`";
             let wrapper_str = "-".repeat(help_str.len());
@@ -94,7 +94,13 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         };
 
     let router = {
-        let alpha = Alpha::new(provisioner_address, loader, storage_manager, env);
+        let alpha = Alpha::new(
+            provisioner_address,
+            loader,
+            storage_manager,
+            env,
+            args.logger_uri,
+        );
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
@@ -108,8 +114,6 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
 
 pub struct Alpha<L, S> {
     // Mutexes are for interior mutability
-    logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
-    logs_tx: UnboundedSender<LogItem>,
     stopped_tx: Sender<(StopReason, String)>,
     provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
@@ -117,6 +121,7 @@ pub struct Alpha<L, S> {
     loader: Mutex<Option<L>>,
     service: Mutex<Option<S>>,
     env: Environment,
+    logger_uri: Uri,
 }
 
 impl<L, S> Alpha<L, S> {
@@ -125,13 +130,11 @@ impl<L, S> Alpha<L, S> {
         loader: L,
         storage_manager: Arc<dyn StorageManager>,
         env: Environment,
+        logger_address: Uri,
     ) -> Self {
-        let (tx, rx) = mpsc::unbounded_channel();
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
-            logs_rx: Mutex::new(Some(rx)),
-            logs_tx: tx,
             stopped_tx,
             kill_tx: Mutex::new(None),
             provisioner_address,
@@ -139,6 +142,7 @@ impl<L, S> Alpha<L, S> {
             loader: Mutex::new(Some(loader)),
             service: Mutex::new(None),
             env,
+            logger_uri: logger_address,
         }
     }
 }
@@ -154,14 +158,15 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
-        logger: Logger,
+        logger_uri: String,
+        deployment_id: String,
     ) -> Result<Self::Service, shuttle_service::Error>;
 }
 
 #[async_trait]
 impl<F, O, Fac, S> Loader<Fac> for F
 where
-    F: FnOnce(Fac, ResourceTracker, Logger) -> O + Send,
+    F: FnOnce(Fac, ResourceTracker, String, String) -> O + Send,
     O: Future<Output = Result<S, shuttle_service::Error>> + Send,
     Fac: Factory + 'static,
     S: Service,
@@ -172,9 +177,10 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
-        logger: Logger,
+        logger_uri: String,
+        deployment_id: String,
     ) -> Result<Self::Service, shuttle_service::Error> {
-        (self)(factory, resource_tracker, logger).await
+        (self)(factory, resource_tracker, logger_uri, deployment_id).await
     }
 }
 
@@ -192,6 +198,7 @@ where
             resources,
             secrets,
             service_name,
+            deployment_id,
         } = request.into_inner();
         trace!(path, "loading alpha project");
 
@@ -231,12 +238,18 @@ where
         );
         trace!("got factory");
 
-        let logs_tx = self.logs_tx.clone();
-        let logger = Logger::new(logs_tx);
-
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
-        let service = match tokio::spawn(loader.load(factory, resource_tracker, logger)).await {
+        let logger_uri = self.logger_uri.clone();
+
+        let service = match tokio::spawn(loader.load(
+            factory,
+            resource_tracker,
+            logger_uri.to_string(),
+            deployment_id,
+        ))
+        .await
+        {
             Ok(res) => match res {
                 Ok(service) => service,
                 Err(error) => {
@@ -429,29 +442,5 @@ where
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
-    }
-
-    type SubscribeLogsStream = ReceiverStream<Result<runtime::LogItem, Status>>;
-
-    async fn subscribe_logs(
-        &self,
-        _request: Request<SubscribeLogsRequest>,
-    ) -> Result<Response<Self::SubscribeLogsStream>, Status> {
-        let logs_rx = self.logs_rx.lock().unwrap().deref_mut().take();
-
-        if let Some(mut logs_rx) = logs_rx {
-            let (tx, rx) = mpsc::channel(1);
-
-            // Move logger items into stream to be returned
-            tokio::spawn(async move {
-                while let Some(log) = logs_rx.recv().await {
-                    tx.send(Ok(log)).await.expect("to send log");
-                }
-            });
-
-            Ok(Response::new(ReceiverStream::new(rx)))
-        } else {
-            Err(Status::internal("logs have already been subscribed to"))
-        }
     }
 }

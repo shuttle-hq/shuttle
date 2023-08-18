@@ -269,31 +269,30 @@ pub use shuttle_codegen::main;
 
 mod alpha;
 mod args;
-mod logger;
 #[cfg(feature = "next")]
 mod next;
 mod provisioner_factory;
 mod resource_tracker;
 
 pub use alpha::{start, Alpha};
-pub use logger::Logger;
 #[cfg(feature = "next")]
 pub use next::{AxumWasm, NextArgs};
+pub use opentelemetry;
+pub use opentelemetry_otlp;
 pub use provisioner_factory::ProvisionerFactory;
 pub use resource_tracker::{get_resource, ResourceTracker};
 pub use shuttle_common::storage_manager::StorageManager;
 pub use shuttle_service::{CustomError, Error, Factory, ResourceBuilder, Service};
+pub use tracing_opentelemetry;
 
 pub use async_trait::async_trait;
 
-/// The default tracing registry used by shuttle.
-pub type Registry = tracing_subscriber::layer::Layered<
-    tracing_subscriber::filter::Filtered<
-        crate::Logger,
-        tracing_subscriber::EnvFilter,
-        tracing_subscriber::Registry,
+pub type Registry<S> = tracing_subscriber::layer::Layered<
+    tracing_opentelemetry::OpenTelemetryLayer<
+        tracing_subscriber::layer::Layered<tracing_subscriber::EnvFilter, S>,
+        opentelemetry::sdk::trace::Tracer,
     >,
-    tracing_subscriber::Registry,
+    tracing_subscriber::layer::Layered<tracing_subscriber::EnvFilter, S>,
 >;
 
 // Dependencies required by the codegen

@@ -658,6 +658,7 @@ workflows:
                   "shuttle-resource-recorder",
                   "shuttle-runtime",
                   "shuttle-service",
+                  "shuttle-logger",
                 ]
       - e2e-test:
           requires:
@@ -669,9 +670,9 @@ workflows:
               only: production
       - approve-push-unstable:
           type: approval
-          filters:
-            branches:
-              only: main
+          # filters:
+          #   branches:
+          #     only: main
       - build-and-push:
           name: build-and-push-unstable
           aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
@@ -679,9 +680,9 @@ workflows:
           production: false
           requires:
             - approve-push-unstable
-          filters:
-            branches:
-              only: main
+          # filters:
+          #   branches:
+          #     only: main
       - deploy-images:
           name: Deploy images to unstable
           postgres-password: DEV_POSTGRES_PASSWORD

@@ -26,6 +26,12 @@ services:
   resource-recorder:
     ports:
       - 8007:8000
+  otel-collector:
+    ports:
+      - 4317:4317
+  logger:
+    ports:
+      - 8080:8000
   panamax:
     profiles:
       - panamax

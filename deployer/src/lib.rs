@@ -11,6 +11,7 @@ use hyper::{
 pub use persistence::Persistence;
 use proxy::AddressGetter;
 pub use runtime_manager::RuntimeManager;
+use shuttle_proto::logger::logger_client::LoggerClient;
 use tokio::sync::Mutex;
 use tracing::{error, info};
 use ulid::Ulid;
@@ -28,6 +29,11 @@ mod runtime_manager;
 pub async fn start(
     persistence: Persistence,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
+    log_fetcher: LoggerClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >,
     args: Args,
 ) {
     // when _set is dropped once axum exits, the deployment tasks will be aborted.
@@ -41,6 +47,7 @@ pub async fn start(
         .secret_getter(persistence.clone())
         .resource_manager(persistence.clone())
         .queue_client(GatewayClient::new(args.gateway_uri))
+        .log_fetcher(log_fetcher)
         .build();
 
     persistence.cleanup_invalid_states().await.unwrap();

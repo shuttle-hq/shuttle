@@ -1,9 +1,14 @@
 use std::process::exit;
 
 use clap::Parser;
-use shuttle_common::backends::tracing::setup_tracing;
+use shuttle_common::{
+    backends::tracing::setup_tracing,
+    claims::{ClaimLayer, InjectPropagationLayer},
+};
 use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence, RuntimeManager};
+use shuttle_proto::logger::logger_client::LoggerClient;
 use tokio::select;
+use tower::ServiceBuilder;
 use tracing::{error, trace};
 use tracing_subscriber::prelude::*;
 use ulid::Ulid;
@@ -35,11 +40,24 @@ async fn main() {
         Some(args.auth_uri.to_string()),
     );
 
+    let channel = args
+        .logger_uri
+        .connect()
+        .await
+        .expect("failed to connect to resource recorder");
+
+    let channel = ServiceBuilder::new()
+        .layer(ClaimLayer)
+        .layer(InjectPropagationLayer)
+        .service(channel);
+
+    let logger_client = LoggerClient::new(channel);
+
     select! {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
             error!("Proxy stopped.")
         },
-        _ = start(persistence, runtime_manager, args) => {
+        _ = start(persistence, runtime_manager, logger_client, args) => {
             error!("Deployment service stopped.")
         },
     }

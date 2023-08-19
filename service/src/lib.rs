@@ -19,9 +19,9 @@ pub const RUNTIME_NAME: &str = "shuttle-runtime";
 
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///
-/// An instance of factory is passed by the deployer as an argument to [ResourceBuilder::build][ResourceBuilder::output] in the initial phase of deployment.
+/// An instance of factory is passed by the deployer as an argument to [ResourceBuilder::output] in the initial phase of deployment.
 ///
-/// Also see the [main][main] macro.
+/// Also see the [shuttle_runtime::main] macro.
 #[async_trait]
 pub trait Factory: Send + Sync {
     /// Get a database connection

@@ -1186,8 +1186,8 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.19.0",
  "tokiotest-httpserver",
- "toml 0.5.11",
- "toml_edit 0.16.2",
+ "toml 0.7.6",
+ "toml_edit",
  "tonic",
  "tracing",
  "tracing-subscriber",
@@ -3668,15 +3668,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nom8"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae01545c9c7fc4486ab7debaf2aad7003ac19431791868fb2e8066df97fad2f8"
-dependencies = [
- "memchr",
-]
-
-[[package]]
 name = "normpath"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5362,7 +5353,7 @@ dependencies = [
  "serde_json",
  "shuttle-common",
  "tokio",
- "toml 0.5.11",
+ "toml 0.7.6",
  "tracing",
  "tracing-subscriber",
 ]
@@ -5513,7 +5504,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
- "toml 0.5.11",
+ "toml 0.7.6",
  "tonic",
  "tower",
  "tower-http 0.4.3",
@@ -5699,7 +5690,7 @@ dependencies = [
  "strfmt",
  "thiserror",
  "tokio",
- "toml 0.5.11",
+ "toml 0.7.6",
  "tracing",
 ]
 
@@ -6509,15 +6500,9 @@ checksum = "c17e963a819c331dcacd7ab957d80bc2b9a9c1e71c804826d2f283dd65306542"
 dependencies = [
  "serde",
  "serde_spanned",
- "toml_datetime 0.6.3",
- "toml_edit 0.19.14",
+ "toml_datetime",
+ "toml_edit",
 ]
-
-[[package]]
-name = "toml_datetime"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4553f467ac8e3d374bc9a177a26801e5d0f9b211aa1673fb137a403afd1c9cf5"
 
 [[package]]
 name = "toml_datetime"
@@ -6530,18 +6515,6 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.16.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd30deba9a1cd7153c22aecf93e86df639e7b81c622b0af8d9255e989991a7b7"
-dependencies = [
- "indexmap 1.9.3",
- "itertools",
- "nom8",
- "toml_datetime 0.5.1",
-]
-
-[[package]]
-name = "toml_edit"
 version = "0.19.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8123f27e969974a3dfba720fdb560be359f57b44302d280ba72e76a74480e8a"
@@ -6549,7 +6522,7 @@ dependencies = [
  "indexmap 2.0.0",
  "serde",
  "serde_spanned",
- "toml_datetime 0.6.3",
+ "toml_datetime",
  "winnow",
 ]
 

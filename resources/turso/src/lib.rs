@@ -3,7 +3,7 @@ use libsql_client::{Client, Config};
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
-    Factory, ResourceBuilder, Type,
+    Environment, Factory, ResourceBuilder, Type,
 };
 use url::Url;
 
@@ -88,8 +88,9 @@ impl ResourceBuilder<Client> for Turso {
         self,
         factory: &mut dyn Factory,
     ) -> Result<Self::Output, shuttle_service::Error> {
-        match factory.get_environment() {
-            shuttle_service::Environment::Production => {
+        let md = factory.get_metadata();
+        match md.env {
+            Environment::Production => {
                 if self.addr.is_empty() {
                     Err(ShuttleError::Custom(CustomError::msg("missing addr")))
                 } else {
@@ -101,7 +102,7 @@ impl ResourceBuilder<Client> for Turso {
                     self.output_from_addr(&addr).await
                 }
             }
-            shuttle_service::Environment::Local => {
+            Environment::Local => {
                 match self.local_addr {
                     Some(ref local_addr) => self.output_from_addr(local_addr).await,
                     None => {
@@ -109,7 +110,7 @@ impl ResourceBuilder<Client> for Turso {
                         let db_file = std::env::current_dir() // Should be root of the project's workspace
                             .and_then(std::fs::canonicalize)
                             .map(|cd| {
-                                let mut p = cd.join(factory.get_service_name().to_string());
+                                let mut p = cd.join(md.service_name);
                                 p.set_extension("db");
                                 p
                             })
@@ -138,25 +139,15 @@ impl ResourceBuilder<Client> for Turso {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
-
-    use async_trait::async_trait;
-    use shuttle_service::{DatabaseReadyInfo, Environment, Factory, ResourceBuilder, ServiceName};
-    use url::Url;
-
-    use crate::{Turso, TursoOutput};
+    use super::*;
 
     struct MockFactory {
-        pub service_name: String,
         pub environment: Environment,
     }
 
     impl MockFactory {
-        fn new() -> Self {
-            Self {
-                service_name: "shuttle-turso".to_string(),
-                environment: Environment::Local,
-            }
+        fn new(environment: Environment) -> Self {
+            Self { environment }
         }
     }
 
@@ -165,7 +156,7 @@ mod test {
         async fn get_db_connection(
             &mut self,
             _db_type: shuttle_service::database::Type,
-        ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
+        ) -> Result<shuttle_service::DatabaseReadyInfo, shuttle_service::Error> {
             panic!("no turso test should try to get a db connection string")
         }
 
@@ -175,29 +166,30 @@ mod test {
             panic!("no turso test should try to get secrets")
         }
 
-        fn get_service_name(&self) -> shuttle_service::ServiceName {
-            ServiceName::from_str(&self.service_name).unwrap()
-        }
-
-        fn get_environment(&self) -> shuttle_service::Environment {
-            self.environment
+        fn get_metadata(&self) -> shuttle_service::DeploymentMetadata {
+            shuttle_service::DeploymentMetadata {
+                env: self.environment,
+                service_name: "my-turso-service".to_string(),
+                project_name: "my-turso-service".to_string(),
+                storage_path: std::path::PathBuf::new(),
+            }
         }
     }
 
     #[tokio::test]
     async fn local_database_default() {
-        let mut factory = MockFactory::new();
+        let mut factory = MockFactory::new(Environment::Local);
 
         let turso = Turso::new();
         let output = turso.output(&mut factory).await.unwrap();
         assert_eq!(output.token, None);
         assert!(output.conn_url.to_string().starts_with("file:///"));
-        assert!(output.conn_url.to_string().ends_with("shuttle-turso.db"));
+        assert!(output.conn_url.to_string().ends_with("my-turso-service.db"));
     }
 
     #[tokio::test]
     async fn local_database_user_supplied() {
-        let mut factory = MockFactory::new();
+        let mut factory = MockFactory::new(Environment::Local);
 
         let mut turso = Turso::new();
         let local_addr = "libsql://test-addr.turso.io";
@@ -216,8 +208,7 @@ mod test {
     #[tokio::test]
     #[should_panic(expected = "missing addr")]
     async fn remote_database_empty_addr() {
-        let mut factory = MockFactory::new();
-        factory.environment = Environment::Production;
+        let mut factory = MockFactory::new(Environment::Production);
 
         let turso = Turso::new();
         turso.output(&mut factory).await.unwrap();
@@ -225,8 +216,7 @@ mod test {
 
     #[tokio::test]
     async fn remote_database() {
-        let mut factory = MockFactory::new();
-        factory.environment = Environment::Production;
+        let mut factory = MockFactory::new(Environment::Production);
 
         let mut turso = Turso::new();
         let addr = "my-turso-addr.turso.io".to_string();

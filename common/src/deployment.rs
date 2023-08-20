@@ -25,7 +25,7 @@ pub enum State {
 
 pub struct DeploymentMetadata {
     pub env: Environment,
-    pub service_name: String,
+    pub service_name: String, // TODO: REPLACE WITH PROPER STRING WRAPPER, SORT OUT THEIR DIFFERENCE
     pub project_name: String,
     pub storage_path: PathBuf,
 }

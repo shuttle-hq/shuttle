@@ -11,7 +11,10 @@ use crossbeam_channel::Sender;
 use flate2::read::GzDecoder;
 use opentelemetry::global;
 use serde_json::json;
-use shuttle_common::claims::Claim;
+use shuttle_common::{
+    claims::Claim,
+    models::deployment::{EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
+};
 use shuttle_service::builder::{build_workspace, BuiltService};
 use tar::Archive;
 use tokio::{
@@ -29,8 +32,6 @@ use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
 use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
-
-pub const EXECUTABLE_DIRNAME: &str = ".shuttle-executables";
 
 pub async fn task(
     mut recv: QueueReceiver,
@@ -325,20 +326,23 @@ async fn set_secrets(
     Ok(())
 }
 
-/// Equivalent to the command: `tar -xzf --strip-components 1`
+/// Akin to the command: `tar -xzf --strip-components 1`
 #[instrument(skip(data, dest))]
 async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
+    debug!("Unpacking archive into {:?}", dest.as_ref());
     let tar = GzDecoder::new(data);
     let mut archive = Archive::new(tar);
     archive.set_overwrite(true);
 
     // Clear directory first
+    trace!("Clearing old files");
     let mut entries = fs::read_dir(&dest).await?;
     while let Some(entry) = entries.next_entry().await? {
-        // Ignore the previous binaries build cache directory
-        if [EXECUTABLE_DIRNAME, "target", "Cargo.lock"]
+        // Ignore files that should be persisted and build cache directory
+        if [EXECUTABLE_DIRNAME, STORAGE_DIRNAME, "target", "Cargo.lock"]
             .contains(&entry.file_name().to_string_lossy().as_ref())
         {
+            trace!("Skipping {:?} while clearing old files", entry);
             continue;
         }
 
@@ -353,6 +357,14 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
         let mut entry = entry?;
         let name = entry.path()?;
         let path: PathBuf = name.components().skip(1).collect();
+        // don't allow archive to overwrite shuttle internals
+        if [EXECUTABLE_DIRNAME, STORAGE_DIRNAME, "target"]
+            .iter()
+            .any(|n| path.starts_with(n))
+        {
+            info!("Skipping {:?} while unpacking", path);
+            continue;
+        }
         let dst: PathBuf = dest.as_ref().join(path);
         std::fs::create_dir_all(dst.parent().unwrap())?;
         trace!("Unpacking {:?} to {:?}", name, dst);

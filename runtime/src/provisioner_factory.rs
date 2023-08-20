@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use async_trait::async_trait;
 use shuttle_common::{
@@ -6,7 +6,7 @@ use shuttle_common::{
     database, DatabaseReadyInfo,
 };
 use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
-use shuttle_service::{Environment, Factory, ServiceName};
+use shuttle_service::{DeploymentMetadata, Environment, Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::info;
 
@@ -72,11 +72,12 @@ impl Factory for ProvisionerFactory {
         Ok(self.secrets.clone())
     }
 
-    fn get_service_name(&self) -> ServiceName {
-        self.service_name.clone()
-    }
-
-    fn get_environment(&self) -> shuttle_service::Environment {
-        self.env
+    fn get_metadata(&self) -> DeploymentMetadata {
+        DeploymentMetadata {
+            env: self.env,
+            service_name: self.service_name.to_string(),
+            project_name: "TODO".into(),
+            storage_path: PathBuf::from(".shuttle-storage"),
+        }
     }
 }

@@ -13,11 +13,13 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use shuttle_common::models::deployment::CREATE_SERVICE_BODY_LIMIT;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     models::{
-        deployment::{get_deployments_table, DeploymentRequest, GIT_STRINGS_MAX_LENGTH},
+        deployment::{
+            get_deployments_table, DeploymentRequest, CREATE_SERVICE_BODY_LIMIT,
+            GIT_STRINGS_MAX_LENGTH,
+        },
         project::{self, DEFAULT_IDLE_MINUTES},
         resource::get_resources_table,
         secret,

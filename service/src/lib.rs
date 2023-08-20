@@ -4,7 +4,10 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 pub use shuttle_common::{
-    database, deployment::Environment, project::ProjectName as ServiceName, resource::Type,
+    database,
+    deployment::{DeploymentMetadata, Environment},
+    project::ProjectName as ServiceName,
+    resource::Type,
     DatabaseReadyInfo, DbInput, DbOutput, SecretStore,
 };
 
@@ -33,11 +36,8 @@ pub trait Factory: Send + Sync {
     /// Get all the secrets for a service
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, crate::Error>;
 
-    /// Get the name for the service being deployed
-    fn get_service_name(&self) -> ServiceName;
-
-    /// Get the environment for this deployment
-    fn get_environment(&self) -> Environment;
+    /// Get the metadata for this deployment
+    fn get_metadata(&self) -> DeploymentMetadata;
 }
 
 /// Used to get resources of type `T` from factories.

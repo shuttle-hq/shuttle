@@ -50,7 +50,7 @@ mod args;
 
 pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     // `--version` overrides any other arguments.
-    if std::env::args().any(|arg| &arg == "--version") {
+    if std::env::args().any(|arg| arg == "--version") {
         print_version();
         return;
     }
@@ -171,8 +171,6 @@ where
         } = request.into_inner();
         trace!(path, "loading alpha project");
 
-        let secrets = BTreeMap::from_iter(secrets);
-
         let channel = self
             .provisioner_address
             .clone()
@@ -197,12 +195,14 @@ where
         let new_resources = Arc::new(Mutex::new(Vec::new()));
         let resource_tracker = ResourceTracker::new(past_resources, new_resources.clone());
 
+        // Sorts secrets by key
+        let secrets = BTreeMap::from_iter(secrets.into_iter());
+
         let factory =
             ProvisionerFactory::new(provisioner_client, service_name, secrets, self.env, claim);
         trace!("got factory");
 
-        let logs_tx = self.logs_tx.clone();
-        let logger = Logger::new(logs_tx);
+        let logger = Logger::new(self.logs_tx.clone());
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 

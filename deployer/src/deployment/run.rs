@@ -10,6 +10,7 @@ use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
+    models::deployment::EXECUTABLE_DIRNAME,
     resource,
 };
 
@@ -30,7 +31,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use super::{queue::EXECUTABLE_DIRNAME, RunReceiver, State};
+use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
     persistence::{DeploymentUpdater, ResourceManager, SecretGetter},
@@ -439,7 +440,7 @@ mod tests {
 
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
-    use shuttle_common::claims::Claim;
+    use shuttle_common::{claims::Claim, models::deployment::EXECUTABLE_DIRNAME};
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
@@ -458,7 +459,6 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        deployment::queue::EXECUTABLE_DIRNAME,
         persistence::{DeploymentUpdater, ResourceManager, Secret, SecretGetter},
         RuntimeManager,
     };

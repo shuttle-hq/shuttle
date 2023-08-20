@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{path::PathBuf, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
@@ -21,6 +21,13 @@ pub enum State {
     Stopped,
     Crashed,
     Unknown,
+}
+
+pub struct DeploymentMetadata {
+    pub env: Environment,
+    pub service_name: String,
+    pub project_name: String,
+    pub storage_path: PathBuf,
 }
 
 /// This which environment is this deployment taking place

@@ -7,7 +7,7 @@ use std::{
 use async_trait::async_trait;
 use bincode::{deserialize_from, serialize_into, Error as BincodeError};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use shuttle_service::{Factory, ResourceBuilder, Type};
+use shuttle_service::{DeploymentMetadata, Factory, ResourceBuilder, Type};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -139,14 +139,16 @@ impl ResourceBuilder<PersistInstance> for Persist {
         self,
         factory: &mut dyn Factory,
     ) -> Result<Self::Output, shuttle_service::Error> {
+        let DeploymentMetadata {
+            service_name,
+            storage_path,
+            ..
+        } = factory.get_metadata();
+
         PersistInstance::new(
-            [
-                /*factory.get_storage_dir() ,  <------- TODO */
-                "shuttle-persist",
-                factory.get_service_name().as_ref(),
-            ]
-            .iter()
-            .collect(),
+            storage_path
+                .join(PathBuf::from("shuttle-persist"))
+                .join(PathBuf::from(service_name)),
         )
         .map_err(|e| shuttle_service::Error::Custom(e.into()))
     }

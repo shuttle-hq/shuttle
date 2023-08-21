@@ -220,9 +220,10 @@ impl Log {
         deployment_id: Option<String>,
     ) -> Option<Vec<Self>> {
         // If we didn't find the id in the resource span, check the inner spans.
-        let deployment_id = deployment_id.or(get_attribute(span.attributes, "deployment_id"))?;
+        let deployment_id =
+            deployment_id.or(get_attribute(span.attributes.clone(), "deployment_id"))?;
 
-        let logs = span
+        let mut logs: Vec<Self> = span
             .events
             .into_iter()
             .flat_map(|event| {
@@ -253,6 +254,30 @@ impl Log {
                 })
             })
             .collect();
+
+        let mut fields = from_any_value_kv_to_serde_json_map(span.attributes);
+        fields.insert(
+            MESSAGE_KEY.to_string(),
+            format!("[span] {}", span.name).into(),
+        );
+
+        logs.push(Log {
+            shuttle_service_name: shuttle_service_name.to_string(),
+            deployment_id,
+            timestamp: DateTime::from_utc(
+                NaiveDateTime::from_timestamp_opt(
+                    (span.start_time_unix_nano / 1_000_000_000)
+                        .try_into()
+                        .unwrap_or_default(),
+                    (span.start_time_unix_nano % 1_000_000_000) as u32,
+                )
+                .unwrap_or_default(),
+                Utc,
+            ),
+            // Span level doesn't exist so this info is not relevant.
+            level: LogLevel::Info,
+            fields: Value::Object(fields),
+        });
 
         Some(logs)
     }

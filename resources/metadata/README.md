@@ -11,7 +11,7 @@ You can get this resource using the `shuttle_metadata::ShuttleServiceInfo` attri
 ```rust
 #[shuttle_runtime::main]
 async fn app(
-    #[shuttle_metadata::ShuttleServiceInfo] service_info: shuttle_service_info::ServiceInfo,
+    #[shuttle_metadata::ShuttleServiceInfo] service_info: shuttle_metadata::ServiceInfo,
 ) -> __ { ... }
 ```
 

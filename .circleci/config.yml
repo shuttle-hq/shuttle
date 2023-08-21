@@ -97,7 +97,7 @@ commands:
             shuttle-shared-db = { path = "$PWD/resources/shared-db" }
             shuttle-secrets = { path = "$PWD/resources/secrets" }
             shuttle-static-folder = { path = "$PWD/resources/static-folder" }
-            shuttle-service-info = { path = "$PWD/resources/service-info" }
+            shuttle-metadata = { path = "$PWD/resources/metadata" }
             shuttle-turso = { path = "$PWD/resources/turso" }
 
             shuttle-axum = { path = "$PWD/services/shuttle-axum" }
@@ -621,7 +621,7 @@ workflows:
                 - resources/persist
                 - resources/secrets
                 - resources/static-folder
-                - resources/service-info
+                - resources/metadata
                 - resources/turso
                 - services/shuttle-actix-web
                 - services/shuttle-axum
@@ -836,7 +836,7 @@ workflows:
                   "resources/secrets",
                   "resources/shared-db",
                   "resources/static-folder",
-                  "resources/service-info",
+                  "resources/metadata",
                   "resources/turso",
                 ]
           name: publish-<< matrix.path >>

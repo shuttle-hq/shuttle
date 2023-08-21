@@ -1,10 +1,10 @@
 [package]
-name = "shuttle-service-info"
+name = "shuttle-metadata"
 version = "0.24.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Plugin to get Shuttle service information"
-keywords = ["shuttle-service", "service-info"]
+keywords = ["shuttle-service", "metadata"]
 
 [dependencies]
 async-trait = "0.1.56"

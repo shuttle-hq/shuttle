@@ -7,8 +7,8 @@ FROM docker.io/lukemathwalker/cargo-chef:latest-rust-${RUSTUP_TOOLCHAIN}-buster 
 WORKDIR /build
 
 
-# Stores source cache
-FROM cargo-chef as cache
+# Stores source cache and cargo chef recipe
+FROM cargo-chef as planner
 WORKDIR /src
 COPY . .
 # Select only the essential files for copying into next steps
@@ -23,15 +23,13 @@ RUN find . \( \
     -name "*.pem" -or \
     -name "ulid0.so" \
     \) -type f -exec install -D \{\} /build/\{\} \;
-
-
-# Stores cargo chef recipe
-FROM cargo-chef AS planner
-COPY --from=cache /build .
+WORKDIR /build
 RUN cargo chef prepare --recipe-path /recipe.json
+# TODO upstream: Reduce the cooking by allowing multiple --bin args to prepare, or like this https://github.com/LukeMathWalker/cargo-chef/issues/181
 
 
-# Builds crate according to cargo chef recipe
+# Builds crate according to cargo chef recipe.
+# This step is skipped if the recipe is unchanged from previous build (no dependencies changed).
 FROM cargo-chef AS builder
 ARG CARGO_PROFILE
 COPY --from=planner /recipe.json /
@@ -40,7 +38,7 @@ RUN cargo chef cook \
     --all-features \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
     --recipe-path /recipe.json
-COPY --from=cache /build .
+COPY --from=planner /build .
 # Building all at once to share build artifacts in the "cook" layer
 RUN cargo build \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
@@ -62,19 +60,13 @@ ARG prepare_args
 # used as env variable in prepare script
 ARG PROD
 
+# Individual preparation of images
 COPY ${folder}/prepare.sh /prepare.sh
-# Prepare steps that don't depend on Shuttle source code
 RUN /prepare.sh "${prepare_args}"
-
-# Currently unused:
-#    COPY --from=cache /build /usr/src/shuttle/
-#    # Any prepare steps that depend on the COPY from cached source code.
-#    # In the deployer, shuttle-next is installed and the panamax mirror config is added in this step.
-#    RUN /prepare.sh --after-src "${prepare_args}"
 
 # shuttle-next is only needed in deployer but is now installed in all images.
 # can be improved, but does not hurt much.
 COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin/
 
-COPY --from=builder /build/target/${CARGO_PROFILE}/${crate} /usr/local/bin
-ENTRYPOINT ["/usr/local/bin/$crate"]
+COPY --from=builder /build/target/${CARGO_PROFILE}/${crate} /usr/local/bin/service
+ENTRYPOINT ["/usr/local/bin/service"]

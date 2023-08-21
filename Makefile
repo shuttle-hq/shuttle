@@ -44,7 +44,6 @@ POSTGRES_PASSWORD?=postgres
 MONGO_INITDB_ROOT_USERNAME?=mongodb
 MONGO_INITDB_ROOT_PASSWORD?=password
 
-CARGO_PROFILE?=release # override with CARGO_PROFILE=debug make ...
 
 ifeq ($(PROD),true)
 DOCKER_COMPOSE_FILES=docker-compose.yml
@@ -55,6 +54,7 @@ CONTAINER_REGISTRY=public.ecr.aws/shuttle
 DD_ENV=production
 # make sure we only ever go to production with `--tls=enable`
 USE_TLS=enable
+CARGO_PROFILE=release
 RUST_LOG?=shuttle=debug,info
 else
 DOCKER_COMPOSE_FILES=docker-compose.yml docker-compose.dev.yml
@@ -64,8 +64,15 @@ DB_FQDN=db.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 DD_ENV=unstable
 USE_TLS?=disable
+# default for local run
+CARGO_PROFILE?=debug
 RUST_LOG?=shuttle=debug,info
 DEPLOYS_API_KEY?=gateway4deployes
+endif
+
+ifeq ($(CI),true)
+# default for staging
+CARGO_PROFILE=release
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres

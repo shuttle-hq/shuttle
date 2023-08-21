@@ -140,6 +140,7 @@ impl UserProxy {
         span.record("project", &project_name.to_string());
 
         let target_ip = project
+            .state
             .target_ip()?
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 

@@ -80,8 +80,14 @@ OTEL_TAG?=0.72.0
 
 USE_PANAMAX?=enable
 ifeq ($(USE_PANAMAX), enable)
-PREPARE_ARGS+=-p 
+PREPARE_ARGS+=-p
 COMPOSE_PROFILES+=panamax
+endif
+
+ifeq ($(SHUTTLE_DETACH), disable)
+SHUTTLE_DETACH=
+else
+SHUTTLE_DETACH=--detach
 endif
 
 DOCKER_COMPOSE_ENV=\
@@ -153,7 +159,12 @@ docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 # to start panamax locally run this command with an override for the profiles:
 # `make COMPOSE_PROFILES=panamax up`
 up: $(DOCKER_COMPOSE_FILES)
-	if [ "$(SHUTTLE_DETACH)" = "disable" ]; then $(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) up; else $(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) up --detach; fi
+	$(DOCKER_COMPOSE_ENV) \
+	$(DOCKER_COMPOSE) \
+	$(addprefix -f ,$(DOCKER_COMPOSE_FILES)) \
+	-p $(STACK) \
+	up \
+	$(SHUTTLE_DETACH)
 
 down: $(DOCKER_COMPOSE_FILES)
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) down
@@ -210,7 +221,7 @@ bump-final:
 	echo "make publish"
 
 # Deploy all our example using the command set in shuttle-command
-# Usage: make deploy-example shuttle-command="cargo shuttle" -j 2
+# Usage: make deploy-examples shuttle-command="cargo shuttle" -j 2
 deploy-examples: deploy-examples/rocket/hello-world \
 	deploy-examples/rocket/persist \
 	deploy-examples/rocket/postgres \
@@ -255,8 +266,9 @@ publish: publish-resources publish-cargo-shuttle
 
 publish-resources: publish-resources/aws-rds \
 	publish-resources/persist \
-	publish-resources/shared-db
-	publish-resources/static-folder
+	publish-resources/shared-db \
+	publish-resources/static-folder \
+	publish-resources/service-info
 
 publish-cargo-shuttle: publish-resources/secrets
 	cd cargo-shuttle; cargo publish

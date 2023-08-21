@@ -485,7 +485,7 @@ where
             project_name: self.project_name.clone(),
             account_name: account_name.clone(),
             gateway: ctx,
-            state: project,
+            state: project.state,
             admin_secret,
         };
 

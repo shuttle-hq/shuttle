@@ -97,6 +97,7 @@ commands:
             shuttle-shared-db = { path = "$PWD/resources/shared-db" }
             shuttle-secrets = { path = "$PWD/resources/secrets" }
             shuttle-static-folder = { path = "$PWD/resources/static-folder" }
+            shuttle-service-info = { path = "$PWD/resources/service-info" }
             shuttle-turso = { path = "$PWD/resources/turso" }
 
             shuttle-axum = { path = "$PWD/services/shuttle-axum" }
@@ -364,10 +365,13 @@ jobs:
       - run:
           name: Deploy images
           command: |
-            DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> USE_TLS=enable PROD=<< parameters.production >> DD_API_KEY=$DD_API_KEY \
+            DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> \
+            TAG=$TAG \
+            PROD=<< parameters.production >> \
+            USE_TLS=enable \
             POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
             MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
-            TAG=$TAG \
+            DD_API_KEY=$DD_API_KEY \
             HONEYCOMB_API_KEY=${<< parameters.honeycomb-api-key >>} \
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             make deploy
@@ -617,6 +621,7 @@ workflows:
                 - resources/persist
                 - resources/secrets
                 - resources/static-folder
+                - resources/service-info
                 - resources/turso
                 - services/shuttle-actix-web
                 - services/shuttle-axum
@@ -831,6 +836,7 @@ workflows:
                   "resources/secrets",
                   "resources/shared-db",
                   "resources/static-folder",
+                  "resources/service-info",
                   "resources/turso",
                 ]
           name: publish-<< matrix.path >>

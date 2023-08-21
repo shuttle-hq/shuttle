@@ -750,8 +750,7 @@ impl ProjectCreating {
                         self.project_id.to_string()
                     ],
                     "Env": [
-                        "RUST_LOG=debug,shuttle=trace,h2=warn",
-                        "LD_LIBRARY_PATH=/usr/src/shuttle/deployer"
+                        "RUST_LOG=debug,shuttle=trace,h2=warn"
                     ]
                 })
             });

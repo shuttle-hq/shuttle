@@ -28,7 +28,6 @@ PROVISIONER_TAG?=$(TAG)
 RESOURCE_RECORDER_TAG?=$(TAG)
 
 DOCKER_BUILD?=docker buildx build
-
 ifeq ($(CI),true)
 DOCKER_BUILD+= --progress plain
 endif
@@ -67,6 +66,7 @@ USE_TLS?=disable
 # default for local run
 CARGO_PROFILE?=debug
 RUST_LOG?=shuttle=debug,info
+DEV_SUFFIX=-dev
 DEPLOYS_API_KEY?=gateway4deployes
 endif
 
@@ -179,6 +179,7 @@ down: $(DOCKER_COMPOSE_FILES)
 
 shuttle-%:
 	$(DOCKER_BUILD) \
+		--target $(@)$(DEV_SUFFIX) \
 		--build-arg folder=$(*) \
 		--build-arg crate=$(@) \
 		--build-arg prepare_args=$(PREPARE_ARGS) \

@@ -50,23 +50,45 @@ RUN cargo build \
     --bin shuttle-next -F next
 
 
-# The final image for running each "shuttle-..." binary
+# Base image for running each "shuttle-..." binary
 ARG RUSTUP_TOOLCHAIN
-FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-crate
+FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-crate-base
 ARG CARGO_PROFILE
 ARG folder
 ARG crate
 ARG prepare_args
-# used as env variable in prepare script
+# Fixes some dependencies compiled with incompatible versions of rustc
+ENV RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN}
+# Used as env variable in prepare script
 ARG PROD
 
-# Individual preparation of images
-COPY ${folder}/prepare.sh /prepare.sh
-RUN /prepare.sh "${prepare_args}"
-
-# shuttle-next is only needed in deployer but is now installed in all images.
-# can be improved, but does not hurt much.
-COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin/
+# Some crates need additional libs
+COPY ${folder}/*.so /usr/lib/
+ENV LD_LIBRARY_PATH=/usr/lib/
 
 COPY --from=builder /build/target/${CARGO_PROFILE}/${crate} /usr/local/bin/service
 ENTRYPOINT ["/usr/local/bin/service"]
+
+
+# Targets for each crate
+
+FROM shuttle-crate-base AS shuttle-auth
+FROM shuttle-auth AS shuttle-auth-dev
+
+FROM shuttle-crate-base AS shuttle-deployer
+ARG CARGO_PROFILE
+COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin/
+COPY deployer/prepare.sh /prepare.sh
+RUN /prepare.sh "${prepare_args}"
+FROM shuttle-deployer AS shuttle-deployer-dev
+# Source code needed for compiling with [patch.crates-io]
+COPY --from=planner /build /usr/src/shuttle/
+
+FROM shuttle-crate-base AS shuttle-gateway
+FROM shuttle-gateway AS shuttle-gateway-dev
+
+FROM shuttle-crate-base AS shuttle-provisioner
+FROM shuttle-provisioner AS shuttle-provisioner-dev
+
+FROM shuttle-crate-base AS shuttle-resource-recorder
+FROM shuttle-resource-recorder AS shuttle-resource-recorder-dev

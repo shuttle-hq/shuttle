@@ -1,4 +1,4 @@
-# Shuttle Service Info
+# Shuttle Metadata
 
 This plugin allows applications to obtain certain information about their runtime environment.
 

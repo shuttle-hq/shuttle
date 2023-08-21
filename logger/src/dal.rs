@@ -116,10 +116,11 @@ impl Sqlite {
 #[async_trait]
 impl Dal for Sqlite {
     async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError> {
-        let result = sqlx::query_as("SELECT * FROM logs WHERE deployment_id = ?")
-            .bind(deployment_id)
-            .fetch_all(&self.pool)
-            .await?;
+        let result =
+            sqlx::query_as("SELECT * FROM logs WHERE deployment_id = ? ORDER BY timestamp")
+                .bind(deployment_id)
+                .fetch_all(&self.pool)
+                .await?;
 
         Ok(result)
     }

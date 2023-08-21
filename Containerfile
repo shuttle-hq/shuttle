@@ -12,6 +12,8 @@ FROM cargo-chef as cache
 WORKDIR /src
 COPY . .
 # Select only the essential files for copying into next steps
+# so that changes to miscellaneous files don't trigger a new cargo-chef cook.
+# Beware that .dockerignore filters files before they get here.
 RUN find . \( \
     -name "*.rs" -or \
     -name "*.toml" -or \
@@ -31,14 +33,17 @@ RUN cargo chef prepare --recipe-path /recipe.json
 
 # Builds crate according to cargo chef recipe
 FROM cargo-chef AS builder
+ARG CARGO_PROFILE
 COPY --from=planner /recipe.json /
+# https://i.imgflip.com/2/74bvex.jpg
 RUN cargo chef cook \
-    # --release \
+    --all-features \
+    $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
     --recipe-path /recipe.json
 COPY --from=cache /build .
 # Building all at once to share build artifacts in the "cook" layer
 RUN cargo build \
-    # --release \
+    $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
     --bin shuttle-auth \
     --bin shuttle-deployer \
     --bin shuttle-provisioner \
@@ -50,6 +55,7 @@ RUN cargo build \
 # The final image for running each "shuttle-..." binary
 ARG RUSTUP_TOOLCHAIN
 FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-crate
+ARG CARGO_PROFILE
 ARG folder
 ARG crate
 ARG prepare_args
@@ -68,8 +74,7 @@ RUN /prepare.sh "${prepare_args}"
 
 # shuttle-next is only needed in deployer but is now installed in all images.
 # can be improved, but does not hurt much.
-COPY --from=builder /build/target/debug/shuttle-next /usr/local/cargo/bin/
+COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin/
 
-COPY --from=builder /build/target/debug/${crate} /usr/local/bin/service
-# COPY --from=builder /build/target/release/${crate} /usr/local/bin/service
-ENTRYPOINT ["/usr/local/bin/service"]
+COPY --from=builder /build/target/${CARGO_PROFILE}/${crate} /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/$crate"]

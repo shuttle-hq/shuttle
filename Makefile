@@ -44,6 +44,8 @@ POSTGRES_PASSWORD?=postgres
 MONGO_INITDB_ROOT_USERNAME?=mongodb
 MONGO_INITDB_ROOT_PASSWORD?=password
 
+CARGO_PROFILE?=release # override with CARGO_PROFILE=debug make ...
+
 ifeq ($(PROD),true)
 DOCKER_COMPOSE_FILES=docker-compose.yml
 STACK=shuttle-prod
@@ -175,6 +177,7 @@ shuttle-%:
 		--build-arg prepare_args=$(PREPARE_ARGS) \
 		--build-arg PROD=$(PROD) \
 		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
 		--tag $(CONTAINER_REGISTRY)/$(*):latest \

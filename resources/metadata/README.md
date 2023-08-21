@@ -6,12 +6,12 @@ This plugin allows applications to obtain certain information about their runtim
 
 Add `shuttle-metadata` to the dependencies for your service.
 
-You can get this resource using the `shuttle_metadata::ShuttleServiceInfo` attribute to get a `ServiceInfo`. This struct will contain information such as the Shuttle service name.
+You can get this resource using the `shuttle_metadata::ShuttleMetadata` attribute to get a `Metadata`. This struct will contain information such as the Shuttle service name.
 
 ```rust
 #[shuttle_runtime::main]
 async fn app(
-    #[shuttle_metadata::ShuttleServiceInfo] service_info: shuttle_metadata::ServiceInfo,
+    #[shuttle_metadata::ShuttleMetadata] metadata: shuttle_metadata::Metadata,
 ) -> __ { ... }
 ```
 

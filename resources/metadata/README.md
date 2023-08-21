@@ -4,7 +4,7 @@ This plugin allows applications to obtain certain information about their runtim
 
 ## Usage
 
-Add `shuttle-service-info` to the dependencies for your service.
+Add `shuttle-metadata` to the dependencies for your service.
 
 You can get this resource using the `shuttle_service_info::ShuttleServiceInfo` attribute to get a `ServiceInfo`. This struct will contain information such as the Shuttle service name.
 
@@ -15,8 +15,8 @@ async fn app(
 ) -> __ { ... }
 ```
 
-#### Example projects that use `shuttle-service-info`
+#### Example projects that use `shuttle-metadata`
 
 | Framework | Link                                                                                       |
 | --------- | ------------------------------------------------------------------------------------------ |
-| Axum      | [axum example](https://github.com/shuttle-hq/shuttle-examples/tree/main/axum/service-info) |
+| Axum      | [axum example](https://github.com/shuttle-hq/shuttle-examples/tree/main/axum/metadata) |

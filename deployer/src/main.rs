@@ -44,7 +44,7 @@ async fn main() {
         .logger_uri
         .connect()
         .await
-        .expect("failed to connect to resource recorder");
+        .expect("failed to connect to logger");
 
     let channel = ServiceBuilder::new()
         .layer(ClaimLayer)

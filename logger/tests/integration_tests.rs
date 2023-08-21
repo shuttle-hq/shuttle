@@ -66,12 +66,8 @@ async fn generate_and_get_runtime_logs() {
     let quoted_deployment_id = format!("\"{DEPLOYMENT_ID}\"");
     let expected = vec![
         MinLogItem {
-            level: LogLevel::Trace,
-            fields: json!({"message": "inside span 1 event"}),
-        },
-        MinLogItem {
             level: LogLevel::Info,
-            fields: json!({"message": "[span] span_name1", "deployment_id": quoted_deployment_id }),
+            fields: json!({"message": "[span] deploy", "deployment_id": quoted_deployment_id }),
         },
         MinLogItem {
             level: LogLevel::Error,
@@ -95,7 +91,11 @@ async fn generate_and_get_runtime_logs() {
         },
         MinLogItem {
             level: LogLevel::Info,
-            fields: json!({"message": "[span] deploy", "deployment_id": quoted_deployment_id }),
+            fields: json!({"message": "[span] span_name1", "deployment_id": quoted_deployment_id }),
+        },
+        MinLogItem {
+            level: LogLevel::Trace,
+            fields: json!({"message": "inside span 1 event"}),
         },
     ];
 
@@ -175,6 +175,10 @@ async fn generate_and_get_service_logs() {
 
     let expected = vec![
         MinLogItem {
+            level: LogLevel::Info,
+            fields: json!({"message": "[span] deploy_instrumented", "deployment_id": DEPLOYMENT_ID.to_string() }),
+        },
+        MinLogItem {
             level: LogLevel::Error,
             fields: json!({"message": "error"}),
         },
@@ -193,10 +197,6 @@ async fn generate_and_get_service_logs() {
         MinLogItem {
             level: LogLevel::Trace,
             fields: json!({"message": "trace"}),
-        },
-        MinLogItem {
-            level: LogLevel::Info,
-            fields: json!({"message": "[span] deploy_instrumented", "deployment_id": DEPLOYMENT_ID.to_string() }),
         },
     ];
 
@@ -277,11 +277,12 @@ async fn generate_and_stream_logs() {
         .unwrap()
         .unwrap();
 
+    let quoted_deployment_id = format!("\"{DEPLOYMENT_ID}\"");
     assert_eq!(
         MinLogItem::from(log),
         MinLogItem {
-            level: LogLevel::Trace,
-            fields: json!({"message": "inside span 1 event"}),
+            level: LogLevel::Info,
+            fields: json!({"message": "[span] span_name1", "deployment_id": quoted_deployment_id}),
         },
     );
 
@@ -290,13 +291,11 @@ async fn generate_and_stream_logs() {
         .unwrap()
         .unwrap()
         .unwrap();
-
-    let quoted_deployment_id = format!("\"{DEPLOYMENT_ID}\"");
     assert_eq!(
         MinLogItem::from(log),
         MinLogItem {
-            level: LogLevel::Info,
-            fields: json!({"message": "[span] span_name1", "deployment_id": quoted_deployment_id}),
+            level: LogLevel::Trace,
+            fields: json!({"message": "inside span 1 event"}),
         },
     );
 
@@ -308,7 +307,6 @@ async fn generate_and_stream_logs() {
         .unwrap()
         .unwrap()
         .unwrap();
-
     assert_eq!(
         MinLogItem::from(log),
         MinLogItem {
@@ -322,7 +320,6 @@ async fn generate_and_stream_logs() {
         .unwrap()
         .unwrap()
         .unwrap();
-
     assert_eq!(
         MinLogItem::from(log),
         MinLogItem {

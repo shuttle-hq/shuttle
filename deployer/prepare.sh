@@ -33,8 +33,11 @@ touch $CARGO_HOME/config.toml
 if [[ $PROD != "true" ]]; then
     echo '
     [patch.crates-io]
-    shuttle-service = { path = "/usr/src/shuttle/service" }
+    shuttle-codegen = { path = "/usr/src/shuttle/codegen" }
+    shuttle-common = { path = "/usr/src/shuttle/common" }
+    shuttle-proto = { path = "/usr/src/shuttle/proto" }
     shuttle-runtime = { path = "/usr/src/shuttle/runtime" }
+    shuttle-service = { path = "/usr/src/shuttle/service" }
 
     shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" }
     shuttle-persist = { path = "/usr/src/shuttle/resources/persist" }

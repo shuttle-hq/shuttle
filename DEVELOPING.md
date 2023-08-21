@@ -136,8 +136,11 @@ In order to test local changes to the library crates, you may want to add the be
 
 ```toml
 [patch.crates-io]
-shuttle-service = { path = "[base]/shuttle/service" }
+shuttle-codegen = { path = "[base]/shuttle/codegen" }
+shuttle-common = { path = "[base]/shuttle/common" }
+shuttle-proto = { path = "[base]/shuttle/proto" }
 shuttle-runtime = { path = "[base]/shuttle/runtime" }
+shuttle-service = { path = "[base]/shuttle/service" }
 
 shuttle-aws-rds = { path = "[base]/shuttle/resources/aws-rds" }
 shuttle-persist = { path = "[base]/shuttle/resources/persist" }

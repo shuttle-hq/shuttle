@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![allow(unused_imports)]
 
 use async_trait::async_trait;
 use paste::paste;

@@ -11,9 +11,9 @@ executors:
     docker:
       - image: cimg/rust:1.70.0
     resource_class: small
-  image-ubuntu:
+  machine-ubuntu:
     machine:
-      image: ubuntu-2204:2022.04.1
+      image: ubuntu-2204:2023.07.2
       docker_layer_caching: true
     resource_class: xlarge
 
@@ -89,8 +89,11 @@ commands:
           command: |
             cat\<< EOF > ~/.cargo/config.toml
             [patch.crates-io]
-            shuttle-service = { path = "$PWD/service" }
+            shuttle-codegen = { path = "$PWD/codegen" }
+            shuttle-common = { path = "$PWD/common" }
+            shuttle-proto = { path = "$PWD/proto" }
             shuttle-runtime = { path = "$PWD/runtime" }
+            shuttle-service = { path = "$PWD/service" }
 
             shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
             shuttle-persist = { path = "$PWD/resources/persist" }
@@ -121,19 +124,16 @@ commands:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.70.0 --target add wasm32-wasi
             sudo apt update && sudo apt install -y libssl1.1
   install-protoc:
-    parameters:
-      arch:
-        description: "The architecture of protoc to install"
-        type: string
-        default: "linux-x86_64"
     steps:
       - run:
           name: Install protoc
+          environment:
+            ARCH: "linux-x86_64"
+            VERSION: "22.2"
           command: |
-            curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-<< parameters.arch >>.zip &&\
-              sudo unzip -o protoc-21.9-<< parameters.arch >>.zip -d /usr/local bin/protoc &&\
-              sudo unzip -o protoc-21.9-<< parameters.arch >>.zip -d /usr/local 'include/*' &&\
-              rm -f protoc-21.9-<< parameters.arch >>.zip
+            curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v$VERSION/protoc-$VERSION-$ARCH.zip" && \
+                unzip -o "protoc-$VERSION-$ARCH.zip" bin/protoc "include/*" -d /usr/local && \
+                rm -f "protoc-$VERSION-$ARCH.zip"
   make-artifact:
     parameters:
       target:
@@ -170,6 +170,24 @@ commands:
           paths:
             - << parameters.target >>/*
             - << parameters.target >>.env
+  do-integration:
+    steps:
+      - install-rust
+      - checkout
+      - run: git submodule sync
+      - run: git submodule update --init
+      - restore-cargo-cache
+      - apply-patches
+      - run:
+          name: Run unit tests
+          command: cargo test --package << parameters.crate >> --all-features --lib -- --nocapture
+      - run:
+          name: Run integration tests
+          # Only run integration tests if there are any
+          command: |
+            set +o pipefail
+            (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") && echo "nothing to test" || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
+      - save-cargo-cache
 
 jobs:
   workspace:
@@ -182,7 +200,7 @@ jobs:
       # the Cargo.lock.
       - run:
           command: |
-            [[ -z $(cat Cargo.lock | grep "\[\[patch.unused\]\]") ]]
+            [ -z $(grep "\[\[patch.unused\]\]" Cargo.lock) ]
       - run: cargo fmt --all --check
       # TODO: this is incompatible with workspace inheritance, uncomment when
       # https://github.com/DevinR528/cargo-sort/pull/29 is merged
@@ -197,7 +215,7 @@ jobs:
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
       - save-cargo-cache
-  check-standalone:
+  test-standalone:
     parameters:
       path:
         description: "Path to crate external from workspace"
@@ -222,38 +240,41 @@ jobs:
                        << parameters.features >> \
                        --manifest-path << parameters.path >>/Cargo.toml \
                        --no-deps -- \
-                       --D warnings \
-                       -A clippy::let-unit-value \
-                       -A clippy::format-push-string
+                       --D warnings
       - run: cargo test << parameters.features >> --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
       - save-cargo-cache
-  platform-test:
+  test-workspace-member:
     parameters:
       crate:
-        description: "Crate to test"
+        description: "Crate in workspace to test"
         type: string
-    # Using an image since tests will start a docker container
-    executor: image-ubuntu
+    executor: docker-rust
+    resource_class: medium+
     steps:
-      - install-rust
-      - install-protoc
       - checkout
-      - run: git submodule sync
-      - run: git submodule update --init
       - restore-cargo-cache
-      - apply-patches
-      - run:
-          name: Run unit tests
-          command: cargo test --package << parameters.crate >> --all-features --lib -- --nocapture
-      - run:
-          name: Run integration tests
-          # Only run integration tests if there are any
-          command: |
-            set +o pipefail
-            (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") && echo "nothing to test" || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
+      - run: cargo test --package << parameters.crate >> --all-features -- --nocapture
       - save-cargo-cache
+  test-workspace-member-integration:
+    parameters:
+      crate:
+        description: "Crate in workspace to test"
+        type: string
+    executor: docker-rust
+    resource_class: medium+
+    steps:
+      - do-integration
+  test-workspace-member-integration-machine:
+    parameters:
+      crate:
+        description: "Crate in workspace to test"
+        type: string
+    # Using a machine image since tests will start a docker container
+    executor: machine-ubuntu
+    steps:
+      - do-integration
   e2e-test:
-    executor: image-ubuntu
+    executor: machine-ubuntu
     steps:
       - install-rust
       - checkout
@@ -284,7 +305,7 @@ jobs:
           key: docker-buildx-{{ .Branch }}
           when: always
   build-and-push:
-    executor: image-ubuntu
+    executor: machine-ubuntu
     parameters:
       aws-access-key-id:
         description: "AWS cli access key id"
@@ -320,7 +341,8 @@ jobs:
             PUSH=true PROD=<< parameters.production >> PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
   deploy-images:
-    executor: image-ubuntu
+    executor: machine-ubuntu
+    resource_class: small
     parameters:
       ssh-fingerprint:
         description: "SSH-key fingerprint"
@@ -612,16 +634,16 @@ workflows:
   ci:
     jobs:
       - workspace
-      - check-standalone:
+      - test-standalone:
           name: << matrix.path >>
           matrix:
             parameters:
               path:
                 - resources/aws-rds
+                - resources/metadata
                 - resources/persist
                 - resources/secrets
                 - resources/static-folder
-                - resources/metadata
                 - resources/turso
                 - services/shuttle-actix-web
                 - services/shuttle-axum
@@ -635,40 +657,70 @@ workflows:
                 - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
-      - check-standalone:
+      - test-standalone:
           # shuttle-shared-db has mutually exclusive features
           # so we run checks for each feature separately
           name: "resources/shared-db: << matrix.features >>"
           matrix:
-            alias: check-standalone-shared-db
+            alias: test-standalone-shared-db
             parameters:
-              path: [resources/shared-db]
+              path:
+                - resources/shared-db
               features:
                 - "-F mongodb"
                 - "-F postgres"
                 - "-F postgres-rustls"
-      - platform-test:
+      ############ This crate has no tests, therefore excluded.
+      # - test-standalone:
+      #   # Has mutually exclusive features, so we run checks for each feature separately
+      #     name: "resources/aws-rds: << matrix.features >>"
+      #     matrix:
+      #       alias: test-standalone-aws-rds
+      #       parameters:
+      #         path:
+      #           - resources/aws-rds
+      #         features:
+      #           - "-F postgres"
+      #           - "-F postgres-rustls"
+      #           - "-F mysql"
+      #           - "-F mysql-rustls"
+      #           - "-F mariadb"
+      #           - "-F mariadb-rustls"
+      - test-workspace-member:
           name: << matrix.crate >>
           matrix:
             parameters:
               crate:
-                [
-                  "shuttle-auth",
-                  "cargo-shuttle",
-                  "shuttle-codegen",
-                  "shuttle-common",
-                  "shuttle-deployer",
-                  "shuttle-proto",
-                  "shuttle-provisioner",
-                  "shuttle-resource-recorder",
-                  "shuttle-runtime",
-                  "shuttle-service",
-                ]
+                # - shuttle-admin # no tests
+                - shuttle-common
+                # - shuttle-common-tests # no tests
+      - test-workspace-member-integration:
+          name: << matrix.crate >>
+          matrix:
+            parameters:
+              crate:
+                - shuttle-auth
+                - shuttle-codegen
+                - shuttle-deployer
+                - shuttle-proto
+                - shuttle-provisioner
+                - shuttle-resource-recorder
+                - shuttle-runtime
+                - shuttle-service
+      - test-workspace-member-integration-machine:
+          name: << matrix.crate >>
+          matrix:
+            parameters:
+              crate:
+                # needs to spawn docker containers, therefore in a machine
+                - cargo-shuttle
       - e2e-test:
           requires:
-            - platform-test
-            - check-standalone
-            - check-standalone-shared-db
+            - test-standalone
+            - test-standalone-shared-db
+            # - test-standalone-aws-rds
+            - test-workspace-member
+            - test-workspace-member-integration-machine
           filters:
             branches:
               only: production

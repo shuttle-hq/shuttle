@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::task::{BoxedTask, TaskResult};
 use crate::{Error, ProjectName};

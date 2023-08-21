@@ -56,7 +56,7 @@ CONTAINER_REGISTRY=public.ecr.aws/shuttle
 DD_ENV=production
 # make sure we only ever go to production with `--tls=enable`
 USE_TLS=enable
-RUST_LOG=debug
+RUST_LOG?=shuttle=debug,info
 else
 DOCKER_COMPOSE_FILES=docker-compose.yml docker-compose.dev.yml
 STACK?=shuttle-dev
@@ -65,7 +65,7 @@ DB_FQDN=db.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 DD_ENV=unstable
 USE_TLS?=disable
-RUST_LOG?=shuttle=trace,debug
+RUST_LOG?=shuttle=debug,info
 DEPLOYS_API_KEY?=gateway4deployes
 endif
 

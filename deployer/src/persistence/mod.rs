@@ -392,11 +392,6 @@ impl Persistence {
         .map_err(Error::from)
     }
 
-    pub(crate) async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
-        // TODO: stress this a bit
-        get_deployment_logs(&self.pool, id).await
-    }
-
     /// Get a broadcast channel for listening to logs that are being stored into persistence
     pub fn get_log_subscriber(&self) -> Receiver<deploy_layer::Log> {
         self.stream_log_send.subscribe()
@@ -456,14 +451,6 @@ async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(Error::from)
-}
-
-async fn get_deployment_logs(pool: &SqlitePool, id: &Uuid) -> Result<Vec<Log>> {
-    sqlx::query_as("SELECT * FROM logs WHERE id = ? ORDER BY timestamp")
-        .bind(id)
-        .fetch_all(pool)
-        .await
         .map_err(Error::from)
 }
 

@@ -20,8 +20,7 @@ use tracing::{debug_span, instrument::Instrumented, Instrument, Span, Subscriber
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
 
-// TODO: change to otel-collector:4317
-const OTLP_ADDRESS: &str = "http://127.0.0.1:4317";
+const OTLP_ADDRESS: &str = "http://otel-collector:4317";
 
 pub fn setup_tracing<S>(subscriber: S, service_name: &str)
 where
@@ -34,12 +33,15 @@ where
         .unwrap();
     let fmt_layer = fmt::layer();
 
+    // The OTLP_ADDRESS env var is useful for setting a localhost address when running deployer locally.
+    let otlp_address = std::env::var("OTLP_ADDRESS").unwrap_or(OTLP_ADDRESS.into());
+
     let tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
                 .tonic()
-                .with_endpoint(OTLP_ADDRESS),
+                .with_endpoint(otlp_address),
         )
         .with_trace_config(
             trace::config().with_resource(Resource::new(vec![KeyValue::new(

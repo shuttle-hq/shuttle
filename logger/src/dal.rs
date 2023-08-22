@@ -2,14 +2,8 @@ use std::{path::Path, str::FromStr, time::SystemTime};
 
 use async_broadcast::{broadcast, Sender};
 use async_trait::async_trait;
-use chrono::NaiveDateTime;
-use opentelemetry_proto::tonic::trace::v1::{ResourceSpans, ScopeSpans, Span};
 use prost_types::Timestamp;
-use serde_json::Value;
-use shuttle_common::{
-    backends::tracing::from_any_value_kv_to_serde_json_map, tracing::MESSAGE_KEY,
-};
-use shuttle_proto::logger::{self, LogItem};
+use shuttle_proto::logger::LogItem;
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
     sqlite::{SqliteConnectOptions, SqliteJournalMode},
@@ -85,13 +79,14 @@ impl Sqlite {
 
         tokio::spawn(async move {
             while let Ok(logs) = rx.recv().await {
-                let mut builder = QueryBuilder::new("INSERT INTO logs (deployment_id, shuttle_service_name, timestamp, level, fields)");
+                let mut builder = QueryBuilder::new(
+                    "INSERT INTO logs (deployment_id, shuttle_service_name, data, tx_timestamp)",
+                );
                 builder.push_values(logs, |mut b, log| {
                     b.push_bind(log.deployment_id)
                         .push_bind(log.shuttle_service_name)
-                        .push_bind(log.timestamp)
-                        .push_bind(log.level)
-                        .push_bind(log.fields);
+                        .push_bind(log.data)
+                        .push_bind(log.tx_timestamp);
                 });
                 let query = builder.build();
 
@@ -114,7 +109,7 @@ impl Sqlite {
 impl Dal for Sqlite {
     async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError> {
         let result =
-            sqlx::query_as("SELECT * FROM logs WHERE deployment_id = ? ORDER BY timestamp")
+            sqlx::query_as("SELECT * FROM logs WHERE deployment_id = ? ORDER BY tx_timestamp")
                 .bind(deployment_id)
                 .fetch_all(&self.pool)
                 .await?;
@@ -127,170 +122,17 @@ impl Dal for Sqlite {
 pub struct Log {
     pub(crate) deployment_id: String,
     pub(crate) shuttle_service_name: String,
-    pub(crate) timestamp: DateTime<Utc>,
-    pub(crate) level: LogLevel,
-    pub(crate) fields: Value,
-}
-
-#[derive(Clone, Debug, sqlx::Type)]
-pub enum LogLevel {
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-
-impl FromStr for LogLevel {
-    type Err = DalError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "TRACE" => Ok(Self::Trace),
-            "DEBUG" => Ok(Self::Debug),
-            "INFO" => Ok(Self::Info),
-            "WARN" => Ok(Self::Warn),
-            "ERROR" => Ok(Self::Error),
-            other => Err(DalError::Parsing(format!("invalid log level: {other}"))),
-        }
-    }
-}
-
-impl From<LogLevel> for logger::LogLevel {
-    fn from(level: LogLevel) -> Self {
-        match level {
-            LogLevel::Trace => Self::Trace,
-            LogLevel::Debug => Self::Debug,
-            LogLevel::Info => Self::Info,
-            LogLevel::Warn => Self::Warn,
-            LogLevel::Error => Self::Error,
-        }
-    }
-}
-
-impl Log {
-    /// Try to get a log from an OTLP [ResourceSpans]
-    pub fn try_from_scope_span(resource_spans: ResourceSpans) -> Option<Vec<Self>> {
-        let ResourceSpans {
-            resource,
-            scope_spans,
-            schema_url: _,
-        } = resource_spans;
-
-        let fields = from_any_value_kv_to_serde_json_map(resource?.attributes);
-        let shuttle_service_name = fields.get("service.name")?.as_str()?.to_string();
-        // TODO: should this be named "deployment.id" to conform to otlp standard?
-        let deployment_id = fields
-            .get("deployment_id")
-            .map(|v| {
-                v.as_str()
-                    .expect("expected to have a string value for deployment_id key")
-            })
-            .map(|inner| inner.to_string());
-
-        let logs = scope_spans
-            .into_iter()
-            .flat_map(|scope_spans| {
-                let ScopeSpans {
-                    spans,
-                    schema_url: _,
-                    ..
-                } = scope_spans;
-
-                let events: Vec<_> = spans
-                    .into_iter()
-                    .flat_map(|span| {
-                        Self::try_from_span(span, &shuttle_service_name, deployment_id.clone())
-                    })
-                    .flatten()
-                    .collect();
-
-                Some(events)
-            })
-            .flatten()
-            .collect();
-
-        Some(logs)
-    }
-
-    /// Try to get self from an OTLP [Span]. Also enrich it with the shuttle service name and deployment id.
-    fn try_from_span(
-        span: Span,
-        shuttle_service_name: &str,
-        deployment_id: Option<String>,
-    ) -> Option<Vec<Self>> {
-        // If we didn't find the id in the resource span, check the inner spans.
-        let mut span_fields = from_any_value_kv_to_serde_json_map(span.attributes);
-        let deployment_id = deployment_id.or(span_fields
-            .get("deployment_id")?
-            .as_str()
-            .map(|inner| inner.to_string()))?;
-        let mut logs: Vec<Self> = span
-            .events
-            .into_iter()
-            .flat_map(|event| {
-                let message = event.name;
-
-                let mut fields = from_any_value_kv_to_serde_json_map(event.attributes);
-                fields.insert(MESSAGE_KEY.to_string(), message.into());
-
-                // Since we store the "level" in the level column in the database, we remove it
-                // from the event fields so it is not duplicated there.
-                // Note: this should never fail, a tracing event should always have a level.
-                let level = fields.remove("level")?;
-
-                let naive = NaiveDateTime::from_timestamp_opt(
-                    (event.time_unix_nano / 1_000_000_000)
-                        .try_into()
-                        .unwrap_or_default(),
-                    (event.time_unix_nano % 1_000_000_000) as u32,
-                )
-                .unwrap_or_default();
-
-                Some(Log {
-                    shuttle_service_name: shuttle_service_name.to_string(),
-                    deployment_id: deployment_id.clone(),
-                    timestamp: DateTime::from_utc(naive, Utc),
-                    level: level.as_str()?.parse().ok()?,
-                    fields: Value::Object(fields),
-                })
-            })
-            .collect();
-
-        span_fields.insert(
-            MESSAGE_KEY.to_string(),
-            format!("[span] {}", span.name).into(),
-        );
-
-        logs.push(Log {
-            shuttle_service_name: shuttle_service_name.to_string(),
-            deployment_id,
-            timestamp: DateTime::from_utc(
-                NaiveDateTime::from_timestamp_opt(
-                    (span.start_time_unix_nano / 1_000_000_000)
-                        .try_into()
-                        .unwrap_or_default(),
-                    (span.start_time_unix_nano % 1_000_000_000) as u32,
-                )
-                .unwrap_or_default(),
-                Utc,
-            ),
-            // Span level doesn't exist for opentelemetry spans, so this info is not relevant.
-            level: LogLevel::Info,
-            fields: Value::Object(span_fields),
-        });
-
-        Some(logs)
-    }
+    pub(crate) tx_timestamp: DateTime<Utc>,
+    pub(crate) data: Vec<u8>,
 }
 
 impl From<Log> for LogItem {
     fn from(log: Log) -> Self {
         LogItem {
             service_name: log.shuttle_service_name,
-            timestamp: Some(Timestamp::from(SystemTime::from(log.timestamp))),
-            level: logger::LogLevel::from(log.level) as i32,
-            fields: serde_json::to_vec(&log.fields).unwrap_or_default(),
+            deployment_id: log.deployment_id,
+            tx_timestamp: Some(Timestamp::from(SystemTime::from(log.tx_timestamp))),
+            data: log.data,
         }
     }
 }

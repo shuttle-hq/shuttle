@@ -11,7 +11,7 @@ use shuttle_common::{
     tracing::{FILEPATH_KEY, LINENO_KEY, MESSAGE_KEY, NAMESPACE_KEY, TARGET_KEY},
 };
 use shuttle_common_tests::JwtScopesLayer;
-use shuttle_logger::{Service, ShuttleLogsOtlp, Sqlite};
+use shuttle_logger::{Service, ShuttleLogs, Sqlite};
 use shuttle_proto::logger::{
     logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogLevel, LogsRequest,
 };
@@ -34,7 +34,7 @@ async fn generate_and_get_runtime_logs() {
 
         Server::builder()
             .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-            .add_service(TraceServiceServer::new(ShuttleLogsOtlp::new(
+            .add_service(TraceServiceServer::new(ShuttleLogs::new(
                 sqlite.get_sender(),
             )))
             .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)))
@@ -143,7 +143,7 @@ async fn generate_and_get_service_logs() {
 
         Server::builder()
             .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-            .add_service(TraceServiceServer::new(ShuttleLogsOtlp::new(
+            .add_service(TraceServiceServer::new(ShuttleLogs::new(
                 sqlite.get_sender(),
             )))
             .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)))
@@ -243,7 +243,7 @@ async fn generate_and_stream_logs() {
 
         Server::builder()
             .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-            .add_service(TraceServiceServer::new(ShuttleLogsOtlp::new(
+            .add_service(TraceServiceServer::new(ShuttleLogs::new(
                 sqlite.get_sender(),
             )))
             .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)))

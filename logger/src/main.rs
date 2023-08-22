@@ -6,7 +6,7 @@ use shuttle_common::backends::{
     auth::{AuthPublicKey, JwtAuthenticationLayer},
     tracing::{setup_tracing, ExtractPropagationLayer},
 };
-use shuttle_logger::{args::Args, Service, ShuttleLogsOtlp, Sqlite};
+use shuttle_logger::{args::Args, Service, Sqlite};
 use shuttle_proto::logger::logger_server::LoggerServer;
 use tonic::transport::Server;
 use tracing::trace;
@@ -29,11 +29,8 @@ async fn main() {
         .layer(ExtractPropagationLayer);
 
     let sqlite = Sqlite::new(&db_path.display().to_string()).await;
-    let svc = ShuttleLogsOtlp::new(sqlite.get_sender());
-    let trace_svc = TraceServiceServer::new(svc);
-    let router = server_builder
-        .add_service(trace_svc)
-        .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)));
+    let router =
+        server_builder.add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)));
 
     router.serve(args.address).await.unwrap();
 }

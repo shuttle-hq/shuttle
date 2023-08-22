@@ -72,7 +72,7 @@ impl From<ErrorKind> for ApiError {
             ),
             ErrorKind::ProjectNotReady => (
                 StatusCode::SERVICE_UNAVAILABLE,
-                "project not ready. Try run `cargo shuttle project restart`.",
+                "project not ready. Try running `cargo shuttle project restart`.",
             ),
             ErrorKind::ProjectUnavailable => {
                 (StatusCode::BAD_GATEWAY, "project returned invalid response")

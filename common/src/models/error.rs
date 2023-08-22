@@ -70,7 +70,10 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::NOT_FOUND,
                 "project not found. Run `cargo shuttle project start` to create a new project.",
             ),
-            ErrorKind::ProjectNotReady => (StatusCode::SERVICE_UNAVAILABLE, "project not ready"),
+            ErrorKind::ProjectNotReady => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "project not ready. Try run `cargo shuttle project restart`.",
+            ),
             ErrorKind::ProjectUnavailable => {
                 (StatusCode::BAD_GATEWAY, "project returned invalid response")
             }

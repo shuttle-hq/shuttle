@@ -58,6 +58,7 @@ ARG folder
 ARG crate
 ARG prepare_args
 # Fixes some dependencies compiled with incompatible versions of rustc
+ARG RUSTUP_TOOLCHAIN
 ENV RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN}
 # Used as env variable in prepare script
 ARG PROD
@@ -86,6 +87,8 @@ COPY --from=planner /build /usr/src/shuttle/
 
 FROM shuttle-crate-base AS shuttle-gateway
 FROM shuttle-gateway AS shuttle-gateway-dev
+# For testing certificates locally
+COPY --from=planner /build/*.pem /usr/src/shuttle/
 
 FROM shuttle-crate-base AS shuttle-provisioner
 FROM shuttle-provisioner AS shuttle-provisioner-dev

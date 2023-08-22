@@ -193,6 +193,17 @@ shuttle-%:
 		-f Containerfile \
 		.
 
+# Dependencies: sed, node+npm
+bump-contributors:
+	sed -i '/<!-- CONTRIBUTOR LIST -->/q' README.md
+	npx github-contributors-list@1.2.5 --owner shuttle-hq --repo shuttle \
+		--format MARKDOWN \
+		--sortOrder desc \
+		--showlogin true \
+		--imagesize 100 \
+		--cols 6 \
+		>> README.md
+
 # Bunch of targets to make bumping the shuttle version easier
 #
 # Dependencies: git, cargo-edit, fastmod, ripgrep

@@ -273,50 +273,8 @@ impl ToTokens for Loader {
                 logger_uri: String,
                 deployment_id: String,
             ) -> #return_type {
-                use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
-                use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
                 #extra_imports
 
-                let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                    .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
-                    .unwrap();
-
-                let tracer = shuttle_runtime::opentelemetry_otlp::new_pipeline()
-                    .tracing()
-                    .with_exporter(
-                        shuttle_runtime::opentelemetry_otlp::new_exporter()
-                            .tonic()
-                            .with_endpoint(logger_uri),
-                    )
-                    .with_trace_config(
-                        shuttle_runtime::opentelemetry::sdk::trace::config()
-                            .with_resource(
-                                shuttle_runtime::opentelemetry::sdk::Resource::new(
-                                    vec![
-                                        shuttle_runtime::opentelemetry::KeyValue::new(
-                                            "service.name",
-                                            "shuttle-runtime",
-                                        ),
-                                        shuttle_runtime::opentelemetry::KeyValue::new(
-                                            "deployment_id",
-                                            deployment_id,
-                                        )
-                                    ]
-                                )
-                            ),
-                        )
-                    .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
-                    .unwrap();
-                let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
-
-                let registry = shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(otel_layer);
-
-                #inject_tracing_layer
-
-                registry.init();
                 #vars
                 #(let #fn_inputs = shuttle_runtime::get_resource(
                     #fn_inputs_builder::new()#fn_inputs_builder_options,

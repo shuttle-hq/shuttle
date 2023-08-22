@@ -1,31 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ###############################################################################
 # This file is used by our common Containerfile incase the container for this #
 # service might need some extra preparation steps for its final image         #
 ###############################################################################
-
-# Stuff that depends on local source files
-if [ "$1" = "--after-src" ]; then
-    # Install the shuttle-next runtime for shuttle-next services.
-    cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" --bin shuttle-next --features next || exit 1
-
-    while getopts "p," o; do
-    case $o in
-        "p") # if panamax is used, the '-p' parameter is passed
-            # Make future crates requests to our own mirror
-            echo '
-[source.shuttle-crates-io-mirror]
-registry = "sparse+http://panamax:8080/index/"
-[source.crates-io]
-replace-with = "shuttle-crates-io-mirror"' >> $CARGO_HOME/config.toml
-                ;;
-            *)
-                ;;
-        esac
-    done
-    exit 0
-fi
 
 # Patch crates to be on same versions
 mkdir -p $CARGO_HOME
@@ -72,3 +50,19 @@ VERSION="22.2" && \
 curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v$VERSION/protoc-$VERSION-$ARCH.zip" && \
     unzip -o "protoc-$VERSION-$ARCH.zip" bin/protoc "include/*" -d /usr/local && \
     rm -f "protoc-$VERSION-$ARCH.zip"
+
+while getopts "p," o; do
+case $o in
+    "p") # if panamax is used, the '-p' parameter is passed
+        # Make future crates requests to our own mirror
+        # This is done after shuttle-next install in order to not sabotage it
+        echo '
+[source.shuttle-crates-io-mirror]
+registry = "sparse+http://panamax:8080/index/"
+[source.crates-io]
+replace-with = "shuttle-crates-io-mirror"' >> $CARGO_HOME/config.toml
+            ;;
+        *)
+            ;;
+    esac
+done

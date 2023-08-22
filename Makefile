@@ -1,10 +1,7 @@
-SRC_CRATES=deployer common codegen cargo-shuttle proto provisioner service
-SRC=$(shell find $(SRC_CRATES) -name "*.rs" -type f -not -path "**/target/*")
+COMMIT_SHA?=$(shell git rev-parse --short HEAD)
 
-COMMIT_SHA ?= $(shell git rev-parse --short HEAD)
-
-BUILDX_CACHE?=/tmp/cache/buildx
 ifeq ($(CI),true)
+BUILDX_CACHE?=/tmp/cache/buildx
 CACHE_FLAGS=--cache-to type=local,dest=$(BUILDX_CACHE),mode=max --cache-from type=local,src=$(BUILDX_CACHE)
 endif
 
@@ -31,7 +28,6 @@ PROVISIONER_TAG?=$(TAG)
 RESOURCE_RECORDER_TAG?=$(TAG)
 
 DOCKER_BUILD?=docker buildx build
-
 ifeq ($(CI),true)
 DOCKER_BUILD+= --progress plain
 endif
@@ -47,6 +43,7 @@ POSTGRES_PASSWORD?=postgres
 MONGO_INITDB_ROOT_USERNAME?=mongodb
 MONGO_INITDB_ROOT_PASSWORD?=password
 
+
 ifeq ($(PROD),true)
 DOCKER_COMPOSE_FILES=docker-compose.yml
 STACK=shuttle-prod
@@ -56,6 +53,7 @@ CONTAINER_REGISTRY=public.ecr.aws/shuttle
 DD_ENV=production
 # make sure we only ever go to production with `--tls=enable`
 USE_TLS=enable
+CARGO_PROFILE=release
 RUST_LOG?=shuttle=debug,info
 else
 DOCKER_COMPOSE_FILES=docker-compose.yml docker-compose.dev.yml
@@ -65,8 +63,16 @@ DB_FQDN=db.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 DD_ENV=unstable
 USE_TLS?=disable
+# default for local run
+CARGO_PROFILE?=debug
 RUST_LOG?=shuttle=debug,info
+DEV_SUFFIX=-dev
 DEPLOYS_API_KEY?=gateway4deployes
+endif
+
+ifeq ($(CI),true)
+# default for staging
+CARGO_PROFILE=release
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres
@@ -112,13 +118,15 @@ DOCKER_COMPOSE_ENV=\
 	COMPOSE_PROFILES=$(COMPOSE_PROFILES)\
 	DOCKER_SOCK=$(DOCKER_SOCK)
 
-.PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
+.PHONY: images clean src up down deploy shuttle-% shuttle-images postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
 
 clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth shuttle-resource-recorder postgres panamax otel
+images: shuttle-images postgres panamax otel
+
+shuttle-images: shuttle-auth shuttle-deployer shuttle-gateway shuttle-provisioner shuttle-resource-recorder
 
 postgres:
 	$(DOCKER_BUILD) \
@@ -169,12 +177,15 @@ up: $(DOCKER_COMPOSE_FILES)
 down: $(DOCKER_COMPOSE_FILES)
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) down
 
-shuttle-%: ${SRC} Cargo.lock
+shuttle-%:
 	$(DOCKER_BUILD) \
+		--target $(@)$(DEV_SUFFIX) \
 		--build-arg folder=$(*) \
+		--build-arg crate=$(@) \
 		--build-arg prepare_args=$(PREPARE_ARGS) \
 		--build-arg PROD=$(PROD) \
 		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
 		--tag $(CONTAINER_REGISTRY)/$(*):latest \

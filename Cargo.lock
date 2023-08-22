@@ -1180,7 +1180,6 @@ dependencies = [
  "shuttle-common-tests",
  "shuttle-proto",
  "shuttle-service",
- "sqlx",
  "strum",
  "tar",
  "tempfile",

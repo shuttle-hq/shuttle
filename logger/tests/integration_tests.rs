@@ -8,7 +8,7 @@ use pretty_assertions::assert_eq;
 use serde_json::{json, Value};
 use shuttle_common::{
     claims::Scope,
-    tracing::{FILEPATH_KEY, LINENO_KEY, NAMESPACE_KEY, TARGET_KEY},
+    tracing::{FILEPATH_KEY, LINENO_KEY, MESSAGE_KEY, NAMESPACE_KEY, TARGET_KEY},
 };
 use shuttle_common_tests::JwtScopesLayer;
 use shuttle_logger::{Service, ShuttleLogsOtlp, Sqlite};
@@ -63,10 +63,11 @@ async fn generate_and_get_runtime_logs() {
         .unwrap()
         .into_inner();
 
+    let quoted_deployment_id = format!("\"{DEPLOYMENT_ID}\"");
     let expected = vec![
         MinLogItem {
-            level: LogLevel::Trace,
-            fields: json!({"message": "foo"}),
+            level: LogLevel::Info,
+            fields: json!({"message": "[span] deploy", "deployment_id": quoted_deployment_id }),
         },
         MinLogItem {
             level: LogLevel::Error,
@@ -87,6 +88,14 @@ async fn generate_and_get_runtime_logs() {
         MinLogItem {
             level: LogLevel::Trace,
             fields: json!({"message": "trace"}),
+        },
+        MinLogItem {
+            level: LogLevel::Info,
+            fields: json!({"message": "[span] span_name1", "deployment_id": quoted_deployment_id }),
+        },
+        MinLogItem {
+            level: LogLevel::Trace,
+            fields: json!({"message": "inside span 1 event"}),
         },
     ];
 
@@ -149,7 +158,7 @@ async fn generate_and_get_service_logs() {
 
     // Start a subscriber and generate some logs using an instrumented deploy function.
     generate_service_logs(port, DEPLOYMENT_ID.into(), deploy_instrumented);
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
     let dst = format!("http://localhost:{port}");
 
@@ -165,6 +174,10 @@ async fn generate_and_get_service_logs() {
         .into_inner();
 
     let expected = vec![
+        MinLogItem {
+            level: LogLevel::Info,
+            fields: json!({"message": "[span] deploy_instrumented", "deployment_id": DEPLOYMENT_ID.to_string() }),
+        },
         MinLogItem {
             level: LogLevel::Error,
             fields: json!({"message": "error"}),
@@ -243,7 +256,7 @@ async fn generate_and_stream_logs() {
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
     // Start a subscriber and generate some logs.
-    generate_runtime_logs(port, DEPLOYMENT_ID.into(), foo);
+    generate_runtime_logs(port, DEPLOYMENT_ID.into(), span_name1);
 
     // Connect to the logger server so we can fetch logs.
     let dst = format!("http://localhost:{port}");
@@ -264,28 +277,54 @@ async fn generate_and_stream_logs() {
         .unwrap()
         .unwrap();
 
+    let quoted_deployment_id = format!("\"{DEPLOYMENT_ID}\"");
     assert_eq!(
         MinLogItem::from(log),
         MinLogItem {
-            level: LogLevel::Trace,
-            fields: json!({"message": "foo"}),
+            level: LogLevel::Info,
+            fields: json!({"message": "[span] span_name1", "deployment_id": quoted_deployment_id}),
         },
     );
-
-    // Start a subscriber and generate some more logs.
-    generate_runtime_logs(port, DEPLOYMENT_ID.into(), bar);
 
     let log = timeout(std::time::Duration::from_millis(500), response.message())
         .await
         .unwrap()
         .unwrap()
         .unwrap();
-
     assert_eq!(
         MinLogItem::from(log),
         MinLogItem {
             level: LogLevel::Trace,
-            fields: json!({"message": "bar"}),
+            fields: json!({"message": "inside span 1 event"}),
+        },
+    );
+
+    // Start a subscriber and generate some more logs.
+    generate_runtime_logs(port, DEPLOYMENT_ID.into(), span_name2);
+
+    let log = timeout(std::time::Duration::from_millis(500), response.message())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        MinLogItem::from(log),
+        MinLogItem {
+            level: LogLevel::Trace,
+            fields: json!({"message": "inside span 2 event"}),
+        },
+    );
+
+    let log = timeout(std::time::Duration::from_millis(500), response.message())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        MinLogItem::from(log),
+        MinLogItem {
+            level: LogLevel::Info,
+            fields: json!({"message": "[span] span_name2", "deployment_id": quoted_deployment_id}),
         },
     );
 }
@@ -356,7 +395,7 @@ fn deploy(deployment_id: String) {
     debug!("debug");
     trace!("trace");
     // This tests that we handle nested spans.
-    foo(deployment_id);
+    span_name1(deployment_id);
 }
 
 #[instrument(fields(%deployment_id))]
@@ -369,13 +408,13 @@ fn deploy_instrumented(deployment_id: String) {
 }
 
 #[instrument]
-fn foo(deployment_id: String) {
-    trace!("foo");
+fn span_name1(deployment_id: String) {
+    trace!("inside span 1 event");
 }
 
 #[instrument]
-fn bar(deployment_id: String) {
-    trace!("bar");
+fn span_name2(deployment_id: String) {
+    trace!("inside span 2 event");
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -394,10 +433,22 @@ impl From<LogItem> for MinLogItem {
             let mut fields: Value = serde_json::from_slice(&log.fields).unwrap();
 
             let map = fields.as_object_mut().unwrap();
-            let target = map.remove(TARGET_KEY).unwrap();
-            let filepath = map.remove(FILEPATH_KEY).unwrap();
 
-            assert_eq!(target, "integration_tests");
+            let message = map.get(MESSAGE_KEY).unwrap();
+            // Span logs don't contain a target field
+            if !message.as_str().unwrap().starts_with("[span] ") {
+                let target = map.remove(TARGET_KEY).unwrap();
+                assert_eq!(target, "integration_tests");
+            } else {
+                // We want to remove what's not of interest for checking
+                // the spans are containing the right information.
+                let _ = map.remove("busy_ns").unwrap();
+                let _ = map.remove("idle_ns").unwrap();
+                let _ = map.remove("thread.id").unwrap();
+                let _ = map.remove("thread.name").unwrap();
+            }
+
+            let filepath = map.remove(FILEPATH_KEY).unwrap();
             assert_eq!(filepath, "logger/tests/integration_tests.rs");
 
             map.remove(LINENO_KEY).unwrap();

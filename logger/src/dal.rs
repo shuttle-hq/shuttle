@@ -3,10 +3,7 @@ use std::{path::Path, str::FromStr, time::SystemTime};
 use async_broadcast::{broadcast, Sender};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
-use opentelemetry_proto::tonic::{
-    common::v1::{any_value, KeyValue},
-    trace::v1::{ResourceSpans, ScopeSpans, Span},
-};
+use opentelemetry_proto::tonic::trace::v1::{ResourceSpans, ScopeSpans, Span};
 use prost_types::Timestamp;
 use serde_json::Value;
 use shuttle_common::{
@@ -116,10 +113,11 @@ impl Sqlite {
 #[async_trait]
 impl Dal for Sqlite {
     async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError> {
-        let result = sqlx::query_as("SELECT * FROM logs WHERE deployment_id = ?")
-            .bind(deployment_id)
-            .fetch_all(&self.pool)
-            .await?;
+        let result =
+            sqlx::query_as("SELECT * FROM logs WHERE deployment_id = ? ORDER BY timestamp")
+                .bind(deployment_id)
+                .fetch_all(&self.pool)
+                .await?;
 
         Ok(result)
     }
@@ -179,14 +177,16 @@ impl Log {
             schema_url: _,
         } = resource_spans;
 
-        // TODO: we should get both of these attributes in the same function and avoid this clone.
-        let resource = resource?;
-        let shuttle_service_name = get_attribute(resource.clone().attributes, "service.name")?;
-
-        // Try to get the deployment_id from the resource attributes, this will be the case for the runtimes,
-        // they add the deployment_id to the otlp tracer config.
+        let fields = from_any_value_kv_to_serde_json_map(resource?.attributes);
+        let shuttle_service_name = fields.get("service.name")?.as_str()?.to_string();
         // TODO: should this be named "deployment.id" to conform to otlp standard?
-        let deployment_id = get_attribute(resource.attributes, "deployment_id");
+        let deployment_id = fields
+            .get("deployment_id")
+            .map(|v| {
+                v.as_str()
+                    .expect("expected to have a string value for deployment_id key")
+            })
+            .map(|inner| inner.to_string());
 
         let logs = scope_spans
             .into_iter()
@@ -220,9 +220,12 @@ impl Log {
         deployment_id: Option<String>,
     ) -> Option<Vec<Self>> {
         // If we didn't find the id in the resource span, check the inner spans.
-        let deployment_id = deployment_id.or(get_attribute(span.attributes, "deployment_id"))?;
-
-        let logs = span
+        let mut span_fields = from_any_value_kv_to_serde_json_map(span.attributes);
+        let deployment_id = deployment_id.or(span_fields
+            .get("deployment_id")?
+            .as_str()
+            .map(|inner| inner.to_string()))?;
+        let mut logs: Vec<Self> = span
             .events
             .into_iter()
             .flat_map(|event| {
@@ -246,13 +249,36 @@ impl Log {
 
                 Some(Log {
                     shuttle_service_name: shuttle_service_name.to_string(),
-                    deployment_id: deployment_id.to_string(),
+                    deployment_id: deployment_id.clone(),
                     timestamp: DateTime::from_utc(naive, Utc),
                     level: level.as_str()?.parse().ok()?,
                     fields: Value::Object(fields),
                 })
             })
             .collect();
+
+        span_fields.insert(
+            MESSAGE_KEY.to_string(),
+            format!("[span] {}", span.name).into(),
+        );
+
+        logs.push(Log {
+            shuttle_service_name: shuttle_service_name.to_string(),
+            deployment_id,
+            timestamp: DateTime::from_utc(
+                NaiveDateTime::from_timestamp_opt(
+                    (span.start_time_unix_nano / 1_000_000_000)
+                        .try_into()
+                        .unwrap_or_default(),
+                    (span.start_time_unix_nano % 1_000_000_000) as u32,
+                )
+                .unwrap_or_default(),
+                Utc,
+            ),
+            // Span level doesn't exist for opentelemetry spans, so this info is not relevant.
+            level: LogLevel::Info,
+            fields: Value::Object(span_fields),
+        });
 
         Some(logs)
     }
@@ -266,18 +292,5 @@ impl From<Log> for LogItem {
             level: logger::LogLevel::from(log.level) as i32,
             fields: serde_json::to_vec(&log.fields).unwrap_or_default(),
         }
-    }
-}
-
-/// Get an attribute with the given key
-fn get_attribute(attributes: Vec<KeyValue>, key: &str) -> Option<String> {
-    match attributes
-        .into_iter()
-        .find(|kv| kv.key == key)?
-        .value?
-        .value?
-    {
-        any_value::Value::StringValue(s) => Some(s),
-        _ => None,
     }
 }

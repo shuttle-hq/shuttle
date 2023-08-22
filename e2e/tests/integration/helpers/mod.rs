@@ -38,15 +38,18 @@ impl TempCargoHome {
                 write!(
                     config,
                     r#"[patch.crates-io]
-shuttle-service = {{ path = "{}" }}
+shuttle-codegen = {{ path = "{}" }}
+shuttle-common = {{ path = "{}" }}
+shuttle-proto = {{ path = "{}" }}
 shuttle-runtime = {{ path = "{}" }}
+shuttle-service = {{ path = "{}" }}
 
 shuttle-aws-rds = {{ path = "{}" }}
+shuttle-metadata = {{ path = "{}" }}
 shuttle-persist = {{ path = "{}" }}
 shuttle-shared-db = {{ path = "{}" }}
 shuttle-secrets = {{ path = "{}" }}
 shuttle-static-folder = {{ path = "{}" }}
-shuttle-metadata = {{ path = "{}" }}
 
 shuttle-axum = {{ path = "{}" }}
 shuttle-actix-web = {{ path = "{}" }}
@@ -60,19 +63,19 @@ shuttle-thruster = {{ path = "{}" }}
 shuttle-tide = {{ path = "{}" }}
 shuttle-tower = {{ path = "{}" }}
 shuttle-warp = {{ path = "{}" }}"#,
-                    WORKSPACE_ROOT.join("service").display(),
+                    WORKSPACE_ROOT.join("codegen").display(),
+                    WORKSPACE_ROOT.join("common").display(),
+                    WORKSPACE_ROOT.join("proto").display(),
                     WORKSPACE_ROOT.join("runtime").display(),
+                    WORKSPACE_ROOT.join("service").display(),
                     WORKSPACE_ROOT.join("resources").join("aws-rds").display(),
+                    WORKSPACE_ROOT.join("resources").join("metadata").display(),
                     WORKSPACE_ROOT.join("resources").join("persist").display(),
                     WORKSPACE_ROOT.join("resources").join("shared-db").display(),
                     WORKSPACE_ROOT.join("resources").join("secrets").display(),
                     WORKSPACE_ROOT
                         .join("resources")
                         .join("static-folder")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("resources")
-                        .join("metadata")
                         .display(),
                     WORKSPACE_ROOT
                         .join("services")

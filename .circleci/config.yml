@@ -182,15 +182,9 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      # Check this to make sure we do not include patched dependencies in
-      # the Cargo.lock.
+      # Check this to make sure we do not include patched dependencies in the Cargo.lock
       - run: '[ -z $(grep "\[\[patch.unused\]\]" Cargo.lock) ]'
       - run: cargo fmt --all --check
-      # TODO: this is incompatible with workspace inheritance, uncomment when
-      # https://github.com/DevinR528/cargo-sort/pull/29 is merged
-      # - run: # install binstall with script
-      # - run: cargo binstall cargo-sort
-      # - run: cargo sort --check --workspace
       - run: |
           cargo clippy --tests \
                        --all-targets \
@@ -213,11 +207,6 @@ jobs:
       - restore-cargo-cache
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
-      # TODO: this is incompatible with workspace inheritance, uncomment when
-      # https://github.com/DevinR528/cargo-sort/pull/29 is merged
-      # - run: # install binstall with script
-      # - run: cargo binstall cargo-sort
-      # - run: cargo sort --check << parameters.path >>
       - run: |
           cargo clippy --tests \
                        --all-targets \
@@ -692,22 +681,6 @@ workflows:
                 - "-F mongodb"
                 - "-F postgres"
                 - "-F postgres-rustls"
-      ############ This crate has no tests, therefore excluded.
-      # - test-standalone:
-      #     # Has mutually exclusive features, so we run checks for each feature separately
-      #     name: "resources/aws-rds: << matrix.features >>"
-      #     matrix:
-      #       alias: test-standalone-aws-rds
-      #       parameters:
-      #         path:
-      #           - resources/aws-rds
-      #         features:
-      #           - "-F postgres"
-      #           - "-F postgres-rustls"
-      #           - "-F mysql"
-      #           - "-F mysql-rustls"
-      #           - "-F mariadb"
-      #           - "-F mariadb-rustls"
       - test-workspace-member:
           name: << matrix.crate >>
           matrix:
@@ -740,7 +713,6 @@ workflows:
           requires:
             - test-standalone
             - test-standalone-shared-db
-            # - test-standalone-aws-rds
             - test-workspace-member
             - test-workspace-member-integration-machine
           filters:

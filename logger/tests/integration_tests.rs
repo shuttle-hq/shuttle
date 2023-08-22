@@ -158,7 +158,7 @@ async fn generate_and_get_service_logs() {
 
     // Start a subscriber and generate some logs using an instrumented deploy function.
     generate_service_logs(port, DEPLOYMENT_ID.into(), deploy_instrumented);
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
     let dst = format!("http://localhost:{port}");
 

@@ -20,14 +20,11 @@
 //! **Warning** Don't log out sensitive info in functions with these annotations
 
 use chrono::{DateTime, Utc};
-use serde_json::json;
-use shuttle_common::{tracing::JsonVisitor, STATE_MESSAGE};
+use shuttle_common::{log::InternalLogOrigin, tracing::JsonVisitor};
 use std::str::FromStr;
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
-
-use crate::persistence::{self, DeploymentState, LogLevel, State};
 
 /// Records logs for the deployment progress
 pub trait LogRecorder: Clone + Send + 'static {
@@ -38,83 +35,27 @@ pub trait LogRecorder: Clone + Send + 'static {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Log {
     /// Deployment id
-    pub id: Uuid,
+    pub deployment_id: Uuid,
 
-    /// Current state of the deployment
-    pub state: State,
+    /// Internal service that produced this log
+    pub internal_origin: InternalLogOrigin,
 
-    /// Log level
-    pub level: LogLevel,
+    /// Time log was produced
+    pub tx_timestamp: DateTime<Utc>,
 
-    /// Time log happened
-    pub timestamp: DateTime<Utc>,
-
-    /// File event took place in
-    pub file: Option<String>,
-
-    /// Line in file event happened on
-    pub line: Option<u32>,
-
-    /// Module log took place in
-    pub target: String,
-
-    /// Extra structured log fields
-    pub fields: serde_json::Value,
-
-    pub r#type: LogType,
-}
-
-impl From<Log> for persistence::Log {
-    fn from(log: Log) -> Self {
-        // Make sure state message is set for state logs
-        // This is used to know when the end of the build logs has been reached
-        let fields = match log.r#type {
-            LogType::Event => log.fields,
-            LogType::State => json!(STATE_MESSAGE),
-        };
-
-        Self {
-            id: log.id,
-            timestamp: log.timestamp,
-            state: log.state,
-            level: log.level,
-            file: log.file,
-            line: log.line,
-            target: log.target,
-            fields,
-        }
-    }
+    /// The log line
+    pub line: String,
 }
 
 impl From<Log> for shuttle_common::LogItem {
     fn from(log: Log) -> Self {
         Self {
-            id: log.id,
-            timestamp: log.timestamp,
-            state: log.state.into(),
-            level: log.level.into(),
-            file: log.file,
+            id: log.deployment_id,
+            internal_origin: log.internal_origin,
+            timestamp: log.tx_timestamp,
             line: log.line,
-            target: log.target,
-            fields: serde_json::to_vec(&log.fields).unwrap(),
         }
     }
-}
-
-impl From<Log> for DeploymentState {
-    fn from(log: Log) -> Self {
-        Self {
-            id: log.id,
-            state: log.state,
-            last_update: log.timestamp,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum LogType {
-    Event,
-    State,
 }
 
 /// Tracing subscriber layer which keeps track of a deployment's state
@@ -123,14 +64,18 @@ where
     R: LogRecorder + Send + Sync,
 {
     recorder: R,
+    internal_service: InternalLogOrigin,
 }
 
 impl<R> DeployLayer<R>
 where
     R: LogRecorder + Send + Sync,
 {
-    pub fn new(recorder: R) -> Self {
-        Self { recorder }
+    pub fn new(recorder: R, internal_service: InternalLogOrigin) -> Self {
+        Self {
+            recorder,
+            internal_service,
+        }
     }
 }
 
@@ -158,17 +103,10 @@ where
                 let metadata = event.metadata();
 
                 self.recorder.record(Log {
-                    id: details.id,
-                    state: details.state,
-                    level: metadata.level().into(),
-                    timestamp: Utc::now(),
-                    file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
-                    line: visitor.line.or_else(|| metadata.line()),
-                    target: visitor
-                        .target
-                        .unwrap_or_else(|| metadata.target().to_string()),
-                    fields: serde_json::Value::Object(visitor.fields),
-                    r#type: LogType::Event,
+                    deployment_id: details.id,
+                    internal_origin: self.internal_service,
+                    tx_timestamp: Utc::now(),
+                    line: "Test".into(),
                 });
                 break;
             }
@@ -182,11 +120,11 @@ where
         ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
         // We only care about spans that change the state
-        if !NewStateVisitor::is_valid(attrs.metadata()) {
+        if !NewServiceVisitor::is_valid(attrs.metadata()) {
             return;
         }
 
-        let mut visitor = NewStateVisitor::default();
+        let mut visitor = NewServiceVisitor::default();
 
         attrs.record(&mut visitor);
 
@@ -203,18 +141,29 @@ where
         let metadata = span.metadata();
 
         self.recorder.record(Log {
-            id: details.id,
-            state: details.state,
-            level: metadata.level().into(),
-            timestamp: Utc::now(),
-            file: metadata.file().map(str::to_string),
-            line: metadata.line(),
-            target: metadata.target().to_string(),
-            fields: Default::default(),
-            r#type: LogType::State,
+            deployment_id: details.id,
+            internal_origin: self.internal_service,
+            tx_timestamp: Utc::now(),
+            line: "Test".into(),
         });
 
         extensions.insert::<ScopeDetails>(details);
+    }
+}
+
+use shuttle_proto::logger::logger_client::LoggerClient;
+impl LogRecorder
+    for LoggerClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >
+{
+    fn record(&self, log: Log) {
+        // TODO: Make async + error handling?
+        self.send_logs(request)
+            .await
+            .expect("Failed to sens log line");
     }
 }
 
@@ -222,45 +171,34 @@ where
 #[derive(Debug, Default)]
 struct ScopeDetails {
     id: Uuid,
-    state: State,
-}
-
-impl From<&tracing::Level> for LogLevel {
-    fn from(level: &tracing::Level) -> Self {
-        match *level {
-            tracing::Level::TRACE => Self::Trace,
-            tracing::Level::DEBUG => Self::Debug,
-            tracing::Level::INFO => Self::Info,
-            tracing::Level::WARN => Self::Warn,
-            tracing::Level::ERROR => Self::Error,
-        }
-    }
+    internal_origin: InternalLogOrigin,
 }
 
 /// This visitor is meant to extract the `ScopeDetails` for any scope with `name` and `status` fields
 #[derive(Default)]
-struct NewStateVisitor {
+struct NewServiceVisitor {
     details: ScopeDetails,
 }
 
-impl NewStateVisitor {
+impl NewServiceVisitor {
     /// Field containing the deployment identifier
     const ID_IDENT: &'static str = "id";
 
-    /// Field containing the deployment state identifier
-    const STATE_IDENT: &'static str = "state";
+    /// Field containing the service that started the span
+    const SERVICE_IDENT: &'static str = "state";
 
     fn is_valid(metadata: &Metadata) -> bool {
         metadata.is_span()
             && metadata.fields().field(Self::ID_IDENT).is_some()
-            && metadata.fields().field(Self::STATE_IDENT).is_some()
+            && metadata.fields().field(Self::SERVICE_IDENT).is_some()
     }
 }
 
-impl Visit for NewStateVisitor {
+impl Visit for NewServiceVisitor {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        if field.name() == Self::STATE_IDENT {
-            self.details.state = State::from_str(&format!("{value:?}")).unwrap_or_default();
+        if field.name() == Self::SERVICE_IDENT {
+            self.details.internal_origin =
+                InternalLogOrigin::from_str(&format!("{value:?}")).unwrap_or_default();
         } else if field.name() == Self::ID_IDENT {
             self.details.id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
         }
@@ -308,10 +246,10 @@ mod tests {
             deploy_layer::LogType, gateway_client::BuildQueueClient, ActiveDeploymentsGetter,
             Built, DeploymentManager, Queued,
         },
-        persistence::{Secret, SecretGetter, SecretRecorder, State},
+        persistence::{Secret, SecretGetter, SecretRecorder},
     };
 
-    use super::{DeployLayer, Log, LogRecorder};
+    use super::{DeployLayer, InternalLogOrigin, Log, LogRecorder};
 
     #[ctor]
     static RECORDER: Arc<Mutex<RecorderMock>> = {
@@ -353,7 +291,10 @@ mod tests {
             .unwrap();
 
         tracing_subscriber::registry()
-            .with(DeployLayer::new(Arc::clone(&recorder)))
+            .with(DeployLayer::new(
+                Arc::clone(&recorder),
+                InternalLogOrigin::Deployer,
+            ))
             .with(filter_layer)
             .with(fmt_layer)
             .init();
@@ -363,20 +304,20 @@ mod tests {
 
     #[derive(Clone)]
     struct RecorderMock {
-        states: Arc<Mutex<Vec<StateLog>>>,
+        log_origins: Arc<Mutex<Vec<TestInternalLog>>>,
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    struct StateLog {
+    struct TestInternalLog {
         id: Uuid,
-        state: State,
+        origin: InternalLogOrigin,
     }
 
-    impl From<Log> for StateLog {
+    impl From<Log> for TestInternalLog {
         fn from(log: Log) -> Self {
             Self {
-                id: log.id,
-                state: log.state,
+                id: log.deployment_id,
+                origin: log.internal_origin,
             }
         }
     }
@@ -384,12 +325,12 @@ mod tests {
     impl RecorderMock {
         fn new() -> Arc<Mutex<Self>> {
             Arc::new(Mutex::new(Self {
-                states: Arc::new(Mutex::new(Vec::new())),
+                log_origins: Arc::new(Mutex::new(Vec::new())),
             }))
         }
 
-        fn get_deployment_states(&self, id: &Uuid) -> Vec<StateLog> {
-            self.states
+        fn get_deployment_log_origins(&self, id: &Uuid) -> Vec<TestInternalLog> {
+            self.log_origins
                 .lock()
                 .unwrap()
                 .iter()
@@ -402,9 +343,7 @@ mod tests {
     impl LogRecorder for RecorderMock {
         fn record(&self, event: Log) {
             // We are only testing the state transitions
-            if event.r#type == LogType::State {
-                self.states.lock().unwrap().push(event.into());
-            }
+            self.log_origins.lock().unwrap().push(event.into());
         }
     }
 
@@ -590,14 +529,14 @@ mod tests {
         }
     }
 
-    async fn test_states(id: &Uuid, expected_states: Vec<StateLog>) {
+    async fn test_origins(id: &Uuid, expected_origins: Vec<TestInternalLog>) {
         loop {
-            let states = RECORDER.lock().unwrap().get_deployment_states(id);
-            if states == expected_states {
+            let origins = RECORDER.lock().unwrap().get_deployment_log_origins(id);
+            if origins == expected_origins {
                 return;
             }
 
-            for (actual, expected) in states.iter().zip(&expected_states) {
+            for (actual, expected) in origins.iter().zip(&expected_origins) {
                 if actual != expected {
                     return;
                 }
@@ -611,39 +550,21 @@ mod tests {
     async fn deployment_to_be_queued() {
         let deployment_manager = get_deployment_manager().await;
 
-        let queued = get_queue("sleep-async");
+        let queued = get_queued_test_project("sleep-async");
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = test_states(
+        let test = test_origins(
             &id,
-            vec![
-                StateLog {
-                    id,
-                    state: State::Queued,
-                },
-                StateLog {
-                    id,
-                    state: State::Building,
-                },
-                StateLog {
-                    id,
-                    state: State::Built,
-                },
-                StateLog {
-                    id,
-                    state: State::Loading,
-                },
-                StateLog {
-                    id,
-                    state: State::Running,
-                },
-            ],
+            vec![TestInternalLog {
+                id,
+                origin: InternalLogOrigin::Deployer,
+            }],
         );
 
         select! {
             _ = sleep(Duration::from_secs(460)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.lock().unwrap().get_deployment_log_origins(&id);
                 panic!("states should go into 'Running' for a valid service: {:#?}", states);
             },
             _ = test => {}
@@ -652,39 +573,17 @@ mod tests {
         // Send kill signal
         deployment_manager.kill(id).await;
 
-        let test = test_states(
+        let test = test_origins(
             &id,
-            vec![
-                StateLog {
-                    id,
-                    state: State::Queued,
-                },
-                StateLog {
-                    id,
-                    state: State::Building,
-                },
-                StateLog {
-                    id,
-                    state: State::Built,
-                },
-                StateLog {
-                    id,
-                    state: State::Loading,
-                },
-                StateLog {
-                    id,
-                    state: State::Running,
-                },
-                StateLog {
-                    id,
-                    state: State::Stopped,
-                },
-            ],
+            vec![TestInternalLog {
+                id,
+                origin: InternalLogOrigin::Deployer,
+            }],
         );
 
         select! {
             _ = sleep(Duration::from_secs(60)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.lock().unwrap().get_deployment_log_origins(&id);
                 panic!("states should go into 'Stopped' for a valid service: {:#?}", states);
             },
             _ = test => {}
@@ -695,43 +594,21 @@ mod tests {
     async fn deployment_self_stop() {
         let deployment_manager = get_deployment_manager().await;
 
-        let queued = get_queue("self-stop");
+        let queued = get_queued_test_project("self-stop");
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = test_states(
+        let test = test_origins(
             &id,
-            vec![
-                StateLog {
-                    id,
-                    state: State::Queued,
-                },
-                StateLog {
-                    id,
-                    state: State::Building,
-                },
-                StateLog {
-                    id,
-                    state: State::Built,
-                },
-                StateLog {
-                    id,
-                    state: State::Loading,
-                },
-                StateLog {
-                    id,
-                    state: State::Running,
-                },
-                StateLog {
-                    id,
-                    state: State::Completed,
-                },
-            ],
+            vec![TestInternalLog {
+                id,
+                origin: InternalLogOrigin::Deployer,
+            }],
         );
 
         select! {
             _ = sleep(Duration::from_secs(460)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.lock().unwrap().get_deployment_log_origins(&id);
                 panic!("states should go into 'Completed' when a service stops by itself: {:#?}", states);
             }
             _ = test => {}
@@ -742,43 +619,21 @@ mod tests {
     async fn deployment_bind_panic() {
         let deployment_manager = get_deployment_manager().await;
 
-        let queued = get_queue("bind-panic");
+        let queued = get_queued_test_project("bind-panic");
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = test_states(
+        let test = test_origins(
             &id,
-            vec![
-                StateLog {
-                    id,
-                    state: State::Queued,
-                },
-                StateLog {
-                    id,
-                    state: State::Building,
-                },
-                StateLog {
-                    id,
-                    state: State::Built,
-                },
-                StateLog {
-                    id,
-                    state: State::Loading,
-                },
-                StateLog {
-                    id,
-                    state: State::Running,
-                },
-                StateLog {
-                    id,
-                    state: State::Crashed,
-                },
-            ],
+            vec![TestInternalLog {
+                id,
+                origin: InternalLogOrigin::Deployer,
+            }],
         );
 
         select! {
             _ = sleep(Duration::from_secs(460)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.lock().unwrap().get_deployment_log_origins(&id);
                 panic!("states should go into 'Crashed' panicking in bind: {:#?}", states);
             }
             _ = test => {}
@@ -789,39 +644,21 @@ mod tests {
     async fn deployment_main_panic() {
         let deployment_manager = get_deployment_manager().await;
 
-        let queued = get_queue("main-panic");
+        let queued = get_queued_test_project("main-panic");
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = test_states(
+        let test = test_origins(
             &id,
-            vec![
-                StateLog {
-                    id,
-                    state: State::Queued,
-                },
-                StateLog {
-                    id,
-                    state: State::Building,
-                },
-                StateLog {
-                    id,
-                    state: State::Built,
-                },
-                StateLog {
-                    id,
-                    state: State::Loading,
-                },
-                StateLog {
-                    id,
-                    state: State::Crashed,
-                },
-            ],
+            vec![TestInternalLog {
+                id,
+                origin: InternalLogOrigin::Deployer,
+            }],
         );
 
         select! {
             _ = sleep(Duration::from_secs(460)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.lock().unwrap().get_deployment_log_origins(&id);
                 panic!("states should go into 'Crashed' when panicking in main: {:#?}", states);
             }
             _ = test => {}
@@ -845,27 +682,17 @@ mod tests {
             })
             .await;
 
-        let test = test_states(
+        let test = test_origins(
             &id,
-            vec![
-                StateLog {
-                    id,
-                    state: State::Built,
-                },
-                StateLog {
-                    id,
-                    state: State::Loading,
-                },
-                StateLog {
-                    id,
-                    state: State::Crashed,
-                },
-            ],
+            vec![TestInternalLog {
+                id,
+                origin: InternalLogOrigin::Deployer,
+            }],
         );
 
         select! {
             _ = sleep(Duration::from_secs(50)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.lock().unwrap().get_deployment_log_origins(&id);
                 panic!("from running should start in built and end in crash for invalid: {:#?}", states)
             },
             _ = test => {}
@@ -894,7 +721,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states(&id);
+        let states = recorder.get_deployment_log_origins(&id);
 
         assert!(
             states.is_empty(),
@@ -916,7 +743,7 @@ mod tests {
             .build()
     }
 
-    fn get_queue(name: &str) -> Queued {
+    fn get_queued_test_project(name: &str) -> Queued {
         let enc = GzEncoder::new(Vec::new(), Compression::fast());
         let mut tar = tar::Builder::new(enc);
 

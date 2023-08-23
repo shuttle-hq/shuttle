@@ -1,24 +1,3 @@
-use super::deploy_layer::{Log, LogRecorder, LogType};
-use super::gateway_client::BuildQueueClient;
-use super::{Built, QueueReceiver, RunSender, State};
-use crate::error::{Error, Result, TestError};
-use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
-use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
-
-use cargo_metadata::Message;
-use chrono::Utc;
-use crossbeam_channel::Sender;
-use opentelemetry::global;
-use serde_json::json;
-use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_workspace, BuiltService};
-use tokio::task::JoinSet;
-use tokio::time::{sleep, timeout};
-use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
-use ulid::Ulid;
-use uuid::Uuid;
-
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::fs::remove_file;
@@ -27,9 +6,28 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use cargo_metadata::Message;
+use chrono::Utc;
+use crossbeam_channel::Sender;
 use flate2::read::GzDecoder;
+use opentelemetry::global;
+use shuttle_common::claims::Claim;
+use shuttle_service::builder::{build_workspace, BuiltService};
 use tar::Archive;
 use tokio::fs;
+use tokio::task::JoinSet;
+use tokio::time::{sleep, timeout};
+use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+use ulid::Ulid;
+use uuid::Uuid;
+
+use super::deploy_layer::{Log, LogRecorder};
+use super::gateway_client::BuildQueueClient;
+use super::{Built, QueueReceiver, RunSender, State};
+use crate::error::{Error, Result, TestError};
+use crate::persistence::{DeploymentUpdater, SecretRecorder};
+use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
 
 pub async fn task(
     mut recv: QueueReceiver,
@@ -196,26 +194,16 @@ impl Queued {
                 // Currently it is not possible to turn these serde `message`s into a `valuable`, but once it is the passing down of `log_recorder` should be removed.
                 let log = match message {
                     Message::TextLine(line) => Log {
-                        id,
-                        state: State::Building,
-                        level: LogLevel::Info,
-                        timestamp: Utc::now(),
-                        file: None,
-                        line: None,
-                        target: String::new(),
-                        fields: json!({ "build_line": line }),
-                        r#type: LogType::Event,
+                        deployment_id: self.id,
+                        internal_origin: shuttle_common::log::InternalLogOrigin::Deployer, // will change to Builder
+                        tx_timestamp: Utc::now(),
+                        line,
                     },
                     message => Log {
-                        id,
-                        state: State::Building,
-                        level: LogLevel::Debug,
-                        timestamp: Utc::now(),
-                        file: None,
-                        line: None,
-                        target: String::new(),
-                        fields: serde_json::to_value(message).unwrap(),
-                        r#type: LogType::Event,
+                        deployment_id: self.id,
+                        internal_origin: shuttle_common::log::InternalLogOrigin::Deployer, // will change to Builder
+                        tx_timestamp: Utc::now(),
+                        line: serde_json::to_string(&message).unwrap(),
                     },
                 };
                 log_recorder.record(log);

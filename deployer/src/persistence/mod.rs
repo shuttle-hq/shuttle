@@ -166,8 +166,8 @@ impl Persistence {
                         insert_log(
                             &pool_cloned,
                             Log {
-                                id: log.id,
-                                timestamp: log.timestamp,
+                                id: log.deployment_id,
+                                timestamp: log.tx_timestamp,
                                 state: log.state,
                                 level: log.level.clone(),
                                 file: log.file.clone(),

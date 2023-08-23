@@ -28,23 +28,25 @@ async fn main() {
             .expect("to get a valid ULID for project_id arg"),
     )
     .await;
-    setup_tracing(
-        tracing_subscriber::registry().with(DeployLayer::new(persistence.clone())),
-        "deployer",
-    );
-
-    let channel = args
-        .logger_uri
-        .connect()
-        .await
-        .expect("failed to connect to logger");
 
     let channel = ServiceBuilder::new()
         .layer(ClaimLayer)
         .layer(InjectPropagationLayer)
-        .service(channel);
-
+        .service(
+            args.logger_uri
+                .connect()
+                .await
+                .expect("failed to connect to logger"),
+        );
     let logger_client = LoggerClient::new(channel);
+
+    setup_tracing(
+        tracing_subscriber::registry().with(DeployLayer::new(
+            logger_client.clone(),
+            shuttle_common::log::InternalLogOrigin::Deployer, // TODO: Make all backends set this up in this way
+        )),
+        "deployer",
+    );
 
     let runtime_manager = RuntimeManager::new(
         args.artifacts_path.clone(),

@@ -1,34 +1,46 @@
-#[cfg(feature = "display")]
-use std::fmt::Write;
-
 use chrono::{DateTime, Utc};
 #[cfg(feature = "display")]
 use crossterm::style::{StyledContent, Stylize};
 use serde::{Deserialize, Serialize};
+use strum::EnumString;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::deployment::State;
+#[derive(Clone, Debug, EnumString, Eq, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(feature = "display", derive(strum::Display))]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub enum InternalLogOrigin {
+    Unknown,
+    Deployer,
+    // Builder,
+    // ResourceRecorder,
+}
 
-pub const STATE_MESSAGE: &str = "NEW STATE";
-
+impl Default for InternalLogOrigin {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::log::Item))]
 pub struct Item {
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
     pub id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::log::InternalLogOrigin))]
+    pub internal_origin: InternalLogOrigin,
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]
     pub timestamp: DateTime<Utc>,
-    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::deployment::State))]
-    pub state: State,
-    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::log::Level))]
-    pub level: Level,
-    pub file: Option<String>,
-    pub line: Option<u32>,
-    pub target: String,
-    pub fields: Vec<u8>,
+    pub line: String,
+    // #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::deployment::State))]
+    // pub state: State,
+    // #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::log::Level))]
+    // pub level: Level,
+    // pub file: Option<String>,
+    // pub line: Option<u32>,
+    // pub target: String,
+    // pub fields: Vec<u8>,
 }
 
 #[cfg(feature = "display")]
@@ -36,51 +48,12 @@ impl std::fmt::Display for Item {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let datetime: chrono::DateTime<chrono::Local> = DateTime::from(self.timestamp);
 
-        let message = match serde_json::from_slice(&self.fields).unwrap() {
-            serde_json::Value::String(str_value) if str_value == STATE_MESSAGE => {
-                writeln!(f)?;
-                format!("Entering {} state", self.state)
-                    .bold()
-                    .blue()
-                    .to_string()
-            }
-            serde_json::Value::Object(map) => {
-                let mut simple = None;
-                let mut extra = vec![];
-
-                for (key, value) in map.iter() {
-                    match key.as_str() {
-                        "message" => simple = value.as_str(),
-                        _ => extra.push(format!("{key}={value}")),
-                    }
-                }
-
-                let mut output = if extra.is_empty() {
-                    String::new()
-                } else {
-                    format!("{{{}}} ", extra.join(" "))
-                };
-
-                if !self.target.is_empty() {
-                    let target = format!("{}:", self.target).dim();
-                    write!(output, "{target} ")?;
-                }
-
-                if let Some(msg) = simple {
-                    write!(output, "{msg}")?;
-                }
-
-                output
-            }
-            other => other.to_string(),
-        };
-
         write!(
             f,
-            "{} {} {}",
+            "{} [{}] {}",
             datetime.to_rfc3339().dim(),
-            self.level.get_colored(),
-            message
+            self.internal_origin,
+            self.line,
         )
     }
 }
@@ -139,16 +112,9 @@ mod tests {
     fn test_timezone_formatting() {
         let item = Item {
             id: Uuid::new_v4(),
+            internal_origin: InternalLogOrigin::Deployer,
             timestamp: Utc::now(),
-            state: State::Building,
-            level: Level::Info,
-            file: None,
-            line: None,
-            target: "shuttle::build".to_string(),
-            fields: serde_json::to_vec(&serde_json::json!({
-                "message": "Building",
-            }))
-            .unwrap(),
+            line: r#"{"message": "Building"}"#.to_owned(),
         };
 
         with_tz("CEST", || {

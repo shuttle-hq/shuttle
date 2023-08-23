@@ -1,6 +1,5 @@
 **/target/
 **/*Containerfile*
-terraform/
 examples/
 **/.cargo/
 **/docker/

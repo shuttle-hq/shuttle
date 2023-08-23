@@ -66,6 +66,7 @@ pub enum Type {
     StaticFolder,
     Persist,
     Turso,
+    Metadata,
     Custom,
 }
 
@@ -77,6 +78,7 @@ impl From<Type> for shuttle_common::resource::Type {
             Type::StaticFolder => Self::StaticFolder,
             Type::Persist => Self::Persist,
             Type::Turso => Self::Turso,
+            Type::Metadata => Self::Metadata,
             Type::Custom => Self::Custom,
         }
     }
@@ -90,6 +92,7 @@ impl From<shuttle_common::resource::Type> for Type {
             shuttle_common::resource::Type::StaticFolder => Self::StaticFolder,
             shuttle_common::resource::Type::Persist => Self::Persist,
             shuttle_common::resource::Type::Turso => Self::Turso,
+            shuttle_common::resource::Type::Metadata => Self::Metadata,
             shuttle_common::resource::Type::Custom => Self::Custom,
         }
     }
@@ -103,6 +106,7 @@ impl Display for Type {
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
             Type::Turso => write!(f, "turso"),
+            Type::Metadata => write!(f, "metadata"),
             Type::Custom => write!(f, "custom"),
         }
     }
@@ -123,6 +127,7 @@ impl FromStr for Type {
                 "static_folder" => Ok(Self::StaticFolder),
                 "persist" => Ok(Self::Persist),
                 "turso" => Ok(Self::Turso),
+                "metadata" => Ok(Self::Metadata),
                 "custom" => Ok(Self::Custom),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
@@ -173,6 +178,7 @@ mod tests {
             Type::StaticFolder,
             Type::Persist,
             Type::Turso,
+            Type::Metadata,
             Type::Custom,
         ];
 

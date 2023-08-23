@@ -20,7 +20,7 @@ use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     models::{
         deployment::{get_deployments_table, DeploymentRequest, GIT_STRINGS_MAX_LENGTH},
-        project::{self, IDLE_MINUTES},
+        project::{self, DEFAULT_IDLE_MINUTES},
         resource::get_resources_table,
         secret,
     },
@@ -291,7 +291,8 @@ impl Shuttle {
             project_args.working_directory = path.clone();
 
             self.load_project(&mut project_args)?;
-            self.project_create(&self.client()?, IDLE_MINUTES).await?;
+            self.project_create(&self.client()?, DEFAULT_IDLE_MINUTES)
+                .await?;
         }
 
         if std::env::current_dir().is_ok_and(|d| d != path) {
@@ -1198,6 +1199,7 @@ impl Shuttle {
             let resources = client
                 .get_service_resources(self.ctx.project_name())
                 .await?;
+
             let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
 
             println!("{resources}{service}");
@@ -1243,6 +1245,17 @@ impl Shuttle {
 
     async fn project_create(&self, client: &Client, idle_minutes: u64) -> Result<()> {
         let config = project::Config { idle_minutes };
+
+        if idle_minutes > 0 {
+            let idle_msg = format!(
+                "Your project will sleep if it is idle for {} minutes.",
+                idle_minutes
+            );
+            println!();
+            println!("{}", idle_msg.yellow());
+            println!("To change the idle time refer to the docs: https://docs.shuttle.rs/introduction/idle-projects");
+            println!();
+        }
 
         self.wait_with_spinner(
             &[

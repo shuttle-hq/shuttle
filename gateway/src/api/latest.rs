@@ -114,11 +114,12 @@ async fn get_project(
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
     let project = service.find_project(&scope).await?;
-    let idle_minutes = project.idle_minutes();
+    let idle_minutes = project.state.idle_minutes();
 
     let response = project::Response {
+        id: project.project_id.to_uppercase(),
         name: scope.to_string(),
-        state: project.into(),
+        state: project.state.into(),
         idle_minutes,
     };
 
@@ -148,9 +149,10 @@ async fn get_projects_list(
         .iter_user_projects_detailed(&name, limit * page, limit)
         .await?
         .map(|project| project::Response {
-            name: project.0.to_string(),
-            idle_minutes: project.1.idle_minutes(),
-            state: project.1.into(),
+            id: project.0.to_string().to_uppercase(),
+            name: project.1.to_string(),
+            idle_minutes: project.2.idle_minutes(),
+            state: project.2.into(),
         })
         .collect();
 
@@ -178,6 +180,7 @@ async fn create_project(
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
     let is_admin = claim.scopes.contains(&Scope::Admin);
+
     let project = service
         .create_project(
             project_name.clone(),
@@ -186,17 +189,20 @@ async fn create_project(
             config.idle_minutes,
         )
         .await?;
-    let idle_minutes = project.idle_minutes();
+    let idle_minutes = project.state.idle_minutes();
 
     service
         .new_task()
         .project(project_name.clone())
+        .and_then(task::run_until_done())
+        .and_then(task::start_idle_deploys())
         .send(&sender)
         .await?;
 
     let response = project::Response {
+        id: project.project_id.to_string().to_uppercase(),
         name: project_name.to_string(),
-        state: project.into(),
+        state: project.state.into(),
         idle_minutes,
     };
 
@@ -225,11 +231,12 @@ async fn destroy_project(
     }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
     let project = service.find_project(&project_name).await?;
-    let idle_minutes = project.idle_minutes();
+    let idle_minutes = project.state.idle_minutes();
 
     let mut response = project::Response {
+        id: project.project_id.to_uppercase(),
         name: project_name.to_string(),
-        state: project.into(),
+        state: project.state.into(),
         idle_minutes,
     };
 
@@ -260,9 +267,8 @@ async fn route_project(
 ) -> Result<Response<Body>, Error> {
     let project_name = scoped_user.scope;
     let project = service.find_or_start_project(&project_name, sender).await?;
-
     service
-        .route(&project, &project_name, &scoped_user.user.name, req)
+        .route(&project.state, &project_name, &scoped_user.user.name, req)
         .await
 }
 
@@ -306,11 +312,7 @@ async fn get_status(
 
     // Compute auth status.
     let auth_status = {
-        let response = AUTH_CLIENT
-            .get_or_init(reqwest::Client::new)
-            .get(service.auth_uri().to_string())
-            .send()
-            .await;
+        let response = AUTH_CLIENT.get(service.auth_uri().clone()).await;
         match response {
             Ok(response) if response.status() == 200 => StatusResponse::healthy(),
             Ok(_) | Err(_) => StatusResponse::unhealthy(),
@@ -519,7 +521,15 @@ async fn request_custom_domain_acme_certificate(
         .await?;
 
     let project = service.find_project(&project_name).await?;
-    let idle_minutes = project.container().unwrap().idle_minutes();
+    let project_id = project
+        .state
+        .container()
+        .unwrap()
+        .project_id()
+        .map_err(|_| Error::custom(ErrorKind::Internal, "Missing project_id from the container"))?;
+
+    let container = project.state.container().unwrap();
+    let idle_minutes = container.idle_minutes();
 
     // Destroy and recreate the project with the new domain.
     service
@@ -534,6 +544,7 @@ async fn request_custom_domain_acme_certificate(
                 async move {
                     let creating = ProjectCreating::new_with_random_initial_key(
                         ctx.project_name,
+                        project_id,
                         idle_minutes,
                     )
                     .with_fqdn(fqdn);
@@ -541,6 +552,8 @@ async fn request_custom_domain_acme_certificate(
                 }
             }
         }))
+        .and_then(task::run_until_done())
+        .and_then(task::start_idle_deploys())
         .send(&sender)
         .await?;
 
@@ -581,27 +594,38 @@ async fn renew_custom_domain_acme_certificate(
         .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
     // Try retrieve the current certificate if any.
     match service.project_details_for_custom_domain(&fqdn).await {
-        Ok(CustomDomain { certificate, .. }) => {
-            let (_, pem) = parse_x509_pem(certificate.as_bytes()).unwrap_or_else(|_| {
-                panic!(
-                    "Malformed existing PEM certificate for {} project.",
-                    project_name
+        Ok(CustomDomain {
+            mut certificate,
+            private_key,
+            ..
+        }) => {
+            certificate.push('\n');
+            certificate.push('\n');
+            certificate.push_str(private_key.as_str());
+            let (_, pem) = parse_x509_pem(certificate.as_bytes()).map_err(|err| {
+                Error::custom(
+                    ErrorKind::Internal,
+                    format!("Error while parsing the pem certificate for {project_name}: {err}"),
                 )
-            });
-            let (_, x509_cert_chain) = parse_x509_certificate(pem.contents.as_bytes())
-                .unwrap_or_else(|_| {
-                    panic!(
-                        "Malformed existing X509 certificate for {} project.",
-                        project_name
+            })?;
+
+            let (_, x509_cert_chain) =
+                parse_x509_certificate(pem.contents.as_bytes()).map_err(|err| {
+                    Error::custom(
+                        ErrorKind::Internal,
+                        format!(
+                            "Error while parsing the certificate chain for {project_name}: {err}"
+                        ),
                     )
-                });
+                })?;
+
             let diff = x509_cert_chain
                 .validity()
                 .not_after
                 .sub(ASN1Time::now())
-                .unwrap();
+                .unwrap_or_default();
 
-            // If current certificate validity less_or_eq than 30 days, attempt renewal.
+            // Renew only when the difference is `None` (meaning certificate expired) or we're within the last 30 days of validity.
             if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
                 return match acme_client
                     .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)

@@ -22,6 +22,8 @@ pub mod wasm;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fmt::Display;
+#[cfg(feature = "openapi")]
+use utoipa::openapi::{Object, ObjectBuilder};
 
 use anyhow::bail;
 #[cfg(feature = "service")]
@@ -203,6 +205,17 @@ impl IntoIterator for SecretStore {
     fn into_iter(self) -> Self::IntoIter {
         self.secrets.into_iter()
     }
+}
+
+#[cfg(feature = "openapi")]
+pub fn ulid_type() -> Object {
+    ObjectBuilder::new()
+        .schema_type(utoipa::openapi::SchemaType::String)
+        .format(Some(utoipa::openapi::SchemaFormat::Custom(
+            "ulid".to_string(),
+        )))
+        .description(Some("String represention of an Ulid according to the spec found here: https://github.com/ulid/spec."))
+        .build()
 }
 
 #[cfg(test)]

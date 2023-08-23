@@ -27,9 +27,9 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.21.0"
+//! shuttle-runtime = "0.24.0"
 //! axum = "0.6.10"
-//! shuttle-axum = "0.21.0"
+//! shuttle-axum = "0.24.0"
 //! tokio = "1.26"
 //! ```
 //!
@@ -113,8 +113,8 @@
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.21.0", features = ["postgres"] }
-//! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
+//! shuttle-shared-db = { version = "0.24.0", features = ["postgres"] }
+//! sqlx = { version = "0.7.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
 //! Now update the `#[shuttle_runtime::main]` function to take in a `PgPool`:
@@ -286,8 +286,26 @@ pub use shuttle_service::{CustomError, Error, Factory, ResourceBuilder, Service}
 
 pub use async_trait::async_trait;
 
+/// The default tracing registry used by shuttle.
+pub type Registry = tracing_subscriber::layer::Layered<
+    tracing_subscriber::filter::Filtered<
+        crate::Logger,
+        tracing_subscriber::EnvFilter,
+        tracing_subscriber::Registry,
+    >,
+    tracing_subscriber::Registry,
+>;
+
 // Dependencies required by the codegen
 pub use anyhow::Context;
 pub use strfmt::strfmt;
 pub use tracing;
 pub use tracing_subscriber;
+
+// Print the version of the runtime.
+pub fn print_version() {
+    let name = env!("CARGO_PKG_NAME");
+    let version = env!("CARGO_PKG_VERSION");
+
+    println!("{name} {version}");
+}

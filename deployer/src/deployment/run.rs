@@ -14,9 +14,12 @@ use shuttle_common::{
     storage_manager::ArtifactsStorageManager,
 };
 
-use shuttle_proto::runtime::{
-    runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
-    SubscribeStopResponse,
+use shuttle_proto::{
+    resource_recorder::record_request,
+    runtime::{
+        runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
+        SubscribeStopResponse,
+    },
 };
 use tokio::{
     sync::Mutex,
@@ -25,12 +28,13 @@ use tokio::{
 use tonic::{transport::Channel, Code};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use ulid::Ulid;
 use uuid::Uuid;
 
 use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
-    persistence::{DeploymentUpdater, Resource, ResourceManager, SecretGetter},
+    persistence::{DeploymentUpdater, ResourceManager, SecretGetter},
     RuntimeManager,
 };
 
@@ -138,7 +142,7 @@ pub async fn task(
 
 #[instrument(skip(active_deployment_getter, runtime_manager))]
 async fn kill_old_deployments(
-    service_id: Uuid,
+    service_id: Ulid,
     deployment_id: Uuid,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
@@ -195,18 +199,19 @@ pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
 
     async fn get_active_deployments(
         &self,
-        service_id: &Uuid,
+        service_id: &Ulid,
     ) -> std::result::Result<Vec<Uuid>, Self::Err>;
 }
 
 #[derive(Clone, Debug)]
 pub struct Built {
-    pub id: Uuid,
+    pub id: Uuid, // Deployment id
     pub service_name: String,
-    pub service_id: Uuid,
+    pub service_id: Ulid,
+    pub project_id: Ulid,
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
-    pub claim: Option<Claim>,
+    pub claim: Claim,
 }
 
 impl Built {
@@ -253,7 +258,6 @@ impl Built {
             .map_err(Error::Runtime)?;
 
         kill_old_deployments.await?;
-
         // Execute loaded service
         load(
             self.service_name.clone(),
@@ -281,12 +285,12 @@ impl Built {
 
 async fn load(
     service_name: String,
-    service_id: Uuid,
+    service_id: Ulid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
-    resource_manager: impl ResourceManager,
+    mut resource_manager: impl ResourceManager,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
-    claim: Option<Claim>,
+    claim: Claim,
 ) -> Result<()> {
     info!(
         "loading project from: {}",
@@ -297,19 +301,15 @@ async fn load(
             .unwrap_or_default()
     );
 
-    // Get resources from cache when a claim is not set (ie an idl project is started)
-    let resources = if claim.is_none() {
-        resource_manager
-            .get_resources(&service_id)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(resource::Response::from)
-            .map(resource::Response::into_bytes)
-            .collect()
-    } else {
-        Default::default()
-    };
+    let resources = resource_manager
+        .get_resources(&service_id, claim.clone())
+        .await
+        .unwrap()
+        .resources
+        .into_iter()
+        .map(resource::Response::from)
+        .map(resource::Response::into_bytes)
+        .collect();
 
     let secrets = secret_getter
         .get_secrets(&service_id)
@@ -329,9 +329,7 @@ async fn load(
         secrets,
     });
 
-    if let Some(claim) = claim {
-        load_request.extensions_mut().insert(claim);
-    }
+    load_request.extensions_mut().insert(claim.clone());
 
     debug!(service_name = %service_name, "loading service");
     let response = runtime_client.load(load_request).await;
@@ -344,20 +342,22 @@ async fn load(
             // Make sure to not log the entire response, the resources field is likely to contain
             // secrets.
             info!(success = %response.success, "loading response");
-
-            for resource in response.resources {
-                let resource: resource::Response = serde_json::from_slice(&resource).unwrap();
-                let resource = Resource {
-                    service_id,
-                    r#type: resource.r#type.into(),
-                    config: resource.config,
-                    data: resource.data,
-                };
-                resource_manager
-                    .insert_resource(&resource)
-                    .await
-                    .expect("to add resource to persistence");
-            }
+            let resources = response
+                .resources
+                .into_iter()
+                .map(|res| {
+                    let resource: resource::Response = serde_json::from_slice(&res).unwrap();
+                    record_request::Resource {
+                        r#type: resource.r#type.to_string(),
+                        config: resource.config.to_string().into_bytes(),
+                        data: resource.data.to_string().into_bytes(),
+                    }
+                })
+                .collect();
+            resource_manager
+                .insert_resources(resources, &service_id, claim.clone())
+                .await
+                .expect("to add resource to persistence");
 
             if response.success {
                 Ok(())
@@ -439,12 +439,13 @@ mod tests {
 
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
-    use shuttle_common::storage_manager::ArtifactsStorageManager;
+    use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
         },
+        resource_recorder::{ResourcesResponse, ResultResponse},
         runtime::{StopReason, SubscribeStopResponse},
     };
     use tempfile::Builder;
@@ -453,10 +454,11 @@ mod tests {
         time::sleep,
     };
     use tonic::transport::Server;
+    use ulid::Ulid;
     use uuid::Uuid;
 
     use crate::{
-        persistence::{DeploymentUpdater, Resource, ResourceManager, Secret, SecretGetter},
+        persistence::{DeploymentUpdater, ResourceManager, Secret, SecretGetter},
         RuntimeManager,
     };
 
@@ -534,7 +536,7 @@ mod tests {
     impl SecretGetter for StubSecretGetter {
         type Err = std::io::Error;
 
-        async fn get_secrets(&self, _service_id: &Uuid) -> Result<Vec<Secret>, Self::Err> {
+        async fn get_secrets(&self, _service_id: &Ulid) -> Result<Vec<Secret>, Self::Err> {
             Ok(Default::default())
         }
     }
@@ -546,11 +548,27 @@ mod tests {
     impl ResourceManager for StubResourceManager {
         type Err = std::io::Error;
 
-        async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
-            Ok(())
+        async fn insert_resources(
+            &mut self,
+            _resources: Vec<shuttle_proto::resource_recorder::record_request::Resource>,
+            _service_id: &ulid::Ulid,
+            _claim: Claim,
+        ) -> Result<ResultResponse, Self::Err> {
+            Ok(ResultResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+            })
         }
-        async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
-            Ok(Vec::new())
+        async fn get_resources(
+            &mut self,
+            _service_id: &ulid::Ulid,
+            _claim: Claim,
+        ) -> Result<ResourcesResponse, Self::Err> {
+            Ok(ResourcesResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+                resources: Vec::new(),
+            })
         }
     }
 
@@ -746,10 +764,11 @@ mod tests {
             Built {
                 id,
                 service_name: crate_name.to_string(),
-                service_id: Uuid::new_v4(),
+                service_id: Ulid::new(),
+                project_id: Ulid::new(),
                 tracing_context: Default::default(),
                 is_next: false,
-                claim: None,
+                claim: Default::default(),
             },
             storage_manager,
         )

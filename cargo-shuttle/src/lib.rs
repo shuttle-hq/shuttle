@@ -65,7 +65,7 @@ use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
-const SHUTTLE_LOGIN_URL: &str = "https://shuttle.rs/login";
+const SHUTTLE_LOGIN_URL: &str = "https://console.shuttle.rs/new-project";
 const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
 const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/introduction/shuttle-commands";
 
@@ -81,6 +81,13 @@ impl Shuttle {
 
     pub async fn run(mut self, mut args: ShuttleArgs) -> Result<CommandOutcome> {
         trace!("running local client");
+
+        if args.api_url.as_ref().is_some_and(|s| s.ends_with('/')) {
+            println!(
+                "WARNING: API URL is probably incorrect. Ends with '/': {}",
+                args.api_url.clone().unwrap()
+            );
+        }
 
         // All commands that need to know which project is being handled
         if matches!(
@@ -605,6 +612,28 @@ impl Shuttle {
                 runtime_path
             } else {
                 trace!(path = ?executable_path, "using alpha runtime");
+                if let Err(err) = check_version(&executable_path) {
+                    warn!("{}", err);
+                    if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
+                        println!("Warning: {}.", mismatch);
+                        if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
+                            // The runtime is newer than cargo-shuttle so we
+                            // should help the user to update cargo-shuttle.
+                            println!(
+                                "[HINT]: You should update cargo-shuttle. \
+                                If cargo-shuttle was installed using cargo, \
+                                you can get the latest version by running \
+                                `cargo install cargo-shuttle`."
+                            );
+                        } else {
+                            println!(
+                                "[HINT]: A newer version of shuttle-runtime is available. \
+                                Change its version to {} in this project's Cargo.toml to update it.",
+                                mismatch.cargo_shuttle
+                            );
+                        }
+                    }
+                }
                 executable_path.clone()
             }
         };
@@ -924,36 +953,122 @@ impl Shuttle {
     }
 
     #[cfg(target_family = "windows")]
+    async fn handle_signals() -> bool {
+        let mut ctrl_break_notif = tokio::signal::windows::ctrl_break()
+            .expect("Can not get the CtrlBreak signal receptor");
+        let mut ctrl_c_notif =
+            tokio::signal::windows::ctrl_c().expect("Can not get the CtrlC signal receptor");
+        let mut ctrl_close_notif = tokio::signal::windows::ctrl_close()
+            .expect("Can not get the CtrlClose signal receptor");
+        let mut ctrl_logoff_notif = tokio::signal::windows::ctrl_logoff()
+            .expect("Can not get the CtrlLogoff signal receptor");
+        let mut ctrl_shutdown_notif = tokio::signal::windows::ctrl_shutdown()
+            .expect("Can not get the CtrlShutdown signal receptor");
+
+        tokio::select! {
+            _ = ctrl_break_notif.recv() => {
+                println!("cargo-shuttle received ctrl-break.");
+                true
+            },
+            _ = ctrl_c_notif.recv() => {
+                println!("cargo-shuttle received ctrl-c.");
+                true
+            },
+            _ = ctrl_close_notif.recv() => {
+                println!("cargo-shuttle received ctrl-close.");
+                true
+            },
+            _ = ctrl_logoff_notif.recv() => {
+                println!("cargo-shuttle received ctrl-logoff.");
+                true
+            },
+            _ = ctrl_shutdown_notif.recv() => {
+                println!("cargo-shuttle received ctrl-shutdown.");
+                true
+            }
+            else => {
+                false
+            }
+        }
+    }
+
+    #[cfg(target_family = "windows")]
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
-
         // Start all the services.
         let mut runtimes: Vec<(
             Child,
             RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         )> = Vec::new();
+        let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {
-            Shuttle::add_runtime_info(
-                Shuttle::spin_local_runtime(
-                    &run_args,
-                    service,
-                    &provisioner_server,
-                    i as u16,
-                    provisioner_port,
-                )
-                .await?,
-                &mut runtimes,
-                &provisioner_server,
-            )
-            .await?;
+            signal_received = tokio::select! {
+                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
+                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &provisioner_server).await?;
+                    false
+                },
+                _ = Shuttle::handle_signals() => {
+                    println!(
+                        "Killing all the runtimes..."
+                    );
+                    true
+                }
+            };
+
+            if signal_received {
+                break;
+            }
         }
 
-        for (mut rt, _) in runtimes {
-            println!(
-                "a service future completed with exit status: {:?}",
-                rt.wait().await?.code()
-            );
+        // If prior signal received is set to true we must stop all the existing runtimes and
+        // exit the `local_run`.
+        if signal_received {
+            provisioner_server.abort();
+            for (mut rt, mut rt_client) in runtimes {
+                Shuttle::stop_runtime(&mut rt, &mut rt_client)
+                    .await
+                    .unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+            }
+            return Ok(());
+        }
+
+        // If no signal was received during runtimes initialization, then we must handle each runtime until
+        // completion and handle the signals during this time.
+        for (mut rt, mut rt_client) in runtimes {
+            // If we received a signal while waiting for any runtime we must stop the rest and exit
+            // the waiting loop.
+            if signal_received {
+                Shuttle::stop_runtime(&mut rt, &mut rt_client)
+                    .await
+                    .unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+                continue;
+            }
+
+            // Receiving a signal will stop the current runtime we're waiting for.
+            signal_received = tokio::select! {
+                res = rt.wait() => {
+                    println!(
+                        "a service future completed with exit status: {:?}",
+                        res.unwrap().code()
+                    );
+                    false
+                },
+                _ = Shuttle::handle_signals() => {
+                    println!(
+                        "Killing all the runtimes..."
+                    );
+                    provisioner_server.abort();
+                    Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
+                        trace!(status = ?err, "stopping the runtime errored out");
+                    });
+                    true
+                }
+            };
         }
 
         println!(
@@ -1346,8 +1461,7 @@ impl Shuttle {
 
 fn check_version(runtime_path: &Path) -> Result<()> {
     let valid_version = semver::Version::from_str(VERSION)
-        .context("failed to convert runtime version to semver")?
-        .to_string();
+        .context("failed to convert runtime version to semver")?;
 
     if !runtime_path.try_exists()? {
         bail!("shuttle-runtime is not installed");
@@ -1370,15 +1484,49 @@ fn check_version(runtime_path: &Path) -> Result<()> {
             .1
             .trim(),
     )
-    .context("failed to convert runtime version to semver")?
-    .to_string();
+    .context("failed to convert runtime version to semver")?;
 
-    if runtime_version == valid_version {
+    if semvers_are_compatible(&valid_version, &runtime_version) {
         Ok(())
     } else {
-        bail!("shuttle-runtime and cargo-shuttle are not the same version")
+        Err(VersionMismatchError {
+            shuttle_runtime: runtime_version,
+            cargo_shuttle: valid_version,
+        })
+        .context("shuttle-runtime and cargo-shuttle have incompatible versions")
     }
 }
+
+/// Check if two versions are compatible based on the rule used by
+/// cargo: "Versions `a` and `b` are compatible if their left-most
+/// nonzero digit is the same."
+fn semvers_are_compatible(a: &semver::Version, b: &semver::Version) -> bool {
+    if a.major != 0 || b.major != 0 {
+        a.major == b.major
+    } else if a.minor != 0 || b.minor != 0 {
+        a.minor == b.minor
+    } else {
+        a.patch == b.patch
+    }
+}
+
+#[derive(Debug)]
+struct VersionMismatchError {
+    shuttle_runtime: semver::Version,
+    cargo_shuttle: semver::Version,
+}
+
+impl std::fmt::Display for VersionMismatchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "shuttle-runtime {} and cargo-shuttle {} are incompatible",
+            self.shuttle_runtime, self.cargo_shuttle
+        )
+    }
+}
+
+impl std::error::Error for VersionMismatchError {}
 
 fn create_spinner() -> ProgressBar {
     let pb = indicatif::ProgressBar::new_spinner();
@@ -1579,5 +1727,23 @@ version = "0.1.0"
         entries.sort();
 
         assert_eq!(entries, vec!["Cargo.lock", "Cargo.toml", "src/main.rs"]);
+    }
+
+    #[test]
+    fn semver_compatibility_check_works() {
+        let semver_tests = &[
+            ("1.0.0", "1.0.0", true),
+            ("1.8.0", "1.0.0", true),
+            ("0.1.0", "0.2.1", false),
+            ("0.9.0", "0.2.0", false),
+        ];
+        for (version_a, version_b, are_compatible) in semver_tests {
+            let version_a = semver::Version::from_str(version_a).unwrap();
+            let version_b = semver::Version::from_str(version_b).unwrap();
+            assert_eq!(
+                super::semvers_are_compatible(&version_a, &version_b),
+                *are_compatible
+            );
+        }
     }
 }

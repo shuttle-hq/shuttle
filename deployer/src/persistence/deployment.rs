@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
 use tracing::error;
+use ulid::Ulid;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -13,7 +14,7 @@ use super::state::State;
 #[derive(Clone, Debug, Default, Eq, PartialEq, ToSchema)]
 pub struct Deployment {
     pub id: Uuid,
-    pub service_id: Uuid,
+    pub service_id: Ulid,
     pub state: State,
     pub last_update: DateTime<Utc>,
     pub address: Option<SocketAddr>,
@@ -40,7 +41,8 @@ impl FromRow<'_, SqliteRow> for Deployment {
 
         Ok(Self {
             id: row.try_get("id")?,
-            service_id: row.try_get("service_id")?,
+            service_id: Ulid::from_string(row.try_get("service_id")?)
+                .expect("to have a valid ulid string"),
             state: row.try_get("state")?,
             last_update: row.try_get("last_update")?,
             address,
@@ -57,7 +59,7 @@ impl From<Deployment> for shuttle_common::models::deployment::Response {
     fn from(deployment: Deployment) -> Self {
         shuttle_common::models::deployment::Response {
             id: deployment.id,
-            service_id: deployment.service_id,
+            service_id: deployment.service_id.to_string(),
             state: deployment.state.into(),
             last_update: deployment.last_update,
             git_commit_id: deployment.git_commit_id,
@@ -87,10 +89,22 @@ pub struct DeploymentState {
     pub last_update: DateTime<Utc>,
 }
 
-#[derive(sqlx::FromRow, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct DeploymentRunnable {
     pub id: Uuid,
     pub service_name: String,
-    pub service_id: Uuid,
+    pub service_id: Ulid,
     pub is_next: bool,
+}
+
+impl FromRow<'_, SqliteRow> for DeploymentRunnable {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            service_id: Ulid::from_string(row.try_get("service_id")?)
+                .expect("to have a valid ulid string"),
+            service_name: row.try_get("service_name")?,
+            id: row.try_get("id")?,
+            is_next: row.try_get("is_next")?,
+        })
+    }
 }

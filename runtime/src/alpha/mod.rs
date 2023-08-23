@@ -30,10 +30,10 @@ use shuttle_proto::{
     },
 };
 use shuttle_service::{Environment, Factory, Service, ServiceName};
-use tokio::sync::{broadcast, oneshot};
 use tokio::sync::{
-    broadcast::Sender,
+    broadcast::{self, Sender},
     mpsc::{self, UnboundedReceiver, UnboundedSender},
+    oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
@@ -43,13 +43,19 @@ use tonic::{
 use tower::ServiceBuilder;
 use tracing::{error, info, trace, warn};
 
-use crate::{provisioner_factory::ProvisionerFactory, Logger, ResourceTracker};
+use crate::{print_version, provisioner_factory::ProvisionerFactory, Logger, ResourceTracker};
 
 use self::args::Args;
 
 mod args;
 
 pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
+    // `--version` overrides any other arguments.
+    if std::env::args().any(|arg| &arg == "--version") {
+        print_version();
+        return;
+    }
+
     let args = match Args::parse() {
         Ok(args) => args,
         Err(e) => {

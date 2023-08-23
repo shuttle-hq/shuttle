@@ -1,3 +1,5 @@
+pub mod cargo_shuttle;
+
 use shuttle_common::claims::{Claim, Scope};
 
 /// Layer to set JwtScopes on a request.

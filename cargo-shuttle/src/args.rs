@@ -40,7 +40,7 @@ pub struct ShuttleArgs {
 #[derive(Parser, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
-    #[arg(global = true, long, default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
+    #[arg(global = true, long, alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
     #[arg(global = true, long)]
@@ -82,26 +82,26 @@ impl ProjectArgs {
     }
 }
 
-/// A cargo command for the shuttle platform (https://www.shuttle.rs/)
+/// A cargo command for the Shuttle platform (https://www.shuttle.rs/)
 ///
 /// See the CLI docs (https://docs.shuttle.rs/introduction/shuttle-commands)
 /// for more information.
 #[derive(Parser)]
 pub enum Command {
-    /// Create a new shuttle project
+    /// Create a new Shuttle project
     Init(InitArgs),
-    /// Run a shuttle service locally
+    /// Run a Shuttle service locally
     Run(RunArgs),
-    /// Deploy a shuttle service
+    /// Deploy a Shuttle service
     Deploy(DeployArgs),
-    /// Manage deployments of a shuttle service
+    /// Manage deployments of a Shuttle service
     #[command(subcommand)]
     Deployment(DeploymentCommand),
-    /// View the status of a shuttle service
+    /// View the status of a Shuttle service
     Status,
-    /// Stop this shuttle service
+    /// Stop this Shuttle service
     Stop,
-    /// View the logs of a deployment in this shuttle service
+    /// View the logs of a deployment in this Shuttle service
     Logs {
         /// Deployment ID to get logs for. Defaults to currently running deployment
         id: Option<Uuid>,
@@ -112,19 +112,19 @@ pub enum Command {
         /// Follow log output
         follow: bool,
     },
-    /// List or manage projects on shuttle
+    /// List or manage projects on Shuttle
     #[command(subcommand)]
     Project(ProjectCommand),
-    /// Manage resources of a shuttle project
+    /// Manage resources of a Shuttle project
     #[command(subcommand)]
     Resource(ResourceCommand),
-    /// Manage secrets for this shuttle service
+    /// Manage secrets for this Shuttle service
     Secrets,
-    /// Remove cargo build artifacts in the shuttle environment
+    /// Remove cargo build artifacts in the Shuttle environment
     Clean,
-    /// Login to the shuttle platform
+    /// Login to the Shuttle platform
     Login(LoginArgs),
-    /// Log out of the shuttle platform
+    /// Log out of the Shuttle platform
     Logout(LogoutArgs),
     /// Generate shell completions
     Generate {
@@ -166,17 +166,17 @@ pub enum ResourceCommand {
 
 #[derive(Parser)]
 pub enum ProjectCommand {
-    /// Create an environment for this project on shuttle
+    /// Create an environment for this project on Shuttle
     Start(ProjectStartArgs),
-    /// Check the status of this project's environment on shuttle
+    /// Check the status of this project's environment on Shuttle
     Status {
         #[arg(short, long)]
         /// Follow status of project command
         follow: bool,
     },
-    /// Destroy this project's environment (container) on shuttle
+    /// Destroy this project's environment (container) on Shuttle
     Stop,
-    /// Destroy and create an environment for this project on shuttle
+    /// Destroy and create an environment for this project on Shuttle
     Restart(ProjectStartArgs),
     /// List all projects belonging to the calling account
     List {
@@ -200,7 +200,7 @@ pub struct ProjectStartArgs {
 
 #[derive(Parser, Clone, Debug)]
 pub struct LoginArgs {
-    /// API key for the shuttle platform
+    /// API key for the Shuttle platform
     #[arg(long)]
     pub api_key: Option<String>,
 }
@@ -214,10 +214,10 @@ pub struct LogoutArgs {
 #[derive(Parser)]
 pub struct DeployArgs {
     /// Allow deployment with uncommited files
-    #[arg(long)]
+    #[arg(long, alias = "ad")]
     pub allow_dirty: bool,
     /// Don't run pre-deploy tests
-    #[arg(long)]
+    #[arg(long, alias = "nt")]
     pub no_test: bool,
 }
 
@@ -236,7 +236,7 @@ pub struct RunArgs {
 
 #[derive(Parser, Clone, Debug)]
 pub struct InitArgs {
-    /// Clone a starter template from shuttle's official examples
+    /// Clone a starter template from Shuttle's official examples
     #[arg(long, short, value_enum, conflicts_with_all = &["from", "subfolder"])]
     pub template: Option<InitTemplateArg>,
     /// Clone a template from a git repository or local path using cargo-generate
@@ -246,11 +246,11 @@ pub struct InitArgs {
     #[arg(long, requires = "from")]
     pub subfolder: Option<String>,
 
-    /// Path where to place the new shuttle project
+    /// Path where to place the new Shuttle project
     #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub path: PathBuf,
 
-    /// Whether to create the environment for this project on shuttle
+    /// Whether to create the environment for this project on Shuttle
     #[arg(long)]
     pub create_env: bool,
     #[command(flatten)]
@@ -260,7 +260,7 @@ pub struct InitArgs {
 #[derive(ValueEnum, Clone, Debug, strum::Display, strum::EnumIter)]
 #[strum(serialize_all = "kebab-case")]
 pub enum InitTemplateArg {
-    /// Actix-web framework
+    /// Actix Web framework
     ActixWeb,
     /// Axum web framework
     Axum,

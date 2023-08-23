@@ -6,6 +6,7 @@ use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence, Runti
 use tokio::select;
 use tracing::{error, trace};
 use tracing_subscriber::prelude::*;
+use ulid::Ulid;
 
 // The `multi_thread` is needed to prevent a deadlock in shuttle_service::loader::build_crate() which spawns two threads
 // Without this, both threads just don't start up
@@ -15,7 +16,13 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
-    let (persistence, _) = Persistence::new(&args.state).await;
+    let (persistence, _) = Persistence::new(
+        &args.state,
+        &args.resource_recorder,
+        Ulid::from_string(args.project_id.as_str())
+            .expect("to get a valid ULID for project_id arg"),
+    )
+    .await;
     setup_tracing(
         tracing_subscriber::registry().with(DeployLayer::new(persistence.clone())),
         "deployer",

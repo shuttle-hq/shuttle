@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.21.0"
+version = "0.24.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -11,6 +11,7 @@ homepage = "https://www.shuttle.rs"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bollard = { workspace = true }
+cargo-generate = "0.18.3"
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
@@ -34,13 +35,15 @@ reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = "0.2.0"
 reqwest-retry = "0.2.0"
 rmp-serde = { workspace = true }
+semver = "1.0.17"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres"] }
 strum = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal"] }
-tokio-tungstenite = { version = "0.19.0", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.19.0", features = [
+  "rustls-tls-webpki-roots",
+] }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tonic = { workspace = true }
@@ -53,8 +56,6 @@ tracing-subscriber = { workspace = true, features = [
 url = "2.3.1"
 uuid = { workspace = true, features = ["v4"] }
 webbrowser = "0.8.2"
-semver = "1.0.17"
-cargo-generate = "0.18.3"
 
 [dependencies.shuttle-common]
 workspace = true
@@ -77,3 +78,4 @@ tempfile = { workspace = true }
 test-context = "0.1.4"
 # Tmp until this branch is merged and released
 tokiotest-httpserver = { git = "https://github.com/shuttle-hq/tokiotest-httpserver", branch = "feat/body" }
+shuttle-common-tests = { path = "../common-tests" }

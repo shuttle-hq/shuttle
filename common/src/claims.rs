@@ -131,7 +131,17 @@ impl ScopeBuilder {
 
     /// Extend the current scopes with those needed by a deployer machine / user.
     pub fn with_deploy_rights(mut self) -> Self {
-        self.0.extend(vec![Scope::DeploymentPush, Scope::Resources]);
+        self.0.extend(vec![
+            Scope::DeploymentPush, // To start an idle deploy
+            Scope::Resources,      // To get past resources for an idle deploy
+            Scope::Service,        // To get the running deploy for a service
+            // To add the locally persisted resources from the older deployers
+            // to the resource-recorder the first time the old deployer is updated
+            // to the new deployer (based on resource-recorder). After this moment
+            // all requests are routed to the resource-recorder instead of local
+            // persistence.
+            Scope::ResourcesWrite,
+        ]);
         self
     }
 
@@ -146,7 +156,7 @@ impl Default for ScopeBuilder {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).
     pub exp: usize,

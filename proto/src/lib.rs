@@ -232,4 +232,14 @@ pub mod resource_recorder {
 
 pub mod logger {
     include!("generated/logger.rs");
+
+    impl From<StoredLogItem> for FetchedLogItem {
+        fn from(value: StoredLogItem) -> Self {
+            FetchedLogItem {
+                service_name: value.service_name,
+                tx_timestamp: value.tx_timestamp,
+                data: value.data,
+            }
+        }
+    }
 }

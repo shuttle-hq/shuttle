@@ -2,7 +2,7 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StoreLogsRequest {
     #[prost(message, repeated, tag = "1")]
-    pub logs: ::prost::alloc::vec::Vec<LogItem>,
+    pub logs: ::prost::alloc::vec::Vec<StoredLogItem>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -20,11 +20,11 @@ pub struct LogsRequest {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogsResponse {
     #[prost(message, repeated, tag = "1")]
-    pub log_items: ::prost::alloc::vec::Vec<LogItem>,
+    pub log_items: ::prost::alloc::vec::Vec<FetchedLogItem>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct LogItem {
+pub struct StoredLogItem {
     #[prost(string, tag = "1")]
     pub service_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
@@ -32,6 +32,16 @@ pub struct LogItem {
     #[prost(message, optional, tag = "3")]
     pub tx_timestamp: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(bytes = "vec", tag = "4")]
+    pub data: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FetchedLogItem {
+    #[prost(string, tag = "1")]
+    pub service_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub tx_timestamp: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(bytes = "vec", tag = "3")]
     pub data: ::prost::alloc::vec::Vec<u8>,
 }
 /// Generated client implementations.
@@ -144,7 +154,7 @@ pub mod logger_client {
             &mut self,
             request: impl tonic::IntoRequest<super::LogsRequest>,
         ) -> Result<
-            tonic::Response<tonic::codec::Streaming<super::LogItem>>,
+            tonic::Response<tonic::codec::Streaming<super::FetchedLogItem>>,
             tonic::Status,
         > {
             self.inner
@@ -183,7 +193,7 @@ pub mod logger_server {
         ) -> Result<tonic::Response<super::LogsResponse>, tonic::Status>;
         /// Server streaming response type for the GetLogsStream method.
         type GetLogsStreamStream: futures_core::Stream<
-                Item = Result<super::LogItem, tonic::Status>,
+                Item = Result<super::FetchedLogItem, tonic::Status>,
             >
             + Send
             + 'static;
@@ -331,7 +341,7 @@ pub mod logger_server {
                         T: Logger,
                     > tonic::server::ServerStreamingService<super::LogsRequest>
                     for GetLogsStreamSvc<T> {
-                        type Response = super::LogItem;
+                        type Response = super::FetchedLogItem;
                         type ResponseStream = T::GetLogsStreamStream;
                         type Future = BoxFuture<
                             tonic::Response<Self::ResponseStream>,

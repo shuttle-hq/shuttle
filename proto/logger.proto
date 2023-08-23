@@ -11,11 +11,11 @@ service Logger {
   rpc GetLogs(LogsRequest) returns (LogsResponse);
 
   // Get fresh logs as they are incoming
-  rpc GetLogsStream(LogsRequest) returns (stream LogItem);
+  rpc GetLogsStream(LogsRequest) returns (stream FetchedLogItem);
 }
 
 message StoreLogsRequest {
-  repeated LogItem logs = 1;
+  repeated StoredLogItem logs = 1;
 }
 
 message StoreLogsResponse {
@@ -27,12 +27,18 @@ message LogsRequest {
 }
 
 message LogsResponse {
-  repeated LogItem log_items = 1;
+  repeated FetchedLogItem log_items = 1;
 }
 
-message LogItem {
+message StoredLogItem {
   string service_name = 1;
   string deployment_id = 2;
   google.protobuf.Timestamp tx_timestamp = 3;
   bytes data = 4;
+}
+
+message FetchedLogItem {
+  string service_name = 1;
+  google.protobuf.Timestamp tx_timestamp = 2;
+  bytes data = 3;
 }

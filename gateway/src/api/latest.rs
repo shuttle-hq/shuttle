@@ -149,7 +149,7 @@ async fn get_projects_list(
         .iter_user_projects_detailed(&name, limit * page, limit)
         .await?
         .map(|project| project::Response {
-            id: project.0.to_string().to_uppercase(),
+            id: project.0.to_uppercase(),
             name: project.1.to_string(),
             idle_minutes: project.2.idle_minutes(),
             state: project.2.into(),

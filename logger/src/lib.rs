@@ -16,6 +16,7 @@ mod dal;
 
 pub use dal::Log;
 pub use dal::Sqlite;
+use tracing::error;
 
 /// A wrapper to capture any error possible with this service
 #[derive(Error, Debug)]
@@ -137,7 +138,9 @@ where
                     if log.tx_timestamp.timestamp() >= last.seconds
                         && log.tx_timestamp.timestamp_nanos() > last.nanos.into()
                     {
-                        tx.send(Ok(log.into())).await.unwrap();
+                        tx.send(Ok(log.into())).await.unwrap_or_else(|_| {
+                            error!("Errored while sending logs to persistence")
+                        });
                     }
                 }
             }

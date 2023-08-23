@@ -22,7 +22,7 @@ use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::headers::{X_SHUTTLE_ACCOUNT_NAME, X_SHUTTLE_ADMIN_SECRET};
-use shuttle_common::models::project::{idle_minutes, IDLE_MINUTES};
+use shuttle_common::models::project::{default_idle_minutes, DEFAULT_IDLE_MINUTES};
 use shuttle_common::models::service;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument, trace};
@@ -119,12 +119,12 @@ pub trait ContainerInspectResponseExt {
         if let Some(config) = &container.config {
             if let Some(labels) = &config.labels {
                 if let Some(idle_minutes) = labels.get("shuttle.idle_minutes") {
-                    return idle_minutes.parse::<u64>().unwrap_or(IDLE_MINUTES);
+                    return idle_minutes.parse::<u64>().unwrap_or(DEFAULT_IDLE_MINUTES);
                 }
             }
         }
 
-        IDLE_MINUTES
+        DEFAULT_IDLE_MINUTES
     }
 
     fn find_arg_and_then<'s, F, O>(&'s self, find: &str, and_then: F) -> Result<O, ProjectError>
@@ -340,6 +340,10 @@ impl Project {
 
     pub fn container_id(&self) -> Option<String> {
         self.container().and_then(|container| container.id)
+    }
+
+    pub fn idle_minutes(&self) -> Option<u64> {
+        self.container().map(|container| container.idle_minutes())
     }
 }
 
@@ -598,7 +602,7 @@ pub struct ProjectCreating {
     #[serde(default)]
     recreate_count: usize,
     /// Label set on container as to how many minutes to wait before a project is considered idle
-    #[serde(default = "idle_minutes")]
+    #[serde(default = "default_idle_minutes")]
     idle_minutes: u64,
 }
 

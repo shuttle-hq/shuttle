@@ -114,10 +114,13 @@ async fn get_project(
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
     let project = service.find_project(&scope).await?;
+    let idle_minutes = project.state.idle_minutes();
+
     let response = project::Response {
         id: project.project_id.to_uppercase(),
         name: scope.to_string(),
         state: project.state.into(),
+        idle_minutes,
     };
 
     Ok(AxumJson(response))
@@ -146,8 +149,9 @@ async fn get_projects_list(
         .iter_user_projects_detailed(&name, limit * page, limit)
         .await?
         .map(|project| project::Response {
-            id: project.0.to_string().to_uppercase(),
+            id: project.0.to_uppercase(),
             name: project.1.to_string(),
+            idle_minutes: project.2.idle_minutes(),
             state: project.2.into(),
         })
         .collect();
@@ -185,6 +189,7 @@ async fn create_project(
             config.idle_minutes,
         )
         .await?;
+    let idle_minutes = project.state.idle_minutes();
 
     service
         .new_task()
@@ -198,6 +203,7 @@ async fn create_project(
         id: project.project_id.to_string().to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
+        idle_minutes,
     };
 
     Ok(AxumJson(response))
@@ -225,11 +231,13 @@ async fn destroy_project(
     }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
     let project = service.find_project(&project_name).await?;
+    let idle_minutes = project.state.idle_minutes();
 
     let mut response = project::Response {
         id: project.project_id.to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
+        idle_minutes,
     };
 
     if response.state == shuttle_common::models::project::State::Destroyed {

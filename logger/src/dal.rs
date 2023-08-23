@@ -120,10 +120,10 @@ impl Dal for Sqlite {
 
 #[derive(Clone, Debug, FromRow)]
 pub struct Log {
-    pub deployment_id: String,
-    pub shuttle_service_name: String,
-    pub tx_timestamp: DateTime<Utc>,
-    pub data: Vec<u8>,
+    pub(crate) deployment_id: String,
+    pub(crate) shuttle_service_name: String,
+    pub(crate) tx_timestamp: DateTime<Utc>,
+    pub(crate) data: Vec<u8>,
 }
 
 impl From<Log> for LogItem {

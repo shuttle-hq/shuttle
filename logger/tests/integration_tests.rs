@@ -2,14 +2,16 @@ use std::{
     io::{self},
     net::{Ipv4Addr, SocketAddr},
     sync::Mutex,
+    time::SystemTime,
 };
 
 use chrono::Utc;
 use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
+use prost_types::Timestamp;
 use shuttle_common::claims::Scope;
 use shuttle_common_tests::JwtScopesLayer;
-use shuttle_logger::{Log, Service, Sqlite};
+use shuttle_logger::{Service, Sqlite};
 use shuttle_proto::logger::{
     logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogsRequest,
     StoreLogsRequest,
@@ -369,7 +371,7 @@ impl From<LogItem> for MinLogItem {
 struct LoggerLayer {
     deployment_id: String,
     shuttle_service: String,
-    tx: UnboundedSender<Vec<Log>>,
+    tx: UnboundedSender<Vec<LogItem>>,
     _logs_forwarding_task: JoinHandle<()>,
 }
 
@@ -379,16 +381,16 @@ impl LoggerLayer {
         shuttle_service: String,
         mut client: LoggerClient<tonic::transport::Channel>,
     ) -> Self {
-        let (tx, mut rx): (UnboundedSender<Vec<Log>>, UnboundedReceiver<Vec<Log>>) =
-            tokio::sync::mpsc::unbounded_channel();
+        let (tx, mut rx): (
+            UnboundedSender<Vec<LogItem>>,
+            UnboundedReceiver<Vec<LogItem>>,
+        ) = tokio::sync::mpsc::unbounded_channel();
         let handle = tokio::task::spawn(async move {
             while let Some(logs) = rx.recv().await {
                 // service_tx.broadcast(logs).await.expect("to not fail");
                 // Get the generated logs
                 let _ = client
-                    .store_logs(Request::new(StoreLogsRequest {
-                        logs: logs.into_iter().map(Into::into).collect(),
-                    }))
+                    .store_logs(Request::new(StoreLogsRequest { logs }))
                     .await
                     .unwrap()
                     .into_inner();
@@ -407,10 +409,10 @@ impl io::Write for LoggerLayer {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self
             .tx
-            .send(vec![Log {
+            .send(vec![LogItem {
                 deployment_id: self.deployment_id.clone(),
-                shuttle_service_name: self.shuttle_service.clone(),
-                tx_timestamp: Utc::now(),
+                service_name: self.shuttle_service.clone(),
+                tx_timestamp: Some(Timestamp::from(SystemTime::from(Utc::now()))),
                 data: buf.to_vec(),
             }])
             .is_ok()

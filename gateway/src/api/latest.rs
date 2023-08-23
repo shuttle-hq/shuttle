@@ -114,11 +114,11 @@ async fn get_project(
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
     let project = service.find_project(&scope).await?;
-    let idle_minutes = project.container().map(|cir| cir.idle_minutes());
-    let state = service.find_project(&scope).await?.into();
+    let idle_minutes = project.idle_minutes();
+
     let response = project::Response {
         name: scope.to_string(),
-        state,
+        state: project.into(),
         idle_minutes,
     };
 

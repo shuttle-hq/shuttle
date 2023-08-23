@@ -1080,20 +1080,6 @@ impl Shuttle {
 
             println!("{resources}{service}");
 
-            let project = client.get_project(self.ctx.project_name()).await?;
-
-            if let Some(idle_minutes) = project.idle_minutes {
-                if idle_minutes > 0 {
-                    let idle_msg = format!(
-                        "Your project will sleep if it is idle for {} minutes.",
-                        idle_minutes
-                    );
-                    println!();
-                    println!("{}", idle_msg.yellow());
-                    println!("To change the idle time refer to the docs: https://docs.shuttle.rs/introduction/idle-projects");
-                }
-            }
-
             Ok(CommandOutcome::Ok)
         } else {
             println!("{}", "Deployment has not entered the running state".red());
@@ -1135,6 +1121,17 @@ impl Shuttle {
 
     async fn project_create(&self, client: &Client, idle_minutes: u64) -> Result<()> {
         let config = project::Config { idle_minutes };
+
+        if idle_minutes > 0 {
+            let idle_msg = format!(
+                "Your project will sleep if it is idle for {} minutes.",
+                idle_minutes
+            );
+            println!();
+            println!("{}", idle_msg.yellow());
+            println!("To change the idle time refer to the docs: https://docs.shuttle.rs/introduction/idle-projects");
+            println!();
+        }
 
         self.wait_with_spinner(
             &[

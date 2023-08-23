@@ -25,8 +25,7 @@ tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["default"] }
-tracing-opentelemetry = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["default", "json"] }
 
 [dependencies.shuttle-common]
 workspace = true
@@ -40,5 +39,3 @@ portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
 shuttle-common-tests = { workspace = true }
-opentelemetry-otlp = { workspace = true }
-opentelemetry = { workspace = true }

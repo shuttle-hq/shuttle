@@ -1,7 +1,7 @@
 use async_broadcast::Sender;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use dal::{Dal, DalError, Log};
+use dal::{Dal, DalError};
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
 use shuttle_proto::logger::{
     logger_server::Logger, LogItem, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
@@ -14,6 +14,7 @@ use tonic::{Request, Response, Status};
 pub mod args;
 mod dal;
 
+pub use dal::Log;
 pub use dal::Sqlite;
 
 /// A wrapper to capture any error possible with this service
@@ -62,7 +63,6 @@ where
 
         let request = request.into_inner();
         let logs = request.logs;
-
         if !logs.is_empty() {
             _ = self
                 .logs_tx

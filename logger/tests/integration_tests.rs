@@ -1,21 +1,24 @@
-use std::net::{Ipv4Addr, SocketAddr};
+use std::{
+    io::{self},
+    net::{Ipv4Addr, SocketAddr},
+    sync::Mutex,
+};
 
-use opentelemetry::KeyValue;
-use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_proto::tonic::collector::trace::v1::trace_service_server::TraceServiceServer;
+use chrono::Utc;
 use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
-use serde_json::{json, Value};
-use shuttle_common::{
-    claims::Scope,
-    tracing::{FILEPATH_KEY, LINENO_KEY, MESSAGE_KEY, NAMESPACE_KEY, TARGET_KEY},
-};
+use shuttle_common::claims::Scope;
 use shuttle_common_tests::JwtScopesLayer;
-use shuttle_logger::{Service, ShuttleLogs, Sqlite};
+use shuttle_logger::{Log, Service, Sqlite};
 use shuttle_proto::logger::{
-    logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogLevel, LogsRequest,
+    logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogsRequest,
+    StoreLogsRequest,
 };
-use tokio::time::timeout;
+use tokio::{
+    sync::mpsc::{UnboundedReceiver, UnboundedSender},
+    task::JoinHandle,
+    time::timeout,
+};
 use tonic::{transport::Server, Request};
 use tracing::{debug, error, info, instrument, trace, warn};
 use tracing_subscriber::prelude::*;
@@ -31,12 +34,11 @@ async fn generate_and_get_runtime_logs() {
     // Start the logger server in the background.
     tokio::task::spawn(async move {
         let sqlite = Sqlite::new_in_memory().await;
-
         Server::builder()
-            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-            .add_service(TraceServiceServer::new(ShuttleLogs::new(
-                sqlite.get_sender(),
-            )))
+            .layer(JwtScopesLayer::new(vec![
+                Scope::Logs,
+                Scope::DeploymentPush,
+            ]))
             .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)))
             .serve(addr)
             .await
@@ -46,13 +48,12 @@ async fn generate_and_get_runtime_logs() {
     // Ensure the logger server has time to start.
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    // Start a subscriber and generate some logs.
-    generate_runtime_logs(port, DEPLOYMENT_ID.into(), deploy);
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
     let dst = format!("http://localhost:{port}");
-
     let mut client = LoggerClient::connect(dst).await.unwrap();
+
+    // Start a subscriber and generate some logs.
+    generate_runtime_logs(client.clone(), DEPLOYMENT_ID.into(), deploy);
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Get the generated logs
     let response = client
@@ -63,64 +64,27 @@ async fn generate_and_get_runtime_logs() {
         .unwrap()
         .into_inner();
 
-    let quoted_deployment_id = format!("\"{DEPLOYMENT_ID}\"");
     let expected = vec![
         MinLogItem {
-            level: LogLevel::Info,
-            fields: json!({"message": "[span] deploy", "deployment_id": quoted_deployment_id }),
+            data: "ERROR deploy{deployment_id=\"runtime-fetch-logs-deployment-id\"}: integration_tests: error\n".to_string(),
         },
         MinLogItem {
-            level: LogLevel::Error,
-            fields: json!({"message": "error"}),
+            data: " WARN deploy{deployment_id=\"runtime-fetch-logs-deployment-id\"}: integration_tests: warn\n".to_string(),
         },
         MinLogItem {
-            level: LogLevel::Warn,
-            fields: json!({"message": "warn"}),
+            data: format!(" INFO deploy{{deployment_id=\"runtime-fetch-logs-deployment-id\"}}: integration_tests: info deployment_id={DEPLOYMENT_ID}\n"),
         },
         MinLogItem {
-            level: LogLevel::Info,
-            fields: json!({"message": "info", "deployment_id": DEPLOYMENT_ID.to_string()}),
+            data: "DEBUG deploy{deployment_id=\"runtime-fetch-logs-deployment-id\"}: integration_tests: debug\n".to_string(),
         },
         MinLogItem {
-            level: LogLevel::Debug,
-            fields: json!({"message": "debug"}),
+            data: "TRACE deploy{deployment_id=\"runtime-fetch-logs-deployment-id\"}: integration_tests: trace\n".to_string(),
         },
         MinLogItem {
-            level: LogLevel::Trace,
-            fields: json!({"message": "trace"}),
-        },
-        MinLogItem {
-            level: LogLevel::Info,
-            fields: json!({"message": "[span] span_name1", "deployment_id": quoted_deployment_id }),
-        },
-        MinLogItem {
-            level: LogLevel::Trace,
-            fields: json!({"message": "inside span 1 event"}),
-        },
+            data: format!("TRACE deploy{{deployment_id=\"runtime-fetch-logs-deployment-id\"}}:span_name1{{deployment_id=\"{DEPLOYMENT_ID}\"}}: integration_tests: inside span 1 event\n"),
+        }
     ];
 
-    assert_eq!(
-        response
-            .log_items
-            .into_iter()
-            .map(MinLogItem::from)
-            .collect::<Vec<_>>(),
-        expected
-    );
-
-    // Generate some logs with a fn not instrumented with deployment_id, and the
-    // ID not added to the tracer attributes.
-    generate_service_logs(port, DEPLOYMENT_ID.into(), deploy);
-
-    let response = client
-        .get_logs(Request::new(LogsRequest {
-            deployment_id: DEPLOYMENT_ID.into(),
-        }))
-        .await
-        .unwrap()
-        .into_inner();
-
-    // Check that no more logs have been recorded.
     assert_eq!(
         response
             .log_items
@@ -142,10 +106,10 @@ async fn generate_and_get_service_logs() {
         let sqlite = Sqlite::new_in_memory().await;
 
         Server::builder()
-            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-            .add_service(TraceServiceServer::new(ShuttleLogs::new(
-                sqlite.get_sender(),
-            )))
+            .layer(JwtScopesLayer::new(vec![
+                Scope::DeploymentPush,
+                Scope::Logs,
+            ]))
             .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)))
             .serve(addr)
             .await
@@ -156,13 +120,12 @@ async fn generate_and_get_service_logs() {
     // TODO: find out why setting this lower causes spurious failures of these tests.
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    // Start a subscriber and generate some logs using an instrumented deploy function.
-    generate_service_logs(port, DEPLOYMENT_ID.into(), deploy_instrumented);
-    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-
     let dst = format!("http://localhost:{port}");
-
     let mut client = LoggerClient::connect(dst).await.unwrap();
+
+    // Start a subscriber and generate some logs using an instrumented deploy function.
+    generate_service_logs(client.clone(), DEPLOYMENT_ID.into(), deploy_instrumented);
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
     // Get the generated logs
     let response = client
@@ -173,30 +136,21 @@ async fn generate_and_get_service_logs() {
         .unwrap()
         .into_inner();
 
-    let expected = vec![
+    let mut expected = vec![
         MinLogItem {
-            level: LogLevel::Info,
-            fields: json!({"message": "[span] deploy_instrumented", "deployment_id": DEPLOYMENT_ID.to_string() }),
+            data: format!("ERROR deploy_instrumented{{deployment_id={DEPLOYMENT_ID}}}: integration_tests: error\n"),
         },
         MinLogItem {
-            level: LogLevel::Error,
-            fields: json!({"message": "error"}),
+            data: format!(" WARN deploy_instrumented{{deployment_id={DEPLOYMENT_ID}}}: integration_tests: warn\n"),
         },
         MinLogItem {
-            level: LogLevel::Warn,
-            fields: json!({"message": "warn"}),
+            data: format!(" INFO deploy_instrumented{{deployment_id={DEPLOYMENT_ID}}}: integration_tests: info deployment_id={DEPLOYMENT_ID}\n"),
         },
         MinLogItem {
-            level: LogLevel::Info,
-            fields: json!({"message": "info", "deployment_id": DEPLOYMENT_ID.to_string()}),
+            data: format!("DEBUG deploy_instrumented{{deployment_id={DEPLOYMENT_ID}}}: integration_tests: debug\n"),
         },
         MinLogItem {
-            level: LogLevel::Debug,
-            fields: json!({"message": "debug"}),
-        },
-        MinLogItem {
-            level: LogLevel::Trace,
-            fields: json!({"message": "trace"}),
+            data: format!("TRACE deploy_instrumented{{deployment_id={DEPLOYMENT_ID}}}: integration_tests: trace\n"),
         },
     ];
 
@@ -210,8 +164,8 @@ async fn generate_and_get_service_logs() {
     );
 
     // Generate some logs with a fn not instrumented with deployment_id.
-    generate_service_logs(port, DEPLOYMENT_ID.into(), deploy);
-
+    generate_service_logs(client.clone(), DEPLOYMENT_ID.into(), deploy);
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
     let response = client
         .get_logs(Request::new(LogsRequest {
             deployment_id: DEPLOYMENT_ID.into(),
@@ -220,7 +174,27 @@ async fn generate_and_get_service_logs() {
         .unwrap()
         .into_inner();
 
-    // Check that no more logs have been recorded.
+    // Check that more logs were added.
+    expected.extend(vec![
+        MinLogItem {
+            data: format!("ERROR deploy{{deployment_id=\"{DEPLOYMENT_ID}\"}}: integration_tests: error\n"),
+        },
+        MinLogItem {
+            data: format!(" WARN deploy{{deployment_id=\"{DEPLOYMENT_ID}\"}}: integration_tests: warn\n"),
+        },
+        MinLogItem {
+            data: format!(" INFO deploy{{deployment_id=\"{DEPLOYMENT_ID}\"}}: integration_tests: info deployment_id={DEPLOYMENT_ID}\n"),
+        },
+        MinLogItem {
+            data: format!("DEBUG deploy{{deployment_id=\"{DEPLOYMENT_ID}\"}}: integration_tests: debug\n"),
+        },
+        MinLogItem {
+            data: format!("TRACE deploy{{deployment_id=\"{DEPLOYMENT_ID}\"}}: integration_tests: trace\n"),
+        },
+        MinLogItem {
+            data: format!("TRACE deploy{{deployment_id=\"{DEPLOYMENT_ID}\"}}:span_name1{{deployment_id=\"{DEPLOYMENT_ID}\"}}: integration_tests: inside span 1 event\n"),
+        },
+    ]);
     assert_eq!(
         response
             .log_items
@@ -240,12 +214,11 @@ async fn generate_and_stream_logs() {
     // Start the logger server in the background.
     tokio::spawn(async move {
         let sqlite = Sqlite::new_in_memory().await;
-
         Server::builder()
-            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-            .add_service(TraceServiceServer::new(ShuttleLogs::new(
-                sqlite.get_sender(),
-            )))
+            .layer(JwtScopesLayer::new(vec![
+                Scope::DeploymentPush,
+                Scope::Logs,
+            ]))
             .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)))
             .serve(addr)
             .await
@@ -255,12 +228,12 @@ async fn generate_and_stream_logs() {
     // Ensure the server has started.
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
-    // Start a subscriber and generate some logs.
-    generate_runtime_logs(port, DEPLOYMENT_ID.into(), span_name1);
-
     // Connect to the logger server so we can fetch logs.
     let dst = format!("http://localhost:{port}");
     let mut client = LoggerClient::connect(dst).await.unwrap();
+
+    // Start a subscriber and generate some logs.
+    generate_runtime_logs(client.clone(), DEPLOYMENT_ID.into(), span_name1);
 
     // Subscribe to stream
     let mut response = client
@@ -276,31 +249,15 @@ async fn generate_and_stream_logs() {
         .unwrap()
         .unwrap()
         .unwrap();
-
-    let quoted_deployment_id = format!("\"{DEPLOYMENT_ID}\"");
     assert_eq!(
         MinLogItem::from(log),
         MinLogItem {
-            level: LogLevel::Info,
-            fields: json!({"message": "[span] span_name1", "deployment_id": quoted_deployment_id}),
-        },
-    );
-
-    let log = timeout(std::time::Duration::from_millis(500), response.message())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        MinLogItem::from(log),
-        MinLogItem {
-            level: LogLevel::Trace,
-            fields: json!({"message": "inside span 1 event"}),
+            data: format!("TRACE span_name1{{deployment_id=\"{DEPLOYMENT_ID}\"}}: integration_tests: inside span 1 event\n")
         },
     );
 
     // Start a subscriber and generate some more logs.
-    generate_runtime_logs(port, DEPLOYMENT_ID.into(), span_name2);
+    generate_runtime_logs(client.clone(), DEPLOYMENT_ID.into(), span_name2);
 
     let log = timeout(std::time::Duration::from_millis(500), response.message())
         .await
@@ -310,21 +267,7 @@ async fn generate_and_stream_logs() {
     assert_eq!(
         MinLogItem::from(log),
         MinLogItem {
-            level: LogLevel::Trace,
-            fields: json!({"message": "inside span 2 event"}),
-        },
-    );
-
-    let log = timeout(std::time::Duration::from_millis(500), response.message())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        MinLogItem::from(log),
-        MinLogItem {
-            level: LogLevel::Info,
-            fields: json!({"message": "[span] span_name2", "deployment_id": quoted_deployment_id}),
+            data: format!("TRACE span_name2{{deployment_id=\"{DEPLOYMENT_ID}\"}}: integration_tests: inside span 2 event\n")
         },
     );
 }
@@ -332,55 +275,39 @@ async fn generate_and_stream_logs() {
 /// For the service logs the deployment id will be retrieved from the spans of functions
 /// instrumented with the deployment_id field, this way we can choose which spans we want
 /// to associate with a deployment and record in the logger.
-fn generate_service_logs(port: u16, deployment_id: String, generator: fn(String)) {
-    generate_logs(
-        port,
-        deployment_id,
-        generator,
-        vec![KeyValue::new("service.name", "test")],
-    );
+fn generate_service_logs(
+    client: LoggerClient<tonic::transport::Channel>,
+    deployment_id: String,
+    generator: fn(String),
+) {
+    generate_tracing_logs(client, deployment_id, generator);
 }
 
 /// For the shuttle-runtime logs we want to add the deployment id to the top level attributes,
 /// this way we can associate any logs coming from a runtime with a deployment.
-fn generate_runtime_logs(port: u16, deployment_id: String, generator: fn(String)) {
-    generate_logs(
-        port,
-        deployment_id.clone(),
-        generator,
-        vec![
-            KeyValue::new("service.name", "test"),
-            KeyValue::new("deployment_id", deployment_id),
-        ],
-    );
+fn generate_runtime_logs(
+    client: LoggerClient<tonic::transport::Channel>,
+    deployment_id: String,
+    generator: fn(String),
+) {
+    generate_tracing_logs(client, deployment_id, generator);
 }
 
 /// Helper function to setup a tracing subscriber and run an instrumented fn to produce logs.
-fn generate_logs(
-    port: u16,
+fn generate_tracing_logs(
+    client: LoggerClient<tonic::transport::Channel>,
     deployment_id: String,
     generator: fn(String),
-    resources: Vec<KeyValue>,
 ) {
-    // Set up tracing subscriber connected to the logger server.
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint(format!("http://127.0.0.1:{port}")),
-        )
-        .with_trace_config(
-            opentelemetry::sdk::trace::config()
-                .with_resource(opentelemetry::sdk::Resource::new(resources)),
-        )
-        .install_simple()
-        .unwrap();
-    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-
-    let _guard = tracing_subscriber::registry()
-        .with(otel_layer)
-        .set_default();
+    // Set up tracing subscriber connected to the logger server
+    let layer = tracing_subscriber::fmt::layer()
+        .with_writer(Mutex::new(LoggerLayer::new(
+            deployment_id.clone(),
+            SHUTTLE_SERVICE.into(),
+            client,
+        )))
+        .with_ansi(false);
+    let _guard = tracing_subscriber::registry().with(layer).set_default();
 
     // Generate some logs.
     generator(deployment_id);
@@ -417,49 +344,84 @@ fn span_name2(deployment_id: String) {
     trace!("inside span 2 event");
 }
 
+const SHUTTLE_SERVICE: &str = "test";
+
 #[derive(Debug, Eq, PartialEq)]
 struct MinLogItem {
-    level: LogLevel,
-    fields: Value,
+    data: String,
 }
 
 impl From<LogItem> for MinLogItem {
     fn from(log: LogItem) -> Self {
-        assert_eq!(log.service_name, "test");
+        assert_eq!(log.service_name, SHUTTLE_SERVICE);
 
-        let fields = if log.fields.is_empty() {
-            Value::Null
-        } else {
-            let mut fields: Value = serde_json::from_slice(&log.fields).unwrap();
+        let data = String::from_utf8(log.data)
+            .expect("to have valid utf8 log data")
+            .split_once(' ')
+            .unwrap()
+            .1
+            .to_string();
 
-            let map = fields.as_object_mut().unwrap();
+        Self { data }
+    }
+}
 
-            let message = map.get(MESSAGE_KEY).unwrap();
-            // Span logs don't contain a target field
-            if !message.as_str().unwrap().starts_with("[span] ") {
-                let target = map.remove(TARGET_KEY).unwrap();
-                assert_eq!(target, "integration_tests");
-            } else {
-                // We want to remove what's not of interest for checking
-                // the spans are containing the right information.
-                let _ = map.remove("busy_ns").unwrap();
-                let _ = map.remove("idle_ns").unwrap();
-                let _ = map.remove("thread.id").unwrap();
-                let _ = map.remove("thread.name").unwrap();
+struct LoggerLayer {
+    deployment_id: String,
+    shuttle_service: String,
+    tx: UnboundedSender<Vec<Log>>,
+    _logs_forwarding_task: JoinHandle<()>,
+}
+
+impl LoggerLayer {
+    pub fn new(
+        deployment_id: String,
+        shuttle_service: String,
+        mut client: LoggerClient<tonic::transport::Channel>,
+    ) -> Self {
+        let (tx, mut rx): (UnboundedSender<Vec<Log>>, UnboundedReceiver<Vec<Log>>) =
+            tokio::sync::mpsc::unbounded_channel();
+        let handle = tokio::task::spawn(async move {
+            while let Some(logs) = rx.recv().await {
+                // service_tx.broadcast(logs).await.expect("to not fail");
+                // Get the generated logs
+                let _ = client
+                    .store_logs(Request::new(StoreLogsRequest {
+                        logs: logs.into_iter().map(Into::into).collect(),
+                    }))
+                    .await
+                    .unwrap()
+                    .into_inner();
             }
-
-            let filepath = map.remove(FILEPATH_KEY).unwrap();
-            assert_eq!(filepath, "logger/tests/integration_tests.rs");
-
-            map.remove(LINENO_KEY).unwrap();
-            map.remove(NAMESPACE_KEY).unwrap();
-
-            fields
-        };
-
+        });
         Self {
-            level: log.level(),
-            fields,
+            deployment_id,
+            shuttle_service,
+            tx,
+            _logs_forwarding_task: handle,
         }
+    }
+}
+
+impl io::Write for LoggerLayer {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if self
+            .tx
+            .send(vec![Log {
+                deployment_id: self.deployment_id.clone(),
+                shuttle_service_name: self.shuttle_service.clone(),
+                tx_timestamp: Utc::now(),
+                data: buf.to_vec(),
+            }])
+            .is_ok()
+        {
+            return Ok(buf.len());
+        }
+
+        Ok(0)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }

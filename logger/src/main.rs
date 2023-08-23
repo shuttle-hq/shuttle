@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use clap::Parser;
-use opentelemetry_proto::tonic::collector::trace::v1::trace_service_server::TraceServiceServer;
 use shuttle_common::backends::{
     auth::{AuthPublicKey, JwtAuthenticationLayer},
     tracing::{setup_tracing, ExtractPropagationLayer},

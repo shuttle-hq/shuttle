@@ -33,13 +33,6 @@ async fn main() {
         "deployer",
     );
 
-    let runtime_manager = RuntimeManager::new(
-        args.artifacts_path.clone(),
-        args.provisioner_address.uri().to_string(),
-        args.logger_uri.uri().to_string(),
-        Some(args.auth_uri.to_string()),
-    );
-
     let channel = args
         .logger_uri
         .connect()
@@ -52,6 +45,14 @@ async fn main() {
         .service(channel);
 
     let logger_client = LoggerClient::new(channel);
+
+    let runtime_manager = RuntimeManager::new(
+        args.artifacts_path.clone(),
+        args.provisioner_address.uri().to_string(),
+        args.logger_uri.uri().to_string(),
+        logger_client.clone(),
+        Some(args.auth_uri.to_string()),
+    );
 
     select! {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {

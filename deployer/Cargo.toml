@@ -24,6 +24,7 @@ once_cell = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-http = { workspace = true }
 pipe = { workspace = true }
+prost-types = { workspace = true }
 portpicker = { workspace = true }
 rmp-serde = { workspace = true }
 serde = { workspace = true }

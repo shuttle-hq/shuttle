@@ -641,6 +641,7 @@ impl Shuttle {
         };
 
         // Child process and gRPC client for sending requests to it
+        // TODO: Is child stdout should be handled?
         let (mut runtime, mut runtime_client) = runtime::start(
             is_wasm,
             StorageManagerType::WorkingDir(working_directory.to_path_buf()),

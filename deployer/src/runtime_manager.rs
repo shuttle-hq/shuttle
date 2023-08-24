@@ -1,9 +1,13 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::SystemTime};
 
 use anyhow::Context;
+use prost_types::Timestamp;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
-use shuttle_proto::runtime::{self, runtime_client::RuntimeClient, StopRequest};
-use tokio::{process, sync::Mutex};
+use shuttle_proto::{
+    logger::{logger_client::LoggerClient, StoreLogsRequest, StoredLogItem},
+    runtime::{self, runtime_client::RuntimeClient, StopRequest},
+};
+use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
 use tonic::transport::Channel;
 use tracing::{debug, info, trace};
 use uuid::Uuid;
@@ -15,7 +19,7 @@ type Runtimes = Arc<
         HashMap<
             Uuid,
             (
-                process::Child,
+                Arc<Mutex<process::Child>>,
                 RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
             ),
         >,
@@ -30,6 +34,11 @@ pub struct RuntimeManager {
     artifacts_path: PathBuf,
     provisioner_address: String,
     logger_uri: String,
+    logger_client: LoggerClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >,
     auth_uri: Option<String>,
 }
 
@@ -38,6 +47,11 @@ impl RuntimeManager {
         artifacts_path: PathBuf,
         provisioner_address: String,
         logger_uri: String,
+        logger_client: LoggerClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
         auth_uri: Option<String>,
     ) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
@@ -45,6 +59,7 @@ impl RuntimeManager {
             artifacts_path,
             provisioner_address,
             logger_uri,
+            logger_client,
             auth_uri,
         }))
     }
@@ -52,6 +67,7 @@ impl RuntimeManager {
     pub async fn get_runtime_client(
         &mut self,
         id: Uuid,
+        service_name: String,
         alpha_runtime_path: Option<PathBuf>,
     ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
         trace!("making new client");
@@ -115,10 +131,45 @@ impl RuntimeManager {
         .await
         .context("failed to start shuttle runtime")?;
 
+        let process = Arc::new(Mutex::new(process));
+        let process_cloned = Arc::clone(&process);
         self.runtimes
             .lock()
             .unwrap()
             .insert(id, (process, runtime_client.clone()));
+
+        let stdout = process_cloned
+            .lock()
+            .await
+            .stdout
+            .take()
+            .context("child process did not have a handle to stdout")?;
+
+        // Ensure the child process is spawned in the runtime so it can
+        // make progress on its own while we await for any output.
+        tokio::spawn(async move {
+            process_cloned
+                .lock()
+                .await
+                .wait()
+                .await
+                .expect("child process encountered an error");
+        });
+
+        let mut reader = BufReader::new(stdout).lines();
+        let mut logger_client = self.logger_client.clone();
+        tokio::spawn(async move {
+            while let Some(line) = reader.next_line().await.unwrap() {
+                // TODO: `store_logs` accepts a Vec but logs are sent one by one. Is this feasible?
+                let logs = vec![StoredLogItem {
+                    deployment_id: id.to_string(),
+                    service_name: service_name.to_string(),
+                    tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
+                    data: line.as_bytes().to_vec(),
+                }];
+                logger_client.store_logs(StoreLogsRequest { logs }).await;
+            }
+        });
 
         Ok(runtime_client)
     }
@@ -127,7 +178,7 @@ impl RuntimeManager {
     pub async fn kill(&mut self, id: &Uuid) -> bool {
         let value = self.runtimes.lock().unwrap().remove(id);
 
-        if let Some((mut process, mut runtime_client)) = value {
+        if let Some((process, mut runtime_client)) = value {
             trace!(%id, "sending stop signal for deployment");
 
             let stop_request = tonic::Request::new(StopRequest {});
@@ -136,7 +187,7 @@ impl RuntimeManager {
             trace!(?response, "stop deployment response");
 
             let result = response.into_inner().success;
-            let _ = process.start_kill();
+            let _ = process.lock().await.start_kill();
 
             result
         } else {
@@ -151,7 +202,7 @@ impl Drop for RuntimeManager {
         info!("runtime manager shutting down");
 
         for (process, _runtime_client) in self.runtimes.lock().unwrap().values_mut() {
-            let _ = process.start_kill();
+            let _ = process.blocking_lock().start_kill();
         }
     }
 }

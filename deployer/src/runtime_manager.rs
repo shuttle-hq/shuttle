@@ -4,7 +4,7 @@ use anyhow::Context;
 use prost_types::Timestamp;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
-    logger::{logger_client::LoggerClient, StoreLogsRequest, StoredLogItem},
+    logger::{logger_client::LoggerClient, LogItem, LogLine, StoreLogsRequest},
     runtime::{self, runtime_client::RuntimeClient, StopRequest},
 };
 use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
@@ -161,11 +161,13 @@ impl RuntimeManager {
         tokio::spawn(async move {
             while let Some(line) = reader.next_line().await.unwrap() {
                 // TODO: `store_logs` accepts a Vec but logs are sent one by one. Is this feasible?
-                let logs = vec![StoredLogItem {
+                let logs = vec![LogItem {
                     deployment_id: id.to_string(),
-                    service_name: service_name.to_string(),
-                    tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
-                    data: line.as_bytes().to_vec(),
+                    log_line: Some(LogLine {
+                        service_name: service_name.to_string(),
+                        tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
+                        data: "log 1 example".as_bytes().to_vec(),
+                    }),
                 }];
                 logger_client.store_logs(StoreLogsRequest { logs }).await;
             }

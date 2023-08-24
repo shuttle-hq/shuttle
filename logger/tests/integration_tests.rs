@@ -29,10 +29,7 @@ async fn store_and_get_logs() {
     let sqlite_clone = sqlite.clone();
     let server = tokio::task::spawn(async move {
         Server::builder()
-            .layer(JwtScopesLayer::new(vec![
-                Scope::Logs,
-                Scope::DeploymentPush,
-            ]))
+            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
             .add_service(LoggerServer::new(Service::new(
                 sqlite_clone.get_sender(),
                 sqlite_clone,
@@ -109,10 +106,7 @@ async fn get_stream_logs() {
     let sqlite_clone = sqlite.clone();
     let server = tokio::task::spawn(async move {
         Server::builder()
-            .layer(JwtScopesLayer::new(vec![
-                Scope::Logs,
-                Scope::DeploymentPush,
-            ]))
+            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
             .add_service(LoggerServer::new(Service::new(
                 sqlite_clone.get_sender(),
                 sqlite_clone,

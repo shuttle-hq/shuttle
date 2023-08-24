@@ -50,7 +50,6 @@ workspace = true
 
 [dev-dependencies]
 crossbeam-channel = { workspace = true }
-opentelemetry-proto = { workspace = true }
 portpicker = "0.1.1"
 futures = { workspace = true }
 shuttle-service = { workspace = true, features = ["builder"] }

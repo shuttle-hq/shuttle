@@ -6,10 +6,6 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
-use opentelemetry_proto::tonic::collector::trace::v1::{
-    trace_service_server::{TraceService, TraceServiceServer},
-    ExportTraceServiceRequest, ExportTraceServiceResponse,
-};
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
     provisioner::{
@@ -60,7 +56,6 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
     } = runtimes[0].clone();
 
     start_provisioner(DummyProvisioner, provisioner_address);
-    start_log_service(DummyLogService, logger_address);
 
     // TODO: update this to work with shuttle-next projects, see cargo-shuttle local run
     let runtime_path = || executable_path.clone();
@@ -121,30 +116,5 @@ impl Provisioner for DummyProvisioner {
 
     async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
         panic!("did not expect any runtime test to do a provisioner health check")
-    }
-}
-
-/// A dummy log service for tests, a log service connection is required
-/// to start a project runtime.
-pub struct DummyLogService;
-
-fn start_log_service(log_service: DummyLogService, address: SocketAddr) {
-    tokio::spawn(async move {
-        Server::builder()
-            .add_service(TraceServiceServer::new(log_service))
-            .serve(address)
-            .await
-    });
-}
-
-#[async_trait]
-impl TraceService for DummyLogService {
-    async fn export(
-        &self,
-        request: tonic::Request<ExportTraceServiceRequest>,
-    ) -> std::result::Result<tonic::Response<ExportTraceServiceResponse>, tonic::Status> {
-        println!("request: {request:?}");
-
-        Ok(Response::new(Default::default()))
     }
 }

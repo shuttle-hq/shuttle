@@ -330,6 +330,7 @@ mod tests {
                 logger_uri: String,
                 deployment_id: String,
             ) -> ShuttleSimple {
+                use shuttle_runtime::Context;
                 simple().await
             }
         };
@@ -399,6 +400,7 @@ mod tests {
                 logger_uri: String,
                 deployment_id: String,
             ) -> ShuttleComplex {
+                use shuttle_runtime::Context;
                 use shuttle_runtime::{Factory, ResourceBuilder};
                 let pool = shuttle_runtime::get_resource(
                     shuttle_shared_db::Postgres::new(),
@@ -511,6 +513,7 @@ mod tests {
                 logger_uri: String,
                 deployment_id: String,
             ) -> ShuttleComplex {
+                use shuttle_runtime::Context;
                 use shuttle_runtime::{Factory, ResourceBuilder};
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
                 let pool = shuttle_runtime::get_resource (

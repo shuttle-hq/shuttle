@@ -23,15 +23,16 @@ pub enum State {
     Unknown,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploymentMetadata {
     pub env: Environment,
-    pub service_name: String, // TODO: REPLACE WITH PROPER STRING WRAPPER, SORT OUT THEIR DIFFERENCE
+    pub service_name: String, // TODO: replace with proper string wrapper, sort out their difference
     pub project_name: String,
     pub storage_path: PathBuf,
 }
 
 /// This which environment is this deployment taking place
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Environment {
     Local,
     Production,

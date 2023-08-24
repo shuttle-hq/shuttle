@@ -69,7 +69,7 @@ where
                 .await
                 .map_err(|err| {
                     Status::internal(format!(
-                        "Errored while storing trying to store the logs in persistence: {err}"
+                        "Errored while trying to store the logs in persistence: {err}"
                     ))
                 })?;
         }

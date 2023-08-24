@@ -18,8 +18,6 @@ use tonic::{transport::Server, Request};
 
 const SHUTTLE_SERVICE: &str = "test";
 
-// TODO: find out why these tests affect one-another. If running them together setting the timeouts
-// low will cause them to fail spuriously. If running single tests they always pass.
 #[tokio::test]
 async fn store_and_get_logs() {
     let port = pick_unused_port().unwrap();

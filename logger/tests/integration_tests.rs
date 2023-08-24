@@ -10,8 +10,8 @@ use shuttle_common::claims::Scope;
 use shuttle_common_tests::JwtScopesLayer;
 use shuttle_logger::{Service, Sqlite};
 use shuttle_proto::logger::{
-    logger_client::LoggerClient, logger_server::LoggerServer, FetchedLogItem, LogsRequest,
-    StoreLogsRequest, StoredLogItem,
+    logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogLine, LogsRequest,
+    StoreLogsRequest,
 };
 use tokio::{task::JoinHandle, time::timeout};
 use tonic::{transport::Server, Request};
@@ -30,13 +30,13 @@ async fn store_and_get_logs() {
 
         // Get the generated logs
         let expected_stored_logs = vec![
-            StoredLogItem {
+            LogItem {
                 deployment_id: deployment_id.to_string(),
                 service_name: SHUTTLE_SERVICE.to_string(),
                 tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
                 data: "log 1 example".as_bytes().to_vec(),
             },
-            StoredLogItem {
+            LogItem {
                 deployment_id: deployment_id.to_string(),
                 service_name: SHUTTLE_SERVICE.to_string(),
                 tx_timestamp: Some(Timestamp::from(
@@ -70,7 +70,7 @@ async fn store_and_get_logs() {
             expected_stored_logs
                 .into_iter()
                 .map(Into::into)
-                .collect::<Vec<FetchedLogItem>>()
+                .collect::<Vec<LogLine>>()
         );
     });
 
@@ -93,13 +93,13 @@ async fn get_stream_logs() {
 
         // Get the generated logs
         let expected_stored_logs = vec![
-            StoredLogItem {
+            LogItem {
                 deployment_id: deployment_id.to_string(),
                 service_name: SHUTTLE_SERVICE.to_string(),
                 tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
                 data: "log 1 example".as_bytes().to_vec(),
             },
-            StoredLogItem {
+            LogItem {
                 deployment_id: deployment_id.to_string(),
                 service_name: SHUTTLE_SERVICE.to_string(),
                 tx_timestamp: Some(Timestamp::from(
@@ -134,14 +134,14 @@ async fn get_stream_logs() {
             .unwrap()
             .unwrap()
             .unwrap();
-        assert_eq!(FetchedLogItem::from(expected_stored_logs[0].clone()), log);
+        assert_eq!(LogLine::from(expected_stored_logs[0].clone()), log);
 
         let log = timeout(std::time::Duration::from_millis(500), response.message())
             .await
             .unwrap()
             .unwrap()
             .unwrap();
-        assert_eq!(FetchedLogItem::from(expected_stored_logs[1].clone()), log);
+        assert_eq!(LogLine::from(expected_stored_logs[1].clone()), log);
     });
 
     tokio::select! {

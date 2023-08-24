@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use dal::Log;
 use dal::{Dal, DalError};
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
-use shuttle_proto::logger::FetchedLogItem;
+use shuttle_proto::logger::LogLine;
 use shuttle_proto::logger::{
     logger_server::Logger, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
 };
@@ -44,7 +44,7 @@ where
         Self { dal, logs_tx }
     }
 
-    async fn get_logs(&self, deployment_id: String) -> Result<Vec<FetchedLogItem>, Error> {
+    async fn get_logs(&self, deployment_id: String) -> Result<Vec<LogLine>, Error> {
         let logs = self.dal.get_logs(deployment_id).await?;
 
         Ok(logs.into_iter().map(Into::into).collect())
@@ -90,7 +90,7 @@ where
         Ok(Response::new(result))
     }
 
-    type GetLogsStreamStream = ReceiverStream<Result<FetchedLogItem, Status>>;
+    type GetLogsStreamStream = ReceiverStream<Result<LogLine, Status>>;
 
     async fn get_logs_stream(
         &self,

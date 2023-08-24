@@ -4,7 +4,7 @@ use async_broadcast::{broadcast, Sender};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use prost_types::Timestamp;
-use shuttle_proto::logger::{FetchedLogItem, StoredLogItem};
+use shuttle_proto::logger::{LogItem, LogLine};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
     sqlite::{SqliteConnectOptions, SqliteJournalMode},
@@ -129,7 +129,7 @@ pub struct Log {
 }
 
 impl Log {
-    pub(crate) fn from_stored(log: StoredLogItem) -> Self {
+    pub(crate) fn from_stored(log: LogItem) -> Self {
         let timestamp = log.tx_timestamp.clone().unwrap_or_default();
         Log {
             deployment_id: log.deployment_id,
@@ -147,9 +147,9 @@ impl Log {
     }
 }
 
-impl From<Log> for StoredLogItem {
+impl From<Log> for LogItem {
     fn from(log: Log) -> Self {
-        StoredLogItem {
+        LogItem {
             service_name: log.shuttle_service_name,
             deployment_id: log.deployment_id,
             tx_timestamp: Some(Timestamp::from(SystemTime::from(log.tx_timestamp))),
@@ -158,9 +158,9 @@ impl From<Log> for StoredLogItem {
     }
 }
 
-impl From<Log> for FetchedLogItem {
+impl From<Log> for LogLine {
     fn from(log: Log) -> Self {
-        FetchedLogItem {
+        LogLine {
             service_name: log.shuttle_service_name,
             tx_timestamp: Some(Timestamp::from(SystemTime::from(log.tx_timestamp))),
             data: log.data,

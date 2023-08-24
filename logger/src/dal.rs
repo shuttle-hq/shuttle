@@ -129,11 +129,12 @@ pub struct Log {
 }
 
 impl Log {
-    pub(crate) fn from_stored(log: LogItem) -> Self {
-        let timestamp = log.tx_timestamp.clone().unwrap_or_default();
-        Log {
+    pub(crate) fn from_log_item(log: LogItem) -> Option<Self> {
+        let log_line = log.log_line?;
+        let timestamp = log_line.tx_timestamp.clone().unwrap_or_default();
+        Some(Log {
             deployment_id: log.deployment_id,
-            shuttle_service_name: log.service_name,
+            shuttle_service_name: log_line.service_name,
             tx_timestamp: DateTime::from_utc(
                 NaiveDateTime::from_timestamp_opt(
                     timestamp.seconds,
@@ -142,18 +143,20 @@ impl Log {
                 .unwrap_or_default(),
                 Utc,
             ),
-            data: log.data,
-        }
+            data: log_line.data,
+        })
     }
 }
 
 impl From<Log> for LogItem {
     fn from(log: Log) -> Self {
         LogItem {
-            service_name: log.shuttle_service_name,
             deployment_id: log.deployment_id,
-            tx_timestamp: Some(Timestamp::from(SystemTime::from(log.tx_timestamp))),
-            data: log.data,
+            log_line: Some(LogLine {
+                service_name: log.shuttle_service_name,
+                tx_timestamp: Some(Timestamp::from(SystemTime::from(log.tx_timestamp))),
+                data: log.data,
+            }),
         }
     }
 }

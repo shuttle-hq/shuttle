@@ -31,10 +31,8 @@ message LogsResponse {
 }
 
 message LogItem {
-  string service_name = 1;
-  string deployment_id = 2;
-  google.protobuf.Timestamp tx_timestamp = 3;
-  bytes data = 4;
+  string deployment_id = 1;
+  LogLine log_line = 2;
 }
 
 message LogLine {

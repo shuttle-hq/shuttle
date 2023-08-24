@@ -65,7 +65,7 @@ where
         if !logs.is_empty() {
             _ = self
                 .logs_tx
-                .broadcast(logs.into_iter().map(Log::from_stored).collect())
+                .broadcast(logs.into_iter().filter_map(Log::from_log_item).collect())
                 .await
                 .map_err(|err| {
                     Status::internal(format!(

@@ -32,19 +32,23 @@ async fn store_and_get_logs() {
         let expected_stored_logs = vec![
             LogItem {
                 deployment_id: deployment_id.to_string(),
-                service_name: SHUTTLE_SERVICE.to_string(),
-                tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
-                data: "log 1 example".as_bytes().to_vec(),
+                log_line: Some(LogLine {
+                    service_name: SHUTTLE_SERVICE.to_string(),
+                    tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
+                    data: "log 1 example".as_bytes().to_vec(),
+                }),
             },
             LogItem {
                 deployment_id: deployment_id.to_string(),
-                service_name: SHUTTLE_SERVICE.to_string(),
-                tx_timestamp: Some(Timestamp::from(
-                    SystemTime::UNIX_EPOCH
-                        .checked_add(Duration::from_secs(10))
-                        .unwrap(),
-                )),
-                data: "log 2 example".as_bytes().to_vec(),
+                log_line: Some(LogLine {
+                    service_name: SHUTTLE_SERVICE.to_string(),
+                    tx_timestamp: Some(Timestamp::from(
+                        SystemTime::UNIX_EPOCH
+                            .checked_add(Duration::from_secs(10))
+                            .unwrap(),
+                    )),
+                    data: "log 2 example".as_bytes().to_vec(),
+                }),
             },
         ];
         let response = client
@@ -69,7 +73,7 @@ async fn store_and_get_logs() {
             logs,
             expected_stored_logs
                 .into_iter()
-                .map(Into::into)
+                .map(|log| log.log_line.unwrap())
                 .collect::<Vec<LogLine>>()
         );
     });
@@ -95,19 +99,23 @@ async fn get_stream_logs() {
         let expected_stored_logs = vec![
             LogItem {
                 deployment_id: deployment_id.to_string(),
-                service_name: SHUTTLE_SERVICE.to_string(),
-                tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
-                data: "log 1 example".as_bytes().to_vec(),
+                log_line: Some(LogLine {
+                    service_name: SHUTTLE_SERVICE.to_string(),
+                    tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
+                    data: "log 1 example".as_bytes().to_vec(),
+                }),
             },
             LogItem {
                 deployment_id: deployment_id.to_string(),
-                service_name: SHUTTLE_SERVICE.to_string(),
-                tx_timestamp: Some(Timestamp::from(
-                    SystemTime::UNIX_EPOCH
-                        .checked_add(Duration::from_secs(10))
-                        .unwrap(),
-                )),
-                data: "log 2 example".as_bytes().to_vec(),
+                log_line: Some(LogLine {
+                    service_name: SHUTTLE_SERVICE.to_string(),
+                    tx_timestamp: Some(Timestamp::from(
+                        SystemTime::UNIX_EPOCH
+                            .checked_add(Duration::from_secs(10))
+                            .unwrap(),
+                    )),
+                    data: "log 2 example".as_bytes().to_vec(),
+                }),
             },
         ];
 
@@ -134,14 +142,14 @@ async fn get_stream_logs() {
             .unwrap()
             .unwrap()
             .unwrap();
-        assert_eq!(LogLine::from(expected_stored_logs[0].clone()), log);
+        assert_eq!(expected_stored_logs[0].clone().log_line.unwrap(), log);
 
         let log = timeout(std::time::Duration::from_millis(500), response.message())
             .await
             .unwrap()
             .unwrap()
             .unwrap();
-        assert_eq!(LogLine::from(expected_stored_logs[1].clone()), log);
+        assert_eq!(expected_stored_logs[1].clone().log_line.unwrap(), log);
     });
 
     tokio::select! {

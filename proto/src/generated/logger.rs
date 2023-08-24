@@ -26,13 +26,9 @@ pub struct LogsResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogItem {
     #[prost(string, tag = "1")]
-    pub service_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
     pub deployment_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub tx_timestamp: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub data: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub log_line: ::core::option::Option<LogLine>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use shuttle_common::models::deployment::{EXECUTABLE_DIRNAME, STORAGE_DIRNAME};
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     models::{
@@ -68,7 +69,7 @@ use crate::provisioner_server::LocalProvisioner;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 const SHUTTLE_LOGIN_URL: &str = "https://console.shuttle.rs/new-project";
-const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
+const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new/choose";
 const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/introduction/shuttle-commands";
 
 pub struct Shuttle {
@@ -1122,10 +1123,10 @@ impl Shuttle {
             }
         }
 
-        deployment_req.data = self.make_archive()?;
+        deployment_req.data = self.make_archive(self.ctx.static_assets())?;
         if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
             bail!(
-                "The project is too large - we have a {}MB project limit.",
+                "The project is too large - the included files must be less than {}MB after archiving.",
                 CREATE_SERVICE_BODY_LIMIT / 1_000_000
             );
         }
@@ -1359,7 +1360,7 @@ impl Shuttle {
         Ok(())
     }
 
-    fn make_archive(&self) -> Result<Vec<u8>> {
+    fn make_archive(&self, include_patterns: Option<&Vec<String>>) -> Result<Vec<u8>> {
         let encoder = GzEncoder::new(Vec::new(), Compression::fast());
         let mut tar = Builder::new(encoder);
 
@@ -1368,14 +1369,39 @@ impl Shuttle {
             .parent()
             .context("get parent directory of crate")?;
 
-        // Make sure the target  and .git folders are excluded at all times
-        let overrides = OverrideBuilder::new(working_directory)
+        let mut overrides = OverrideBuilder::new(working_directory);
+        overrides
+            // Base rule, since inclusion overrides (those that don't start with '!')
+            // switch it over to whitelist mode
+            .add("*")
+            .context("add `*` override")?
+            // Default excludes
             .add("!.git/")
-            .context("add `!.git/` override")?
+            .context("add `!.git/` override")?;
+        if let Some(rules) = include_patterns {
+            // Custom includes
+            for rule in rules {
+                overrides
+                    .add(rule.as_str())
+                    .context(format!("adding custom include pattern {:?}", rule))?;
+            }
+        }
+        overrides
+            // target folder is excluded at all times
             .add("!target/")
             .context("add `!target/` override")?
+            // Secrets are included at all times
+            .add("Secrets.toml")
+            .context("add `**/Secrets.toml` override")?
+            // these should always be ignored when unpacked in deployment, so ignore them here as well
+            .add(&format!("!{EXECUTABLE_DIRNAME}/"))
+            .context(format!("add `!{EXECUTABLE_DIRNAME}/` override"))?
+            .add(&format!("!{STORAGE_DIRNAME}/"))
+            .context(format!("add `!{STORAGE_DIRNAME}/` override"))?;
+
+        let overrides = overrides
             .build()
-            .context("build an override")?;
+            .context("building archive override rules")?;
 
         // Add all the entries to a map to avoid duplication of the Secrets.toml file
         // if it is in the root of the workspace.
@@ -1387,34 +1413,28 @@ impl Shuttle {
             .build()
         {
             let dir_entry = dir_entry.context("get directory entry")?;
+            let path = dir_entry.path();
+            let file_type = dir_entry.file_type().context("get file type")?;
 
-            let secrets_path = dir_entry.path().join("Secrets.toml");
-
-            if dir_entry.file_type().context("get file type")?.is_dir() {
-                // Make sure to add any `Secrets.toml` files.
-                if secrets_path.exists() {
-                    let path = secrets_path
-                        .strip_prefix(base_directory)
-                        .context("strip the base of the archive entry")?
-                        .to_path_buf();
-                    entries.insert(secrets_path.clone(), path.clone());
-                }
-
+            if file_type.is_dir() {
                 // It's not possible to add a directory to an archive
                 continue;
             }
+            if file_type.is_symlink() {
+                debug!("Skipping symlink {:?}", path);
+                continue;
+            }
 
-            let path = dir_entry
-                .path()
+            let name = path
                 .strip_prefix(base_directory)
                 .context("strip the base of the archive entry")?;
 
-            entries.insert(dir_entry.path().to_path_buf(), path.to_path_buf());
+            entries.insert(path.to_owned(), name.to_owned());
         }
 
-        let secrets_path = self.ctx.working_directory().join("Secrets.toml");
-        if secrets_path.exists() {
-            entries.insert(secrets_path, Path::new("shuttle").join("Secrets.toml"));
+        if entries.is_empty() {
+            error!("No files included in upload. Aborting...");
+            bail!("No files included in upload. Hint: static assets must be inside of workspace.");
         }
 
         // Append all the entries to the archive.
@@ -1588,7 +1608,7 @@ mod tests {
         let mut shuttle = Shuttle::new().unwrap();
         shuttle.load_project(&mut project_args).unwrap();
 
-        let archive = shuttle.make_archive().unwrap();
+        let archive = shuttle.make_archive(None).unwrap();
 
         // Make sure the Secrets.toml file is not initially present
         let tar = GzDecoder::new(&archive[..]);

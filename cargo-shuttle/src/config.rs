@@ -148,6 +148,7 @@ impl GlobalConfig {
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
     pub name: Option<ProjectName>,
+    pub static_assets: Option<Vec<String>>,
 }
 
 /// A handler for configuration files. The type parameter `M` is the [`ConfigManager`] which handles
@@ -385,6 +386,18 @@ impl RequestContext {
             .name
             .as_ref()
             .unwrap()
+    }
+
+    /// # Panics
+    /// Panics if the project configuration has not been loaded.
+    pub fn static_assets(&self) -> Option<&Vec<String>> {
+        self.project
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .static_assets
+            .as_ref()
     }
 }
 

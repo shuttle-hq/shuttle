@@ -5700,7 +5700,6 @@ dependencies = [
  "crossbeam-channel",
  "futures",
  "hyper",
- "opentelemetry-proto",
  "portpicker",
  "prost-types",
  "rmp-serde",

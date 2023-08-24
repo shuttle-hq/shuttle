@@ -44,6 +44,7 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::{StreamExt, TryFutureExt};
 use git2::{Repository, StatusOptions};
+use globset::{Glob, GlobSetBuilder};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
@@ -1103,7 +1104,7 @@ impl Shuttle {
 
             let dirty = self.is_dirty(&repo);
             if !args.allow_dirty && dirty.is_err() {
-                bail!(dirty.unwrap_err().context("dirty not allowed"));
+                bail!(dirty.unwrap_err());
             }
             deployment_req.git_dirty = Some(dirty.is_err());
 
@@ -1365,80 +1366,82 @@ impl Shuttle {
         let mut tar = Builder::new(encoder);
 
         let working_directory = self.ctx.working_directory();
-        let base_directory = working_directory
-            .parent()
-            .context("get parent directory of crate")?;
 
-        let mut overrides = OverrideBuilder::new(working_directory);
-        overrides
-            // Base rule, since inclusion overrides (those that don't start with '!')
-            // switch it over to whitelist mode
-            .add("*")
-            .context("add `*` override")?
-            // Default excludes
+        //
+        // Mixing include and exclude overrides messes up the .ignore and .gitignore etc,
+        // therefore these "ignore" walk and the "include" walk are separate.
+        //
+        let mut entries = Vec::new();
+
+        // Default excludes
+        let ignore_overrides = OverrideBuilder::new(working_directory)
             .add("!.git/")
-            .context("add `!.git/` override")?;
-        if let Some(rules) = include_patterns {
-            // Custom includes
-            for rule in rules {
-                overrides
-                    .add(rule.as_str())
-                    .context(format!("adding custom include pattern {:?}", rule))?;
-            }
-        }
-        overrides
-            // target folder is excluded at all times
+            .context("adding override `!.git/`")?
             .add("!target/")
-            .context("add `!target/` override")?
-            // Secrets are included at all times
-            .add("Secrets.toml")
-            .context("add `**/Secrets.toml` override")?
+            .context("adding override `!target/`")?
             // these should always be ignored when unpacked in deployment, so ignore them here as well
             .add(&format!("!{EXECUTABLE_DIRNAME}/"))
-            .context(format!("add `!{EXECUTABLE_DIRNAME}/` override"))?
+            .context(format!("adding override `!{EXECUTABLE_DIRNAME}/`"))?
             .add(&format!("!{STORAGE_DIRNAME}/"))
-            .context(format!("add `!{STORAGE_DIRNAME}/` override"))?;
-
-        let overrides = overrides
+            .context(format!("adding override `!{STORAGE_DIRNAME}/`"))?
             .build()
             .context("building archive override rules")?;
-
-        // Add all the entries to a map to avoid duplication of the Secrets.toml file
-        // if it is in the root of the workspace.
-        let mut entries = BTreeMap::new();
-
-        for dir_entry in WalkBuilder::new(working_directory)
+        for r in WalkBuilder::new(working_directory)
             .hidden(false)
-            .overrides(overrides)
+            .overrides(ignore_overrides)
             .build()
         {
-            let dir_entry = dir_entry.context("get directory entry")?;
-            let path = dir_entry.path();
-            let file_type = dir_entry.file_type().context("get file type")?;
+            entries.push(r.context("list dir entry")?.into_path())
+        }
 
-            if file_type.is_dir() {
-                // It's not possible to add a directory to an archive
-                continue;
+        let mut globs = GlobSetBuilder::new();
+
+        // Always include secrets
+        globs.add(Glob::new("**/Secrets.toml").unwrap());
+
+        // User provided includes
+        if let Some(rules) = include_patterns {
+            for r in rules {
+                globs.add(Glob::new(r.as_str()).context(format!("parsing glob pattern {:?}", r))?);
             }
-            if file_type.is_symlink() {
-                debug!("Skipping symlink {:?}", path);
+        }
+
+        // Find the files
+        let globs = globs.build().context("glob glob")?;
+        for entry in walkdir::WalkDir::new(working_directory) {
+            let path = entry.context("list dir")?.into_path();
+            if globs.is_match(
+                path.strip_prefix(working_directory)
+                    .context("strip prefix of path")?,
+            ) {
+                entries.push(path);
+            }
+        }
+
+        let mut archive_files = BTreeMap::new();
+        for path in entries {
+            // It's not possible to add a directory to an archive
+            // and symlinks == chaos
+            if path.is_dir() || path.is_symlink() {
+                trace!("Skipping {:?}", path);
                 continue;
             }
 
             let name = path
-                .strip_prefix(base_directory)
-                .context("strip the base of the archive entry")?;
+                .strip_prefix(working_directory.parent().context("get parent dir")?)
+                .context("strip prefix of path")?
+                .to_owned();
 
-            entries.insert(path.to_owned(), name.to_owned());
+            archive_files.insert(path, name);
         }
 
-        if entries.is_empty() {
+        if archive_files.is_empty() {
             error!("No files included in upload. Aborting...");
-            bail!("No files included in upload. Hint: static assets must be inside of workspace.");
+            bail!("No files included in upload.");
         }
 
         // Append all the entries to the archive.
-        for (k, v) in entries {
+        for (k, v) in archive_files {
             debug!("Packing {k:?}");
             tar.append_path_with_name(k, v)?;
         }

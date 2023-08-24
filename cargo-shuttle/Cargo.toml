@@ -24,6 +24,7 @@ dunce = "1.0.3"
 flate2 = { workspace = true }
 futures = { workspace = true }
 git2 = "0.17.2"
+globset = "0.4.13"
 home = { workspace = true }
 headers = { workspace = true }
 indicatif = "0.17.3"
@@ -55,6 +56,7 @@ tracing-subscriber = { workspace = true, features = [
 ] }
 url = "2.3.1"
 uuid = { workspace = true, features = ["v4"] }
+walkdir = "2.3.3"
 webbrowser = "0.8.2"
 
 [dependencies.shuttle-common]

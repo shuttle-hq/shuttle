@@ -1160,6 +1160,7 @@ dependencies = [
  "flate2",
  "futures",
  "git2",
+ "globset",
  "headers",
  "home",
  "ignore",
@@ -1193,6 +1194,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
+ "walkdir",
  "webbrowser",
 ]
 

@@ -1,10 +1,12 @@
 use async_broadcast::Sender;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
+use dal::Log;
 use dal::{Dal, DalError};
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
+use shuttle_proto::logger::FetchedLogItem;
 use shuttle_proto::logger::{
-    logger_server::Logger, LogItem, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
+    logger_server::Logger, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
 };
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -14,7 +16,6 @@ use tonic::{Request, Response, Status};
 pub mod args;
 mod dal;
 
-pub use dal::Log;
 pub use dal::Sqlite;
 use tracing::error;
 
@@ -44,7 +45,7 @@ where
         Self { dal, logs_tx }
     }
 
-    async fn get_logs(&self, deployment_id: String) -> Result<Vec<LogItem>, Error> {
+    async fn get_logs(&self, deployment_id: String) -> Result<Vec<FetchedLogItem>, Error> {
         let logs = self.dal.get_logs(deployment_id).await?;
 
         Ok(logs.into_iter().map(Into::into).collect())
@@ -109,7 +110,7 @@ where
         Ok(Response::new(result))
     }
 
-    type GetLogsStreamStream = ReceiverStream<Result<LogItem, Status>>;
+    type GetLogsStreamStream = ReceiverStream<Result<FetchedLogItem, Status>>;
 
     async fn get_logs_stream(
         &self,

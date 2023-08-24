@@ -3,7 +3,7 @@ use std::{path::Path, str::FromStr, time::SystemTime};
 use async_broadcast::{broadcast, Sender};
 use async_trait::async_trait;
 use prost_types::Timestamp;
-use shuttle_proto::logger::LogItem;
+use shuttle_proto::logger::{FetchedLogItem, StoredLogItem};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
     sqlite::{SqliteConnectOptions, SqliteJournalMode},
@@ -29,6 +29,7 @@ pub trait Dal {
     async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError>;
 }
 
+#[derive(Clone)]
 pub struct Sqlite {
     pool: SqlitePool,
     tx: Sender<Vec<Log>>,
@@ -126,11 +127,21 @@ pub struct Log {
     pub(crate) data: Vec<u8>,
 }
 
-impl From<Log> for LogItem {
+impl From<Log> for StoredLogItem {
     fn from(log: Log) -> Self {
-        LogItem {
+        StoredLogItem {
             service_name: log.shuttle_service_name,
             deployment_id: log.deployment_id,
+            tx_timestamp: Some(Timestamp::from(SystemTime::from(log.tx_timestamp))),
+            data: log.data,
+        }
+    }
+}
+
+impl From<Log> for FetchedLogItem {
+    fn from(log: Log) -> Self {
+        FetchedLogItem {
+            service_name: log.shuttle_service_name,
             tx_timestamp: Some(Timestamp::from(SystemTime::from(log.tx_timestamp))),
             data: log.data,
         }

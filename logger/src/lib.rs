@@ -61,8 +61,6 @@ where
         &self,
         request: Request<StoreLogsRequest>,
     ) -> Result<Response<StoreLogsResponse>, Status> {
-        request.verify(Scope::DeploymentPush)?;
-
         let request = request.into_inner();
         let logs = request.logs;
         if !logs.is_empty() {

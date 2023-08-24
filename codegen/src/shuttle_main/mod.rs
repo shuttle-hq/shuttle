@@ -259,6 +259,7 @@ impl ToTokens for Loader {
                 logger_uri: String,
                 deployment_id: String,
             ) -> #return_type {
+                use shuttle_runtime::Context;
                 #extra_imports
                 #vars
                 #(let #fn_inputs = shuttle_runtime::get_resource(

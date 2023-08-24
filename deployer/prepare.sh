@@ -20,8 +20,9 @@ if [[ $PROD != "true" ]]; then
     shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" }
     shuttle-metadata = { path = "/usr/src/shuttle/resources/metadata" }
     shuttle-persist = { path = "/usr/src/shuttle/resources/persist" }
-    shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
     shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
+    shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
+    shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }
     shuttle-turso = { path = "/usr/src/shuttle/resources/turso" }
 
     shuttle-actix-web = { path = "/usr/src/shuttle/services/shuttle-actix-web" }

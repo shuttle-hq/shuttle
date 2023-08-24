@@ -2,6 +2,7 @@ use std::{path::Path, str::FromStr, time::SystemTime};
 
 use async_broadcast::{broadcast, Sender};
 use async_trait::async_trait;
+use chrono::NaiveDateTime;
 use prost_types::Timestamp;
 use shuttle_proto::logger::{FetchedLogItem, StoredLogItem};
 use sqlx::{
@@ -125,6 +126,25 @@ pub struct Log {
     pub(crate) shuttle_service_name: String,
     pub(crate) tx_timestamp: DateTime<Utc>,
     pub(crate) data: Vec<u8>,
+}
+
+impl Log {
+    pub(crate) fn from_stored(log: StoredLogItem) -> Self {
+        let timestamp = log.tx_timestamp.clone().unwrap_or_default();
+        Log {
+            deployment_id: log.deployment_id,
+            shuttle_service_name: log.service_name,
+            tx_timestamp: DateTime::from_utc(
+                NaiveDateTime::from_timestamp_opt(
+                    timestamp.seconds,
+                    timestamp.nanos.try_into().unwrap_or_default(),
+                )
+                .unwrap_or_default(),
+                Utc,
+            ),
+            data: log.data,
+        }
+    }
 }
 
 impl From<Log> for StoredLogItem {

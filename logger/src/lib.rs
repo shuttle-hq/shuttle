@@ -1,6 +1,5 @@
 use async_broadcast::Sender;
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDateTime, Utc};
 use dal::Log;
 use dal::{Dal, DalError};
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
@@ -66,26 +65,7 @@ where
         if !logs.is_empty() {
             _ = self
                 .logs_tx
-                .broadcast(
-                    logs.into_iter()
-                        .map(|li| {
-                            let timestamp = li.tx_timestamp.clone().unwrap_or_default();
-                            Log {
-                                deployment_id: li.deployment_id,
-                                shuttle_service_name: li.service_name,
-                                tx_timestamp: DateTime::from_utc(
-                                    NaiveDateTime::from_timestamp_opt(
-                                        timestamp.seconds,
-                                        timestamp.nanos.try_into().unwrap_or_default(),
-                                    )
-                                    .unwrap_or_default(),
-                                    Utc,
-                                ),
-                                data: li.data,
-                            }
-                        })
-                        .collect(),
-                )
+                .broadcast(logs.into_iter().map(Log::from_stored).collect())
                 .await
                 .map_err(|err| {
                     println!("failed to send log to storage: {}", err);

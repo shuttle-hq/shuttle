@@ -25,7 +25,7 @@ tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["default", "json"] }
+tracing-subscriber = { workspace = true, features = ["default"] }
 
 [dependencies.shuttle-common]
 workspace = true

@@ -40,7 +40,7 @@ features = ["frameworks"]
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["claims", "backend"]
+features = ["claims"]
 
 [dependencies.shuttle-proto]
 workspace = true

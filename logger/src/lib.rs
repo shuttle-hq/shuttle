@@ -68,8 +68,10 @@ where
                 .broadcast(logs.into_iter().map(Log::from_stored).collect())
                 .await
                 .map_err(|err| {
-                    println!("failed to send log to storage: {}", err);
-                });
+                    Status::internal(format!(
+                        "Errored while storing trying to store the logs in persistence: {err}"
+                    ))
+                })?;
         }
 
         Ok(Response::new(StoreLogsResponse { success: true }))

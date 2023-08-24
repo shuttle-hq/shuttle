@@ -13,7 +13,7 @@ use shuttle_proto::logger::{
     logger_client::LoggerClient, logger_server::LoggerServer, FetchedLogItem, LogsRequest,
     StoreLogsRequest, StoredLogItem,
 };
-use tokio::time::timeout;
+use tokio::{task::JoinHandle, time::timeout};
 use tonic::{transport::Server, Request};
 
 const SHUTTLE_SERVICE: &str = "test";
@@ -21,24 +21,9 @@ const SHUTTLE_SERVICE: &str = "test";
 #[tokio::test]
 async fn store_and_get_logs() {
     let port = pick_unused_port().unwrap();
-    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-    const DEPLOYMENT_ID: &str = "runtime-fetch-logs-deployment-id";
+    let deployment_id = "runtime-fetch-logs-deployment-id";
 
-    // Start the logger server in the background.
-    let sqlite = Sqlite::new_in_memory().await;
-    let sqlite_clone = sqlite.clone();
-    let server = tokio::task::spawn(async move {
-        Server::builder()
-            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-            .add_service(LoggerServer::new(Service::new(
-                sqlite_clone.get_sender(),
-                sqlite_clone,
-            )))
-            .serve(addr)
-            .await
-            .unwrap()
-    });
-
+    let server = get_server(port);
     let test = tokio::task::spawn(async move {
         let dst = format!("http://localhost:{port}");
         let mut client = LoggerClient::connect(dst).await.unwrap();
@@ -46,13 +31,13 @@ async fn store_and_get_logs() {
         // Get the generated logs
         let expected_stored_logs = vec![
             StoredLogItem {
-                deployment_id: DEPLOYMENT_ID.to_string(),
+                deployment_id: deployment_id.to_string(),
                 service_name: SHUTTLE_SERVICE.to_string(),
                 tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
                 data: "log 1 example".as_bytes().to_vec(),
             },
             StoredLogItem {
-                deployment_id: DEPLOYMENT_ID.to_string(),
+                deployment_id: deployment_id.to_string(),
                 service_name: SHUTTLE_SERVICE.to_string(),
                 tx_timestamp: Some(Timestamp::from(
                     SystemTime::UNIX_EPOCH
@@ -74,7 +59,7 @@ async fn store_and_get_logs() {
         // Get logs
         let logs = client
             .get_logs(Request::new(LogsRequest {
-                deployment_id: DEPLOYMENT_ID.into(),
+                deployment_id: deployment_id.into(),
             }))
             .await
             .unwrap()
@@ -98,24 +83,10 @@ async fn store_and_get_logs() {
 #[tokio::test]
 async fn get_stream_logs() {
     let port = pick_unused_port().unwrap();
-    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-    const DEPLOYMENT_ID: &str = "runtime-fetch-logs-deployment-id";
+    let deployment_id = "runtime-fetch-logs-deployment-id";
 
     // Start the logger server in the background.
-    let sqlite = Sqlite::new_in_memory().await;
-    let sqlite_clone = sqlite.clone();
-    let server = tokio::task::spawn(async move {
-        Server::builder()
-            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-            .add_service(LoggerServer::new(Service::new(
-                sqlite_clone.get_sender(),
-                sqlite_clone,
-            )))
-            .serve(addr)
-            .await
-            .unwrap()
-    });
-
+    let server = get_server(port);
     let test = tokio::task::spawn(async move {
         let dst = format!("http://localhost:{port}");
         let mut client = LoggerClient::connect(dst).await.unwrap();
@@ -123,13 +94,13 @@ async fn get_stream_logs() {
         // Get the generated logs
         let expected_stored_logs = vec![
             StoredLogItem {
-                deployment_id: DEPLOYMENT_ID.to_string(),
+                deployment_id: deployment_id.to_string(),
                 service_name: SHUTTLE_SERVICE.to_string(),
                 tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
                 data: "log 1 example".as_bytes().to_vec(),
             },
             StoredLogItem {
-                deployment_id: DEPLOYMENT_ID.to_string(),
+                deployment_id: deployment_id.to_string(),
                 service_name: SHUTTLE_SERVICE.to_string(),
                 tx_timestamp: Some(Timestamp::from(
                     SystemTime::UNIX_EPOCH
@@ -152,7 +123,7 @@ async fn get_stream_logs() {
         // Subscribe to stream
         let mut response = client
             .get_logs_stream(Request::new(LogsRequest {
-                deployment_id: DEPLOYMENT_ID.into(),
+                deployment_id: deployment_id.into(),
             }))
             .await
             .unwrap()
@@ -177,4 +148,17 @@ async fn get_stream_logs() {
         _ = server => panic!("server stopped first"),
         _ = test => ()
     }
+}
+
+fn get_server(port: u16) -> JoinHandle<()> {
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+    tokio::task::spawn(async move {
+        let sqlite = Sqlite::new_in_memory().await;
+        Server::builder()
+            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
+            .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)))
+            .serve(addr)
+            .await
+            .unwrap()
+    })
 }

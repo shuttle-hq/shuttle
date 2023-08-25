@@ -1,5 +1,17 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StoreLogsRequest {
+    #[prost(message, repeated, tag = "1")]
+    pub logs: ::prost::alloc::vec::Vec<LogItem>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StoreLogsResponse {
+    #[prost(bool, tag = "1")]
+    pub success: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogsRequest {
     #[prost(string, tag = "1")]
     pub deployment_id: ::prost::alloc::string::String,
@@ -8,54 +20,25 @@ pub struct LogsRequest {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogsResponse {
     #[prost(message, repeated, tag = "1")]
-    pub log_items: ::prost::alloc::vec::Vec<LogItem>,
+    pub log_items: ::prost::alloc::vec::Vec<LogLine>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogItem {
     #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub log_line: ::core::option::Option<LogLine>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LogLine {
+    #[prost(string, tag = "1")]
     pub service_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
-    pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(enumeration = "LogLevel", tag = "3")]
-    pub level: i32,
-    #[prost(bytes = "vec", tag = "4")]
-    pub fields: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum LogLevel {
-    Trace = 0,
-    Debug = 1,
-    Info = 2,
-    Warn = 3,
-    Error = 4,
-}
-impl LogLevel {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            LogLevel::Trace => "Trace",
-            LogLevel::Debug => "Debug",
-            LogLevel::Info => "Info",
-            LogLevel::Warn => "Warn",
-            LogLevel::Error => "Error",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "Trace" => Some(Self::Trace),
-            "Debug" => Some(Self::Debug),
-            "Info" => Some(Self::Info),
-            "Warn" => Some(Self::Warn),
-            "Error" => Some(Self::Error),
-            _ => None,
-        }
-    }
+    pub tx_timestamp: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub data: ::prost::alloc::vec::Vec<u8>,
 }
 /// Generated client implementations.
 pub mod logger_client {
@@ -126,6 +109,24 @@ pub mod logger_client {
             self.inner = self.inner.accept_compressed(encoding);
             self
         }
+        /// Store logs
+        pub async fn store_logs(
+            &mut self,
+            request: impl tonic::IntoRequest<super::StoreLogsRequest>,
+        ) -> Result<tonic::Response<super::StoreLogsResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/logger.Logger/StoreLogs");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
         /// Get stored logs
         pub async fn get_logs(
             &mut self,
@@ -149,7 +150,7 @@ pub mod logger_client {
             &mut self,
             request: impl tonic::IntoRequest<super::LogsRequest>,
         ) -> Result<
-            tonic::Response<tonic::codec::Streaming<super::LogItem>>,
+            tonic::Response<tonic::codec::Streaming<super::LogLine>>,
             tonic::Status,
         > {
             self.inner
@@ -176,6 +177,11 @@ pub mod logger_server {
     /// Generated trait containing gRPC methods that should be implemented for use with LoggerServer.
     #[async_trait]
     pub trait Logger: Send + Sync + 'static {
+        /// Store logs
+        async fn store_logs(
+            &self,
+            request: tonic::Request<super::StoreLogsRequest>,
+        ) -> Result<tonic::Response<super::StoreLogsResponse>, tonic::Status>;
         /// Get stored logs
         async fn get_logs(
             &self,
@@ -183,7 +189,7 @@ pub mod logger_server {
         ) -> Result<tonic::Response<super::LogsResponse>, tonic::Status>;
         /// Server streaming response type for the GetLogsStream method.
         type GetLogsStreamStream: futures_core::Stream<
-                Item = Result<super::LogItem, tonic::Status>,
+                Item = Result<super::LogLine, tonic::Status>,
             >
             + Send
             + 'static;
@@ -252,6 +258,42 @@ pub mod logger_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
+                "/logger.Logger/StoreLogs" => {
+                    #[allow(non_camel_case_types)]
+                    struct StoreLogsSvc<T: Logger>(pub Arc<T>);
+                    impl<T: Logger> tonic::server::UnaryService<super::StoreLogsRequest>
+                    for StoreLogsSvc<T> {
+                        type Response = super::StoreLogsResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::StoreLogsRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).store_logs(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = StoreLogsSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/logger.Logger/GetLogs" => {
                     #[allow(non_camel_case_types)]
                     struct GetLogsSvc<T: Logger>(pub Arc<T>);
@@ -295,7 +337,7 @@ pub mod logger_server {
                         T: Logger,
                     > tonic::server::ServerStreamingService<super::LogsRequest>
                     for GetLogsStreamSvc<T> {
-                        type Response = super::LogItem;
+                        type Response = super::LogLine;
                         type ResponseStream = T::GetLogsStreamStream;
                         type Future = BoxFuture<
                             tonic::Response<Self::ResponseStream>,

@@ -1,5 +1,4 @@
 use proc_macro::TokenStream;
-use proc_macro2::Punct;
 use proc_macro2::Span;
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
@@ -9,11 +8,10 @@ use syn::{
     Signature, Stmt, Token, Type, TypePath,
 };
 
-pub(crate) fn r#impl(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(attr as MainArgs);
+pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut fn_decl = parse_macro_input!(item as ItemFn);
 
-    let loader = Loader::from_item_fn(&mut fn_decl, args);
+    let loader = Loader::from_item_fn(&mut fn_decl);
 
     quote! {
         #[tokio::main]
@@ -32,7 +30,6 @@ struct Loader {
     fn_ident: Ident,
     fn_inputs: Vec<Input>,
     fn_return: TypePath,
-    fn_args: MainArgs,
 }
 
 #[derive(Debug, PartialEq)]
@@ -87,7 +84,7 @@ impl Parse for BuilderOption {
 }
 
 impl Loader {
-    pub(crate) fn from_item_fn(item_fn: &mut ItemFn, args: MainArgs) -> Option<Self> {
+    pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Option<Self> {
         // rename function to allow any name, such as 'main'
         item_fn.sig.ident = Ident::new(
             &format!("__shuttle_{}", item_fn.sig.ident),
@@ -124,7 +121,6 @@ impl Loader {
             fn_ident: item_fn.sig.ident.clone(),
             fn_inputs: inputs,
             fn_return: type_path,
-            fn_args: args,
         })
     }
 }
@@ -256,16 +252,6 @@ impl ToTokens for Loader {
             (None, None)
         };
 
-        let inject_tracing_layer = match self.fn_args.tracing_args {
-            None => quote! {},
-            Some(ref args) => {
-                let layer_fn = &args.value;
-                quote! {
-                    let registry = registry.with(#layer_fn());
-                }
-            }
-        };
-
         let loader = quote! {
             async fn loader(
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory,
@@ -274,49 +260,7 @@ impl ToTokens for Loader {
                 deployment_id: String,
             ) -> #return_type {
                 use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
-                use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
                 #extra_imports
-
-                let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                    .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
-                    .unwrap();
-
-                let tracer = shuttle_runtime::opentelemetry_otlp::new_pipeline()
-                    .tracing()
-                    .with_exporter(
-                        shuttle_runtime::opentelemetry_otlp::new_exporter()
-                            .tonic()
-                            .with_endpoint(logger_uri),
-                    )
-                    .with_trace_config(
-                        shuttle_runtime::opentelemetry::sdk::trace::config()
-                            .with_resource(
-                                shuttle_runtime::opentelemetry::sdk::Resource::new(
-                                    vec![
-                                        shuttle_runtime::opentelemetry::KeyValue::new(
-                                            "service.name",
-                                            "shuttle-runtime",
-                                        ),
-                                        shuttle_runtime::opentelemetry::KeyValue::new(
-                                            "deployment_id",
-                                            deployment_id,
-                                        )
-                                    ]
-                                )
-                            ),
-                        )
-                    .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
-                    .unwrap();
-                let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
-
-                let registry = shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(otel_layer);
-
-                #inject_tracing_layer
-
-                registry.init();
                 #vars
                 #(let #fn_inputs = shuttle_runtime::get_resource(
                     #fn_inputs_builder::new()#fn_inputs_builder_options,
@@ -335,64 +279,6 @@ impl ToTokens for Loader {
     }
 }
 
-/// Configuration options specified by the user.
-#[derive(Debug, Default)]
-struct MainArgs {
-    tracing_args: Option<TracingAttr>,
-}
-
-impl Parse for MainArgs {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        // Start with empty arguments
-        let mut args = Self::default();
-
-        // If the user didn't pass any arguments, this loop is a no-op.
-        // Otherwise, any argument starts with some identifier. If we find one, we continue to
-        // parse the input according to the name of the identifier.
-        while let Ok(ident) = input.parse::<Ident>() {
-            match ident.to_string().as_str() {
-                "tracing_layer" => {
-                    let equal_sign = input.parse::<Punct>()?;
-
-                    if equal_sign.as_char() != '=' {
-                        emit_error!(ident, "must be followed by a `=`.");
-                    }
-
-                    let value = input.parse()?;
-
-                    args.tracing_args = Some(TracingAttr {
-                        _attr: ident,
-                        _equal_sign: equal_sign,
-                        value,
-                    });
-                }
-
-                attr_ident => emit_error!(attr_ident, "Unknown attribute."),
-            };
-        }
-
-        Ok(args)
-    }
-}
-
-/// An attribute to customize the tracing registry setup by shuttle
-#[derive(Debug)]
-struct TracingAttr {
-    _attr: Ident,
-    _equal_sign: Punct,
-    value: Path,
-}
-
-impl Parse for TracingAttr {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        Ok(Self {
-            _attr: input.parse()?,
-            _equal_sign: input.parse()?,
-            value: input.parse()?,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -407,7 +293,7 @@ mod tests {
             async fn simple() -> ShuttleAxum {}
         );
 
-        let actual = Loader::from_item_fn(&mut input, Default::default()).unwrap();
+        let actual = Loader::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(__shuttle_simple);
         let expected_return: TypePath = parse_quote!(ShuttleAxum);
 
@@ -422,7 +308,7 @@ mod tests {
             async fn main() -> ShuttleAxum {}
         );
 
-        let actual = Loader::from_item_fn(&mut input, Default::default()).unwrap();
+        let actual = Loader::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(__shuttle_main);
 
         assert_eq!(actual.fn_ident, expected_ident);
@@ -434,7 +320,6 @@ mod tests {
             fn_ident: parse_quote!(simple),
             fn_inputs: Vec::new(),
             fn_return: parse_quote!(ShuttleSimple),
-            fn_args: Default::default(),
         };
 
         let actual = quote!(#input);
@@ -446,47 +331,6 @@ mod tests {
                 deployment_id: String,
             ) -> ShuttleSimple {
                 use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
-                use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
-
-                let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                    .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
-                    .unwrap();
-
-                let tracer = shuttle_runtime::opentelemetry_otlp::new_pipeline()
-                    .tracing()
-                    .with_exporter(
-                        shuttle_runtime::opentelemetry_otlp::new_exporter()
-                            .tonic()
-                            .with_endpoint(logger_uri),
-                    )
-                    .with_trace_config(
-                        shuttle_runtime::opentelemetry::sdk::trace::config()
-                            .with_resource(
-                                shuttle_runtime::opentelemetry::sdk::Resource::new(
-                                    vec![
-                                        shuttle_runtime::opentelemetry::KeyValue::new(
-                                            "service.name",
-                                            "shuttle-runtime",
-                                        ),
-                                        shuttle_runtime::opentelemetry::KeyValue::new(
-                                            "deployment_id",
-                                            deployment_id,
-                                        )
-                                    ]
-                                )
-                            ),
-                        )
-                    .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
-                    .unwrap();
-                let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
-
-                let registry = shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(otel_layer);
-
-                registry.init();
-
                 simple().await
             }
         };
@@ -500,7 +344,7 @@ mod tests {
             async fn complex(#[shuttle_shared_db::Postgres] pool: PgPool) -> ShuttleTide {}
         );
 
-        let actual = Loader::from_item_fn(&mut input, Default::default()).unwrap();
+        let actual = Loader::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(__shuttle_complex);
         let expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
@@ -546,7 +390,6 @@ mod tests {
                 },
             ],
             fn_return: parse_quote!(ShuttleComplex),
-            fn_args: Default::default(),
         };
 
         let actual = quote!(#input);
@@ -558,48 +401,7 @@ mod tests {
                 deployment_id: String,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
-                use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
                 use shuttle_runtime::{Factory, ResourceBuilder};
-
-                let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                    .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
-                    .unwrap();
-
-                let tracer = shuttle_runtime::opentelemetry_otlp::new_pipeline()
-                    .tracing()
-                    .with_exporter(
-                        shuttle_runtime::opentelemetry_otlp::new_exporter()
-                            .tonic()
-                            .with_endpoint(logger_uri),
-                    )
-                    .with_trace_config(
-                        shuttle_runtime::opentelemetry::sdk::trace::config()
-                            .with_resource(
-                                shuttle_runtime::opentelemetry::sdk::Resource::new(
-                                    vec![
-                                        shuttle_runtime::opentelemetry::KeyValue::new(
-                                            "service.name",
-                                            "shuttle-runtime",
-                                        ),
-                                        shuttle_runtime::opentelemetry::KeyValue::new(
-                                            "deployment_id",
-                                            deployment_id,
-                                        )
-                                    ]
-                                )
-                            ),
-                        )
-                    .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
-                    .unwrap();
-                let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
-
-                let registry = shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(otel_layer);
-
-                registry.init();
-
                 let pool = shuttle_runtime::get_resource(
                     shuttle_shared_db::Postgres::new(),
                     &mut factory,
@@ -653,7 +455,7 @@ mod tests {
             }
         );
 
-        let actual = Loader::from_item_fn(&mut input, Default::default()).unwrap();
+        let actual = Loader::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(__shuttle_complex);
         let mut expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
@@ -690,7 +492,6 @@ mod tests {
                 },
             }],
             fn_return: parse_quote!(ShuttleComplex),
-            fn_args: Default::default(),
         };
 
         input.fn_inputs[0]
@@ -713,48 +514,7 @@ mod tests {
                 deployment_id: String,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
-                use shuttle_runtime::opentelemetry_otlp::WithExportConfig;
                 use shuttle_runtime::{Factory, ResourceBuilder};
-
-                let filter_layer = shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                    .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("info"))
-                    .unwrap();
-
-                let tracer = shuttle_runtime::opentelemetry_otlp::new_pipeline()
-                    .tracing()
-                    .with_exporter(
-                        shuttle_runtime::opentelemetry_otlp::new_exporter()
-                            .tonic()
-                            .with_endpoint(logger_uri),
-                    )
-                    .with_trace_config(
-                        shuttle_runtime::opentelemetry::sdk::trace::config()
-                            .with_resource(
-                                shuttle_runtime::opentelemetry::sdk::Resource::new(
-                                    vec![
-                                        shuttle_runtime::opentelemetry::KeyValue::new(
-                                            "service.name",
-                                            "shuttle-runtime",
-                                        ),
-                                        shuttle_runtime::opentelemetry::KeyValue::new(
-                                            "deployment_id",
-                                            deployment_id,
-                                        )
-                                    ]
-                                )
-                            ),
-                        )
-                    .install_batch(shuttle_runtime::opentelemetry::runtime::Tokio)
-                    .unwrap();
-                let otel_layer = shuttle_runtime::tracing_opentelemetry::layer().with_tracer(tracer);
-
-                let registry = shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(otel_layer);
-
-                registry.init();
-
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
                 let pool = shuttle_runtime::get_resource (
                     shuttle_shared_db::Postgres::new().size(&shuttle_runtime::strfmt("10Gb", &vars)?).public(false),

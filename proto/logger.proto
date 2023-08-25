@@ -4,11 +4,22 @@ package logger;
 import "google/protobuf/timestamp.proto";
 
 service Logger {
+  // Store logs
+  rpc StoreLogs(StoreLogsRequest) returns (StoreLogsResponse);
+
   // Get stored logs
   rpc GetLogs(LogsRequest) returns (LogsResponse);
 
   // Get fresh logs as they are incoming
-  rpc GetLogsStream(LogsRequest) returns (stream LogItem);
+  rpc GetLogsStream(LogsRequest) returns (stream LogLine);
+}
+
+message StoreLogsRequest {
+  repeated LogItem logs = 1;
+}
+
+message StoreLogsResponse {
+  bool success = 1;
 }
 
 message LogsRequest {
@@ -16,20 +27,16 @@ message LogsRequest {
 }
 
 message LogsResponse {
-  repeated LogItem log_items = 1;
+  repeated LogLine log_items = 1;
 }
 
 message LogItem {
-  string service_name = 1;
-  google.protobuf.Timestamp timestamp = 2;
-  LogLevel level = 3;
-  bytes fields = 4;
+  string deployment_id = 1;
+  LogLine log_line = 2;
 }
 
-enum LogLevel {
-  Trace = 0;
-  Debug = 1;
-  Info = 2;
-  Warn = 3;
-  Error = 4;
+message LogLine {
+  string service_name = 1;
+  google.protobuf.Timestamp tx_timestamp = 2;
+  bytes data = 3;
 }

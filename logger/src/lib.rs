@@ -1,11 +1,12 @@
 use async_broadcast::Sender;
 use async_trait::async_trait;
-use dal::{Dal, DalError, Log};
-use opentelemetry_proto::tonic::collector::trace::v1::{
-    trace_service_server::TraceService, ExportTraceServiceRequest, ExportTraceServiceResponse,
-};
+use dal::Log;
+use dal::{Dal, DalError};
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
-use shuttle_proto::logger::{logger_server::Logger, LogItem, LogsRequest, LogsResponse};
+use shuttle_proto::logger::LogLine;
+use shuttle_proto::logger::{
+    logger_server::Logger, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
+};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -15,6 +16,7 @@ pub mod args;
 mod dal;
 
 pub use dal::Sqlite;
+use tracing::error;
 
 /// A wrapper to capture any error possible with this service
 #[derive(Error, Debug)]
@@ -29,44 +31,6 @@ impl From<Error> for Status {
     }
 }
 
-pub struct ShuttleLogsOtlp {
-    tx: Sender<Vec<Log>>,
-}
-
-impl ShuttleLogsOtlp {
-    pub fn new(tx: Sender<Vec<Log>>) -> Self {
-        Self { tx }
-    }
-}
-
-#[async_trait]
-impl TraceService for ShuttleLogsOtlp {
-    async fn export(
-        &self,
-        request: Request<ExportTraceServiceRequest>,
-    ) -> std::result::Result<tonic::Response<ExportTraceServiceResponse>, tonic::Status> {
-        let request = request.into_inner();
-
-        let logs: Vec<_> = request
-            .resource_spans
-            .into_iter()
-            .flat_map(Log::try_from_scope_span)
-            .flatten()
-            .collect();
-
-        // TODO: consider returning different response for this case.
-        if !logs.is_empty() {
-            _ = self.tx.broadcast(logs).await.map_err(|err| {
-                println!("failed to send log to storage: {}", err);
-            });
-        }
-
-        Ok(Response::new(ExportTraceServiceResponse {
-            partial_success: None,
-        }))
-    }
-}
-
 pub struct Service<D> {
     dal: D,
     logs_tx: Sender<Vec<Log>>,
@@ -76,14 +40,11 @@ impl<D> Service<D>
 where
     D: Dal + Send + Sync + 'static,
 {
-    pub fn new(logs_rx: Sender<Vec<Log>>, dal: D) -> Self {
-        Self {
-            dal,
-            logs_tx: logs_rx,
-        }
+    pub fn new(logs_tx: Sender<Vec<Log>>, dal: D) -> Self {
+        Self { dal, logs_tx }
     }
 
-    async fn get_logs(&self, deployment_id: String) -> Result<Vec<LogItem>, Error> {
+    async fn get_logs(&self, deployment_id: String) -> Result<Vec<LogLine>, Error> {
         let logs = self.dal.get_logs(deployment_id).await?;
 
         Ok(logs.into_iter().map(Into::into).collect())
@@ -95,6 +56,27 @@ impl<D> Logger for Service<D>
 where
     D: Dal + Send + Sync + 'static,
 {
+    async fn store_logs(
+        &self,
+        request: Request<StoreLogsRequest>,
+    ) -> Result<Response<StoreLogsResponse>, Status> {
+        let request = request.into_inner();
+        let logs = request.logs;
+        if !logs.is_empty() {
+            _ = self
+                .logs_tx
+                .broadcast(logs.into_iter().filter_map(Log::from_log_item).collect())
+                .await
+                .map_err(|err| {
+                    Status::internal(format!(
+                        "Errored while trying to store the logs in persistence: {err}"
+                    ))
+                })?;
+        }
+
+        Ok(Response::new(StoreLogsResponse { success: true }))
+    }
+
     async fn get_logs(
         &self,
         request: Request<LogsRequest>,
@@ -108,7 +90,7 @@ where
         Ok(Response::new(result))
     }
 
-    type GetLogsStreamStream = ReceiverStream<Result<LogItem, Status>>;
+    type GetLogsStreamStream = ReceiverStream<Result<LogLine, Status>>;
 
     async fn get_logs_stream(
         &self,
@@ -126,7 +108,7 @@ where
             let mut last = Default::default();
 
             for log in logs {
-                last = log.timestamp.clone().unwrap_or_default();
+                last = log.tx_timestamp.clone().unwrap_or_default();
                 if let Err(error) = tx.send(Ok(log)).await {
                     println!("error sending log: {}", error);
                 };
@@ -134,11 +116,12 @@ where
 
             while let Ok(logs) = logs_rx.recv().await {
                 for log in logs {
-                    let log: LogItem = log.into();
-                    let this_time = log.timestamp.clone().unwrap_or_default();
-
-                    if this_time.seconds >= last.seconds && this_time.nanos > last.nanos {
-                        tx.send(Ok(log)).await.unwrap();
+                    if log.tx_timestamp.timestamp() >= last.seconds
+                        && log.tx_timestamp.timestamp_nanos() > last.nanos.into()
+                    {
+                        tx.send(Ok(log.into())).await.unwrap_or_else(|_| {
+                            error!("Errored while sending logs to persistence")
+                        });
                     }
                 }
             }

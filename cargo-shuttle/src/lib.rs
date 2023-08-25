@@ -8,7 +8,7 @@ mod provisioner_server;
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
-use std::io::stdout;
+use std::io::{stdout, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -46,9 +46,10 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::printdoc;
-use std::fmt::Write;
+use std::fmt::Write as FmtWrite;
 use strum::IntoEnumIterator;
 use tar::Builder;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::task::JoinHandle;
 use tonic::transport::Channel;
@@ -641,7 +642,6 @@ impl Shuttle {
         };
 
         // Child process and gRPC client for sending requests to it
-        // TODO: Is child stdout should be handled?
         let (mut runtime, mut runtime_client) = runtime::start(
             is_wasm,
             StorageManagerType::WorkingDir(working_directory.to_path_buf()),
@@ -657,6 +657,18 @@ impl Shuttle {
             logger_server.abort();
             err
         })?;
+
+        let child_stdout = runtime
+            .stdout
+            .take()
+            .context("child process did not have a handle to stdout")?;
+        let mut reader = BufReader::new(child_stdout).lines();
+        tokio::spawn(async move {
+            while let Some(line) = reader.next_line().await.unwrap() {
+                let mut stdout = stdout().lock();
+                writeln!(stdout, "{}", line).unwrap();
+            }
+        });
 
         let service_name = service.service_name()?;
         let load_request = tonic::Request::new(LoadRequest {

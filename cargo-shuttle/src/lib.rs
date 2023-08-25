@@ -1124,7 +1124,7 @@ impl Shuttle {
             }
         }
 
-        deployment_req.data = self.make_archive(self.ctx.static_assets())?;
+        deployment_req.data = self.make_archive(self.ctx.assets())?;
         if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
             bail!(
                 "The project is too large - the included files must be less than {}MB after archiving.",

@@ -22,6 +22,7 @@ impl Default for InternalLogOrigin {
         Self::Unknown
     }
 }
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::log::Item))]
@@ -33,14 +34,6 @@ pub struct Item {
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]
     pub timestamp: DateTime<Utc>,
     pub line: String,
-    // #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::deployment::State))]
-    // pub state: State,
-    // #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::log::Level))]
-    // pub level: Level,
-    // pub file: Option<String>,
-    // pub line: Option<u32>,
-    // pub target: String,
-    // pub fields: Vec<u8>,
 }
 
 #[cfg(feature = "display")]
@@ -55,43 +48,6 @@ impl std::fmt::Display for Item {
             self.internal_origin,
             self.line,
         )
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[cfg_attr(feature = "openapi", schema(as = shuttle_common::log::Level))]
-pub enum Level {
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-
-#[cfg(feature = "display")]
-impl Level {
-    fn get_colored(&self) -> StyledContent<&str> {
-        match self {
-            Level::Trace => "TRACE".magenta(),
-            Level::Debug => "DEBUG".blue(),
-            Level::Info => " INFO".green(),
-            Level::Warn => " WARN".yellow(),
-            Level::Error => "ERROR".red(),
-        }
-    }
-}
-
-impl From<&tracing::Level> for Level {
-    fn from(level: &tracing::Level) -> Self {
-        match *level {
-            tracing::Level::ERROR => Self::Error,
-            tracing::Level::WARN => Self::Warn,
-            tracing::Level::INFO => Self::Info,
-            tracing::Level::DEBUG => Self::Debug,
-            tracing::Level::TRACE => Self::Trace,
-        }
     }
 }
 

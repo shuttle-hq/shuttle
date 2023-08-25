@@ -147,13 +147,14 @@ impl RuntimeManager {
         tokio::spawn(async move {
             while let Some(line) = reader.next_line().await.unwrap() {
                 // TODO: `store_logs` accepts a Vec but logs are sent one by one. Is this feasible?
+                let utc = Utc::now();
                 let logs = vec![LogItem {
                     deployment_id: id.to_string(),
                     log_line: Some(LogLine {
                         service_name: service_name.to_string(),
                         tx_timestamp: Some(Timestamp {
-                            seconds: Utc::now().timestamp(),
-                            nanos: 0,
+                            seconds: utc.timestamp(),
+                            nanos: utc.timestamp_subsec_nanos().try_into().unwrap_or_default(),
                         }),
                         data: line.as_bytes().to_vec(),
                     }),

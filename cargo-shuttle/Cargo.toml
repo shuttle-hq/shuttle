@@ -42,7 +42,7 @@ serde_json = { workspace = true }
 strum = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal", "rt-multi-thread"] }
-tokio-tungstenite = { version = "0.19.0", features = [
+tokio-tungstenite = { version = "0.20.0", features = [
   "rustls-tls-webpki-roots",
 ] }
 toml = { workspace = true }

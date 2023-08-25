@@ -20,7 +20,7 @@ type Runtimes = Arc<
         HashMap<
             Uuid,
             (
-                Arc<Mutex<process::Child>>,
+                process::Child,
                 RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
             ),
         >,
@@ -120,7 +120,7 @@ impl RuntimeManager {
             }
         };
 
-        let (process, runtime_client) = runtime::start(
+        let (mut process, runtime_client) = runtime::start(
             is_next,
             runtime::StorageManagerType::Artifacts(self.artifacts_path.clone()),
             &self.provisioner_address,
@@ -132,30 +132,15 @@ impl RuntimeManager {
         .await
         .context("failed to start shuttle runtime")?;
 
-        let process = Arc::new(Mutex::new(process));
-        let process_cloned = Arc::clone(&process);
-        self.runtimes
-            .lock()
-            .unwrap()
-            .insert(id, (process, runtime_client.clone()));
-
-        let stdout = process_cloned
-            .lock()
-            .await
+        let stdout = process
             .stdout
             .take()
             .context("child process did not have a handle to stdout")?;
 
-        // Ensure the child process is spawned in the runtime so it can
-        // make progress on its own while we await for any output.
-        tokio::spawn(async move {
-            process_cloned
-                .lock()
-                .await
-                .wait()
-                .await
-                .expect("child process encountered an error");
-        });
+        self.runtimes
+            .lock()
+            .unwrap()
+            .insert(id, (process, runtime_client.clone()));
 
         let mut reader = BufReader::new(stdout).lines();
         let mut logger_client = self.logger_client.clone();
@@ -184,7 +169,7 @@ impl RuntimeManager {
     pub async fn kill(&mut self, id: &Uuid) -> bool {
         let value = self.runtimes.lock().unwrap().remove(id);
 
-        if let Some((process, mut runtime_client)) = value {
+        if let Some((mut process, mut runtime_client)) = value {
             trace!(%id, "sending stop signal for deployment");
 
             let stop_request = tonic::Request::new(StopRequest {});
@@ -193,7 +178,7 @@ impl RuntimeManager {
             trace!(?response, "stop deployment response");
 
             let result = response.into_inner().success;
-            let _ = process.lock().await.start_kill();
+            let _ = process.start_kill();
 
             result
         } else {
@@ -208,7 +193,7 @@ impl Drop for RuntimeManager {
         info!("runtime manager shutting down");
 
         for (process, _runtime_client) in self.runtimes.lock().unwrap().values_mut() {
-            let _ = process.blocking_lock().start_kill();
+            let _ = process.start_kill();
         }
     }
 }

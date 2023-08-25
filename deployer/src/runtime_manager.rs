@@ -1,6 +1,7 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::SystemTime};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use anyhow::Context;
+use chrono::Utc;
 use prost_types::Timestamp;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
@@ -165,8 +166,11 @@ impl RuntimeManager {
                     deployment_id: id.to_string(),
                     log_line: Some(LogLine {
                         service_name: service_name.to_string(),
-                        tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
-                        data: "log 1 example".as_bytes().to_vec(),
+                        tx_timestamp: Some(Timestamp {
+                            seconds: Utc::now().timestamp(),
+                            nanos: 0,
+                        }),
+                        data: line.as_bytes().to_vec(),
                     }),
                 }];
                 logger_client.store_logs(StoreLogsRequest { logs }).await;

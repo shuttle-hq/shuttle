@@ -95,7 +95,7 @@ pub mod provisioner {
 }
 
 pub mod runtime {
-    use std::{path::PathBuf, time::Duration};
+    use std::{path::PathBuf, process::Stdio, time::Duration};
 
     use anyhow::Context;
     use shuttle_common::claims::{
@@ -164,6 +164,7 @@ pub mod runtime {
         );
         let runtime = process::Command::new(runtime_executable_path)
             .args(&args)
+            .stdout(Stdio::piped())
             .kill_on_drop(true)
             .spawn()
             .context("spawning runtime process")?;

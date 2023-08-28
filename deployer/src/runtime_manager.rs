@@ -1,9 +1,14 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use anyhow::Context;
+use chrono::Utc;
+use prost_types::Timestamp;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
-use shuttle_proto::runtime::{self, runtime_client::RuntimeClient, StopRequest};
-use tokio::{process, sync::Mutex};
+use shuttle_proto::{
+    logger::{logger_client::LoggerClient, LogItem, LogLine, StoreLogsRequest},
+    runtime::{self, runtime_client::RuntimeClient, StopRequest},
+};
+use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
 use tonic::transport::Channel;
 use tracing::{debug, info, trace};
 use uuid::Uuid;
@@ -30,6 +35,11 @@ pub struct RuntimeManager {
     artifacts_path: PathBuf,
     provisioner_address: String,
     logger_uri: String,
+    logger_client: LoggerClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >,
     auth_uri: Option<String>,
 }
 
@@ -38,6 +48,11 @@ impl RuntimeManager {
         artifacts_path: PathBuf,
         provisioner_address: String,
         logger_uri: String,
+        logger_client: LoggerClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
         auth_uri: Option<String>,
     ) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
@@ -45,6 +60,7 @@ impl RuntimeManager {
             artifacts_path,
             provisioner_address,
             logger_uri,
+            logger_client,
             auth_uri,
         }))
     }
@@ -52,6 +68,7 @@ impl RuntimeManager {
     pub async fn get_runtime_client(
         &mut self,
         id: Uuid,
+        service_name: String,
         alpha_runtime_path: Option<PathBuf>,
     ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
         trace!("making new client");
@@ -103,7 +120,7 @@ impl RuntimeManager {
             }
         };
 
-        let (process, runtime_client) = runtime::start(
+        let (mut process, runtime_client) = runtime::start(
             is_next,
             runtime::StorageManagerType::Artifacts(self.artifacts_path.clone()),
             &self.provisioner_address,
@@ -115,10 +132,36 @@ impl RuntimeManager {
         .await
         .context("failed to start shuttle runtime")?;
 
+        let stdout = process
+            .stdout
+            .take()
+            .context("child process did not have a handle to stdout")?;
+
         self.runtimes
             .lock()
             .unwrap()
             .insert(id, (process, runtime_client.clone()));
+
+        let mut reader = BufReader::new(stdout).lines();
+        let mut logger_client = self.logger_client.clone();
+        tokio::spawn(async move {
+            while let Some(line) = reader.next_line().await.unwrap() {
+                // TODO: `store_logs` accepts a Vec but logs are sent one by one. Is this feasible?
+                let utc = Utc::now();
+                let logs = vec![LogItem {
+                    deployment_id: id.to_string(),
+                    log_line: Some(LogLine {
+                        service_name: service_name.to_string(),
+                        tx_timestamp: Some(Timestamp {
+                            seconds: utc.timestamp(),
+                            nanos: utc.timestamp_subsec_nanos().try_into().unwrap_or_default(),
+                        }),
+                        data: line.as_bytes().to_vec(),
+                    }),
+                }];
+                logger_client.store_logs(StoreLogsRequest { logs }).await;
+            }
+        });
 
         Ok(runtime_client)
     }

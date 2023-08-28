@@ -46,9 +46,10 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::printdoc;
-use std::fmt::Write;
+use std::fmt::Write as FmtWrite;
 use strum::IntoEnumIterator;
 use tar::Builder;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::task::JoinHandle;
 use tonic::transport::Channel;
@@ -657,6 +658,17 @@ impl Shuttle {
             logger_server.abort();
             err
         })?;
+
+        let child_stdout = runtime
+            .stdout
+            .take()
+            .context("child process did not have a handle to stdout")?;
+        let mut reader = BufReader::new(child_stdout).lines();
+        tokio::spawn(async move {
+            while let Some(line) = reader.next_line().await.unwrap() {
+                println!("{}", line);
+            }
+        });
 
         let service_name = service.service_name()?;
         let load_request = tonic::Request::new(LoadRequest {

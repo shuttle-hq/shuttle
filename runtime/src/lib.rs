@@ -27,9 +27,9 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.24.0"
+//! shuttle-runtime = "0.25.0"
 //! axum = "0.6.10"
-//! shuttle-axum = "0.24.0"
+//! shuttle-axum = "0.25.0"
 //! tokio = "1.26"
 //! ```
 //!
@@ -113,7 +113,7 @@
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.24.0", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.25.0", features = ["postgres"] }
 //! sqlx = { version = "0.7.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!

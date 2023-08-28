@@ -60,7 +60,7 @@ impl RequestWrapper {
         request
             .headers_mut()
             .unwrap() // Safe to unwrap as we just made the builder
-            .extend(self.headers.into_iter());
+            .extend(self.headers);
 
         request
     }
@@ -107,7 +107,7 @@ impl ResponseWrapper {
         response
             .headers_mut()
             .unwrap() // Safe to unwrap since we just made the builder
-            .extend(self.headers.into_iter());
+            .extend(self.headers);
 
         response
     }

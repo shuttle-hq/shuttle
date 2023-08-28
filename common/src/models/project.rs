@@ -13,11 +13,11 @@ use strum::EnumString;
 use utoipa::ToSchema;
 
 /// Timeframe before a project is considered idle
-pub const IDLE_MINUTES: u64 = 30;
+pub const DEFAULT_IDLE_MINUTES: u64 = 30;
 
-/// Function to set [IDLE_MINUTES] as a serde default
-pub const fn idle_minutes() -> u64 {
-    IDLE_MINUTES
+/// Function to set [DEFAULT_IDLE_MINUTES] as a serde default
+pub const fn default_idle_minutes() -> u64 {
+    DEFAULT_IDLE_MINUTES
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -29,6 +29,7 @@ pub struct Response {
     pub name: String,
     #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::models::project::State))]
     pub state: State,
+    pub idle_minutes: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]

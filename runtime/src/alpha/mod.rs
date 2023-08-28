@@ -195,7 +195,7 @@ where
         } = request.into_inner();
         trace!(path, "loading alpha project");
 
-        let secrets = BTreeMap::from_iter(secrets.into_iter());
+        let secrets = BTreeMap::from_iter(secrets);
 
         let channel = self
             .provisioner_address

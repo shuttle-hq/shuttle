@@ -11,7 +11,7 @@ in
       openssl
     ];
     buildInputs = with nixpkgs; [
-      ((rustChannelOf{ channel = "1.70.0"; }).rust.override {
+      ((rustChannelOf{ channel = "1.72.0"; }).rust.override {
         extensions = ["rust-src"];
         targets = ["wasm32-wasi"];
       })

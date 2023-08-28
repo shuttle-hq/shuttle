@@ -286,8 +286,9 @@ mod tests {
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use portpicker::pick_unused_port;
-    use shuttle_common::claims::Claim;
+    use shuttle_common::claims::{Claim, ClaimLayer, InjectPropagationLayer};
     use shuttle_proto::{
+        logger::logger_client::LoggerClient,
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
@@ -296,7 +297,8 @@ mod tests {
     };
     use tempfile::Builder;
     use tokio::{select, time::sleep};
-    use tonic::transport::Server;
+    use tonic::transport::{Endpoint, Server};
+    use tower::ServiceBuilder;
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     use ulid::Ulid;
     use uuid::Uuid;
@@ -432,10 +434,13 @@ mod tests {
         }
     }
 
-    fn get_runtime_manager() -> Arc<tokio::sync::Mutex<RuntimeManager>> {
+    async fn get_runtime_manager() -> Arc<tokio::sync::Mutex<RuntimeManager>> {
         let provisioner_addr =
             SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
-        let logger_uri = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
+        let logger_uri = format!(
+            "http://{}",
+            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap())
+        );
         let mock = ProvisionerMock;
 
         tokio::spawn(async move {
@@ -449,10 +454,24 @@ mod tests {
         let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
 
+        let channel = Endpoint::try_from(logger_uri.to_string())
+            .unwrap()
+            .connect()
+            .await
+            .expect("failed to connect to logger");
+
+        let channel = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
+
+        let logger_client = LoggerClient::new(channel);
+
         RuntimeManager::new(
             path,
             format!("http://{}", provisioner_addr),
-            format!("http://{}", logger_uri),
+            logger_uri,
+            logger_client,
             None,
         )
     }
@@ -590,7 +609,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("sleep-async");
         let id = queued.id;
@@ -674,7 +693,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_self_stop() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("self-stop");
         let id = queued.id;
@@ -721,7 +740,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_bind_panic() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("bind-panic");
         let id = queued.id;
@@ -768,7 +787,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_main_panic() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("main-panic");
         let id = queued.id;
@@ -811,7 +830,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_from_run() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let id = Uuid::new_v4();
         deployment_manager
@@ -855,7 +874,7 @@ mod tests {
 
     #[tokio::test]
     async fn scope_with_nil_id() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let id = Uuid::nil();
         deployment_manager
@@ -883,7 +902,7 @@ mod tests {
         );
     }
 
-    fn get_deployment_manager() -> DeploymentManager {
+    async fn get_deployment_manager() -> DeploymentManager {
         DeploymentManager::builder()
             .build_log_recorder(RECORDER.clone())
             .secret_recorder(RECORDER.clone())
@@ -891,7 +910,7 @@ mod tests {
             .artifacts_path(PathBuf::from("/tmp"))
             .secret_getter(StubSecretGetter)
             .resource_manager(StubResourceManager)
-            .runtime(get_runtime_manager())
+            .runtime(get_runtime_manager().await)
             .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)
             .build()

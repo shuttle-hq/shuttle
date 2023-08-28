@@ -357,7 +357,7 @@ jobs:
       - save-buildx-cache
   deploy-images:
     executor: machine-ubuntu
-    resource_class: small
+    resource_class: medium
     parameters:
       ssh-fingerprint:
         description: "SSH-key fingerprint"

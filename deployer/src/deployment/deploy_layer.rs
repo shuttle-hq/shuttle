@@ -460,7 +460,10 @@ mod tests {
             .await
             .expect("failed to connect to logger");
 
-        let channel = ServiceBuilder::new().service(channel);
+        let channel = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
 
         let logger_client = LoggerClient::new(channel);
 

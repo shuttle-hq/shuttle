@@ -449,8 +449,12 @@ mod tests {
 
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
-    use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
+    use shuttle_common::{
+        claims::{Claim, ClaimLayer, InjectPropagationLayer},
+        storage_manager::ArtifactsStorageManager,
+    };
     use shuttle_proto::{
+        logger::logger_client::LoggerClient,
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
@@ -463,7 +467,8 @@ mod tests {
         sync::{oneshot, Mutex},
         time::sleep,
     };
-    use tonic::transport::Server;
+    use tonic::transport::{Endpoint, Server};
+    use tower::ServiceBuilder;
     use ulid::Ulid;
     use uuid::Uuid;
 
@@ -513,10 +518,13 @@ mod tests {
         }
     }
 
-    fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
+    async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
         let provisioner_addr =
             SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
-        let logger_uri = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
+        let logger_uri = format!(
+            "http://{}",
+            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap())
+        );
         let mock = ProvisionerMock;
 
         tokio::spawn(async move {
@@ -530,10 +538,24 @@ mod tests {
         let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
 
+        let channel = Endpoint::try_from(logger_uri.to_string())
+            .unwrap()
+            .connect()
+            .await
+            .expect("failed to connect to logger");
+
+        let channel = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
+
+        let logger_client = LoggerClient::new(channel);
+
         RuntimeManager::new(
             path,
             format!("http://{}", provisioner_addr),
-            format!("http://{}", logger_uri),
+            logger_uri,
+            logger_client,
             None,
         )
     }
@@ -602,7 +624,7 @@ mod tests {
     async fn can_be_killed() {
         let (built, storage_manager) = make_and_built("sleep-async");
         let id = built.id;
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
         let handle_cleanup = |response: Option<SubscribeStopResponse>| {
@@ -645,7 +667,7 @@ mod tests {
     #[tokio::test]
     async fn self_stop() {
         let (built, storage_manager) = make_and_built("sleep-async");
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
         let handle_cleanup = |response: Option<SubscribeStopResponse>| {
@@ -685,7 +707,7 @@ mod tests {
     #[tokio::test]
     async fn panic_in_bind() {
         let (built, storage_manager) = make_and_built("bind-panic");
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
         let handle_cleanup = |response: Option<SubscribeStopResponse>| {
@@ -728,7 +750,7 @@ mod tests {
     #[should_panic(expected = "Load(\"main panic\")")]
     async fn panic_in_main() {
         let (built, storage_manager) = make_and_built("main-panic");
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
 
         let handle_cleanup = |_result| panic!("service should never be started");
 

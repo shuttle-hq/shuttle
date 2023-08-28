@@ -739,8 +739,8 @@ workflows:
           mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
           honeycomb-api-key: DEV_HONEYCOMB_API_KEY
           deploys-api-key: DEV_DEPLOYS_API_KEY
-          requires:
-            - build-and-push-unstable
+          # requires:
+          #   - build-and-push-unstable
   release:
     jobs:
       - linux-qa:

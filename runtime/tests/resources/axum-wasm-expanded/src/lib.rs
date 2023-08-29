@@ -24,7 +24,7 @@ async fn app(request: shuttle_next::Request<BoxBody>) -> shuttle_next::response:
 }
 
 async fn hello() -> &'static str {
-    println!("in goodbye()");
+    println!("in hello()");
     "Hello, World!"
 }
 

@@ -25,7 +25,6 @@ tokio = { workspace = true, features = ["full"] }
 tokio-stream = "0.1.11"
 tonic = { workspace = true }
 tower = { workspace = true }
-tracing = { workspace = true, features = ["default"] }
 cap-std = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 hyper = { workspace = true, optional = true }

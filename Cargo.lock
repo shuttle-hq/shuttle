@@ -5715,7 +5715,6 @@ dependencies = [
  "tokio-stream",
  "tonic",
  "tower",
- "tracing",
  "uuid",
  "wasi-common",
  "wasmtime",

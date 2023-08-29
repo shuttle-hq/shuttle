@@ -31,8 +31,7 @@ use shuttle_proto::{
 use shuttle_service::{Environment, Factory, Service, ServiceName};
 use tokio::sync::{
     broadcast::{self, Sender},
-    mpsc::{self},
-    oneshot,
+    mpsc, oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
@@ -40,7 +39,6 @@ use tonic::{
     Request, Response, Status,
 };
 use tower::ServiceBuilder;
-use tracing::{error, info, trace, warn};
 
 use crate::{print_version, provisioner_factory::ProvisionerFactory, ResourceTracker};
 
@@ -59,7 +57,6 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         Ok(args) => args,
         Err(e) => {
             println!("runtime received malformed or incorrect args, {e}");
-            error!("{e}");
             let help_str = "[HINT]: Run shuttle with `cargo shuttle run`";
             let wrapper_str = "-".repeat(help_str.len());
             println!("{wrapper_str}\n{help_str}\n{wrapper_str}");
@@ -200,7 +197,7 @@ where
             service_name,
             deployment_id,
         } = request.into_inner();
-        trace!(path, "loading alpha project");
+        println!("loading alpha project at {path}");
 
         let secrets = BTreeMap::from_iter(secrets.into_iter());
 
@@ -236,7 +233,6 @@ where
             self.env,
             claim,
         );
-        trace!("got factory");
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
@@ -253,7 +249,7 @@ where
             Ok(res) => match res {
                 Ok(service) => service,
                 Err(error) => {
-                    error!(%error, "loading service failed");
+                    println!("loading service failed: {error}");
 
                     let message = LoadResponse {
                         success: false,
@@ -286,7 +282,7 @@ where
                         },
                     };
 
-                    error!(error = msg, "loading service panicked");
+                    println!("loading service panicked: {msg}");
 
                     let message = LoadResponse {
                         success: false,
@@ -295,7 +291,7 @@ where
                     };
                     return Ok(Response::new(message));
                 } else {
-                    error!(%error, "loading service crashed");
+                    println!("loading service crashed: {error}");
                     let message = LoadResponse {
                         success: false,
                         message: error.to_string(),
@@ -325,7 +321,7 @@ where
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        trace!("alpha starting");
+        println!("alpha starting");
         let service = self.service.lock().unwrap().deref_mut().take();
         let service = service.unwrap();
 
@@ -334,7 +330,7 @@ where
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        trace!(%service_address, "starting");
+        println!("starting on {service_address}");
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
@@ -351,10 +347,10 @@ where
                 res = &mut background => {
                     match res {
                         Ok(_) => {
-                            info!("service stopped all on its own");
+                            println!("service stopped all on its own");
                             let _ = stopped_tx
                                 .send((StopReason::End, String::new()))
-                                .map_err(|e| error!("{e}"));
+                                .map_err(|e| println!("{e}"));
                         },
                         Err(error) => {
                             if error.is_panic() {
@@ -367,16 +363,16 @@ where
                                     },
                                 };
 
-                                error!(error = msg, "service panicked");
+                                println!( "service panicked: {msg}");
 
                                 let _ = stopped_tx
                                     .send((StopReason::Crash, msg))
-                                    .map_err(|e| error!("{e}"));
+                                    .map_err(|e| println!("{e}"));
                             } else {
-                                error!(%error, "service crashed");
+                                println!( "service crashed: {error}");
                                 let _ = stopped_tx
                                     .send((StopReason::Crash, error.to_string()))
-                                    .map_err(|e| error!("{e}"));
+                                    .map_err(|e| println!("{e}"));
                             }
                         },
                     }
@@ -386,12 +382,12 @@ where
                         Ok(_) => {
                             let _ = stopped_tx
                                 .send((StopReason::Request, String::new()))
-                                .map_err(|e| error!("{e}"));
+                                .map_err(|e| println!("{e}"));
                         }
-                        Err(_) => trace!("the sender dropped")
+                        Err(_) => println!("the kill sender dropped")
                     };
 
-                    info!("will now abort the service");
+                    println!("will now abort the service");
                     background.abort();
                     background.await.unwrap().expect("to stop service");
                 }
@@ -408,13 +404,13 @@ where
 
         if let Some(kill_tx) = kill_tx {
             if kill_tx.send("stopping deployment".to_owned()).is_err() {
-                error!("the receiver dropped");
+                println!("the kill receiver dropped");
                 return Err(Status::internal("failed to stop deployment"));
             }
 
             Ok(Response::new(StopResponse { success: true }))
         } else {
-            warn!("failed to stop deployment");
+            println!("failed to stop deployment");
 
             Ok(tonic::Response::new(StopResponse { success: false }))
         }

@@ -1,22 +1,14 @@
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 
-pub use args::Args;
-pub use deployment::deploy_layer::DeployLayer;
-use deployment::DeploymentManager;
 use fqdn::FQDN;
 use hyper::{
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
 };
-pub use persistence::Persistence;
-use proxy::AddressGetter;
-pub use runtime_manager::RuntimeManager;
 use shuttle_proto::logger::logger_client::LoggerClient;
 use tokio::sync::Mutex;
 use tracing::{error, info};
 use ulid::Ulid;
-
-use crate::deployment::gateway_client::GatewayClient;
 
 mod args;
 mod deployment;
@@ -25,6 +17,13 @@ pub mod handlers;
 mod persistence;
 mod proxy;
 mod runtime_manager;
+
+pub use crate::args::Args;
+pub use crate::deployment::state_change_layer::StateChangeLayer;
+use crate::deployment::{gateway_client::GatewayClient, DeploymentManager};
+pub use crate::persistence::Persistence;
+use crate::proxy::AddressGetter;
+pub use crate::runtime_manager::RuntimeManager;
 
 pub async fn start(
     persistence: Persistence,
@@ -38,7 +37,7 @@ pub async fn start(
 ) {
     // when _set is dropped once axum exits, the deployment tasks will be aborted.
     let deployment_manager = DeploymentManager::builder()
-        .build_log_recorder(persistence.clone())
+        .build_log_recorder(log_fetcher.clone())
         .secret_recorder(persistence.clone())
         .active_deployment_getter(persistence.clone())
         .artifacts_path(args.artifacts_path)

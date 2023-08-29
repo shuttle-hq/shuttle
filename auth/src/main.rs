@@ -1,7 +1,7 @@
 use std::io;
 
 use clap::Parser;
-use shuttle_common::backends::tracing::setup_tracing;
+use shuttle_common::{backends::tracing::setup_tracing, log::Backend};
 use sqlx::migrate::Migrator;
 use tracing::{info, trace};
 
@@ -15,7 +15,7 @@ async fn main() -> io::Result<()> {
 
     trace!(args = ?args, "parsed args");
 
-    setup_tracing(tracing_subscriber::registry(), "auth");
+    setup_tracing(tracing_subscriber::registry(), Backend::Auth);
 
     let db_path = args.state.join("authentication.sqlite");
 

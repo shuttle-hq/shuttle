@@ -86,7 +86,6 @@ pub trait DeploymentUpdater: Clone + Send + Sync + 'static {
 pub struct DeploymentState {
     pub id: Uuid,
     pub state: State,
-    pub last_update: DateTime<Utc>,
 }
 
 #[derive(Debug, PartialEq, Eq)]

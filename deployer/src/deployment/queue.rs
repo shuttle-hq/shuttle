@@ -11,8 +11,7 @@ use chrono::Utc;
 use crossbeam_channel::Sender;
 use flate2::read::GzDecoder;
 use opentelemetry::global;
-use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_workspace, BuiltService};
+use shuttle_common::log::LogRecorder;
 use tar::Archive;
 use tokio::fs;
 use tokio::task::JoinSet;
@@ -22,12 +21,17 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use super::deploy_layer::{Log, LogRecorder};
+use shuttle_common::{
+    claims::Claim,
+    storage_manager::{ArtifactsStorageManager, StorageManager},
+    LogItem,
+};
+use shuttle_service::builder::{build_workspace, BuiltService};
+
 use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
 use crate::persistence::{DeploymentUpdater, SecretRecorder};
-use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
 
 pub async fn task(
     mut recv: QueueReceiver,
@@ -192,18 +196,13 @@ impl Queued {
                 trace!(?message, "received cargo message");
                 // TODO: change these to `info!(...)` as [valuable] support increases.
                 // Currently it is not possible to turn these serde `message`s into a `valuable`, but once it is the passing down of `log_recorder` should be removed.
-                let log = match message {
-                    Message::TextLine(line) => Log {
-                        deployment_id: self.id,
-                        internal_origin: shuttle_common::log::InternalLogOrigin::Deployer, // will change to Builder
-                        tx_timestamp: Utc::now(),
-                        line,
-                    },
-                    message => Log {
-                        deployment_id: self.id,
-                        internal_origin: shuttle_common::log::InternalLogOrigin::Deployer, // will change to Builder
-                        tx_timestamp: Utc::now(),
-                        line: serde_json::to_string(&message).unwrap(),
+                let log = LogItem {
+                    id: self.id,
+                    internal_origin: shuttle_common::log::Backend::Deployer, // will change to Builder
+                    timestamp: Utc::now(),
+                    line: match message {
+                        Message::TextLine(line) => line,
+                        message => serde_json::to_string(&message).unwrap(),
                     },
                 };
                 log_recorder.record(log);

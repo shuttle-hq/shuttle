@@ -12,7 +12,7 @@ pub type DeploymentId = Uuid;
 #[cfg(feature = "service")]
 pub mod log;
 #[cfg(feature = "service")]
-pub use log::Item as LogItem;
+pub use log::LogItem;
 #[cfg(feature = "models")]
 pub mod models;
 #[cfg(feature = "service")]

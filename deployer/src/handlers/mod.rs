@@ -70,7 +70,7 @@ mod project;
         shuttle_common::models::service::Response,
         shuttle_common::models::secret::Response,
         shuttle_common::models::deployment::Response,
-        shuttle_common::log::Item,
+        shuttle_common::log::LogItem,
         shuttle_common::models::secret::Response,
         shuttle_common::log::Level,
         shuttle_common::deployment::State
@@ -545,7 +545,7 @@ pub async fn start_deployment(
     get,
     path = "/projects/{project_name}/deployments/{deployment_id}/logs",
     responses(
-        (status = 200, description = "Gets the logs a specific deployment.", body = [shuttle_common::log::Item]),
+        (status = 200, description = "Gets the logs a specific deployment.", body = [shuttle_common::log::LogItem]),
         (status = 500, description = "Database or streaming error.", body = String),
         (status = 404, description = "Record could not be found.", body = String),
     ),
@@ -567,7 +567,6 @@ pub async fn get_logs(
 
     let mut client = deployment_manager.logs_fetcher().clone();
     if let Ok(logs) = client.get_logs(logs_request).await {
-        // TODO: awaits on the From impl for `shuttle_proto::logger::LogItem` -> `shuttle_common::LogItem`.
         Ok(Json(
             logs.into_inner()
                 .log_items

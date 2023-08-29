@@ -4,8 +4,9 @@ use clap::Parser;
 use shuttle_common::{
     backends::tracing::setup_tracing,
     claims::{ClaimLayer, InjectPropagationLayer},
+    log::{Backend, DeploymentLogLayer},
 };
-use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence, RuntimeManager};
+use shuttle_deployer::{start, start_proxy, Args, Persistence, RuntimeManager, StateChangeLayer};
 use shuttle_proto::logger::logger_client::LoggerClient;
 use tokio::select;
 use tower::ServiceBuilder;
@@ -41,11 +42,17 @@ async fn main() {
     let logger_client = LoggerClient::new(channel);
 
     setup_tracing(
-        tracing_subscriber::registry().with(DeployLayer::new(
-            logger_client.clone(),
-            shuttle_common::log::InternalLogOrigin::Deployer, // TODO: Make all backends set this up in this way
-        )),
-        "deployer",
+        tracing_subscriber::registry()
+            .with(StateChangeLayer {
+                log_recorder: logger_client.clone(),
+                state_recorder: persistence.clone(),
+            })
+            // TODO: Make all relevant backends set this up in this way
+            .with(DeploymentLogLayer {
+                recorder: logger_client.clone(),
+                internal_service: Backend::Deployer,
+            }),
+        Backend::Deployer,
     );
 
     let runtime_manager = RuntimeManager::new(

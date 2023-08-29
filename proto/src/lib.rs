@@ -232,7 +232,10 @@ pub mod resource_recorder {
 }
 
 pub mod logger {
+    use std::str::FromStr;
     use std::time::Duration;
+
+    use shuttle_common::log::{LogItem as LogItemCommon, LogRecorder};
 
     use prost::bytes::Bytes;
     use tokio::{select, sync::mpsc, time::interval};
@@ -246,6 +249,34 @@ pub mod logger {
     use self::logger_client::LoggerClient;
 
     include!("generated/logger.rs");
+
+    impl From<LogItem> for LogItemCommon {
+        fn from(value: LogItem) -> Self {
+            let line = value.log_line.expect("log item to have log line");
+            Self {
+                id: value.deployment_id.parse().unwrap_or_default(),
+                internal_origin: shuttle_common::log::Backend::from_str(&line.service_name)
+                    .expect("backend name to be valid"),
+                timestamp: line.tx_timestamp.expect("there to be a timestamp").into(), // TODO
+                line: String::from_utf8(line.data).expect("line to be uft8"),
+            }
+        }
+    }
+
+    impl LogRecorder
+        for logger_client::LoggerClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >
+    {
+        fn record(&self, log: LogItemCommon) {
+            // TODO: Make async + error handling?
+            // self.send_logs(request)
+            //     .await
+            //     .expect("Failed to sens log line");
+        }
+    }
 
     /// Adapter to some client which expects to receive a vector of items
     #[async_trait]

@@ -2,6 +2,7 @@ use clap::Parser;
 use futures::prelude::*;
 
 use shuttle_common::backends::tracing::setup_tracing;
+use shuttle_common::log::Backend;
 use shuttle_gateway::acme::{AcmeClient, CustomDomain};
 use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
 use shuttle_gateway::args::StartArgs;
@@ -28,7 +29,7 @@ async fn main() -> io::Result<()> {
 
     trace!(args = ?args, "parsed args");
 
-    setup_tracing(tracing_subscriber::registry(), "gateway");
+    setup_tracing(tracing_subscriber::registry(), Backend::Gateway);
 
     let db_path = args.state.join("gateway.sqlite");
     let db_uri = db_path.to_str().unwrap();

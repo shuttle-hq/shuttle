@@ -15,123 +15,40 @@
 //!
 //! Here the `id` is extracted from the `built` argument and the `state` is taken from the [State] enum (the special `%` is needed to use the `Display` trait to convert the values to a str).
 //!
-//! All `debug!()` etc in these functions will be captured by this layer and will be associated with the deployment and the state.
-//!
 //! **Warning** Don't log out sensitive info in functions with these annotations
 
-use chrono::{DateTime, Utc};
-use serde_json::json;
-use shuttle_common::{log::InternalLogOrigin, tracing::JsonVisitor};
 use std::str::FromStr;
+
+use chrono::Utc;
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
 
-use crate::persistence::{self, DeploymentState, State};
+use shuttle_common::{
+    log::{Backend, LogRecorder},
+    LogItem,
+};
 
-/// Records logs for the deployment progress
-pub trait LogRecorder: Clone + Send + 'static {
-    fn record(&self, log: Log);
-}
+use crate::{
+    persistence::{DeploymentState, State},
+    Persistence,
+};
 
-/// An event or state transition log
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Log {
-    /// Deployment id
-    pub deployment_id: Uuid,
-
-    /// Internal service that produced this log
-    pub internal_origin: InternalLogOrigin,
-
-    /// Time log was produced
-    pub tx_timestamp: DateTime<Utc>,
-
-    /// The log line
-    pub line: String,
-}
-
-impl From<Log> for shuttle_common::LogItem {
-    fn from(log: Log) -> Self {
-        Self {
-            id: log.deployment_id,
-            internal_origin: log.internal_origin,
-            timestamp: log.tx_timestamp,
-            line: log.line,
-        }
-    }
-}
-
-// impl From<Log> for DeploymentState {
-//     fn from(log: Log) -> Self {
-//         Self {
-//             id: log.deployment_id,
-//             state: log.state,
-//             last_update: log.timestamp,
-//         }
-//     }
-// }
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum LogType {
-    Event,
-    State,
-}
-
-/// Tracing subscriber layer which keeps track of a deployment's state
-pub struct DeployLayer<R>
+/// Tracing subscriber layer which keeps track of a deployment's state.
+/// Logs a special line when entering a span tagged with deployment id and state.
+pub struct StateChangeLayer<R>
 where
     R: LogRecorder + Send + Sync,
 {
-    recorder: R,
-    internal_service: InternalLogOrigin,
+    pub log_recorder: R,
+    pub state_recorder: Persistence,
 }
 
-impl<R> DeployLayer<R>
-where
-    R: LogRecorder + Send + Sync,
-{
-    pub fn new(recorder: R, internal_service: InternalLogOrigin) -> Self {
-        Self {
-            recorder,
-            internal_service,
-        }
-    }
-}
-
-impl<R, S> Layer<S> for DeployLayer<R>
+impl<R, S> Layer<S> for StateChangeLayer<R>
 where
     S: Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
     R: LogRecorder + Send + Sync + 'static,
 {
-    fn on_event(&self, event: &tracing::Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
-        // We only care about events in some state scope
-        let scope = if let Some(scope) = ctx.event_scope(event) {
-            scope
-        } else {
-            return;
-        };
-
-        // Find the first scope with the scope details containing the current state
-        for span in scope.from_root() {
-            let extensions = span.extensions();
-
-            if let Some(details) = extensions.get::<ScopeDetails>() {
-                let mut visitor = JsonVisitor::default();
-
-                event.record(&mut visitor);
-                let metadata = event.metadata();
-
-                self.recorder.record(Log {
-                    deployment_id: details.id,
-                    internal_origin: self.internal_service,
-                    tx_timestamp: Utc::now(),
-                    line: "Test".into(),
-                });
-                break;
-            }
-        }
-    }
-
     fn on_new_span(
         &self,
         attrs: &span::Attributes<'_>,
@@ -144,58 +61,33 @@ where
         }
 
         let mut visitor = NewStateVisitor::default();
-
         attrs.record(&mut visitor);
 
-        let details = visitor.details;
-
-        if details.id.is_nil() {
+        if visitor.id.is_nil() {
             warn!("scope details does not have a valid id");
             return;
         }
 
-        // Safe to unwrap since this is the `on_new_span` method
-        let span = ctx.span(id).unwrap();
-        let mut extensions = span.extensions_mut();
-        let metadata = span.metadata();
-
-        self.recorder.record(Log {
-            deployment_id: details.id,
-            internal_origin: self.internal_service,
-            tx_timestamp: Utc::now(),
-            line: "Test".into(),
+        // To deployer persistence
+        self.state_recorder.record_state(DeploymentState {
+            id: visitor.id,
+            state: visitor.state,
         });
-
-        extensions.insert::<ScopeDetails>(details);
+        // To logger
+        self.log_recorder.record(LogItem {
+            id: visitor.id,
+            internal_origin: Backend::Deployer,
+            timestamp: Utc::now(),
+            line: format!(" INFO Entering {:?} state", visitor.state),
+        });
     }
 }
 
-use shuttle_proto::logger::logger_client::LoggerClient;
-impl LogRecorder
-    for LoggerClient<
-        shuttle_common::claims::ClaimService<
-            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-        >,
-    >
-{
-    fn record(&self, log: Log) {
-        // TODO: Make async + error handling?
-        // self.send_logs(request)
-        //     .await
-        //     .expect("Failed to sens log line");
-    }
-}
-
-/// Used to keep track of the current state a deployment scope is in
-#[derive(Debug, Default)]
-struct ScopeDetails {
-    id: Uuid,
-    state: State,
-}
-/// This visitor is meant to extract the `ScopeDetails` for any scope with `name` and `status` fields
+/// To extract `id` and `state` fields for scopes that have them
 #[derive(Default)]
 struct NewStateVisitor {
-    details: ScopeDetails,
+    id: Uuid,
+    state: State,
 }
 
 impl NewStateVisitor {
@@ -215,9 +107,9 @@ impl NewStateVisitor {
 impl Visit for NewStateVisitor {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == Self::STATE_IDENT {
-            self.details.state = State::from_str(&format!("{value:?}")).unwrap_or_default();
+            self.state = State::from_str(&format!("{value:?}")).unwrap_or_default();
         } else if field.name() == Self::ID_IDENT {
-            self.details.id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
+            self.id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
         }
     }
 }
@@ -260,13 +152,13 @@ mod tests {
 
     use crate::{
         deployment::{
-            deploy_layer::LogType, gateway_client::BuildQueueClient, ActiveDeploymentsGetter,
+            gateway_client::BuildQueueClient, state_change_layer::LogType, ActiveDeploymentsGetter,
             Built, DeploymentManager, Queued,
         },
         persistence::{Secret, SecretGetter, SecretRecorder, State},
     };
 
-    use super::{DeployLayer, Log, LogRecorder};
+    use super::{LogItem, LogRecorder, StateChangeLayer};
 
     #[ctor]
     static RECORDER: Arc<Mutex<RecorderMock>> = {
@@ -308,7 +200,7 @@ mod tests {
             .unwrap();
 
         tracing_subscriber::registry()
-            .with(DeployLayer::new(Arc::clone(&recorder)))
+            .with(StateChangeLayer::new(Arc::clone(&recorder)))
             .with(filter_layer)
             .with(fmt_layer)
             .init();
@@ -327,8 +219,8 @@ mod tests {
         state: State,
     }
 
-    // impl From<Log> for StateLog {
-    //     fn from(log: Log) -> Self {
+    // impl From<LogItem> for StateLog {
+    //     fn from(log: LogItem) -> Self {
     //         Self {
     //             id: log.id,
     //             state: log.state,
@@ -355,7 +247,7 @@ mod tests {
     }
 
     impl LogRecorder for RecorderMock {
-        fn record(&self, event: Log) {
+        fn record(&self, event: LogItem) {
             // We are only testing the state transitions
             if event.r#type == LogType::State {
                 self.states.lock().unwrap().push(event.into());
@@ -446,7 +338,7 @@ mod tests {
     }
 
     impl<R: LogRecorder> LogRecorder for Arc<Mutex<R>> {
-        fn record(&self, event: Log) {
+        fn record(&self, event: LogItem) {
             self.lock().unwrap().record(event);
         }
     }

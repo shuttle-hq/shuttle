@@ -20,9 +20,11 @@ use tracing::{debug_span, instrument::Instrumented, Instrument, Span, Subscriber
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
 
+use crate::log::Backend;
+
 const OTLP_ADDRESS: &str = "http://otel-collector:4317";
 
-pub fn setup_tracing<S>(subscriber: S, service_name: &str)
+pub fn setup_tracing<S>(subscriber: S, backend: Backend)
 where
     S: Subscriber + for<'a> LookupSpan<'a> + Send + Sync,
 {
@@ -46,7 +48,7 @@ where
         .with_trace_config(
             trace::config().with_resource(Resource::new(vec![KeyValue::new(
                 "service.name",
-                service_name.to_string(),
+                backend.to_string(),
             )])),
         )
         .install_batch(Tokio)
@@ -196,7 +198,7 @@ pub fn serde_json_map_to_key_value_list(
 /// Convert an [AnyValue] to a [serde_json::Value]
 pub fn from_any_value_to_serde_json_value(any_value: AnyValue) -> serde_json::Value {
     let Some(value) = any_value.value else {
-        return serde_json::Value::Null
+        return serde_json::Value::Null;
     };
 
     match value {
@@ -204,7 +206,9 @@ pub fn from_any_value_to_serde_json_value(any_value: AnyValue) -> serde_json::Va
         any_value::Value::BoolValue(b) => serde_json::Value::Bool(b),
         any_value::Value::IntValue(i) => serde_json::Value::Number(i.into()),
         any_value::Value::DoubleValue(f) => {
-            let Some(number) = serde_json::Number::from_f64(f) else {return serde_json::Value::Null};
+            let Some(number) = serde_json::Number::from_f64(f) else {
+                return serde_json::Value::Null;
+            };
             serde_json::Value::Number(number)
         }
         any_value::Value::ArrayValue(a) => {

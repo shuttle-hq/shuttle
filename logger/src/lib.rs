@@ -110,7 +110,10 @@ where
             for log in logs {
                 last = log.tx_timestamp.clone().unwrap_or_default();
                 if let Err(error) = tx.send(Ok(log)).await {
-                    println!("error sending log: {}", error);
+                    error!(
+                        error = &error as &dyn std::error::Error,
+                        "error sending log"
+                    );
                 };
             }
 

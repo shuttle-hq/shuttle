@@ -3,16 +3,18 @@ use std::{collections::BTreeMap, path::PathBuf};
 use async_trait::async_trait;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
-    database, DatabaseReadyInfo,
+    database,
+    models::deployment::STORAGE_DIRNAME,
+    DatabaseReadyInfo,
 };
 use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
-use shuttle_service::{DeploymentMetadata, Environment, Factory, ServiceName};
+use shuttle_service::{DeploymentMetadata, Environment, Factory, ProjectName};
 use tonic::{transport::Channel, Request};
 use tracing::info;
 
 /// A factory (service locator) which goes through the provisioner crate
 pub struct ProvisionerFactory {
-    service_name: ServiceName,
+    service_name: ProjectName,
     provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
     secrets: BTreeMap<String, String>,
     env: Environment,
@@ -22,7 +24,7 @@ pub struct ProvisionerFactory {
 impl ProvisionerFactory {
     pub(crate) fn new(
         provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
-        service_name: ServiceName,
+        service_name: ProjectName,
         secrets: BTreeMap<String, String>,
         env: Environment,
         claim: Option<Claim>,
@@ -75,9 +77,9 @@ impl Factory for ProvisionerFactory {
     fn get_metadata(&self) -> DeploymentMetadata {
         DeploymentMetadata {
             env: self.env,
+            project_name: self.service_name.clone(),
             service_name: self.service_name.to_string(),
-            project_name: "TODO".into(),
-            storage_path: PathBuf::from(".shuttle-storage"),
+            storage_path: PathBuf::from(STORAGE_DIRNAME),
         }
     }
 }

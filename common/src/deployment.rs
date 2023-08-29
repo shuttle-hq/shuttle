@@ -5,6 +5,8 @@ use strum::{Display, EnumString};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
+use crate::project::ProjectName;
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -26,40 +28,47 @@ pub enum State {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploymentMetadata {
     pub env: Environment,
-    pub service_name: String, // TODO: replace with proper string wrapper, sort out their difference
-    pub project_name: String,
+    pub project_name: ProjectName,
+    /// Typically your crate name
+    pub service_name: String,
+    /// Path to a folder that persists between deployments
     pub storage_path: PathBuf,
 }
 
-/// This which environment is this deployment taking place
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+/// The environment this project is running in
+#[derive(Clone, Copy, Debug, EnumString, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum Environment {
     Local,
-    Production,
+    #[strum(serialize = "production")] // Keep this around for a while for backward compat
+    Deployment,
 }
 
-impl FromStr for Environment {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "local" => Ok(Environment::Local),
-            "production" => Ok(Environment::Production),
-            _ => Err(()),
-        }
+impl Default for Environment {
+    fn default() -> Self {
+        Self::Local
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use crate::deployment::State;
+    use super::*;
 
     #[test]
     fn test_state_deser() {
         assert_eq!(State::Queued, State::from_str("Queued").unwrap());
         assert_eq!(State::Unknown, State::from_str("unKnown").unwrap());
         assert_eq!(State::Built, State::from_str("built").unwrap());
+    }
+
+    #[test]
+    fn test_env_deser() {
+        assert_eq!(Environment::Local, Environment::from_str("local").unwrap());
+        assert_eq!(
+            Environment::Deployment,
+            Environment::from_str("production").unwrap()
+        );
+        assert!(State::from_str("somewhere_else").is_err());
     }
 }

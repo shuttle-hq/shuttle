@@ -28,7 +28,7 @@ use shuttle_proto::{
         StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
-use shuttle_service::{Environment, Factory, Service, ServiceName};
+use shuttle_service::{Environment, Factory, ProjectName, Service};
 use tokio::sync::{
     broadcast::{self, Sender},
     mpsc::{self, UnboundedReceiver, UnboundedSender},
@@ -185,7 +185,7 @@ where
 
         let provisioner_client = ProvisionerClient::new(channel);
 
-        let service_name = ServiceName::from_str(service_name.as_str())
+        let service_name = ProjectName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
         let past_resources = resources

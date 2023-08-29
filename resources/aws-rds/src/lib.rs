@@ -33,7 +33,7 @@ macro_rules! aws_engine {
 
                 async fn output(self, factory: &mut dyn shuttle_service::Factory) -> Result<Self::Output, shuttle_service::Error> {
                     let info = match factory.get_metadata().env {
-                        shuttle_service::Environment::Production => shuttle_service::DbOutput::Info(
+                        shuttle_service::Environment::Deployment => shuttle_service::DbOutput::Info(
                             factory
                                 .get_db_connection(shuttle_service::database::Type::AwsRds(shuttle_service::database::AwsRdsEngine::$struct_ident))
                                 .await?

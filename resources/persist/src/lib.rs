@@ -148,7 +148,7 @@ impl ResourceBuilder<PersistInstance> for Persist {
         PersistInstance::new(
             storage_path
                 .join(PathBuf::from("shuttle-persist"))
-                .join(PathBuf::from(service_name)),
+                .join(PathBuf::from(service_name)), // separate persist directories per service
         )
         .map_err(|e| shuttle_service::Error::Custom(e.into()))
     }

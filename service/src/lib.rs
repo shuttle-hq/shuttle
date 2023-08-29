@@ -6,7 +6,7 @@ use serde::{de::DeserializeOwned, Serialize};
 pub use shuttle_common::{
     database,
     deployment::{DeploymentMetadata, Environment},
-    project::ProjectName as ServiceName,
+    project::ProjectName,
     resource::Type,
     DatabaseReadyInfo, DbInput, DbOutput, SecretStore,
 };

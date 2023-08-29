@@ -90,7 +90,7 @@ impl ResourceBuilder<Client> for Turso {
     ) -> Result<Self::Output, shuttle_service::Error> {
         let md = factory.get_metadata();
         match md.env {
-            Environment::Production => {
+            Environment::Deployment => {
                 if self.addr.is_empty() {
                     Err(ShuttleError::Custom(CustomError::msg("missing addr")))
                 } else {
@@ -169,8 +169,8 @@ mod test {
         fn get_metadata(&self) -> shuttle_service::DeploymentMetadata {
             shuttle_service::DeploymentMetadata {
                 env: self.environment,
+                project_name: shuttle_service::ProjectName::from_str("my-turso-service").unwrap(),
                 service_name: "my-turso-service".to_string(),
-                project_name: "my-turso-service".to_string(),
                 storage_path: std::path::PathBuf::new(),
             }
         }
@@ -208,7 +208,7 @@ mod test {
     #[tokio::test]
     #[should_panic(expected = "missing addr")]
     async fn remote_database_empty_addr() {
-        let mut factory = MockFactory::new(Environment::Production);
+        let mut factory = MockFactory::new(Environment::Deployment);
 
         let turso = Turso::new();
         turso.output(&mut factory).await.unwrap();
@@ -216,7 +216,7 @@ mod test {
 
     #[tokio::test]
     async fn remote_database() {
-        let mut factory = MockFactory::new(Environment::Production);
+        let mut factory = MockFactory::new(Environment::Deployment);
 
         let mut turso = Turso::new();
         let addr = "my-turso-addr.turso.io".to_string();

@@ -232,8 +232,9 @@ pub mod resource_recorder {
 }
 
 pub mod logger {
-    use std::sync::mpsc;
+    use std::time::Duration;
 
+    use tokio::{select, sync::mpsc, time::interval};
     use tonic::async_trait;
 
     include!("generated/logger.rs");
@@ -248,18 +249,19 @@ pub mod logger {
 
     /// Wrapper to batch together items before forwarding them to some vector receiver
     pub struct Batcher<I: VecReceiver> {
-        tx: mpsc::Sender<I::Item>,
+        tx: mpsc::UnboundedSender<I::Item>,
     }
 
     impl<I: VecReceiver + 'static> Batcher<I>
     where
         I::Item: Send,
     {
-        /// Create a new batcher around inner with the given batch capacity
-        pub fn new(inner: I, capacity: usize) -> Self {
-            let (tx, rx) = mpsc::channel();
+        /// Create a new batcher around inner with the given batch capacity.
+        /// Items will be send when the batch has reached capacity or at the set interval. Whichever comes first.
+        pub fn new(inner: I, capacity: usize, interval: Duration) -> Self {
+            let (tx, rx) = mpsc::unbounded_channel();
 
-            tokio::spawn(Self::batch(inner, rx, capacity));
+            tokio::spawn(Self::batch(inner, rx, capacity, interval));
 
             Self { tx }
         }
@@ -268,29 +270,53 @@ pub mod logger {
         pub fn send(&self, item: I::Item) {
             match self.tx.send(item) {
                 Ok(_) => {}
-                Err(_) => todo!(),
+                Err(_) => unreachable!("the receiver will never drop"),
             }
         }
 
         /// Background task to forward the items ones the batch capacity has been reached
-        async fn batch(mut inner: I, rx: mpsc::Receiver<I::Item>, capacity: usize) {
+        async fn batch(
+            mut inner: I,
+            mut rx: mpsc::UnboundedReceiver<I::Item>,
+            capacity: usize,
+            interval_duration: Duration,
+        ) {
+            let mut interval = interval(interval_duration);
+
+            // Without this, the default behaviour will burst any missed tickers until they are caught up.
+            // This will cause a flood which we want to avoid.
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            // Get past the first tick
+            interval.tick().await;
+
             let mut cache = Vec::with_capacity(capacity);
 
             loop {
-                let item = rx.recv();
+                select! {
+                    item = rx.recv() => {
+                        if let Some(item) = item {
+                            cache.push(item);
 
-                match item {
-                    Ok(item) => {
-                        cache.push(item);
+                            if cache.len() == capacity {
+                                let old_cache = cache;
+                                cache = Vec::with_capacity(capacity);
 
-                        if cache.len() == capacity {
+                                inner.receive(old_cache).await;
+                            }
+                        } else {
+                            // Sender dropped
+                            return;
+                        }
+                    },
+                    _ = interval.tick() => {
+                        if !cache.is_empty() {
                             let old_cache = cache;
                             cache = Vec::with_capacity(capacity);
 
                             inner.receive(old_cache).await;
                         }
                     }
-                    Err(_) => return,
                 }
             }
         }
@@ -323,7 +349,7 @@ pub mod logger {
         #[tokio::test(flavor = "multi_thread")]
         async fn capacity_reached() {
             let mock = MockGroupReceiver::default();
-            let batcher = Batcher::new(mock.clone(), 2);
+            let batcher = Batcher::new(mock.clone(), 2, Duration::from_secs(120));
 
             batcher.send(1);
             sleep(Duration::from_millis(50)).await;
@@ -340,6 +366,26 @@ pub mod logger {
             batcher.send(4);
             sleep(Duration::from_millis(50)).await;
             assert_eq!(*mock.0.lock().unwrap(), Some(vec![3, 4]));
+        }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn interval_reached() {
+            let mock = MockGroupReceiver::default();
+            let batcher = Batcher::new(mock.clone(), 2, Duration::from_millis(300));
+
+            sleep(Duration::from_millis(500)).await;
+            assert_eq!(
+                *mock.0.lock().unwrap(),
+                None,
+                "we should never send something when the cache is empty"
+            );
+
+            batcher.send(1);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), None);
+
+            sleep(Duration::from_millis(500)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![1]));
         }
     }
 }

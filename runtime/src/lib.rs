@@ -287,7 +287,6 @@ pub use async_trait::async_trait;
 // Dependencies required by the codegen
 pub use anyhow::Context;
 pub use strfmt::strfmt;
-pub use tracing;
 
 // Print the version of the runtime.
 pub fn print_version() {

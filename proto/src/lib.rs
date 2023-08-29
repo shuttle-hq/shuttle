@@ -232,5 +232,114 @@ pub mod resource_recorder {
 }
 
 pub mod logger {
+    use std::sync::mpsc;
+
+    use tonic::async_trait;
+
     include!("generated/logger.rs");
+
+    /// Adapter to some client which expects to receive a vector of items
+    #[async_trait]
+    pub trait VecReceiver: Send {
+        type Item;
+
+        async fn receive(&mut self, items: Vec<Self::Item>);
+    }
+
+    /// Wrapper to batch together items before forwarding them to some vector receiver
+    pub struct Batcher<I: VecReceiver> {
+        tx: mpsc::Sender<I::Item>,
+    }
+
+    impl<I: VecReceiver + 'static> Batcher<I>
+    where
+        I::Item: Send,
+    {
+        /// Create a new batcher around inner with the given batch capacity
+        pub fn new(inner: I, capacity: usize) -> Self {
+            let (tx, rx) = mpsc::channel();
+
+            tokio::spawn(Self::batch(inner, rx, capacity));
+
+            Self { tx }
+        }
+
+        /// Send a single item into this batcher
+        pub fn send(&self, item: I::Item) {
+            match self.tx.send(item) {
+                Ok(_) => {}
+                Err(_) => todo!(),
+            }
+        }
+
+        /// Background task to forward the items ones the batch capacity has been reached
+        async fn batch(mut inner: I, rx: mpsc::Receiver<I::Item>, capacity: usize) {
+            let mut cache = Vec::with_capacity(capacity);
+
+            loop {
+                let item = rx.recv();
+
+                match item {
+                    Ok(item) => {
+                        cache.push(item);
+
+                        if cache.len() == capacity {
+                            let old_cache = cache;
+                            cache = Vec::with_capacity(capacity);
+
+                            inner.receive(old_cache).await;
+                        }
+                    }
+                    Err(_) => return,
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::{
+            sync::{Arc, Mutex},
+            time::Duration,
+        };
+
+        use tokio::time::sleep;
+        use tonic::async_trait;
+
+        use super::{Batcher, VecReceiver};
+
+        #[derive(Default, Clone)]
+        struct MockGroupReceiver(Arc<Mutex<Option<Vec<u32>>>>);
+
+        #[async_trait]
+        impl VecReceiver for MockGroupReceiver {
+            type Item = u32;
+
+            async fn receive(&mut self, items: Vec<Self::Item>) {
+                *self.0.lock().unwrap() = Some(items);
+            }
+        }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn capacity_reached() {
+            let mock = MockGroupReceiver::default();
+            let batcher = Batcher::new(mock.clone(), 2);
+
+            batcher.send(1);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), None);
+
+            batcher.send(2);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![1, 2]));
+
+            batcher.send(3);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![1, 2]));
+
+            batcher.send(4);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![3, 4]));
+        }
+    }
 }

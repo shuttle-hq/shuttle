@@ -340,22 +340,12 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
         #[no_mangle]
         #[allow(non_snake_case)]
         pub extern "C" fn __SHUTTLE_Axum_call(
-            logs_fd: std::os::wasi::prelude::RawFd,
             parts_fd: std::os::wasi::prelude::RawFd,
             body_fd: std::os::wasi::prelude::RawFd,
         ) {
             use shuttle_next::body::{Body, HttpBody};
-            use shuttle_next::tracing_prelude::*;
-            use shuttle_next::Logger;
             use std::io::{Read, Write};
             use std::os::wasi::io::FromRawFd;
-
-            // file descriptor 2 for writing logs to
-            let logs_fd = unsafe { std::fs::File::from_raw_fd(logs_fd) };
-
-            shuttle_next::tracing_registry()
-                .with(Logger::new(logs_fd))
-                .init(); // this sets the subscriber as the global default and also adds a compatibility layer for capturing `log::Record`s
 
             // file descriptor 3 for reading and writing http parts
             let mut parts_fd = unsafe { std::fs::File::from_raw_fd(parts_fd) };

@@ -9,6 +9,7 @@ use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::runtime::{
     self, runtime_client::RuntimeClient, StopRequest, SubscribeLogsRequest,
 };
+use shuttle_service::Environment;
 use tokio::{process, sync::Mutex};
 use tonic::transport::Channel;
 use tracing::{debug, info, trace};
@@ -109,7 +110,7 @@ impl RuntimeManager {
 
         let (process, runtime_client) = runtime::start(
             is_next,
-            true,
+            Environment::Deployment,
             &self.provisioner_address,
             self.auth_uri.as_ref(),
             port,

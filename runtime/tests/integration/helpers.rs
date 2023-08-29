@@ -14,7 +14,7 @@ use shuttle_proto::{
     },
     runtime::{self, runtime_client::RuntimeClient},
 };
-use shuttle_service::builder::build_workspace;
+use shuttle_service::{builder::build_workspace, Environment};
 use tokio::process::Child;
 use tonic::{
     transport::{Channel, Server},
@@ -51,7 +51,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
 
     let (runtime, runtime_client) = runtime::start(
         service.is_wasm,
-        false,
+        Environment::Local,
         &format!("http://{}", provisioner_address),
         None,
         runtime_port,

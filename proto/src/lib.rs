@@ -107,7 +107,7 @@ pub mod runtime {
     use prost_types::Timestamp;
     use shuttle_common::{
         claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer},
-        deployment::State,
+        deployment::{Environment, State},
         ParseError,
     };
     use tokio::process;
@@ -208,7 +208,7 @@ pub mod runtime {
 
     pub async fn start(
         wasm: bool,
-        in_deployment: bool,
+        environment: Environment,
         provisioner_address: &str,
         auth_uri: Option<&String>,
         port: u16,
@@ -219,6 +219,7 @@ pub mod runtime {
         runtime_client::RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     )> {
         let port = &port.to_string();
+        let environment = format!("{:?}", environment);
 
         let args = if wasm {
             vec!["--port", port]
@@ -229,7 +230,7 @@ pub mod runtime {
                 "--provisioner-address",
                 provisioner_address,
                 "--env",
-                if in_deployment { "production" } else { "local" },
+                environment.as_str(),
             ];
 
             if let Some(auth_uri) = auth_uri {

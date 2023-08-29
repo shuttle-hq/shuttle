@@ -32,6 +32,7 @@ use shuttle_proto::runtime::{
     SubscribeLogsRequest,
 };
 use shuttle_service::builder::{build_workspace, BuiltService};
+use shuttle_service::Environment;
 
 use anyhow::{anyhow, bail, Context, Result};
 use cargo_metadata::Message;
@@ -637,7 +638,7 @@ impl Shuttle {
         // Child process and gRPC client for sending requests to it
         let (mut runtime, mut runtime_client) = runtime::start(
             service.is_wasm,
-            false,
+            Environment::Local,
             &format!("http://localhost:{provisioner_port}"),
             None,
             run_args.port - idx - 1,

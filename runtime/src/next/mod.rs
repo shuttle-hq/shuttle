@@ -14,7 +14,7 @@ use futures::TryStreamExt;
 use hyper::body::HttpBody;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
-use shuttle_common::wasm::{Bytesable, Log, RequestWrapper, ResponseWrapper};
+use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
     LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest, StopResponse,
@@ -35,7 +35,6 @@ pub use self::args::NextArgs;
 
 extern crate rmp_serde as rmps;
 
-const LOGS_FD: u32 = 20;
 const PARTS_FD: u32 = 3;
 const BODY_FD: u32 = 4;
 
@@ -223,6 +222,7 @@ impl Router {
     ) -> anyhow::Result<Response<Body>> {
         let wasi = WasiCtxBuilder::new()
             .inherit_stdio()
+            .inherit_stdout()
             .inherit_args()
             .context("failed to read args")?
             .build();
@@ -230,20 +230,13 @@ impl Router {
         let mut store = Store::new(&self.engine, wasi);
         self.linker.module(&mut store, "axum", &self.module)?;
 
-        let (logs_stream, logs_client) =
-            UnixStream::pair().context("failed to open logs unixstream")?;
         let (mut parts_stream, parts_client) =
             UnixStream::pair().context("failed to open parts unixstream")?;
         let (mut body_stream, body_client) =
             UnixStream::pair().context("failed to open body write unixstream")?;
 
-        let logs_client = WasiUnixStream::from_cap_std(logs_client);
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
         let body_client = WasiUnixStream::from_cap_std(body_client);
-
-        store
-            .data_mut()
-            .insert_file(LOGS_FD, Box::new(logs_client), FileCaps::all());
 
         store
             .data_mut()
@@ -251,14 +244,6 @@ impl Router {
         store
             .data_mut()
             .insert_file(BODY_FD, Box::new(body_client), FileCaps::all());
-
-        tokio::task::spawn_blocking(move || {
-            let mut iter = logs_stream.bytes().filter_map(Result::ok);
-
-            while let Some(_log) = Log::from_bytes(&mut iter) {
-                // TODO: send to the log server here
-            }
-        });
 
         let (parts, body) = req.into_parts();
 
@@ -308,11 +293,8 @@ impl Router {
             .context("wasm module should be loaded and the router function should be available")?
             .into_func()
             .context("router function should be a function")?
-            .typed::<(RawFd, RawFd, RawFd), ()>(&store)?
-            .call(
-                &mut store,
-                (LOGS_FD as i32, PARTS_FD as i32, BODY_FD as i32),
-            )?;
+            .typed::<(RawFd, RawFd), ()>(&store)?
+            .call(&mut store, (PARTS_FD as i32, BODY_FD as i32))?;
 
         // Read response parts from wasm
         let reader = BufReader::new(&mut parts_stream);

@@ -16,11 +16,10 @@ use bollard::{
     service::{CreateImageInfo, HealthConfig, HostConfig, PortBinding},
     Docker,
 };
-use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsServiceServer;
 use portpicker::pick_unused_port;
 use shuttle_common::claims::Scope;
 use shuttle_common_tests::JwtScopesLayer;
-use shuttle_logger::{Postgres, Service, ShuttleLogsOtlp};
+use shuttle_logger::{Postgres, Service};
 use shuttle_proto::logger::logger_server::LoggerServer;
 use sqlx::{
     postgres::{PgConnectOptions, PgSslMode},
@@ -37,9 +36,6 @@ async fn logger_server(options: PgConnectOptions, port: u16) {
     let postgres = Postgres::with_options(options).await;
     Server::builder()
         .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-        .add_service(LogsServiceServer::new(ShuttleLogsOtlp::new(
-            postgres.get_sender(),
-        )))
         .add_service(LoggerServer::new(Service::new(
             postgres.get_sender(),
             postgres.clone(),

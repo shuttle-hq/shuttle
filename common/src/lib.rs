@@ -2,6 +2,7 @@
 pub mod backends;
 #[cfg(feature = "claims")]
 pub mod claims;
+pub mod constants;
 pub mod database;
 #[cfg(feature = "service")]
 pub mod deployment;
@@ -20,23 +21,18 @@ pub mod wasm;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fmt::Display;
-#[cfg(feature = "openapi")]
-use utoipa::openapi::{Object, ObjectBuilder};
 
 use anyhow::bail;
+use serde::{Deserialize, Serialize};
+
 #[cfg(feature = "service")]
 pub use log::Item as LogItem;
 #[cfg(feature = "service")]
 pub use log::STATE_MESSAGE;
-use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
+use utoipa::openapi::{Object, ObjectBuilder};
 #[cfg(feature = "service")]
 use uuid::Uuid;
-
-#[cfg(debug_assertions)]
-pub const API_URL_DEFAULT: &str = "http://localhost:8001";
-
-#[cfg(not(debug_assertions))]
-pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
 
 pub type ApiUrl = String;
 pub type Host = String;

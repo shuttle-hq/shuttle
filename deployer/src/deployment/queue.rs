@@ -13,7 +13,7 @@ use opentelemetry::global;
 use serde_json::json;
 use shuttle_common::{
     claims::Claim,
-    models::deployment::{EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
+    constants::{EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
 };
 use shuttle_service::builder::{build_workspace, BuiltService};
 use tar::Archive;

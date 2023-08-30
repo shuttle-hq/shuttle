@@ -6,10 +6,11 @@ use anyhow::{anyhow, bail, Context};
 use cargo_metadata::Message;
 use cargo_metadata::{Package, Target};
 use crossbeam_channel::Sender;
-use shuttle_common::project::ProjectName;
+use shuttle_common::{
+    constants::{NEXT_NAME, RUNTIME_NAME},
+    project::ProjectName,
+};
 use tracing::{debug, error, trace};
-
-use crate::{NEXT_NAME, RUNTIME_NAME};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// This represents a compiled alpha or shuttle-next service.

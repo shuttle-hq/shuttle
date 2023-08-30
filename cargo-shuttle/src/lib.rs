@@ -13,9 +13,9 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use shuttle_common::models::deployment::{EXECUTABLE_DIRNAME, STORAGE_DIRNAME};
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
+    constants::{EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
     models::{
         deployment::{
             get_deployments_table, DeploymentRequest, CREATE_SERVICE_BODY_LIMIT,
@@ -25,14 +25,17 @@ use shuttle_common::{
         resource::get_resources_table,
         secret,
     },
+    project::ProjectName,
+    resource, ApiKey,
 };
-use shuttle_common::{project::ProjectName, resource, ApiKey};
 use shuttle_proto::runtime::{
     self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest,
     SubscribeLogsRequest,
 };
-use shuttle_service::builder::{build_workspace, BuiltService};
-use shuttle_service::Environment;
+use shuttle_service::{
+    builder::{build_workspace, BuiltService},
+    Environment,
+};
 
 use anyhow::{anyhow, bail, Context, Result};
 use cargo_metadata::Message;

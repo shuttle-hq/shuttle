@@ -196,7 +196,7 @@ where
         let resource_tracker = ResourceTracker::new(past_resources, new_resources.clone());
 
         // Sorts secrets by key
-        let secrets = BTreeMap::from_iter(secrets.into_iter());
+        let secrets = BTreeMap::from_iter(secrets);
 
         let factory =
             ProvisionerFactory::new(provisioner_client, service_name, secrets, self.env, claim);

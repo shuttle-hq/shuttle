@@ -17,9 +17,6 @@ pub use error::{CustomError, Error};
 #[cfg(feature = "builder")]
 pub mod builder;
 
-pub const NEXT_NAME: &str = "shuttle-next";
-pub const RUNTIME_NAME: &str = "shuttle-runtime";
-
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///
 /// An instance of factory is passed by the deployer as an argument to [ResourceBuilder::output] in the initial phase of deployment.

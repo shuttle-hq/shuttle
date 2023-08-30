@@ -3,9 +3,8 @@ use std::{collections::BTreeMap, path::PathBuf};
 use async_trait::async_trait;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
-    database,
-    models::deployment::STORAGE_DIRNAME,
-    DatabaseReadyInfo,
+    constants::STORAGE_DIRNAME,
+    database, DatabaseReadyInfo,
 };
 use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
 use shuttle_service::{DeploymentMetadata, Environment, Factory, ProjectName};

@@ -246,6 +246,7 @@ impl Bytesable for DateTime<Utc> {
 
         let datetime = NaiveDateTime::from_timestamp_millis(millis)?;
 
+        #[allow(deprecated)]
         Some(Self::from_utc(datetime, Utc))
     }
 }

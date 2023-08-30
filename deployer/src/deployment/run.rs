@@ -10,7 +10,7 @@ use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
-    models::deployment::EXECUTABLE_DIRNAME,
+    constants::EXECUTABLE_DIRNAME,
     resource,
 };
 
@@ -440,7 +440,7 @@ mod tests {
 
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
-    use shuttle_common::{claims::Claim, models::deployment::EXECUTABLE_DIRNAME};
+    use shuttle_common::{claims::Claim, constants::EXECUTABLE_DIRNAME};
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},

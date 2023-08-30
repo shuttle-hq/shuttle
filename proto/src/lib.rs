@@ -219,7 +219,7 @@ pub mod runtime {
         runtime_client::RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     )> {
         let port = &port.to_string();
-        let environment = format!("{:?}", environment);
+        let environment = &environment.to_string();
 
         let args = if wasm {
             vec!["--port", port]
@@ -230,7 +230,7 @@ pub mod runtime {
                 "--provisioner-address",
                 provisioner_address,
                 "--env",
-                environment.as_str(),
+                environment,
             ];
 
             if let Some(auth_uri) = auth_uri {

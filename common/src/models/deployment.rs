@@ -19,14 +19,6 @@ pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
 pub const CREATE_SERVICE_BODY_LIMIT: usize = 50_000_000;
 const GIT_OPTION_NONE_TEXT: &str = "N/A";
 
-//
-// Constants regarding the deployer environment and conventions
-//
-/// Where executables are moved to in order to persist across deploys, relative to workspace root
-pub const EXECUTABLE_DIRNAME: &str = ".shuttle-executables";
-/// Where general files will persist across deploys, relative to workspace root. Used by plugins.
-pub const STORAGE_DIRNAME: &str = ".shuttle-storage";
-
 #[derive(Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::deployment::Response))]

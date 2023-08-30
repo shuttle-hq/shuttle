@@ -140,6 +140,7 @@ impl ResourceBuilder<Client> for Turso {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::str::FromStr;
 
     struct MockFactory {
         pub environment: Environment,

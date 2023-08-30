@@ -4,8 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use shuttle_common::project::ProjectName;
-use shuttle_common::{ApiKey, ApiUrl, API_URL_DEFAULT};
+use shuttle_common::{constants::API_URL_DEFAULT, project::ProjectName, ApiKey, ApiUrl};
 use tracing::trace;
 
 use crate::args::ProjectArgs;

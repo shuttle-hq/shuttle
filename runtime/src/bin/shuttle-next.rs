@@ -7,7 +7,6 @@ use shuttle_common::backends::tracing::ExtractPropagationLayer;
 use shuttle_proto::runtime::runtime_server::RuntimeServer;
 use shuttle_runtime::{print_version, AxumWasm, NextArgs};
 use tonic::transport::Server;
-use tracing::trace;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -20,7 +19,7 @@ async fn main() {
 
     let args = NextArgs::parse().unwrap();
 
-    trace!(args = ?args, "parsed args");
+    println!("parsed args");
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 

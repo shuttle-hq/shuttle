@@ -23,7 +23,6 @@ use shuttle_proto::runtime::{
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
-use tracing::{error, trace, warn};
 use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
@@ -69,7 +68,7 @@ impl Runtime for AxumWasm {
         request: tonic::Request<LoadRequest>,
     ) -> Result<tonic::Response<LoadResponse>, Status> {
         let wasm_path = request.into_inner().path;
-        trace!(wasm_path, "loading shuttle-next project");
+        println!("loading shuttle-next project");
 
         let router = RouterBuilder::new()
             .map_err(|err| Status::from_error(err.into()))?
@@ -129,13 +128,13 @@ impl Runtime for AxumWasm {
 
         if let Some(kill_tx) = kill_tx {
             if kill_tx.send("stopping deployment".to_owned()).is_err() {
-                error!("the receiver dropped");
+                println!("the receiver dropped");
                 return Err(Status::internal("failed to stop deployment"));
             }
 
             Ok(tonic::Response::new(StopResponse { success: true }))
         } else {
-            warn!("trying to stop a service that was not started");
+            println!("trying to stop a service that was not started");
 
             Ok(tonic::Response::new(StopResponse { success: false }))
         }
@@ -152,7 +151,7 @@ impl Runtime for AxumWasm {
 
         // Move the stop channel into a stream to be returned
         tokio::spawn(async move {
-            trace!("moved stop channel into thread");
+            println!("moved stop channel into thread");
             while let Ok((reason, message)) = stopped_rx.recv().await {
                 tx.send(Ok(SubscribeStopResponse {
                     reason: reason as i32,
@@ -196,7 +195,7 @@ impl RouterBuilder {
         let module = Module::from_file(&self.engine, file)?;
 
         for export in module.exports() {
-            trace!("export: {}", export.name());
+            println!("export: {}", export.name());
         }
 
         Ok(Router {
@@ -287,7 +286,7 @@ impl Router {
 
         // Call our function in wasm, telling it to route the request we've written to it
         // and write back a response
-        trace!("calling Router");
+        println!("calling Router");
         self.linker
             .get(&mut store, "axum", "__SHUTTLE_Axum_call")
             .context("wasm module should be loaded and the router function should be available")?
@@ -334,7 +333,7 @@ async fn run_until_stopped(
                     Ok::<_, Infallible>(match router.handle_request(req).await {
                         Ok(res) => res,
                         Err(err) => {
-                            error!("error sending request: {}", err);
+                            println!("error sending request: {}", err);
                             Response::builder()
                                 .status(hyper::http::StatusCode::INTERNAL_SERVER_ERROR)
                                 .body(Body::empty())
@@ -348,23 +347,23 @@ async fn run_until_stopped(
 
     let server = hyper::Server::bind(&address).serve(make_service);
 
-    trace!("starting hyper server on: {}", &address);
+    println!("starting hyper server on: {}", &address);
     tokio::select! {
         _ = server => {
             stopped_tx.send((StopReason::End, String::new())).unwrap();
-            trace!("axum wasm server stopped");
+            println!("axum wasm server stopped");
         },
         message = kill_rx => {
             match message {
                 Ok(msg) =>{
                     stopped_tx.send((StopReason::Request, String::new())).unwrap();
-                    trace!("{msg}")
+                    println!("{msg}")
                 } ,
                 Err(_) => {
                     stopped_tx
                         .send((StopReason::Crash, "the kill sender dropped".to_string()))
                         .unwrap();
-                    trace!("the sender dropped")
+                    println!("the sender dropped")
                 }
             }
         }

@@ -5,7 +5,7 @@ use shuttle_common::backends::{
     auth::{AuthPublicKey, JwtAuthenticationLayer},
     tracing::{setup_tracing, ExtractPropagationLayer},
 };
-use shuttle_logger::{args::Args, Postgres, Service, ShuttleLogsOtlp};
+use shuttle_logger::{args::Args, Postgres, Service};
 use shuttle_proto::logger::logger_server::LoggerServer;
 use tonic::transport::Server;
 use tracing::trace;

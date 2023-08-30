@@ -117,6 +117,7 @@ pub mod runtime {
         wasm: bool,
         storage_manager_type: StorageManagerType,
         provisioner_address: &str,
+        logger_uri: &str,
         auth_uri: Option<&String>,
         port: u16,
         get_runtime_executable: impl FnOnce() -> PathBuf,

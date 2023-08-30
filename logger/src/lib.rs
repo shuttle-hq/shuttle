@@ -11,11 +11,12 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
+use tracing::error;
 
 pub mod args;
 mod dal;
 
-pub use dal::postgres::Postgres;
+pub use dal::Postgres;
 
 /// A wrapper to capture any error possible with this service
 #[derive(Error, Debug)]

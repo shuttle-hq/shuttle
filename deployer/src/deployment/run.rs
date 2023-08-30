@@ -454,7 +454,7 @@ mod tests {
         storage_manager::ArtifactsStorageManager,
     };
     use shuttle_proto::{
-        logger::logger_client::LoggerClient,
+        logger::{logger_client::LoggerClient, Batcher},
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
@@ -549,7 +549,7 @@ mod tests {
             .layer(InjectPropagationLayer)
             .service(channel);
 
-        let logger_client = LoggerClient::new(channel);
+        let logger_client = Batcher::wrap(LoggerClient::new(channel));
 
         RuntimeManager::new(
             path,

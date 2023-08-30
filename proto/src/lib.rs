@@ -234,8 +234,16 @@ pub mod resource_recorder {
 pub mod logger {
     use std::time::Duration;
 
+    use prost::bytes::Bytes;
     use tokio::{select, sync::mpsc, time::interval};
-    use tonic::async_trait;
+    use tonic::{
+        async_trait,
+        codegen::{Body, StdError},
+        Request,
+    };
+    use tracing::error;
+
+    use self::logger_client::LoggerClient;
 
     include!("generated/logger.rs");
 
@@ -247,7 +255,33 @@ pub mod logger {
         async fn receive(&mut self, items: Vec<Self::Item>);
     }
 
+    #[async_trait]
+    impl<T> VecReceiver for LoggerClient<T>
+    where
+        T: tonic::client::GrpcService<tonic::body::BoxBody> + Send + Sync + Clone,
+        T::Error: Into<StdError>,
+        T::ResponseBody: Body<Data = Bytes> + Send + 'static,
+        T::Future: Send,
+        <T::ResponseBody as Body>::Error: Into<StdError> + Send,
+    {
+        type Item = LogItem;
+
+        async fn receive(&mut self, items: Vec<Self::Item>) {
+            match self
+                .store_logs(Request::new(StoreLogsRequest { logs: items }))
+                .await
+            {
+                Ok(_) => {}
+                Err(error) => error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to send batch logs to logger"
+                ),
+            }
+        }
+    }
+
     /// Wrapper to batch together items before forwarding them to some vector receiver
+    #[derive(Clone)]
     pub struct Batcher<I: VecReceiver> {
         tx: mpsc::UnboundedSender<I::Item>,
     }
@@ -264,6 +298,14 @@ pub mod logger {
             tokio::spawn(Self::batch(inner, rx, capacity, interval));
 
             Self { tx }
+        }
+
+        /// Create a batcher around inner. It will send a batch of items to inner if a capacity of 2048 is reached
+        /// or if an interval of 5 seconds are reached.
+        ///
+        /// These are the same defaults used by the otel batcher
+        pub fn wrap(inner: I) -> Self {
+            Self::new(inner, 2048, Duration::from_secs(5))
         }
 
         /// Send a single item into this batcher

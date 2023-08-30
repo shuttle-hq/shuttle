@@ -232,5 +232,200 @@ pub mod resource_recorder {
 }
 
 pub mod logger {
+    use std::time::Duration;
+
+    use prost::bytes::Bytes;
+    use tokio::{select, sync::mpsc, time::interval};
+    use tonic::{
+        async_trait,
+        codegen::{Body, StdError},
+        Request,
+    };
+    use tracing::error;
+
+    use self::logger_client::LoggerClient;
+
     include!("generated/logger.rs");
+
+    /// Adapter to some client which expects to receive a vector of items
+    #[async_trait]
+    pub trait VecReceiver: Send {
+        type Item;
+
+        async fn receive(&mut self, items: Vec<Self::Item>);
+    }
+
+    #[async_trait]
+    impl<T> VecReceiver for LoggerClient<T>
+    where
+        T: tonic::client::GrpcService<tonic::body::BoxBody> + Send + Sync + Clone,
+        T::Error: Into<StdError>,
+        T::ResponseBody: Body<Data = Bytes> + Send + 'static,
+        T::Future: Send,
+        <T::ResponseBody as Body>::Error: Into<StdError> + Send,
+    {
+        type Item = LogItem;
+
+        async fn receive(&mut self, items: Vec<Self::Item>) {
+            if let Err(error) = self
+                .store_logs(Request::new(StoreLogsRequest { logs: items }))
+                .await
+            {
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to send batch logs to logger"
+                );
+            }
+        }
+    }
+
+    /// Wrapper to batch together items before forwarding them to some vector receiver
+    #[derive(Clone)]
+    pub struct Batcher<I: VecReceiver> {
+        tx: mpsc::UnboundedSender<I::Item>,
+    }
+
+    impl<I: VecReceiver + 'static> Batcher<I>
+    where
+        I::Item: Send,
+    {
+        /// Create a new batcher around inner with the given batch capacity.
+        /// Items will be send when the batch has reached capacity or at the set interval. Whichever comes first.
+        pub fn new(inner: I, capacity: usize, interval: Duration) -> Self {
+            let (tx, rx) = mpsc::unbounded_channel();
+
+            tokio::spawn(Self::batch(inner, rx, capacity, interval));
+
+            Self { tx }
+        }
+
+        /// Create a batcher around inner. It will send a batch of items to inner if a capacity of 2048 is reached
+        /// or if an interval of 5 seconds are reached.
+        ///
+        /// These are the same defaults used by the otel batcher
+        pub fn wrap(inner: I) -> Self {
+            Self::new(inner, 2048, Duration::from_secs(5))
+        }
+
+        /// Send a single item into this batcher
+        pub fn send(&self, item: I::Item) {
+            if self.tx.send(item).is_err() {
+                unreachable!("the receiver will never drop");
+            }
+        }
+
+        /// Background task to forward the items ones the batch capacity has been reached
+        async fn batch(
+            mut inner: I,
+            mut rx: mpsc::UnboundedReceiver<I::Item>,
+            capacity: usize,
+            interval_duration: Duration,
+        ) {
+            let mut interval = interval(interval_duration);
+
+            // Without this, the default behaviour will burst any missed tickers until they are caught up.
+            // This will cause a flood which we want to avoid.
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            // Get past the first tick
+            interval.tick().await;
+
+            let mut cache = Vec::with_capacity(capacity);
+
+            loop {
+                select! {
+                    item = rx.recv() => {
+                        if let Some(item) = item {
+                            cache.push(item);
+
+                            if cache.len() == capacity {
+                                let old_cache = cache;
+                                cache = Vec::with_capacity(capacity);
+
+                                inner.receive(old_cache).await;
+                            }
+                        } else {
+                            // Sender dropped
+                            return;
+                        }
+                    },
+                    _ = interval.tick() => {
+                        if !cache.is_empty() {
+                            let old_cache = cache;
+                            cache = Vec::with_capacity(capacity);
+
+                            inner.receive(old_cache).await;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::{
+            sync::{Arc, Mutex},
+            time::Duration,
+        };
+
+        use tokio::time::sleep;
+        use tonic::async_trait;
+
+        use super::{Batcher, VecReceiver};
+
+        #[derive(Default, Clone)]
+        struct MockGroupReceiver(Arc<Mutex<Option<Vec<u32>>>>);
+
+        #[async_trait]
+        impl VecReceiver for MockGroupReceiver {
+            type Item = u32;
+
+            async fn receive(&mut self, items: Vec<Self::Item>) {
+                *self.0.lock().unwrap() = Some(items);
+            }
+        }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn capacity_reached() {
+            let mock = MockGroupReceiver::default();
+            let batcher = Batcher::new(mock.clone(), 2, Duration::from_secs(120));
+
+            batcher.send(1);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), None);
+
+            batcher.send(2);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![1, 2]));
+
+            batcher.send(3);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![1, 2]));
+
+            batcher.send(4);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![3, 4]));
+        }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn interval_reached() {
+            let mock = MockGroupReceiver::default();
+            let batcher = Batcher::new(mock.clone(), 2, Duration::from_millis(300));
+
+            sleep(Duration::from_millis(500)).await;
+            assert_eq!(
+                *mock.0.lock().unwrap(),
+                None,
+                "we should never send something when the cache is empty"
+            );
+
+            batcher.send(1);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), None);
+
+            sleep(Duration::from_millis(500)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![1]));
+        }
+    }
 }

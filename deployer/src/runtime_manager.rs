@@ -5,7 +5,7 @@ use chrono::Utc;
 use prost_types::Timestamp;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
-    logger::{logger_client::LoggerClient, LogItem, LogLine, StoreLogsRequest},
+    logger::{logger_client::LoggerClient, Batcher, LogItem, LogLine},
     runtime::{self, runtime_client::RuntimeClient, StopRequest},
 };
 use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
@@ -35,9 +35,11 @@ pub struct RuntimeManager {
     artifacts_path: PathBuf,
     provisioner_address: String,
     logger_uri: String,
-    logger_client: LoggerClient<
-        shuttle_common::claims::ClaimService<
-            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+    logger_client: Batcher<
+        LoggerClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
         >,
     >,
     auth_uri: Option<String>,
@@ -48,9 +50,11 @@ impl RuntimeManager {
         artifacts_path: PathBuf,
         provisioner_address: String,
         logger_uri: String,
-        logger_client: LoggerClient<
-            shuttle_common::claims::ClaimService<
-                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        logger_client: Batcher<
+            LoggerClient<
+                shuttle_common::claims::ClaimService<
+                    shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+                >,
             >,
         >,
         auth_uri: Option<String>,
@@ -143,12 +147,11 @@ impl RuntimeManager {
             .insert(id, (process, runtime_client.clone()));
 
         let mut reader = BufReader::new(stdout).lines();
-        let mut logger_client = self.logger_client.clone();
+        let logger_client = self.logger_client.clone();
         tokio::spawn(async move {
             while let Some(line) = reader.next_line().await.unwrap() {
-                // TODO: `store_logs` accepts a Vec but logs are sent one by one. Is this feasible?
                 let utc = Utc::now();
-                let logs = vec![LogItem {
+                let log = LogItem {
                     deployment_id: id.to_string(),
                     log_line: Some(LogLine {
                         service_name: service_name.to_string(),
@@ -158,8 +161,8 @@ impl RuntimeManager {
                         }),
                         data: line.as_bytes().to_vec(),
                     }),
-                }];
-                logger_client.store_logs(StoreLogsRequest { logs }).await;
+                };
+                logger_client.send(log);
             }
         });
 

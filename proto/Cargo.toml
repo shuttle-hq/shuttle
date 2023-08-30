@@ -23,3 +23,4 @@ features = ["claims", "service", "wasm", "models", "backend"]
 
 [dev-dependencies]
 tonic-build = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }

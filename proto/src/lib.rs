@@ -267,15 +267,14 @@ pub mod logger {
         type Item = LogItem;
 
         async fn receive(&mut self, items: Vec<Self::Item>) {
-            match self
+            if let Err(error) = self
                 .store_logs(Request::new(StoreLogsRequest { logs: items }))
                 .await
             {
-                Ok(_) => {}
-                Err(error) => error!(
+                error!(
                     error = &error as &dyn std::error::Error,
                     "failed to send batch logs to logger"
-                ),
+                );
             }
         }
     }
@@ -310,9 +309,8 @@ pub mod logger {
 
         /// Send a single item into this batcher
         pub fn send(&self, item: I::Item) {
-            match self.tx.send(item) {
-                Ok(_) => {}
-                Err(_) => unreachable!("the receiver will never drop"),
+            if self.tx.send(item).is_err() {
+                unreachable!("the receiver will never drop");
             }
         }
 

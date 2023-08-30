@@ -44,7 +44,7 @@ pub struct LogItem {
     #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::log::InternalLogOrigin))]
     pub internal_origin: Backend,
 
-    /// Time log was produced
+    /// Time log was captured
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]
     pub timestamp: DateTime<Utc>,
 
@@ -116,7 +116,7 @@ where
         id: &span::Id,
         ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        // We only care about spans that change the state
+        // We only care about spans that concern a deployment
         if !DeploymentIdVisitor::is_valid(attrs.metadata()) {
             return;
         }

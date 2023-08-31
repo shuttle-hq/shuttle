@@ -204,6 +204,6 @@ fn spawn_server(port: u16, db_name: String) -> JoinHandle<()> {
             .add_service(LoggerServer::new(Service::new(pg.get_sender(), pg)))
             .serve(addr)
             .await
-            .unwrap();
+            .unwrap()
     })
 }

@@ -60,7 +60,7 @@ impl Postgres {
 
         // TODO: we switched to async_broadcast to resolve the infinite loop bug, but it wasn't related.
         // Should we switch back to tokio::broadcast?
-        let (tx, mut rx): (Sender<Vec<Log>>, _) = broadcast(256);
+        let (tx, mut rx): (Sender<Vec<Log>>, _) = broadcast(1000);
         let pool_spawn = pool.clone();
 
         tokio::spawn(async move {

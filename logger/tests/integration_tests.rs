@@ -1,35 +1,55 @@
-use std::time::{Duration, SystemTime};
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    time::{Duration, SystemTime},
+};
 
+use ctor::dtor;
+use once_cell::sync::Lazy;
 use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
-use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use shuttle_common::claims::Scope;
+use shuttle_common_tests::JwtScopesLayer;
+use shuttle_logger::{Postgres, Service};
 use shuttle_proto::logger::{
-    logger_client::LoggerClient, LogItem, LogLine, LogsRequest, StoreLogsRequest,
+    logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogLine, LogsRequest,
+    StoreLogsRequest,
 };
 use sqlx::__rt::timeout;
-use tonic::Request;
+use tokio::task::JoinHandle;
+use tonic::{
+    transport::{Server, Uri},
+    Request,
+};
 
-mod local_postgres;
-use local_postgres::LocalPostgresWrapper;
+mod helpers;
+use helpers::{exec_psql, DockerInstance};
 
-// static HOST_PORT: Lazy<Option<u16>> = Lazy::new(pick_unused_port);
-// static POSTGRES_WRAPPER: Lazy<LocalPostgresWrapper> = Lazy::new(LocalPostgresWrapper::default);
 use prost_types::Timestamp;
+use uuid::Uuid;
 
 const SHUTTLE_SERVICE: &str = "test";
 
+static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new());
+
+#[dtor]
+fn cleanup() {
+    PG.cleanup();
+}
+
 #[tokio::test]
-async fn store_and_get_logs() {
-    let postgres_wrapper = LocalPostgresWrapper::default();
+async fn store_and_get_logs_copy() {
     let logger_port = pick_unused_port().unwrap();
-    let db_name: String = thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(10)
-        .map(char::from)
-        .collect();
     let deployment_id = "runtime-fetch-logs-deployment-id";
 
-    let test_future = async move {
+    // Create a unique database name so we have a new database for each test.
+    let db_name = Uuid::new_v4().to_string();
+
+    let server = spawn_server(logger_port, db_name);
+
+    let test_future = tokio::spawn(async move {
+        // Ensure the DB has been created and server has started.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
         let dst = format!("http://localhost:{logger_port}");
         let mut client = LoggerClient::connect(dst).await.unwrap();
 
@@ -74,6 +94,7 @@ async fn store_and_get_logs() {
             .unwrap()
             .into_inner()
             .log_items;
+
         assert_eq!(
             logs,
             expected_stored_logs
@@ -81,25 +102,27 @@ async fn store_and_get_logs() {
                 .map(|log| log.log_line.unwrap())
                 .collect::<Vec<LogLine>>()
         );
-    };
+    });
 
-    postgres_wrapper
-        .run_against_underlying_container(test_future, logger_port, &db_name)
-        .await;
+    tokio::select! {
+        _ = server => panic!("server stopped first"),
+        result = test_future => result.expect("test should succeed")
+    }
 }
 
 #[tokio::test]
-async fn get_stream_logs() {
-    let postgres_wrapper = LocalPostgresWrapper::default();
+async fn get_stream_logs_copy() {
     let logger_port = pick_unused_port().unwrap();
-    let db_name: String = thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(10)
-        .map(char::from)
-        .collect();
     let deployment_id = "runtime-fetch-logs-deployment-id";
 
-    let test_future = async move {
+    // Create a unique database name so we have a new database for each test.
+    let db_name = Uuid::new_v4().to_string();
+
+    let server = spawn_server(logger_port, db_name);
+
+    let test_future = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(800)).await;
+
         let dst = format!("http://localhost:{logger_port}");
         let mut client = LoggerClient::connect(dst).await.unwrap();
 
@@ -158,9 +181,29 @@ async fn get_stream_logs() {
             .unwrap()
             .unwrap();
         assert_eq!(expected_stored_logs[1].clone().log_line.unwrap(), log);
-    };
+    });
 
-    postgres_wrapper
-        .run_against_underlying_container(test_future, logger_port, &db_name)
-        .await;
+    tokio::select! {
+        _ = server => panic!("server stopped first"),
+        result = test_future => result.expect("test should succeed")
+    }
+}
+
+fn spawn_server(port: u16, db_name: String) -> JoinHandle<()> {
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+
+    // Get the PG uri first so the static PG is initialized.
+    let pg_uri = Uri::try_from(format!("{}/{}", PG.uri, db_name)).unwrap();
+
+    exec_psql(&format!(r#"CREATE DATABASE "{}";"#, &db_name));
+
+    tokio::task::spawn(async move {
+        let pg = Postgres::new(&pg_uri).await;
+        Server::builder()
+            .layer(JwtScopesLayer::new(vec![Scope::Logs]))
+            .add_service(LoggerServer::new(Service::new(pg.get_sender(), pg)))
+            .serve(addr)
+            .await
+            .unwrap();
+    })
 }

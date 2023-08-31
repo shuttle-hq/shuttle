@@ -94,10 +94,11 @@ impl Postgres {
 #[async_trait]
 impl Dal for Postgres {
     async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError> {
-        let result = sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1")
-            .bind(deployment_id)
-            .fetch_all(&self.pool)
-            .await?;
+        let result =
+            sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp")
+                .bind(deployment_id)
+                .fetch_all(&self.pool)
+                .await?;
 
         Ok(result)
     }

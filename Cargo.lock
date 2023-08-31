@@ -5620,15 +5620,14 @@ version = "0.24.0"
 dependencies = [
  "async-broadcast",
  "async-trait",
- "bollard",
  "chrono",
  "clap",
+ "ctor",
  "once_cell",
  "opentelemetry-proto",
  "portpicker",
  "pretty_assertions",
  "prost-types",
- "rand",
  "serde_json",
  "shuttle-common",
  "shuttle-common-tests",
@@ -5640,6 +5639,7 @@ dependencies = [
  "tonic",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

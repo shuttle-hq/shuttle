@@ -480,8 +480,10 @@ impl GatewayService {
                     state: project,
                 })
             } else {
-                // Otherwise it already exists
-                Err(Error::from_kind(ErrorKind::ProjectAlreadyExists))
+                // Otherwise it already exists. Because the caller of this
+                // command is the project owner, this means that the project
+                // is already running.
+                Err(Error::from_kind(ErrorKind::ProjectAlreadyRunning))
             }
         } else {
             // Check if project name is valid according to new rules if it
@@ -1009,10 +1011,20 @@ pub mod tests {
 
         // If recreated by the same user
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo, false, 0).await,
+            svc.create_project(matrix.clone(), neo.clone(), false, 0)
+                .await,
             Ok(FindProjectPayload {
                 project_id: _,
                 state: Project::Creating(_),
+            })
+        ));
+
+        // If recreated by the same user again while it's running
+        assert!(matches!(
+            svc.create_project(matrix.clone(), neo, false, 0).await,
+            Err(Error {
+                kind: ErrorKind::ProjectAlreadyRunning,
+                ..
             })
         ));
 
@@ -1036,10 +1048,20 @@ pub mod tests {
 
         // If recreated by an admin
         assert!(matches!(
-            svc.create_project(matrix, trinity, true, 0).await,
+            svc.create_project(matrix.clone(), trinity.clone(), true, 0)
+                .await,
             Ok(FindProjectPayload {
                 project_id: _,
                 state: Project::Creating(_),
+            })
+        ));
+
+        // If recreated by an adamin again while it's running
+        assert!(matches!(
+            svc.create_project(matrix, trinity, true, 0).await,
+            Err(Error {
+                kind: ErrorKind::ProjectAlreadyRunning,
+                ..
             })
         ));
 

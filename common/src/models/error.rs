@@ -42,6 +42,7 @@ pub enum ErrorKind {
     ProjectNotFound,
     InvalidProjectName,
     ProjectAlreadyExists,
+    ProjectAlreadyRunning,
     ProjectNotReady,
     ProjectUnavailable,
     CustomDomainNotFound,
@@ -97,6 +98,9 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::BAD_REQUEST,
                 "a project with the same name already exists",
             ),
+            ErrorKind::ProjectAlreadyRunning => {
+                (StatusCode::BAD_REQUEST, "project is already running")
+            }
             ErrorKind::InvalidCustomDomain => (StatusCode::BAD_REQUEST, "invalid custom domain"),
             ErrorKind::CustomDomainNotFound => (StatusCode::NOT_FOUND, "custom domain not found"),
             ErrorKind::CustomDomainAlreadyExists => {

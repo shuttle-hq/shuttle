@@ -24,6 +24,8 @@ message StoreLogsResponse {
 
 message LogsRequest {
   string deployment_id = 1;
+  optional uint32 page = 2;
+  optional uint32 limit = 3;
 }
 
 message LogsResponse {

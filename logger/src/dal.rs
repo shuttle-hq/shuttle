@@ -7,9 +7,9 @@ use prost_types::Timestamp;
 use shuttle_proto::logger::{LogItem, LogLine};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
-    sqlite::{SqliteConnectOptions, SqliteJournalMode},
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow},
     types::chrono::{DateTime, Utc},
-    FromRow, QueryBuilder, SqlitePool,
+    FromRow, QueryBuilder, Row, SqlitePool,
 };
 use thiserror::Error;
 use tracing::{error, info};
@@ -27,7 +27,12 @@ pub enum DalError {
 #[async_trait]
 pub trait Dal {
     /// Get logs for a deployment
-    async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError>;
+    async fn get_logs(
+        &self,
+        deployment_id: String,
+        page: Option<u32>,
+        limit: Option<u32>,
+    ) -> Result<Vec<Log>, DalError>;
 }
 
 #[derive(Clone)]
@@ -109,13 +114,32 @@ impl Sqlite {
 
 #[async_trait]
 impl Dal for Sqlite {
-    async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError> {
-        let result =
-            sqlx::query_as("SELECT * FROM logs WHERE deployment_id = ? ORDER BY tx_timestamp")
-                .bind(deployment_id)
-                .fetch_all(&self.pool)
-                .await?;
-
+    async fn get_logs(
+        &self,
+        deployment_id: String,
+        page: Option<u32>,
+        limit: Option<u32>,
+    ) -> Result<Vec<Log>, DalError> {
+        let mut query = QueryBuilder::new("SELECT * FROM logs WHERE deployment_id = ");
+        query
+            .push_bind(deployment_id)
+            .push("  ORDER BY tx_timestamp");
+        if let Some(limit) = limit {
+            query.push(" LIMIT ").push_bind(limit);
+            if let Some(page) = page {
+                let offset = page * limit;
+                if offset > 0 {
+                    query.push(" OFFSET ").push_bind(offset);
+                }
+            }
+        }
+        let result = query
+            .build()
+            .fetch_all(&self.pool)
+            .await?
+            .iter()
+            .map(Log::from)
+            .collect();
         Ok(result)
     }
 }
@@ -126,6 +150,17 @@ pub struct Log {
     pub(crate) shuttle_service_name: String,
     pub(crate) tx_timestamp: DateTime<Utc>,
     pub(crate) data: Vec<u8>,
+}
+
+impl<'a> From<&'a SqliteRow> for Log {
+    fn from(row: &'a SqliteRow) -> Self {
+        Self {
+            deployment_id: row.get("deployment_id"),
+            shuttle_service_name: row.get("shuttle_service_name"),
+            tx_timestamp: row.get("tx_timestamp"),
+            data: row.get("data"),
+        }
+    }
 }
 
 impl Log {

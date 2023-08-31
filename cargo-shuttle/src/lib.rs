@@ -127,8 +127,15 @@ impl Shuttle {
                 return self.deploy(&self.client()?, deploy_args).await;
             }
             Command::Status => self.status(&self.client()?).await,
-            Command::Logs { id, latest, follow } => {
-                self.logs(&self.client()?, id, latest, follow).await
+            Command::Logs {
+                id,
+                latest,
+                follow,
+                page,
+                limit,
+            } => {
+                self.logs(&self.client()?, id, latest, follow, page, limit)
+                    .await
             }
             Command::Deployment(DeploymentCommand::List { page, limit }) => {
                 self.deployments_list(&self.client()?, page, limit).await
@@ -446,6 +453,8 @@ impl Shuttle {
         id: Option<Uuid>,
         latest: bool,
         follow: bool,
+        page: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<()> {
         let id = if let Some(id) = id {
             id
@@ -481,7 +490,9 @@ impl Shuttle {
                 }
             }
         } else {
-            let logs = client.get_logs(self.ctx.project_name(), &id).await?;
+            let logs = client
+                .get_logs(self.ctx.project_name(), &id, page, limit)
+                .await?;
 
             for log in logs.into_iter() {
                 println!("{log}");

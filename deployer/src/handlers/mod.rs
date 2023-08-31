@@ -551,16 +551,20 @@ pub async fn start_deployment(
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
-        ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
+        ("deployment_id" = String, Path, description = "The deployment id in uuid format."),
+        PaginationDetails
     )
 )]
 pub async fn get_logs(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
+    Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<Json<Vec<LogItem>>> {
     let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),
+        page,
+        limit,
     });
 
     logs_request.extensions_mut().insert(claim);
@@ -609,6 +613,7 @@ async fn logs_websocket_handler(
 ) {
     let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),
+        ..Default::default()
     });
 
     logs_request.extensions_mut().insert(claim);

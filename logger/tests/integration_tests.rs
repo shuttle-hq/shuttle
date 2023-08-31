@@ -64,6 +64,7 @@ async fn store_and_get_logs() {
         let logs = client
             .get_logs(Request::new(LogsRequest {
                 deployment_id: deployment_id.into(),
+                ..Default::default()
             }))
             .await
             .unwrap()
@@ -132,6 +133,7 @@ async fn get_stream_logs() {
         let mut response = client
             .get_logs_stream(Request::new(LogsRequest {
                 deployment_id: deployment_id.into(),
+                ..Default::default()
             }))
             .await
             .unwrap()

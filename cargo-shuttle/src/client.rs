@@ -149,13 +149,24 @@ impl Client {
         &self,
         project: &ProjectName,
         deployment_id: &Uuid,
+        page: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<LogItem>> {
-        let path = format!(
+        let mut path = format!(
             "/projects/{}/deployments/{}/logs",
             project.as_str(),
-            deployment_id
+            deployment_id,
         );
-
+        if let Some(page_value) = page {
+            path.push_str(&format!("?page={}", page_value));
+        }
+        if let Some(limit_value) = limit {
+            path.push_str(&format!(
+                "{}limit={}",
+                if path.contains('?') { "&" } else { "?" },
+                limit_value
+            ));
+        }
         self.get(path).await
     }
 

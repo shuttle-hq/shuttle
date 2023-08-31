@@ -111,6 +111,12 @@ pub enum Command {
         #[arg(short, long)]
         /// Follow log output
         follow: bool,
+        #[arg(long)]
+        /// Which page to display
+        page: Option<u32>,
+        #[arg(long)]
+        /// How many logs per page to display
+        limit: Option<u32>,
     },
     /// List or manage projects on Shuttle
     #[command(subcommand)]

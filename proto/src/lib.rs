@@ -235,6 +235,7 @@ pub mod logger {
     use std::str::FromStr;
     use std::time::Duration;
 
+    use chrono::{DateTime, NaiveDateTime, Utc};
     use shuttle_common::log::{LogItem as LogItemCommon, LogRecorder};
 
     use prost::bytes::Bytes;
@@ -252,13 +253,25 @@ pub mod logger {
 
     impl From<LogItem> for LogItemCommon {
         fn from(value: LogItem) -> Self {
-            let line = value.log_line.expect("log item to have log line");
+            let LogLine {
+                service_name,
+                tx_timestamp,
+                data,
+            } = value.log_line.expect("log item to have log line");
+            let tx_timestamp = tx_timestamp.expect("log to have timestamp");
             Self {
                 id: value.deployment_id.parse().unwrap_or_default(),
-                internal_origin: shuttle_common::log::Backend::from_str(&line.service_name)
+                internal_origin: shuttle_common::log::Backend::from_str(&service_name)
                     .expect("backend name to be valid"),
-                timestamp: line.tx_timestamp.expect("there to be a timestamp").into(), // TODO
-                line: String::from_utf8(line.data).expect("line to be uft8"),
+                timestamp: DateTime::from_utc(
+                    NaiveDateTime::from_timestamp_opt(
+                        tx_timestamp.seconds,
+                        tx_timestamp.nanos.try_into().unwrap_or_default(),
+                    )
+                    .unwrap_or_default(),
+                    Utc,
+                ),
+                line: String::from_utf8(data).expect("line to be utf-8"),
             }
         }
     }

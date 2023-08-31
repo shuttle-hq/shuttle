@@ -15,7 +15,6 @@ use sqlx::{
     sqlite::{Sqlite, SqliteConnectOptions, SqliteJournalMode, SqlitePool},
     QueryBuilder,
 };
-use std::result::Result as StdResult;
 use tokio::task::JoinHandle;
 use tonic::transport::Endpoint;
 use tower::ServiceBuilder;
@@ -25,7 +24,6 @@ use uuid::Uuid;
 
 pub mod deployment;
 mod error;
-pub mod log;
 mod resource;
 mod secret;
 pub mod service;
@@ -35,7 +33,6 @@ mod user;
 use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentState, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
-pub use self::log::{Level as LogLevel, Log};
 use self::resource::Resource;
 pub use self::resource::{ResourceManager, Type as ResourceType};
 pub use self::secret::{Secret, SecretGetter, SecretRecorder};
@@ -168,7 +165,6 @@ impl Persistence {
         let (state_send, state_recv): (crossbeam_channel::Sender<DeploymentState>, _) =
             crossbeam_channel::bounded(0);
 
-        // let pool_cloned = pool.clone();
         let handle = tokio::spawn(async move {
             // State change logs are received on this non-async channel.
             while let Ok(state) = state_recv.recv() {
@@ -181,7 +177,6 @@ impl Persistence {
                             "failed to update deployment state"
                         )
                     });
-                // TODO: SEND TO LOGGER?
             }
         });
 

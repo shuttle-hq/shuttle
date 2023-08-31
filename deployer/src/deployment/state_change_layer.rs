@@ -25,7 +25,7 @@ use tracing_subscriber::Layer;
 use uuid::Uuid;
 
 use shuttle_common::{
-    log::{Backend, LogRecorder},
+    log::{Backend, ColoredLevel, LogRecorder},
     LogItem,
 };
 
@@ -74,12 +74,15 @@ where
             state: visitor.state,
         });
         // To logger
-        self.log_recorder.record(LogItem {
-            id: visitor.id,
-            internal_origin: Backend::Deployer,
-            timestamp: Utc::now(),
-            line: format!(" INFO Entering {:?} state", visitor.state),
-        });
+        self.log_recorder.record(LogItem::new(
+            visitor.id,
+            Backend::Deployer,
+            format!(
+                "{} {}",
+                tracing::Level::INFO.colored(),
+                format!("Entering {} state", visitor.state), // make blue?
+            ),
+        ));
     }
 }
 

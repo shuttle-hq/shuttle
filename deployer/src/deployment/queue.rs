@@ -190,21 +190,20 @@ impl Queued {
         info!("Building deployment");
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
-        let id = self.id;
+
         tokio::task::spawn_blocking(move || {
             while let Ok(message) = rx.recv() {
                 trace!(?message, "received cargo message");
                 // TODO: change these to `info!(...)` as [valuable] support increases.
                 // Currently it is not possible to turn these serde `message`s into a `valuable`, but once it is the passing down of `log_recorder` should be removed.
-                let log = LogItem {
-                    id: self.id,
-                    internal_origin: shuttle_common::log::Backend::Deployer, // will change to Builder
-                    timestamp: Utc::now(),
-                    line: match message {
+                let log = LogItem::new(
+                    self.id,
+                    shuttle_common::log::Backend::Deployer, // will change to Builder
+                    match message {
                         Message::TextLine(line) => line,
                         message => serde_json::to_string(&message).unwrap(),
                     },
-                };
+                );
                 log_recorder.record(log);
             }
         });
@@ -243,7 +242,7 @@ impl Queued {
         let is_next = built_service.is_wasm;
 
         deployment_updater
-            .set_is_next(&id, is_next)
+            .set_is_next(&self.id, is_next)
             .await
             .map_err(|e| Error::Build(Box::new(e)))?;
 

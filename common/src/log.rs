@@ -1,13 +1,19 @@
+use std::fmt::Write;
+
 use chrono::{DateTime, Utc};
+#[cfg(feature = "display")]
+use crossterm::style::StyledContent;
 #[cfg(feature = "display")]
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::EnumString;
-use tracing::{field::Visit, span, warn, Metadata, Subscriber};
+use tracing::{field::Visit, span, warn, Event, Level, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 use uuid::Uuid;
+
+use crate::tracing::JsonVisitor;
 
 /// Used to determine settings based on which backend crate does what
 #[derive(Clone, Debug, EnumString, Eq, PartialEq, Deserialize, Serialize)]
@@ -52,6 +58,17 @@ pub struct LogItem {
     pub line: String,
 }
 
+impl LogItem {
+    pub fn new(id: Uuid, internal_origin: Backend, line: String) -> Self {
+        Self {
+            id,
+            internal_origin,
+            timestamp: Utc::now(),
+            line,
+        }
+    }
+}
+
 #[cfg(feature = "display")]
 impl std::fmt::Display for LogItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -59,12 +76,65 @@ impl std::fmt::Display for LogItem {
 
         write!(
             f,
-            "{} [{}] {}",
+            "{} {} {}",
             datetime.to_rfc3339().dim(),
-            self.internal_origin,
+            format!("[{}]", self.internal_origin).grey(),
             self.line,
         )
     }
+}
+
+#[cfg(feature = "display")]
+pub trait ColoredLevel {
+    fn colored(&self) -> StyledContent<&str>;
+}
+
+#[cfg(feature = "display")]
+impl ColoredLevel for tracing::Level {
+    fn colored(&self) -> StyledContent<&str> {
+        match *self {
+            Level::TRACE => "TRACE".magenta(),
+            Level::DEBUG => "DEBUG".blue(),
+            Level::INFO => " INFO".green(),
+            Level::WARN => " WARN".yellow(),
+            Level::ERROR => "ERROR".red(),
+        }
+    }
+}
+
+#[cfg(feature = "display")]
+pub fn format_event(event: &Event<'_>) -> String {
+    let metadata = event.metadata();
+    let mut visitor = JsonVisitor::default();
+    event.record(&mut visitor);
+
+    let mut message = String::new();
+
+    let target = visitor
+        .target
+        .unwrap_or_else(|| metadata.target().to_string());
+
+    if !target.is_empty() {
+        let t = format!("{target}: ").dim();
+        write!(message, "{t}").unwrap();
+    }
+
+    let mut simple = None;
+    let mut extra = vec![];
+    for (key, value) in visitor.fields.iter() {
+        match key.as_str() {
+            "message" => simple = value.as_str(),
+            _ => extra.push(format!("{key}={value}")),
+        }
+    }
+    if !extra.is_empty() {
+        write!(message, "{{{}}} ", extra.join(" ")).unwrap();
+    }
+    if let Some(msg) = simple {
+        write!(message, "{msg}").unwrap();
+    }
+
+    format!("{} {}", metadata.level().colored(), message)
 }
 
 /// Records logs for the deployment progress
@@ -95,17 +165,16 @@ where
             return;
         };
 
-        // Find the outermost scope with the scope details containing the current state
+        // Find the outermost scope with the scope details containing the current deployment id
         for span in scope.from_root() {
             let extensions = span.extensions();
 
             if let Some(details) = extensions.get::<ScopeDetails>() {
-                self.recorder.record(LogItem {
-                    id: details.id,
-                    internal_origin: self.internal_service.clone(),
-                    timestamp: Utc::now(),
-                    line: "Test".into(),
-                });
+                self.recorder.record(LogItem::new(
+                    details.deployment_id,
+                    self.internal_service.clone(),
+                    format_event(event),
+                ));
                 break;
             }
         }
@@ -124,8 +193,8 @@ where
         attrs.record(&mut visitor);
         let details = visitor.details;
 
-        if details.id.is_nil() {
-            warn!("scope details does not have a valid id");
+        if details.deployment_id.is_nil() {
+            warn!("scope details does not have a valid deployment_id");
             return;
         }
 
@@ -133,12 +202,19 @@ where
         let span = ctx.span(id).unwrap();
         let mut extensions = span.extensions_mut();
 
-        self.recorder.record(LogItem {
-            id: details.id,
-            internal_origin: self.internal_service.clone(),
-            timestamp: Utc::now(),
-            line: "Test".into(),
-        });
+        let metadata = attrs.metadata();
+
+        let message = format!(
+            "{} Entering span {}",
+            metadata.level().colored(),
+            metadata.name().blue(),
+        );
+
+        self.recorder.record(LogItem::new(
+            details.deployment_id,
+            self.internal_service.clone(),
+            message,
+        ));
 
         extensions.insert::<ScopeDetails>(details);
     }
@@ -146,9 +222,9 @@ where
 
 #[derive(Debug, Default)]
 struct ScopeDetails {
-    id: Uuid,
+    deployment_id: Uuid,
 }
-/// To extract `id` field for scopes that have it
+/// To extract `deployment_id` field for scopes that have it
 #[derive(Default)]
 struct DeploymentIdVisitor {
     details: ScopeDetails,
@@ -156,7 +232,7 @@ struct DeploymentIdVisitor {
 
 impl DeploymentIdVisitor {
     /// Field containing the deployment identifier
-    const ID_IDENT: &'static str = "id";
+    const ID_IDENT: &'static str = "deployment_id";
 
     fn is_valid(metadata: &Metadata) -> bool {
         metadata.is_span() && metadata.fields().field(Self::ID_IDENT).is_some()
@@ -166,7 +242,7 @@ impl DeploymentIdVisitor {
 impl Visit for DeploymentIdVisitor {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == Self::ID_IDENT {
-            self.details.id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
+            self.details.deployment_id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
         }
     }
 }
@@ -186,12 +262,11 @@ mod tests {
 
     #[test]
     fn test_timezone_formatting() {
-        let item = LogItem {
-            id: Uuid::new_v4(),
-            internal_origin: Backend::Deployer,
-            timestamp: Utc::now(),
-            line: r#"{"message": "Building"}"#.to_owned(),
-        };
+        let item = LogItem::new(
+            Uuid::new_v4(),
+            Backend::Deployer,
+            r#"{"message": "Building"}"#.to_owned(),
+        );
 
         with_tz("CEST", || {
             let cest_dt = item.timestamp.with_timezone(&chrono::Local).to_rfc3339();

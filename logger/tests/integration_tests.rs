@@ -37,7 +37,7 @@ fn cleanup() {
 }
 
 #[tokio::test]
-async fn store_and_get_logs_copy() {
+async fn store_and_get_logs() {
     let logger_port = pick_unused_port().unwrap();
     let deployment_id = "runtime-fetch-logs-deployment-id";
 
@@ -111,7 +111,7 @@ async fn store_and_get_logs_copy() {
 }
 
 #[tokio::test]
-async fn get_stream_logs_copy() {
+async fn get_stream_logs() {
     let logger_port = pick_unused_port().unwrap();
     let deployment_id = "runtime-fetch-logs-deployment-id";
 

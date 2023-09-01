@@ -98,9 +98,10 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::BAD_REQUEST,
                 "a project with the same name already exists",
             ),
-            ErrorKind::ProjectAlreadyRunning => {
-                (StatusCode::BAD_REQUEST, "project is already running")
-            }
+            ErrorKind::ProjectAlreadyRunning => (
+                StatusCode::BAD_REQUEST,
+                "it looks like your project is already running. You can find out more with `cargo shuttle project status`",
+            ),
             ErrorKind::InvalidCustomDomain => (StatusCode::BAD_REQUEST, "invalid custom domain"),
             ErrorKind::CustomDomainNotFound => (StatusCode::NOT_FOUND, "custom domain not found"),
             ErrorKind::CustomDomainAlreadyExists => {

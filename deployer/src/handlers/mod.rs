@@ -1,7 +1,3 @@
-mod error;
-
-use crate::deployment::{Built, DeploymentManager, Queued};
-use crate::persistence::{Deployment, Persistence, ResourceManager, SecretGetter, State};
 use async_trait::async_trait;
 use axum::extract::{
     ws::{self, WebSocket},
@@ -18,6 +14,12 @@ use chrono::Utc;
 use fqdn::FQDN;
 use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
+use tracing::{error, field, instrument, trace, warn};
+use ulid::Ulid;
+use utoipa::{IntoParams, OpenApi};
+use utoipa_swagger_ui::SwaggerUi;
+use uuid::Uuid;
+
 use shuttle_common::backends::auth::{
     AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
 };
@@ -33,14 +35,12 @@ use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_proto::logger::LogsRequest;
 use shuttle_service::builder::clean_crate;
-use tracing::{error, field, instrument, trace, warn};
-use ulid::Ulid;
-use utoipa::{IntoParams, OpenApi};
-use utoipa_swagger_ui::SwaggerUi;
-use uuid::Uuid;
 
+use crate::deployment::{Built, DeploymentManager, Queued};
+use crate::persistence::{Deployment, Persistence, ResourceManager, SecretGetter, State};
 pub use {self::error::Error, self::error::Result, self::local::set_jwt_bearer};
 
+mod error;
 mod local;
 mod project;
 
@@ -58,7 +58,7 @@ mod project;
         get_logs_subscribe,
         get_logs,
         get_secrets,
-        clean_project
+        clean_project,
     ),
     components(schemas(
         shuttle_common::models::service::Summary,
@@ -72,8 +72,7 @@ mod project;
         shuttle_common::models::deployment::Response,
         shuttle_common::log::LogItem,
         shuttle_common::models::secret::Response,
-        shuttle_common::log::Level,
-        shuttle_common::deployment::State
+        shuttle_common::deployment::State,
     ))
 )]
 pub struct ApiDoc;
@@ -571,7 +570,7 @@ pub async fn get_logs(
             logs.into_inner()
                 .log_items
                 .into_iter()
-                .map(shuttle_common::LogItem::from)
+                .map(|l| l.to_log_item_with_id(deployment_id))
                 .collect(),
         ))
     } else {
@@ -643,7 +642,7 @@ async fn logs_websocket_handler(
                 break;
             }
             Ok(Some(proto_log)) => {
-                let log = LogItem::from(proto_log);
+                let log = proto_log.to_log_item_with_id(deployment_id);
                 trace!(?log, "received log from broadcast channel");
                 if log.id == deployment_id {
                     let msg = serde_json::to_string(&log).expect("to convert log item to json");

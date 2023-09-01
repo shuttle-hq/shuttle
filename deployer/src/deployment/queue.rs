@@ -7,7 +7,6 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use cargo_metadata::Message;
-use chrono::Utc;
 use crossbeam_channel::Sender;
 use flate2::read::GzDecoder;
 use opentelemetry::global;
@@ -194,8 +193,6 @@ impl Queued {
         tokio::task::spawn_blocking(move || {
             while let Ok(message) = rx.recv() {
                 trace!(?message, "received cargo message");
-                // TODO: change these to `info!(...)` as [valuable] support increases.
-                // Currently it is not possible to turn these serde `message`s into a `valuable`, but once it is the passing down of `log_recorder` should be removed.
                 let log = LogItem::new(
                     self.id,
                     shuttle_common::log::Backend::Deployer, // will change to Builder

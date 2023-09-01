@@ -76,9 +76,11 @@ impl std::fmt::Display for LogItem {
 
         write!(
             f,
-            "{} {} {}",
-            datetime.to_rfc3339().dim(),
-            format!("[{}]", self.internal_origin).grey(),
+            "{} [{}] {}",
+            datetime
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, false)
+                .dim(),
+            self.internal_origin,
             self.line,
         )
     }
@@ -269,14 +271,20 @@ mod tests {
         );
 
         with_tz("CEST", || {
-            let cest_dt = item.timestamp.with_timezone(&chrono::Local).to_rfc3339();
+            let cest_dt = item
+                .timestamp
+                .with_timezone(&chrono::Local)
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, false);
             let log_line = format!("{}", &item);
 
             assert!(log_line.contains(&cest_dt));
         });
 
         with_tz("UTC", || {
-            let utc_dt = item.timestamp.with_timezone(&chrono::Local).to_rfc3339();
+            let utc_dt = item
+                .timestamp
+                .with_timezone(&chrono::Local)
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, false);
             let log_line = format!("{}", &item);
 
             assert!(log_line.contains(&utc_dt));

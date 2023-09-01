@@ -19,8 +19,6 @@
 
 use std::str::FromStr;
 
-use chrono::Utc;
-use shuttle_proto::logger::{Batcher, VecReceiver};
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
@@ -53,8 +51,8 @@ where
     fn on_new_span(
         &self,
         attrs: &span::Attributes<'_>,
-        id: &span::Id,
-        ctx: tracing_subscriber::layer::Context<'_, S>,
+        _id: &span::Id,
+        _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
         // We only care about spans that change the state
         if !NewStateVisitor::is_valid(attrs.metadata()) {

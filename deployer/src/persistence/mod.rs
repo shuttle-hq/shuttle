@@ -414,7 +414,7 @@ impl ResourceManager for Persistence {
         // If the resources list is empty
         if res.resources.is_empty() {
             // Check if there are cached resources on the local persistence.
-            let resources: StdResult<Vec<Resource>, sqlx::Error> =
+            let resources: std::result::Result<Vec<Resource>, sqlx::Error> =
                 sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
                     .bind(service_id.to_string())
                     .fetch_all(&self.pool)

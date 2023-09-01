@@ -245,23 +245,52 @@ pub mod logger {
     };
     use tracing::error;
 
-    use shuttle_common::log::{LogItem as LogItemCommon, LogRecorder};
+    use shuttle_common::{
+        log::{Backend, LogItem as LogItemCommon, LogRecorder},
+        DeploymentId,
+    };
 
     use self::logger_client::LoggerClient;
 
     include!("generated/logger.rs");
 
+    impl From<LogItemCommon> for LogItem {
+        fn from(value: LogItemCommon) -> Self {
+            Self {
+                deployment_id: value.id.to_string(),
+                log_line: Some(LogLine {
+                    tx_timestamp: Some(prost_types::Timestamp {
+                        seconds: value.timestamp.timestamp(),
+                        nanos: value.timestamp.timestamp_subsec_nanos() as i32,
+                    }),
+                    service_name: format!("{:?}", value.internal_origin),
+                    data: value.line.into_bytes(),
+                }),
+            }
+        }
+    }
+
     impl From<LogItem> for LogItemCommon {
         fn from(value: LogItem) -> Self {
+            value
+                .log_line
+                .expect("log item to have log line")
+                .to_log_item_with_id(value.deployment_id.parse().unwrap_or_default())
+        }
+    }
+
+    impl LogLine {
+        pub fn to_log_item_with_id(self, deployment_id: DeploymentId) -> LogItemCommon {
             let LogLine {
                 service_name,
                 tx_timestamp,
                 data,
-            } = value.log_line.expect("log item to have log line");
+            } = self;
             let tx_timestamp = tx_timestamp.expect("log to have timestamp");
-            Self {
-                id: value.deployment_id.parse().unwrap_or_default(),
-                internal_origin: shuttle_common::log::Backend::from_str(&service_name)
+
+            LogItemCommon {
+                id: deployment_id,
+                internal_origin: Backend::from_str(&service_name)
                     .expect("backend name to be valid"),
                 timestamp: DateTime::from_utc(
                     NaiveDateTime::from_timestamp_opt(
@@ -278,10 +307,10 @@ pub mod logger {
 
     impl<I> LogRecorder for Batcher<I>
     where
-        I: VecReceiver<Item = LogItemCommon> + Clone + 'static,
+        I: VecReceiver<Item = LogItem> + Clone + 'static,
     {
         fn record(&self, log: LogItemCommon) {
-            self.send(log);
+            self.send(log.into());
         }
     }
 

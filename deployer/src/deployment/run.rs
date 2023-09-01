@@ -735,7 +735,7 @@ mod tests {
         let crate_dir: PathBuf = [RESOURCES_PATH, crate_name].iter().collect();
 
         Command::new("cargo")
-            .args(["build", "--release"])
+            .args(["build"])
             .current_dir(&crate_dir)
             .spawn()
             .unwrap()
@@ -750,7 +750,7 @@ mod tests {
         };
 
         let id = Uuid::new_v4();
-        let exe_path = crate_dir.join("target/release").join(bin_name);
+        let exe_path = crate_dir.join("target/debug").join(bin_name);
         let new_dir = crate_dir.join(EXECUTABLE_DIRNAME);
         let new_exe_path = new_dir.join(id.to_string());
 
@@ -766,7 +766,7 @@ mod tests {
                 is_next: false,
                 claim: Default::default(),
             },
-            RESOURCES_PATH.into(), // is joined later on with `service_name` to arrive at `crate_name`
+            RESOURCES_PATH.into(), // is later joined with `service_name` to arrive at `crate_name`
         )
     }
 }

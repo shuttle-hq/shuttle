@@ -379,7 +379,8 @@ async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<BuiltService> {
-    let runtimes = build_workspace(project_path, true, tx, true)
+    let release = std::env::var("CI").is_ok_and(|s| s == "true");
+    let runtimes = build_workspace(project_path, release, tx, true)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 

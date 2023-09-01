@@ -33,9 +33,6 @@ services:
   otel-collector:
     ports:
       - 4317:4317
-  logger:
-    ports:
-      - 8080:8000
   panamax:
     profiles:
       - panamax
@@ -43,6 +40,8 @@ services:
     profiles:
       - panamax
   logger:
+    ports:
+      - 8080:8000
     depends_on:
       - auth
       - logger-postgres
@@ -60,7 +59,7 @@ services:
 
         exec /usr/local/bin/service "$${@:0}"
   logger-postgres:
-    image: "${CONTAINER_REGISTRY}/logger-postgres:${LOGGER_POSTGRES_TAG}"
+    image: "docker.io/library/postgres:${LOGGER_POSTGRES_TAG}"
     restart: always
     networks:
       user-net:
@@ -70,4 +69,5 @@ services:
       - logger-postgres-vol:/var/lib/postgresql/data
     ports:
       - 8003:8000
-      - 5432:5432
+      # the shared postgres already uses 5432
+      - 5433:5432

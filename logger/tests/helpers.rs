@@ -33,7 +33,7 @@ impl DockerInstance {
         } = Config {
             container_name: PG_CONTAINER_NAME,
             // The postgres version should always be in sync with the prod RDS version.
-            image: "docker.io/library/postgres:14",
+            image: "docker.io/library/postgres:15",
             engine: "postgres",
             port: "5432",
             env: vec!["POSTGRES_PASSWORD=password", "PGUSER=postgres"],
@@ -53,8 +53,10 @@ impl DockerInstance {
 
         Self::wait_ready(Duration::from_secs(120), &is_ready_cmd);
 
-        // TODO: find out why this is needed for tests to pass reliably.
-        sleep(Duration::from_millis(300));
+        // The container enters the ready state and then reboots, sleep a little and then
+        // check if it's ready again afterwards.
+        sleep(Duration::from_millis(350));
+        Self::wait_ready(Duration::from_secs(120), &is_ready_cmd);
 
         Self {
             container_name,

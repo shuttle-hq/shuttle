@@ -10,7 +10,7 @@ pub struct Args {
     pub address: SocketAddr,
 
     /// Remote database connection url
-    #[arg(long, default_value = "./")]
+    #[arg(long)]
     pub db_connection_uri: Uri,
 
     /// Address to reach the authentication service at

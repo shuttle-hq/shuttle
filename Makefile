@@ -81,8 +81,8 @@ endif
 POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=14
 
-LOGGER_POSTGRES_EXTRA_PATH?=./extras/logger-postgres
-LOGGER_POSTGRES_TAG?=14
+# this should use the same version as our prod RDS database
+LOGGER_POSTGRES_TAG?=15
 LOGGER_POSTGRES_HOST?=logger-postgres
 LOGGER_POSTGRES_PASSWORD?=postgres
 
@@ -164,14 +164,6 @@ postgres:
 		$(BUILDX_FLAGS) \
 		-f $(POSTGRES_EXTRA_PATH)/Containerfile \
 		$(POSTGRES_EXTRA_PATH)
-
-logger-postgres:
-	$(DOCKER_BUILD) \
-		--build-arg LOGGER_POSTGRES_TAG=$(LOGGER_POSTGRES_TAG) \
-		--tag $(CONTAINER_REGISTRY)/logger-postgres:$(LOGGER_POSTGRES_TAG) \
-		$(BUILDX_FLAGS) \
-		-f $(LOGGER_POSTGRES_EXTRA_PATH)/Containerfile \
-		$(LOGGER_POSTGRES_EXTRA_PATH)
 
 panamax:
 	if [ $(USE_PANAMAX) = "enable" ]; then \

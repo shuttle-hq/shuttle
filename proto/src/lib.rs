@@ -236,8 +236,6 @@ pub mod logger {
     use std::time::Duration;
 
     use chrono::{DateTime, NaiveDateTime, Utc};
-    use shuttle_common::log::{LogItem as LogItemCommon, LogRecorder};
-
     use prost::bytes::Bytes;
     use tokio::{select, sync::mpsc, time::interval};
     use tonic::{
@@ -246,6 +244,8 @@ pub mod logger {
         Request,
     };
     use tracing::error;
+
+    use shuttle_common::log::{LogItem as LogItemCommon, LogRecorder};
 
     use self::logger_client::LoggerClient;
 
@@ -276,18 +276,12 @@ pub mod logger {
         }
     }
 
-    impl LogRecorder
-        for logger_client::LoggerClient<
-            shuttle_common::claims::ClaimService<
-                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-            >,
-        >
+    impl<I> LogRecorder for Batcher<I>
+    where
+        I: VecReceiver<Item = LogItemCommon> + Clone + 'static,
     {
         fn record(&self, log: LogItemCommon) {
-            // TODO: Make async + error handling?
-            // self.send_logs(request)
-            //     .await
-            //     .expect("Failed to sens log line");
+            self.send(log);
         }
     }
 

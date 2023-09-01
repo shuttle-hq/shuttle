@@ -112,7 +112,7 @@ pub async fn task(
     }
 }
 
-#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
+#[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
@@ -148,7 +148,7 @@ async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) {
     }
 }
 
-#[instrument(skip(run_send), fields(id = %built.id, state = %State::Built))]
+#[instrument(skip(run_send), fields(deployment_id = %built.id, state = %State::Built))]
 async fn promote_to_run(mut built: Built, run_send: RunSender) {
     let cx = Span::current().context();
 
@@ -173,7 +173,7 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    #[instrument(skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(deployment_id = %self.id, state = %State::Building))]
     async fn handle(
         self,
         storage_manager: ArtifactsStorageManager,

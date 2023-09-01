@@ -148,7 +148,7 @@ pub struct DeploymentLogLayer<R>
 where
     R: LogRecorder + Send + Sync,
 {
-    pub recorder: R,
+    pub log_recorder: R,
     pub internal_service: Backend,
 }
 
@@ -170,7 +170,7 @@ where
             let extensions = span.extensions();
 
             if let Some(details) = extensions.get::<ScopeDetails>() {
-                self.recorder.record(LogItem::new(
+                self.log_recorder.record(LogItem::new(
                     details.deployment_id,
                     self.internal_service.clone(),
                     format_event(event),
@@ -210,7 +210,7 @@ where
             metadata.name().blue(),
         );
 
-        self.recorder.record(LogItem::new(
+        self.log_recorder.record(LogItem::new(
             details.deployment_id,
             self.internal_service.clone(),
             message,

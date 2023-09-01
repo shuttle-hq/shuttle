@@ -5,6 +5,7 @@ use hyper::{
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
 };
+use shuttle_common::log::LogRecorder;
 use shuttle_proto::logger::logger_client::LoggerClient;
 use tokio::sync::Mutex;
 use tracing::{error, info};
@@ -28,6 +29,7 @@ pub use crate::runtime_manager::RuntimeManager;
 pub async fn start(
     persistence: Persistence,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
+    log_recorder: impl LogRecorder,
     log_fetcher: LoggerClient<
         shuttle_common::claims::ClaimService<
             shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
@@ -37,7 +39,7 @@ pub async fn start(
 ) {
     // when _set is dropped once axum exits, the deployment tasks will be aborted.
     let deployment_manager = DeploymentManager::builder()
-        .build_log_recorder(log_fetcher.clone())
+        .build_log_recorder(log_recorder)
         .secret_recorder(persistence.clone())
         .active_deployment_getter(persistence.clone())
         .artifacts_path(args.artifacts_path)

@@ -7,7 +7,7 @@
 //! This is very similar to Aspect Oriented Programming where we use the annotations from the function to trigger the recording of a new state.
 //! This annotation is a [#[instrument]](https://docs.rs/tracing-attributes/latest/tracing_attributes/attr.instrument.html) with an `id` and `state` field as follow:
 //! ```no-test
-//! #[instrument(fields(id = %built.id, state = %State::Built))]
+//! #[instrument(fields(deployment_id = %built.id, state = %State::Built))]
 //! pub async fn new_state_fn(built: Built) {
 //!     // Get built ready for starting
 //! }
@@ -20,6 +20,7 @@
 use std::str::FromStr;
 
 use chrono::Utc;
+use shuttle_proto::logger::{Batcher, VecReceiver};
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
@@ -63,19 +64,19 @@ where
         let mut visitor = NewStateVisitor::default();
         attrs.record(&mut visitor);
 
-        if visitor.id.is_nil() {
+        if visitor.deployment_id.is_nil() {
             warn!("scope details does not have a valid id");
             return;
         }
 
         // To deployer persistence
         self.state_recorder.record_state(DeploymentState {
-            id: visitor.id,
+            id: visitor.deployment_id,
             state: visitor.state,
         });
         // To logger
         self.log_recorder.record(LogItem::new(
-            visitor.id,
+            visitor.deployment_id,
             Backend::Deployer,
             format!(
                 "{} {}",
@@ -86,16 +87,16 @@ where
     }
 }
 
-/// To extract `id` and `state` fields for scopes that have them
+/// To extract `deployment_id` and `state` fields for scopes that have them
 #[derive(Default)]
 struct NewStateVisitor {
-    id: Uuid,
+    deployment_id: Uuid,
     state: State,
 }
 
 impl NewStateVisitor {
     /// Field containing the deployment identifier
-    const ID_IDENT: &'static str = "id";
+    const ID_IDENT: &'static str = "deployment_id";
 
     /// Field containing the deployment state identifier
     const STATE_IDENT: &'static str = "state";
@@ -112,7 +113,7 @@ impl Visit for NewStateVisitor {
         if field.name() == Self::STATE_IDENT {
             self.state = State::from_str(&format!("{value:?}")).unwrap_or_default();
         } else if field.name() == Self::ID_IDENT {
-            self.id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
+            self.deployment_id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
         }
     }
 }

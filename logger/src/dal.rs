@@ -1,4 +1,4 @@
-use std::{path::Path, str::FromStr, time::SystemTime};
+use std::time::SystemTime;
 
 use async_broadcast::{broadcast, Sender};
 use async_trait::async_trait;
@@ -6,13 +6,15 @@ use chrono::NaiveDateTime;
 use prost_types::Timestamp;
 use shuttle_proto::logger::{LogItem, LogLine};
 use sqlx::{
-    migrate::{MigrateDatabase, Migrator},
-    sqlite::{SqliteConnectOptions, SqliteJournalMode},
+    migrate::Migrator,
+    postgres::PgConnectOptions,
     types::chrono::{DateTime, Utc},
-    FromRow, QueryBuilder, SqlitePool,
+    FromRow, PgPool, QueryBuilder,
 };
 use thiserror::Error;
-use tracing::{error, info};
+use tracing::error;
+
+use tonic::transport::Uri;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -20,8 +22,6 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 pub enum DalError {
     #[error("database request failed: {0}")]
     Sqlx(#[from] sqlx::Error),
-    #[error("parsing log failed: {0}")]
-    Parsing(String),
 }
 
 #[async_trait]
@@ -31,48 +31,32 @@ pub trait Dal {
 }
 
 #[derive(Clone)]
-pub struct Sqlite {
-    pool: SqlitePool,
+pub struct Postgres {
+    pool: PgPool,
     tx: Sender<Vec<Log>>,
 }
 
-impl Sqlite {
+impl Postgres {
     /// This function creates all necessary tables and sets up a database connection pool.
-    pub async fn new(path: &str) -> Self {
-        if !Path::new(path).exists() {
-            sqlx::Sqlite::create_database(path).await.unwrap();
-        }
-
-        info!(
-            "state db: {}",
-            std::fs::canonicalize(path).unwrap().to_string_lossy()
-        );
-
-        // We have found in the past that setting synchronous to anything other than the default (full) breaks the
-        // broadcast channel in deployer. The broken symptoms are that the ws socket connections won't get any logs
-        // from the broadcast channel and would then close. When users did deploys, this would make it seem like the
-        // deploy is done (while it is still building for most of the time) and the status of the previous deployment
-        // would be returned to the user.
-        //
-        // If you want to activate a faster synchronous mode, then also do proper testing to confirm this bug is no
-        // longer present.
-        let sqlite_options = SqliteConnectOptions::from_str(path)
-            .unwrap()
-            .journal_mode(SqliteJournalMode::Wal);
-
-        let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
-
+    pub async fn new(connection_uri: &Uri) -> Self {
+        let pool = PgPool::connect(connection_uri.to_string().as_str())
+            .await
+            .expect("to be able to connect to the postgres db using the connection url");
         Self::from_pool(pool).await
     }
 
-    #[allow(dead_code)]
-    pub async fn new_in_memory() -> Self {
-        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    pub async fn with_options(options: PgConnectOptions) -> Self {
+        let pool = PgPool::connect_with(options)
+            .await
+            .expect("to be able to connect to the postgres db using the pg connect options");
         Self::from_pool(pool).await
     }
 
-    async fn from_pool(pool: SqlitePool) -> Self {
-        MIGRATIONS.run(&pool).await.unwrap();
+    async fn from_pool(pool: PgPool) -> Self {
+        MIGRATIONS
+            .run(&pool)
+            .await
+            .expect("to run migrations successfully");
 
         // TODO: we switched to async_broadcast to resolve the infinite loop bug, but it wasn't related.
         // Should we switch back to tokio::broadcast?
@@ -108,10 +92,10 @@ impl Sqlite {
 }
 
 #[async_trait]
-impl Dal for Sqlite {
+impl Dal for Postgres {
     async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError> {
         let result =
-            sqlx::query_as("SELECT * FROM logs WHERE deployment_id = ? ORDER BY tx_timestamp")
+            sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp")
                 .bind(deployment_id)
                 .fetch_all(&self.pool)
                 .await?;

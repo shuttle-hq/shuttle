@@ -7,7 +7,6 @@ volumes:
   panamax-io-index-vol:
   resource-recorder-vol:
   mongodb-vol:
-  logger-vol:
 networks:
   user-net:
     attachable: true
@@ -122,13 +121,13 @@ services:
     networks:
       user-net:
       default:
-    volumes:
-      - logger-vol:/var/lib
     environment:
       - RUST_LOG=${RUST_LOG}
+      - LOGGER_POSTGRES_HOST=${LOGGER_POSTGRES_HOST}
+      - LOGGER_POSTGRES_PASSWORD=${LOGGER_POSTGRES_PASSWORD}
     command:
       - "--address=0.0.0.0:8000"
-      - "--state=/var/lib"
+      - "--db-connection-uri=postgres://postgres:${LOGGER_POSTGRES_PASSWORD}@${LOGGER_POSTGRES_HOST}:5432/postgres"
       - "--auth-uri=http://auth:8000"
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"

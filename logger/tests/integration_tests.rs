@@ -3,29 +3,54 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use ctor::dtor;
+use once_cell::sync::Lazy;
 use portpicker::pick_unused_port;
 use pretty_assertions::assert_eq;
-use prost_types::Timestamp;
 use shuttle_common::claims::Scope;
 use shuttle_common_tests::JwtScopesLayer;
-use shuttle_logger::{Service, Sqlite};
+use shuttle_logger::{Postgres, Service};
 use shuttle_proto::logger::{
     logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogLine, LogsRequest,
     StoreLogsRequest,
 };
-use tokio::{task::JoinHandle, time::timeout};
-use tonic::{transport::Server, Request};
+use sqlx::__rt::timeout;
+use tokio::task::JoinHandle;
+use tonic::{
+    transport::{Server, Uri},
+    Request,
+};
+
+mod helpers;
+use helpers::{exec_psql, DockerInstance};
+
+use prost_types::Timestamp;
+use uuid::Uuid;
 
 const SHUTTLE_SERVICE: &str = "test";
 
+static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new());
+
+#[dtor]
+fn cleanup() {
+    PG.cleanup();
+}
+
 #[tokio::test]
 async fn store_and_get_logs() {
-    let port = pick_unused_port().unwrap();
+    let logger_port = pick_unused_port().unwrap();
     let deployment_id = "runtime-fetch-logs-deployment-id";
 
-    let server = get_server(port);
-    let test = tokio::task::spawn(async move {
-        let dst = format!("http://localhost:{port}");
+    // Create a unique database name so we have a new database for each test.
+    let db_name = Uuid::new_v4().to_string();
+
+    let server = spawn_server(logger_port, db_name);
+
+    let test_future = tokio::spawn(async move {
+        // Ensure the DB has been created and server has started.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        let dst = format!("http://localhost:{logger_port}");
         let mut client = LoggerClient::connect(dst).await.unwrap();
 
         // Get the generated logs
@@ -69,6 +94,7 @@ async fn store_and_get_logs() {
             .unwrap()
             .into_inner()
             .log_items;
+
         assert_eq!(
             logs,
             expected_stored_logs
@@ -80,19 +106,24 @@ async fn store_and_get_logs() {
 
     tokio::select! {
         _ = server => panic!("server stopped first"),
-        _ = test => ()
+        result = test_future => result.expect("test should succeed")
     }
 }
 
 #[tokio::test]
 async fn get_stream_logs() {
-    let port = pick_unused_port().unwrap();
+    let logger_port = pick_unused_port().unwrap();
     let deployment_id = "runtime-fetch-logs-deployment-id";
 
-    // Start the logger server in the background.
-    let server = get_server(port);
-    let test = tokio::task::spawn(async move {
-        let dst = format!("http://localhost:{port}");
+    // Create a unique database name so we have a new database for each test.
+    let db_name = Uuid::new_v4().to_string();
+
+    let server = spawn_server(logger_port, db_name);
+
+    let test_future = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(800)).await;
+
+        let dst = format!("http://localhost:{logger_port}");
         let mut client = LoggerClient::connect(dst).await.unwrap();
 
         // Get the generated logs
@@ -154,17 +185,23 @@ async fn get_stream_logs() {
 
     tokio::select! {
         _ = server => panic!("server stopped first"),
-        _ = test => ()
+        result = test_future => result.expect("test should succeed")
     }
 }
 
-fn get_server(port: u16) -> JoinHandle<()> {
+fn spawn_server(port: u16, db_name: String) -> JoinHandle<()> {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+
+    // Get the PG uri first so the static PG is initialized.
+    let pg_uri = Uri::try_from(format!("{}/{}", PG.uri, db_name)).unwrap();
+
+    exec_psql(&format!(r#"CREATE DATABASE "{}";"#, &db_name));
+
     tokio::task::spawn(async move {
-        let sqlite = Sqlite::new_in_memory().await;
+        let pg = Postgres::new(&pg_uri).await;
         Server::builder()
             .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-            .add_service(LoggerServer::new(Service::new(sqlite.get_sender(), sqlite)))
+            .add_service(LoggerServer::new(Service::new(pg.get_sender(), pg)))
             .serve(addr)
             .await
             .unwrap()

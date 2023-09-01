@@ -5604,6 +5604,8 @@ dependencies = [
  "async-trait",
  "chrono",
  "clap",
+ "ctor",
+ "once_cell",
  "opentelemetry-proto",
  "portpicker",
  "pretty_assertions",
@@ -5619,6 +5621,7 @@ dependencies = [
  "tonic",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

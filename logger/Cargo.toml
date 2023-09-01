@@ -18,7 +18,7 @@ sqlx = { workspace = true, features = [
     "json",
     "migrate",
     "runtime-tokio-rustls",
-    "sqlite",
+    "postgres",
 ] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
@@ -35,7 +35,10 @@ features = ["backend", "tonic"]
 workspace = true
 
 [dev-dependencies]
+once_cell = { workspace = true }
 portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
 shuttle-common-tests = { workspace = true }
+uuid = { workspace = true }
+ctor = { workspace = true }

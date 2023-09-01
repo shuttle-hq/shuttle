@@ -1,5 +1,6 @@
 use std::{
     net::{Ipv4Addr, SocketAddr},
+    str,
     time::{Duration, SystemTime},
 };
 
@@ -17,13 +18,14 @@ use tokio::{task::JoinHandle, time::timeout};
 use tonic::{transport::Server, Request};
 
 const SHUTTLE_SERVICE: &str = "test";
+const DEPLOYMENT_ID: &str = "runtime-fetch-logs-deployment-id";
 
 #[tokio::test]
 async fn store_and_get_logs() {
     let port = pick_unused_port().unwrap();
-    let deployment_id = "runtime-fetch-logs-deployment-id";
 
     let server = get_server(port);
+    tokio::time::sleep(Duration::from_secs(1)).await;
     let test = tokio::task::spawn(async move {
         let dst = format!("http://localhost:{port}");
         let mut client = LoggerClient::connect(dst).await.unwrap();
@@ -31,7 +33,7 @@ async fn store_and_get_logs() {
         // Get the generated logs
         let expected_stored_logs = vec![
             LogItem {
-                deployment_id: deployment_id.to_string(),
+                deployment_id: DEPLOYMENT_ID.to_string(),
                 log_line: Some(LogLine {
                     service_name: SHUTTLE_SERVICE.to_string(),
                     tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
@@ -39,7 +41,7 @@ async fn store_and_get_logs() {
                 }),
             },
             LogItem {
-                deployment_id: deployment_id.to_string(),
+                deployment_id: DEPLOYMENT_ID.to_string(),
                 log_line: Some(LogLine {
                     service_name: SHUTTLE_SERVICE.to_string(),
                     tx_timestamp: Some(Timestamp::from(
@@ -63,7 +65,7 @@ async fn store_and_get_logs() {
         // Get logs
         let logs = client
             .get_logs(Request::new(LogsRequest {
-                deployment_id: deployment_id.into(),
+                deployment_id: DEPLOYMENT_ID.into(),
                 ..Default::default()
             }))
             .await
@@ -88,10 +90,10 @@ async fn store_and_get_logs() {
 #[tokio::test]
 async fn get_stream_logs() {
     let port = pick_unused_port().unwrap();
-    let deployment_id = "runtime-fetch-logs-deployment-id";
 
     // Start the logger server in the background.
     let server = get_server(port);
+    tokio::time::sleep(Duration::from_secs(1)).await;
     let test = tokio::task::spawn(async move {
         let dst = format!("http://localhost:{port}");
         let mut client = LoggerClient::connect(dst).await.unwrap();
@@ -99,7 +101,7 @@ async fn get_stream_logs() {
         // Get the generated logs
         let expected_stored_logs = vec![
             LogItem {
-                deployment_id: deployment_id.to_string(),
+                deployment_id: DEPLOYMENT_ID.to_string(),
                 log_line: Some(LogLine {
                     service_name: SHUTTLE_SERVICE.to_string(),
                     tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
@@ -107,7 +109,7 @@ async fn get_stream_logs() {
                 }),
             },
             LogItem {
-                deployment_id: deployment_id.to_string(),
+                deployment_id: DEPLOYMENT_ID.to_string(),
                 log_line: Some(LogLine {
                     service_name: SHUTTLE_SERVICE.to_string(),
                     tx_timestamp: Some(Timestamp::from(
@@ -119,7 +121,6 @@ async fn get_stream_logs() {
                 }),
             },
         ];
-
         let response = client
             .store_logs(Request::new(StoreLogsRequest {
                 logs: expected_stored_logs.clone(),
@@ -132,7 +133,7 @@ async fn get_stream_logs() {
         // Subscribe to stream
         let mut response = client
             .get_logs_stream(Request::new(LogsRequest {
-                deployment_id: deployment_id.into(),
+                deployment_id: DEPLOYMENT_ID.into(),
                 ..Default::default()
             }))
             .await
@@ -152,6 +153,80 @@ async fn get_stream_logs() {
             .unwrap()
             .unwrap();
         assert_eq!(expected_stored_logs[1].clone().log_line.unwrap(), log);
+    });
+
+    tokio::select! {
+        _ = server => panic!("server stopped first"),
+        _ = test => ()
+    }
+}
+
+#[tokio::test]
+async fn paginate_logs() {
+    let port = pick_unused_port().unwrap();
+
+    // Start the logger server in the background.
+    let server = get_server(port);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let test = tokio::task::spawn(async move {
+        let dst = format!("http://localhost:{port}");
+        let mut client = LoggerClient::connect(dst).await.unwrap();
+
+        let mut test_logs = Vec::new();
+        for i in 1..=50 {
+            test_logs.push(LogItem {
+                deployment_id: DEPLOYMENT_ID.to_string(),
+                log_line: Some(LogLine {
+                    service_name: SHUTTLE_SERVICE.to_string(),
+                    tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
+                    data: format!("log {i} example").as_bytes().to_vec(),
+                }),
+            });
+        }
+
+        let response = client
+            .store_logs(Request::new(StoreLogsRequest {
+                logs: test_logs.clone(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(response.success);
+
+        // Get logs
+        let logs = client
+            .get_logs(Request::new(LogsRequest {
+                deployment_id: DEPLOYMENT_ID.into(),
+                page: Some(1),
+                limit: Some(25),
+            }))
+            .await
+            .unwrap()
+            .into_inner()
+            .log_items;
+
+        assert_eq!(25, logs.len());
+        assert_eq!(
+            "log 26 example",
+            str::from_utf8(&logs.first().unwrap().data).unwrap()
+        );
+
+        let logs = client
+            .get_logs(Request::new(LogsRequest {
+                deployment_id: DEPLOYMENT_ID.into(),
+                page: Some(2),
+                limit: Some(20),
+            }))
+            .await
+            .unwrap()
+            .into_inner()
+            .log_items;
+
+        assert_eq!(10, logs.len());
+        assert_eq!(
+            "log 41 example",
+            str::from_utf8(&logs.first().unwrap().data).unwrap()
+        );
     });
 
     tokio::select! {

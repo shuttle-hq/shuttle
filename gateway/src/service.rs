@@ -21,6 +21,7 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
+use shuttle_common::models::project::State;
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
@@ -480,10 +481,35 @@ impl GatewayService {
                     state: project,
                 })
             } else {
-                // Otherwise it already exists. Because the caller of this
-                // command is the project owner, this means that the project
-                // is already running.
-                Err(Error::from_kind(ErrorKind::ProjectAlreadyRunning))
+                // Otherwise it already exists. Because the caller of this command is the
+                // project owner, this means that the project is already in some running state.
+                let state = State::from(project);
+                let message = match state {
+                    // Ongoing processes.
+                    State::Creating { .. }
+                    | State::Attaching { .. }
+                    | State::Recreating { .. }
+                    | State::Starting { .. }
+                    | State::Restarting { .. }
+                    | State::Stopping
+                    | State::Rebooting
+                    | State::Destroying => {
+                        format!("project '{project_name}' is already {state}. You can check the status again using `cargo shuttle project status`.")
+                    }
+                    // Use different message than the default for `State::Ready`.
+                    State::Ready => {
+                        format!("project '{project_name}' is already running")
+                    }
+                    State::Started | State::Stopped | State::Destroyed => {
+                        format!("project '{project_name}' is already {state}. Try using `cargo shuttle project restart` instead.")
+                    }
+                    State::Errored { message } => {
+                        format!("project '{project_name}' is in an errored state.\nproject message: {message}")
+                    }
+                };
+                Err(Error::from_kind(ErrorKind::ProjectAlreadyExists {
+                    owner_state_msg: Some(message),
+                }))
             }
         } else {
             // Check if project name is valid according to new rules if it
@@ -529,7 +555,9 @@ impl GatewayService {
                 // project name clash
                 if let Some(db_err_code) = err.as_database_error().and_then(DatabaseError::code) {
                     if db_err_code == "2067" {  // SQLITE_CONSTRAINT_UNIQUE
-                        return Error::from_kind(ErrorKind::ProjectAlreadyExists)
+                        return Error::from_kind(ErrorKind::ProjectAlreadyExists{
+                            owner_state_msg: None
+                        })
                     }
                 }
                 // Otherwise this is internal
@@ -1004,7 +1032,9 @@ pub mod tests {
             svc.create_project(matrix.clone(), trinity.clone(), false, 0)
                 .await,
             Err(Error {
-                kind: ErrorKind::ProjectAlreadyExists,
+                kind: ErrorKind::ProjectAlreadyExists {
+                    owner_state_msg: None
+                },
                 ..
             })
         ));
@@ -1023,7 +1053,9 @@ pub mod tests {
         assert!(matches!(
             svc.create_project(matrix.clone(), neo, false, 0).await,
             Err(Error {
-                kind: ErrorKind::ProjectAlreadyRunning,
+                kind: ErrorKind::ProjectAlreadyExists {
+                    owner_state_msg: Some(_)
+                },
                 ..
             })
         ));
@@ -1060,7 +1092,9 @@ pub mod tests {
         assert!(matches!(
             svc.create_project(matrix, trinity, true, 0).await,
             Err(Error {
-                kind: ErrorKind::ProjectAlreadyRunning,
+                kind: ErrorKind::ProjectAlreadyExists {
+                    owner_state_msg: Some(_)
+                },
                 ..
             })
         ));

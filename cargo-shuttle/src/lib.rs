@@ -32,7 +32,7 @@ use shuttle_service::builder::{build_workspace, BuiltService};
 
 use anyhow::{anyhow, bail, Context, Result};
 use cargo_metadata::Message;
-use clap::CommandFactory;
+use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use clap_complete::{generate, Shell};
 use config::RequestContext;
 use crossterm::style::Stylize;
@@ -71,15 +71,34 @@ const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/introduction/shuttle
 
 pub struct Shuttle {
     ctx: RequestContext,
+    provided_path_to_init: bool,
 }
 
 impl Shuttle {
     pub fn new() -> Result<Self> {
         let ctx = RequestContext::load_global()?;
-        Ok(Self { ctx })
+        Ok(Self {
+            ctx,
+            provided_path_to_init: false,
+        })
     }
 
-    pub async fn run(mut self, mut args: ShuttleArgs) -> Result<CommandOutcome> {
+    pub async fn parse_args_and_run(mut self) -> Result<CommandOutcome> {
+        // A hack to see if the PATH arg of the init command was explicitly given
+        let matches = ShuttleArgs::command().get_matches();
+        let args = ShuttleArgs::from_arg_matches(&matches)
+            .expect("args to already be parsed successfully");
+        self.provided_path_to_init =
+            matches
+                .subcommand_matches("init")
+                .is_some_and(|init_matches| {
+                    init_matches.value_source("path") == Some(ValueSource::CommandLine)
+                });
+
+        self.run(args).await
+    }
+
+    pub async fn run(mut self, args: ShuttleArgs) -> Result<CommandOutcome> {
         trace!("running local client");
 
         if args.api_url.as_ref().is_some_and(|s| s.ends_with('/')) {
@@ -109,7 +128,7 @@ impl Shuttle {
                 | Command::Logs { .. }
                 | Command::Run(..)
         ) {
-            self.load_project(&mut args.project_args)?;
+            self.load_project(&args.project_args)?;
         }
 
         self.ctx.set_api_url(args.api_url);
@@ -163,15 +182,14 @@ impl Shuttle {
 
     /// Log in, initialize a project and potentially create the Shuttle environment for it.
     ///
-    /// If both a project name and framework are passed as arguments, it will run without any extra
+    /// If project name, template, and path are passed as arguments, it will run without any extra
     /// interaction.
     async fn init(&mut self, args: InitArgs, mut project_args: ProjectArgs) -> Result<()> {
         // Turns the template or git args (if present) to a repo+folder.
         let git_templates = args.git_template()?;
 
-        // Caveat: No way of telling if args.path was given or default
-        // Ideally that would be checked here (go interactive if not given)
-        let interactive = project_args.name.is_none() || git_templates.is_none();
+        let interactive =
+            project_args.name.is_none() || git_templates.is_none() || !self.provided_path_to_init;
 
         let theme = ColorfulTheme::default();
 
@@ -315,7 +333,7 @@ impl Shuttle {
         Ok(())
     }
 
-    pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {
+    pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
         trace!("loading project arguments: {project_args:?}");
 
         self.ctx.load_local(project_args)

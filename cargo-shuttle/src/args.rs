@@ -224,7 +224,7 @@ pub struct DeployArgs {
 #[derive(Parser, Debug)]
 pub struct RunArgs {
     /// Port to start service on
-    #[arg(long, env, default_value = "8000")]
+    #[arg(long, short = 'p', env, default_value = "8000")]
     pub port: u16,
     /// Use 0.0.0.0 instead of localhost (for usage with local external devices)
     #[arg(long)]
@@ -343,14 +343,14 @@ fn parse_path(path: OsString) -> Result<PathBuf, String> {
 /// Helper function to parse, create if not exists, and return the absolute path
 pub(crate) fn parse_init_path(path: OsString) -> Result<PathBuf, io::Error> {
     // Create the directory if does not exist
-    create_dir_all(&path)?;
-
-    parse_path(path.clone()).map_err(|e| {
+    create_dir_all(&path).map_err(|e| {
         io::Error::new(
             ErrorKind::InvalidInput,
-            format!("could not turn {path:?} into a real path: {e}"),
+            format!("Could not create directory: {e}"),
         )
-    })
+    })?;
+
+    parse_path(path.clone()).map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))
 }
 
 #[cfg(test)]

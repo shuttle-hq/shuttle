@@ -84,7 +84,7 @@ impl ProjectArgs {
 
 /// A cargo command for the Shuttle platform (https://www.shuttle.rs/)
 ///
-/// See the CLI docs (https://docs.shuttle.rs/introduction/shuttle-commands)
+/// See the CLI docs (https://docs.shuttle.rs/getting-started/shuttle-commands)
 /// for more information.
 #[derive(Parser)]
 pub enum Command {

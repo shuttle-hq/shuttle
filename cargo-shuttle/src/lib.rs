@@ -67,7 +67,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 const SHUTTLE_LOGIN_URL: &str = "https://console.shuttle.rs/new-project";
 const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
-const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/introduction/shuttle-commands";
+const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/shuttle-commands";
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -235,9 +235,23 @@ impl Shuttle {
                 .with_prompt("Directory")
                 .default(path.to_owned())
                 .interact()?;
-
             println!();
-            args::parse_init_path(OsString::from(directory_str))?
+
+            let path = args::parse_init_path(OsString::from(directory_str))?;
+
+            if std::fs::read_dir(&path)
+                .expect("init dir to exist and list entries")
+                .count()
+                > 0
+                && !Confirm::with_theme(&theme)
+                    .with_prompt("Target directory is not empty. Are you sure?")
+                    .default(true)
+                    .interact()?
+            {
+                return Ok(());
+            }
+
+            path
         } else {
             args.path.clone()
         };
@@ -307,7 +321,7 @@ impl Shuttle {
             // so `load_project` is ran with the correct project path
             project_args.working_directory = path.clone();
 
-            self.load_project(&mut project_args)?;
+            self.load_project(&project_args)?;
             self.project_create(&self.client()?, DEFAULT_IDLE_MINUTES)
                 .await?;
         }
@@ -324,7 +338,7 @@ impl Shuttle {
                 printdoc!(
                     "
                     Hint: Discord bots might want to use `--idle-minutes 0` when starting the
-                    project so that they don't go offline: https://docs.shuttle.rs/introduction/idle-projects
+                    project so that they don't go offline: https://docs.shuttle.rs/getting-started/idle-projects
                     "
                 );
             }
@@ -1262,7 +1276,7 @@ impl Shuttle {
             );
             println!();
             println!("{}", idle_msg.yellow());
-            println!("To change the idle time refer to the docs: https://docs.shuttle.rs/introduction/idle-projects");
+            println!("To change the idle time refer to the docs: https://docs.shuttle.rs/getting-started/idle-projects");
             println!();
         }
 
@@ -1596,9 +1610,9 @@ mod tests {
         dunce::canonicalize(path).unwrap()
     }
 
-    fn get_archive_entries(mut project_args: ProjectArgs) -> Vec<String> {
+    fn get_archive_entries(project_args: ProjectArgs) -> Vec<String> {
         let mut shuttle = Shuttle::new().unwrap();
-        shuttle.load_project(&mut project_args).unwrap();
+        shuttle.load_project(&project_args).unwrap();
 
         let archive = shuttle.make_archive().unwrap();
 
@@ -1625,13 +1639,13 @@ mod tests {
 
     #[test]
     fn load_project_returns_proper_working_directory_in_project_args() {
-        let mut project_args = ProjectArgs {
+        let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
             name: None,
         };
 
         let mut shuttle = Shuttle::new().unwrap();
-        shuttle.load_project(&mut project_args).unwrap();
+        shuttle.load_project(&project_args).unwrap();
 
         assert_eq!(
             project_args.working_directory,

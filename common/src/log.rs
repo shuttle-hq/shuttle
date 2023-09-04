@@ -16,11 +16,12 @@ use uuid::Uuid;
 use crate::tracing::JsonVisitor;
 
 /// Used to determine settings based on which backend crate does what
-#[derive(Clone, Debug, EnumString, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, EnumString, Eq, PartialEq, Deserialize, Serialize)]
 #[cfg_attr(feature = "display", derive(strum::Display))]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub enum Backend {
     /// Is considered an error
+    #[default]
     Unknown,
 
     Auth,
@@ -30,12 +31,6 @@ pub enum Backend {
     Logger,
     Provisioner,
     ResourceRecorder,
-}
-
-impl Default for Backend {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

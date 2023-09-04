@@ -41,12 +41,11 @@ pub enum ErrorKind {
     UserAlreadyExists,
     ProjectNotFound,
     InvalidProjectName,
-    ProjectAlreadyExists {
-        // A message describing a running state of the project.
-        // Used if the project already exists but is owned
-        // by the caller, which means they can modify the project.
-        owner_state_msg: Option<String>,
-    },
+    ProjectAlreadyExists,
+    /// Contains a message describing a running state of the project.
+    /// Used if the project already exists but is owned
+    /// by the caller, which means they can modify the project.
+    OwnProjectAlreadyExists(String),
     ProjectNotReady,
     ProjectUnavailable,
     CustomDomainNotFound,
@@ -98,15 +97,11 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::BAD_REQUEST,
                 "the requested operation is invalid",
             ),
-            ErrorKind::ProjectAlreadyExists {
-                owner_state_msg: None,
-            } => (
+            ErrorKind::ProjectAlreadyExists => (
                 StatusCode::BAD_REQUEST,
                 "a project with the same name already exists",
             ),
-            ErrorKind::ProjectAlreadyExists {
-                owner_state_msg: Some(message),
-            } => {
+            ErrorKind::OwnProjectAlreadyExists(message) => {
                 return Self {
                     message,
                     status_code: StatusCode::BAD_REQUEST.as_u16(),

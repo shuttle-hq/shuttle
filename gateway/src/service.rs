@@ -500,16 +500,20 @@ impl GatewayService {
                     State::Ready => {
                         format!("project '{project_name}' is already running")
                     }
-                    State::Started | State::Stopped | State::Destroyed => {
+                    State::Started | State::Destroyed => {
                         format!("project '{project_name}' is already {state}. Try using `cargo shuttle project restart` instead.")
+                    }
+                    State::Stopped => {
+                        format!("project '{project_name}' is idled. Find out more about idle projects here: \
+				 https://docs.shuttle.rs/getting-started/idle-projects")
                     }
                     State::Errored { message } => {
                         format!("project '{project_name}' is in an errored state.\nproject message: {message}")
                     }
                 };
-                Err(Error::from_kind(ErrorKind::ProjectAlreadyExists {
-                    owner_state_msg: Some(message),
-                }))
+                Err(Error::from_kind(ErrorKind::OwnProjectAlreadyExists(
+                    message,
+                )))
             }
         } else {
             // Check if project name is valid according to new rules if it
@@ -555,9 +559,7 @@ impl GatewayService {
                 // project name clash
                 if let Some(db_err_code) = err.as_database_error().and_then(DatabaseError::code) {
                     if db_err_code == "2067" {  // SQLITE_CONSTRAINT_UNIQUE
-                        return Error::from_kind(ErrorKind::ProjectAlreadyExists{
-                            owner_state_msg: None
-                        })
+                        return Error::from_kind(ErrorKind::ProjectAlreadyExists)
                     }
                 }
                 // Otherwise this is internal
@@ -1032,9 +1034,7 @@ pub mod tests {
             svc.create_project(matrix.clone(), trinity.clone(), false, 0)
                 .await,
             Err(Error {
-                kind: ErrorKind::ProjectAlreadyExists {
-                    owner_state_msg: None
-                },
+                kind: ErrorKind::ProjectAlreadyExists,
                 ..
             })
         ));
@@ -1053,9 +1053,7 @@ pub mod tests {
         assert!(matches!(
             svc.create_project(matrix.clone(), neo, false, 0).await,
             Err(Error {
-                kind: ErrorKind::ProjectAlreadyExists {
-                    owner_state_msg: Some(_)
-                },
+                kind: ErrorKind::OwnProjectAlreadyExists(_),
                 ..
             })
         ));
@@ -1092,9 +1090,7 @@ pub mod tests {
         assert!(matches!(
             svc.create_project(matrix, trinity, true, 0).await,
             Err(Error {
-                kind: ErrorKind::ProjectAlreadyExists {
-                    owner_state_msg: Some(_)
-                },
+                kind: ErrorKind::OwnProjectAlreadyExists(_),
                 ..
             })
         ));

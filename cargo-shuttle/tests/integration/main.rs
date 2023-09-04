@@ -13,14 +13,17 @@ async fn cargo_shuttle_command(
 
     Shuttle::new()
         .unwrap()
-        .run(ShuttleArgs {
-            api_url: Some("http://shuttle.invalid:80".to_string()),
-            project_args: ProjectArgs {
-                working_directory,
-                name: None,
+        .run(
+            ShuttleArgs {
+                api_url: Some("http://shuttle.invalid:80".to_string()),
+                project_args: ProjectArgs {
+                    working_directory,
+                    name: None,
+                },
+                cmd,
             },
-            cmd,
-        })
+            false,
+        )
         .await
 }
 

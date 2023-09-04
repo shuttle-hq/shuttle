@@ -71,34 +71,34 @@ const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/shut
 
 pub struct Shuttle {
     ctx: RequestContext,
-    provided_path_to_init: bool,
 }
 
 impl Shuttle {
     pub fn new() -> Result<Self> {
         let ctx = RequestContext::load_global()?;
-        Ok(Self {
-            ctx,
-            provided_path_to_init: false,
-        })
+        Ok(Self { ctx })
     }
 
-    pub async fn parse_args_and_run(mut self) -> Result<CommandOutcome> {
+    pub async fn parse_args_and_run(self) -> Result<CommandOutcome> {
         // A hack to see if the PATH arg of the init command was explicitly given
         let matches = ShuttleArgs::command().get_matches();
         let args = ShuttleArgs::from_arg_matches(&matches)
             .expect("args to already be parsed successfully");
-        self.provided_path_to_init =
+        let provided_path_to_init =
             matches
                 .subcommand_matches("init")
                 .is_some_and(|init_matches| {
                     init_matches.value_source("path") == Some(ValueSource::CommandLine)
                 });
 
-        self.run(args).await
+        self.run(args, provided_path_to_init).await
     }
 
-    pub async fn run(mut self, args: ShuttleArgs) -> Result<CommandOutcome> {
+    pub async fn run(
+        mut self,
+        args: ShuttleArgs,
+        provided_path_to_init: bool,
+    ) -> Result<CommandOutcome> {
         trace!("running local client");
 
         if args.api_url.as_ref().is_some_and(|s| s.ends_with('/')) {
@@ -134,7 +134,10 @@ impl Shuttle {
         self.ctx.set_api_url(args.api_url);
 
         match args.cmd {
-            Command::Init(init_args) => self.init(init_args, args.project_args).await,
+            Command::Init(init_args) => {
+                self.init(init_args, args.project_args, provided_path_to_init)
+                    .await
+            }
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
@@ -184,12 +187,17 @@ impl Shuttle {
     ///
     /// If project name, template, and path are passed as arguments, it will run without any extra
     /// interaction.
-    async fn init(&mut self, args: InitArgs, mut project_args: ProjectArgs) -> Result<()> {
+    async fn init(
+        &mut self,
+        args: InitArgs,
+        mut project_args: ProjectArgs,
+        provided_path_to_init: bool,
+    ) -> Result<()> {
         // Turns the template or git args (if present) to a repo+folder.
         let git_templates = args.git_template()?;
 
         let interactive =
-            project_args.name.is_none() || git_templates.is_none() || !self.provided_path_to_init;
+            project_args.name.is_none() || git_templates.is_none() || !provided_path_to_init;
 
         let theme = ColorfulTheme::default();
 

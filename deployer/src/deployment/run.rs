@@ -173,19 +173,19 @@ async fn kill_old_deployments(
 
 #[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Completed))]
 fn completed_cleanup(_id: &Uuid) {
-    info!(DEPLOYER_END_MSG_COMPLETED);
+    info!("{}", DEPLOYER_END_MSG_COMPLETED);
 }
 
 #[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Stopped))]
 fn stopped_cleanup(_id: &Uuid) {
-    info!(DEPLOYER_END_MSG_STOPPED);
+    info!("{}", DEPLOYER_END_MSG_STOPPED);
 }
 
 #[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        DEPLOYER_END_MSG_CRASHED
+        "{}", DEPLOYER_END_MSG_CRASHED
     );
 }
 
@@ -193,7 +193,7 @@ fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
 fn start_crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        DEPLOYER_END_MSG_STARTUP_ERR
+        "{}", DEPLOYER_END_MSG_STARTUP_ERR
     );
 }
 

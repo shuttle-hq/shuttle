@@ -11,7 +11,7 @@ use shuttle_service::{DeploymentMetadata, Factory, ResourceBuilder, Type};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum PersistError<'a> {
+pub enum PersistError {
     #[error("invalid key name")]
     InvalidKey,
     #[error("failed to open file: {0}")]
@@ -20,8 +20,8 @@ pub enum PersistError<'a> {
     CreateFolder(std::io::Error),
     #[error("failed to list contents of folder: {0}")]
     ListFolder(std::io::Error),
-    #[error("failed to list the file name: {0}")]
-    ListName(&'a str),
+    #[error("failed to list file name: {0}")]
+    ListName(String),
     #[error("failed to clear folder: {0}")]
     RemoveFolder(std::io::Error),
     #[error("failed to remove file: {0}")]
@@ -42,7 +42,7 @@ pub struct PersistInstance {
 
 impl PersistInstance {
     /// Constructs a PersistInstance and creates its associated storage folder
-    pub fn new(dir: PathBuf) -> Result<Self, PersistError<'static>> {
+    pub fn new(dir: PathBuf) -> Result<Self, PersistError> {
         fs::create_dir_all(&dir).map_err(PersistError::CreateFolder)?;
 
         Ok(Self { dir })
@@ -78,7 +78,7 @@ impl PersistInstance {
                     .to_str()
                     .map(ToString::to_string)
                     .ok_or(PersistError::ListName(
-                        "the file name contains invalid characters",
+                        "the file name contains invalid characters".to_owned(),
                     ))
             })
             .collect()
@@ -88,6 +88,7 @@ impl PersistInstance {
     pub fn clear(&self) -> Result<(), PersistError> {
         fs::remove_dir_all(&self.dir).map_err(PersistError::RemoveFolder)?;
         fs::create_dir_all(&self.dir).map_err(PersistError::CreateFolder)?;
+
         Ok(())
     }
 
@@ -95,6 +96,7 @@ impl PersistInstance {
     pub fn remove(&self, key: &str) -> Result<(), PersistError> {
         let file_path = self.get_storage_file(key)?;
         fs::remove_file(file_path).map_err(PersistError::RemoveFile)?;
+
         Ok(())
     }
 
@@ -106,6 +108,7 @@ impl PersistInstance {
         let file_path = self.get_storage_file(key)?;
         let file = File::open(file_path).map_err(PersistError::Open)?;
         let reader = BufReader::new(file);
+
         Ok(deserialize_from(reader).map_err(PersistError::Deserialize))?
     }
 

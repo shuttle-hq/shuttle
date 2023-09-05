@@ -10,6 +10,10 @@ use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
+    deployment::{
+        DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
+        DEPLOYER_END_MSG_STOPPED,
+    },
     resource,
     storage_manager::ArtifactsStorageManager,
 };
@@ -169,19 +173,19 @@ async fn kill_old_deployments(
 
 #[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Completed))]
 fn completed_cleanup(_id: &Uuid) {
-    info!("service finished all on its own");
+    info!(DEPLOYER_END_MSG_COMPLETED);
 }
 
 #[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Stopped))]
 fn stopped_cleanup(_id: &Uuid) {
-    info!("service was stopped by the user");
+    info!(DEPLOYER_END_MSG_STOPPED);
 }
 
 #[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        "service encountered an error"
+        DEPLOYER_END_MSG_CRASHED
     );
 }
 
@@ -189,7 +193,7 @@ fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
 fn start_crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        "service startup encountered an error"
+        DEPLOYER_END_MSG_STARTUP_ERR
     );
 }
 

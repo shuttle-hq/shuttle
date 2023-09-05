@@ -15,6 +15,7 @@ use std::process::exit;
 use std::str::FromStr;
 
 use logger_server::LocalLogger;
+use shuttle_common::deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD};
 use shuttle_common::models::deployment::CREATE_SERVICE_BODY_LIMIT;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
@@ -1163,8 +1164,12 @@ impl Shuttle {
                     let log_item: shuttle_common::LogItem =
                         serde_json::from_str(&line).expect("to parse log line");
 
-                    // Placeholders for loss of previous behavior.
-                    if log_item.line.contains("DEPLOYMENT DONE") {
+                    println!("{log_item}");
+
+                    if DEPLOYER_END_MESSAGES_BAD
+                        .iter()
+                        .any(|m| log_item.line.contains(m))
+                    {
                         println!();
                         println!("{}", "Deployment crashed".red());
                         println!();
@@ -1174,11 +1179,13 @@ impl Shuttle {
 
                         return Ok(CommandOutcome::DeploymentFailure);
                     }
-                    if log_item.line.contains("DEPLOYMENT DONE") {
+                    if DEPLOYER_END_MESSAGES_GOOD
+                        .iter()
+                        .any(|m| log_item.line.contains(m))
+                    {
                         debug!("received end message, breaking deployment stream");
                         break;
                     }
-                    println!("{log_item}");
                 }
             } else {
                 eprintln!("--- Reconnecting websockets logging ---");
@@ -1190,8 +1197,6 @@ impl Shuttle {
                     .await?;
             }
         }
-
-        todo!("Introduce a way for the log stream above to break");
 
         // Temporary fix.
         // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.

@@ -21,6 +21,7 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
+use shuttle_common::models::project::State;
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
@@ -480,10 +481,39 @@ impl GatewayService {
                     state: project,
                 })
             } else {
-                // Otherwise it already exists. Because the caller of this
-                // command is the project owner, this means that the project
-                // is already running.
-                Err(Error::from_kind(ErrorKind::ProjectAlreadyRunning))
+                // Otherwise it already exists. Because the caller of this command is the
+                // project owner, this means that the project is already in some running state.
+                let state = State::from(project);
+                let message = match state {
+                    // Ongoing processes.
+                    State::Creating { .. }
+                    | State::Attaching { .. }
+                    | State::Recreating { .. }
+                    | State::Starting { .. }
+                    | State::Restarting { .. }
+                    | State::Stopping
+                    | State::Rebooting
+                    | State::Destroying => {
+                        format!("project '{project_name}' is already {state}. You can check the status again using `cargo shuttle project status`.")
+                    }
+                    // Use different message than the default for `State::Ready`.
+                    State::Ready => {
+                        format!("project '{project_name}' is already running")
+                    }
+                    State::Started | State::Destroyed => {
+                        format!("project '{project_name}' is already {state}. Try using `cargo shuttle project restart` instead.")
+                    }
+                    State::Stopped => {
+                        format!("project '{project_name}' is idled. Find out more about idle projects here: \
+				 https://docs.shuttle.rs/getting-started/idle-projects")
+                    }
+                    State::Errored { message } => {
+                        format!("project '{project_name}' is in an errored state.\nproject message: {message}")
+                    }
+                };
+                Err(Error::from_kind(ErrorKind::OwnProjectAlreadyExists(
+                    message,
+                )))
             }
         } else {
             // Check if project name is valid according to new rules if it
@@ -1023,7 +1053,7 @@ pub mod tests {
         assert!(matches!(
             svc.create_project(matrix.clone(), neo, false, 0).await,
             Err(Error {
-                kind: ErrorKind::ProjectAlreadyRunning,
+                kind: ErrorKind::OwnProjectAlreadyExists(_),
                 ..
             })
         ));
@@ -1060,7 +1090,7 @@ pub mod tests {
         assert!(matches!(
             svc.create_project(matrix, trinity, true, 0).await,
             Err(Error {
-                kind: ErrorKind::ProjectAlreadyRunning,
+                kind: ErrorKind::OwnProjectAlreadyExists(_),
                 ..
             })
         ));

@@ -72,5 +72,6 @@ features = ["builder"]
 ctor = { workspace = true }
 hex = "0.4.3"
 rand = { workspace = true }
+shuttle-common-tests = { path = "../common-tests" }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }

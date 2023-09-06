@@ -1,4 +1,5 @@
 pub mod cargo_shuttle;
+pub mod logger;
 
 use shuttle_common::claims::{Claim, Scope};
 

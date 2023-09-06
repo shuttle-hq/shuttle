@@ -5482,7 +5482,9 @@ dependencies = [
  "portpicker",
  "reqwest",
  "shuttle-common",
+ "shuttle-proto",
  "tokio",
+ "tonic",
  "tower",
 ]
 
@@ -5517,6 +5519,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shuttle-common",
+ "shuttle-common-tests",
  "shuttle-proto",
  "shuttle-service",
  "sqlx",

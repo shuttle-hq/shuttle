@@ -147,12 +147,12 @@ mod tests {
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use portpicker::pick_unused_port;
-    use shuttle_common::claims::{Claim, ClaimLayer, InjectPropagationLayer};
+    use shuttle_common::claims::Claim;
+    use shuttle_common_tests::logger::mocked_logger_client;
     use shuttle_proto::{
         logger::{
-            logger_client::LoggerClient,
-            logger_server::{Logger, LoggerServer},
-            Batcher, LogLine, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
+            logger_client::LoggerClient, logger_server::Logger, Batcher, LogLine, LogsRequest,
+            LogsResponse, StoreLogsRequest, StoreLogsResponse,
         },
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
@@ -163,11 +163,7 @@ mod tests {
     use tempfile::Builder;
     use tokio::{select, sync::mpsc, time::sleep};
     use tokio_stream::wrappers::ReceiverStream;
-    use tonic::{
-        transport::{Endpoint, Server},
-        Request, Response, Status,
-    };
-    use tower::ServiceBuilder;
+    use tonic::{transport::Server, Request, Response, Status};
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     use ulid::Ulid;
     use uuid::Uuid;
@@ -795,31 +791,7 @@ mod tests {
     }
 
     async fn get_deployment_manager() -> DeploymentManager {
-        let logger_addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
-        let logger_uri = format!("http://{}", logger_addr);
-        tokio::spawn(async move {
-            Server::builder()
-                .add_service(LoggerServer::new(RecorderMock::new()))
-                .serve(logger_addr)
-                .await
-        });
-
-        // Wait for the logger server to start before creating a client.
-        tokio::time::sleep(Duration::from_millis(200)).await;
-
-        let channel = Endpoint::try_from(logger_uri.to_string())
-            .unwrap()
-            .connect()
-            .await
-            .expect("failed to connect to logger");
-
-        let channel = ServiceBuilder::new()
-            .layer(ClaimLayer)
-            .layer(InjectPropagationLayer)
-            .service(channel);
-
-        let logger_client = LoggerClient::new(channel);
-
+        let logger_client = mocked_logger_client(RecorderMock::new()).await;
         DeploymentManager::builder()
             .build_log_recorder(RECORDER.clone())
             .secret_recorder(RECORDER.clone())

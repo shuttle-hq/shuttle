@@ -73,3 +73,4 @@ ctor = { workspace = true }
 hex = "0.4.3"
 rand = { workspace = true }
 tempfile = { workspace = true }
+tokio-stream = { workspace = true }

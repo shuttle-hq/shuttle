@@ -24,10 +24,7 @@ RUSTUP_TOOLCHAIN=1.72.0
 TAG?=$(shell git describe --tags --abbrev=0)
 BACKEND_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
-GATEWAY_TAG?=$(TAG)
-LOGGER_TAG?=$(TAG)
 PROVISIONER_TAG?=$(TAG)
-RESOURCE_RECORDER_TAG?=$(TAG)
 RESOURCE_RECORDER_TAG?=$(TAG)
 
 DOCKER_BUILD?=docker buildx build
@@ -101,10 +98,8 @@ endif
 
 DOCKER_COMPOSE_ENV=\
 	STACK=$(STACK)\
-	AUTH_TAG=$(AUTH_TAG)\
+	BACKEND_TAG=$(BACKEND_TAG)\
 	DEPLOYER_TAG=$(DEPLOYER_TAG)\
-	GATEWAY_TAG=$(GATEWAY_TAG)\
-	LOGGER_TAG=$(LOGGER_TAG)\
 	PROVISIONER_TAG=$(PROVISIONER_TAG)\
 	RESOURCE_RECORDER_TAG=$(RESOURCE_RECORDER_TAG)\
 	POSTGRES_TAG=${POSTGRES_TAG}\
@@ -123,13 +118,15 @@ DOCKER_COMPOSE_ENV=\
 	COMPOSE_PROFILES=$(COMPOSE_PROFILES)\
 	DOCKER_SOCK=$(DOCKER_SOCK)
 
-.PHONY: clean images postgres panamax otel deploy test docker-compose.rendered.yml up down shuttle-%
+.PHONY: images clean src up down deploy shuttle-% shuttle-images postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
 
 clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-auth shuttle-deployer shuttle-gateway shuttle-logger shuttle-provisioner shuttle-resource-recorder otel panamax postgres
+images: shuttle-images postgres panamax otel
+
+shuttle-images: shuttle-auth shuttle-deployer shuttle-gateway shuttle-provisioner shuttle-resource-recorder
 
 postgres:
 	$(DOCKER_BUILD) \

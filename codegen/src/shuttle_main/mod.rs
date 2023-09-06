@@ -22,13 +22,13 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 shuttle_runtime::tracing_subscriber::fmt::init();
                 println!(
                     "{}\n{}\nTo disable tracing, remove the default features from {}:\n{}\n{}",
-                    "tracing is initialized!".yellow().bold(),
-                    "=".repeat(23).yellow(),
+                    "Shuttle's default tracing subscriber is initialized!".yellow().bold(),
+                    "=".repeat(52).yellow(),
                     "shuttle-runtime".italic(),
                     "shuttle-runtime = { version = \"*\", default-features = false }"
                         .white()
                         .italic(),
-                    "=".repeat(23).yellow()
+                    "=".repeat(52).yellow()
                 );
                 shuttle_runtime::start(loader).await;
             }

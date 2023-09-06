@@ -26,7 +26,7 @@ body = """
 
 {% macro commit(commit) -%}
     - {% if commit.scope %}*({{ commit.scope }})* {% endif %}{% if commit.breaking %}[**breaking**] {% endif %}\
-        {{ commit.message | upper_first }} - ([{{ commit.id | truncate(length=7, end="") }}](<REPO>/commit/{{ commit.id }}))\
+        {{ commit.message | upper_first | trim }} - ([{{ commit.id | truncate(length=7, end="") }}](<REPO>/commit/{{ commit.id }}))\
 {% endmacro -%}
 
 {% for group, commits in commits | group_by(attribute="group") %}
@@ -59,7 +59,7 @@ postprocessors = [
 # parse the commits based on https://www.conventionalcommits.org
 conventional_commits = true
 # filter out the commits that are not conventional
-filter_unconventional = true
+filter_unconventional = false
 # process each line of a commit as an individual commit
 split_commits = false
 # regex for preprocessing the commit messages
@@ -77,6 +77,7 @@ commit_parsers = [
   { message = "^test", group = "<!-- 6 -->Testing" },
   { message = "^chore|ci", group = "<!-- 7 -->Miscellaneous Tasks" },
   { message = "^revert", group = "<!-- 8 -->Revert" },
+  { message = ".*", group = "<!-- 9 -->Miscellaneous" },
 ]
 # protect breaking changes from being skipped due to matching a skipping commit_parser
 protect_breaking_commits = false

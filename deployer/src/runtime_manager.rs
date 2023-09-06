@@ -37,7 +37,6 @@ pub struct RuntimeManager {
     runtimes: Runtimes,
     artifacts_path: PathBuf,
     provisioner_address: String,
-    logger_uri: String,
     logger_client: Batcher<
         LoggerClient<
             shuttle_common::claims::ClaimService<
@@ -52,7 +51,6 @@ impl RuntimeManager {
     pub fn new(
         artifacts_path: PathBuf,
         provisioner_address: String,
-        logger_uri: String,
         logger_client: Batcher<
             LoggerClient<
                 shuttle_common::claims::ClaimService<
@@ -66,7 +64,6 @@ impl RuntimeManager {
             runtimes: Default::default(),
             artifacts_path,
             provisioner_address,
-            logger_uri,
             logger_client,
             auth_uri,
         }))
@@ -131,7 +128,6 @@ impl RuntimeManager {
             is_next,
             runtime::StorageManagerType::Artifacts(self.artifacts_path.clone()),
             &self.provisioner_address,
-            &self.logger_uri,
             self.auth_uri.as_ref(),
             port,
             get_runtime_executable,

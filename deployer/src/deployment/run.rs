@@ -558,7 +558,6 @@ mod tests {
         RuntimeManager::new(
             path,
             format!("http://{}", provisioner_addr),
-            logger_uri,
             logger_client,
             None,
         )

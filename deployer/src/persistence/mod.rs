@@ -31,15 +31,15 @@ mod state;
 mod user;
 
 use self::deployment::DeploymentRunnable;
-pub use self::deployment::{Deployment, DeploymentState, DeploymentUpdater};
+pub use self::deployment::{Deployment, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
 use self::resource::Resource;
 pub use self::resource::{ResourceManager, Type as ResourceType};
 pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
-pub use self::state::State;
+pub use self::state::{State, StateRecorder};
 pub use self::user::User;
-use crate::deployment::ActiveDeploymentsGetter;
+use crate::deployment::{ActiveDeploymentsGetter, DeploymentState};
 use crate::proxy::AddressGetter;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
@@ -148,13 +148,6 @@ impl Persistence {
         };
 
         (persistence, handle)
-    }
-
-    /// Takes a state and send it on to the async thread that records it
-    pub fn record_state(&self, state: DeploymentState) {
-        self.state_send
-            .send(state)
-            .expect("failed to move log to async thread");
     }
 
     async fn from_pool(
@@ -590,6 +583,14 @@ impl ActiveDeploymentsGetter for Persistence {
     }
 }
 
+impl StateRecorder for Persistence {
+    type Err = Error;
+
+    fn record_state(&self, state: DeploymentState) -> Result<()> {
+        self.state_send.send(state).map_err(Error::from)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::{Ipv4Addr, SocketAddr};
@@ -599,7 +600,7 @@ mod tests {
 
     use super::*;
     use crate::persistence::{
-        deployment::{Deployment, DeploymentRunnable, DeploymentState},
+        deployment::{Deployment, DeploymentRunnable},
         state::State,
     };
 

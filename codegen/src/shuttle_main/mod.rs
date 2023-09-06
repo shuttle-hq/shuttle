@@ -256,7 +256,6 @@ impl ToTokens for Loader {
             async fn loader(
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory,
                 mut #resource_tracker_ident: shuttle_runtime::ResourceTracker,
-                logger_uri: String,
                 deployment_id: String,
             ) -> #return_type {
                 use shuttle_runtime::Context;
@@ -327,7 +326,6 @@ mod tests {
             async fn loader(
                 mut _factory: shuttle_runtime::ProvisionerFactory,
                 mut _resource_tracker: shuttle_runtime::ResourceTracker,
-                logger_uri: String,
                 deployment_id: String,
             ) -> ShuttleSimple {
                 use shuttle_runtime::Context;
@@ -397,7 +395,6 @@ mod tests {
             async fn loader(
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 mut resource_tracker: shuttle_runtime::ResourceTracker,
-                logger_uri: String,
                 deployment_id: String,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
@@ -510,7 +507,6 @@ mod tests {
             async fn loader(
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 mut resource_tracker: shuttle_runtime::ResourceTracker,
-                logger_uri: String,
                 deployment_id: String,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;

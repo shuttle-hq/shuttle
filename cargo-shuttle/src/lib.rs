@@ -536,7 +536,6 @@ impl Shuttle {
         idx: u16,
         provisioner_port: u16,
         logger_server: &JoinHandle<Result<(), tonic::transport::Error>>,
-        logger_port: u16,
     ) -> Result<
         Option<(
             Child,
@@ -648,7 +647,6 @@ impl Shuttle {
             is_wasm,
             StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{provisioner_port}"),
-            &format!("http://localhost:{logger_port}"),
             None,
             run_args.port - idx - 1,
             runtime_path,
@@ -861,7 +859,7 @@ impl Shuttle {
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
-        let (logger_server, logger_port) = Shuttle::setup_local_logger().await?;
+        let (logger_server, _) = Shuttle::setup_local_logger().await?;
         let mut sigterm_notif =
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
                 .expect("Can not get the SIGTERM signal receptor");
@@ -879,7 +877,7 @@ impl Shuttle {
             // We must cover the case of starting multiple workspace services and receiving a signal in parallel.
             // This must stop all the existing runtimes and creating new ones.
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port, &logger_server, logger_port) => {
+                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port, &logger_server) => {
                     Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &[&provisioner_server, &logger_server]).await?;
                     false
                 },

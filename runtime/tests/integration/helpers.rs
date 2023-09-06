@@ -37,10 +37,6 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
         Ipv4Addr::LOCALHOST.into(),
         portpicker::pick_unused_port().unwrap(),
     );
-    let logger_address = SocketAddr::new(
-        Ipv4Addr::LOCALHOST.into(),
-        portpicker::pick_unused_port().unwrap(),
-    );
     let runtime_port = portpicker::pick_unused_port().unwrap();
     let runtime_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), runtime_port);
 
@@ -64,7 +60,6 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
         is_wasm,
         runtime::StorageManagerType::WorkingDir(PathBuf::from(project_path.clone())),
         &format!("http://{}", provisioner_address),
-        &format!("http://{}", logger_address),
         None,
         runtime_port,
         runtime_path,

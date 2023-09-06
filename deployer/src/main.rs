@@ -4,9 +4,10 @@ use clap::Parser;
 use shuttle_common::{
     backends::tracing::setup_tracing,
     claims::{ClaimLayer, InjectPropagationLayer},
+    log::{Backend, DeploymentLogLayer},
 };
-use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence, RuntimeManager};
-use shuttle_proto::logger::logger_client::LoggerClient;
+use shuttle_deployer::{start, start_proxy, Args, Persistence, RuntimeManager, StateChangeLayer};
+use shuttle_proto::logger::{logger_client::LoggerClient, Batcher};
 use tokio::select;
 use tower::ServiceBuilder;
 use tracing::{error, trace};
@@ -28,29 +29,38 @@ async fn main() {
             .expect("to get a valid ULID for project_id arg"),
     )
     .await;
-    setup_tracing(
-        tracing_subscriber::registry().with(DeployLayer::new(persistence.clone())),
-        "deployer",
-    );
-
-    let channel = args
-        .logger_uri
-        .connect()
-        .await
-        .expect("failed to connect to logger");
 
     let channel = ServiceBuilder::new()
         .layer(ClaimLayer)
         .layer(InjectPropagationLayer)
-        .service(channel);
-
+        .service(
+            args.logger_uri
+                .connect()
+                .await
+                .expect("failed to connect to logger"),
+        );
     let logger_client = LoggerClient::new(channel);
+    let logger_batcher = Batcher::wrap(logger_client.clone());
+
+    setup_tracing(
+        tracing_subscriber::registry()
+            .with(StateChangeLayer {
+                log_recorder: logger_batcher.clone(),
+                state_recorder: persistence.clone(),
+            })
+            // TODO: Make all relevant backends set this up in this way
+            .with(DeploymentLogLayer {
+                log_recorder: logger_batcher.clone(),
+                internal_service: Backend::Deployer,
+            }),
+        Backend::Deployer,
+    );
 
     let runtime_manager = RuntimeManager::new(
         args.artifacts_path.clone(),
         args.provisioner_address.uri().to_string(),
         args.logger_uri.uri().to_string(),
-        logger_client.clone(),
+        logger_batcher.clone(),
         Some(args.auth_uri.to_string()),
     );
 
@@ -58,7 +68,7 @@ async fn main() {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
             error!("Proxy stopped.")
         },
-        _ = start(persistence, runtime_manager, logger_client, args) => {
+        _ = start(persistence, runtime_manager, logger_batcher, logger_client, args) => {
             error!("Deployment service stopped.")
         },
     }

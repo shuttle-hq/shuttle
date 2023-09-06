@@ -43,8 +43,8 @@ pub struct LogLine {
 /// Generated client implementations.
 pub mod logger_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     #[derive(Debug, Clone)]
     pub struct LoggerClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -88,9 +88,8 @@ pub mod logger_client {
                     <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-            >>::Error: Into<StdError> + Send + Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
+                Into<StdError> + Send + Sync,
         {
             LoggerClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -114,15 +113,12 @@ pub mod logger_client {
             &mut self,
             request: impl tonic::IntoRequest<super::StoreLogsRequest>,
         ) -> Result<tonic::Response<super::StoreLogsResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/logger.Logger/StoreLogs");
             self.inner.unary(request.into_request(), path, codec).await
@@ -132,15 +128,12 @@ pub mod logger_client {
             &mut self,
             request: impl tonic::IntoRequest<super::LogsRequest>,
         ) -> Result<tonic::Response<super::LogsResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/logger.Logger/GetLogs");
             self.inner.unary(request.into_request(), path, codec).await
@@ -149,24 +142,19 @@ pub mod logger_client {
         pub async fn get_logs_stream(
             &mut self,
             request: impl tonic::IntoRequest<super::LogsRequest>,
-        ) -> Result<
-            tonic::Response<tonic::codec::Streaming<super::LogLine>>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> Result<tonic::Response<tonic::codec::Streaming<super::LogLine>>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/logger.Logger/GetLogsStream",
-            );
-            self.inner.server_streaming(request.into_request(), path, codec).await
+            let path = http::uri::PathAndQuery::from_static("/logger.Logger/GetLogsStream");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
         }
     }
 }
@@ -188,9 +176,7 @@ pub mod logger_server {
             request: tonic::Request<super::LogsRequest>,
         ) -> Result<tonic::Response<super::LogsResponse>, tonic::Status>;
         /// Server streaming response type for the GetLogsStream method.
-        type GetLogsStreamStream: futures_core::Stream<
-                Item = Result<super::LogLine, tonic::Status>,
-            >
+        type GetLogsStreamStream: futures_core::Stream<Item = Result<super::LogLine, tonic::Status>>
             + Send
             + 'static;
         /// Get fresh logs as they are incoming
@@ -218,10 +204,7 @@ pub mod logger_server {
                 send_compression_encodings: Default::default(),
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -249,10 +232,7 @@ pub mod logger_server {
         type Response = http::Response<tonic::body::BoxBody>;
         type Error = std::convert::Infallible;
         type Future = BoxFuture<Self::Response, Self::Error>;
-        fn poll_ready(
-            &mut self,
-            _cx: &mut Context<'_>,
-        ) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
@@ -261,13 +241,9 @@ pub mod logger_server {
                 "/logger.Logger/StoreLogs" => {
                     #[allow(non_camel_case_types)]
                     struct StoreLogsSvc<T: Logger>(pub Arc<T>);
-                    impl<T: Logger> tonic::server::UnaryService<super::StoreLogsRequest>
-                    for StoreLogsSvc<T> {
+                    impl<T: Logger> tonic::server::UnaryService<super::StoreLogsRequest> for StoreLogsSvc<T> {
                         type Response = super::StoreLogsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::StoreLogsRequest>,
@@ -284,11 +260,10 @@ pub mod logger_server {
                         let inner = inner.0;
                         let method = StoreLogsSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -297,13 +272,9 @@ pub mod logger_server {
                 "/logger.Logger/GetLogs" => {
                     #[allow(non_camel_case_types)]
                     struct GetLogsSvc<T: Logger>(pub Arc<T>);
-                    impl<T: Logger> tonic::server::UnaryService<super::LogsRequest>
-                    for GetLogsSvc<T> {
+                    impl<T: Logger> tonic::server::UnaryService<super::LogsRequest> for GetLogsSvc<T> {
                         type Response = super::LogsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::LogsRequest>,
@@ -320,11 +291,10 @@ pub mod logger_server {
                         let inner = inner.0;
                         let method = GetLogsSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -333,24 +303,17 @@ pub mod logger_server {
                 "/logger.Logger/GetLogsStream" => {
                     #[allow(non_camel_case_types)]
                     struct GetLogsStreamSvc<T: Logger>(pub Arc<T>);
-                    impl<
-                        T: Logger,
-                    > tonic::server::ServerStreamingService<super::LogsRequest>
-                    for GetLogsStreamSvc<T> {
+                    impl<T: Logger> tonic::server::ServerStreamingService<super::LogsRequest> for GetLogsStreamSvc<T> {
                         type Response = super::LogLine;
                         type ResponseStream = T::GetLogsStreamStream;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
-                        >;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::LogsRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
-                                (*inner).get_logs_stream(request).await
-                            };
+                            let fut = async move { (*inner).get_logs_stream(request).await };
                             Box::pin(fut)
                         }
                     }
@@ -361,28 +324,23 @@ pub mod logger_server {
                         let inner = inner.0;
                         let method = GetLogsStreamSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        Ok(
-                            http::Response::builder()
-                                .status(200)
-                                .header("grpc-status", "12")
-                                .header("content-type", "application/grpc")
-                                .body(empty_body())
-                                .unwrap(),
-                        )
-                    })
-                }
+                _ => Box::pin(async move {
+                    Ok(http::Response::builder()
+                        .status(200)
+                        .header("grpc-status", "12")
+                        .header("content-type", "application/grpc")
+                        .body(empty_body())
+                        .unwrap())
+                }),
             }
         }
     }

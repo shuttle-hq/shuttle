@@ -1,60 +1,53 @@
+use std::net::SocketAddr;
+use std::path::Path;
+use std::str::FromStr;
+
+use chrono::Utc;
+use error::{Error, Result};
+use hyper::Uri;
+use shuttle_common::claims::{Claim, ClaimLayer, InjectPropagationLayer};
+use shuttle_proto::resource_recorder::{
+    record_request, resource_recorder_client::ResourceRecorderClient, RecordRequest,
+    ResourcesResponse, ResultResponse, ServiceResourcesRequest,
+};
+use sqlx::{
+    migrate::{MigrateDatabase, Migrator},
+    sqlite::{Sqlite, SqliteConnectOptions, SqliteJournalMode, SqlitePool},
+    QueryBuilder,
+};
+use tokio::task::JoinHandle;
+use tonic::transport::Endpoint;
+use tower::ServiceBuilder;
+use tracing::{error, info, instrument, trace};
+use ulid::Ulid;
+use uuid::Uuid;
+
 pub mod deployment;
 mod error;
-pub mod log;
 mod resource;
 mod secret;
 pub mod service;
 mod state;
 mod user;
 
-use crate::deployment::deploy_layer::{LogRecorder, LogType};
-use crate::deployment::{deploy_layer, ActiveDeploymentsGetter};
-use crate::proxy::AddressGetter;
-use error::{Error, Result};
-use hyper::Uri;
-use shuttle_common::claims::{Claim, ClaimLayer, InjectPropagationLayer};
-use shuttle_proto::resource_recorder::resource_recorder_client::ResourceRecorderClient;
-use shuttle_proto::resource_recorder::{
-    record_request, RecordRequest, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
-};
-use sqlx::QueryBuilder;
-use std::result::Result as StdResult;
-use tonic::transport::Endpoint;
-use tower::ServiceBuilder;
-use ulid::Ulid;
-
-use std::net::SocketAddr;
-use std::path::Path;
-use std::str::FromStr;
-
-use chrono::Utc;
-use serde_json::json;
-use shuttle_common::STATE_MESSAGE;
-use sqlx::migrate::{MigrateDatabase, Migrator};
-use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteJournalMode, SqlitePool};
-use tokio::sync::broadcast::{self, Receiver, Sender};
-use tokio::task::JoinHandle;
-use tracing::{error, info, instrument, trace};
-use uuid::Uuid;
-
 use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentState, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
-pub use self::log::{Level as LogLevel, Log};
 use self::resource::Resource;
 pub use self::resource::{ResourceManager, Type as ResourceType};
 pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
 pub use self::state::State;
 pub use self::user::User;
+use crate::deployment::ActiveDeploymentsGetter;
+use crate::proxy::AddressGetter;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[derive(Clone)]
 pub struct Persistence {
     pool: SqlitePool,
-    log_send: crossbeam_channel::Sender<deploy_layer::Log>,
-    stream_log_send: Sender<deploy_layer::Log>,
+    state_send: crossbeam_channel::Sender<DeploymentState>,
     resource_recorder_client: Option<
         ResourceRecorderClient<
             shuttle_common::claims::ClaimService<
@@ -117,100 +110,15 @@ impl Persistence {
         )
         .await
         .unwrap();
-        let (log_send, stream_log_send, handle) = Self::from_pool(pool.clone()).await;
+        let (state_send, handle) = Self::from_pool(pool.clone()).await;
         let persistence = Self {
             pool,
-            log_send,
-            stream_log_send,
+            state_send,
             resource_recorder_client: None,
             project_id: Ulid::new(),
         };
 
         (persistence, handle)
-    }
-
-    async fn from_pool(
-        pool: SqlitePool,
-    ) -> (
-        crossbeam_channel::Sender<deploy_layer::Log>,
-        broadcast::Sender<deploy_layer::Log>,
-        JoinHandle<()>,
-    ) {
-        MIGRATIONS.run(&pool).await.unwrap();
-
-        let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
-            crossbeam_channel::bounded(0);
-
-        let (stream_log_send, _) = broadcast::channel(1);
-        let stream_log_send_clone = stream_log_send.clone();
-
-        let pool_cloned = pool.clone();
-
-        // The logs are received on a non-async thread.
-        // This moves them to an async thread
-        let handle = tokio::spawn(async move {
-            while let Ok(log) = log_recv.recv() {
-                trace!(?log, "persistence received got log");
-                match log.r#type {
-                    LogType::Event => {
-                        insert_log(&pool_cloned, log.clone())
-                            .await
-                            .unwrap_or_else(|error| {
-                                error!(
-                                    error = &error as &dyn std::error::Error,
-                                    "failed to insert event log"
-                                )
-                            });
-                    }
-                    LogType::State => {
-                        insert_log(
-                            &pool_cloned,
-                            Log {
-                                id: log.id,
-                                timestamp: log.timestamp,
-                                state: log.state,
-                                level: log.level.clone(),
-                                file: log.file.clone(),
-                                line: log.line,
-                                target: String::new(),
-                                fields: json!(STATE_MESSAGE),
-                            },
-                        )
-                        .await
-                        .unwrap_or_else(|error| {
-                            error!(
-                                error = &error as &dyn std::error::Error,
-                                "failed to insert state log"
-                            )
-                        });
-                        update_deployment(&pool_cloned, log.clone())
-                            .await
-                            .unwrap_or_else(|error| {
-                                error!(
-                                    error = &error as &dyn std::error::Error,
-                                    "failed to update deployment state"
-                                )
-                            });
-                    }
-                };
-
-                let receiver_count = stream_log_send_clone.receiver_count();
-                trace!(?log, receiver_count, "sending log to broadcast stream");
-
-                if receiver_count > 0 {
-                    stream_log_send_clone.send(log).unwrap_or_else(|error| {
-                        error!(
-                            error = &error as &dyn std::error::Error,
-                            "failed to broadcast log"
-                        );
-
-                        0
-                    });
-                }
-            }
-        });
-
-        (log_send, stream_log_send, handle)
     }
 
     async fn configure(
@@ -228,18 +136,51 @@ impl Persistence {
             .layer(ClaimLayer)
             .layer(InjectPropagationLayer)
             .service(channel);
-
         let resource_recorder_client = ResourceRecorderClient::new(channel);
-        let (log_send, stream_log_send, handle) = Self::from_pool(pool.clone()).await;
+
+        let (state_send, handle) = Self::from_pool(pool.clone()).await;
+
         let persistence = Self {
             pool,
-            log_send,
-            stream_log_send,
+            state_send,
             resource_recorder_client: Some(resource_recorder_client),
             project_id,
         };
 
         (persistence, handle)
+    }
+
+    /// Takes a state and send it on to the async thread that records it
+    pub fn record_state(&self, state: DeploymentState) {
+        self.state_send
+            .send(state)
+            .expect("failed to move log to async thread");
+    }
+
+    async fn from_pool(
+        pool: SqlitePool,
+    ) -> (crossbeam_channel::Sender<DeploymentState>, JoinHandle<()>) {
+        MIGRATIONS.run(&pool).await.unwrap();
+
+        let (state_send, state_recv): (crossbeam_channel::Sender<DeploymentState>, _) =
+            crossbeam_channel::bounded(0);
+
+        let handle = tokio::spawn(async move {
+            // State change logs are received on this non-async channel.
+            while let Ok(state) = state_recv.recv() {
+                trace!(?state, "persistence received state change");
+                update_deployment(&pool, state)
+                    .await
+                    .unwrap_or_else(|error| {
+                        error!(
+                            error = &error as &dyn std::error::Error,
+                            "failed to update deployment state"
+                        )
+                    });
+            }
+        });
+
+        (state_send, handle)
     }
 
     pub fn project_id(&self) -> Ulid {
@@ -392,22 +333,11 @@ impl Persistence {
         .map_err(Error::from)
     }
 
-    /// Get a broadcast channel for listening to logs that are being stored into persistence
-    pub fn get_log_subscriber(&self) -> Receiver<deploy_layer::Log> {
-        self.stream_log_send.subscribe()
-    }
-
-    /// Returns a sender for sending logs to persistence storage
-    pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
-        self.log_send.clone()
-    }
-
     pub async fn stop_running_deployment(&self, deployable: DeploymentRunnable) -> Result<()> {
         update_deployment(
             &self.pool,
             DeploymentState {
                 id: deployable.id,
-                last_update: Utc::now(),
                 state: State::Stopped,
             },
         )
@@ -415,12 +345,10 @@ impl Persistence {
     }
 }
 
-async fn update_deployment(pool: &SqlitePool, state: impl Into<DeploymentState>) -> Result<()> {
-    let state = state.into();
-
+async fn update_deployment(pool: &SqlitePool, state: DeploymentState) -> Result<()> {
     sqlx::query("UPDATE deployments SET state = ?, last_update = ? WHERE id = ?")
         .bind(state.state)
-        .bind(state.last_update)
+        .bind(Utc::now())
         .bind(state.id)
         .execute(pool)
         .await
@@ -434,32 +362,6 @@ async fn get_deployment(pool: &SqlitePool, id: &Uuid) -> Result<Option<Deploymen
         .fetch_optional(pool)
         .await
         .map_err(Error::from)
-}
-
-async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
-    let log = log.into();
-
-    sqlx::query("INSERT INTO logs (id, timestamp, state, level, file, line, target, fields) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(log.id)
-        .bind(log.timestamp)
-        .bind(log.state)
-        .bind(log.level)
-        .bind(log.file)
-        .bind(log.line)
-        .bind(log.target)
-        .bind(log.fields)
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(Error::from)
-}
-
-impl LogRecorder for Persistence {
-    fn record(&self, log: deploy_layer::Log) {
-        self.log_send
-            .send(log)
-            .expect("failed to move log to async thread");
-    }
 }
 
 #[async_trait::async_trait]
@@ -512,7 +414,7 @@ impl ResourceManager for Persistence {
         // If the resources list is empty
         if res.resources.is_empty() {
             // Check if there are cached resources on the local persistence.
-            let resources: StdResult<Vec<Resource>, sqlx::Error> =
+            let resources: std::result::Result<Vec<Resource>, sqlx::Error> =
                 sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
                     .bind(service_id.to_string())
                     .fetch_all(&self.pool)
@@ -724,7 +626,6 @@ mod tests {
             DeploymentState {
                 id,
                 state: State::Built,
-                last_update: Utc::now(),
             },
         )
         .await

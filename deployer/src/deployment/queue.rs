@@ -1,24 +1,3 @@
-use super::deploy_layer::{Log, LogRecorder, LogType};
-use super::gateway_client::BuildQueueClient;
-use super::{Built, QueueReceiver, RunSender, State};
-use crate::error::{Error, Result, TestError};
-use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
-use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
-
-use cargo_metadata::Message;
-use chrono::Utc;
-use crossbeam_channel::Sender;
-use opentelemetry::global;
-use serde_json::json;
-use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_workspace, BuiltService};
-use tokio::task::JoinSet;
-use tokio::time::{sleep, timeout};
-use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
-use ulid::Ulid;
-use uuid::Uuid;
-
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::fs::remove_file;
@@ -27,9 +6,31 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use cargo_metadata::Message;
+use crossbeam_channel::Sender;
 use flate2::read::GzDecoder;
+use opentelemetry::global;
+use shuttle_common::log::LogRecorder;
 use tar::Archive;
 use tokio::fs;
+use tokio::task::JoinSet;
+use tokio::time::{sleep, timeout};
+use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+use ulid::Ulid;
+use uuid::Uuid;
+
+use shuttle_common::{
+    claims::Claim,
+    storage_manager::{ArtifactsStorageManager, StorageManager},
+    LogItem,
+};
+use shuttle_service::builder::{build_workspace, BuiltService};
+
+use super::gateway_client::BuildQueueClient;
+use super::{Built, QueueReceiver, RunSender, State};
+use crate::error::{Error, Result, TestError};
+use crate::persistence::{DeploymentUpdater, SecretRecorder};
 
 pub async fn task(
     mut recv: QueueReceiver,
@@ -110,7 +111,7 @@ pub async fn task(
     }
 }
 
-#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
+#[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
@@ -146,7 +147,7 @@ async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) {
     }
 }
 
-#[instrument(skip(run_send), fields(id = %built.id, state = %State::Built))]
+#[instrument(skip(run_send), fields(deployment_id = %built.id, state = %State::Built))]
 async fn promote_to_run(mut built: Built, run_send: RunSender) {
     let cx = Span::current().context();
 
@@ -171,7 +172,7 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    #[instrument(skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(deployment_id = %self.id, state = %State::Building))]
     async fn handle(
         self,
         storage_manager: ArtifactsStorageManager,
@@ -188,36 +189,18 @@ impl Queued {
         info!("Building deployment");
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
-        let id = self.id;
+
         tokio::task::spawn_blocking(move || {
             while let Ok(message) = rx.recv() {
                 trace!(?message, "received cargo message");
-                // TODO: change these to `info!(...)` as [valuable] support increases.
-                // Currently it is not possible to turn these serde `message`s into a `valuable`, but once it is the passing down of `log_recorder` should be removed.
-                let log = match message {
-                    Message::TextLine(line) => Log {
-                        id,
-                        state: State::Building,
-                        level: LogLevel::Info,
-                        timestamp: Utc::now(),
-                        file: None,
-                        line: None,
-                        target: String::new(),
-                        fields: json!({ "build_line": line }),
-                        r#type: LogType::Event,
+                let log = LogItem::new(
+                    self.id,
+                    shuttle_common::log::Backend::Deployer, // will change to Builder
+                    match message {
+                        Message::TextLine(line) => line,
+                        message => serde_json::to_string(&message).unwrap(),
                     },
-                    message => Log {
-                        id,
-                        state: State::Building,
-                        level: LogLevel::Debug,
-                        timestamp: Utc::now(),
-                        file: None,
-                        line: None,
-                        target: String::new(),
-                        fields: serde_json::to_value(message).unwrap(),
-                        r#type: LogType::Event,
-                    },
-                };
+                );
                 log_recorder.record(log);
             }
         });
@@ -256,7 +239,7 @@ impl Queued {
         let is_next = built_service.is_wasm;
 
         deployment_updater
-            .set_is_next(&id, is_next)
+            .set_is_next(&self.id, is_next)
             .await
             .map_err(|e| Error::Build(Box::new(e)))?;
 

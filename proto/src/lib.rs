@@ -232,8 +232,10 @@ pub mod resource_recorder {
 }
 
 pub mod logger {
+    use std::str::FromStr;
     use std::time::Duration;
 
+    use chrono::{DateTime, NaiveDateTime, Utc};
     use prost::bytes::Bytes;
     use tokio::{select, sync::mpsc, time::interval};
     use tonic::{
@@ -243,9 +245,74 @@ pub mod logger {
     };
     use tracing::error;
 
+    use shuttle_common::{
+        log::{Backend, LogItem as LogItemCommon, LogRecorder},
+        DeploymentId,
+    };
+
     use self::logger_client::LoggerClient;
 
     include!("generated/logger.rs");
+
+    impl From<LogItemCommon> for LogItem {
+        fn from(value: LogItemCommon) -> Self {
+            Self {
+                deployment_id: value.id.to_string(),
+                log_line: Some(LogLine {
+                    tx_timestamp: Some(prost_types::Timestamp {
+                        seconds: value.timestamp.timestamp(),
+                        nanos: value.timestamp.timestamp_subsec_nanos() as i32,
+                    }),
+                    service_name: format!("{:?}", value.internal_origin),
+                    data: value.line.into_bytes(),
+                }),
+            }
+        }
+    }
+
+    impl From<LogItem> for LogItemCommon {
+        fn from(value: LogItem) -> Self {
+            value
+                .log_line
+                .expect("log item to have log line")
+                .to_log_item_with_id(value.deployment_id.parse().unwrap_or_default())
+        }
+    }
+
+    impl LogLine {
+        pub fn to_log_item_with_id(self, deployment_id: DeploymentId) -> LogItemCommon {
+            let LogLine {
+                service_name,
+                tx_timestamp,
+                data,
+            } = self;
+            let tx_timestamp = tx_timestamp.expect("log to have timestamp");
+
+            LogItemCommon {
+                id: deployment_id,
+                internal_origin: Backend::from_str(&service_name)
+                    .expect("backend name to be valid"),
+                timestamp: DateTime::from_utc(
+                    NaiveDateTime::from_timestamp_opt(
+                        tx_timestamp.seconds,
+                        tx_timestamp.nanos.try_into().unwrap_or_default(),
+                    )
+                    .unwrap_or_default(),
+                    Utc,
+                ),
+                line: String::from_utf8(data).expect("line to be utf-8"),
+            }
+        }
+    }
+
+    impl<I> LogRecorder for Batcher<I>
+    where
+        I: VecReceiver<Item = LogItem> + Clone + 'static,
+    {
+        fn record(&self, log: LogItemCommon) {
+            self.send(log.into());
+        }
+    }
 
     /// Adapter to some client which expects to receive a vector of items
     #[async_trait]

@@ -15,6 +15,7 @@ use std::process::exit;
 use std::str::FromStr;
 
 use logger_server::LocalLogger;
+use shuttle_common::deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD};
 use shuttle_common::models::deployment::CREATE_SERVICE_BODY_LIMIT;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
@@ -1140,8 +1141,11 @@ impl Shuttle {
         deployment_req.data = self.make_archive()?;
         if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
             bail!(
-                "The project is too large - we have a {}MB project limit.",
-                CREATE_SERVICE_BODY_LIMIT / 1_000_000
+                r#"The project is too large - we have a {} MB project limit. \
+                Your project archive is {} MB. \
+                Run with `RUST_LOG="cargo_shuttle=debug"` to see which files are being packed."#,
+                CREATE_SERVICE_BODY_LIMIT / 1_000_000,
+                deployment_req.data.len() / 1_000_000,
             );
         }
 
@@ -1160,33 +1164,31 @@ impl Shuttle {
                     let log_item: shuttle_common::LogItem =
                         serde_json::from_str(&line).expect("to parse log line");
 
-                    match log_item.state.clone() {
-                        shuttle_common::deployment::State::Queued
-                        | shuttle_common::deployment::State::Building
-                        | shuttle_common::deployment::State::Built
-                        | shuttle_common::deployment::State::Loading => {
-                            println!("{log_item}");
-                        }
-                        shuttle_common::deployment::State::Crashed => {
-                            println!();
-                            println!("{}", "Deployment crashed".red());
-                            println!();
-                            println!("Run the following for more details");
-                            println!();
-                            print!("cargo shuttle logs {}", &deployment.id);
-                            println!();
+                    println!("{log_item}");
 
-                            return Ok(CommandOutcome::DeploymentFailure);
-                        }
-                        // Break on remaining end states: Running, Stopped, Completed or Unknown.
-                        end_state => {
-                            debug!(state = %end_state, "received end state, breaking deployment stream");
-                            break;
-                        }
-                    };
+                    if DEPLOYER_END_MESSAGES_BAD
+                        .iter()
+                        .any(|m| log_item.line.contains(m))
+                    {
+                        println!();
+                        println!("{}", "Deployment crashed".red());
+                        println!();
+                        println!("Run the following for more details");
+                        println!();
+                        println!("cargo shuttle logs {}", &deployment.id);
+
+                        return Ok(CommandOutcome::DeploymentFailure);
+                    }
+                    if DEPLOYER_END_MESSAGES_GOOD
+                        .iter()
+                        .any(|m| log_item.line.contains(m))
+                    {
+                        debug!("received end message, breaking deployment stream");
+                        break;
+                    }
                 }
             } else {
-                println!("Reconnecting websockets logging");
+                eprintln!("--- Reconnecting websockets logging ---");
                 // A wait time short enough for not much state to have changed, long enough that
                 // the terminal isn't completely spammed
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -1198,6 +1200,7 @@ impl Shuttle {
 
         // Temporary fix.
         // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
+        // Note: Will otherwise be possible when health checks are supported
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         let deployment = client
@@ -1205,19 +1208,7 @@ impl Shuttle {
             .await?;
 
         // A deployment will only exist if there is currently one in the running state
-        if deployment.state == shuttle_common::deployment::State::Running {
-            let service = client.get_service(self.ctx.project_name()).await?;
-
-            let resources = client
-                .get_service_resources(self.ctx.project_name())
-                .await?;
-
-            let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
-
-            println!("{resources}{service}");
-
-            Ok(CommandOutcome::Ok)
-        } else {
+        if deployment.state != shuttle_common::deployment::State::Running {
             println!("{}", "Deployment has not entered the running state".red());
             println!();
 
@@ -1251,8 +1242,18 @@ impl Shuttle {
             println!("cargo shuttle logs {}", &deployment.id);
             println!();
 
-            Ok(CommandOutcome::DeploymentFailure)
+            return Ok(CommandOutcome::DeploymentFailure);
         }
+
+        let service = client.get_service(self.ctx.project_name()).await?;
+        let resources = client
+            .get_service_resources(self.ctx.project_name())
+            .await?;
+        let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
+
+        println!("{resources}{service}");
+
+        Ok(CommandOutcome::Ok)
     }
 
     async fn project_create(&self, client: &Client, idle_minutes: u64) -> Result<()> {

@@ -13,10 +13,8 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let loader = Loader::from_item_fn(&mut fn_decl);
 
-    let main = if cfg!(feature = "setup-tracing") {
-        quote! {
-            #[tokio::main]
-            async fn main() {
+    let tracing_setup = if cfg!(feature = "setup-tracing") {
+        Some(quote! {
                 use shuttle_runtime::colored::*;
                 shuttle_runtime::colored::control::set_override(true);
                 shuttle_runtime::tracing_subscriber::fmt::init();
@@ -30,20 +28,17 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         .italic(),
                     "=".repeat(52).yellow()
                 );
-                shuttle_runtime::start(loader).await;
-            }
-        }
+        })
     } else {
-        quote! {
-            #[tokio::main]
-            async fn main() {
-                shuttle_runtime::start(loader).await;
-            }
-        }
+        None
     };
 
     quote! {
-        #main
+        #[tokio::main]
+        async fn main() {
+            #tracing_setup
+            shuttle_runtime::start(loader).await;
+        }
 
         #loader
 

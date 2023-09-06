@@ -31,6 +31,7 @@ pub enum Backend {
     Logger,
     Provisioner,
     ResourceRecorder,
+    Runtime(String),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -3,7 +3,10 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use anyhow::Context;
 use chrono::Utc;
 use prost_types::Timestamp;
-use shuttle_common::claims::{ClaimService, InjectPropagation};
+use shuttle_common::{
+    claims::{ClaimService, InjectPropagation},
+    log::Backend,
+};
 use shuttle_proto::{
     logger::{logger_client::LoggerClient, Batcher, LogItem, LogLine},
     runtime::{self, runtime_client::RuntimeClient, StopRequest},
@@ -154,7 +157,7 @@ impl RuntimeManager {
                 let log = LogItem {
                     deployment_id: id.to_string(),
                     log_line: Some(LogLine {
-                        service_name: service_name.to_string(),
+                        service_name: Backend::Runtime(service_name.clone()).to_string(),
                         tx_timestamp: Some(Timestamp {
                             seconds: utc.timestamp(),
                             nanos: utc.timestamp_subsec_nanos().try_into().unwrap_or_default(),

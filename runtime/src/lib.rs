@@ -288,6 +288,9 @@ pub use async_trait::async_trait;
 pub use anyhow::Context;
 pub use strfmt::strfmt;
 
+#[cfg(feature = "setup-tracing")]
+pub use {colored, tracing_subscriber};
+
 // Print the version of the runtime.
 pub fn print_version() {
     let name = env!("CARGO_PKG_NAME");

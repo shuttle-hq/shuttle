@@ -13,11 +13,37 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let loader = Loader::from_item_fn(&mut fn_decl);
 
-    quote! {
-        #[tokio::main]
-        async fn main() {
-            shuttle_runtime::start(loader).await;
+    let main = if cfg!(feature = "setup-tracing") {
+        quote! {
+            #[tokio::main]
+            async fn main() {
+                use shuttle_runtime::colored::*;
+                shuttle_runtime::colored::control::set_override(true);
+                shuttle_runtime::tracing_subscriber::fmt::init();
+                println!(
+                    "{}\n{}\nTo disable tracing, remove the default features from {}:\n{}\n{}",
+                    "tracing is initialized!".yellow().bold(),
+                    "=".repeat(23).yellow(),
+                    "shuttle-runtime".italic(),
+                    "shuttle-runtime = { version = \"*\", default-features = false }"
+                        .white()
+                        .italic(),
+                    "=".repeat(23).yellow()
+                );
+                shuttle_runtime::start(loader).await;
+            }
         }
+    } else {
+        quote! {
+            #[tokio::main]
+            async fn main() {
+                shuttle_runtime::start(loader).await;
+            }
+        }
+    };
+
+    quote! {
+        #main
 
         #loader
 

@@ -301,7 +301,7 @@ async fn load(
             .unwrap_or_default()
     );
 
-    let resources: Vec<Vec<u8>> = resource_manager
+    let resources = resource_manager
         .get_resources(&service_id, claim.clone())
         .await
         .map_err(|err| Error::Load(err.to_string()))?

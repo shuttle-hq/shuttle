@@ -303,7 +303,7 @@ pub async fn get_service_resources(
             .await?
             .resources
             .into_iter()
-            .map(|resource| shuttle_common::resource::Response::try_from(resource))
+            .map(shuttle_common::resource::Response::try_from)
             // We ignore and trace the errors for resources with corrupted data, returning just the
             // valid resources.
             // TODO: investigate how the resource data can get corrupted.

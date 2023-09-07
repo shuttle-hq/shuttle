@@ -307,7 +307,7 @@ async fn load(
         .map_err(|err| Error::Load(err.to_string()))?
         .resources
         .into_iter()
-        .map(|resource| resource::Response::try_from(resource))
+        .map(resource::Response::try_from)
         // We ignore and trace the errors for resources with corrupted data, returning just the
         // valid resources.
         // TODO: investigate how the resource data can get corrupted.

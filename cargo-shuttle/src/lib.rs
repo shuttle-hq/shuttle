@@ -13,7 +13,9 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use shuttle_common::deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD};
+use shuttle_common::deployment::{
+    DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD, DEPLOYER_START_RESPONSE,
+};
 use shuttle_common::models::deployment::CREATE_SERVICE_BODY_LIMIT;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
@@ -1157,11 +1159,17 @@ impl Shuttle {
 
                         return Ok(CommandOutcome::DeploymentFailure);
                     }
+
                     if DEPLOYER_END_MESSAGES_GOOD
                         .iter()
                         .any(|m| log_item.line.contains(m))
                     {
                         debug!("received end message, breaking deployment stream");
+                        break;
+                    }
+
+                    if log_item.line.contains(DEPLOYER_START_RESPONSE) {
+                        debug!("received start response inside the logs, breaking the loop");
                         break;
                     }
                 }
@@ -1222,6 +1230,9 @@ impl Shuttle {
 
             return Ok(CommandOutcome::DeploymentFailure);
         }
+
+        // Print a newline in between the last deployment log line and the deployment details.
+        println!();
 
         let service = client.get_service(self.ctx.project_name()).await?;
         let resources = client

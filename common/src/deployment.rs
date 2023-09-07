@@ -32,6 +32,7 @@ pub const DEPLOYER_END_MSG_STARTUP_ERR: &str = "Service startup encountered an e
 pub const DEPLOYER_END_MSG_CRASHED: &str = "Service encountered an error and crashed";
 pub const DEPLOYER_END_MSG_STOPPED: &str = "Service was stopped by the user";
 pub const DEPLOYER_END_MSG_COMPLETED: &str = "Service finished running all on its own";
+pub const DEPLOYER_START_RESPONSE: &str = "{response=\"StartResponse { success: ";
 
 pub const DEPLOYER_END_MESSAGES_BAD: &[&str] =
     &[DEPLOYER_END_MSG_STARTUP_ERR, DEPLOYER_END_MSG_CRASHED];

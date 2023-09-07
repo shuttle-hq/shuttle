@@ -11,7 +11,6 @@ args! {
         "--storage-manager-type" => pub storage_manager_type: StorageManagerType,
         "--storage-manager-path" => pub storage_manager_path: PathBuf,
         "--auth-uri" => #[arg(default_value = "http://127.0.0.1:8008")] pub auth_uri: Uri,
-        "--logger-uri" => #[arg(default_value = "http://127.0.0.1:8009")] pub logger_uri: Uri,
     }
 }
 

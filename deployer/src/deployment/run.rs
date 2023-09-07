@@ -453,12 +453,13 @@ mod tests {
 
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
-    use shuttle_common::{
-        claims::{Claim, ClaimLayer, InjectPropagationLayer},
-        storage_manager::ArtifactsStorageManager,
-    };
+    use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
+    use shuttle_common_tests::logger::mocked_logger_client;
     use shuttle_proto::{
-        logger::{logger_client::LoggerClient, Batcher},
+        logger::{
+            logger_server::Logger, Batcher, LogLine, LogsRequest, LogsResponse, StoreLogsRequest,
+            StoreLogsResponse,
+        },
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
@@ -468,11 +469,11 @@ mod tests {
     };
     use tempfile::Builder;
     use tokio::{
-        sync::{oneshot, Mutex},
+        sync::{mpsc, oneshot, Mutex},
         time::sleep,
     };
-    use tonic::transport::{Endpoint, Server};
-    use tower::ServiceBuilder;
+    use tokio_stream::wrappers::ReceiverStream;
+    use tonic::{transport::Server, Request, Response, Status};
     use ulid::Ulid;
     use uuid::Uuid;
 
@@ -522,18 +523,44 @@ mod tests {
         }
     }
 
+    pub struct MockedLogger;
+
+    #[async_trait]
+    impl Logger for MockedLogger {
+        async fn store_logs(
+            &self,
+            _: Request<StoreLogsRequest>,
+        ) -> Result<Response<StoreLogsResponse>, Status> {
+            Ok(Response::new(StoreLogsResponse { success: true }))
+        }
+
+        async fn get_logs(
+            &self,
+            _: Request<LogsRequest>,
+        ) -> Result<Response<LogsResponse>, Status> {
+            Ok(Response::new(LogsResponse {
+                log_items: Vec::new(),
+            }))
+        }
+
+        type GetLogsStreamStream = ReceiverStream<Result<LogLine, Status>>;
+
+        async fn get_logs_stream(
+            &self,
+            _: Request<LogsRequest>,
+        ) -> Result<Response<Self::GetLogsStreamStream>, Status> {
+            let (_, rx) = mpsc::channel(1);
+            Ok(Response::new(ReceiverStream::new(rx)))
+        }
+    }
+
     async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
         let provisioner_addr =
             SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
-        let logger_uri = format!(
-            "http://{}",
-            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap())
-        );
-        let mock = ProvisionerMock;
 
         tokio::spawn(async move {
             Server::builder()
-                .add_service(ProvisionerServer::new(mock))
+                .add_service(ProvisionerServer::new(ProvisionerMock))
                 .serve(provisioner_addr)
                 .await
                 .unwrap();
@@ -542,23 +569,11 @@ mod tests {
         let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
 
-        let channel = Endpoint::try_from(logger_uri.to_string())
-            .unwrap()
-            .connect()
-            .await
-            .expect("failed to connect to logger");
-
-        let channel = ServiceBuilder::new()
-            .layer(ClaimLayer)
-            .layer(InjectPropagationLayer)
-            .service(channel);
-
-        let logger_client = Batcher::wrap(LoggerClient::new(channel));
+        let logger_client = Batcher::wrap(mocked_logger_client(MockedLogger).await);
 
         RuntimeManager::new(
             path,
             format!("http://{}", provisioner_addr),
-            logger_uri,
             logger_client,
             None,
         )

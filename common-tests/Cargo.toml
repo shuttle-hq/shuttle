@@ -13,4 +13,8 @@ tower = { workspace = true }
 cargo-shuttle = { path = "../cargo-shuttle" }
 portpicker = { workspace = true }
 tokio = { workspace = true }
+tonic = { workspace = true }
 reqwest = { workspace = true }
+
+[dependencies.shuttle-proto]
+workspace = true

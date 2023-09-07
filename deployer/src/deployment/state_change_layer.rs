@@ -28,25 +28,26 @@ use shuttle_common::{
     LogItem,
 };
 
-use crate::{
-    persistence::{DeploymentState, State},
-    Persistence,
-};
+use crate::persistence::{State, StateRecorder};
+
+use super::DeploymentState;
 
 /// Tracing subscriber layer which keeps track of a deployment's state.
 /// Logs a special line when entering a span tagged with deployment id and state.
-pub struct StateChangeLayer<R>
+pub struct StateChangeLayer<R, SR>
 where
     R: LogRecorder + Send + Sync,
+    SR: StateRecorder + Send + Sync,
 {
     pub log_recorder: R,
-    pub state_recorder: Persistence,
+    pub state_recorder: SR,
 }
 
-impl<R, S> Layer<S> for StateChangeLayer<R>
+impl<R, S, SR> Layer<S> for StateChangeLayer<R, SR>
 where
     S: Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
     R: LogRecorder + Send + Sync + 'static,
+    SR: StateRecorder,
 {
     fn on_new_span(
         &self,
@@ -63,24 +64,34 @@ where
         attrs.record(&mut visitor);
 
         if visitor.deployment_id.is_nil() {
-            warn!("scope details does not have a valid id");
+            warn!("scope details does not have a valid deployment id");
             return;
         }
 
         // To deployer persistence
-        self.state_recorder.record_state(DeploymentState {
+        let res = self.state_recorder.record_state(DeploymentState {
             id: visitor.deployment_id,
             state: visitor.state,
         });
+
+        let log_line = match res {
+            Ok(_) => format!(
+                "{} Entering {} state",
+                tracing::Level::INFO.colored(),
+                visitor.state, // make blue?
+            ),
+            Err(_) => format!(
+                "{} The deployer failed while recording the new state: {}",
+                tracing::Level::ERROR.colored(),
+                visitor.state
+            ),
+        };
+
         // To logger
         self.log_recorder.record(LogItem::new(
             visitor.deployment_id,
             Backend::Deployer,
-            format!(
-                "{} {}",
-                tracing::Level::INFO.colored(),
-                format!("Entering {} state", visitor.state), // make blue?
-            ),
+            log_line,
         ));
     }
 }
@@ -127,7 +138,8 @@ mod tests {
     };
 
     use crate::{
-        persistence::{DeploymentUpdater, ResourceManager},
+        deployment::DeploymentState,
+        persistence::{DeploymentUpdater, ResourceManager, StateRecorder},
         RuntimeManager,
     };
     use async_trait::async_trait;
@@ -135,9 +147,13 @@ mod tests {
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use portpicker::pick_unused_port;
-    use shuttle_common::claims::{Claim, ClaimLayer, InjectPropagationLayer};
+    use shuttle_common::claims::Claim;
+    use shuttle_common_tests::logger::mocked_logger_client;
     use shuttle_proto::{
-        logger::{logger_client::LoggerClient, Batcher},
+        logger::{
+            logger_client::LoggerClient, logger_server::Logger, Batcher, LogLine, LogsRequest,
+            LogsResponse, StoreLogsRequest, StoreLogsResponse,
+        },
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
@@ -145,25 +161,27 @@ mod tests {
         resource_recorder::{ResourcesResponse, ResultResponse},
     };
     use tempfile::Builder;
-    use tokio::{select, time::sleep};
-    use tonic::transport::{Endpoint, Server};
-    use tower::ServiceBuilder;
+    use tokio::{select, sync::mpsc, time::sleep};
+    use tokio_stream::wrappers::ReceiverStream;
+    use tonic::{transport::Server, Request, Response, Status};
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     use ulid::Ulid;
     use uuid::Uuid;
 
     use crate::{
         deployment::{
-            gateway_client::BuildQueueClient, state_change_layer::LogType, ActiveDeploymentsGetter,
-            Built, DeploymentManager, Queued,
+            gateway_client::BuildQueueClient, ActiveDeploymentsGetter, Built, DeploymentManager,
+            Queued,
         },
         persistence::{Secret, SecretGetter, SecretRecorder, State},
     };
 
-    use super::{LogItem, LogRecorder, StateChangeLayer};
+    use super::{LogItem, StateChangeLayer};
+
+    use shuttle_common::log::LogRecorder;
 
     #[ctor]
-    static RECORDER: Arc<Mutex<RecorderMock>> = {
+    static RECORDER: RecorderMock = {
         let recorder = RecorderMock::new();
 
         // Copied from the test-log crate
@@ -202,7 +220,10 @@ mod tests {
             .unwrap();
 
         tracing_subscriber::registry()
-            .with(StateChangeLayer::new(Arc::clone(&recorder)))
+            .with(StateChangeLayer {
+                log_recorder: recorder.clone(),
+                state_recorder: recorder.clone(),
+            })
             .with(filter_layer)
             .with(fmt_layer)
             .init();
@@ -212,32 +233,32 @@ mod tests {
 
     #[derive(Clone)]
     struct RecorderMock {
-        states: Arc<Mutex<Vec<StateLog>>>,
+        states: Arc<Mutex<Vec<MockStateLog>>>,
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    struct StateLog {
+    struct MockStateLog {
         id: Uuid,
         state: State,
     }
 
-    // impl From<LogItem> for StateLog {
-    //     fn from(log: LogItem) -> Self {
-    //         Self {
-    //             id: log.id,
-    //             state: log.state,
-    //         }
-    //     }
-    // }
+    impl From<DeploymentState> for MockStateLog {
+        fn from(log: DeploymentState) -> Self {
+            Self {
+                id: log.id,
+                state: log.state,
+            }
+        }
+    }
 
     impl RecorderMock {
-        fn new() -> Arc<Mutex<Self>> {
-            Arc::new(Mutex::new(Self {
+        fn new() -> Self {
+            Self {
                 states: Arc::new(Mutex::new(Vec::new())),
-            }))
+            }
         }
 
-        fn get_deployment_states(&self, id: &Uuid) -> Vec<StateLog> {
+        fn get_deployment_states(&self, id: &Uuid) -> Vec<MockStateLog> {
             self.states
                 .lock()
                 .unwrap()
@@ -249,11 +270,47 @@ mod tests {
     }
 
     impl LogRecorder for RecorderMock {
-        fn record(&self, event: LogItem) {
-            // We are only testing the state transitions
-            if event.r#type == LogType::State {
-                self.states.lock().unwrap().push(event.into());
-            }
+        fn record(&self, _: LogItem) {}
+    }
+
+    #[derive(thiserror::Error, Debug)]
+    pub enum MockError {}
+
+    impl StateRecorder for RecorderMock {
+        type Err = MockError;
+
+        fn record_state(&self, event: DeploymentState) -> Result<(), MockError> {
+            self.states.lock().unwrap().push(event.into());
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl Logger for RecorderMock {
+        async fn store_logs(
+            &self,
+            _: Request<StoreLogsRequest>,
+        ) -> Result<Response<StoreLogsResponse>, Status> {
+            Ok(Response::new(StoreLogsResponse { success: true }))
+        }
+
+        async fn get_logs(
+            &self,
+            _: Request<LogsRequest>,
+        ) -> Result<Response<LogsResponse>, Status> {
+            Ok(Response::new(LogsResponse {
+                log_items: Vec::new(),
+            }))
+        }
+
+        type GetLogsStreamStream = ReceiverStream<Result<LogLine, Status>>;
+
+        async fn get_logs_stream(
+            &self,
+            _: Request<LogsRequest>,
+        ) -> Result<Response<Self::GetLogsStreamStream>, Status> {
+            let (_, rx) = mpsc::channel(1);
+            Ok(Response::new(ReceiverStream::new(rx)))
         }
     }
 
@@ -283,16 +340,19 @@ mod tests {
         }
     }
 
-    async fn get_runtime_manager() -> Arc<tokio::sync::Mutex<RuntimeManager>> {
+    async fn get_runtime_manager(
+        logger_client: Batcher<
+            LoggerClient<
+                shuttle_common::claims::ClaimService<
+                    shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+                >,
+            >,
+        >,
+    ) -> Arc<tokio::sync::Mutex<RuntimeManager>> {
         let provisioner_addr =
             SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
-        let logger_uri = format!(
-            "http://{}",
-            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap())
-        );
-        let mock = ProvisionerMock;
-
         tokio::spawn(async move {
+            let mock = ProvisionerMock;
             Server::builder()
                 .add_service(ProvisionerServer::new(mock))
                 .serve(provisioner_addr)
@@ -303,30 +363,16 @@ mod tests {
         let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
 
-        let channel = Endpoint::try_from(logger_uri.to_string())
-            .unwrap()
-            .connect()
-            .await
-            .expect("failed to connect to logger");
-
-        let channel = ServiceBuilder::new()
-            .layer(ClaimLayer)
-            .layer(InjectPropagationLayer)
-            .service(channel);
-
-        let logger_client = Batcher::wrap(LoggerClient::new(channel));
-
         RuntimeManager::new(
             path,
             format!("http://{}", provisioner_addr),
-            logger_uri,
             logger_client,
             None,
         )
     }
 
     #[async_trait::async_trait]
-    impl SecretRecorder for Arc<Mutex<RecorderMock>> {
+    impl SecretRecorder for RecorderMock {
         type Err = std::io::Error;
 
         async fn insert_secret(
@@ -336,12 +382,6 @@ mod tests {
             _value: &str,
         ) -> Result<(), Self::Err> {
             panic!("no tests should set secrets")
-        }
-    }
-
-    impl<R: LogRecorder> LogRecorder for Arc<Mutex<R>> {
-        fn record(&self, event: LogItem) {
-            self.lock().unwrap().record(event);
         }
     }
 
@@ -439,9 +479,9 @@ mod tests {
         }
     }
 
-    async fn test_states(id: &Uuid, expected_states: Vec<StateLog>) {
+    async fn test_states(id: &Uuid, expected_states: Vec<MockStateLog>) {
         loop {
-            let states = RECORDER.lock().unwrap().get_deployment_states(id);
+            let states = RECORDER.get_deployment_states(id);
             if states == expected_states {
                 return;
             }
@@ -467,23 +507,23 @@ mod tests {
         let test = test_states(
             &id,
             vec![
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Queued,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Building,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Built,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Loading,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Running,
                 },
@@ -492,7 +532,7 @@ mod tests {
 
         select! {
             _ = sleep(Duration::from_secs(460)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Running' for a valid service: {:#?}", states);
             },
             _ = test => {}
@@ -504,27 +544,27 @@ mod tests {
         let test = test_states(
             &id,
             vec![
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Queued,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Building,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Built,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Loading,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Running,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Stopped,
                 },
@@ -533,7 +573,7 @@ mod tests {
 
         select! {
             _ = sleep(Duration::from_secs(60)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Stopped' for a valid service: {:#?}", states);
             },
             _ = test => {}
@@ -551,27 +591,27 @@ mod tests {
         let test = test_states(
             &id,
             vec![
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Queued,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Building,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Built,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Loading,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Running,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Completed,
                 },
@@ -580,7 +620,7 @@ mod tests {
 
         select! {
             _ = sleep(Duration::from_secs(460)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Completed' when a service stops by itself: {:#?}", states);
             }
             _ = test => {}
@@ -598,27 +638,27 @@ mod tests {
         let test = test_states(
             &id,
             vec![
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Queued,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Building,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Built,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Loading,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Running,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Crashed,
                 },
@@ -627,7 +667,7 @@ mod tests {
 
         select! {
             _ = sleep(Duration::from_secs(460)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Crashed' panicking in bind: {:#?}", states);
             }
             _ = test => {}
@@ -645,23 +685,23 @@ mod tests {
         let test = test_states(
             &id,
             vec![
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Queued,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Building,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Built,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Loading,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Crashed,
                 },
@@ -670,7 +710,7 @@ mod tests {
 
         select! {
             _ = sleep(Duration::from_secs(460)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Crashed' when panicking in main: {:#?}", states);
             }
             _ = test => {}
@@ -697,15 +737,15 @@ mod tests {
         let test = test_states(
             &id,
             vec![
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Built,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Loading,
                 },
-                StateLog {
+                MockStateLog {
                     id,
                     state: State::Crashed,
                 },
@@ -714,7 +754,7 @@ mod tests {
 
         select! {
             _ = sleep(Duration::from_secs(50)) => {
-                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                let states = RECORDER.get_deployment_states(&id);
                 panic!("from running should start in built and end in crash for invalid: {:#?}", states)
             },
             _ = test => {}
@@ -742,8 +782,7 @@ mod tests {
         // Give it a small time to start up
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states(&id);
+        let states = RECORDER.get_deployment_states(&id);
 
         assert!(
             states.is_empty(),
@@ -752,6 +791,7 @@ mod tests {
     }
 
     async fn get_deployment_manager() -> DeploymentManager {
+        let logger_client = mocked_logger_client(RecorderMock::new()).await;
         DeploymentManager::builder()
             .build_log_recorder(RECORDER.clone())
             .secret_recorder(RECORDER.clone())
@@ -759,7 +799,8 @@ mod tests {
             .artifacts_path(PathBuf::from("/tmp"))
             .secret_getter(StubSecretGetter)
             .resource_manager(StubResourceManager)
-            .runtime(get_runtime_manager().await)
+            .log_fetcher(logger_client.clone())
+            .runtime(get_runtime_manager(Batcher::wrap(logger_client)).await)
             .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)
             .build()

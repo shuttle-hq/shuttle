@@ -26,6 +26,12 @@ use crate::{
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct DeploymentState {
+    pub id: Uuid,
+    pub state: State,
+}
+
 pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
     build_log_recorder: Option<LR>,
     logs_fetcher: Option<

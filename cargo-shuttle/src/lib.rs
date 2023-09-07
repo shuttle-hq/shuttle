@@ -14,7 +14,7 @@ use std::process::exit;
 use std::str::FromStr;
 
 use shuttle_common::deployment::{
-    DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD, DEPLOYER_START_RESPONSE,
+    DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD,
 };
 use shuttle_common::models::deployment::CREATE_SERVICE_BODY_LIMIT;
 use shuttle_common::{
@@ -1165,11 +1165,6 @@ impl Shuttle {
                         .any(|m| log_item.line.contains(m))
                     {
                         debug!("received end message, breaking deployment stream");
-                        break;
-                    }
-
-                    if log_item.line.contains(DEPLOYER_START_RESPONSE) {
-                        debug!("received start response inside the logs, breaking the loop");
                         break;
                     }
                 }

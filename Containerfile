@@ -19,6 +19,7 @@ RUN find . \( \
     -name "*.toml" -or \
     -name "Cargo.lock" -or \
     -name "*.sql" -or \
+    -name "README.md" -or \
     # Used for local TLS testing, as described in admin/README.md
     -name "*.pem" -or \
     -name "ulid0.so" \

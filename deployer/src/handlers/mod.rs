@@ -303,14 +303,18 @@ pub async fn get_service_resources(
             .await?
             .resources
             .into_iter()
-            .map(|resource| {
-                shuttle_common::resource::Response::try_from(resource)
-                    .map_err(|err| anyhow::anyhow!(err.to_string()).into())
-            })
-            // We collect into a Result so that if the response contains a resource with corrupted
-            // data, we terminate iteration and return error.
+            .map(|resource| shuttle_common::resource::Response::try_from(resource))
+            // We ignore and trace the errors for resources with corrupted data, returning just the
+            // valid resources.
             // TODO: investigate how the resource data can get corrupted.
-            .collect::<Result<Vec<_>>>()?;
+            .filter_map(|resource| {
+                resource
+                    .map_err(|err| {
+                        error!(error = ?err, "failed to parse resource data");
+                    })
+                    .ok()
+            })
+            .collect();
 
         Ok(Json(resources))
     } else {

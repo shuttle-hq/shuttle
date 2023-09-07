@@ -307,14 +307,17 @@ async fn load(
         .map_err(|err| Error::Load(err.to_string()))?
         .resources
         .into_iter()
-        .map(|resource| {
-            resource::Response::try_from(resource).map_err(|err| Error::Load(err.to_string()))
-        })
-        // We collect into a Result so that if the response contains a resource with corrupted data,
-        // we terminate iteration and return error.
+        .map(|resource| resource::Response::try_from(resource))
+        // We ignore and trace the errors for resources with corrupted data, returning just the
+        // valid resources.
         // TODO: investigate how the resource data can get corrupted.
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
+        .filter_map(|resource| {
+            resource
+                .map_err(|err| {
+                    error!(error = ?err, "failed to parse resource data");
+                })
+                .ok()
+        })
         .map(resource::Response::into_bytes)
         .collect();
 

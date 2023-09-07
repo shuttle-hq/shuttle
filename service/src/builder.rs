@@ -56,7 +56,8 @@ impl BuiltService {
 }
 
 fn extract_shuttle_toml_name(path: PathBuf) -> anyhow::Result<String> {
-    let shuttle_toml = read_to_string(path).context("Shuttle.toml not found")?;
+    let shuttle_toml =
+        read_to_string(path.as_path()).map_err(|_| anyhow!("{} not found", path.display()))?;
 
     let toml: toml::Value =
         toml::from_str(&shuttle_toml).context("failed to parse Shuttle.toml")?;

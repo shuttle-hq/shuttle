@@ -351,10 +351,12 @@ async fn load(
     match response {
         Ok(response) => {
             let response = response.into_inner();
-
             // Make sure to not log the entire response, the resources field is likely to contain
             // secrets.
-            info!(success = %response.success, "loading response");
+            if response.success {
+                info!("Successfully loaded service");
+            }
+
             let resources = response
                 .resources
                 .into_iter()
@@ -375,12 +377,12 @@ async fn load(
             if response.success {
                 Ok(())
             } else {
-                error!(error = %response.message, "failed to load service");
+                error!(error = %response.message, "Failed to load service");
                 Err(Error::Load(response.message))
             }
         }
         Err(error) => {
-            error!(%error, "failed to load service");
+            error!(%error, "Failed to load service");
             Err(Error::Load(error.to_string()))
         }
     }
@@ -417,7 +419,9 @@ async fn run(
 
     match response {
         Ok(response) => {
-            info!(response = ?response.into_inner(),  "start client response: ");
+            if response.into_inner().success {
+                info!("Runtime started successully");
+            }
 
             // Wait for stop reason
             let reason = stream.message().await.expect("message from tonic stream");

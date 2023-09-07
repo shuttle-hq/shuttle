@@ -1461,7 +1461,7 @@ impl Shuttle {
 
 fn check_version(runtime_path: &Path) -> Result<()> {
     let valid_version = semver::Version::from_str(VERSION)
-        .context("failed to convert runtime version to semver")?;
+        .context("failed to convert cargo-shuttle version to semver")?;
 
     if !runtime_path.try_exists()? {
         bail!("shuttle-runtime is not installed");
@@ -1484,7 +1484,7 @@ fn check_version(runtime_path: &Path) -> Result<()> {
             .1
             .trim(),
     )
-    .context("failed to convert runtime version to semver")?;
+    .context("failed to convert user's runtime version to semver")?;
 
     if semvers_are_compatible(&valid_version, &runtime_version) {
         Ok(())

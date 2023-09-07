@@ -232,7 +232,7 @@ pub mod logger {
     use std::str::FromStr;
     use std::time::Duration;
 
-    use chrono::{DateTime, NaiveDateTime, Utc};
+    use chrono::{NaiveDateTime, TimeZone, Utc};
     use prost::bytes::Bytes;
     use tokio::{select, sync::mpsc, time::interval};
     use tonic::{
@@ -289,13 +289,12 @@ pub mod logger {
                 id: deployment_id,
                 internal_origin: Backend::from_str(&service_name)
                     .expect("backend name to be valid"),
-                timestamp: DateTime::from_utc(
-                    NaiveDateTime::from_timestamp_opt(
+                timestamp: Utc.from_utc_datetime(
+                    &NaiveDateTime::from_timestamp_opt(
                         tx_timestamp.seconds,
                         tx_timestamp.nanos.try_into().unwrap_or_default(),
                     )
                     .unwrap_or_default(),
-                    Utc,
                 ),
                 line: String::from_utf8(data).expect("line to be utf-8"),
             }

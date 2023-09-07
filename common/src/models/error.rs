@@ -30,7 +30,7 @@ impl Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, strum::Display)]
 pub enum ErrorKind {
     KeyMissing,
     BadHost,
@@ -42,7 +42,10 @@ pub enum ErrorKind {
     ProjectNotFound,
     InvalidProjectName,
     ProjectAlreadyExists,
-    ProjectAlreadyRunning,
+    /// Contains a message describing a running state of the project.
+    /// Used if the project already exists but is owned
+    /// by the caller, which means they can modify the project.
+    OwnProjectAlreadyExists(String),
     ProjectNotReady,
     ProjectUnavailable,
     CustomDomainNotFound,
@@ -98,10 +101,12 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::BAD_REQUEST,
                 "a project with the same name already exists",
             ),
-            ErrorKind::ProjectAlreadyRunning => (
-                StatusCode::BAD_REQUEST,
-                "it looks like your project is already running. You can find out more with `cargo shuttle project status`",
-            ),
+            ErrorKind::OwnProjectAlreadyExists(message) => {
+                return Self {
+                    message,
+                    status_code: StatusCode::BAD_REQUEST.as_u16(),
+                }
+            }
             ErrorKind::InvalidCustomDomain => (StatusCode::BAD_REQUEST, "invalid custom domain"),
             ErrorKind::CustomDomainNotFound => (StatusCode::NOT_FOUND, "custom domain not found"),
             ErrorKind::CustomDomainAlreadyExists => {

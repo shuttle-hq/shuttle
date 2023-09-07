@@ -122,9 +122,10 @@ where
                     if log.tx_timestamp.timestamp() >= last.seconds
                         && log.tx_timestamp.timestamp_nanos() > last.nanos.into()
                     {
-                        tx.send(Ok(log.into()))
-                            .await
-                            .unwrap_or_else(|err| error!("Errored while sending logs: {err}"));
+                        if let Err(err) = tx.send(Ok(log.into())).await {
+                            error!("Errored while sending logs: {err}");
+                            return;
+                        }
                     }
                 }
             }

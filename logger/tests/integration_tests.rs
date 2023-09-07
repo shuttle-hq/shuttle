@@ -29,7 +29,7 @@ use uuid::Uuid;
 
 const SHUTTLE_SERVICE: &str = "test";
 
-static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new());
+static PG: Lazy<DockerInstance> = Lazy::new(DockerInstance::default);
 
 #[dtor]
 fn cleanup() {

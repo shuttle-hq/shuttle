@@ -16,11 +16,13 @@ doctest = false
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
+colored = { workspace = true, optional = true }
 prost-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 strfmt = { workspace = true }
 thiserror = { workspace = true }
+tracing-subscriber = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = "0.1.11"
 tonic = { workspace = true }
@@ -55,7 +57,7 @@ shuttle-service = { workspace = true, features = ["builder"] }
 uuid = { workspace = true }
 
 [features]
-default = []
+default = ["setup-tracing"]
 next = [
     "cap-std",
     "futures",
@@ -66,4 +68,9 @@ next = [
     "wasmtime",
     "wasmtime-wasi",
     "shuttle-common/wasm",
+]
+setup-tracing = [
+    "tracing-subscriber",
+    "colored",
+    "shuttle-codegen/setup-tracing",
 ]

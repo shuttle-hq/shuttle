@@ -56,7 +56,7 @@ impl ResourceTracker {
 
 macro_rules! log {
     ($msg:expr) => {
-        println!("{} [Resource][{}] {}", chrono::Utc::now(), B::TYPE, $msg);
+        println!("[Resource][{}] {}", B::TYPE, $msg);
     };
 }
 

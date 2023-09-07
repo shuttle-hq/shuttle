@@ -301,13 +301,20 @@ async fn load(
             .unwrap_or_default()
     );
 
-    let resources = resource_manager
+    let resources: Vec<Vec<u8>> = resource_manager
         .get_resources(&service_id, claim.clone())
         .await
-        .unwrap()
+        .map_err(|err| Error::Load(err.to_string()))?
         .resources
         .into_iter()
-        .map(resource::Response::from)
+        .map(|resource| {
+            resource::Response::try_from(resource).map_err(|err| Error::Load(err.to_string()))
+        })
+        // We collect into a Result so that if the response contains a resource with corrupted data,
+        // we terminate iteration and return error.
+        // TODO: investigate how the resource data can get corrupted.
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
         .map(resource::Response::into_bytes)
         .collect();
 

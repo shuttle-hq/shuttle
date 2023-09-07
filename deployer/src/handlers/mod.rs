@@ -303,8 +303,14 @@ pub async fn get_service_resources(
             .await?
             .resources
             .into_iter()
-            .map(Into::into)
-            .collect();
+            .map(|resource| {
+                shuttle_common::resource::Response::try_from(resource)
+                    .map_err(|err| anyhow::anyhow!(err.to_string()).into())
+            })
+            // We collect into a Result so that if the response contains a resource with corrupted
+            // data, we terminate iteration and return error.
+            // TODO: investigate how the resource data can get corrupted.
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Json(resources))
     } else {

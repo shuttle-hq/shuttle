@@ -19,7 +19,7 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 
 # the rust version used by our containers, and as an override for our deployers
 # ensuring all user crates are compiled with the same rustc toolchain
-RUSTUP_TOOLCHAIN=1.70.0
+RUSTUP_TOOLCHAIN=1.72.0
 
 TAG?=$(shell git describe --tags --abbrev=0)
 AUTH_TAG?=$(TAG)
@@ -209,3 +209,19 @@ down: $(DOCKER_COMPOSE_FILES)
 	$(addprefix -f ,$(DOCKER_COMPOSE_FILES)) \
 	-p $(STACK) \
 	down
+
+shuttle-%:
+	$(DOCKER_BUILD) \
+		--target $(@)$(DEV_SUFFIX) \
+		--build-arg folder=$(*) \
+		--build-arg crate=$(@) \
+		--build-arg prepare_args=$(PREPARE_ARGS) \
+		--build-arg PROD=$(PROD) \
+		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
+		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
+		--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
+		--tag $(CONTAINER_REGISTRY)/$(*):latest \
+		$(BUILDX_FLAGS) \
+		-f Containerfile \
+		.

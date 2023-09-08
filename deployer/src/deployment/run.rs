@@ -316,10 +316,20 @@ async fn load(
     let resources = resource_manager
         .get_resources(&service_id, claim.clone())
         .await
-        .unwrap()
+        .map_err(|err| Error::Load(err.to_string()))?
         .resources
         .into_iter()
-        .map(resource::Response::from)
+        .map(resource::Response::try_from)
+        // We ignore and trace the errors for resources with corrupted data, returning just the
+        // valid resources.
+        // TODO: investigate how the resource data can get corrupted.
+        .filter_map(|resource| {
+            resource
+                .map_err(|err| {
+                    error!(error = ?err, "failed to parse resource data");
+                })
+                .ok()
+        })
         .map(resource::Response::into_bytes)
         .collect();
 

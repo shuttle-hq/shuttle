@@ -188,7 +188,7 @@ where
         } = request.into_inner();
         println!("loading alpha service at {path}");
 
-        let secrets = BTreeMap::from_iter(secrets.into_iter());
+        let secrets = BTreeMap::from_iter(secrets);
 
         let channel = self
             .provisioner_address

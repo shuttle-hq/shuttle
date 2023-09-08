@@ -80,7 +80,7 @@ display = ["chrono/clock", "comfy-table", "crossterm"]
 openapi = ["utoipa/chrono", "utoipa/uuid"]
 models = ["async-trait", "display", "http", "reqwest", "service"]
 persist = ["sqlx/sqlite", "rand"]
-service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid"]
+service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid", "tracing-subscriber"]
 tracing = []
 wasm = [
     "chrono/clock",

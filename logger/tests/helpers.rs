@@ -21,8 +21,8 @@ struct Config<'a> {
     is_ready_cmd: Vec<&'a str>,
 }
 
-impl DockerInstance {
-    pub fn new() -> Self {
+impl Default for DockerInstance {
+    fn default() -> Self {
         let Config {
             engine,
             env,
@@ -63,7 +63,9 @@ impl DockerInstance {
             uri: format!("{engine}://{engine}:password@localhost:{host_port}"),
         }
     }
+}
 
+impl DockerInstance {
     fn wait_ready(mut timeout: Duration, is_ready_cmd: &[&str]) {
         let mut now = SystemTime::now();
         while !timeout.is_zero() {

@@ -112,7 +112,7 @@ pub async fn task(
     }
 }
 
-#[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
+#[instrument(name = "Build failed", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
@@ -120,9 +120,8 @@ fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     );
 }
 
-#[instrument(skip(queue_client), fields(state = %State::Queued))]
+#[instrument(name = "Waiting for queue slot", skip(queue_client), fields(deployment_id = %id, state = %State::Queued))]
 async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result<()> {
-    trace!("getting a build slot");
     loop {
         let got_slot = queue_client.get_slot(id).await?;
 
@@ -138,6 +137,7 @@ async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result
     Ok(())
 }
 
+#[instrument(name = "Releasing queue slot", skip(queue_client), fields(deployment_id = %id))]
 async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) {
     match queue_client.release_slot(id).await {
         Ok(_) => {}
@@ -148,7 +148,7 @@ async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) {
     }
 }
 
-#[instrument(skip(run_send), fields(deployment_id = %built.id, state = %State::Built))]
+#[instrument(name = "Starting deployment", skip(run_send), fields(deployment_id = %built.id, state = %State::Built))]
 async fn promote_to_run(mut built: Built, run_send: RunSender) {
     let cx = Span::current().context();
 
@@ -173,7 +173,7 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(deployment_id = %self.id, state = %State::Building))]
+    #[instrument(name = "Building project", skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(deployment_id = %self.id, state = %State::Building))]
     async fn handle(
         self,
         storage_manager: ArtifactsStorageManager,
@@ -220,10 +220,7 @@ impl Queued {
         set_secrets(secrets, &self.service_id, secret_recorder).await?;
 
         if self.will_run_tests {
-            info!(
-                build_line = "Running tests before starting up",
-                "Running deployment's unit tests"
-            );
+            info!("Running tests before starting up");
 
             run_pre_deploy_tests(&project_path, tx).await?;
         }

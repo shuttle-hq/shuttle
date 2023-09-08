@@ -64,6 +64,43 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         }
     };
 
+    // this is handled after arg parsing to not interfere with --version above
+    if cfg!(feature = "setup-tracing") {
+        use colored::{control, Colorize};
+        control::set_override(true); // always apply color
+
+        use tracing_subscriber::prelude::*;
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer().without_time())
+            .with(
+                // let user override RUST_LOG in local run if they want to
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    // otherwise use our default
+                    .or_else(|_| tracing_subscriber::EnvFilter::try_new("info,shuttle=trace"))
+                    .unwrap(),
+            )
+            .init();
+
+        println!(
+            "{}\n\
+            {}\n\
+            To disable the subscriber and use your own,\n\
+            remove the default features for {}:\n\
+            \n\
+            {}\n\
+            {}",
+            "=".repeat(63).yellow(),
+            "Shuttle's default tracing subscriber is initialized!"
+                .yellow()
+                .bold(),
+            "shuttle-runtime".italic(),
+            r#"shuttle-runtime = { version = "...", default-features = false }"#
+                .white()
+                .italic(),
+            "=".repeat(63).yellow()
+        );
+    }
+
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
     let provisioner_address = args.provisioner_address;

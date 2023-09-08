@@ -15,6 +15,7 @@ use std::str::FromStr;
 
 use shuttle_common::deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD};
 use shuttle_common::models::deployment::CREATE_SERVICE_BODY_LIMIT;
+use shuttle_common::LogItem;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     models::{
@@ -694,6 +695,13 @@ impl Shuttle {
             err
         })?;
 
+        let service_name = service.service_name()?;
+        let deployment_id: Uuid = Default::default();
+
+        // Clones to send to spawn
+        let service_name_clone = service_name.clone().to_string();
+        let deployment_id_clone = deployment_id.clone();
+
         let child_stdout = runtime
             .stdout
             .take()
@@ -701,13 +709,17 @@ impl Shuttle {
         let mut reader = BufReader::new(child_stdout).lines();
         tokio::spawn(async move {
             while let Some(line) = reader.next_line().await.unwrap() {
-                println!("{}", line);
+                let log_item = LogItem::new(
+                    deployment_id_clone,
+                    shuttle_common::log::Backend::Runtime(service_name_clone.clone()),
+                    line,
+                );
+                println!("{log_item}");
             }
         });
 
-        let service_name = service.service_name()?;
         let load_request = tonic::Request::new(LoadRequest {
-            deployment_id: Default::default(),
+            deployment_id: deployment_id.to_string(),
             path: executable_path
                 .into_os_string()
                 .into_string()

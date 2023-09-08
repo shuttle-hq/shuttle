@@ -16,8 +16,10 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let tracing_setup = if cfg!(feature = "setup-tracing") {
         Some(quote! {
                 use shuttle_runtime::colored::*;
+                use shuttle_runtime::tracing_subscriber::{registry, fmt, prelude::*};
                 shuttle_runtime::colored::control::set_override(true);
-                shuttle_runtime::tracing_subscriber::fmt::init();
+                registry().with(fmt::layer().without_time()).init();
+
                 println!(
                     "{}\n{}\nTo disable tracing, remove the default features from {}:\n{}\n{}",
                     "Shuttle's default tracing subscriber is initialized!".yellow().bold(),

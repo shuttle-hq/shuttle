@@ -32,7 +32,7 @@ use shuttle_service::builder::{build_workspace, BuiltService};
 
 use anyhow::{anyhow, bail, Context, Result};
 use cargo_metadata::Message;
-use clap::CommandFactory;
+use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use clap_complete::{generate, Shell};
 use config::RequestContext;
 use crossterm::style::Stylize;
@@ -68,7 +68,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 const SHUTTLE_LOGIN_URL: &str = "https://console.shuttle.rs/new-project";
 const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
-const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/introduction/shuttle-commands";
+const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/shuttle-commands";
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -80,7 +80,26 @@ impl Shuttle {
         Ok(Self { ctx })
     }
 
-    pub async fn run(mut self, mut args: ShuttleArgs) -> Result<CommandOutcome> {
+    pub async fn parse_args_and_run(self) -> Result<CommandOutcome> {
+        // A hack to see if the PATH arg of the init command was explicitly given
+        let matches = ShuttleArgs::command().get_matches();
+        let args = ShuttleArgs::from_arg_matches(&matches)
+            .expect("args to already be parsed successfully");
+        let provided_path_to_init =
+            matches
+                .subcommand_matches("init")
+                .is_some_and(|init_matches| {
+                    init_matches.value_source("path") == Some(ValueSource::CommandLine)
+                });
+
+        self.run(args, provided_path_to_init).await
+    }
+
+    pub async fn run(
+        mut self,
+        args: ShuttleArgs,
+        provided_path_to_init: bool,
+    ) -> Result<CommandOutcome> {
         trace!("running local client");
 
         if args.api_url.as_ref().is_some_and(|s| s.ends_with('/')) {
@@ -110,13 +129,16 @@ impl Shuttle {
                 | Command::Logs { .. }
                 | Command::Run(..)
         ) {
-            self.load_project(&mut args.project_args)?;
+            self.load_project(&args.project_args)?;
         }
 
         self.ctx.set_api_url(args.api_url);
 
         match args.cmd {
-            Command::Init(init_args) => self.init(init_args, args.project_args).await,
+            Command::Init(init_args) => {
+                self.init(init_args, args.project_args, provided_path_to_init)
+                    .await
+            }
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
@@ -164,15 +186,19 @@ impl Shuttle {
 
     /// Log in, initialize a project and potentially create the Shuttle environment for it.
     ///
-    /// If both a project name and framework are passed as arguments, it will run without any extra
+    /// If project name, template, and path are passed as arguments, it will run without any extra
     /// interaction.
-    async fn init(&mut self, args: InitArgs, mut project_args: ProjectArgs) -> Result<()> {
+    async fn init(
+        &mut self,
+        args: InitArgs,
+        mut project_args: ProjectArgs,
+        provided_path_to_init: bool,
+    ) -> Result<()> {
         // Turns the template or git args (if present) to a repo+folder.
         let git_templates = args.git_template()?;
 
-        // Caveat: No way of telling if args.path was given or default
-        // Ideally that would be checked here (go interactive if not given)
-        let interactive = project_args.name.is_none() || git_templates.is_none();
+        let interactive =
+            project_args.name.is_none() || git_templates.is_none() || !provided_path_to_init;
 
         let theme = ColorfulTheme::default();
 
@@ -218,9 +244,23 @@ impl Shuttle {
                 .with_prompt("Directory")
                 .default(path.to_owned())
                 .interact()?;
-
             println!();
-            args::parse_init_path(OsString::from(directory_str))?
+
+            let path = args::parse_init_path(OsString::from(directory_str))?;
+
+            if std::fs::read_dir(&path)
+                .expect("init dir to exist and list entries")
+                .count()
+                > 0
+                && !Confirm::with_theme(&theme)
+                    .with_prompt("Target directory is not empty. Are you sure?")
+                    .default(true)
+                    .interact()?
+            {
+                return Ok(());
+            }
+
+            path
         } else {
             args.path.clone()
         };
@@ -290,7 +330,7 @@ impl Shuttle {
             // so `load_project` is ran with the correct project path
             project_args.working_directory = path.clone();
 
-            self.load_project(&mut project_args)?;
+            self.load_project(&project_args)?;
             self.project_create(&self.client()?, DEFAULT_IDLE_MINUTES)
                 .await?;
         }
@@ -307,7 +347,7 @@ impl Shuttle {
                 printdoc!(
                     "
                     Hint: Discord bots might want to use `--idle-minutes 0` when starting the
-                    project so that they don't go offline: https://docs.shuttle.rs/introduction/idle-projects
+                    project so that they don't go offline: https://docs.shuttle.rs/getting-started/idle-projects
                     "
                 );
             }
@@ -316,7 +356,7 @@ impl Shuttle {
         Ok(())
     }
 
-    pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {
+    pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
         trace!("loading project arguments: {project_args:?}");
 
         self.ctx.load_local(project_args)
@@ -1244,7 +1284,7 @@ impl Shuttle {
             );
             println!();
             println!("{}", idle_msg.yellow());
-            println!("To change the idle time refer to the docs: https://docs.shuttle.rs/introduction/idle-projects");
+            println!("To change the idle time refer to the docs: https://docs.shuttle.rs/getting-started/idle-projects");
             println!();
         }
 
@@ -1578,9 +1618,9 @@ mod tests {
         dunce::canonicalize(path).unwrap()
     }
 
-    fn get_archive_entries(mut project_args: ProjectArgs) -> Vec<String> {
+    fn get_archive_entries(project_args: ProjectArgs) -> Vec<String> {
         let mut shuttle = Shuttle::new().unwrap();
-        shuttle.load_project(&mut project_args).unwrap();
+        shuttle.load_project(&project_args).unwrap();
 
         let archive = shuttle.make_archive().unwrap();
 
@@ -1607,13 +1647,13 @@ mod tests {
 
     #[test]
     fn load_project_returns_proper_working_directory_in_project_args() {
-        let mut project_args = ProjectArgs {
+        let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
             name: None,
         };
 
         let mut shuttle = Shuttle::new().unwrap();
-        shuttle.load_project(&mut project_args).unwrap();
+        shuttle.load_project(&project_args).unwrap();
 
         assert_eq!(
             project_args.working_directory,

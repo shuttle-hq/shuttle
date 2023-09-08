@@ -49,7 +49,7 @@ impl Factory for ProvisionerFactory {
     ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
         let mut request = Request::new(DatabaseRequest {
             project_name: self.service_name.to_string(),
-            db_type: Some(db_type.clone().into()),
+            db_type: Some(db_type.into()),
         });
 
         if let Some(claim) = &self.claim {

@@ -372,7 +372,7 @@ impl UserServiceBuilder {
             futs.push(user_without_tls);
         }
 
-        future::select_all(futs.into_iter()).map(|((name, resolved), _, _)| {
+        future::select_all(futs).map(|((name, resolved), _, _)| {
             error!(service = %name, "exited early");
             resolved
         })

@@ -12,7 +12,7 @@ use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
     deployment::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
-        DEPLOYER_END_MSG_STOPPED,
+        DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
     resource,
     storage_manager::ArtifactsStorageManager,
@@ -351,10 +351,9 @@ async fn load(
     match response {
         Ok(response) => {
             let response = response.into_inner();
-            // Make sure to not log the entire response, the resources field is likely to contain
-            // secrets.
+            // Make sure to not log the entire response, the resources field is likely to contain secrets.
             if response.success {
-                info!("Successfully loaded service");
+                info!("successfully loaded service");
             }
 
             let resources = response
@@ -377,12 +376,12 @@ async fn load(
             if response.success {
                 Ok(())
             } else {
-                error!(error = %response.message, "Failed to load service");
+                error!(error = %response.message, "failed to load service");
                 Err(Error::Load(response.message))
             }
         }
         Err(error) => {
-            error!(%error, "Failed to load service");
+            error!(%error, "failed to load service");
             Err(Error::Load(error.to_string()))
         }
     }
@@ -420,7 +419,7 @@ async fn run(
     match response {
         Ok(response) => {
             if response.into_inner().success {
-                info!("Runtime started successully");
+                info!(DEPLOYER_RUNTIME_START_RESPONSE);
             }
 
             // Wait for stop reason
@@ -435,12 +434,11 @@ async fn run(
             }));
         }
         Err(ref status) => {
+            error!(%status, "failed to start service");
             start_crashed_cleanup(
                 &id,
                 Error::Start("runtime failed to start deployment".to_string()),
             );
-
-            error!(%status, "failed to start service");
         }
     }
 }

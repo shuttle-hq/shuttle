@@ -186,7 +186,7 @@ where
             service_name,
             deployment_id,
         } = request.into_inner();
-        println!("Loading alpha service at {path}");
+        println!("loading alpha service at {path}");
 
         let secrets = BTreeMap::from_iter(secrets.into_iter());
 
@@ -303,7 +303,7 @@ where
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        println!("Alpha runtime starting");
+        println!("alpha runtime starting");
         let service = self.service.lock().unwrap().deref_mut().take();
         let service = service.unwrap();
 
@@ -312,7 +312,7 @@ where
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        println!("Starting on {service_address}");
+        println!("starting on {service_address}");
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
         *self.kill_tx.lock().unwrap() = Some(kill_tx);

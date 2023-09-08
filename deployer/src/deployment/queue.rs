@@ -10,6 +10,7 @@ use cargo_metadata::Message;
 use crossbeam_channel::Sender;
 use flate2::read::GzDecoder;
 use opentelemetry::global;
+use shuttle_common::deployment::DEPLOYER_END_MSG_BUILD_ERR;
 use shuttle_common::log::LogRecorder;
 use tar::Archive;
 use tokio::fs;
@@ -115,7 +116,7 @@ pub async fn task(
 fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        "service build encountered an error"
+        DEPLOYER_END_MSG_BUILD_ERR,
     );
 }
 

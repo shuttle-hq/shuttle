@@ -56,10 +56,10 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let args = match Args::parse() {
         Ok(args) => args,
         Err(e) => {
-            println!("runtime received malformed or incorrect args, {e}");
+            eprintln!("Runtime received malformed or incorrect args, {e}");
             let help_str = "[HINT]: Run shuttle with `cargo shuttle run`";
             let wrapper_str = "-".repeat(help_str.len());
-            println!("{wrapper_str}\n{help_str}\n{wrapper_str}");
+            eprintln!("{wrapper_str}\n{help_str}\n{wrapper_str}");
             return;
         }
     };
@@ -186,7 +186,7 @@ where
             service_name,
             deployment_id,
         } = request.into_inner();
-        println!("loading alpha project at {path}");
+        println!("loading alpha service at {path}");
 
         let secrets = BTreeMap::from_iter(secrets.into_iter());
 
@@ -225,6 +225,7 @@ where
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
+        // send to new thread to catch panics
         let service =
             match tokio::spawn(loader.load(factory, resource_tracker, deployment_id)).await {
                 Ok(res) => match res {
@@ -302,7 +303,7 @@ where
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        println!("alpha starting");
+        println!("alpha runtime starting");
         let service = self.service.lock().unwrap().deref_mut().take();
         let service = service.unwrap();
 
@@ -344,13 +345,13 @@ where
                                     },
                                 };
 
-                                println!( "service panicked: {msg}");
+                                println!("service panicked: {msg}");
 
                                 let _ = stopped_tx
                                     .send((StopReason::Crash, msg))
                                     .map_err(|e| println!("{e}"));
                             } else {
-                                println!( "service crashed: {error}");
+                                println!("service crashed: {error}");
                                 let _ = stopped_tx
                                     .send((StopReason::Crash, error.to_string()))
                                     .map_err(|e| println!("{e}"));

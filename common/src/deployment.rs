@@ -29,14 +29,22 @@ pub enum Environment {
 }
 
 pub const DEPLOYER_END_MSG_STARTUP_ERR: &str = "Service startup encountered an error";
+pub const DEPLOYER_END_MSG_BUILD_ERR: &str = "Service build encountered an error";
 pub const DEPLOYER_END_MSG_CRASHED: &str = "Service encountered an error and crashed";
 pub const DEPLOYER_END_MSG_STOPPED: &str = "Service was stopped by the user";
 pub const DEPLOYER_END_MSG_COMPLETED: &str = "Service finished running all on its own";
+pub const DEPLOYER_RUNTIME_START_RESPONSE: &str = "Runtime started successully";
 
-pub const DEPLOYER_END_MESSAGES_BAD: &[&str] =
-    &[DEPLOYER_END_MSG_STARTUP_ERR, DEPLOYER_END_MSG_CRASHED];
-pub const DEPLOYER_END_MESSAGES_GOOD: &[&str] =
-    &[DEPLOYER_END_MSG_STOPPED, DEPLOYER_END_MSG_COMPLETED];
+pub const DEPLOYER_END_MESSAGES_BAD: &[&str] = &[
+    DEPLOYER_END_MSG_STARTUP_ERR,
+    DEPLOYER_END_MSG_BUILD_ERR,
+    DEPLOYER_END_MSG_CRASHED,
+];
+pub const DEPLOYER_END_MESSAGES_GOOD: &[&str] = &[
+    DEPLOYER_END_MSG_STOPPED,
+    DEPLOYER_END_MSG_COMPLETED,
+    DEPLOYER_RUNTIME_START_RESPONSE,
+];
 
 #[cfg(test)]
 mod tests {

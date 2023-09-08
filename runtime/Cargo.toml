@@ -70,7 +70,8 @@ next = [
     "shuttle-common/wasm",
 ]
 setup-tracing = [
-    "tracing-subscriber",
+    "tracing-subscriber/default",
+    "tracing-subscriber/env-filter",
     "colored",
     "shuttle-codegen/setup-tracing",
 ]

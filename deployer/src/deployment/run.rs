@@ -12,7 +12,7 @@ use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
     deployment::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
-        DEPLOYER_END_MSG_STOPPED,
+        DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
     resource,
     storage_manager::ArtifactsStorageManager,
@@ -351,10 +351,11 @@ async fn load(
     match response {
         Ok(response) => {
             let response = response.into_inner();
+            // Make sure to not log the entire response, the resources field is likely to contain secrets.
+            if response.success {
+                info!("successfully loaded service");
+            }
 
-            // Make sure to not log the entire response, the resources field is likely to contain
-            // secrets.
-            info!(success = %response.success, "loading response");
             let resources = response
                 .resources
                 .into_iter()
@@ -417,7 +418,9 @@ async fn run(
 
     match response {
         Ok(response) => {
-            info!(response = ?response.into_inner(),  "start client response: ");
+            if response.into_inner().success {
+                info!(DEPLOYER_RUNTIME_START_RESPONSE);
+            }
 
             // Wait for stop reason
             let reason = stream.message().await.expect("message from tonic stream");
@@ -431,12 +434,11 @@ async fn run(
             }));
         }
         Err(ref status) => {
+            error!(%status, "failed to start service");
             start_crashed_cleanup(
                 &id,
                 Error::Start("runtime failed to start deployment".to_string()),
             );
-
-            error!(%status, "failed to start service");
         }
     }
 }

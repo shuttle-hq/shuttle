@@ -32,14 +32,17 @@ pub async fn cargo_shuttle_run(working_directory: &str, external: bool) -> Strin
         release: false,
     };
 
-    let runner = Shuttle::new().unwrap().run(ShuttleArgs {
-        api_url: Some("http://shuttle.invalid:80".to_string()),
-        project_args: ProjectArgs {
-            working_directory: working_directory.clone(),
-            name: None,
+    let runner = Shuttle::new().unwrap().run(
+        ShuttleArgs {
+            api_url: Some("http://shuttle.invalid:80".to_string()),
+            project_args: ProjectArgs {
+                working_directory: working_directory.clone(),
+                name: None,
+            },
+            cmd: Command::Run(run_args),
         },
-        cmd: Command::Run(run_args),
-    });
+        false,
+    );
 
     tokio::spawn({
         let working_directory = working_directory.clone();

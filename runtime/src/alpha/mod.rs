@@ -65,11 +65,13 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     };
 
     // this is handled after arg parsing to not interfere with --version above
-    if cfg!(feature = "setup-tracing") {
-        use colored::{control, Colorize};
-        control::set_override(true); // always apply color
-
+    #[cfg(feature = "setup-tracing")]
+    {
+        use colored::Colorize;
         use tracing_subscriber::prelude::*;
+
+        colored::control::set_override(true); // always apply color
+
         tracing_subscriber::registry()
             .with(tracing_subscriber::fmt::layer().without_time())
             .with(
@@ -85,7 +87,7 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
             "{}\n\
             {}\n\
             To disable the subscriber and use your own,\n\
-            remove the default features for {}:\n\
+            turn off the default features for {}:\n\
             \n\
             {}\n\
             {}",
@@ -94,10 +96,8 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
                 .yellow()
                 .bold(),
             "shuttle-runtime".italic(),
-            r#"shuttle-runtime = { version = "...", default-features = false }"#
-                .white()
-                .italic(),
-            "=".repeat(63).yellow()
+            r#"shuttle-runtime = { version = "...", default-features = false }"#.italic(),
+            "=".repeat(63).yellow(),
         );
     }
 

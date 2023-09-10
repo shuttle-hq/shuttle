@@ -30,7 +30,7 @@ use tokio::{
     task::{JoinHandle, JoinSet},
 };
 use tonic::{transport::Channel, Code};
-use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
+use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -147,7 +147,7 @@ pub async fn task(
 #[instrument(skip(active_deployment_getter, runtime_manager))]
 async fn kill_old_deployments(
     service_id: Ulid,
-    deployment_id: Uuid,
+    __deployment_id: Uuid, // prefixed to not catch this span in DeploymentLogLayer
     active_deployment_getter: impl ActiveDeploymentsGetter,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
 ) -> Result<()> {
@@ -159,12 +159,12 @@ async fn kill_old_deployments(
         .await
         .map_err(|e| Error::OldCleanup(Box::new(e)))?
         .into_iter()
-        .filter(|old_id| old_id != &deployment_id)
+        .filter(|old_id| old_id != &__deployment_id)
     {
-        trace!(%old_id, "stopping old deployment");
+        info!("stopping old deployment (id {old_id})");
 
         if !guard.kill(&old_id).await {
-            warn!(id = %old_id, "failed to kill old deployment");
+            warn!("failed to kill old deployment (id {old_id})");
         }
     }
 
@@ -304,14 +304,7 @@ async fn load(
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Claim,
 ) -> Result<()> {
-    info!(
-        "loading project from: {}",
-        executable_path
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap_or_default()
-    );
+    info!("Loading resources");
 
     let resources = resource_manager
         .get_resources(&service_id, claim.clone())

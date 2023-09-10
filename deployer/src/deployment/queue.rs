@@ -181,13 +181,10 @@ impl Queued {
         log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
     ) -> Result<Built> {
-        info!("Extracting received data");
-
         let project_path = storage_manager.service_build_path(&self.service_name)?;
 
+        info!("Extracting files");
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
-
-        info!("Building deployment");
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
 
@@ -208,6 +205,7 @@ impl Queued {
 
         let project_path = project_path.canonicalize()?;
 
+        info!("Building deployment");
         // Currently returns the first found shuttle service in a given workspace.
         let built_service = build_deployment(&project_path, tx.clone()).await?;
 
@@ -221,7 +219,6 @@ impl Queued {
 
         if self.will_run_tests {
             info!("Running tests before starting up");
-
             run_pre_deploy_tests(&project_path, tx).await?;
         }
 
@@ -356,17 +353,16 @@ async fn run_pre_deploy_tests(
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
-    // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
     tokio::task::spawn_blocking(move || {
-        for message in Message::parse_stream(read) {
-            match message {
-                Ok(message) => {
-                    if let Err(error) = tx.send(message) {
+        for line in read.lines() {
+            match line {
+                Ok(line) => {
+                    if let Err(error) = tx.send(Message::TextLine(line)) {
                         error!("failed to send cargo message on channel: {error}");
                     }
                 }
                 Err(error) => {
-                    error!("failed to parse cargo message: {error}");
+                    error!("failed to read cargo output line: {error}");
                 }
             }
         }
@@ -374,9 +370,12 @@ async fn run_pre_deploy_tests(
 
     let mut cmd = Command::new("cargo")
         .arg("test")
+        // We set the tests to build with the release profile since deployments compile
+        // with the release profile by default. This means crates don't need to be
+        // recompiled in debug mode for the tests, reducing memory usage during deployment.
         .arg("--release")
         .arg("--jobs=4")
-        .arg("--message-format=json")
+        .arg("--color=always")
         .current_dir(project_path)
         .stdout(Stdio::piped())
         .spawn()

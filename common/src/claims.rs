@@ -17,7 +17,7 @@ use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use strum::EnumMessage;
 use tower::{Layer, Service};
-use tracing::{error, trace, Span};
+use tracing::{error, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// Minutes before a claim expires
@@ -219,7 +219,7 @@ impl Claim {
         let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
         validation.set_issuer(&[ISS]);
 
-        trace!(token, "converting token to claim");
+        // trace!(token, "converting token to claim");
         let mut claim: Self = decode(token, &decoding_key, &validation)
             .map_err(|err| {
                 error!(

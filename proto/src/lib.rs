@@ -154,10 +154,10 @@ pub mod runtime {
             args
         };
 
-        trace!(
-            "Spawning runtime process {:?} {:?}",
-            runtime_executable_path,
-            args
+        info!(
+            "Spawning runtime process: {} {}",
+            runtime_executable_path.display(),
+            args.join(" ")
         );
         let runtime = process::Command::new(runtime_executable_path)
             .args(&args)

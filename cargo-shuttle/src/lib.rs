@@ -1168,7 +1168,7 @@ impl Shuttle {
             }
         }
 
-        deployment_req.data = self.make_archive(self.ctx.assets())?;
+        deployment_req.data = self.make_archive()?;
         if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
             bail!(
                 "The project is too large - the included files must be less than {}MB after archiving.",
@@ -1405,7 +1405,8 @@ impl Shuttle {
         Ok(())
     }
 
-    fn make_archive(&self, include_patterns: Option<&Vec<String>>) -> Result<Vec<u8>> {
+    fn make_archive(&self) -> Result<Vec<u8>> {
+        let include_patterns = self.ctx.assets();
         let encoder = GzEncoder::new(Vec::new(), Compression::fast());
         let mut tar = Builder::new(encoder);
 
@@ -1635,7 +1636,6 @@ mod tests {
     use flate2::read::GzDecoder;
     use shuttle_common::project::ProjectName;
     use tar::Archive;
-    use tempfile::TempDir;
 
     use crate::args::ProjectArgs;
     use crate::Shuttle;
@@ -1655,9 +1655,8 @@ mod tests {
         let mut shuttle = Shuttle::new().unwrap();
         shuttle.load_project(&project_args).unwrap();
 
-        let archive = shuttle.make_archive(None).unwrap();
+        let archive = shuttle.make_archive().unwrap();
 
-        // Make sure the Secrets.toml file is not initially present
         let tar = GzDecoder::new(&archive[..]);
         let mut archive = Archive::new(tar);
 
@@ -1679,6 +1678,51 @@ mod tests {
     }
 
     #[test]
+    fn make_archive_respect_rules() {
+        let working_directory = canonicalize(path_from_workspace_root(
+            "cargo-shuttle/tests/resources/archiving",
+        ))
+        .unwrap();
+
+        fs::write(working_directory.join("Secrets.toml"), "KEY = 'value'").unwrap();
+        fs::write(working_directory.join("Secrets.dev.toml"), "KEY = 'dev'").unwrap();
+        fs::write(working_directory.join("asset2"), "").unwrap();
+        fs::write(working_directory.join("asset4"), "").unwrap();
+        fs::create_dir_all(working_directory.join("dist")).unwrap();
+        fs::write(working_directory.join("dist").join("dist1"), "").unwrap();
+
+        fs::create_dir_all(working_directory.join("target")).unwrap();
+        fs::write(working_directory.join("target").join("binary"), b"12345").unwrap();
+
+        let project_args = ProjectArgs {
+            working_directory: working_directory.to_path_buf(),
+            name: Some(ProjectName::from_str("archiving-test").unwrap()),
+        };
+        let mut entries = get_archive_entries(project_args);
+        entries.sort();
+
+        assert_eq!(
+            entries,
+            vec![
+                ".gitignore",
+                ".ignore",
+                "Cargo.toml",
+                "Secrets.toml", // always included bu default
+                "Secrets.toml.example",
+                "Shuttle.toml",
+                "asset1", // normal file
+                "asset2", // .gitignore'd, but delcared in Shuttle.toml
+                // asset3 is .ignore'd
+                "asset4",                // .gitignore'd, but un-ignored in .ignore
+                "dist/dist1",            // .gitignore'd, but delcared in Shuttle.toml
+                "nested/static/nested1", // normal file
+                // nested/static/nestedignore is .gitignore'd
+                "src/main.rs",
+            ]
+        );
+    }
+
+    #[test]
     fn load_project_returns_proper_working_directory_in_project_args() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
@@ -1696,110 +1740,6 @@ mod tests {
             project_args.workspace_path().unwrap(),
             path_from_workspace_root("examples/axum/hello-world")
         );
-    }
-
-    #[test]
-    fn make_archive_include_secrets() {
-        let working_directory =
-            canonicalize(path_from_workspace_root("examples/rocket/secrets")).unwrap();
-
-        fs::write(
-            working_directory.join("Secrets.toml"),
-            "MY_API_KEY = 'the contents of my API key'",
-        )
-        .unwrap();
-
-        let project_args = ProjectArgs {
-            working_directory,
-            name: None,
-        };
-
-        let mut entries = get_archive_entries(project_args);
-        entries.sort();
-
-        assert_eq!(
-            entries,
-            vec![
-                ".gitignore",
-                "Cargo.toml",
-                "README.md",
-                "Secrets.toml",
-                "Secrets.toml.example",
-                "Shuttle.toml",
-                "src/main.rs",
-            ]
-        );
-    }
-
-    #[test]
-    fn make_archive_respect_ignore() {
-        let tmp_dir = TempDir::new().unwrap();
-        let working_directory = tmp_dir.path();
-
-        fs::write(working_directory.join(".env"), "API_KEY = 'blabla'").unwrap();
-        fs::write(working_directory.join(".ignore"), ".env").unwrap();
-        fs::write(
-            working_directory.join("Cargo.toml"),
-            r#"
-[package]
-name = "secrets"
-version = "0.1.0"
-"#,
-        )
-        .unwrap();
-        fs::create_dir_all(working_directory.join("src")).unwrap();
-        fs::write(
-            working_directory.join("src").join("main.rs"),
-            "fn main() {}",
-        )
-        .unwrap();
-
-        let project_args = ProjectArgs {
-            working_directory: working_directory.to_path_buf(),
-            name: Some(ProjectName::from_str("secret").unwrap()),
-        };
-
-        let mut entries = get_archive_entries(project_args);
-        entries.sort();
-
-        assert_eq!(
-            entries,
-            vec![".ignore", "Cargo.lock", "Cargo.toml", "src/main.rs"]
-        );
-    }
-
-    #[test]
-    fn make_archive_ignore_target_folder() {
-        let tmp_dir = TempDir::new().unwrap();
-        let working_directory = tmp_dir.path();
-
-        fs::create_dir_all(working_directory.join("target")).unwrap();
-        fs::write(working_directory.join("target").join("binary"), "12345").unwrap();
-        fs::write(
-            working_directory.join("Cargo.toml"),
-            r#"
-[package]
-name = "exclude_target"
-version = "0.1.0"
-"#,
-        )
-        .unwrap();
-        fs::create_dir_all(working_directory.join("src")).unwrap();
-        fs::write(
-            working_directory.join("src").join("main.rs"),
-            "fn main() {}",
-        )
-        .unwrap();
-
-        let project_args = ProjectArgs {
-            working_directory: working_directory.to_path_buf(),
-            name: Some(ProjectName::from_str("exclude_target").unwrap()),
-        };
-
-        let mut entries = get_archive_entries(project_args);
-        entries.sort();
-
-        assert_eq!(entries, vec!["Cargo.lock", "Cargo.toml", "src/main.rs"]);
     }
 
     #[test]

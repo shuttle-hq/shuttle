@@ -1,0 +1,3 @@
+asset3
+nested/static/nestedignore
+!asset4

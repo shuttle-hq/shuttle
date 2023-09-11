@@ -347,10 +347,8 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             use std::io::{Read, Write};
             use std::os::wasi::io::FromRawFd;
 
-            use shuttle_next::{colored_control, Colorize};
             use shuttle_next::tracing_prelude::*;
 
-            colored_control::set_override(true); // always apply color
             shuttle_next::tracing_registry()
                 .with(shuttle_next::tracing_fmt::layer().without_time())
                 .init();

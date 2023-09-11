@@ -1,5 +1,4 @@
 pub use axum::*;
-pub use colored::{control as colored_control, Colorize};
 pub use futures_executor::block_on;
 pub use http::Request;
 pub use rmp_serde::from_read;

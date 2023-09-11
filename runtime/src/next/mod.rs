@@ -221,7 +221,7 @@ impl Router {
     ) -> anyhow::Result<Response<Body>> {
         let wasi = WasiCtxBuilder::new()
             .inherit_stdio()
-            .inherit_stdout()
+            .stdout(Box::new(stdout.clone()))
             .inherit_args()
             .context("failed to read args")?
             .build();

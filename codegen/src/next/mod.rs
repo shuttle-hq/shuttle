@@ -347,6 +347,20 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             use std::io::{Read, Write};
             use std::os::wasi::io::FromRawFd;
 
+            use shuttle_next::{colored_control, Colorize};
+            use shuttle_next::tracing_prelude::*;
+
+            colored_control::set_override(true); // always apply color
+            let level = if cfg!(debug_assertions) {
+                "debug,shuttle=trace,h2=info,tower=info,hyper=info"
+            } else {
+                "info,shuttle=trace"
+            };
+
+            shuttle_next::tracing_registry()
+                .with(shuttle_next::tracing_fmt::layer().without_time())
+                .init();
+
             // file descriptor 3 for reading and writing http parts
             let mut parts_fd = unsafe { std::fs::File::from_raw_fd(parts_fd) };
 

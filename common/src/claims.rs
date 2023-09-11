@@ -17,7 +17,7 @@ use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use strum::EnumMessage;
 use tower::{Layer, Service};
-use tracing::{error, Span};
+use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// Minutes before a claim expires

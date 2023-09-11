@@ -50,32 +50,25 @@ processors:
         action: insert
 
 exporters:
-  logging:
-    loglevel: error
-#   datadog:
-#     api:
-#       site: datadoghq.eu
-#       key: ${env:DD_API_KEY}
-  # otlp:
-    # endpoint: "api.honeycomb.io:443"
-    # headers:
-    #   "x-honeycomb-team": ${env:HONEYCOMB_API_KEY}
+  datadog:
+    api:
+      site: datadoghq.eu
+      key: ${env:DD_API_KEY}
   otlp:
-    endpoint: "logger:8000"
-    tls: 
-      insecure: true
-    compression: none
+    endpoint: "api.honeycomb.io:443"
+    headers:
+      "x-honeycomb-team": ${env:HONEYCOMB_API_KEY}
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [attributes, batch]
-      exporters: [logging, otlp]
+      exporters: [datadog, otlp]
     logs:
       receivers: [otlp]
       processors: [attributes, batch]
-      exporters: [logging]
+      exporters: [datadog, otlp]
     metrics:
       receivers: [hostmetrics, prometheus/otel, otlp]
       processors: [batch]
-      exporters: [logging]
+      exporters: [datadog]

@@ -100,9 +100,11 @@ where
 
         // Subscribe as soon as possible
         let mut logs_rx = self.logs_tx.new_receiver();
-        let request = request.into_inner();
+        let LogsRequest { deployment_id } = request.into_inner();
         let (tx, rx) = mpsc::channel(1);
-        let logs = self.get_logs(request.deployment_id).await?;
+
+        // Get logs before stream was started
+        let logs = self.get_logs(deployment_id.clone()).await?;
 
         tokio::spawn(async move {
             let mut last = Default::default();
@@ -119,7 +121,8 @@ where
 
             while let Ok(logs) = logs_rx.recv().await {
                 for log in logs {
-                    if log.tx_timestamp.timestamp() >= last.seconds
+                    if log.deployment_id == deployment_id
+                        && log.tx_timestamp.timestamp() >= last.seconds
                         && log.tx_timestamp.timestamp_nanos() > last.nanos.into()
                     {
                         tx.send(Ok(log.into()))

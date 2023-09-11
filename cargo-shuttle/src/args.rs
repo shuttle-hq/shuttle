@@ -350,7 +350,7 @@ pub(crate) fn parse_init_path(path: OsString) -> Result<PathBuf, io::Error> {
         )
     })?;
 
-    parse_path(path.clone()).map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))
+    parse_path(path).map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))
 }
 
 #[cfg(test)]

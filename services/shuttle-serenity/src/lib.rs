@@ -60,7 +60,7 @@ impl shuttle_runtime::Service for SerenityService {
     /// Takes the client that is returned by the user in their [shuttle_runtime::main] function
     /// and starts it.
     async fn bind(mut self, _addr: SocketAddr) -> Result<(), Error> {
-        self.0.start().await.map_err(CustomError::new)?;
+        self.0.start_autosharded().await.map_err(CustomError::new)?;
 
         Ok(())
     }

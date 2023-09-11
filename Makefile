@@ -70,6 +70,11 @@ CARGO_PROFILE?=debug
 RUST_LOG?=shuttle=debug,info
 DEV_SUFFIX=-dev
 DEPLOYS_API_KEY?=gateway4deployes
+
+# this should use the same version as our prod RDS database
+LOGGER_POSTGRES_TAG?=15
+LOGGER_POSTGRES_PASSWORD?=postgres
+LOGGER_POSTGRES_URI?=postgres://postgres:${LOGGER_POSTGRES_PASSWORD}@logger-postgres:5432/postgres
 endif
 
 ifeq ($(CI),true)
@@ -79,11 +84,6 @@ endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=14
-
-# this should use the same version as our prod RDS database
-LOGGER_POSTGRES_TAG?=15
-LOGGER_POSTGRES_HOST?=logger-postgres
-LOGGER_POSTGRES_PASSWORD?=postgres
 
 PANAMAX_EXTRA_PATH?=./extras/panamax
 PANAMAX_TAG?=1.0.12
@@ -114,7 +114,7 @@ DOCKER_COMPOSE_ENV=\
 	POSTGRES_TAG=${POSTGRES_TAG}\
 	LOGGER_POSTGRES_TAG=${LOGGER_POSTGRES_TAG}\
 	LOGGER_POSTGRES_PASSWORD=${LOGGER_POSTGRES_PASSWORD}\
-	LOGGER_POSTGRES_HOST=${LOGGER_POSTGRES_HOST}\
+	LOGGER_POSTGRES_URI=${LOGGER_POSTGRES_URI}\
 	PANAMAX_TAG=${PANAMAX_TAG}\
 	OTEL_TAG=${OTEL_TAG}\
 	APPS_FQDN=$(APPS_FQDN)\

@@ -700,7 +700,6 @@ impl Shuttle {
 
         // Clones to send to spawn
         let service_name_clone = service_name.clone().to_string();
-        let deployment_id_clone = deployment_id.clone();
 
         let child_stdout = runtime
             .stdout
@@ -710,7 +709,7 @@ impl Shuttle {
         tokio::spawn(async move {
             while let Some(line) = reader.next_line().await.unwrap() {
                 let log_item = LogItem::new(
-                    deployment_id_clone,
+                    deployment_id,
                     shuttle_common::log::Backend::Runtime(service_name_clone.clone()),
                     line,
                 );

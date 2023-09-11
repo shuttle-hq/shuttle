@@ -202,11 +202,7 @@ where
 
         let metadata = attrs.metadata();
 
-        let message = format!(
-            "{} Entering span {}",
-            metadata.level().colored(),
-            metadata.name().blue(),
-        );
+        let message = format!("{} {}", metadata.level().colored(), metadata.name().blue());
 
         self.log_recorder.record(LogItem::new(
             details.deployment_id,

@@ -28,4 +28,3 @@ tokio = { version = "1", features = ["full"] }
 default = []
 frameworks = []
 next = []
-setup-tracing = []

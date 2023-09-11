@@ -843,12 +843,9 @@ impl Shuttle {
             while let Ok(message) = rx.recv() {
                 match message {
                     Message::TextLine(line) => println!("{line}"),
-                    Message::CompilerMessage(message) => {
-                        if let Some(rendered) = message.message.rendered {
-                            println!("{rendered}");
-                        }
+                    message => {
+                        trace!("skipping cargo line: {message:?}")
                     }
-                    _ => {}
                 }
             }
         });

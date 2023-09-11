@@ -219,7 +219,7 @@ impl Claim {
         let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
         validation.set_issuer(&[ISS]);
 
-        trace!(token, "converting token to claim");
+        trace!("converting token to claim");
         let mut claim: Self = decode(token, &decoding_key, &validation)
             .map_err(|err| {
                 error!(

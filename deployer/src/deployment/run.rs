@@ -30,7 +30,7 @@ use tokio::{
     task::{JoinHandle, JoinSet},
 };
 use tonic::{transport::Channel, Code};
-use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
+use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -147,7 +147,7 @@ pub async fn task(
 #[instrument(skip(active_deployment_getter, runtime_manager))]
 async fn kill_old_deployments(
     service_id: Ulid,
-    deployment_id: Uuid,
+    __deployment_id: Uuid, // prefixed to not catch this span in DeploymentLogLayer
     active_deployment_getter: impl ActiveDeploymentsGetter,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
 ) -> Result<()> {
@@ -159,29 +159,29 @@ async fn kill_old_deployments(
         .await
         .map_err(|e| Error::OldCleanup(Box::new(e)))?
         .into_iter()
-        .filter(|old_id| old_id != &deployment_id)
+        .filter(|old_id| old_id != &__deployment_id)
     {
-        trace!(%old_id, "stopping old deployment");
+        info!("stopping old deployment (id {old_id})");
 
         if !guard.kill(&old_id).await {
-            warn!(id = %old_id, "failed to kill old deployment");
+            warn!("failed to kill old deployment (id {old_id})");
         }
     }
 
     Ok(())
 }
 
-#[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Completed))]
+#[instrument(name = "Cleaning up completed deployment", skip(_id), fields(deployment_id = %_id, state = %State::Completed))]
 fn completed_cleanup(_id: &Uuid) {
     info!("{}", DEPLOYER_END_MSG_COMPLETED);
 }
 
-#[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Stopped))]
+#[instrument(name = "Cleaning up stopped deployment", skip(_id), fields(deployment_id = %_id, state = %State::Stopped))]
 fn stopped_cleanup(_id: &Uuid) {
     info!("{}", DEPLOYER_END_MSG_STOPPED);
 }
 
-#[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
+#[instrument(name = "Cleaning up crashed deployment", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
@@ -189,7 +189,7 @@ fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     );
 }
 
-#[instrument(skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
+#[instrument(name = "Cleaning up startup crashed deployment", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn start_crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
@@ -219,7 +219,7 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, storage_manager, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup), fields(deployment_id = %self.id, state = %State::Loading))]
+    #[instrument(name = "Loading resources", skip(self, storage_manager, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup), fields(deployment_id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
@@ -304,14 +304,7 @@ async fn load(
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Claim,
 ) -> Result<()> {
-    info!(
-        "loading project from: {}",
-        executable_path
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap_or_default()
-    );
+    info!("Loading resources");
 
     let resources = resource_manager
         .get_resources(&service_id, claim.clone())
@@ -398,7 +391,7 @@ async fn load(
 }
 
 // TODO: add ticket to add deployment_id to more functions that need to be instrumented in deployer.
-#[instrument(skip(runtime_client, deployment_updater, cleanup), fields(deployment_id = %id, state = %State::Running))]
+#[instrument(name = "Starting service", skip(runtime_client, deployment_updater, cleanup), fields(deployment_id = %id, state = %State::Running))]
 async fn run(
     id: Uuid,
     service_name: String,
@@ -423,13 +416,12 @@ async fn run(
         .unwrap()
         .into_inner();
 
-    info!("starting service");
     let response = runtime_client.start(start_request).await;
 
     match response {
         Ok(response) => {
             if response.into_inner().success {
-                info!(DEPLOYER_RUNTIME_START_RESPONSE);
+                info!("{}", DEPLOYER_RUNTIME_START_RESPONSE);
             }
 
             // Wait for stop reason

@@ -141,19 +141,16 @@ pub async fn build_workspace(
     Ok(runtimes)
 }
 
-pub async fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Vec<String>> {
+pub async fn clean_crate(project_path: &Path) -> anyhow::Result<Vec<String>> {
     let project_path = project_path.to_owned();
     let manifest_path = project_path.join("Cargo.toml");
     if !manifest_path.exists() {
         bail!("failed to read the Shuttle project manifest");
     }
-    let profile = if release_mode { "release" } else { "dev" };
     let output = tokio::process::Command::new("cargo")
         .arg("clean")
         .arg("--manifest-path")
         .arg(manifest_path.to_str().unwrap())
-        .arg("--profile")
-        .arg(profile)
         .output()
         .await
         .unwrap();
@@ -225,13 +222,11 @@ async fn compile(
     let target_path = target_path.into();
 
     let mut cargo = tokio::process::Command::new("cargo");
-
-    let (reader, writer) = os_pipe::pipe()?;
-    let writer_clone = writer.try_clone()?;
-    cargo.stdout(writer);
-    cargo.stderr(writer_clone);
-
-    cargo.arg("build").arg("--manifest-path").arg(manifest_path);
+    cargo
+        .arg("build")
+        .arg("--manifest-path")
+        .arg(manifest_path)
+        .arg("--color=always"); // piping disables auto color
 
     if deployment {
         cargo.arg("-j").arg(4.to_string());
@@ -252,6 +247,11 @@ async fn compile(
     if wasm {
         cargo.arg("--target").arg("wasm32-wasi");
     }
+
+    let (reader, writer) = os_pipe::pipe()?;
+    let writer_clone = writer.try_clone()?;
+    cargo.stdout(writer);
+    cargo.stderr(writer_clone);
 
     let mut handle = cargo.spawn()?;
 

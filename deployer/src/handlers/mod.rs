@@ -10,11 +10,11 @@ use axum::middleware::{self, from_extractor};
 use axum::routing::{get, post, Router};
 use axum::Json;
 use bytes::Bytes;
-use chrono::Utc;
+use chrono::{SecondsFormat, Utc};
 use fqdn::FQDN;
 use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
-use tracing::{error, field, instrument, trace, warn};
+use tracing::{error, field, info, info_span, instrument, trace, warn};
 use ulid::Ulid;
 use utoipa::{IntoParams, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
@@ -117,7 +117,6 @@ impl RouterBuilder {
                 get(get_service.layer(ScopedLayer::new(vec![Scope::Service])))
                     .post(
                         create_service
-                            .layer(Extension(project_id))
                             .layer(DefaultBodyLimit::max(CREATE_SERVICE_BODY_LIMIT))
                             .layer(ScopedLayer::new(vec![Scope::ServiceCreate])),
                     )
@@ -343,12 +342,31 @@ pub async fn create_service(
     Path((project_name, service_name)): Path<(String, String)>,
     Rmp(deployment_req): Rmp<DeploymentRequest>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
+    let id = Uuid::new_v4();
+    let now = Utc::now();
+
+    let span = info_span!(
+        "Starting deployment",
+        deployment_id = %id,
+    );
+
     let service = persistence.get_or_create_service(&service_name).await?;
+    let pid = persistence.project_id();
+
+    span.in_scope(|| {
+        info!("Deployment ID: {}", id);
+        info!("Service ID: {}", service.id);
+        info!("Service name: {}", service.name);
+        info!("Project ID: {}", pid);
+        info!("Project name: {}", project_name);
+        info!("Date: {}", now.to_rfc3339_opts(SecondsFormat::Secs, true));
+    });
+
     let deployment = Deployment {
-        id: Uuid::new_v4(),
+        id,
         service_id: service.id,
         state: State::Queued,
-        last_update: Utc::now(),
+        last_update: now,
         address: None,
         is_next: false,
         git_commit_id: deployment_req
@@ -368,7 +386,7 @@ pub async fn create_service(
         id: deployment.id,
         service_name: service.name,
         service_id: deployment.service_id,
-        project_id: persistence.project_id(),
+        project_id: pid,
         data: deployment_req.data,
         will_run_tests: !deployment_req.no_test,
         tracing_context: Default::default(),
@@ -732,7 +750,7 @@ pub async fn clean_project(
         .service_build_path(&project_name)
         .map_err(anyhow::Error::new)?;
 
-    let lines = clean_crate(&project_path, true).await?;
+    let lines = clean_crate(&project_path).await?;
 
     Ok(Json(lines))
 }

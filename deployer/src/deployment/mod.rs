@@ -244,7 +244,7 @@ impl DeploymentManager {
         self.queue_send.send(queued).await.unwrap();
     }
 
-    #[instrument(skip(self), fields(deployment_id = %built.id, state = %State::Built))]
+    #[instrument(name = "Starting deployment", skip(self), fields(deployment_id = %built.id, state = %State::Built))]
     pub async fn run_push(&self, built: Built) {
         self.run_send.send(built).await.unwrap();
     }

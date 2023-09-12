@@ -23,7 +23,6 @@ jsonwebtoken = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true,  optional = true }
-opentelemetry-proto = { workspace = true, optional = true }
 pin-project = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
@@ -53,7 +52,6 @@ backend = [
     "claims",
     "hyper/client",
     "opentelemetry-otlp",
-    "opentelemetry-proto/gen-tonic",
     "thiserror",
     "tokio",
     "tonic",

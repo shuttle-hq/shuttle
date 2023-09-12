@@ -1,7 +1,6 @@
 use strum::{Display, EnumString};
 use utoipa::ToSchema;
-
-use crate::deployment::DeploymentState;
+use uuid::Uuid;
 
 /// States a deployment can be in
 #[derive(sqlx::Type, Debug, Display, Clone, Copy, EnumString, PartialEq, Eq, ToSchema)]
@@ -33,6 +32,12 @@ pub enum State {
 
     /// We never expect this state and entering this state should be considered a bug
     Unknown,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct DeploymentState {
+    pub id: Uuid,
+    pub state: State,
 }
 
 impl Default for State {

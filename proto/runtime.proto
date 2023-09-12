@@ -22,9 +22,6 @@ message LoadRequest {
   // Path to compiled file to load for service
   string path = 2;
 
-  // The id of this deployment
-  string deployment_id = 3;
-
   // A cache of resource details to use instead when asked
   repeated bytes resources = 10;
 

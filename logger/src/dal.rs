@@ -1,6 +1,5 @@
 use std::time::SystemTime;
 
-use async_broadcast::{broadcast, Sender};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use prost_types::Timestamp;
@@ -12,6 +11,7 @@ use sqlx::{
     FromRow, PgPool, QueryBuilder,
 };
 use thiserror::Error;
+use tokio::sync::broadcast::{self, Sender};
 use tracing::error;
 
 use tonic::transport::Uri;
@@ -58,9 +58,7 @@ impl Postgres {
             .await
             .expect("to run migrations successfully");
 
-        // TODO: we switched to async_broadcast to resolve the infinite loop bug, but it wasn't related.
-        // Should we switch back to tokio::broadcast?
-        let (tx, mut rx): (Sender<Vec<Log>>, _) = broadcast(1000);
+        let (tx, mut rx): (Sender<Vec<Log>>, _) = broadcast::channel(1000);
         let pool_spawn = pool.clone();
 
         tokio::spawn(async move {

@@ -708,6 +708,7 @@ workflows:
                 # need to spawn docker containers, therefore in a machine
                 - cargo-shuttle
                 - shuttle-provisioner
+                - shuttle-logger
       - e2e-test:
           requires:
             - test-standalone

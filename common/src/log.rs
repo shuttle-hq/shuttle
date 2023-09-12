@@ -1,123 +1,242 @@
-#[cfg(feature = "display")]
 use std::fmt::Write;
 
 use chrono::{DateTime, Utc};
 #[cfg(feature = "display")]
-use crossterm::style::{StyledContent, Stylize};
+use crossterm::style::StyledContent;
+#[cfg(feature = "display")]
+use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
+use strum::EnumString;
+use tracing::{field::Visit, span, warn, Event, Level, Metadata, Subscriber};
+use tracing_subscriber::Layer;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::deployment::State;
+use crate::tracing::JsonVisitor;
 
-pub const STATE_MESSAGE: &str = "NEW STATE";
+/// Used to determine settings based on which backend crate does what
+#[derive(Clone, Debug, Default, EnumString, Eq, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(feature = "display", derive(strum::Display))]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub enum Backend {
+    /// Is considered an error
+    #[default]
+    Unknown,
+
+    Auth,
+    // Builder,
+    Deployer,
+    Gateway,
+    Logger,
+    Provisioner,
+    ResourceRecorder,
+    Runtime(String),
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[cfg_attr(feature = "openapi", schema(as = shuttle_common::log::Item))]
-pub struct Item {
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::log::LogItem))]
+pub struct LogItem {
+    /// Deployment id
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
     pub id: Uuid,
+
+    /// Internal service that produced this log
+    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::log::InternalLogOrigin))]
+    pub internal_origin: Backend,
+
+    /// Time log was captured
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]
     pub timestamp: DateTime<Utc>,
-    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::deployment::State))]
-    pub state: State,
-    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::log::Level))]
-    pub level: Level,
-    pub file: Option<String>,
-    pub line: Option<u32>,
-    pub target: String,
-    pub fields: Vec<u8>,
+
+    /// The log line
+    pub line: String,
 }
 
-#[cfg(feature = "display")]
-impl std::fmt::Display for Item {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let datetime: chrono::DateTime<chrono::Local> = DateTime::from(self.timestamp);
-
-        let message = match serde_json::from_slice(&self.fields).unwrap() {
-            serde_json::Value::String(str_value) if str_value == STATE_MESSAGE => {
-                writeln!(f)?;
-                format!("Entering {} state", self.state)
-                    .bold()
-                    .blue()
-                    .to_string()
-            }
-            serde_json::Value::Object(map) => {
-                let mut simple = None;
-                let mut extra = vec![];
-
-                for (key, value) in map.iter() {
-                    match key.as_str() {
-                        "message" => simple = value.as_str(),
-                        _ => extra.push(format!("{key}={value}")),
-                    }
-                }
-
-                let mut output = if extra.is_empty() {
-                    String::new()
-                } else {
-                    format!("{{{}}} ", extra.join(" "))
-                };
-
-                if !self.target.is_empty() {
-                    let target = format!("{}:", self.target).dim();
-                    write!(output, "{target} ")?;
-                }
-
-                if let Some(msg) = simple {
-                    write!(output, "{msg}")?;
-                }
-
-                output
-            }
-            other => other.to_string(),
-        };
-
-        write!(
-            f,
-            "{} {} {}",
-            datetime.to_rfc3339().dim(),
-            self.level.get_colored(),
-            message
-        )
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[cfg_attr(feature = "openapi", schema(as = shuttle_common::log::Level))]
-pub enum Level {
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-
-#[cfg(feature = "display")]
-impl Level {
-    fn get_colored(&self) -> StyledContent<&str> {
-        match self {
-            Level::Trace => "TRACE".magenta(),
-            Level::Debug => "DEBUG".blue(),
-            Level::Info => " INFO".green(),
-            Level::Warn => " WARN".yellow(),
-            Level::Error => "ERROR".red(),
+impl LogItem {
+    pub fn new(id: Uuid, internal_origin: Backend, line: String) -> Self {
+        Self {
+            id,
+            internal_origin,
+            timestamp: Utc::now(),
+            line,
         }
     }
 }
 
-impl From<&tracing::Level> for Level {
-    fn from(level: &tracing::Level) -> Self {
-        match *level {
-            tracing::Level::ERROR => Self::Error,
-            tracing::Level::WARN => Self::Warn,
-            tracing::Level::INFO => Self::Info,
-            tracing::Level::DEBUG => Self::Debug,
-            tracing::Level::TRACE => Self::Trace,
+#[cfg(feature = "display")]
+impl std::fmt::Display for LogItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let datetime: chrono::DateTime<chrono::Local> = DateTime::from(self.timestamp);
+
+        write!(
+            f,
+            "{} [{}] {}",
+            datetime
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, false)
+                .dim(),
+            self.internal_origin,
+            self.line,
+        )
+    }
+}
+
+#[cfg(feature = "display")]
+pub trait ColoredLevel {
+    fn colored(&self) -> StyledContent<&str>;
+}
+
+#[cfg(feature = "display")]
+impl ColoredLevel for tracing::Level {
+    fn colored(&self) -> StyledContent<&str> {
+        match *self {
+            Level::TRACE => "TRACE".magenta(),
+            Level::DEBUG => "DEBUG".blue(),
+            Level::INFO => " INFO".green(),
+            Level::WARN => " WARN".yellow(),
+            Level::ERROR => "ERROR".red(),
+        }
+    }
+}
+
+#[cfg(feature = "display")]
+pub fn format_event(event: &Event<'_>) -> String {
+    let metadata = event.metadata();
+    let mut visitor = JsonVisitor::default();
+    event.record(&mut visitor);
+
+    let mut message = String::new();
+
+    let target = visitor
+        .target
+        .unwrap_or_else(|| metadata.target().to_string());
+
+    if !target.is_empty() {
+        let t = format!("{target}: ").dim();
+        write!(message, "{t}").unwrap();
+    }
+
+    let mut simple = None;
+    let mut extra = vec![];
+    for (key, value) in visitor.fields.iter() {
+        match key.as_str() {
+            "message" => simple = value.as_str(),
+            _ => extra.push(format!("{key}={value}")),
+        }
+    }
+    if !extra.is_empty() {
+        write!(message, "{{{}}} ", extra.join(" ")).unwrap();
+    }
+    if let Some(msg) = simple {
+        write!(message, "{msg}").unwrap();
+    }
+
+    format!("{} {}", metadata.level().colored(), message)
+}
+
+/// Records logs for the deployment progress
+pub trait LogRecorder: Clone + Send + 'static {
+    fn record(&self, log: LogItem);
+}
+
+/// Tracing subscriber layer which logs based on if the log
+/// is from a span that is tagged with a deployment id
+pub struct DeploymentLogLayer<R>
+where
+    R: LogRecorder + Send + Sync,
+{
+    pub log_recorder: R,
+    pub internal_service: Backend,
+}
+
+impl<R, S> Layer<S> for DeploymentLogLayer<R>
+where
+    S: Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
+    R: LogRecorder + Send + Sync + 'static,
+{
+    fn on_event(&self, event: &tracing::Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
+        // We only care about events in some scope
+        let scope = if let Some(scope) = ctx.event_scope(event) {
+            scope
+        } else {
+            return;
+        };
+
+        // Find the outermost scope with the scope details containing the current deployment id
+        for span in scope.from_root() {
+            let extensions = span.extensions();
+
+            if let Some(details) = extensions.get::<ScopeDetails>() {
+                self.log_recorder.record(LogItem::new(
+                    details.deployment_id,
+                    self.internal_service.clone(),
+                    format_event(event),
+                ));
+                break;
+            }
+        }
+    }
+    fn on_new_span(
+        &self,
+        attrs: &span::Attributes<'_>,
+        id: &span::Id,
+        ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        // We only care about spans that concern a deployment
+        if !DeploymentIdVisitor::is_valid(attrs.metadata()) {
+            return;
+        }
+        let mut visitor = DeploymentIdVisitor::default();
+        attrs.record(&mut visitor);
+        let details = visitor.details;
+
+        if details.deployment_id.is_nil() {
+            warn!("scope details does not have a valid deployment_id");
+            return;
+        }
+
+        // Safe to unwrap since this is the `on_new_span` method
+        let span = ctx.span(id).unwrap();
+        let mut extensions = span.extensions_mut();
+
+        let metadata = attrs.metadata();
+
+        let message = format!("{} {}", metadata.level().colored(), metadata.name().blue());
+
+        self.log_recorder.record(LogItem::new(
+            details.deployment_id,
+            self.internal_service.clone(),
+            message,
+        ));
+
+        extensions.insert::<ScopeDetails>(details);
+    }
+}
+
+#[derive(Debug, Default)]
+struct ScopeDetails {
+    deployment_id: Uuid,
+}
+/// To extract `deployment_id` field for scopes that have it
+#[derive(Default)]
+struct DeploymentIdVisitor {
+    details: ScopeDetails,
+}
+
+impl DeploymentIdVisitor {
+    /// Field containing the deployment identifier
+    const ID_IDENT: &'static str = "deployment_id";
+
+    fn is_valid(metadata: &Metadata) -> bool {
+        metadata.is_span() && metadata.fields().field(Self::ID_IDENT).is_some()
+    }
+}
+
+impl Visit for DeploymentIdVisitor {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == Self::ID_IDENT {
+            self.details.deployment_id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
         }
     }
 }
@@ -137,29 +256,27 @@ mod tests {
 
     #[test]
     fn test_timezone_formatting() {
-        let item = Item {
-            id: Uuid::new_v4(),
-            timestamp: Utc::now(),
-            state: State::Building,
-            level: Level::Info,
-            file: None,
-            line: None,
-            target: "shuttle::build".to_string(),
-            fields: serde_json::to_vec(&serde_json::json!({
-                "message": "Building",
-            }))
-            .unwrap(),
-        };
+        let item = LogItem::new(
+            Uuid::new_v4(),
+            Backend::Deployer,
+            r#"{"message": "Building"}"#.to_owned(),
+        );
 
         with_tz("CEST", || {
-            let cest_dt = item.timestamp.with_timezone(&chrono::Local).to_rfc3339();
+            let cest_dt = item
+                .timestamp
+                .with_timezone(&chrono::Local)
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, false);
             let log_line = format!("{}", &item);
 
             assert!(log_line.contains(&cest_dt));
         });
 
         with_tz("UTC", || {
-            let utc_dt = item.timestamp.with_timezone(&chrono::Local).to_rfc3339();
+            let utc_dt = item
+                .timestamp
+                .with_timezone(&chrono::Local)
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, false);
             let log_line = format!("{}", &item);
 
             assert!(log_line.contains(&utc_dt));

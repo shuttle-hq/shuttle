@@ -45,8 +45,9 @@ RUN cargo build \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
     --bin shuttle-auth \
     --bin shuttle-deployer \
-    --bin shuttle-provisioner \
     --bin shuttle-gateway \
+    --bin shuttle-logger \
+    --bin shuttle-provisioner \
     --bin shuttle-resource-recorder \
     --bin shuttle-next -F next
 
@@ -90,6 +91,9 @@ FROM shuttle-crate-base AS shuttle-gateway
 FROM shuttle-gateway AS shuttle-gateway-dev
 # For testing certificates locally
 COPY --from=planner /build/*.pem /usr/src/shuttle/
+
+FROM shuttle-crate-base AS shuttle-logger
+FROM shuttle-logger AS shuttle-logger-dev
 
 FROM shuttle-crate-base AS shuttle-provisioner
 FROM shuttle-provisioner AS shuttle-provisioner-dev

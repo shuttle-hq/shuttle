@@ -22,17 +22,15 @@ use shuttle_common::{
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
-        self,
         runtime_server::{Runtime, RuntimeServer},
-        LoadRequest, LoadResponse, LogItem, StartRequest, StartResponse, StopReason, StopRequest,
-        StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
+        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
+        StopResponse, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
 use shuttle_service::{Environment, Factory, ProjectName, Service};
 use tokio::sync::{
     broadcast::{self, Sender},
-    mpsc::{self, UnboundedReceiver, UnboundedSender},
-    oneshot,
+    mpsc, oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
@@ -40,9 +38,8 @@ use tonic::{
     Request, Response, Status,
 };
 use tower::ServiceBuilder;
-use tracing::{error, info, trace, warn};
 
-use crate::{print_version, provisioner_factory::ProvisionerFactory, Logger, ResourceTracker};
+use crate::{print_version, provisioner_factory::ProvisionerFactory, ResourceTracker};
 
 use self::args::Args;
 
@@ -58,13 +55,50 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let args = match Args::parse() {
         Ok(args) => args,
         Err(e) => {
-            error!("{e}");
+            eprintln!("Runtime received malformed or incorrect args, {e}");
             let help_str = "[HINT]: Run shuttle with `cargo shuttle run`";
             let wrapper_str = "-".repeat(help_str.len());
-            println!("{wrapper_str}\n{help_str}\n{wrapper_str}");
+            eprintln!("{wrapper_str}\n{help_str}\n{wrapper_str}");
             return;
         }
     };
+
+    // this is handled after arg parsing to not interfere with --version above
+    #[cfg(feature = "setup-tracing")]
+    {
+        use colored::Colorize;
+        use tracing_subscriber::prelude::*;
+
+        colored::control::set_override(true); // always apply color
+
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer().without_time())
+            .with(
+                // let user override RUST_LOG in local run if they want to
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    // otherwise use our default
+                    .or_else(|_| tracing_subscriber::EnvFilter::try_new("info,shuttle=trace"))
+                    .unwrap(),
+            )
+            .init();
+
+        println!(
+            "{}\n\
+            {}\n\
+            To disable the subscriber and use your own,\n\
+            turn off the default features for {}:\n\
+            \n\
+            {}\n\
+            {}",
+            "=".repeat(63).yellow(),
+            "Shuttle's default tracing subscriber is initialized!"
+                .yellow()
+                .bold(),
+            "shuttle-runtime".italic(),
+            r#"shuttle-runtime = { version = "...", default-features = false }"#.italic(),
+            "=".repeat(63).yellow(),
+        );
+    }
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
@@ -91,8 +125,6 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
 
 pub struct Alpha<L, S> {
     // Mutexes are for interior mutability
-    logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
-    logs_tx: UnboundedSender<LogItem>,
     stopped_tx: Sender<(StopReason, String)>,
     provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
@@ -103,12 +135,9 @@ pub struct Alpha<L, S> {
 
 impl<L, S> Alpha<L, S> {
     pub fn new(provisioner_address: Endpoint, loader: L, env: Environment) -> Self {
-        let (tx, rx) = mpsc::unbounded_channel();
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
-            logs_rx: Mutex::new(Some(rx)),
-            logs_tx: tx,
             stopped_tx,
             kill_tx: Mutex::new(None),
             provisioner_address,
@@ -130,14 +159,14 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
-        logger: Logger,
+        deployment_id: String,
     ) -> Result<Self::Service, shuttle_service::Error>;
 }
 
 #[async_trait]
 impl<F, O, Fac, S> Loader<Fac> for F
 where
-    F: FnOnce(Fac, ResourceTracker, Logger) -> O + Send,
+    F: FnOnce(Fac, ResourceTracker, String) -> O + Send,
     O: Future<Output = Result<S, shuttle_service::Error>> + Send,
     Fac: Factory + 'static,
     S: Service,
@@ -148,9 +177,9 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
-        logger: Logger,
+        deployment_id: String,
     ) -> Result<Self::Service, shuttle_service::Error> {
-        (self)(factory, resource_tracker, logger).await
+        (self)(factory, resource_tracker, deployment_id).await
     }
 }
 
@@ -168,8 +197,9 @@ where
             resources,
             secrets,
             service_name,
+            deployment_id,
         } = request.into_inner();
-        trace!(path, "loading alpha project");
+        println!("loading alpha service at {path}");
 
         let channel = self
             .provisioner_address
@@ -200,68 +230,67 @@ where
 
         let factory =
             ProvisionerFactory::new(provisioner_client, service_name, secrets, self.env, claim);
-        trace!("got factory");
-
-        let logger = Logger::new(self.logs_tx.clone());
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
-        let service = match tokio::spawn(loader.load(factory, resource_tracker, logger)).await {
-            Ok(res) => match res {
-                Ok(service) => service,
+        // send to new thread to catch panics
+        let service =
+            match tokio::spawn(loader.load(factory, resource_tracker, deployment_id)).await {
+                Ok(res) => match res {
+                    Ok(service) => service,
+                    Err(error) => {
+                        println!("loading service failed: {error}");
+
+                        let message = LoadResponse {
+                            success: false,
+                            message: error.to_string(),
+                            resources: new_resources
+                                .lock()
+                                .expect("to get lock no new resources")
+                                .iter()
+                                .map(resource::Response::to_bytes)
+                                .collect(),
+                        };
+                        return Ok(Response::new(message));
+                    }
+                },
                 Err(error) => {
-                    error!(%error, "loading service failed");
+                    let resources = new_resources
+                        .lock()
+                        .expect("to get lock no new resources")
+                        .iter()
+                        .map(resource::Response::to_bytes)
+                        .collect();
 
-                    let message = LoadResponse {
-                        success: false,
-                        message: error.to_string(),
-                        resources: new_resources
-                            .lock()
-                            .expect("to get lock no new resources")
-                            .iter()
-                            .map(resource::Response::to_bytes)
-                            .collect(),
-                    };
-                    return Ok(Response::new(message));
-                }
-            },
-            Err(error) => {
-                let resources = new_resources
-                    .lock()
-                    .expect("to get lock no new resources")
-                    .iter()
-                    .map(resource::Response::to_bytes)
-                    .collect();
-
-                if error.is_panic() {
-                    let panic = error.into_panic();
-                    let msg = match panic.downcast_ref::<String>() {
-                        Some(msg) => msg.to_string(),
-                        None => match panic.downcast_ref::<&str>() {
+                    if error.is_panic() {
+                        let panic = error.into_panic();
+                        let msg = match panic.downcast_ref::<String>() {
                             Some(msg) => msg.to_string(),
-                            None => "<no panic message>".to_string(),
-                        },
-                    };
+                            None => match panic.downcast_ref::<&str>() {
+                                Some(msg) => msg.to_string(),
+                                None => "<no panic message>".to_string(),
+                            },
+                        };
 
-                    error!(error = msg, "loading service panicked");
+                        println!("loading service panicked: {msg}");
 
-                    let message = LoadResponse {
-                        success: false,
-                        message: msg,
-                        resources,
-                    };
-                    return Ok(Response::new(message));
-                } else {
-                    error!(%error, "loading service crashed");
-                    let message = LoadResponse {
-                        success: false,
-                        message: error.to_string(),
-                        resources,
-                    };
-                    return Ok(Response::new(message));
+                        let message = LoadResponse {
+                            success: false,
+                            message: msg,
+                            resources,
+                        };
+                        return Ok(Response::new(message));
+                    } else {
+                        println!("loading service crashed: {error}");
+                        let message = LoadResponse {
+                            success: false,
+                            message: error.to_string(),
+                            resources,
+                        };
+                        return Ok(Response::new(message));
+                    }
                 }
-            }
-        };
+            };
 
         *self.service.lock().unwrap() = Some(service);
 
@@ -282,7 +311,7 @@ where
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        trace!("alpha starting");
+        println!("alpha runtime starting");
         let service = self.service.lock().unwrap().deref_mut().take();
         let service = service.unwrap();
 
@@ -291,7 +320,7 @@ where
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        trace!(%service_address, "starting");
+        println!("starting on {service_address}");
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
@@ -308,10 +337,10 @@ where
                 res = &mut background => {
                     match res {
                         Ok(_) => {
-                            info!("service stopped all on its own");
+                            println!("service stopped all on its own");
                             let _ = stopped_tx
                                 .send((StopReason::End, String::new()))
-                                .map_err(|e| error!("{e}"));
+                                .map_err(|e| println!("{e}"));
                         },
                         Err(error) => {
                             if error.is_panic() {
@@ -324,16 +353,16 @@ where
                                     },
                                 };
 
-                                error!(error = msg, "service panicked");
+                                println!("service panicked: {msg}");
 
                                 let _ = stopped_tx
                                     .send((StopReason::Crash, msg))
-                                    .map_err(|e| error!("{e}"));
+                                    .map_err(|e| println!("{e}"));
                             } else {
-                                error!(%error, "service crashed");
+                                println!("service crashed: {error}");
                                 let _ = stopped_tx
                                     .send((StopReason::Crash, error.to_string()))
-                                    .map_err(|e| error!("{e}"));
+                                    .map_err(|e| println!("{e}"));
                             }
                         },
                     }
@@ -343,12 +372,12 @@ where
                         Ok(_) => {
                             let _ = stopped_tx
                                 .send((StopReason::Request, String::new()))
-                                .map_err(|e| error!("{e}"));
+                                .map_err(|e| println!("{e}"));
                         }
-                        Err(_) => trace!("the sender dropped")
+                        Err(_) => println!("the kill sender dropped")
                     };
 
-                    info!("will now abort the service");
+                    println!("will now abort the service");
                     background.abort();
                     background.await.unwrap().expect("to stop service");
                 }
@@ -365,13 +394,13 @@ where
 
         if let Some(kill_tx) = kill_tx {
             if kill_tx.send("stopping deployment".to_owned()).is_err() {
-                error!("the receiver dropped");
+                println!("the kill receiver dropped");
                 return Err(Status::internal("failed to stop deployment"));
             }
 
             Ok(Response::new(StopResponse { success: true }))
         } else {
-            warn!("failed to stop deployment");
+            println!("failed to stop deployment");
 
             Ok(tonic::Response::new(StopResponse { success: false }))
         }
@@ -399,29 +428,5 @@ where
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
-    }
-
-    type SubscribeLogsStream = ReceiverStream<Result<runtime::LogItem, Status>>;
-
-    async fn subscribe_logs(
-        &self,
-        _request: Request<SubscribeLogsRequest>,
-    ) -> Result<Response<Self::SubscribeLogsStream>, Status> {
-        let logs_rx = self.logs_rx.lock().unwrap().deref_mut().take();
-
-        if let Some(mut logs_rx) = logs_rx {
-            let (tx, rx) = mpsc::channel(1);
-
-            // Move logger items into stream to be returned
-            tokio::spawn(async move {
-                while let Some(log) = logs_rx.recv().await {
-                    tx.send(Ok(log)).await.expect("to send log");
-                }
-            });
-
-            Ok(Response::new(ReceiverStream::new(rx)))
-        } else {
-            Err(Status::internal("logs have already been subscribed to"))
-        }
     }
 }

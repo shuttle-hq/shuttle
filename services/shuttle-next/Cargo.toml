@@ -20,4 +20,4 @@ rmp-serde = "1.1.1"
 tower-service = "0.3.1"
 shuttle-common = { path = "../../common", version = "0.25.0", features = ["wasm"] }
 shuttle-codegen = { path = "../../codegen", version = "0.25.0", features = ["next"] }
-tracing-subscriber = { version = "0.3.16", default-features = false, features = ["registry", "std"] }
+tracing-subscriber = { version = "0.3.16", features = ["env-filter", "registry"] }

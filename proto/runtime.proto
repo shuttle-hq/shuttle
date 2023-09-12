@@ -1,8 +1,6 @@
 syntax = "proto3";
 package runtime;
 
-import "google/protobuf/timestamp.proto";
-
 service Runtime {
   // Load a service file to be ready to start it
   rpc Load(LoadRequest) returns (LoadResponse);
@@ -15,9 +13,6 @@ service Runtime {
 
   // Channel to notify a service has been stopped
   rpc SubscribeStop(SubscribeStopRequest) returns (stream SubscribeStopResponse);
-
-  // Subscribe to runtime logs
-  rpc SubscribeLogs(SubscribeLogsRequest) returns (stream LogItem);
 }
 
 message LoadRequest {
@@ -26,6 +21,9 @@ message LoadRequest {
 
   // Path to compiled file to load for service
   string path = 2;
+
+  // The id of this deployment
+  string deployment_id = 3;
 
   // A cache of resource details to use instead when asked
   repeated bytes resources = 10;
@@ -79,24 +77,4 @@ enum StopReason {
 
   // Service crashed
   Crash = 2;
-}
-
-message SubscribeLogsRequest {}
-
-message LogItem {
-  google.protobuf.Timestamp timestamp = 2;
-  LogLevel level = 4;
-  optional string file = 5;
-  optional uint32 line = 6;
-  string target = 7;
-  bytes fields = 8;
-  string state = 9;
-}
-
-enum LogLevel {
-  Trace = 0;
-  Debug = 1;
-  Info = 2;
-  Warn = 3;
-  Error = 4;
 }

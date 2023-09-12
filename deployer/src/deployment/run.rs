@@ -11,6 +11,10 @@ use portpicker::pick_unused_port;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
     constants::EXECUTABLE_DIRNAME,
+    deployment::{
+        DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
+        DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
+    },
     resource,
 };
 
@@ -26,7 +30,7 @@ use tokio::{
     task::{JoinHandle, JoinSet},
 };
 use tonic::{transport::Channel, Code};
-use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
+use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -142,7 +146,7 @@ pub async fn task(
 #[instrument(skip(active_deployment_getter, runtime_manager))]
 async fn kill_old_deployments(
     service_id: Ulid,
-    deployment_id: Uuid,
+    __deployment_id: Uuid, // prefixed to not catch this span in DeploymentLogLayer
     active_deployment_getter: impl ActiveDeploymentsGetter,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
 ) -> Result<()> {
@@ -154,41 +158,41 @@ async fn kill_old_deployments(
         .await
         .map_err(|e| Error::OldCleanup(Box::new(e)))?
         .into_iter()
-        .filter(|old_id| old_id != &deployment_id)
+        .filter(|old_id| old_id != &__deployment_id)
     {
-        trace!(%old_id, "stopping old deployment");
+        info!("stopping old deployment (id {old_id})");
 
         if !guard.kill(&old_id).await {
-            warn!(id = %old_id, "failed to kill old deployment");
+            warn!("failed to kill old deployment (id {old_id})");
         }
     }
 
     Ok(())
 }
 
-#[instrument(skip(_id), fields(id = %_id, state = %State::Completed))]
+#[instrument(name = "Cleaning up completed deployment", skip(_id), fields(deployment_id = %_id, state = %State::Completed))]
 fn completed_cleanup(_id: &Uuid) {
-    info!("service finished all on its own");
+    info!("{}", DEPLOYER_END_MSG_COMPLETED);
 }
 
-#[instrument(skip(_id), fields(id = %_id, state = %State::Stopped))]
+#[instrument(name = "Cleaning up stopped deployment", skip(_id), fields(deployment_id = %_id, state = %State::Stopped))]
 fn stopped_cleanup(_id: &Uuid) {
-    info!("service was stopped by the user");
+    info!("{}", DEPLOYER_END_MSG_STOPPED);
 }
 
-#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
+#[instrument(name = "Cleaning up crashed deployment", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        "service encountered an error"
+        "{}", DEPLOYER_END_MSG_CRASHED
     );
 }
 
-#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
+#[instrument(name = "Cleaning up startup crashed deployment", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn start_crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        "service startup encountered an error"
+        "{}", DEPLOYER_END_MSG_STARTUP_ERR
     );
 }
 
@@ -214,7 +218,11 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(
+        name = "Loading resources",
+        skip(self, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup),
+        fields(deployment_id = %self.id, state = %State::Loading)
+    )]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
@@ -255,7 +263,12 @@ impl Built {
         let runtime_client = runtime_manager
             .lock()
             .await
-            .get_runtime_client(self.id, project_path.as_path(), alpha_runtime_path)
+            .get_runtime_client(
+                self.id,
+                project_path.as_path(),
+                self.service_name.clone(),
+                alpha_runtime_path,
+            )
             .await
             .map_err(Error::Runtime)?;
 
@@ -264,6 +277,7 @@ impl Built {
         load(
             self.service_name.clone(),
             self.service_id,
+            self.id,
             executable_path.clone(),
             secret_getter,
             resource_manager,
@@ -285,23 +299,19 @@ impl Built {
     }
 }
 
+// TODO: refactor this and remove clippy allow.
+#[allow(clippy::too_many_arguments)]
 async fn load(
     service_name: String,
     service_id: Ulid,
+    deployment_id: Uuid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
     mut resource_manager: impl ResourceManager,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Claim,
 ) -> Result<()> {
-    info!(
-        "loading project from: {}",
-        executable_path
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap_or_default()
-    );
+    info!("Loading resources");
 
     let resources = resource_manager
         .get_resources(&service_id, claim.clone())
@@ -337,6 +347,7 @@ async fn load(
             .into_string()
             .unwrap_or_default(),
         service_name: service_name.clone(),
+        deployment_id: deployment_id.to_string(),
         resources,
         secrets,
     });
@@ -350,10 +361,11 @@ async fn load(
     match response {
         Ok(response) => {
             let response = response.into_inner();
+            // Make sure to not log the entire response, the resources field is likely to contain secrets.
+            if response.success {
+                info!("successfully loaded service");
+            }
 
-            // Make sure to not log the entire response, the resources field is likely to contain
-            // secrets.
-            info!(success = %response.success, "loading response");
             let resources = response
                 .resources
                 .into_iter()
@@ -385,7 +397,8 @@ async fn load(
     }
 }
 
-#[instrument(skip(runtime_client, deployment_updater, cleanup), fields(state = %State::Running))]
+// TODO: add ticket to add deployment_id to more functions that need to be instrumented in deployer.
+#[instrument(name = "Starting service", skip(runtime_client, deployment_updater, cleanup), fields(deployment_id = %id, state = %State::Running))]
 async fn run(
     id: Uuid,
     service_name: String,
@@ -410,12 +423,13 @@ async fn run(
         .unwrap()
         .into_inner();
 
-    info!("starting service");
     let response = runtime_client.start(start_request).await;
 
     match response {
         Ok(response) => {
-            info!(response = ?response.into_inner(),  "start client response: ");
+            if response.into_inner().success {
+                info!("{}", DEPLOYER_RUNTIME_START_RESPONSE);
+            }
 
             // Wait for stop reason
             let reason = stream.message().await.expect("message from tonic stream");
@@ -429,12 +443,11 @@ async fn run(
             }));
         }
         Err(ref status) => {
+            error!(%status, "failed to start service");
             start_crashed_cleanup(
                 &id,
                 Error::Start("runtime failed to start deployment".to_string()),
             );
-
-            error!(%status, "failed to start service");
         }
     }
 }
@@ -451,7 +464,12 @@ mod tests {
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
     use shuttle_common::{claims::Claim, constants::EXECUTABLE_DIRNAME};
+    use shuttle_common_tests::logger::mocked_logger_client;
     use shuttle_proto::{
+        logger::{
+            logger_server::Logger, Batcher, LogLine, LogsRequest, LogsResponse, StoreLogsRequest,
+            StoreLogsResponse,
+        },
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
@@ -461,10 +479,11 @@ mod tests {
     };
     use tokio::{
         process::Command,
-        sync::{oneshot, Mutex},
+        sync::{mpsc, oneshot, Mutex},
         time::sleep,
     };
-    use tonic::transport::Server;
+    use tokio_stream::wrappers::ReceiverStream;
+    use tonic::{transport::Server, Request, Response, Status};
     use ulid::Ulid;
     use uuid::Uuid;
 
@@ -507,28 +526,52 @@ mod tests {
         }
     }
 
-    fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
+    pub struct MockedLogger;
+
+    #[async_trait]
+    impl Logger for MockedLogger {
+        async fn store_logs(
+            &self,
+            _: Request<StoreLogsRequest>,
+        ) -> Result<Response<StoreLogsResponse>, Status> {
+            Ok(Response::new(StoreLogsResponse { success: true }))
+        }
+
+        async fn get_logs(
+            &self,
+            _: Request<LogsRequest>,
+        ) -> Result<Response<LogsResponse>, Status> {
+            Ok(Response::new(LogsResponse {
+                log_items: Vec::new(),
+            }))
+        }
+
+        type GetLogsStreamStream = ReceiverStream<Result<LogLine, Status>>;
+
+        async fn get_logs_stream(
+            &self,
+            _: Request<LogsRequest>,
+        ) -> Result<Response<Self::GetLogsStreamStream>, Status> {
+            let (_, rx) = mpsc::channel(1);
+            Ok(Response::new(ReceiverStream::new(rx)))
+        }
+    }
+
+    async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
         let provisioner_addr =
             SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
-        let mock = ProvisionerMock;
 
         tokio::spawn(async move {
             Server::builder()
-                .add_service(ProvisionerServer::new(mock))
+                .add_service(ProvisionerServer::new(ProvisionerMock))
                 .serve(provisioner_addr)
                 .await
                 .unwrap();
         });
 
-        let (tx, rx) = crossbeam_channel::unbounded();
+        let logger_client = Batcher::wrap(mocked_logger_client(MockedLogger).await);
 
-        tokio::runtime::Handle::current().spawn_blocking(move || {
-            while let Ok(log) = rx.recv() {
-                println!("test log: {log:?}");
-            }
-        });
-
-        RuntimeManager::new(format!("http://{}", provisioner_addr), None, tx)
+        RuntimeManager::new(format!("http://{}", provisioner_addr), logger_client, None)
     }
 
     #[derive(Clone)]
@@ -595,7 +638,7 @@ mod tests {
     async fn can_be_killed() {
         let (built, path) = make_and_built("sleep-async").await;
         let id = built.id;
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
         let handle_cleanup = |response: Option<SubscribeStopResponse>| {
@@ -638,7 +681,7 @@ mod tests {
     #[tokio::test]
     async fn self_stop() {
         let (built, path) = make_and_built("sleep-async").await;
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
         let handle_cleanup = |response: Option<SubscribeStopResponse>| {
@@ -678,7 +721,7 @@ mod tests {
     #[tokio::test]
     async fn panic_in_bind() {
         let (built, path) = make_and_built("bind-panic").await;
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
         let handle_cleanup = |response: Option<SubscribeStopResponse>| {
@@ -721,7 +764,7 @@ mod tests {
     #[should_panic(expected = "Load(\"main panic\")")]
     async fn panic_in_main() {
         let (built, path) = make_and_built("main-panic").await;
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
 
         let handle_cleanup = |_result| panic!("service should never be started");
 

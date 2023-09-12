@@ -22,8 +22,10 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 RUSTUP_TOOLCHAIN=1.72.0
 
 TAG?=$(shell git describe --tags --abbrev=0)
-BACKEND_TAG?=$(TAG)
+AUTH_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
+GATEWAY_TAG?=$(TAG)
+LOGGER_TAG?=$(TAG)
 PROVISIONER_TAG?=$(TAG)
 RESOURCE_RECORDER_TAG?=$(TAG)
 
@@ -68,6 +70,11 @@ CARGO_PROFILE?=debug
 RUST_LOG?=shuttle=debug,info
 DEV_SUFFIX=-dev
 DEPLOYS_API_KEY?=gateway4deployes
+
+# this should use the same version as our prod RDS database
+LOGGER_POSTGRES_TAG?=15
+LOGGER_POSTGRES_PASSWORD?=postgres
+LOGGER_POSTGRES_URI?=postgres://postgres:${LOGGER_POSTGRES_PASSWORD}@logger-postgres:5432/postgres
 endif
 
 ifeq ($(CI),true)
@@ -98,11 +105,16 @@ endif
 
 DOCKER_COMPOSE_ENV=\
 	STACK=$(STACK)\
-	BACKEND_TAG=$(BACKEND_TAG)\
+	AUTH_TAG=$(AUTH_TAG)\
 	DEPLOYER_TAG=$(DEPLOYER_TAG)\
+	GATEWAY_TAG=$(GATEWAY_TAG)\
+	LOGGER_TAG=$(LOGGER_TAG)\
 	PROVISIONER_TAG=$(PROVISIONER_TAG)\
 	RESOURCE_RECORDER_TAG=$(RESOURCE_RECORDER_TAG)\
 	POSTGRES_TAG=${POSTGRES_TAG}\
+	LOGGER_POSTGRES_TAG=${LOGGER_POSTGRES_TAG}\
+	LOGGER_POSTGRES_PASSWORD=${LOGGER_POSTGRES_PASSWORD}\
+	LOGGER_POSTGRES_URI=${LOGGER_POSTGRES_URI}\
 	PANAMAX_TAG=${PANAMAX_TAG}\
 	OTEL_TAG=${OTEL_TAG}\
 	APPS_FQDN=$(APPS_FQDN)\
@@ -118,15 +130,31 @@ DOCKER_COMPOSE_ENV=\
 	COMPOSE_PROFILES=$(COMPOSE_PROFILES)\
 	DOCKER_SOCK=$(DOCKER_SOCK)
 
-.PHONY: images clean src up down deploy shuttle-% shuttle-images postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
+.PHONY: clean images the-shuttle-images shuttle-% postgres panamax otel deploy test docker-compose.rendered.yml up down
 
 clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-images postgres panamax otel
+images: the-shuttle-images postgres panamax otel
 
-shuttle-images: shuttle-auth shuttle-deployer shuttle-gateway shuttle-provisioner shuttle-resource-recorder
+the-shuttle-images: shuttle-auth shuttle-deployer shuttle-gateway shuttle-logger shuttle-provisioner shuttle-resource-recorder
+
+shuttle-%:
+	$(DOCKER_BUILD) \
+		--target $(@)$(DEV_SUFFIX) \
+		--build-arg folder=$(*) \
+		--build-arg crate=$(@) \
+		--build-arg prepare_args=$(PREPARE_ARGS) \
+		--build-arg PROD=$(PROD) \
+		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
+		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
+		--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
+		--tag $(CONTAINER_REGISTRY)/$(*):latest \
+		$(BUILDX_FLAGS) \
+		-f Containerfile \
+		.
 
 postgres:
 	$(DOCKER_BUILD) \
@@ -175,7 +203,11 @@ up: $(DOCKER_COMPOSE_FILES)
 	$(SHUTTLE_DETACH)
 
 down: $(DOCKER_COMPOSE_FILES)
-	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) down
+	$(DOCKER_COMPOSE_ENV) \
+	$(DOCKER_COMPOSE) \
+	$(addprefix -f ,$(DOCKER_COMPOSE_FILES)) \
+	-p $(STACK) \
+	down
 
 shuttle-%:
 	$(DOCKER_BUILD) \

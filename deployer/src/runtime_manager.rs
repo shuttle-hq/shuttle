@@ -5,17 +5,21 @@ use std::{
 };
 
 use anyhow::Context;
-use shuttle_common::claims::{ClaimService, InjectPropagation};
-use shuttle_proto::runtime::{
-    self, runtime_client::RuntimeClient, StopRequest, SubscribeLogsRequest,
+use chrono::Utc;
+use prost_types::Timestamp;
+use shuttle_common::{
+    claims::{ClaimService, InjectPropagation},
+    log::Backend,
+};
+use shuttle_proto::{
+    logger::{logger_client::LoggerClient, Batcher, LogItem, LogLine},
+    runtime::{self, runtime_client::RuntimeClient, StopRequest},
 };
 use shuttle_service::Environment;
-use tokio::{process, sync::Mutex};
+use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
 use tonic::transport::Channel;
 use tracing::{debug, info, trace};
 use uuid::Uuid;
-
-use crate::deployment::deploy_layer;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -37,21 +41,33 @@ type Runtimes = Arc<
 pub struct RuntimeManager {
     runtimes: Runtimes,
     provisioner_address: String,
+    logger_client: Batcher<
+        LoggerClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
+    >,
     auth_uri: Option<String>,
-    log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
 }
 
 impl RuntimeManager {
     pub fn new(
         provisioner_address: String,
+        logger_client: Batcher<
+            LoggerClient<
+                shuttle_common::claims::ClaimService<
+                    shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+                >,
+            >,
+        >,
         auth_uri: Option<String>,
-        log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
     ) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             runtimes: Default::default(),
             provisioner_address,
+            logger_client,
             auth_uri,
-            log_sender,
         }))
     }
 
@@ -59,6 +75,7 @@ impl RuntimeManager {
         &mut self,
         id: Uuid,
         project_path: &Path,
+        service_name: String,
         alpha_runtime_path: Option<PathBuf>,
     ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
         trace!("making new client");
@@ -108,7 +125,7 @@ impl RuntimeManager {
                 .join("bin/shuttle-next")
         };
 
-        let (process, runtime_client) = runtime::start(
+        let (mut process, runtime_client) = runtime::start(
             is_next,
             Environment::Deployment,
             &self.provisioner_address,
@@ -120,27 +137,35 @@ impl RuntimeManager {
         .await
         .context("failed to start shuttle runtime")?;
 
-        let sender = self.log_sender.clone();
-        let mut stream = runtime_client
-            .clone()
-            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
-            .await
-            .context("subscribing to runtime logs stream")?
-            .into_inner();
-
-        tokio::spawn(async move {
-            while let Ok(Some(log)) = stream.message().await {
-                if let Ok(mut log) = deploy_layer::Log::try_from(log) {
-                    log.id = id;
-                    sender.send(log).expect("to send log to persistence");
-                }
-            }
-        });
+        let stdout = process
+            .stdout
+            .take()
+            .context("child process did not have a handle to stdout")?;
 
         self.runtimes
             .lock()
             .unwrap()
             .insert(id, (process, runtime_client.clone()));
+
+        let mut reader = BufReader::new(stdout).lines();
+        let logger_client = self.logger_client.clone();
+        tokio::spawn(async move {
+            while let Some(line) = reader.next_line().await.unwrap() {
+                let utc = Utc::now();
+                let log = LogItem {
+                    deployment_id: id.to_string(),
+                    log_line: Some(LogLine {
+                        service_name: Backend::Runtime(service_name.clone()).to_string(),
+                        tx_timestamp: Some(Timestamp {
+                            seconds: utc.timestamp(),
+                            nanos: utc.timestamp_subsec_nanos().try_into().unwrap_or_default(),
+                        }),
+                        data: line.as_bytes().to_vec(),
+                    }),
+                };
+                logger_client.send(log);
+            }
+        });
 
         Ok(runtime_client)
     }

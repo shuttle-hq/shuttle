@@ -1,6 +1,8 @@
 use strum::{Display, EnumString};
 use utoipa::ToSchema;
 
+use crate::deployment::DeploymentState;
+
 /// States a deployment can be in
 #[derive(sqlx::Type, Debug, Display, Clone, Copy, EnumString, PartialEq, Eq, ToSchema)]
 #[strum(ascii_case_insensitive)]
@@ -69,6 +71,14 @@ impl From<shuttle_common::deployment::State> for State {
             shuttle_common::deployment::State::Unknown => Self::Unknown,
         }
     }
+}
+
+/// Records state logs for the deployment progress
+pub trait StateRecorder: Clone + Send + Sync + 'static {
+    type Err: std::error::Error + Send;
+
+    /// Takes a state and send it on to the async thread that records it.
+    fn record_state(&self, log: DeploymentState) -> Result<(), Self::Err>;
 }
 
 #[cfg(test)]

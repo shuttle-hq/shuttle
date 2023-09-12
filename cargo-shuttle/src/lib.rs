@@ -16,6 +16,7 @@ use std::str::FromStr;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     constants::{EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
+    deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
         deployment::{
             get_deployments_table, DeploymentRequest, CREATE_SERVICE_BODY_LIMIT,
@@ -26,11 +27,10 @@ use shuttle_common::{
         secret,
     },
     project::ProjectName,
-    resource, ApiKey,
+    resource, ApiKey, LogItem,
 };
 use shuttle_proto::runtime::{
     self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest,
-    SubscribeLogsRequest,
 };
 use shuttle_service::{
     builder::{build_workspace, BuiltService},
@@ -53,9 +53,10 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::printdoc;
-use std::fmt::Write;
+use std::fmt::Write as FmtWrite;
 use strum::IntoEnumIterator;
 use tar::Builder;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::task::JoinHandle;
 use tonic::transport::Channel;
@@ -695,7 +696,29 @@ impl Shuttle {
         })?;
 
         let service_name = service.service_name()?;
+        let deployment_id: Uuid = Default::default();
+
+        // Clones to send to spawn
+        let service_name_clone = service_name.clone().to_string();
+
+        let child_stdout = runtime
+            .stdout
+            .take()
+            .context("child process did not have a handle to stdout")?;
+        let mut reader = BufReader::new(child_stdout).lines();
+        tokio::spawn(async move {
+            while let Some(line) = reader.next_line().await.unwrap() {
+                let log_item = LogItem::new(
+                    deployment_id,
+                    shuttle_common::log::Backend::Runtime(service_name_clone.clone()),
+                    line,
+                );
+                println!("{log_item}");
+            }
+        });
+
         let load_request = tonic::Request::new(LoadRequest {
+            deployment_id: deployment_id.to_string(),
             path: service
                 .executable_path
                 .clone()
@@ -730,23 +753,6 @@ impl Shuttle {
             .collect();
 
         println!("{}", get_resources_table(&resources, service_name.as_str()));
-
-        let mut stream = runtime_client
-            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
-            .or_else(|err| async {
-                provisioner_server.abort();
-                runtime.kill().await?;
-                Err(err)
-            })
-            .await?
-            .into_inner();
-
-        tokio::spawn(async move {
-            while let Ok(Some(log)) = stream.message().await {
-                let log: shuttle_common::LogItem = log.try_into().expect("to convert log");
-                println!("{log}");
-            }
-        });
 
         let addr = SocketAddr::new(
             if run_args.external {
@@ -812,7 +818,7 @@ impl Shuttle {
             Child,
             RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         )>,
-        provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
+        extra_servers: &[&JoinHandle<Result<(), tonic::transport::Error>>],
     ) -> Result<(), Status> {
         match runtime {
             Some(inner) => {
@@ -821,7 +827,10 @@ impl Shuttle {
             }
             None => {
                 trace!("Runtime error: No runtime process. Crashed during startup?");
-                provisioner_server.abort();
+                for server in extra_servers {
+                    server.abort();
+                }
+
                 for rt_info in existing_runtimes {
                     let mut errored_out = false;
                     // Stopping all runtimes gracefully first, but if this errors out the function kills the runtime forcefully.
@@ -851,12 +860,9 @@ impl Shuttle {
             while let Ok(message) = rx.recv() {
                 match message {
                     Message::TextLine(line) => println!("{line}"),
-                    Message::CompilerMessage(message) => {
-                        if let Some(rendered) = message.message.rendered {
-                            println!("{rendered}");
-                        }
+                    message => {
+                        trace!("skipping cargo line: {message:?}")
                     }
-                    _ => {}
                 }
             }
         });
@@ -878,7 +884,7 @@ impl Shuttle {
     ) -> Result<(JoinHandle<Result<(), tonic::transport::Error>>, u16)> {
         let provisioner = LocalProvisioner::new()?;
         let provisioner_port =
-            portpicker::pick_unused_port().expect("unable to find available port");
+            portpicker::pick_unused_port().expect("unable to find available port for provisioner");
         let provisioner_server = provisioner.start(SocketAddr::new(
             Ipv4Addr::LOCALHOST.into(),
             provisioner_port,
@@ -911,7 +917,7 @@ impl Shuttle {
                 res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
                     match res {
                         Ok(runtime) => {
-                            Shuttle::add_runtime_info(runtime, &mut runtimes, &provisioner_server).await?;
+                            Shuttle::add_runtime_info(runtime, &mut runtimes, &[&provisioner_server]).await?;
                         },
                         Err(e) => println!("Runtime error: {e:?}"),
                     }
@@ -1048,6 +1054,7 @@ impl Shuttle {
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
+
         // Start all the services.
         let mut runtimes: Vec<(
             Child,
@@ -1057,7 +1064,7 @@ impl Shuttle {
         for (i, service) in services.iter().enumerate() {
             signal_received = tokio::select! {
                 res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
-                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &provisioner_server).await?;
+                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &[&provisioner_server]).await?;
                     false
                 },
                 _ = Shuttle::handle_signals() => {
@@ -1171,8 +1178,11 @@ impl Shuttle {
         deployment_req.data = self.make_archive()?;
         if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
             bail!(
-                "The project is too large - the included files must be less than {}MB after archiving.",
-                CREATE_SERVICE_BODY_LIMIT / 1_000_000
+                r#"The project is too large - we have a {} MB project limit. \
+                Your project archive is {} MB. \
+                Run with `RUST_LOG="cargo_shuttle=debug"` to see which files are being packed."#,
+                CREATE_SERVICE_BODY_LIMIT / 1_000_000,
+                deployment_req.data.len() / 1_000_000,
             );
         }
 
@@ -1191,33 +1201,31 @@ impl Shuttle {
                     let log_item: shuttle_common::LogItem =
                         serde_json::from_str(&line).expect("to parse log line");
 
-                    match log_item.state.clone() {
-                        shuttle_common::deployment::State::Queued
-                        | shuttle_common::deployment::State::Building
-                        | shuttle_common::deployment::State::Built
-                        | shuttle_common::deployment::State::Loading => {
-                            println!("{log_item}");
-                        }
-                        shuttle_common::deployment::State::Crashed => {
-                            println!();
-                            println!("{}", "Deployment crashed".red());
-                            println!();
-                            println!("Run the following for more details");
-                            println!();
-                            print!("cargo shuttle logs {}", &deployment.id);
-                            println!();
+                    println!("{log_item}");
 
-                            return Ok(CommandOutcome::DeploymentFailure);
-                        }
-                        // Break on remaining end states: Running, Stopped, Completed or Unknown.
-                        end_state => {
-                            debug!(state = %end_state, "received end state, breaking deployment stream");
-                            break;
-                        }
-                    };
+                    if DEPLOYER_END_MESSAGES_BAD
+                        .iter()
+                        .any(|m| log_item.line.contains(m))
+                    {
+                        println!();
+                        println!("{}", "Deployment crashed".red());
+                        println!();
+                        println!("Run the following for more details");
+                        println!();
+                        println!("cargo shuttle logs {}", &deployment.id);
+
+                        return Ok(CommandOutcome::DeploymentFailure);
+                    }
+                    if DEPLOYER_END_MESSAGES_GOOD
+                        .iter()
+                        .any(|m| log_item.line.contains(m))
+                    {
+                        debug!("received end message, breaking deployment stream");
+                        break;
+                    }
                 }
             } else {
-                println!("Reconnecting websockets logging");
+                eprintln!("--- Reconnecting websockets logging ---");
                 // A wait time short enough for not much state to have changed, long enough that
                 // the terminal isn't completely spammed
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -1229,6 +1237,7 @@ impl Shuttle {
 
         // Temporary fix.
         // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
+        // Note: Will otherwise be possible when health checks are supported
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         let deployment = client
@@ -1236,19 +1245,7 @@ impl Shuttle {
             .await?;
 
         // A deployment will only exist if there is currently one in the running state
-        if deployment.state == shuttle_common::deployment::State::Running {
-            let service = client.get_service(self.ctx.project_name()).await?;
-
-            let resources = client
-                .get_service_resources(self.ctx.project_name())
-                .await?;
-
-            let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
-
-            println!("{resources}{service}");
-
-            Ok(CommandOutcome::Ok)
-        } else {
+        if deployment.state != shuttle_common::deployment::State::Running {
             println!("{}", "Deployment has not entered the running state".red());
             println!();
 
@@ -1282,8 +1279,18 @@ impl Shuttle {
             println!("cargo shuttle logs {}", &deployment.id);
             println!();
 
-            Ok(CommandOutcome::DeploymentFailure)
+            return Ok(CommandOutcome::DeploymentFailure);
         }
+
+        let service = client.get_service(self.ctx.project_name()).await?;
+        let resources = client
+            .get_service_resources(self.ctx.project_name())
+            .await?;
+        let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
+
+        println!("{resources}{service}");
+
+        Ok(CommandOutcome::Ok)
     }
 
     async fn project_create(&self, client: &Client, idle_minutes: u64) -> Result<()> {
@@ -1535,7 +1542,7 @@ impl Shuttle {
 
 fn check_version(runtime_path: &Path) -> Result<()> {
     let valid_version = semver::Version::from_str(VERSION)
-        .context("failed to convert runtime version to semver")?;
+        .context("failed to convert cargo-shuttle version to semver")?;
 
     if !runtime_path.try_exists()? {
         bail!("shuttle-runtime is not installed");
@@ -1558,7 +1565,7 @@ fn check_version(runtime_path: &Path) -> Result<()> {
             .1
             .trim(),
     )
-    .context("failed to convert runtime version to semver")?;
+    .context("failed to convert user's runtime version to semver")?;
 
     if semvers_are_compatible(&valid_version, &runtime_version) {
         Ok(())

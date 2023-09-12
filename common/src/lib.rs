@@ -7,7 +7,13 @@ pub mod database;
 #[cfg(feature = "service")]
 pub mod deployment;
 #[cfg(feature = "service")]
+use uuid::Uuid;
+#[cfg(feature = "service")]
+pub type DeploymentId = Uuid;
+#[cfg(feature = "service")]
 pub mod log;
+#[cfg(feature = "service")]
+pub use log::LogItem;
 #[cfg(feature = "models")]
 pub mod models;
 #[cfg(feature = "service")]
@@ -24,20 +30,11 @@ use std::fmt::Display;
 
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
-
-#[cfg(feature = "service")]
-pub use log::Item as LogItem;
-#[cfg(feature = "service")]
-pub use log::STATE_MESSAGE;
 #[cfg(feature = "openapi")]
 use utoipa::openapi::{Object, ObjectBuilder};
-#[cfg(feature = "service")]
-use uuid::Uuid;
 
 pub type ApiUrl = String;
 pub type Host = String;
-#[cfg(feature = "service")]
-pub type DeploymentId = Uuid;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "persist", derive(sqlx::Type, PartialEq, Hash, Eq))]

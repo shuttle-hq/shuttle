@@ -233,6 +233,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-broadcast"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c48ccdbf6ca6b121e0f586cbc0e73ae440e56c67c30fa0873b4e110d9c26d2b"
+dependencies = [
+ "event-listener",
+ "futures-core",
+]
+
+[[package]]
 name = "async-lock"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1157,6 +1167,7 @@ dependencies = [
  "indicatif",
  "indoc",
  "openssl",
+ "opentelemetry-proto",
  "portpicker",
  "reqwest",
  "reqwest-middleware",
@@ -5439,9 +5450,9 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-otlp",
+ "opentelemetry-proto",
  "pin-project",
  "proptest",
- "prost-types",
  "rand",
  "reqwest",
  "ring",
@@ -5474,7 +5485,9 @@ dependencies = [
  "portpicker",
  "reqwest",
  "shuttle-common",
+ "shuttle-proto",
  "tokio",
+ "tonic",
  "tower",
 ]
 
@@ -5503,11 +5516,13 @@ dependencies = [
  "opentelemetry-http",
  "pipe",
  "portpicker",
+ "prost-types",
  "rand",
  "rmp-serde",
  "serde",
  "serde_json",
  "shuttle-common",
+ "shuttle-common-tests",
  "shuttle-proto",
  "shuttle-service",
  "sqlx",
@@ -5516,6 +5531,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "toml 0.7.8",
  "tonic",
  "tower",
@@ -5584,6 +5600,34 @@ dependencies = [
  "utoipa-swagger-ui",
  "uuid",
  "x509-parser",
+]
+
+[[package]]
+name = "shuttle-logger"
+version = "0.25.0"
+dependencies = [
+ "async-broadcast",
+ "async-trait",
+ "chrono",
+ "clap",
+ "ctor",
+ "once_cell",
+ "opentelemetry-proto",
+ "portpicker",
+ "pretty_assertions",
+ "prost-types",
+ "serde_json",
+ "shuttle-common",
+ "shuttle-common-tests",
+ "shuttle-proto",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -5662,6 +5706,7 @@ dependencies = [
  "async-trait",
  "cap-std",
  "chrono",
+ "colored",
  "crossbeam-channel",
  "futures",
  "hyper",
@@ -5680,8 +5725,8 @@ dependencies = [
  "tokio-stream",
  "tonic",
  "tower",
- "tracing",
  "tracing-subscriber",
+ "uuid",
  "wasi-common",
  "wasmtime",
  "wasmtime-wasi",

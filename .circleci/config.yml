@@ -383,6 +383,9 @@ jobs:
       deploys-api-key:
         description: "Shuttle api key used by the gateway to authorise starting idle deployments"
         type: env_var_name
+      logger-postgres-uri:
+        description: "URI used to connect to the logger RDS postgres database."
+        type: string
       production:
         description: "Push and deploy to production"
         type: boolean

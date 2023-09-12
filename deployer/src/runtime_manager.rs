@@ -71,7 +71,7 @@ impl RuntimeManager {
         }))
     }
 
-    pub async fn get_runtime_client(
+    pub async fn create_runtime_client(
         &mut self,
         id: Uuid,
         project_path: &Path,
@@ -168,6 +168,12 @@ impl RuntimeManager {
         });
 
         Ok(runtime_client)
+    }
+
+    pub fn kill_process(&mut self, id: Uuid) {
+        if let Some((mut process, _)) = self.runtimes.lock().unwrap().remove(&id) {
+            let _ = process.start_kill();
+        }
     }
 
     /// Send a kill / stop signal for a deployment to its running runtime

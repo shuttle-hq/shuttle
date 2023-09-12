@@ -1711,10 +1711,11 @@ mod tests {
                 "Secrets.toml.example",
                 "Shuttle.toml",
                 "asset1", // normal file
-                "asset2", // .gitignore'd, but delcared in Shuttle.toml
+                "asset2", // .gitignore'd, but included in Shuttle.toml
                 // asset3 is .ignore'd
                 "asset4",                // .gitignore'd, but un-ignored in .ignore
-                "dist/dist1",            // .gitignore'd, but delcared in Shuttle.toml
+                "asset5",                // .ignore'd, but included in Shuttle.toml
+                "dist/dist1",            // .gitignore'd, but included in Shuttle.toml
                 "nested/static/nested1", // normal file
                 // nested/static/nestedignore is .gitignore'd
                 "src/main.rs",

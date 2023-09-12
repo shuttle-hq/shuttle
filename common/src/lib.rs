@@ -9,9 +9,9 @@ pub mod deployment;
 use uuid::Uuid;
 #[cfg(feature = "service")]
 pub type DeploymentId = Uuid;
-#[cfg(feature = "tracing")]
+#[cfg(feature = "service")]
 pub mod log;
-#[cfg(feature = "tracing")]
+#[cfg(feature = "service")]
 pub use log::LogItem;
 #[cfg(feature = "models")]
 pub mod models;

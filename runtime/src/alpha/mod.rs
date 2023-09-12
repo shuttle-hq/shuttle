@@ -219,7 +219,6 @@ where
             resources,
             secrets,
             service_name,
-            ..
         } = request.into_inner();
         println!("loading alpha service at {path}");
 

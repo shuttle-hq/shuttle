@@ -379,11 +379,9 @@ pub mod logger {
         }
 
         /// Create a batcher around inner. It will send a batch of items to inner if a capacity of 2048 is reached
-        /// or if an interval of 5 seconds are reached.
-        ///
-        /// These are the same defaults used by the otel batcher
+        /// or if an interval of 1 second is reached.
         pub fn wrap(inner: I) -> Self {
-            Self::new(inner, 2048, Duration::from_secs(5))
+            Self::new(inner, 2048, Duration::from_secs(1))
         }
 
         /// Send a single item into this batcher

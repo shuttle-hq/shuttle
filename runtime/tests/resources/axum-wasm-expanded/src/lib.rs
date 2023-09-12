@@ -24,12 +24,12 @@ async fn app(request: shuttle_next::Request<BoxBody>) -> shuttle_next::response:
 }
 
 async fn hello() -> &'static str {
-    println!("in hello()");
+    debug!("in hello()");
     "Hello, World!"
 }
 
 async fn goodbye() -> &'static str {
-    println!("in goodbye()");
+    debug!("in goodbye()");
     "Goodbye, World!"
 }
 
@@ -54,6 +54,12 @@ pub extern "C" fn __SHUTTLE_Axum_call(
     use shuttle_next::body::{Body, HttpBody};
     use std::io::{Read, Write};
     use std::os::wasi::io::FromRawFd;
+
+    use shuttle_next::tracing_prelude::*;
+
+    shuttle_next::tracing_registry()
+        .with(shuttle_next::tracing_fmt::layer().without_time())
+        .init();
 
     // file descriptor 3 for reading and writing http parts
     let mut parts_fd = unsafe { std::fs::File::from_raw_fd(parts_fd) };

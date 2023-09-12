@@ -54,13 +54,40 @@ pub struct LogItem {
     pub line: String,
 }
 
+const LOGLINE_MAX_CHARS: usize = 2048;
+const TRUNC_MSG: &str = "... (truncated)";
+
 impl LogItem {
-    pub fn new(id: Uuid, internal_origin: Backend, line: String) -> Self {
+    pub fn new(id: Uuid, internal_origin: Backend, line: impl Into<String>) -> Self {
+        let mut line: String = line.into();
+
+        Self::truncate_line(&mut line);
+
         Self {
             id,
             internal_origin,
             timestamp: Utc::now(),
             line,
+        }
+    }
+
+    fn truncate_line(line: &mut String) {
+        // Check if it can be over the limit (assuming ascii only), no iteration
+        if line.len() > LOGLINE_MAX_CHARS {
+            // Then, check if it actually is over the limit.
+            // Find the char boundrary of the last char, but iterate no more than
+            // the max number of chars allowed.
+            let x = line
+                .char_indices()
+                .enumerate()
+                .find(|(i, _)| *i == LOGLINE_MAX_CHARS);
+            // If char iterator reached max iteration count
+            if let Some((_, (ci, _))) = x {
+                // Truncate to the char boundrary found
+                line.truncate(ci);
+                // New allocation unlikely since it keeps its capacity
+                write!(line, "{}", TRUNC_MSG).expect("write to string");
+            }
         }
     }
 }
@@ -281,5 +308,31 @@ mod tests {
 
             assert!(log_line.contains(&utc_dt));
         });
+    }
+
+    #[test]
+    fn log_item_truncate() {
+        let mut l = "öl".repeat(100);
+        LogItem::truncate_line(&mut l);
+        assert_eq!(l.len(), 300);
+        assert_eq!(l.chars().count(), 200);
+
+        let mut l = "🍪".repeat(LOGLINE_MAX_CHARS);
+        LogItem::truncate_line(&mut l);
+        assert_eq!(l.len(), 4 * (LOGLINE_MAX_CHARS));
+        assert_eq!(l.chars().count(), LOGLINE_MAX_CHARS);
+
+        // one cookie should be truncated, and the suffix message should be appended
+        // ✨ = 3b, 🍪 = 4b
+
+        let mut l = format!("A{}", "🍪".repeat(LOGLINE_MAX_CHARS));
+        LogItem::truncate_line(&mut l);
+        assert_eq!(l.len(), 1 + 4 * (LOGLINE_MAX_CHARS - 1) + TRUNC_MSG.len());
+        assert_eq!(l.chars().count(), LOGLINE_MAX_CHARS + TRUNC_MSG.len());
+
+        let mut l = format!("✨{}", "🍪".repeat(LOGLINE_MAX_CHARS));
+        LogItem::truncate_line(&mut l);
+        assert_eq!(l.len(), 3 + 4 * (LOGLINE_MAX_CHARS - 1) + TRUNC_MSG.len());
+        assert_eq!(l.chars().count(), LOGLINE_MAX_CHARS + TRUNC_MSG.len());
     }
 }

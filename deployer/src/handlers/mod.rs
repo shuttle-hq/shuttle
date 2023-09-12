@@ -354,6 +354,7 @@ pub async fn create_service(
     let pid = persistence.project_id();
 
     span.in_scope(|| {
+        info!("Deployer version: {}", crate::VERSION);
         info!("Deployment ID: {}", id);
         info!("Service ID: {}", service.id);
         info!("Service name: {}", service.name);

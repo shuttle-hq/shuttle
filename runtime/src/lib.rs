@@ -241,10 +241,10 @@ pub use strfmt::strfmt;
 #[cfg(feature = "setup-tracing")]
 pub use {colored, tracing_subscriber};
 
+const NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 // Print the version of the runtime.
 pub fn print_version() {
-    let name = env!("CARGO_PKG_NAME");
-    let version = env!("CARGO_PKG_VERSION");
-
-    println!("{name} {version}");
+    println!("{NAME} {VERSION}");
 }

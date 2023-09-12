@@ -64,6 +64,11 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         }
     };
 
+    println!(
+        "shuttle-runtime executable started (version {})",
+        crate::VERSION
+    );
+
     // this is handled after arg parsing to not interfere with --version above
     #[cfg(feature = "setup-tracing")]
     {
@@ -336,7 +341,6 @@ where
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        println!("alpha runtime starting");
         let service = self.service.lock().unwrap().deref_mut().take();
         let service = service.unwrap();
 
@@ -345,7 +349,7 @@ where
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        println!("starting on {service_address}");
+        println!("Starting on {service_address}");
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
         *self.kill_tx.lock().unwrap() = Some(kill_tx);

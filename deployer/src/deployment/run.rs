@@ -270,7 +270,6 @@ impl Built {
         load(
             self.service_name.clone(),
             self.service_id,
-            self.id,
             executable_path.clone(),
             secret_getter,
             resource_manager,
@@ -292,12 +291,9 @@ impl Built {
     }
 }
 
-// TODO: refactor this and remove clippy allow.
-#[allow(clippy::too_many_arguments)]
 async fn load(
     service_name: String,
     service_id: Ulid,
-    deployment_id: Uuid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
     mut resource_manager: impl ResourceManager,
@@ -340,7 +336,6 @@ async fn load(
             .into_string()
             .unwrap_or_default(),
         service_name: service_name.clone(),
-        deployment_id: deployment_id.to_string(),
         resources,
         secrets,
     });

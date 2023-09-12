@@ -20,13 +20,11 @@ use tonic::{
     transport::{Channel, Server},
     Request, Response, Status,
 };
-use uuid::Uuid;
 
 pub struct TestRuntime {
     pub runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     pub bin_path: String,
     pub service_name: String,
-    pub deployment_id: Uuid,
     pub runtime_address: SocketAddr,
     pub secrets: HashMap<String, String>,
     pub runtime: Child,
@@ -73,7 +71,6 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
             .into_string()
             .expect("to convert path to string"),
         service_name: service_name.to_string(),
-        deployment_id: Uuid::new_v4(),
         runtime_address,
         secrets,
         runtime,

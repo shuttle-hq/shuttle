@@ -147,7 +147,7 @@ pub async fn task(
 #[instrument(skip(active_deployment_getter, deployment_id, runtime_manager))]
 async fn kill_old_deployments(
     service_id: Ulid,
-    deployment_id: Uuid, // prefixed to not catch this span in DeploymentLogLayer
+    deployment_id: Uuid,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
 ) -> Result<()> {

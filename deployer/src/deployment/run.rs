@@ -457,12 +457,9 @@ mod tests {
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
     use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
-    use shuttle_common_tests::logger::mocked_logger_client;
+    use shuttle_common_tests::logger::{mocked_logger_client, MockedLogger};
     use shuttle_proto::{
-        logger::{
-            logger_server::Logger, Batcher, LogLine, LogsRequest, LogsResponse, StoreLogsRequest,
-            StoreLogsResponse,
-        },
+        logger::Batcher,
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
@@ -472,11 +469,10 @@ mod tests {
     };
     use tempfile::Builder;
     use tokio::{
-        sync::{mpsc, oneshot, Mutex},
+        sync::{oneshot, Mutex},
         time::sleep,
     };
-    use tokio_stream::wrappers::ReceiverStream;
-    use tonic::{transport::Server, Request, Response, Status};
+    use tonic::transport::Server;
     use ulid::Ulid;
     use uuid::Uuid;
 
@@ -523,37 +519,6 @@ mod tests {
             _request: tonic::Request<Ping>,
         ) -> Result<tonic::Response<Pong>, tonic::Status> {
             panic!("no run tests should do a health check");
-        }
-    }
-
-    pub struct MockedLogger;
-
-    #[async_trait]
-    impl Logger for MockedLogger {
-        async fn store_logs(
-            &self,
-            _: Request<StoreLogsRequest>,
-        ) -> Result<Response<StoreLogsResponse>, Status> {
-            Ok(Response::new(StoreLogsResponse { success: true }))
-        }
-
-        async fn get_logs(
-            &self,
-            _: Request<LogsRequest>,
-        ) -> Result<Response<LogsResponse>, Status> {
-            Ok(Response::new(LogsResponse {
-                log_items: Vec::new(),
-            }))
-        }
-
-        type GetLogsStreamStream = ReceiverStream<Result<LogLine, Status>>;
-
-        async fn get_logs_stream(
-            &self,
-            _: Request<LogsRequest>,
-        ) -> Result<Response<Self::GetLogsStreamStream>, Status> {
-            let (_, rx) = mpsc::channel(1);
-            Ok(Response::new(ReceiverStream::new(rx)))
         }
     }
 

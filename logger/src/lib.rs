@@ -1,4 +1,3 @@
-use async_broadcast::Sender;
 use async_trait::async_trait;
 use dal::Log;
 use dal::{Dal, DalError};
@@ -8,6 +7,7 @@ use shuttle_proto::logger::{
     logger_server::Logger, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
 };
 use thiserror::Error;
+use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
@@ -65,8 +65,7 @@ where
         if !logs.is_empty() {
             _ = self
                 .logs_tx
-                .broadcast(logs.into_iter().filter_map(Log::from_log_item).collect())
-                .await
+                .send(logs.into_iter().filter_map(Log::from_log_item).collect())
                 .map_err(|err| {
                     Status::internal(format!(
                         "Errored while trying to store the logs in persistence: {err}"
@@ -99,7 +98,7 @@ where
         request.verify(Scope::Logs)?;
 
         // Subscribe as soon as possible
-        let mut logs_rx = self.logs_tx.new_receiver();
+        let mut logs_rx = self.logs_tx.subscribe();
         let LogsRequest { deployment_id } = request.into_inner();
         let (tx, rx) = mpsc::channel(1);
 

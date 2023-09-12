@@ -54,8 +54,15 @@ pub struct LogItem {
     pub line: String,
 }
 
+const LOG_LINE_MAX_CHARS: usize = 2048;
+
 impl LogItem {
-    pub fn new(id: Uuid, internal_origin: Backend, line: String) -> Self {
+    pub fn new(id: Uuid, internal_origin: Backend, line: impl Into<String>) -> Self {
+        let mut line = line.into();
+        if line.chars().count() > LOG_LINE_MAX_CHARS {
+            line = line.chars().take(LOG_LINE_MAX_CHARS).collect()
+        }
+
         Self {
             id,
             internal_origin,

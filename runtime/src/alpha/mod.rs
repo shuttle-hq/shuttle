@@ -340,7 +340,7 @@ where
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        println!("alpha runtime starting");
+        println!("Runtime starting (version {})", crate::VERSION);
         let service = self.service.lock().unwrap().deref_mut().take();
         let service = service.unwrap();
 
@@ -349,7 +349,7 @@ where
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        println!("starting on {service_address}");
+        println!("Starting on {service_address}");
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
         *self.kill_tx.lock().unwrap() = Some(kill_tx);

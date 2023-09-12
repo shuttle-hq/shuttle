@@ -144,10 +144,10 @@ pub async fn task(
     }
 }
 
-#[instrument(skip(active_deployment_getter, runtime_manager))]
+#[instrument(skip(active_deployment_getter, deployment_id, runtime_manager))]
 async fn kill_old_deployments(
     service_id: Ulid,
-    __deployment_id: Uuid, // prefixed to not catch this span in DeploymentLogLayer
+    deployment_id: Uuid, // prefixed to not catch this span in DeploymentLogLayer
     active_deployment_getter: impl ActiveDeploymentsGetter,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
 ) -> Result<()> {
@@ -159,7 +159,7 @@ async fn kill_old_deployments(
         .await
         .map_err(|e| Error::OldCleanup(Box::new(e)))?
         .into_iter()
-        .filter(|old_id| old_id != &__deployment_id)
+        .filter(|old_id| old_id != &deployment_id)
     {
         info!("stopping old deployment (id {old_id})");
 

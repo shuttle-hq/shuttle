@@ -64,6 +64,11 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         }
     };
 
+    println!(
+        "shuttle-runtime executable started (version {})",
+        crate::VERSION
+    );
+
     // this is handled after arg parsing to not interfere with --version above
     #[cfg(feature = "setup-tracing")]
     {
@@ -340,7 +345,6 @@ where
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        println!("Runtime starting (version {})", crate::VERSION);
         let service = self.service.lock().unwrap().deref_mut().take();
         let service = service.unwrap();
 

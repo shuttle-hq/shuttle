@@ -390,7 +390,6 @@ async fn load(
     }
 }
 
-// TODO: add ticket to add deployment_id to more functions that need to be instrumented in deployer.
 #[instrument(name = "Starting service", skip(runtime_client, deployment_updater, cleanup), fields(deployment_id = %id, state = %State::Running))]
 async fn run(
     id: Uuid,

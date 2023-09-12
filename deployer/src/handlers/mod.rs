@@ -671,7 +671,7 @@ async fn logs_websocket_handler(
             }
             Ok(Some(proto_log)) => {
                 let log = proto_log.to_log_item_with_id(deployment_id);
-                trace!(?log, "received log from broadcast channel");
+                trace!(?log, "received log from logger stream");
                 if log.id == deployment_id {
                     let msg = serde_json::to_string(&log).expect("to convert log item to json");
                     let sent = s.send(ws::Message::Text(msg)).await;

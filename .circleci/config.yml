@@ -411,6 +411,7 @@ jobs:
             DD_API_KEY=$DD_API_KEY \
             HONEYCOMB_API_KEY=${<< parameters.honeycomb-api-key >>} \
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
+            LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
             make deploy
       - when:
           condition: << parameters.production >>
@@ -740,6 +741,7 @@ workflows:
           mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
           honeycomb-api-key: DEV_HONEYCOMB_API_KEY
           deploys-api-key: DEV_DEPLOYS_API_KEY
+          logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
           requires:
             - build-and-push-unstable
   release:
@@ -819,6 +821,7 @@ workflows:
           mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
           honeycomb-api-key: PROD_HONEYCOMB_API_KEY
           deploys-api-key: PROD_DEPLOYS_API_KEY
+          logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
           ssh-config-script: production-ssh-config.sh
           ssh-host: shuttle.prod.internal

@@ -6,7 +6,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-async-broadcast = "0.5.1"
 async-trait = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }

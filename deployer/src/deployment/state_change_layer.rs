@@ -28,9 +28,7 @@ use shuttle_common::{
     LogItem,
 };
 
-use crate::persistence::{State, StateRecorder};
-
-use super::DeploymentState;
+use crate::persistence::{DeploymentState, State, StateRecorder};
 
 /// Tracing subscriber layer which keeps track of a deployment's state.
 /// Logs a special line when entering a span tagged with deployment id and state.
@@ -138,8 +136,7 @@ mod tests {
     };
 
     use crate::{
-        deployment::DeploymentState,
-        persistence::{DeploymentUpdater, ResourceManager, StateRecorder},
+        persistence::{DeploymentState, DeploymentUpdater, ResourceManager, StateRecorder},
         RuntimeManager,
     };
     use async_trait::async_trait;

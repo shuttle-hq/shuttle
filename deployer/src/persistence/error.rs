@@ -1,4 +1,4 @@
-use crate::deployment::DeploymentState;
+use super::DeploymentState;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

@@ -37,9 +37,10 @@ use self::resource::Resource;
 pub use self::resource::{ResourceManager, Type as ResourceType};
 pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
+pub use self::state::DeploymentState;
 pub use self::state::{State, StateRecorder};
 pub use self::user::User;
-use crate::deployment::{ActiveDeploymentsGetter, DeploymentState};
+use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");

@@ -12,7 +12,7 @@ use sqlx::{
 };
 use thiserror::Error;
 use tokio::sync::broadcast::{self, Sender};
-use tracing::error;
+use tracing::{error, trace};
 
 use tonic::transport::Uri;
 
@@ -62,21 +62,31 @@ impl Postgres {
         let pool_spawn = pool.clone();
 
         tokio::spawn(async move {
-            while let Ok(logs) = rx.recv().await {
-                let mut builder = QueryBuilder::new(
-                    "INSERT INTO logs (deployment_id, shuttle_service_name, data, tx_timestamp)",
-                );
-                builder.push_values(logs, |mut b, log| {
-                    b.push_bind(log.deployment_id)
-                        .push_bind(log.shuttle_service_name)
-                        .push_bind(log.data)
-                        .push_bind(log.tx_timestamp);
-                });
-                let query = builder.build();
+            loop {
+                match rx.recv().await {
+                    Ok(logs) => {
+                        let mut builder = QueryBuilder::new(
+                            "INSERT INTO logs (deployment_id, shuttle_service_name, data, tx_timestamp)",
+                        );
 
-                if let Err(error) = query.execute(&pool_spawn).await {
-                    error!(error = %error, "failed to insert logs");
-                };
+                        trace!("inserting {} logs into the database", logs.len());
+
+                        builder.push_values(logs, |mut b, log| {
+                            b.push_bind(log.deployment_id)
+                                .push_bind(log.shuttle_service_name)
+                                .push_bind(log.data)
+                                .push_bind(log.tx_timestamp);
+                        });
+                        let query = builder.build();
+
+                        if let Err(error) = query.execute(&pool_spawn).await {
+                            error!(error = %error, "failed to insert logs");
+                        };
+                    }
+                    Err(err) => {
+                        error!(error = %err, "failed to receive message");
+                    }
+                }
             }
         });
 

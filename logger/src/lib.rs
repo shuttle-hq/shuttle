@@ -121,21 +121,28 @@ where
                 };
             }
 
-            while let Ok(logs) = logs_rx.recv().await {
-                for log in logs {
-                    if log.deployment_id == deployment_id
-                        && log.tx_timestamp.timestamp() >= last.seconds
-                        && log.tx_timestamp.timestamp_nanos() > last.nanos.into()
-                    {
-                        if let Err(error) = tx.send(Ok(log.into())).await {
-                            error!(
-                                error = &error as &dyn std::error::Error,
-                                "error sending new log"
-                            );
+            loop {
+                match logs_rx.recv().await {
+                    Ok(logs) => {
+                        for log in logs {
+                            if log.deployment_id == deployment_id
+                                && log.tx_timestamp.timestamp() >= last.seconds
+                                && log.tx_timestamp.timestamp_nanos() > last.nanos.into()
+                            {
+                                if let Err(error) = tx.send(Ok(log.into())).await {
+                                    error!(
+                                        error = &error as &dyn std::error::Error,
+                                        "error sending new log"
+                                    );
 
-                            // Receiver closed so end stream spawn
-                            return;
-                        };
+                                    // Receiver closed so end stream spawn
+                                    return;
+                                };
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        error!(error = %err, "failed to receive logs in logs stream");
                     }
                 }
             }

@@ -9,7 +9,7 @@ use chrono::Utc;
 use prost_types::Timestamp;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
-    log::Backend,
+    log::{Backend, LOGLINE_MAX_CHARS},
 };
 use shuttle_proto::{
     logger::{logger_client::LoggerClient, Batcher, LogItem, LogLine},
@@ -150,7 +150,14 @@ impl RuntimeManager {
         let mut reader = BufReader::new(stdout).lines();
         let logger_client = self.logger_client.clone();
         tokio::spawn(async move {
+            let limiter = leaky_bucket::RateLimiter::builder()
+                .max(LOGLINE_MAX_CHARS * 100)
+                .initial(LOGLINE_MAX_CHARS * 10)
+                .refill(LOGLINE_MAX_CHARS)
+                .interval(tokio::time::Duration::from_millis(10))
+                .build();
             while let Some(line) = reader.next_line().await.unwrap() {
+                limiter.acquire(line.len()).await;
                 let utc = Utc::now();
                 let log = LogItem {
                     deployment_id: id.to_string(),

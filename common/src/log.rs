@@ -54,7 +54,7 @@ pub struct LogItem {
     pub line: String,
 }
 
-const LOGLINE_MAX_CHARS: usize = 2048;
+pub const LOGLINE_MAX_CHARS: usize = 2048;
 const TRUNC_MSG: &str = "... (truncated)";
 
 impl LogItem {

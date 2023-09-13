@@ -3298,6 +3298,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "leaky-bucket"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8eb491abd89e9794d50f93c8db610a29509123e3fbbc9c8c67a528e9391cd853"
+dependencies = [
+ "parking_lot 0.12.1",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "leb128"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5596,6 +5607,7 @@ dependencies = [
  "home",
  "hyper",
  "hyper-reverse-proxy",
+ "leaky-bucket",
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",

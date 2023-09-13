@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
@@ -60,6 +60,16 @@ impl Postgres {
 
         let (tx, mut rx): (Sender<Vec<Log>>, _) = broadcast::channel(1000);
         let pool_spawn = pool.clone();
+
+        let interval_tx = tx.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(10));
+
+            loop {
+                interval.tick().await;
+                debug!("logger broadcast channel queue size: {}", interval_tx.len());
+            }
+        });
 
         tokio::spawn(async move {
             loop {

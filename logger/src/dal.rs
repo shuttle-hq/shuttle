@@ -84,7 +84,7 @@ impl Postgres {
                         };
                     }
                     Err(err) => {
-                        error!(error = %err, "failed to receive message");
+                        error!(error = %err, "failed to receive message in database receiver");
                     }
                 }
             }

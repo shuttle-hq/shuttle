@@ -124,10 +124,14 @@ where
             loop {
                 match logs_rx.recv().await {
                     Ok(logs) => {
-                        if !logs_rx.is_empty() {
-                            debug!("stream receiver queue size {}", logs_rx.len())
+                        if !logs
+                            .first()
+                            .is_some_and(|l| l.deployment_id == deployment_id)
+                        {
+                            continue;
                         }
-
+                        // only if logs was for this recipient, to reduce spam.
+                        debug!("stream receiver queue size {}", logs_rx.len());
                         for log in logs {
                             if log.deployment_id == deployment_id
                                 && log.tx_timestamp.timestamp() >= last.seconds

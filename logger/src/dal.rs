@@ -12,7 +12,7 @@ use sqlx::{
 };
 use thiserror::Error;
 use tokio::sync::broadcast::{self, Sender};
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use tonic::transport::Uri;
 
@@ -67,7 +67,7 @@ impl Postgres {
 
             loop {
                 interval.tick().await;
-                debug!("logger broadcast channel queue size: {}", interval_tx.len());
+                info!("broadcast channel queue size: {}", interval_tx.len());
             }
         });
 
@@ -80,6 +80,7 @@ impl Postgres {
                         );
 
                         debug!("inserting {} logs into the database", logs.len());
+                        debug!("database receiver queue size {}", rx.len());
 
                         builder.push_values(logs, |mut b, log| {
                             b.push_bind(log.deployment_id)

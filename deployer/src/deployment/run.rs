@@ -185,7 +185,11 @@ fn stopped_cleanup(_id: &Uuid) {
 }
 
 #[instrument(name = "Cleaning up crashed deployment", skip(id, runtime_manager), fields(deployment_id = %id, state = %State::Crashed))]
-fn crashed_cleanup(id: &Uuid, runtime_manager: Arc<Mutex<RuntimeManager>>, error: impl std::error::Error + 'static) {
+fn crashed_cleanup(
+    id: &Uuid,
+    runtime_manager: Arc<Mutex<RuntimeManager>>,
+    error: impl std::error::Error + 'static,
+) {
     error!(
         error = &error as &dyn std::error::Error,
         "{}", DEPLOYER_END_MSG_CRASHED
@@ -293,7 +297,8 @@ impl Built {
             resource_manager,
             runtime_client.clone(),
             self.claim,
-        ).await?;
+        )
+        .await?;
 
         let handler = tokio::spawn(run(
             self.id,

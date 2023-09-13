@@ -14,20 +14,27 @@ use shuttle_common::{
     storage_manager::ArtifactsStorageManager,
 };
 
-use shuttle_proto::runtime::{
-    runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
-    SubscribeStopResponse,
+use shuttle_proto::{
+    resource_recorder::record_request,
+    runtime::{
+        runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
+        SubscribeStopResponse,
+    },
 };
-use tokio::sync::Mutex;
+use tokio::{
+    sync::Mutex,
+    task::{JoinHandle, JoinSet},
+};
 use tonic::{transport::Channel, Code};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use ulid::Ulid;
 use uuid::Uuid;
 
 use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
-    persistence::{DeploymentUpdater, Resource, ResourcePersistence, SecretGetter},
+    persistence::{DeploymentUpdater, ResourcePersistence, SecretGetter},
     RuntimeManager,
 };
 
@@ -44,79 +51,98 @@ pub async fn task(
 ) {
     info!("Run task started");
 
-    while let Some(built) = recv.recv().await {
-        let id = built.id;
+    let mut set = JoinSet::new();
 
-        info!("Built deployment at the front of run queue: {id}");
+    loop {
+        tokio::select! {
+            Some(built) = recv.recv() => {
+                let id = built.id;
 
-        let deployment_updater = deployment_updater.clone();
-        let secret_getter = secret_getter.clone();
-        let resource_manager = resource_manager.clone();
-        let storage_manager = storage_manager.clone();
+                info!("Built deployment at the front of run queue: {id}");
 
-        let old_deployments_killer = kill_old_deployments(
-            built.service_id,
-            id,
-            active_deployment_getter.clone(),
-            runtime_manager.clone(),
-        );
-        let cleanup = move |response: Option<SubscribeStopResponse>| {
-            debug!(response = ?response,  "stop client response: ");
+                let deployment_updater = deployment_updater.clone();
+                let secret_getter = secret_getter.clone();
+                let resource_manager = resource_manager.clone();
+                let storage_manager = storage_manager.clone();
 
-            if let Some(response) = response {
-                match StopReason::from_i32(response.reason).unwrap_or_default() {
-                    StopReason::Request => stopped_cleanup(&id),
-                    StopReason::End => completed_cleanup(&id),
-                    StopReason::Crash => crashed_cleanup(
-                        &id,
-                        Error::Run(anyhow::Error::msg(response.message).into()),
-                    ),
-                }
-            } else {
-                crashed_cleanup(
-                    &id,
-                    Error::Runtime(anyhow::anyhow!(
-                        "stop subscribe channel stopped unexpectedly"
-                    )),
-                )
-            }
-        };
-        let runtime_manager = runtime_manager.clone();
+                let old_deployments_killer = kill_old_deployments(
+                    built.service_id,
+                    id,
+                    active_deployment_getter.clone(),
+                    runtime_manager.clone(),
+                );
+                let cleanup = move |response: Option<SubscribeStopResponse>| {
+                    debug!(response = ?response,  "stop client response: ");
 
-        tokio::spawn(async move {
-            let parent_cx = global::get_text_map_propagator(|propagator| {
-                propagator.extract(&built.tracing_context)
-            });
-            let span = debug_span!("runner");
-            span.set_parent(parent_cx);
+                    if let Some(response) = response {
+                        match StopReason::from_i32(response.reason).unwrap_or_default() {
+                            StopReason::Request => stopped_cleanup(&id),
+                            StopReason::End => completed_cleanup(&id),
+                            StopReason::Crash => crashed_cleanup(
+                                &id,
+                                Error::Run(anyhow::Error::msg(response.message).into()),
+                            ),
+                        }
+                    } else {
+                        crashed_cleanup(
+                            &id,
+                            Error::Runtime(anyhow::anyhow!(
+                                "stop subscribe channel stopped unexpectedly"
+                            )),
+                        )
+                    }
+                };
+                let runtime_manager = runtime_manager.clone();
 
-            async move {
-                if let Err(err) = built
-                    .handle(
-                        storage_manager,
-                        secret_getter,
-                        resource_manager,
-                        runtime_manager,
-                        deployment_updater,
-                        old_deployments_killer,
-                        cleanup,
-                    )
+                set.spawn(async move {
+                    let parent_cx = global::get_text_map_propagator(|propagator| {
+                        propagator.extract(&built.tracing_context)
+                    });
+                    let span = debug_span!("runner");
+                    span.set_parent(parent_cx);
+
+                    async move {
+                        match built
+                            .handle(
+                                storage_manager,
+                                secret_getter,
+                                resource_manager,
+                                runtime_manager,
+                                deployment_updater,
+                                old_deployments_killer,
+                                cleanup,
+                            )
+                            .await
+                        {
+                            Ok(handle) => handle
+                                .await
+                                .expect("the call to run in built.handle to be done"),
+                            Err(err) => start_crashed_cleanup(&id, err),
+                        };
+
+                        info!("deployment done");
+                    }
+                    .instrument(span)
                     .await
-                {
-                    start_crashed_cleanup(&id, err)
+                });
+            },
+            Some(res) = set.join_next() => {
+                match res {
+                    Ok(_) => (),
+                    Err(err) => {
+                        error!(error = %err, "an error happened while joining a deployment run task")
+                    }
                 }
 
-                info!("deployment done");
             }
-            .instrument(span)
-            .await
-        });
+            else => break
+        }
     }
 }
 
 #[instrument(skip(active_deployment_getter, runtime_manager))]
 async fn kill_old_deployments(
-    service_id: Uuid,
+    service_id: Ulid,
     deployment_id: Uuid,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
@@ -173,18 +199,19 @@ pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
 
     async fn get_active_deployments(
         &self,
-        service_id: &Uuid,
+        service_id: &Ulid,
     ) -> std::result::Result<Vec<Uuid>, Self::Err>;
 }
 
 #[derive(Clone, Debug)]
 pub struct Built {
-    pub id: Uuid,
+    pub id: Uuid, // Deployment id
     pub service_name: String,
-    pub service_id: Uuid,
+    pub service_id: Ulid,
+    pub project_id: Ulid,
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
-    pub claim: Option<Claim>,
+    pub claim: Claim,
 }
 
 impl Built {
@@ -199,7 +226,7 @@ impl Built {
         deployment_updater: impl DeploymentUpdater,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
-    ) -> Result<()> {
+    ) -> Result<JoinHandle<()>> {
         // For alpha this is the path to the users project with an embedded runtime.
         // For shuttle-next this is the path to the compiled .wasm file, which will be
         // used in the load request.
@@ -231,7 +258,6 @@ impl Built {
             .map_err(Error::Runtime)?;
 
         kill_old_deployments.await?;
-
         // Execute loaded service
         load(
             self.service_name.clone(),
@@ -244,7 +270,7 @@ impl Built {
         )
         .await?;
 
-        tokio::spawn(run(
+        let handler = tokio::spawn(run(
             self.id,
             self.service_name,
             runtime_client,
@@ -253,18 +279,18 @@ impl Built {
             cleanup,
         ));
 
-        Ok(())
+        Ok(handler)
     }
 }
 
 async fn load(
     service_name: String,
-    service_id: Uuid,
+    service_id: Ulid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
-    resource_manager: impl ResourcePersistence,
+    mut resource_manager: impl ResourcePersistence,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
-    claim: Option<Claim>,
+    claim: Claim,
 ) -> Result<()> {
     info!(
         "loading project from: {}",
@@ -275,19 +301,15 @@ async fn load(
             .unwrap_or_default()
     );
 
-    // Get resources from cache when a claim is not set (ie an idl project is started)
-    let resources = if claim.is_none() {
-        resource_manager
-            .get_resources(&service_id)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(resource::Response::from)
-            .map(resource::Response::into_bytes)
-            .collect()
-    } else {
-        Default::default()
-    };
+    let resources = resource_manager
+        .get_resources(&service_id, claim.clone())
+        .await
+        .unwrap()
+        .resources
+        .into_iter()
+        .map(resource::Response::from)
+        .map(resource::Response::into_bytes)
+        .collect();
 
     let secrets = secret_getter
         .get_secrets(&service_id)
@@ -307,13 +329,12 @@ async fn load(
         secrets,
     });
 
-    if let Some(claim) = claim {
-        load_request.extensions_mut().insert(claim);
-    }
+    load_request.extensions_mut().insert(claim.clone());
 
-    debug!("loading service");
+    debug!(service_name = %service_name, "loading service");
     let response = runtime_client.load(load_request).await;
 
+    debug!(service_name = %service_name, "service loaded");
     match response {
         Ok(response) => {
             let response = response.into_inner();
@@ -321,20 +342,22 @@ async fn load(
             // Make sure to not log the entire response, the resources field is likely to contain
             // secrets.
             info!(success = %response.success, "loading response");
-
-            for resource in response.resources {
-                let resource: resource::Response = serde_json::from_slice(&resource).unwrap();
-                let resource = Resource {
-                    service_id,
-                    r#type: resource.r#type.into(),
-                    config: resource.config,
-                    data: resource.data,
-                };
-                resource_manager
-                    .insert_resource(&resource)
-                    .await
-                    .expect("to add resource to persistence");
-            }
+            let resources = response
+                .resources
+                .into_iter()
+                .map(|res| {
+                    let resource: resource::Response = serde_json::from_slice(&res).unwrap();
+                    record_request::Resource {
+                        r#type: resource.r#type.to_string(),
+                        config: resource.config.to_string().into_bytes(),
+                        data: resource.data.to_string().into_bytes(),
+                    }
+                })
+                .collect();
+            resource_manager
+                .insert_resources(resources, &service_id, claim.clone())
+                .await
+                .expect("to add resource to persistence");
 
             if response.success {
                 Ok(())
@@ -416,12 +439,13 @@ mod tests {
 
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
-    use shuttle_common::storage_manager::ArtifactsStorageManager;
+    use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
-            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
         },
+        resource_recorder::{ResourcesResponse, ResultResponse},
         runtime::{StopReason, SubscribeStopResponse},
     };
     use tempfile::Builder;
@@ -430,12 +454,11 @@ mod tests {
         time::sleep,
     };
     use tonic::transport::Server;
+    use ulid::Ulid;
     use uuid::Uuid;
 
     use crate::{
-        persistence::{
-            DeploymentUpdater, Resource, ResourcePersistence, ResourceType, Secret, SecretGetter,
-        },
+        persistence::{DeploymentUpdater, ResourcePersistence, Secret, SecretGetter},
         RuntimeManager,
     };
 
@@ -470,6 +493,13 @@ mod tests {
             _request: tonic::Request<DatabaseRequest>,
         ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
             panic!("no run tests should delete a db");
+        }
+
+        async fn health_check(
+            &self,
+            _request: tonic::Request<Ping>,
+        ) -> Result<tonic::Response<Pong>, tonic::Status> {
+            panic!("no run tests should do a health check");
         }
     }
 
@@ -506,7 +536,7 @@ mod tests {
     impl SecretGetter for StubSecretGetter {
         type Err = std::io::Error;
 
-        async fn get_secrets(&self, _service_id: &Uuid) -> Result<Vec<Secret>, Self::Err> {
+        async fn get_secrets(&self, _service_id: &Ulid) -> Result<Vec<Secret>, Self::Err> {
             Ok(Default::default())
         }
     }
@@ -518,18 +548,27 @@ mod tests {
     impl ResourcePersistence for StubResourcePersistence {
         type Err = std::io::Error;
 
-        async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
-            Ok(())
+        async fn insert_resources(
+            &mut self,
+            _resources: Vec<shuttle_proto::resource_recorder::record_request::Resource>,
+            _service_id: &ulid::Ulid,
+            _claim: Claim,
+        ) -> Result<ResultResponse, Self::Err> {
+            Ok(ResultResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+            })
         }
-        async fn get_resource(
-            &self,
-            _service_id: &Uuid,
-            _type: ResourceType,
-        ) -> Result<Option<Resource>, Self::Err> {
-            Ok(None)
-        }
-        async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
-            Ok(Vec::new())
+        async fn get_resources(
+            &mut self,
+            _service_id: &ulid::Ulid,
+            _claim: Claim,
+        ) -> Result<ResourcesResponse, Self::Err> {
+            Ok(ResourcesResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+                resources: Vec::new(),
+            })
         }
         async fn delete_resource(
             &self,
@@ -732,10 +771,11 @@ mod tests {
             Built {
                 id,
                 service_name: crate_name.to_string(),
-                service_id: Uuid::new_v4(),
+                service_id: Ulid::new(),
+                project_id: Ulid::new(),
                 tracing_context: Default::default(),
                 is_next: false,
-                claim: None,
+                claim: Default::default(),
             },
             storage_manager,
         )

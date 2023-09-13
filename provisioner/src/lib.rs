@@ -1,17 +1,23 @@
+use std::ops::Deref;
 use std::time::Duration;
 
 pub use args::Args;
 use aws_config::timeout;
-use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::SdkError, Client};
+use aws_sdk_rds::{
+    error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
+    Client,
+};
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
-use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::backends::auth::VerifyClaim;
+use shuttle_common::claims::Scope;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
+use shuttle_proto::provisioner::{Ping, Pong};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};
@@ -168,7 +174,13 @@ impl MyProvisioner {
 
             // Make sure database can't see other databases or other users
             // For #557
-            let options = self.pool.connect_options().clone().database(&database_name);
+            let options = self
+                .pool
+                .connect_options()
+                .deref()
+                .clone()
+                .database(&database_name);
+
             let mut conn = options.connect().await?;
 
             let stmts = vec![
@@ -255,9 +267,17 @@ impl MyProvisioner {
             Ok(_) => {
                 wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
             }
-            Err(SdkError::ServiceError { err, .. }) => {
-                if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
+            Err(SdkError::ServiceError(err)) => {
+                if let ModifyDBInstanceError::DbInstanceNotFoundFault(_) = err.err() {
                     debug!("creating new AWS RDS {instance_name}");
+
+                    // The engine display impl is used for both the engine and the database name,
+                    // but for mysql the engine name is an invalid database name.
+                    let db_name = if let aws_rds::Engine::Mysql(_) = engine {
+                        "msql".to_string()
+                    } else {
+                        engine.to_string()
+                    };
 
                     client
                         .create_db_instance()
@@ -269,7 +289,7 @@ impl MyProvisioner {
                         .allocated_storage(20)
                         .backup_retention_period(0) // Disable backups
                         .publicly_accessible(true)
-                        .db_name(engine.to_string())
+                        .db_name(db_name)
                         .set_db_subnet_group_name(Some(RDS_SUBNET_GROUP.to_string()))
                         .send()
                         .await?
@@ -280,7 +300,7 @@ impl MyProvisioner {
                 } else {
                     return Err(Error::Plain(format!(
                         "got unexpected error from AWS RDS service: {}",
-                        err
+                        err.err()
                     )));
                 }
             }
@@ -392,10 +412,11 @@ impl MyProvisioner {
             .await;
 
         // Did we get an error that wasn't "db instance not found"
-        if let Err(SdkError::ServiceError { err, .. }) = delete_result {
-            if !err.is_db_instance_not_found_fault() {
+        if let Err(SdkError::ServiceError(err)) = delete_result {
+            if !err.err().is_db_instance_not_found_fault() {
                 return Err(Error::Plain(format!(
-                    "got unexpected error from AWS RDS service: {err}"
+                    "got unexpected error from AWS RDS service: {}",
+                    err.err()
                 )));
             }
         }
@@ -411,7 +432,7 @@ impl Provisioner for MyProvisioner {
         &self,
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseResponse>, Status> {
-        verify_claim(&request)?;
+        request.verify(Scope::ResourcesWrite)?;
 
         let request = request.into_inner();
         let db_type = request.db_type.unwrap();
@@ -435,7 +456,7 @@ impl Provisioner for MyProvisioner {
         &self,
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
-        verify_claim(&request)?;
+        request.verify(Scope::ResourcesWrite)?;
 
         let request = request.into_inner();
         let db_type = request.db_type.unwrap();
@@ -453,21 +474,10 @@ impl Provisioner for MyProvisioner {
 
         Ok(Response::new(reply))
     }
-}
 
-/// Verify the claim on the request has the correct scope to call this service
-fn verify_claim<B>(request: &Request<B>) -> Result<(), Status> {
-    let claim = request
-        .extensions()
-        .get::<Claim>()
-        .ok_or_else(|| Status::internal("could not get claim"))?;
-
-    if claim.scopes.contains(&Scope::ResourcesWrite) {
-        Ok(())
-    } else {
-        Err(Status::permission_denied(
-            "does not have resource allocation scope",
-        ))
+    #[tracing::instrument(skip(self))]
+    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        Ok(Response::new(Pong {}))
     }
 }
 

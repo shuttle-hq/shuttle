@@ -2,8 +2,6 @@ use std::error::Error as StdError;
 use std::io;
 use thiserror::Error;
 
-use cargo::util::errors::CliError;
-
 use crate::deployment::gateway_client;
 
 #[derive(Error, Debug)]
@@ -39,11 +37,11 @@ pub enum Error {
 #[derive(Error, Debug)]
 pub enum TestError {
     #[error("The deployment's tests failed.")]
-    Failed(CliError),
+    Failed,
     #[error("Failed to setup tests run: {0}")]
     Setup(#[from] anyhow::Error),
     #[error("Failed to run tests: {0}")]
-    Run(#[from] tokio::task::JoinError),
+    Run(#[from] std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

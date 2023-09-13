@@ -5,7 +5,7 @@ use serde_json::Value;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-use crate::{database, split_first_component};
+use crate::database;
 
 /// Common type to hold all the information we need for a generic resource
 #[derive(Clone, Deserialize, Serialize)]
@@ -35,6 +35,31 @@ pub enum Type {
     Secrets,
     StaticFolder,
     Persist,
+    Turso,
+    Metadata,
+    Custom,
+}
+
+impl FromStr for Type {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((prefix, rest)) = s.split_once("::") {
+            match prefix {
+                "database" => Ok(Self::Database(database::Type::from_str(rest)?)),
+                _ => Err(format!("'{prefix}' is an unknown resource type")),
+            }
+        } else {
+            match s {
+                "secrets" => Ok(Self::Secrets),
+                "static_folder" => Ok(Self::StaticFolder),
+                "metadata" => Ok(Self::Metadata),
+                "persist" => Ok(Self::Persist),
+                "turso" => Ok(Self::Turso),
+                _ => Err(format!("'{s}' is an unknown resource type")),
+            }
+        }
+    }
 }
 
 impl Response {
@@ -58,22 +83,9 @@ impl Display for Type {
             Type::Secrets => write!(f, "secrets"),
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
-        }
-    }
-}
-
-impl FromStr for Type {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match split_first_component(s) {
-            ("database", Some(db_type)) => {
-                Ok(Type::Database(db_type.parse().map_err(|_| ParseError)?))
-            }
-            ("secrets", None) => Ok(Type::Secrets),
-            ("static_folder", None) => Ok(Type::StaticFolder),
-            ("persist", None) => Ok(Type::Persist),
-            _ => Err(ParseError),
+            Type::Turso => write!(f, "turso"),
+            Type::Metadata => write!(f, "metadata"),
+            Type::Custom => write!(f, "custom"),
         }
     }
 }

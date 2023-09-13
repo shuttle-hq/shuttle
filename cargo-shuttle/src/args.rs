@@ -5,22 +5,19 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use cargo_metadata::MetadataCommand;
 use clap::{
     builder::{OsStringValueParser, PossibleValue, TypedValueParser},
     Parser, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::{models::project::IDLE_MINUTES, project::ProjectName, resource};
+use shuttle_common::{models::project::DEFAULT_IDLE_MINUTES, project::ProjectName, resource};
 use uuid::Uuid;
-
-use crate::init::Template;
 
 #[derive(Parser)]
 #[command(
     version,
-    about,
     // Cargo passes in the subcommand name to the invoked executable. Use a
     // hidden, optional positional argument to deal with it.
     arg(clap::Arg::new("dummy")
@@ -28,7 +25,7 @@ use crate::init::Template;
         .required(false)
         .hide(true))
 )]
-pub struct Args {
+pub struct ShuttleArgs {
     #[command(flatten)]
     pub project_args: ProjectArgs,
     /// Run this command against the API at the supplied URL
@@ -43,7 +40,7 @@ pub struct Args {
 #[derive(Parser, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
-    #[arg(global = true, long, default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
+    #[arg(global = true, long, alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
     #[arg(global = true, long)]
@@ -85,22 +82,26 @@ impl ProjectArgs {
     }
 }
 
+/// A cargo command for the Shuttle platform (https://www.shuttle.rs/)
+///
+/// See the CLI docs (https://docs.shuttle.rs/introduction/shuttle-commands)
+/// for more information.
 #[derive(Parser)]
 pub enum Command {
-    /// Create a new shuttle project
+    /// Create a new Shuttle project
     Init(InitArgs),
-    /// Run a shuttle service locally
+    /// Run a Shuttle service locally
     Run(RunArgs),
-    /// Deploy a shuttle service
+    /// Deploy a Shuttle service
     Deploy(DeployArgs),
-    /// Manage deployments of a shuttle service
+    /// Manage deployments of a Shuttle service
     #[command(subcommand)]
     Deployment(DeploymentCommand),
-    /// View the status of a shuttle service
+    /// View the status of a Shuttle service
     Status,
-    /// Stop this shuttle service
+    /// Stop this Shuttle service
     Stop,
-    /// View the logs of a deployment in this shuttle service
+    /// View the logs of a deployment in this Shuttle service
     Logs {
         /// Deployment ID to get logs for. Defaults to currently running deployment
         id: Option<Uuid>,
@@ -111,20 +112,20 @@ pub enum Command {
         /// Follow log output
         follow: bool,
     },
-    /// List or manage projects on shuttle
+    /// List or manage projects on Shuttle
     #[command(subcommand)]
     Project(ProjectCommand),
-    /// Manage resources of a shuttle project
+    /// Manage resources of a Shuttle project
     #[command(subcommand)]
     Resource(ResourceCommand),
-    /// Manage secrets for this shuttle service
+    /// Manage secrets for this Shuttle service
     Secrets,
-    /// Remove cargo build artifacts in the shuttle environment
+    /// Remove cargo build artifacts in the Shuttle environment
     Clean,
-    /// Login to the shuttle platform
+    /// Login to the Shuttle platform
     Login(LoginArgs),
-    /// Log out of the shuttle platform
-    Logout,
+    /// Log out of the Shuttle platform
+    Logout(LogoutArgs),
     /// Generate shell completions
     Generate {
         /// Which shell
@@ -141,7 +142,15 @@ pub enum Command {
 #[derive(Parser)]
 pub enum DeploymentCommand {
     /// List all the deployments for a service
-    List,
+    List {
+        #[arg(long, default_value = "1")]
+        /// Which page to display
+        page: u32,
+
+        #[arg(long, default_value = "10")]
+        /// How many projects per page to display
+        limit: u32,
+    },
     /// View status of a deployment
     Status {
         /// ID of deployment to get status for
@@ -162,25 +171,33 @@ pub enum ResourceCommand {
 
 #[derive(Parser)]
 pub enum ProjectCommand {
-    /// Create an environment for this project on shuttle
+    /// Create an environment for this project on Shuttle
     Start(ProjectStartArgs),
-    /// Check the status of this project's environment on shuttle
+    /// Check the status of this project's environment on Shuttle
     Status {
         #[arg(short, long)]
         /// Follow status of project command
         follow: bool,
     },
-    /// Destroy this project's environment (container) on shuttle
+    /// Destroy this project's environment (container) on Shuttle
     Stop,
-    /// Destroy and create an environment for this project on shuttle
+    /// Destroy and create an environment for this project on Shuttle
     Restart(ProjectStartArgs),
     /// List all projects belonging to the calling account
-    List,
+    List {
+        #[arg(long, default_value = "1")]
+        /// Which page to display
+        page: u32,
+
+        #[arg(long, default_value = "10")]
+        /// How many projects per page to display
+        limit: u32,
+    },
 }
 
 #[derive(Parser, Debug)]
 pub struct ProjectStartArgs {
-    #[arg(long, default_value_t = IDLE_MINUTES)]
+    #[arg(long, default_value_t = DEFAULT_IDLE_MINUTES)]
     /// How long to wait before putting the project in an idle state due to inactivity.
     /// 0 means the project will never idle
     pub idle_minutes: u64,
@@ -188,18 +205,24 @@ pub struct ProjectStartArgs {
 
 #[derive(Parser, Clone, Debug)]
 pub struct LoginArgs {
-    /// API key for the shuttle platform
+    /// API key for the Shuttle platform
     #[arg(long)]
     pub api_key: Option<String>,
 }
 
+#[derive(Parser, Clone, Debug)]
+pub struct LogoutArgs {
+    /// Reset the API key before logging out
+    #[arg(long)]
+    pub reset_api_key: bool,
+}
 #[derive(Parser)]
 pub struct DeployArgs {
     /// Allow deployment with uncommited files
-    #[arg(long)]
+    #[arg(long, alias = "ad")]
     pub allow_dirty: bool,
     /// Don't run pre-deploy tests
-    #[arg(long)]
+    #[arg(long, alias = "nt")]
     pub no_test: bool,
 }
 
@@ -211,78 +234,109 @@ pub struct RunArgs {
     /// Use 0.0.0.0 instead of localhost (for usage with local external devices)
     #[arg(long)]
     pub external: bool,
-    /// Use release mode for building the project.
+    /// Use release mode for building the project
     #[arg(long, short = 'r')]
     pub release: bool,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 pub struct InitArgs {
-    /// Initialize the project with a template
-    #[arg(long, short, value_enum)]
+    /// Clone a starter template from Shuttle's official examples
+    #[arg(long, short, value_enum, conflicts_with_all = &["from", "subfolder"])]
     pub template: Option<InitTemplateArg>,
-    /// Whether to create the environment for this project on shuttle
+    /// Clone a template from a git repository or local path using cargo-generate
+    #[arg(long)]
+    pub from: Option<String>,
+    /// Path to the template in the source (used with --from)
+    #[arg(long, requires = "from")]
+    pub subfolder: Option<String>,
+
+    /// Path where to place the new Shuttle project
+    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
+    pub path: PathBuf,
+
+    /// Whether to create the environment for this project on Shuttle
     #[arg(long)]
     pub create_env: bool,
     #[command(flatten)]
     pub login_args: LoginArgs,
-    /// Path to initialize a new shuttle project
-    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
-    pub path: PathBuf,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone, Debug, strum::Display, strum::EnumIter)]
+#[strum(serialize_all = "kebab-case")]
 pub enum InitTemplateArg {
-    /// Initialize with actix-web framework
+    /// Actix Web framework
     ActixWeb,
-    /// Initialize with axum framework
+    /// Axum web framework
     Axum,
-    /// Initialize with poem framework
+    /// Poem web framework
     Poem,
-    /// Initialize with poise framework
+    /// Poise Discord framework
     Poise,
-    /// Initialize with rocket framework
+    /// Rocket web framework
     Rocket,
-    /// Initialize with salvo framework
+    /// Salvo web framework
     Salvo,
-    /// Initialize with serenity framework
+    /// Serenity Discord framework
     Serenity,
-    /// Initialize with tide framework
-    Tide,
-    /// Initialize with thruster framework
+    /// Thruster web framework
     Thruster,
-    /// Initialize with tower framework
+    /// Tide web framework
+    Tide,
+    /// Tower web framework
     Tower,
-    /// Initialize with warp framework
+    /// Warp web framework
     Warp,
-    /// Initialize with no template
+    /// No template - Custom empty service
     None,
 }
 
+pub const EXAMPLES_REPO: &str = "https://github.com/shuttle-hq/shuttle-examples";
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TemplateLocation {
+    pub auto_path: String,
+    pub subfolder: Option<String>,
+}
+
 impl InitArgs {
-    /// `None` -> No template chosen, ask for it
-    ///
-    /// `Some(Template::None)` -> Init with a blank cargo project
-    pub fn framework(&self) -> Option<Template> {
-        // Why separate enums?
-        // Future might have more options that pre-defined templates
-        self.template.as_ref().map(|t| {
-            use InitTemplateArg::*;
-            match t {
-                ActixWeb => Template::ActixWeb,
-                Axum => Template::Axum,
-                Poem => Template::Poem,
-                Poise => Template::Poise,
-                Rocket => Template::Rocket,
-                Salvo => Template::Salvo,
-                Serenity => Template::Serenity,
-                Tide => Template::Tide,
-                Thruster => Template::Thruster,
-                Tower => Template::Tower,
-                Warp => Template::Warp,
-                None => Template::None,
-            }
+    pub fn git_template(&self) -> anyhow::Result<Option<TemplateLocation>> {
+        if self.from.is_some() && self.template.is_some() {
+            bail!("Template and From args can not be set at the same time.");
+        }
+        Ok(if let Some(from) = self.from.clone() {
+            Some(TemplateLocation {
+                auto_path: from,
+                subfolder: self.subfolder.clone(),
+            })
+        } else {
+            self.template.as_ref().map(|t| t.template())
         })
+    }
+}
+
+impl InitTemplateArg {
+    pub fn template(&self) -> TemplateLocation {
+        use InitTemplateArg::*;
+        let path = match self {
+            ActixWeb => "actix-web/hello-world",
+            Axum => "axum/hello-world",
+            Poem => "poem/hello-world",
+            Poise => "poise/hello-world",
+            Rocket => "rocket/hello-world",
+            Salvo => "salvo/hello-world",
+            Serenity => "serenity/hello-world",
+            Thruster => "thruster/hello-world",
+            Tide => "tide/hello-world",
+            Tower => "tower/hello-world",
+            Warp => "warp/hello-world",
+            None => "custom-service/none",
+        };
+
+        TemplateLocation {
+            auto_path: EXAMPLES_REPO.into(),
+            subfolder: Some(path.to_string()),
+        }
     }
 }
 
@@ -312,27 +366,84 @@ mod tests {
 
     #[test]
     fn test_init_args_framework() {
+        // pre-defined template (only hello world)
+        let init_args = InitArgs {
+            template: Some(InitTemplateArg::Tower),
+            from: None,
+            subfolder: None,
+            create_env: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+        assert_eq!(
+            init_args.git_template().unwrap(),
+            Some(TemplateLocation {
+                auto_path: EXAMPLES_REPO.into(),
+                subfolder: Some("tower/hello-world".into())
+            })
+        );
+
+        // pre-defined template (multiple)
         let init_args = InitArgs {
             template: Some(InitTemplateArg::Axum),
+            from: None,
+            subfolder: None,
             create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
-        assert_eq!(init_args.framework(), Some(Template::Axum));
+        assert_eq!(
+            init_args.git_template().unwrap(),
+            Some(TemplateLocation {
+                auto_path: EXAMPLES_REPO.into(),
+                subfolder: Some("axum/hello-world".into())
+            })
+        );
+
+        // pre-defined "none" template
         let init_args = InitArgs {
             template: Some(InitTemplateArg::None),
+            from: None,
+            subfolder: None,
             create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
-        assert_eq!(init_args.framework(), Some(Template::None));
+        assert_eq!(
+            init_args.git_template().unwrap(),
+            Some(TemplateLocation {
+                auto_path: EXAMPLES_REPO.into(),
+                subfolder: Some("custom-service/none".into())
+            })
+        );
+
+        // git template with path
         let init_args = InitArgs {
             template: None,
+            from: Some("https://github.com/some/repo".into()),
+            subfolder: Some("some/path".into()),
             create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
-        assert_eq!(init_args.framework(), None);
+        assert_eq!(
+            init_args.git_template().unwrap(),
+            Some(TemplateLocation {
+                auto_path: "https://github.com/some/repo".into(),
+                subfolder: Some("some/path".into())
+            })
+        );
+
+        // No template or repo chosen
+        let init_args = InitArgs {
+            template: None,
+            from: None,
+            subfolder: None,
+            create_env: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+        assert_eq!(init_args.git_template().unwrap(), None);
     }
 
     #[test]

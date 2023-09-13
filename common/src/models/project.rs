@@ -1,3 +1,5 @@
+#[cfg(feature = "openapi")]
+use crate::ulid_type;
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, Color,
     ContentArrangement, Table,
@@ -6,24 +8,28 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use strum::EnumString;
+
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// Timeframe before a project is considered idle
-pub const IDLE_MINUTES: u64 = 30;
+pub const DEFAULT_IDLE_MINUTES: u64 = 30;
 
-/// Function to set [IDLE_MINUTES] as a serde default
-pub const fn idle_minutes() -> u64 {
-    IDLE_MINUTES
+/// Function to set [DEFAULT_IDLE_MINUTES] as a serde default
+pub const fn default_idle_minutes() -> u64 {
+    DEFAULT_IDLE_MINUTES
 }
 
 #[derive(Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::Response))]
 pub struct Response {
+    #[cfg_attr(feature = "openapi", schema(schema_with = ulid_type))]
+    pub id: String,
     pub name: String,
     #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::models::project::State))]
     pub state: State,
+    pub idle_minutes: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
@@ -184,12 +190,20 @@ pub struct AdminResponse {
     pub account_name: String,
 }
 
-pub fn get_table(projects: &Vec<Response>) -> String {
+pub fn get_table(projects: &Vec<Response>, page: u32) -> String {
     if projects.is_empty() {
-        format!(
-            "{}\n",
-            "No projects are linked to this account".yellow().bold()
-        )
+        // The page starts at 1 in the CLI.
+        if page <= 1 {
+            format!(
+                "{}\n",
+                "No projects are linked to this account".yellow().bold()
+            )
+        } else {
+            format!(
+                "{}\n",
+                "No more projects linked to this account".yellow().bold()
+            )
+        }
     } else {
         let mut table = Table::new();
         table
@@ -214,7 +228,10 @@ pub fn get_table(projects: &Vec<Response>) -> String {
             r#"
 These projects are linked to this account
 {table}
+
+{}
 "#,
+            "More projects might be available on the next page using --page.".bold()
         )
     }
 }

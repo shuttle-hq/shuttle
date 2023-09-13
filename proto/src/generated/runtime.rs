@@ -85,6 +85,8 @@ pub struct LogItem {
     pub target: ::prost::alloc::string::String,
     #[prost(bytes = "vec", tag = "8")]
     pub fields: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "9")]
+    pub state: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

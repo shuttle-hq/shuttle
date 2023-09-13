@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use comfy_table::Color;
-use crossterm::style::Stylize;
+use crossterm::style::{Color, Stylize};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
@@ -71,7 +70,10 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::NOT_FOUND,
                 "project not found. Run `cargo shuttle project start` to create a new project.",
             ),
-            ErrorKind::ProjectNotReady => (StatusCode::SERVICE_UNAVAILABLE, "project not ready"),
+            ErrorKind::ProjectNotReady => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "project not ready. Try running `cargo shuttle project restart`.",
+            ),
             ErrorKind::ProjectUnavailable => {
                 (StatusCode::BAD_GATEWAY, "project returned invalid response")
             }
@@ -132,8 +134,9 @@ impl From<StatusCode> for ApiError {
                 "we don't serve this resource"
             },
             StatusCode::BAD_GATEWAY => {
-                warn!("got a bad response from a deployer");
-                "response from deployer is invalid. Please create a ticket to report this"
+                warn!("got a bad response from the gateway");
+                // Gateway's default response when a request handler panicks is a 502 with some HTML.
+                "response from gateway is invalid. Please create a ticket to report this"
             },
             _ => {
                 error!(%code, "got an unexpected status code");

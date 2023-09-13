@@ -1,4 +1,4 @@
-use crate::helpers::app;
+use crate::helpers::{self, app};
 use axum::body::Body;
 use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
 use serde_json::{self, Value};
@@ -102,4 +102,28 @@ async fn get_user() {
     let persisted_user: Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(user, persisted_user);
+}
+
+#[tokio::test]
+async fn test_reset_key() {
+    let app = app().await;
+
+    // Reset API key without API key.
+    let request = Request::builder()
+        .uri("/users/reset-api-key")
+        .method("PUT")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.send_request(request).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // Reset API key with API key.
+    let request = Request::builder()
+        .uri("/users/reset-api-key")
+        .method("PUT")
+        .header(AUTHORIZATION, format!("Bearer {}", helpers::ADMIN_KEY))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.send_request(request).await;
+    assert_eq!(response.status(), StatusCode::OK);
 }

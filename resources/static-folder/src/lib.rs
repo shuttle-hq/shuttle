@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use fs_extra::dir::{copy, CopyOptions};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    error::{CustomError, Error as ShuttleError},
+    error::{CustomError, Error as ShuttleServiceError},
     Factory, ResourceBuilder, Type,
 };
 use std::path::{Path, PathBuf};
@@ -16,8 +16,18 @@ pub struct StaticFolder<'a> {
 
 pub enum Error {
     AbsolutePath,
-    TransversedUp,
+    TraversedUp,
     Copy(fs_extra::error::Error),
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Paths {
+    // Build storage, where service files including assets are downloaded into
+    input: PathBuf,
+    // The service storage, used at runtime
+    output: PathBuf,
+    // The relative path against both the service storage
+    assets: PathBuf,
 }
 
 impl<'a> StaticFolder<'a> {
@@ -34,7 +44,7 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
 
     type Config = &'a str;
 
-    type Output = PathBuf;
+    type Output = Paths;
 
     fn new() -> Self {
         Self { folder: "static" }
@@ -63,7 +73,7 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
         trace!(input_directory = ?input_dir, "got input directory");
 
         match dunce::canonicalize(input_dir.clone()) {
-            Ok(canonical_path) if canonical_path != input_dir => return Err(Error::TransversedUp)?,
+            Ok(canonical_path) if canonical_path != input_dir => return Err(Error::TraversedUp)?,
             Ok(_) => {
                 // The path did not change to outside the crate's build folder
             }
@@ -80,13 +90,25 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
 
         trace!(output_directory = ?output_dir, "got output directory");
 
-        if output_dir.join(self.folder) == input_dir {
-            return Ok(output_dir.join(self.folder));
+        Ok(Paths {
+            input: input_dir,
+            output: output_dir,
+            assets: folder.to_path_buf(),
+        })
+    }
+
+    async fn build(build_data: &Self::Output) -> Result<PathBuf, shuttle_service::Error> {
+        let input_dir = &build_data.input;
+        let output_dir = build_data.output.join(&build_data.assets);
+
+        if &output_dir == input_dir {
+            return Ok(output_dir);
         }
 
         let copy_options = CopyOptions::new().overwrite(true);
-        match copy(&input_dir, &output_dir, &copy_options) {
-            Ok(_) => Ok(output_dir.join(self.folder)),
+
+        match copy(input_dir, &build_data.output, &copy_options) {
+            Ok(_) => Ok(output_dir),
             Err(error) => {
                 error!(
                     error = &error as &dyn std::error::Error,
@@ -97,23 +119,17 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
             }
         }
     }
-
-    async fn build(build_data: &Self::Output) -> Result<PathBuf, shuttle_service::Error> {
-        Ok(build_data.clone())
-    }
 }
 
 impl From<Error> for shuttle_service::Error {
     fn from(error: Error) -> Self {
         let msg = match error {
             Error::AbsolutePath => "Cannot use an absolute path for a static folder".to_string(),
-            Error::TransversedUp => {
-                "Cannot transverse out of crate for a static folder".to_string()
-            }
+            Error::TraversedUp => "Cannot traverse out of crate for a static folder".to_string(),
             Error::Copy(error) => format!("Cannot copy static folder: {}", error),
         };
 
-        ShuttleError::Custom(CustomError::msg(msg))
+        ShuttleServiceError::Custom(CustomError::msg(msg))
     }
 }
 
@@ -145,7 +161,10 @@ mod tests {
     impl MockFactory {
         fn new() -> Self {
             Self {
-                temp_dir: Builder::new().prefix("static_folder").tempdir().unwrap(),
+                temp_dir: Builder::new()
+                    .prefix("static_folder")
+                    .tempdir_in("./")
+                    .unwrap(),
             }
         }
 
@@ -218,10 +237,12 @@ mod tests {
         // Call plugin
         let static_folder = StaticFolder::new();
 
-        let actual_folder = static_folder.output(&mut factory).await.unwrap();
+        let paths = static_folder.output(&mut factory).await.unwrap();
+        // Should copy the files.
+        StaticFolder::build(&paths).await.unwrap();
 
         assert_eq!(
-            actual_folder,
+            paths.output.join(paths.assets),
             factory.storage_path().join("static"),
             "expect path to the static folder"
         );
@@ -247,8 +268,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[should_panic(expected = "Cannot transverse out of crate for a static folder")]
-    async fn cannot_transverse_up() {
+    #[should_panic(expected = "Cannot traverse out of crate for a static folder")]
+    async fn cannot_traverse_up() {
         let mut factory = MockFactory::new();
 
         let password_file_path = factory.escape_path().join("passwd");

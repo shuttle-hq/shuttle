@@ -1,10 +1,7 @@
-SRC_CRATES=deployer common codegen cargo-shuttle proto provisioner service
-SRC=$(shell find $(SRC_CRATES) -name "*.rs" -type f -not -path "**/target/*")
+COMMIT_SHA?=$(shell git rev-parse --short HEAD)
 
-COMMIT_SHA ?= $(shell git rev-parse --short HEAD)
-
-BUILDX_CACHE?=/tmp/cache/buildx
 ifeq ($(CI),true)
+BUILDX_CACHE?=/tmp/cache/buildx
 CACHE_FLAGS=--cache-to type=local,dest=$(BUILDX_CACHE),mode=max --cache-from type=local,src=$(BUILDX_CACHE)
 endif
 
@@ -22,14 +19,18 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 
 # the rust version used by our containers, and as an override for our deployers
 # ensuring all user crates are compiled with the same rustc toolchain
-RUSTUP_TOOLCHAIN=1.68.0
+RUSTUP_TOOLCHAIN=1.72.0
 
-TAG?=$(shell git describe --tags)
+TAG?=$(shell git describe --tags --abbrev=0)
 BACKEND_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
 PROVISIONER_TAG?=$(TAG)
+RESOURCE_RECORDER_TAG?=$(TAG)
 
 DOCKER_BUILD?=docker buildx build
+ifeq ($(CI),true)
+DOCKER_BUILD+= --progress plain
+endif
 
 DOCKER_COMPOSE=$(shell which docker-compose)
 ifeq ($(DOCKER_COMPOSE),)
@@ -42,6 +43,7 @@ POSTGRES_PASSWORD?=postgres
 MONGO_INITDB_ROOT_USERNAME?=mongodb
 MONGO_INITDB_ROOT_PASSWORD?=password
 
+
 ifeq ($(PROD),true)
 DOCKER_COMPOSE_FILES=docker-compose.yml
 STACK=shuttle-prod
@@ -52,7 +54,7 @@ DD_ENV=production
 # make sure we only ever go to production with `--tls=enable`
 USE_TLS=enable
 CARGO_PROFILE=release
-RUST_LOG=debug
+RUST_LOG?=shuttle=debug,info
 else
 DOCKER_COMPOSE_FILES=docker-compose.yml docker-compose.dev.yml
 STACK?=shuttle-dev
@@ -61,14 +63,16 @@ DB_FQDN=db.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 DD_ENV=unstable
 USE_TLS?=disable
-CARGO_PROFILE=debug
-RUST_LOG?=shuttle=trace,debug
+# default for local run
+CARGO_PROFILE?=debug
+RUST_LOG?=shuttle=debug,info
+DEV_SUFFIX=-dev
+DEPLOYS_API_KEY?=gateway4deployes
 endif
 
-ARCH=$(shell uname -m)
-PROTOC_ARCH=$(ARCH)
-ifeq ($(ARCH), arm64)
-PROTOC_ARCH=aarch_64
+ifeq ($(CI),true)
+# default for staging
+CARGO_PROFILE=release
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres
@@ -82,8 +86,14 @@ OTEL_TAG?=0.72.0
 
 USE_PANAMAX?=enable
 ifeq ($(USE_PANAMAX), enable)
-PREPARE_ARGS+=-p 
+PREPARE_ARGS+=-p
 COMPOSE_PROFILES+=panamax
+endif
+
+ifeq ($(SHUTTLE_DETACH), disable)
+SHUTTLE_DETACH=
+else
+SHUTTLE_DETACH=--detach
 endif
 
 DOCKER_COMPOSE_ENV=\
@@ -91,6 +101,7 @@ DOCKER_COMPOSE_ENV=\
 	BACKEND_TAG=$(BACKEND_TAG)\
 	DEPLOYER_TAG=$(DEPLOYER_TAG)\
 	PROVISIONER_TAG=$(PROVISIONER_TAG)\
+	RESOURCE_RECORDER_TAG=$(RESOURCE_RECORDER_TAG)\
 	POSTGRES_TAG=${POSTGRES_TAG}\
 	PANAMAX_TAG=${PANAMAX_TAG}\
 	OTEL_TAG=${OTEL_TAG}\
@@ -98,6 +109,7 @@ DOCKER_COMPOSE_ENV=\
 	DB_FQDN=$(DB_FQDN)\
 	POSTGRES_PASSWORD=$(POSTGRES_PASSWORD)\
 	RUST_LOG=$(RUST_LOG)\
+	DEPLOYS_API_KEY=$(DEPLOYS_API_KEY)\
 	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY)\
 	MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME)\
 	MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD)\
@@ -106,13 +118,15 @@ DOCKER_COMPOSE_ENV=\
 	COMPOSE_PROFILES=$(COMPOSE_PROFILES)\
 	DOCKER_SOCK=$(DOCKER_SOCK)
 
-.PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
+.PHONY: images clean src up down deploy shuttle-% shuttle-images postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
 
 clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgres panamax otel
+images: shuttle-images postgres panamax otel
+
+shuttle-images: shuttle-auth shuttle-deployer shuttle-gateway shuttle-provisioner shuttle-resource-recorder
 
 postgres:
 	$(DOCKER_BUILD) \
@@ -153,16 +167,23 @@ docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 # to start panamax locally run this command with an override for the profiles:
 # `make COMPOSE_PROFILES=panamax up`
 up: $(DOCKER_COMPOSE_FILES)
-	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) up -d
+	$(DOCKER_COMPOSE_ENV) \
+	$(DOCKER_COMPOSE) \
+	$(addprefix -f ,$(DOCKER_COMPOSE_FILES)) \
+	-p $(STACK) \
+	up \
+	$(SHUTTLE_DETACH)
 
 down: $(DOCKER_COMPOSE_FILES)
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) down
 
-shuttle-%: ${SRC} Cargo.lock
+shuttle-%:
 	$(DOCKER_BUILD) \
-		--build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
+		--target $(@)$(DEV_SUFFIX) \
 		--build-arg folder=$(*) \
+		--build-arg crate=$(@) \
 		--build-arg prepare_args=$(PREPARE_ARGS) \
+		--build-arg PROD=$(PROD) \
 		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
 		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
@@ -211,7 +232,7 @@ bump-final:
 	echo "make publish"
 
 # Deploy all our example using the command set in shuttle-command
-# Usage: make deploy-example shuttle-command="cargo shuttle" -j 2
+# Usage: make deploy-examples shuttle-command="cargo shuttle" -j 2
 deploy-examples: deploy-examples/rocket/hello-world \
 	deploy-examples/rocket/persist \
 	deploy-examples/rocket/postgres \
@@ -256,8 +277,9 @@ publish: publish-resources publish-cargo-shuttle
 
 publish-resources: publish-resources/aws-rds \
 	publish-resources/persist \
-	publish-resources/shared-db
-	publish-resources/static-folder
+	publish-resources/shared-db \
+	publish-resources/static-folder \
+	publish-resources/metadata
 
 publish-cargo-shuttle: publish-resources/secrets
 	cd cargo-shuttle; cargo publish

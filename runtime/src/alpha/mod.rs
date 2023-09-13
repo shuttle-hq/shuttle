@@ -10,7 +10,6 @@ use std::{
 
 use anyhow::Context;
 use async_trait::async_trait;
-use clap::Parser;
 use core::future::Future;
 use shuttle_common::{
     backends::{
@@ -31,10 +30,10 @@ use shuttle_proto::{
     },
 };
 use shuttle_service::{Environment, Factory, Service, ServiceName};
-use tokio::sync::{broadcast, oneshot};
 use tokio::sync::{
-    broadcast::Sender,
+    broadcast::{self, Sender},
     mpsc::{self, UnboundedReceiver, UnboundedSender},
+    oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
@@ -44,14 +43,30 @@ use tonic::{
 use tower::ServiceBuilder;
 use tracing::{error, info, trace, warn};
 
-use crate::{provisioner_factory::ProvisionerFactory, Logger, ResourceTracker};
+use crate::{print_version, provisioner_factory::ProvisionerFactory, Logger, ResourceTracker};
 
 use self::args::Args;
 
 mod args;
 
 pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
-    let args = Args::parse();
+    // `--version` overrides any other arguments.
+    if std::env::args().any(|arg| &arg == "--version") {
+        print_version();
+        return;
+    }
+
+    let args = match Args::parse() {
+        Ok(args) => args,
+        Err(e) => {
+            error!("{e}");
+            let help_str = "[HINT]: Run shuttle with `cargo shuttle run`";
+            let wrapper_str = "-".repeat(help_str.len());
+            println!("{wrapper_str}\n{help_str}\n{wrapper_str}");
+            return;
+        }
+    };
+
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
     let provisioner_address = args.provisioner_address;
@@ -85,7 +100,10 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         server_builder.add_service(svc)
     };
 
-    router.serve(addr).await.unwrap();
+    match router.serve(addr).await {
+        Ok(_) => {}
+        Err(e) => panic!("Error while serving address {addr}: {e}"),
+    };
 }
 
 pub struct Alpha<L, S> {
@@ -177,7 +195,7 @@ where
         } = request.into_inner();
         trace!(path, "loading alpha project");
 
-        let secrets = BTreeMap::from_iter(secrets.into_iter());
+        let secrets = BTreeMap::from_iter(secrets);
 
         let channel = self
             .provisioner_address
@@ -247,10 +265,13 @@ where
 
                 if error.is_panic() {
                     let panic = error.into_panic();
-                    let msg = panic
-                        .downcast_ref::<&str>()
-                        .map(|x| x.to_string())
-                        .unwrap_or_else(|| "<no panic message>".to_string());
+                    let msg = match panic.downcast_ref::<String>() {
+                        Some(msg) => msg.to_string(),
+                        None => match panic.downcast_ref::<&str>() {
+                            Some(msg) => msg.to_string(),
+                            None => "<no panic message>".to_string(),
+                        },
+                    };
 
                     error!(error = msg, "loading service panicked");
 
@@ -300,8 +321,6 @@ where
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        let _logs_tx = self.logs_tx.clone();
-
         trace!(%service_address, "starting");
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
@@ -320,25 +339,31 @@ where
                     match res {
                         Ok(_) => {
                             info!("service stopped all on its own");
-                            stopped_tx.send((StopReason::End, String::new())).unwrap();
+                            let _ = stopped_tx
+                                .send((StopReason::End, String::new()))
+                                .map_err(|e| error!("{e}"));
                         },
                         Err(error) => {
                             if error.is_panic() {
                                 let panic = error.into_panic();
-                                let msg = panic.downcast_ref::<&str>()
-                                    .map(|x| x.to_string())
-                                    .unwrap_or_else(|| "<no panic message>".to_string());
+                                let msg = match panic.downcast_ref::<String>() {
+                                    Some(msg) => msg.to_string(),
+                                    None => match panic.downcast_ref::<&str>() {
+                                        Some(msg) => msg.to_string(),
+                                        None => "<no panic message>".to_string(),
+                                    },
+                                };
 
                                 error!(error = msg, "service panicked");
 
-                                stopped_tx
+                                let _ = stopped_tx
                                     .send((StopReason::Crash, msg))
-                                    .unwrap();
+                                    .map_err(|e| error!("{e}"));
                             } else {
                                 error!(%error, "service crashed");
-                                stopped_tx
+                                let _ = stopped_tx
                                     .send((StopReason::Crash, error.to_string()))
-                                    .unwrap();
+                                    .map_err(|e| error!("{e}"));
                             }
                         },
                     }
@@ -346,7 +371,9 @@ where
                 message = kill_rx => {
                     match message {
                         Ok(_) => {
-                            stopped_tx.send((StopReason::Request, String::new())).unwrap();
+                            let _ = stopped_tx
+                                .send((StopReason::Request, String::new()))
+                                .map_err(|e| error!("{e}"));
                         }
                         Err(_) => trace!("the sender dropped")
                     };

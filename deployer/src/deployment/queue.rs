@@ -5,29 +5,28 @@ use crate::error::{Error, Result, TestError};
 use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
 use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
 
-use cargo::util::interning::InternedString;
 use cargo_metadata::Message;
 use chrono::Utc;
 use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
 use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_workspace, get_config, BuiltService};
+use shuttle_service::builder::{build_workspace, BuiltService};
+use tokio::task::JoinSet;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use ulid::Ulid;
 use uuid::Uuid;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::fs::remove_file;
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use cargo::core::compiler::{CompileMode, MessageFormat};
-use cargo::core::Workspace;
-use cargo::ops::{self, CompileOptions, TestOptions};
 use flate2::read::GzDecoder;
 use tar::Archive;
 use tokio::fs;
@@ -43,58 +42,71 @@ pub async fn task(
 ) {
     info!("Queue task started");
 
-    while let Some(queued) = recv.recv().await {
-        let id = queued.id;
+    let mut tasks = JoinSet::new();
 
-        info!("Queued deployment at the front of the queue: {id}");
+    loop {
+        tokio::select! {
+            Some(queued) = recv.recv() => {
+                let id = queued.id;
 
-        let deployment_updater = deployment_updater.clone();
-        let run_send_cloned = run_send.clone();
-        let log_recorder = log_recorder.clone();
-        let secret_recorder = secret_recorder.clone();
-        let storage_manager = storage_manager.clone();
-        let queue_client = queue_client.clone();
+                info!("Queued deployment at the front of the queue: {id}");
 
-        tokio::spawn(async move {
-            let parent_cx = global::get_text_map_propagator(|propagator| {
-                propagator.extract(&queued.tracing_context)
-            });
-            let span = debug_span!("builder");
-            span.set_parent(parent_cx);
+                let deployment_updater = deployment_updater.clone();
+                let run_send_cloned = run_send.clone();
+                let log_recorder = log_recorder.clone();
+                let secret_recorder = secret_recorder.clone();
+                let storage_manager = storage_manager.clone();
+                let queue_client = queue_client.clone();
 
-            async move {
-                match timeout(
-                    Duration::from_secs(60 * 3), // Timeout after 3 minutes if the build queue hangs or it takes too long for a slot to become available
-                    wait_for_queue(queue_client.clone(), id),
-                )
-                .await
-                {
-                    Ok(_) => {}
-                    Err(err) => return build_failed(&id, err),
-                }
+                tasks.spawn(async move {
+                    let parent_cx = global::get_text_map_propagator(|propagator| {
+                        propagator.extract(&queued.tracing_context)
+                    });
+                    let span = debug_span!("builder");
+                    span.set_parent(parent_cx);
 
-                match queued
-                    .handle(
-                        storage_manager,
-                        deployment_updater,
-                        log_recorder,
-                        secret_recorder,
-                    )
+                    async move {
+                        match timeout(
+                            Duration::from_secs(60 * 3), // Timeout after 3 minutes if the build queue hangs or it takes too long for a slot to become available
+                            wait_for_queue(queue_client.clone(), id),
+                        )
+                        .await
+                        {
+                            Ok(_) => {}
+                            Err(err) => return build_failed(&id, err),
+                        }
+
+                        match queued
+                            .handle(
+                                storage_manager,
+                                deployment_updater,
+                                log_recorder,
+                                secret_recorder,
+                            )
+                            .await
+                        {
+                            Ok(built) => {
+                                remove_from_queue(queue_client, id).await;
+                                promote_to_run(built, run_send_cloned).await
+                            }
+                            Err(err) => {
+                                remove_from_queue(queue_client, id).await;
+                                build_failed(&id, err)
+                            }
+                        }
+                    }
+                    .instrument(span)
                     .await
-                {
-                    Ok(built) => {
-                        remove_from_queue(queue_client, id).await;
-                        promote_to_run(built, run_send_cloned).await
-                    }
-                    Err(err) => {
-                        remove_from_queue(queue_client, id).await;
-                        build_failed(&id, err)
-                    }
+                });
+            },
+            Some(res) = tasks.join_next() => {
+                match res {
+                    Ok(_) => (),
+                    Err(err) => error!(error = %err, "an error happened while joining a builder task"),
                 }
             }
-            .instrument(span)
-            .await
-        });
+            else => break
+        }
     }
 }
 
@@ -150,11 +162,12 @@ async fn promote_to_run(mut built: Built, run_send: RunSender) {
 pub struct Queued {
     pub id: Uuid,
     pub service_name: String,
-    pub service_id: Uuid,
+    pub service_id: Ulid,
+    pub project_id: Ulid,
     pub data: Vec<u8>,
     pub will_run_tests: bool,
     pub tracing_context: HashMap<String, String>,
-    pub claim: Option<Claim>,
+    pub claim: Claim,
 }
 
 impl Queued {
@@ -212,10 +225,10 @@ impl Queued {
         let project_path = project_path.canonicalize()?;
 
         // Currently returns the first found shuttle service in a given workspace.
-        let runtime = build_deployment(&project_path, tx.clone()).await?;
+        let built_service = build_deployment(&project_path, tx.clone()).await?;
 
         // Get the Secrets.toml from the shuttle service in the workspace.
-        let secrets = get_secrets(&runtime.working_directory).await?;
+        let secrets = get_secrets(&built_service.working_directory).await?;
 
         // Set the secrets from the service, ignoring any Secrets.toml if it is in the root of the workspace.
         // TODO: refactor this when we support starting multiple services. Do we want to set secrets in the
@@ -233,9 +246,14 @@ impl Queued {
 
         info!("Moving built executable");
 
-        store_executable(&storage_manager, runtime.executable_path.clone(), &self.id).await?;
+        store_executable(
+            &storage_manager,
+            built_service.executable_path.clone(),
+            &self.id,
+        )
+        .await?;
 
-        let is_next = runtime.is_wasm;
+        let is_next = built_service.is_wasm;
 
         deployment_updater
             .set_is_next(&id, is_next)
@@ -246,6 +264,7 @@ impl Queued {
             id: self.id,
             service_name: self.service_name,
             service_id: self.service_id,
+            project_id: self.project_id,
             tracing_context: Default::default(),
             is_next,
             claim: self.claim,
@@ -286,7 +305,7 @@ async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
 #[instrument(skip(secrets, service_id, secret_recorder))]
 async fn set_secrets(
     secrets: BTreeMap<String, String>,
-    service_id: &Uuid,
+    service_id: &Ulid,
     secret_recorder: impl SecretRecorder,
 ) -> Result<()> {
     for (key, value) in secrets.into_iter() {
@@ -325,9 +344,11 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 
     for entry in archive.entries()? {
         let mut entry = entry?;
-        let path: PathBuf = entry.path()?.components().skip(1).collect();
+        let name = entry.path()?;
+        let path: PathBuf = name.components().skip(1).collect();
         let dst: PathBuf = dest.as_ref().join(path);
         std::fs::create_dir_all(dst.parent().unwrap())?;
+        trace!("Unpacking {:?} to {:?}", name, dst);
         entry.unpack(dst)?;
     }
 
@@ -339,7 +360,7 @@ async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<BuiltService> {
-    let runtimes = build_workspace(project_path, true, tx)
+    let runtimes = build_workspace(project_path, true, tx, true)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 
@@ -370,36 +391,29 @@ async fn run_pre_deploy_tests(
         }
     });
 
-    let config = get_config(write)?;
-    let manifest_path = project_path.join("Cargo.toml");
+    let mut cmd = Command::new("cargo")
+        .arg("test")
+        .arg("--release")
+        .arg("--jobs=4")
+        .arg("--message-format=json")
+        .current_dir(project_path)
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(TestError::Run)?;
 
-    let ws = Workspace::new(&manifest_path, &config)?;
+    let stdout = cmd.stdout.take().unwrap();
+    let stdout_reader = BufReader::new(stdout);
+    for line in stdout_reader.lines().flatten() {
+        if let Err(error) = write.send(format!("{}\n", line.trim_end_matches('\n'))) {
+            error!("failed to send to pipe: {error}");
+        }
+    }
 
-    let mut compile_opts = CompileOptions::new(&config, CompileMode::Test)?;
-
-    compile_opts.build_config.message_format = MessageFormat::Json {
-        render_diagnostics: false,
-        short: false,
-        ansi: false,
-    };
-
-    // We set the tests to build with the release profile since deployments compile
-    // with the release profile by default. This means crates don't need to be
-    // recompiled in debug mode for the tests, reducing memory usage during deployment.
-    compile_opts.build_config.requested_profile = InternedString::new("release");
-
-    // Build tests with a maximum of 4 workers.
-    compile_opts.build_config.jobs = 4;
-
-    compile_opts.spec = ops::Packages::All;
-
-    let opts = TestOptions {
-        compile_opts,
-        no_run: false,
-        no_fail_fast: false,
-    };
-
-    ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
+    if cmd.wait().map_err(TestError::Run)?.success() {
+        Ok(())
+    } else {
+        Err(TestError::Failed)
+    }
 }
 
 /// This will store the path to the executable for each runtime, which will be the users project with
@@ -541,7 +555,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         let failure_project_path = root.join("tests/resources/tests-fail");
         assert!(matches!(
             super::run_pre_deploy_tests(&failure_project_path, tx.clone()).await,
-            Err(TestError::Failed(_))
+            Err(TestError::Failed)
         ));
 
         let pass_project_path = root.join("tests/resources/tests-pass");

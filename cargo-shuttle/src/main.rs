@@ -1,12 +1,12 @@
 use anyhow::Result;
-use cargo_shuttle::{Args, CommandOutcome, Shuttle};
+use cargo_shuttle::{CommandOutcome, Shuttle, ShuttleArgs};
 use clap::Parser;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let result = Shuttle::new()?.run(Args::parse()).await;
+    let result = Shuttle::new()?.run(ShuttleArgs::parse()).await;
 
     if matches!(result, Ok(CommandOutcome::DeploymentFailure)) {
         // Deployment failure results in a shell error exit code being returned (this allows

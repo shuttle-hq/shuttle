@@ -1,37 +1,33 @@
-use std::path::PathBuf;
+use std::{fmt::Debug, path::PathBuf, str::FromStr};
 
-use clap::{Parser, ValueEnum};
 use tonic::transport::{Endpoint, Uri};
 
-#[derive(Parser, Debug)]
-#[command(version)]
-pub struct Args {
-    /// Port to start runtime on
-    #[arg(long)]
-    pub port: u16,
+use crate::args::args;
 
-    /// Address to reach provisioner at
-    #[arg(long, default_value = "http://localhost:3000")]
-    pub provisioner_address: Endpoint,
-
-    /// Type of storage manager to start
-    #[arg(long, value_enum)]
-    pub storage_manager_type: StorageManagerType,
-
-    /// Path to use for storage manager
-    #[arg(long)]
-    pub storage_manager_path: PathBuf,
-
-    /// Address to reach the authentication service at
-    #[arg(long, default_value = "http://127.0.0.1:8008")]
-    pub auth_uri: Uri,
+args! {
+    pub struct Args {
+        "--port" => pub port: u16,
+        "--provisioner-address" => #[arg(default_value = "http://localhost:3000")] pub provisioner_address: Endpoint,
+        "--storage-manager-type" => pub storage_manager_type: StorageManagerType,
+        "--storage-manager-path" => pub storage_manager_path: PathBuf,
+        "--auth-uri" => #[arg(default_value = "http://127.0.0.1:8008")] pub auth_uri: Uri,
+    }
 }
 
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(Clone, Debug)]
 pub enum StorageManagerType {
-    /// Use a deloyer artifacts directory
     Artifacts,
-
-    /// Use a local working directory
     WorkingDir,
+}
+
+impl FromStr for StorageManagerType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "artifacts" => Ok(StorageManagerType::Artifacts),
+            "working-dir" => Ok(StorageManagerType::WorkingDir),
+            _ => Err(()),
+        }
+    }
 }

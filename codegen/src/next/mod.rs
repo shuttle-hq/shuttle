@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
 use syn::{
-    parenthesized, parse::Parse, parse2, punctuated::Punctuated, token::Paren, Expr, ExprLit, File,
-    Ident, Item, ItemFn, Lit, LitStr, Token,
+    parse::Parse, punctuated::Punctuated, Expr, ExprLit, File, Ident, Item, ItemFn, Lit, LitStr,
+    Token,
 };
 
 #[derive(Debug, Eq, PartialEq)]
@@ -24,7 +24,6 @@ struct Parameter {
 #[derive(Debug, Eq, PartialEq)]
 struct Params {
     params: Punctuated<Parameter, Token![,]>,
-    paren_token: Paren,
 }
 
 impl Parse for Parameter {
@@ -39,10 +38,8 @@ impl Parse for Parameter {
 
 impl Parse for Params {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let content;
         Ok(Self {
-            paren_token: parenthesized!(content in input),
-            params: content.parse_terminated(Parameter::parse)?,
+            params: input.parse_terminated(Parameter::parse, Token![,])?,
         })
     }
 }
@@ -56,7 +53,7 @@ impl Endpoint {
         // Find the index of an attribute that is an endpoint
         for index in 0..item.attrs.len() {
             // The endpoint ident should be the last segment in the path
-            if let Some(segment) = item.attrs[index].path.segments.last() {
+            if let Some(segment) = item.attrs[index].path().segments.last() {
                 if segment.ident.to_string().as_str() == "endpoint" {
                     // TODO: we should allow multiple endpoint attributes per handler.
                     // We could refactor this to return a Vec<Endpoint> and then check
@@ -85,7 +82,7 @@ impl Endpoint {
         };
 
         // Parse the endpoint's parameters
-        let params: Params = match parse2(endpoint.tokens) {
+        let params: Params = match endpoint.parse_args() {
             Ok(params) => params,
             Err(err) => {
                 // This will error on invalid parameter syntax
@@ -95,11 +92,17 @@ impl Endpoint {
         };
 
         // We'll use the paren span for errors later
-        let paren = params.paren_token;
+        let endpoint_delim_span = &endpoint
+            .meta
+            .require_list()
+            .expect("Endpoint meta should be a list")
+            .delimiter
+            .span()
+            .join();
 
         if params.params.is_empty() {
             emit_error!(
-                paren.span,
+                endpoint_delim_span,
                 "missing endpoint arguments";
                 hint = "The endpoint takes two arguments: `endpoint(method = get, route = \"/hello\")`"
             );
@@ -175,7 +178,7 @@ impl Endpoint {
 
         if route.is_none() {
             emit_error!(
-                paren.span,
+                endpoint_delim_span,
                 "no route provided";
                 hint = "Add a route to your endpoint: `route = \"/hello\")`"
             );
@@ -184,7 +187,7 @@ impl Endpoint {
 
         if method.is_none() {
             emit_error!(
-                paren.span,
+                endpoint_delim_span,
                 "no method provided";
                 hint = "Add a method to your endpoint: `method = get`"
             );
@@ -588,11 +591,10 @@ mod tests {
 
     #[test]
     fn parse_params() {
-        let actual: Params = parse_quote![(method = get, route = "/hello")];
+        let actual: Params = parse_quote![method = get, route = "/hello"];
 
         let mut expected = Params {
             params: Default::default(),
-            paren_token: Default::default(),
         };
         expected.params.push(parse_quote!(method = get));
         expected.params.push(parse_quote!(route = "/hello"));

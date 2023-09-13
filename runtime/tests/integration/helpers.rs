@@ -10,7 +10,7 @@ use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
     },
     runtime::{self, runtime_client::RuntimeClient},
 };
@@ -39,7 +39,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
     let runtime_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), runtime_port);
 
     let (tx, _) = crossbeam_channel::unbounded();
-    let runtimes = build_workspace(Path::new(&project_path), false, tx).await?;
+    let runtimes = build_workspace(Path::new(&project_path), false, tx, false).await?;
 
     let secrets: HashMap<String, String> = Default::default();
 
@@ -104,5 +104,9 @@ impl Provisioner for DummyProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("did not expect any runtime test to delete dbs")
+    }
+
+    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        panic!("did not expect any runtime test to do a provisioner health check")
     }
 }

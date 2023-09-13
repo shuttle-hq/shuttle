@@ -5,8 +5,8 @@ mod mongo;
 #[cfg(feature = "mongodb")]
 pub use mongo::MongoDb;
 
-#[cfg(feature = "postgres")]
+#[cfg(any(feature = "postgres", feature = "postgres-rustls"))]
 mod postgres;
 
-#[cfg(feature = "postgres")]
+#[cfg(any(feature = "postgres", feature = "postgres-rustls"))]
 pub use postgres::Postgres;

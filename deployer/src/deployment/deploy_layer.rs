@@ -118,7 +118,7 @@ impl TryFrom<runtime::LogItem> for Log {
     fn try_from(log: runtime::LogItem) -> Result<Self, Self::Error> {
         Ok(Self {
             id: Default::default(),
-            state: State::Running,
+            state: State::from_str(&log.state).unwrap_or_default(),
             level: runtime::LogLevel::from_i32(log.level)
                 .unwrap_or_default()
                 .into(),
@@ -311,7 +311,7 @@ mod tests {
     };
 
     use crate::{
-        persistence::{DeploymentUpdater, Resource, ResourcePersistence, ResourceType},
+        persistence::{DeploymentUpdater, ResourcePersistence, ResourceType},
         RuntimeManager,
     };
     use async_trait::async_trait;
@@ -319,14 +319,19 @@ mod tests {
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use portpicker::pick_unused_port;
-    use shuttle_proto::provisioner::{
-        provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+    use shuttle_common::claims::Claim;
+    use shuttle_proto::{
+        provisioner::{
+            provisioner_server::{Provisioner, ProvisionerServer},
+            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+        },
+        resource_recorder::{ResourcesResponse, ResultResponse},
     };
     use tempfile::Builder;
     use tokio::{select, time::sleep};
     use tonic::transport::Server;
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+    use ulid::Ulid;
     use uuid::Uuid;
 
     use crate::{
@@ -451,6 +456,13 @@ mod tests {
         ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
             panic!("no deploy layer tests should request delete a db");
         }
+
+        async fn health_check(
+            &self,
+            _request: tonic::Request<Ping>,
+        ) -> Result<tonic::Response<Pong>, tonic::Status> {
+            panic!("no run tests should do a health check");
+        }
     }
 
     fn get_runtime_manager() -> Arc<tokio::sync::Mutex<RuntimeManager>> {
@@ -479,7 +491,7 @@ mod tests {
 
         async fn insert_secret(
             &self,
-            _service_id: &Uuid,
+            _service_id: &Ulid,
             _key: &str,
             _value: &str,
         ) -> Result<(), Self::Err> {
@@ -518,7 +530,7 @@ mod tests {
 
         async fn get_active_deployments(
             &self,
-            _service_id: &Uuid,
+            _service_id: &Ulid,
         ) -> std::result::Result<Vec<Uuid>, Self::Err> {
             Ok(vec![])
         }
@@ -551,7 +563,7 @@ mod tests {
     impl SecretGetter for StubSecretGetter {
         type Err = std::io::Error;
 
-        async fn get_secrets(&self, _service_id: &Uuid) -> Result<Vec<Secret>, Self::Err> {
+        async fn get_secrets(&self, _service_id: &Ulid) -> Result<Vec<Secret>, Self::Err> {
             Ok(Default::default())
         }
     }
@@ -559,27 +571,37 @@ mod tests {
     #[derive(Clone)]
     struct StubResourcePersistence;
 
-    #[async_trait::async_trait]
+    #[async_trait]
     impl ResourcePersistence for StubResourcePersistence {
         type Err = std::io::Error;
 
-        async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
-            Ok(())
+        async fn insert_resources(
+            &mut self,
+            _resource: Vec<shuttle_proto::resource_recorder::record_request::Resource>,
+            _service_id: &ulid::Ulid,
+            _claim: Claim,
+        ) -> Result<ResultResponse, Self::Err> {
+            Ok(ResultResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+            })
         }
-        async fn get_resource(
-            &self,
-            _service_id: &Uuid,
-            _type: ResourceType,
-        ) -> Result<Option<Resource>, Self::Err> {
-            Ok(None)
-        }
-        async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
-            Ok(Vec::new())
+        async fn get_resources(
+            &mut self,
+            _service_id: &ulid::Ulid,
+            _claim: Claim,
+        ) -> Result<ResourcesResponse, Self::Err> {
+            Ok(ResourcesResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+                resources: Vec::new(),
+            })
         }
         async fn delete_resource(
             &self,
             _service_id: &Uuid,
             _type: ResourceType,
+            _claim: Claim,
         ) -> Result<(), Self::Err> {
             Ok(())
         }
@@ -588,9 +610,14 @@ mod tests {
     async fn test_states(id: &Uuid, expected_states: Vec<StateLog>) {
         loop {
             let states = RECORDER.lock().unwrap().get_deployment_states(id);
+            if states == expected_states {
+                return;
+            }
 
-            if *states == expected_states {
-                break;
+            for (actual, expected) in states.iter().zip(&expected_states) {
+                if actual != expected {
+                    return;
+                }
             }
 
             sleep(Duration::from_millis(250)).await;
@@ -599,7 +626,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
-        let deployment_manager = get_deployment_manager().await;
+        let deployment_manager = get_deployment_manager();
 
         let queued = get_queue("sleep-async");
         let id = queued.id;
@@ -642,12 +669,8 @@ mod tests {
         // Send kill signal
         deployment_manager.kill(id).await;
 
-        sleep(Duration::from_secs(1)).await;
-
-        let states = RECORDER.lock().unwrap().get_deployment_states(&id);
-
-        assert_eq!(
-            *states,
+        let test = test_states(
+            &id,
             vec![
                 StateLog {
                     id,
@@ -673,13 +696,21 @@ mod tests {
                     id,
                     state: State::Stopped,
                 },
-            ]
+            ],
         );
+
+        select! {
+            _ = sleep(Duration::from_secs(60)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Stopped' for a valid service: {:#?}", states);
+            },
+            _ = test => {}
+        };
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_self_stop() {
-        let deployment_manager = get_deployment_manager().await;
+        let deployment_manager = get_deployment_manager();
 
         let queued = get_queue("self-stop");
         let id = queued.id;
@@ -726,7 +757,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_bind_panic() {
-        let deployment_manager = get_deployment_manager().await;
+        let deployment_manager = get_deployment_manager();
 
         let queued = get_queue("bind-panic");
         let id = queued.id;
@@ -773,7 +804,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_main_panic() {
-        let deployment_manager = get_deployment_manager().await;
+        let deployment_manager = get_deployment_manager();
 
         let queued = get_queue("main-panic");
         let id = queued.id;
@@ -816,17 +847,18 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_from_run() {
-        let deployment_manager = get_deployment_manager().await;
+        let deployment_manager = get_deployment_manager();
 
         let id = Uuid::new_v4();
         deployment_manager
             .run_push(Built {
                 id,
                 service_name: "run-test".to_string(),
-                service_id: Uuid::new_v4(),
+                service_id: Ulid::new(),
+                project_id: Ulid::new(),
                 tracing_context: Default::default(),
                 is_next: false,
-                claim: None,
+                claim: Default::default(),
             })
             .await;
 
@@ -859,18 +891,19 @@ mod tests {
 
     #[tokio::test]
     async fn scope_with_nil_id() {
-        let deployment_manager = get_deployment_manager().await;
+        let deployment_manager = get_deployment_manager();
 
         let id = Uuid::nil();
         deployment_manager
             .queue_push(Queued {
                 id,
                 service_name: "nil_id".to_string(),
-                service_id: Uuid::new_v4(),
+                service_id: Ulid::new(),
+                project_id: Ulid::new(),
                 data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
                 tracing_context: Default::default(),
-                claim: None,
+                claim: Default::default(),
             })
             .await;
 
@@ -886,7 +919,7 @@ mod tests {
         );
     }
 
-    async fn get_deployment_manager() -> DeploymentManager {
+    fn get_deployment_manager() -> DeploymentManager {
         DeploymentManager::builder()
             .build_log_recorder(RECORDER.clone())
             .secret_recorder(RECORDER.clone())
@@ -925,11 +958,12 @@ mod tests {
         Queued {
             id: Uuid::new_v4(),
             service_name: format!("deploy-layer-{name}"),
-            service_id: Uuid::new_v4(),
+            service_id: Ulid::new(),
+            project_id: Ulid::new(),
             data: bytes,
             will_run_tests: false,
             tracing_context: Default::default(),
-            claim: None,
+            claim: Default::default(),
         }
     }
 }

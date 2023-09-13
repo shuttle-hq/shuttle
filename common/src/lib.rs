@@ -22,6 +22,8 @@ pub mod wasm;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fmt::Display;
+#[cfg(feature = "openapi")]
+use utoipa::openapi::{Object, ObjectBuilder};
 
 use anyhow::bail;
 #[cfg(feature = "service")]
@@ -108,6 +110,8 @@ pub enum ParseError {
     Timestamp(#[from] prost_types::TimestampError),
     #[error("failed to parse serde: {0}")]
     Serde(#[from] serde_json::Error),
+    #[error("failed to parse state: {0}")]
+    State(String),
 }
 
 /// Holds the input for a DB resource
@@ -195,18 +199,29 @@ impl SecretStore {
     }
 }
 
-pub(crate) fn split_first_component(s: &str) -> (&str, Option<&str>) {
-    match s.split_once("::") {
-        Some((first, rest)) => (first, Some(rest)),
-        None => (s, None),
+impl IntoIterator for SecretStore {
+    type Item = (String, String);
+    type IntoIter = <BTreeMap<String, String> as IntoIterator>::IntoIter;
+    fn into_iter(self) -> Self::IntoIter {
+        self.secrets.into_iter()
     }
+}
+
+#[cfg(feature = "openapi")]
+pub fn ulid_type() -> Object {
+    ObjectBuilder::new()
+        .schema_type(utoipa::openapi::SchemaType::String)
+        .format(Some(utoipa::openapi::SchemaFormat::Custom(
+            "ulid".to_string(),
+        )))
+        .description(Some("String represention of an Ulid according to the spec found here: https://github.com/ulid/spec."))
+        .build()
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use proptest::prelude::*;
-
-    use crate::ApiKey;
 
     proptest! {
         #[test]
@@ -233,5 +248,19 @@ mod tests {
     #[should_panic(expected = "The API key should consist of only alphanumeric characters.")]
     fn non_alphanumeric_api_key() {
         ApiKey::parse("dh9z58jttoes3qv@").unwrap();
+    }
+
+    #[test]
+    fn secretstore_intoiter() {
+        let bt = BTreeMap::from([
+            ("1".to_owned(), "2".to_owned()),
+            ("3".to_owned(), "4".to_owned()),
+        ]);
+        let ss = SecretStore::new(bt);
+
+        let mut iter = ss.into_iter();
+        assert_eq!(iter.next(), Some(("1".to_owned(), "2".to_owned())));
+        assert_eq!(iter.next(), Some(("3".to_owned(), "4".to_owned())));
+        assert_eq!(iter.next(), None);
     }
 }

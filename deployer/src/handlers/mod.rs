@@ -1,39 +1,45 @@
 mod error;
 
-use axum::extract::ws::{self, WebSocket};
-use axum::extract::{Extension, Path, Query};
+use crate::deployment::{Built, DeploymentManager, Queued};
+use crate::persistence::{Deployment, Log, Persistence, SecretGetter, State};
+use async_trait::async_trait;
+use axum::extract::{
+    ws::{self, WebSocket},
+    FromRequest,
+};
+use axum::extract::{DefaultBodyLimit, Extension, Path, Query};
 use axum::handler::Handler;
 use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
 use axum::routing::{delete, get, post, Router};
-use axum::{extract::BodyStream, Json};
-use bytes::BufMut;
+use axum::Json;
+use bytes::Bytes;
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
-use futures::StreamExt;
-use hyper::Uri;
+use hyper::{Request, StatusCode, Uri};
+use serde::{de::DeserializeOwned, Deserialize};
 use shuttle_common::backends::auth::{
     AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
 };
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::models::deployment::{
+    DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
+};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::storage_manager::StorageManager;
-use shuttle_common::{request_span, resource, LogItem};
+use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
-use tracing::{debug, error, field, instrument, trace, warn};
-use utoipa::OpenApi;
-
+use tracing::{error, field, instrument, trace, warn};
+use ulid::Ulid;
+use utoipa::{IntoParams, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
-use crate::deployment::{DeploymentManager, Queued};
-use crate::persistence::{Deployment, Log, Persistence, ResourcePersistence, SecretGetter, State};
+use crate::persistence::ResourcePersistence;
 use crate::resource::ResourceManager;
-
-use std::collections::HashMap;
 
 pub use {self::error::Error, self::error::Result, self::local::set_jwt_bearer};
 
@@ -75,6 +81,14 @@ mod project;
 )]
 pub struct ApiDoc;
 
+#[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
+pub struct PaginationDetails {
+    /// Page to fetch, starting from 0.
+    pub page: Option<u32>,
+    /// Number of results per page.
+    pub limit: Option<u32>,
+}
+
 #[derive(Clone)]
 pub struct RouterBuilder {
     router: Router,
@@ -89,6 +103,7 @@ impl RouterBuilder {
         resource_manager: ResourceManager,
         proxy_fqdn: FQDN,
         project_name: ProjectName,
+        project_id: Ulid,
         auth_uri: Uri,
     ) -> Self {
         let router = Router::new()
@@ -105,7 +120,12 @@ impl RouterBuilder {
             .route(
                 "/projects/:project_name/services/:service_name",
                 get(get_service.layer(ScopedLayer::new(vec![Scope::Service])))
-                    .post(create_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate])))
+                    .post(
+                        create_service
+                            .layer(Extension(project_id))
+                            .layer(DefaultBodyLimit::max(CREATE_SERVICE_BODY_LIMIT))
+                            .layer(ScopedLayer::new(vec![Scope::ServiceCreate])),
+                    )
                     .delete(stop_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate]))),
             )
             .route(
@@ -124,7 +144,12 @@ impl RouterBuilder {
             .route(
                 "/projects/:project_name/deployments/:deployment_id",
                 get(get_deployment.layer(ScopedLayer::new(vec![Scope::Deployment])))
-                    .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
+                    .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush])))
+                    .put(
+                        start_deployment
+                            .layer(Extension(project_id))
+                            .layer(ScopedLayer::new(vec![Scope::DeploymentPush])),
+                    ),
             )
             .route(
                 "/projects/:project_name/ws/deployments/:deployment_id/logs",
@@ -279,13 +304,15 @@ pub async fn get_service(
     )
 )]
 pub async fn get_service_resources(
-    Extension(persistence): Extension<Persistence>,
+    Extension(mut persistence): Extension<Persistence>,
+    Extension(claim): Extension<Claim>,
     Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let resources = persistence
-            .get_resources(&service.id)
+            .get_resources(&service.id, claim)
             .await?
+            .resources
             .into_iter()
             .map(Into::into)
             .collect();
@@ -307,12 +334,14 @@ pub async fn get_service_resources(
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the service."),
-        ("service_name" = String, Path, description = "Name of the service.")
+        ("service_name" = String, Path, description = "Name of the service."),
+        ("resource_type" = String, Path, description = "Type of the resource.")
     )
 )]
 pub async fn delete_service_resource(
-    Extension(persistence): Extension<Persistence>,
+    Extension(mut persistence): Extension<Persistence>,
     Extension(mut resource_manager): Extension<ResourceManager>,
+    Extension(claim): Extension<Claim>,
     Path((project_name, service_name, resource_type)): Path<(String, String, String)>,
 ) -> Result<()> {
     let service = persistence
@@ -321,28 +350,24 @@ pub async fn delete_service_resource(
         .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
 
     let resource_type: shuttle_common::resource::Type =
-        resource_type
-            .parse()
-            .map_err(|e: resource::ParseError| Error::Convert {
-                from: "String".to_string(),
-                to: "ResourceType".to_string(),
-                message: e.to_string(),
-            })?;
-    // TODO: totally replace persistence::ResourceType with shuttle_common::resource::Type
-    // or implement From<&shuttle_common::resource::Type> for persistence::ResourceType
+        resource_type.parse().map_err(|e: String| Error::Convert {
+            from: "String".to_string(),
+            to: "ResourceType".to_string(),
+            message: e.to_string(),
+        })?;
+
     let persistence_resource_type = resource_type.into();
 
     persistence
-        .get_resource(&service.id, persistence_resource_type)
-        .await?
-        .ok_or_else(|| Error::NotFound("resource not found".to_string()))?;
+        .get_resource(&service.id, persistence_resource_type, claim.clone())
+        .await?;
 
     resource_manager
         .delete_resource(&project_name, &resource_type)
         .await
         .map_err(|e| Error::Custom(e.into()))?;
     persistence
-        .delete_resource(&service.id, persistence_resource_type)
+        .delete_resource(&service.id, persistence_resource_type, claim)
         .await?;
 
     Ok(())
@@ -367,39 +392,38 @@ pub async fn create_service(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     Path((project_name, service_name)): Path<(String, String)>,
-    Query(params): Query<HashMap<String, String>>,
-    mut stream: BodyStream,
+    Rmp(deployment_req): Rmp<DeploymentRequest>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     let service = persistence.get_or_create_service(&service_name).await?;
-    let id = Uuid::new_v4();
-
     let deployment = Deployment {
-        id,
+        id: Uuid::new_v4(),
         service_id: service.id,
         state: State::Queued,
         last_update: Utc::now(),
         address: None,
         is_next: false,
+        git_commit_id: deployment_req
+            .git_commit_id
+            .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
+        git_commit_msg: deployment_req
+            .git_commit_msg
+            .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
+        git_branch: deployment_req
+            .git_branch
+            .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
+        git_dirty: deployment_req.git_dirty,
     };
 
-    let mut data = Vec::new();
-    while let Some(buf) = stream.next().await {
-        let buf = buf?;
-        debug!("Received {} bytes", buf.len());
-        data.put(buf);
-    }
-    debug!("Received a total of {} bytes", data.len());
-
     persistence.insert_deployment(deployment.clone()).await?;
-
     let queued = Queued {
-        id,
+        id: deployment.id,
         service_name: service.name,
-        service_id: service.id,
-        data,
-        will_run_tests: !params.contains_key("no-test"),
+        service_id: deployment.service_id,
+        project_id: persistence.project_id(),
+        data: deployment_req.data,
+        will_run_tests: !deployment_req.no_test,
         tracing_context: Default::default(),
-        claim: Some(claim),
+        claim,
     };
 
     deployment_manager.queue_push(queued).await;
@@ -458,16 +482,20 @@ pub async fn stop_service(
         (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
-        ("project_name" = String, Path, description = "Name of the project that owns the deployments.")
+        ("project_name" = String, Path, description = "Name of the project that owns the deployments."),
+        PaginationDetails
     )
 )]
 pub async fn get_deployments(
     Extension(persistence): Extension<Persistence>,
     Path(project_name): Path<String>,
+    Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<Json<Vec<shuttle_common::models::deployment::Response>>> {
     if let Some(service) = persistence.get_service_by_name(&project_name).await? {
+        let limit = limit.unwrap_or(u32::MAX);
+        let page = page.unwrap_or(0);
         let deployments = persistence
-            .get_deployments(&service.id)
+            .get_deployments(&service.id, page * limit, limit)
             .await?
             .into_iter()
             .map(Into::into)
@@ -528,6 +556,45 @@ pub async fn delete_deployment(
         deployment_manager.kill(deployment.id).await;
 
         Ok(Json(deployment.into()))
+    } else {
+        Err(Error::NotFound("deployment not found".to_string()))
+    }
+}
+
+#[instrument(skip_all, fields(%project_name, %deployment_id))]
+#[utoipa::path(
+    put,
+    path = "/projects/{project_name}/deployments/{deployment_id}",
+    responses(
+        (status = 200, description = "Started a specific deployment.", body = shuttle_common::models::deployment::Response),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Could not find deployment to start", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
+        ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
+    )
+)]
+pub async fn start_deployment(
+    Extension(persistence): Extension<Persistence>,
+    Extension(deployment_manager): Extension<DeploymentManager>,
+    Extension(claim): Extension<Claim>,
+    Extension(project_id): Extension<Ulid>,
+    Path((project_name, deployment_id)): Path<(String, Uuid)>,
+) -> Result<()> {
+    if let Some(deployment) = persistence.get_runnable_deployment(&deployment_id).await? {
+        let built = Built {
+            id: deployment.id,
+            service_name: deployment.service_name,
+            service_id: deployment.service_id,
+            project_id,
+            tracing_context: Default::default(),
+            is_next: deployment.is_next,
+            claim,
+        };
+        deployment_manager.run_push(built).await;
+
+        Ok(())
     } else {
         Err(Error::NotFound("deployment not found".to_string()))
     }
@@ -689,11 +756,41 @@ pub async fn clean_project(
         .service_build_path(&project_name)
         .map_err(anyhow::Error::new)?;
 
-    let lines = clean_crate(&project_path, true)?;
+    let lines = clean_crate(&project_path, true).await?;
 
     Ok(Json(lines))
 }
 
 async fn get_status() -> String {
     "Ok".to_string()
+}
+
+pub struct Rmp<T>(T);
+
+#[async_trait]
+impl<S, B, T> FromRequest<S, B> for Rmp<T>
+where
+    S: Send + Sync,
+    B: Send + 'static,
+    Bytes: FromRequest<S, B>,
+    T: DeserializeOwned,
+{
+    type Rejection = StatusCode;
+
+    async fn from_request(
+        req: Request<B>,
+        state: &S,
+    ) -> std::result::Result<Self, Self::Rejection> {
+        let bytes = Bytes::from_request(req, state).await.map_err(|_| {
+            error!("failed to collect body bytes, is the body too large?");
+            StatusCode::PAYLOAD_TOO_LARGE
+        })?;
+
+        let t = rmp_serde::from_slice::<T>(&bytes).map_err(|error| {
+            error!(error = %error, "failed to deserialize request body");
+            StatusCode::BAD_REQUEST
+        })?;
+
+        Ok(Self(t))
+    }
 }

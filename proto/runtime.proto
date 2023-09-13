@@ -90,6 +90,7 @@ message LogItem {
   optional uint32 line = 6;
   string target = 7;
   bytes fields = 8;
+  string state = 9;
 }
 
 enum LogLevel {

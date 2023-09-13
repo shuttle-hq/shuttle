@@ -1,61 +1,5 @@
-use cargo_shuttle::{Args, Command, ProjectArgs, RunArgs, Shuttle};
-use portpicker::pick_unused_port;
 use reqwest::StatusCode;
-use std::{fs::canonicalize, process::exit, time::Duration};
-use tokio::time::sleep;
-
-/// creates a `cargo-shuttle` run instance with some reasonable defaults set.
-async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
-    let working_directory = canonicalize(working_directory).unwrap();
-
-    let port = pick_unused_port().unwrap();
-
-    let url = if !external {
-        format!("http://localhost:{port}")
-    } else {
-        format!("http://0.0.0.0:{port}")
-    };
-
-    let run_args = RunArgs {
-        port,
-        external,
-        release: false,
-    };
-
-    let runner = Shuttle::new().unwrap().run(Args {
-        api_url: Some("http://shuttle.invalid:80".to_string()),
-        project_args: ProjectArgs {
-            working_directory: working_directory.clone(),
-            name: None,
-        },
-        cmd: Command::Run(run_args),
-    });
-
-    let working_directory_clone = working_directory.clone();
-
-    tokio::spawn(async move {
-        sleep(Duration::from_secs(600)).await;
-
-        println!(
-            "run test for '{}' took too long. Did it fail to shutdown?",
-            working_directory_clone.display()
-        );
-        exit(1);
-    });
-
-    tokio::spawn(runner);
-
-    // Wait for service to be responsive
-    while (reqwest::Client::new().get(url.clone()).send().await).is_err() {
-        println!(
-            "waiting for '{}' to start up...",
-            working_directory.display()
-        );
-        sleep(Duration::from_millis(350)).await;
-    }
-
-    url
-}
+use shuttle_common_tests::cargo_shuttle::cargo_shuttle_run;
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
@@ -63,7 +7,7 @@ async fn rocket_hello_world() {
     let url = cargo_shuttle_run("../examples/rocket/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(url)
         .send()
         .await
         .unwrap()
@@ -127,7 +71,7 @@ async fn axum_static_files() {
     let client = reqwest::Client::new();
 
     let request_text = client
-        .get(format!("{url}/hello"))
+        .get(url.clone())
         .send()
         .await
         .unwrap()
@@ -137,26 +81,27 @@ async fn axum_static_files() {
 
     assert_eq!(request_text, "Hello, world!");
 
-    let request_text = client.get(url).send().await.unwrap().text().await.unwrap();
-
-    assert!(
-        request_text.contains("This is an example of serving static files with axum and shuttle.")
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn shuttle_next() {
-    let url = cargo_shuttle_run("../examples/next/hello-world", false).await;
-    let client = reqwest::Client::new();
-
     let request_text = client
-        .get(format!("{url}/hello"))
+        .get(format!("{url}/assets"))
         .send()
         .await
         .unwrap()
         .text()
         .await
         .unwrap();
+
+    assert!(
+        request_text.contains("This is an example of serving static files with axum and shuttle.")
+    );
+}
+
+// note: you need `rustup target add wasm32-wasi` to make this project compile
+#[tokio::test(flavor = "multi_thread")]
+async fn shuttle_next() {
+    let url = cargo_shuttle_run("../examples/next/hello-world", false).await;
+    let client = reqwest::Client::new();
+
+    let request_text = client.get(&url).send().await.unwrap().text().await.unwrap();
 
     assert_eq!(request_text, "Hello, World!");
 
@@ -236,7 +181,7 @@ async fn actix_web_hello_world() {
     let url = cargo_shuttle_run("../examples/actix-web/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(url)
         .send()
         .await
         .unwrap()
@@ -253,7 +198,7 @@ async fn axum_hello_world() {
     let url = cargo_shuttle_run("../examples/axum/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(url)
         .send()
         .await
         .unwrap()
@@ -270,7 +215,7 @@ async fn tide_hello_world() {
     let url = cargo_shuttle_run("../examples/tide/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(url)
         .send()
         .await
         .unwrap()
@@ -287,7 +232,7 @@ async fn tower_hello_world() {
     let url = cargo_shuttle_run("../examples/tower/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(url)
         .send()
         .await
         .unwrap()
@@ -304,7 +249,7 @@ async fn warp_hello_world() {
     let url = cargo_shuttle_run("../examples/warp/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(url)
         .send()
         .await
         .unwrap()
@@ -321,7 +266,7 @@ async fn poem_hello_world() {
     let url = cargo_shuttle_run("../examples/poem/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(url)
         .send()
         .await
         .unwrap()
@@ -402,7 +347,7 @@ async fn salvo_hello_world() {
     let url = cargo_shuttle_run("../examples/salvo/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(url)
         .send()
         .await
         .unwrap()
@@ -419,7 +364,7 @@ async fn thruster_hello_world() {
     let url = cargo_shuttle_run("../examples/thruster/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(url)
         .send()
         .await
         .unwrap()
@@ -435,7 +380,7 @@ async fn rocket_hello_world_with_router_ip() {
     let url = cargo_shuttle_run("../examples/rocket/hello-world", true).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(url)
         .send()
         .await
         .unwrap()

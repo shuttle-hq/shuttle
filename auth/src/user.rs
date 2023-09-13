@@ -13,7 +13,7 @@ use shuttle_common::{
     ApiKey,
 };
 use sqlx::{query, Row, SqlitePool};
-use tracing::{trace, Span};
+use tracing::{debug, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
 
@@ -22,6 +22,7 @@ pub trait UserManagement: Send + Sync {
     async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error>;
     async fn get_user(&self, name: AccountName) -> Result<User, Error>;
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
+    async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
 }
 
 #[derive(Clone)]
@@ -69,6 +70,23 @@ impl UserManagement for UserManager {
             })
             .ok_or(Error::UserNotFound)
     }
+
+    async fn reset_key(&self, name: AccountName) -> Result<(), Error> {
+        let key = ApiKey::generate();
+
+        let rows_affected = query("UPDATE users SET key = ?1 WHERE account_name = ?2")
+            .bind(&key)
+            .bind(&name)
+            .execute(&self.pool)
+            .await?
+            .rows_affected();
+
+        if rows_affected > 0 {
+            Ok(())
+        } else {
+            Err(Error::UserNotFound)
+        }
+    }
 }
 
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
@@ -106,7 +124,7 @@ where
         let user_manager: UserManagerState = UserManagerState::from_ref(state);
 
         let user = user_manager
-            .get_user_by_key(key.as_ref().clone())
+            .get_user_by_key(key.into())
             .await
             // Absorb any error into `Unauthorized`
             .map_err(|_| Error::Unauthorized)?;
@@ -128,13 +146,12 @@ impl From<User> for shuttle_common::models::user::Response {
     }
 }
 
-/// A wrapper around [ApiKey] so we can implement [FromRequestParts]
-/// for it.
+/// A wrapper around [ApiKey] so we can implement [FromRequestParts] for it.
 pub struct Key(ApiKey);
 
-impl AsRef<ApiKey> for Key {
-    fn as_ref(&self) -> &ApiKey {
-        &self.0
+impl From<Key> for ApiKey {
+    fn from(key: Key) -> Self {
+        key.0
     }
 }
 
@@ -151,7 +168,10 @@ where
             .map_err(|_| Error::KeyMissing)
             .and_then(|TypedHeader(Authorization(bearer))| {
                 let bearer = bearer.token().trim();
-                ApiKey::parse(bearer).map_err(|_| Self::Rejection::Unauthorized)
+                ApiKey::parse(bearer).map_err(|error| {
+                    debug!(error = ?error, "received a malformed api-key");
+                    Self::Rejection::Unauthorized
+                })
             })?;
 
         trace!("got bearer key");
@@ -171,6 +191,7 @@ pub enum AccountTier {
     Pro,
     Team,
     Admin,
+    Deployer,
 }
 
 impl From<AccountTier> for Vec<Scope> {
@@ -181,6 +202,12 @@ impl From<AccountTier> for Vec<Scope> {
             builder = builder.with_admin()
         }
 
+        if tier == AccountTier::Deployer {
+            builder = builder.with_deploy_rights();
+        } else {
+            builder = builder.with_basic();
+        }
+
         builder.build()
     }
 }
@@ -189,11 +216,17 @@ impl From<AccountTier> for Vec<Scope> {
 #[sqlx(transparent)]
 pub struct AccountName(String);
 
+impl From<String> for AccountName {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
 impl FromStr for AccountName {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_string()))
+        Ok(s.to_string().into())
     }
 }
 
@@ -233,6 +266,125 @@ where
             Ok(Self { user })
         } else {
             Err(Error::Forbidden)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    mod convert_tiers {
+        use shuttle_common::claims::Scope;
+
+        use crate::user::AccountTier;
+
+        #[test]
+        fn basic() {
+            let scopes: Vec<Scope> = AccountTier::Basic.into();
+
+            assert_eq!(
+                scopes,
+                vec![
+                    Scope::Deployment,
+                    Scope::DeploymentPush,
+                    Scope::Logs,
+                    Scope::Service,
+                    Scope::ServiceCreate,
+                    Scope::Project,
+                    Scope::ProjectCreate,
+                    Scope::Resources,
+                    Scope::ResourcesWrite,
+                    Scope::Secret,
+                    Scope::SecretWrite,
+                ]
+            );
+        }
+
+        #[test]
+        fn pro() {
+            let scopes: Vec<Scope> = AccountTier::Pro.into();
+
+            assert_eq!(
+                scopes,
+                vec![
+                    Scope::Deployment,
+                    Scope::DeploymentPush,
+                    Scope::Logs,
+                    Scope::Service,
+                    Scope::ServiceCreate,
+                    Scope::Project,
+                    Scope::ProjectCreate,
+                    Scope::Resources,
+                    Scope::ResourcesWrite,
+                    Scope::Secret,
+                    Scope::SecretWrite,
+                ]
+            );
+        }
+
+        #[test]
+        fn team() {
+            let scopes: Vec<Scope> = AccountTier::Team.into();
+
+            assert_eq!(
+                scopes,
+                vec![
+                    Scope::Deployment,
+                    Scope::DeploymentPush,
+                    Scope::Logs,
+                    Scope::Service,
+                    Scope::ServiceCreate,
+                    Scope::Project,
+                    Scope::ProjectCreate,
+                    Scope::Resources,
+                    Scope::ResourcesWrite,
+                    Scope::Secret,
+                    Scope::SecretWrite,
+                ]
+            );
+        }
+
+        #[test]
+        fn admin() {
+            let scopes: Vec<Scope> = AccountTier::Admin.into();
+
+            assert_eq!(
+                scopes,
+                vec![
+                    Scope::User,
+                    Scope::UserCreate,
+                    Scope::AcmeCreate,
+                    Scope::CustomDomainCreate,
+                    Scope::CustomDomainCertificateRenew,
+                    Scope::GatewayCertificateRenew,
+                    Scope::Admin,
+                    Scope::Deployment,
+                    Scope::DeploymentPush,
+                    Scope::Logs,
+                    Scope::Service,
+                    Scope::ServiceCreate,
+                    Scope::Project,
+                    Scope::ProjectCreate,
+                    Scope::Resources,
+                    Scope::ResourcesWrite,
+                    Scope::Secret,
+                    Scope::SecretWrite,
+                ]
+            );
+        }
+
+        #[test]
+        fn deployer_machine() {
+            let scopes: Vec<Scope> = AccountTier::Deployer.into();
+
+            assert_eq!(
+                scopes,
+                vec![
+                    Scope::DeploymentPush,
+                    Scope::Resources,
+                    Scope::Service,
+                    Scope::ResourcesWrite
+                ]
+            );
         }
     }
 }

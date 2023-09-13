@@ -13,6 +13,9 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bollard::Docker;
 use futures::prelude::*;
+use hyper::client::HttpConnector;
+use hyper::Client;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
@@ -29,6 +32,8 @@ pub mod service;
 pub mod task;
 pub mod tls;
 pub mod worker;
+
+static AUTH_CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 
 /// Server-side errors that do not have to do with the user runtime
 /// should be [`Error`]s.
@@ -346,6 +351,7 @@ pub mod tests {
     use shuttle_common::backends::auth::ConvertResponse;
     use shuttle_common::claims::{Claim, Scope};
     use shuttle_common::models::project;
+    use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
 
@@ -582,6 +588,11 @@ pub mod tests {
             let auth_uri: Uri = format!("http://{auth}").parse().unwrap();
 
             let auth_service = AuthService::new(auth);
+            auth_service
+                .lock()
+                .unwrap()
+                .users
+                .insert("gateway".to_string(), vec![Scope::Resources]);
 
             let prefix = format!(
                 "shuttle_test_{}_",
@@ -611,6 +622,7 @@ pub mod tests {
                     auth_uri: auth_uri.clone(),
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
+                    deploys_api_key: "gateway".to_string(),
                 },
             };
 
@@ -618,7 +630,16 @@ pub mod tests {
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
 
-            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+            let pool = SqlitePool::connect_with(
+                SqliteConnectOptions::from_str("sqlite::memory:")
+                    .unwrap()
+                    // Set the ulid0 extension for generating ULID's in migrations.
+                    // This uses the ulid0.so file in the crate root, with the
+                    // LD_LIBRARY_PATH env set in build.rs.
+                    .extension("ulid0"),
+            )
+            .await
+            .unwrap();
             MIGRATIONS.run(&pool).await.unwrap();
 
             let acme_client = AcmeClient::new();

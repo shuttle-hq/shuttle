@@ -98,6 +98,7 @@ pub mod runtime {
     use std::{
         convert::TryFrom,
         path::PathBuf,
+        str::FromStr,
         time::{Duration, SystemTime},
     };
 
@@ -106,12 +107,13 @@ pub mod runtime {
     use prost_types::Timestamp;
     use shuttle_common::{
         claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer},
+        deployment::State,
         ParseError,
     };
     use tokio::process;
     use tonic::transport::{Channel, Endpoint};
     use tower::ServiceBuilder;
-    use tracing::info;
+    use tracing::{info, trace};
 
     pub enum StorageManagerType {
         Artifacts(PathBuf),
@@ -139,7 +141,7 @@ pub mod runtime {
             Ok(Self {
                 id: Default::default(),
                 timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap_or_default())?),
-                state: shuttle_common::deployment::State::Running,
+                state: State::from_str(&log.state).unwrap_or(State::Unknown),
                 level: LogLevel::from_i32(log.level).unwrap_or_default().into(),
                 file: log.file,
                 line: log.line,
@@ -178,6 +180,9 @@ pub mod runtime {
                 line,
                 target: log.target,
                 fields: log.fields,
+                // We can safely assume the state received from shuttle-next to be running,
+                // it will not currently load any resources.
+                state: State::Running.to_string(),
             }
         }
     }
@@ -247,22 +252,39 @@ pub mod runtime {
             args
         };
 
+        trace!(
+            "Spawning runtime process {:?} {:?}",
+            runtime_executable_path,
+            args
+        );
         let runtime = process::Command::new(runtime_executable_path)
             .args(&args)
             .kill_on_drop(true)
             .spawn()
             .context("spawning runtime process")?;
 
-        // Sleep because the timeout below does not seem to work
-        // TODO: investigate why
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
         info!("connecting runtime client");
         let conn = Endpoint::new(format!("http://127.0.0.1:{port}"))
             .context("creating runtime client endpoint")?
             .connect_timeout(Duration::from_secs(5));
 
-        let channel = conn.connect().await.context("connecting runtime client")?;
+        // Wait for the spawned process to open the endpoint port.
+        // Connecting instantly does not give it enough time.
+        let channel = tokio::time::timeout(Duration::from_millis(7000), async move {
+            let mut ms = 5;
+            loop {
+                if let Ok(channel) = conn.connect().await {
+                    break channel;
+                }
+                trace!("waiting for runtime endpoint to open");
+                // exponential backoff
+                tokio::time::sleep(Duration::from_millis(ms)).await;
+                ms *= 2;
+            }
+        })
+        .await
+        .context("runtime client endpoint did not open in time")?;
+
         let channel = ServiceBuilder::new()
             .layer(ClaimLayer)
             .layer(InjectPropagationLayer)
@@ -270,5 +292,35 @@ pub mod runtime {
         let runtime_client = runtime_client::RuntimeClient::new(channel);
 
         Ok((runtime, runtime_client))
+    }
+}
+
+pub mod resource_recorder {
+    use std::str::FromStr;
+
+    include!("generated/resource_recorder.rs");
+
+    impl From<record_request::Resource> for shuttle_common::resource::Response {
+        fn from(resource: record_request::Resource) -> Self {
+            shuttle_common::resource::Response {
+                r#type: shuttle_common::resource::Type::from_str(resource.r#type.as_str())
+                    .expect("to have a valid resource string"),
+                config: serde_json::from_slice(&resource.config)
+                    .expect("to have JSON valid config"),
+                data: serde_json::from_slice(&resource.data).expect("to have JSON valid data"),
+            }
+        }
+    }
+
+    impl From<Resource> for shuttle_common::resource::Response {
+        fn from(resource: Resource) -> Self {
+            shuttle_common::resource::Response {
+                r#type: shuttle_common::resource::Type::from_str(resource.r#type.as_str())
+                    .expect("to have a valid resource string"),
+                config: serde_json::from_slice(&resource.config)
+                    .expect("to have JSON valid config"),
+                data: serde_json::from_slice(&resource.data).expect("to have JSON valid data"),
+            }
+        }
     }
 }

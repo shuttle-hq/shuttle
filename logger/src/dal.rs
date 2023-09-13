@@ -12,7 +12,7 @@ use sqlx::{
 };
 use thiserror::Error;
 use tokio::sync::broadcast::{self, Sender};
-use tracing::{error, trace};
+use tracing::{debug, error};
 
 use tonic::transport::Uri;
 
@@ -69,7 +69,7 @@ impl Postgres {
                             "INSERT INTO logs (deployment_id, shuttle_service_name, data, tx_timestamp)",
                         );
 
-                        trace!("inserting {} logs into the database", logs.len());
+                        debug!("inserting {} logs into the database", logs.len());
 
                         builder.push_values(logs, |mut b, log| {
                             b.push_bind(log.deployment_id)

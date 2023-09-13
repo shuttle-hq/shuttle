@@ -7,16 +7,77 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-/// Project names should conform to valid Host segments (or labels)
+/// Project names must conform to valid Host segments (or labels)
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).
 /// Initially we'll implement a strict subset of the IETF RFC 1123, concretely:
-/// - It does not start or end with `-` or `_`.
-/// - It does not contain any characters outside of the alphanumeric range, except for `-` or `_`.
+///
+/// - It does not start or end with `-`.
+/// - It does not contain any characters outside of the alphanumeric range, except for `-`.
 /// - It is not empty.
-/// - It does not contain profanity.
-/// - It is not a reserved word.
+/// - It is shorter than 64 characters.
+///
+/// Additionaly, while host segments are technically case-insensitive, the filesystem isn't,
+/// so we restrict project names to be lower case. We also restrict the use of profanity,
+/// as well as a list of reserved words.
 #[derive(Clone, Serialize, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "backend", derive(sqlx::Type, Hash))]
+#[cfg_attr(feature = "backend", sqlx(transparent))]
 pub struct ProjectName(String);
+
+impl ProjectName {
+    /// The rules a valid project name must follow.
+    pub const RULES: &str = "\
+    Project names must:
+    1. only contain lowercase alphanumeric characters or dashes `-`.
+    2. not start or end with a dash.
+    3. not be empty.
+    4. be shorter than 64 characters.
+    5. not contain any profanities.
+    6. not be a reserved word.\
+    ";
+
+    pub fn is_valid(label: &str) -> bool {
+        fn is_valid_char(byte: u8) -> bool {
+            matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-')
+        }
+
+        fn is_profanity_free(label: &str) -> bool {
+            let (_censored, analysis) = Censor::from_str(label).censor_and_analyze();
+            !analysis.is(Type::MODERATE_OR_HIGHER)
+        }
+
+        fn is_reserved(label: &str) -> bool {
+            static INSTANCE: OnceCell<HashSet<&str>> = OnceCell::new();
+            INSTANCE.get_or_init(|| HashSet::from(["shuttleapp", "shuttle"]));
+
+            INSTANCE
+                .get()
+                .expect("Reserved words not set")
+                .contains(label)
+        }
+
+        // Each label in a hostname can be between 1 and 63 chars.
+        let is_too_long = label.len() > 63;
+
+        !(label.bytes().any(|byte| !is_valid_char(byte))
+            || is_reserved(label)
+            || !is_profanity_free(label)
+            || is_too_long
+            || label.ends_with('-')
+            || label.starts_with('-')
+            || label.is_empty())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl AsRef<String> for ProjectName {
+    fn as_ref(&self) -> &String {
+        &self.0
+    }
+}
 
 impl<'de> Deserialize<'de> for ProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -34,60 +95,19 @@ impl std::fmt::Display for ProjectName {
     }
 }
 
-impl ProjectName {
-    pub fn is_valid(hostname: &str) -> bool {
-        fn is_valid_char(byte: u8) -> bool {
-            matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_')
-        }
-
-        fn is_profanity_free(hostname: &str) -> bool {
-            let (_censored, analysis) = Censor::from_str(hostname).censor_and_analyze();
-            !analysis.is(Type::MODERATE_OR_HIGHER)
-        }
-
-        fn is_reserved(hostname: &str) -> bool {
-            static INSTANCE: OnceCell<HashSet<&str>> = OnceCell::new();
-            INSTANCE.get_or_init(|| HashSet::from(["shuttle.rs"]));
-
-            INSTANCE
-                .get()
-                .expect("Reserved words not set")
-                .contains(hostname)
-        }
-
-        let separators = ['-', '_'];
-
-        !(hostname.bytes().any(|byte| !is_valid_char(byte))
-            || is_reserved(hostname)
-            || !is_profanity_free(hostname)
-            || hostname.ends_with(separators)
-            || hostname.starts_with(separators)
-            || hostname.is_empty())
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl AsRef<String> for ProjectName {
-    fn as_ref(&self) -> &String {
-        &self.0
-    }
-}
-
 impl FromStr for ProjectName {
     type Err = ProjectNameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match ProjectName::is_valid(s) {
-            true => Ok(ProjectName(s.to_string())),
-            false => Err(ProjectNameError::InvalidName(s.to_string())),
+        let s = s.to_owned();
+        match ProjectName::is_valid(&s) {
+            true => Ok(ProjectName(s)),
+            false => Err(ProjectNameError::InvalidName(s)),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ProjectNameError {
     InvalidName(String),
 }
@@ -95,16 +115,10 @@ pub enum ProjectNameError {
 impl Display for ProjectNameError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProjectNameError::InvalidName(name) => write!(
-                f,
-                r#"
-`{name}` is an invalid project name. project name must
-1. start and end with alphanumeric characters.
-2. only contain characters inside of the alphanumeric range, except for `-`, or `_`.
-3. not be empty.,
-4. not contain profanity.
-5. not be a reserved word."#,
-            ),
+            ProjectNameError::InvalidName(name) => {
+                let rules = ProjectName::RULES;
+                write!(f, "`{name}` is not a valid project name. {rules}")
+            }
         }
     }
 }
@@ -118,31 +132,29 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn valid_hostnames() {
-        for hostname in [
-            "VaLiD-HoStNaMe",
+    fn valid_labels() {
+        for label in [
             "50-name",
             "235235",
-            "VaLid",
             "123",
-            "s________e",
-            "snake_case",
             "kebab-case",
             "lowercase",
-            "UPPERCASE",
-            "CamelCase",
-            "pascalCase",
             "myassets",
             "dachterrasse",
+            "another-valid-project-name",
         ] {
-            let project_name = ProjectName::from_str(hostname);
-            assert!(project_name.is_ok(), "{:?} was err", hostname);
+            let project_name = ProjectName::from_str(label);
+            assert!(project_name.is_ok(), "{:?} was err", label);
         }
     }
 
     #[test]
-    fn invalid_hostnames() {
-        for hostname in [
+    fn invalid_labels() {
+        for label in [
+            "UPPERCASE",
+            "CamelCase",
+            "pascalCase",
+            "InVaLid",
             "-invalid-name",
             "also-invalid-",
             "asdf@fasd",
@@ -155,10 +167,17 @@ pub mod tests {
             "__invalid",
             "invalid__",
             "test-condom-condom",
-            "shuttle.rs",
+            "s________e",
+            "snake_case",
+            "exactly-16-chars\
+            exactly-16-chars\
+            exactly-16-chars\
+            exactly-16-chars",
+            "shuttle",
+            "shuttleapp",
         ] {
-            let project_name = ProjectName::from_str(hostname);
-            assert!(project_name.is_err(), "{:?} was ok", hostname);
+            let project_name = ProjectName::from_str(label);
+            assert!(project_name.is_err(), "{:?} was ok", label);
         }
     }
 }

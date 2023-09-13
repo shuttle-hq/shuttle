@@ -23,7 +23,7 @@ use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Scope, EXP_MINUTES};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
-use shuttle_common::{request_span, VersionInfo};
+use shuttle_common::{project::ProjectName, request_span, VersionInfo};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
@@ -49,7 +49,7 @@ use crate::service::GatewayService;
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{Error, ProjectName, AUTH_CLIENT};
+use crate::{Error, AUTH_CLIENT};
 
 use super::auth_layer::ShuttleAuthLayer;
 

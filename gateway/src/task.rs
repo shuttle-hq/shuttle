@@ -1,4 +1,5 @@
 use futures::Future;
+use shuttle_common::project::ProjectName;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -13,7 +14,7 @@ use uuid::Uuid;
 use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
 use crate::worker::TaskRouter;
-use crate::{AccountName, Error, ErrorKind, ProjectName, Refresh, State};
+use crate::{AccountName, Error, ErrorKind, Refresh, State};
 
 // Default maximum _total_ time a task is allowed to run
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);

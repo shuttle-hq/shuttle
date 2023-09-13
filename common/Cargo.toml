@@ -59,7 +59,8 @@ backend = [
     "tower-http",
     "tracing-subscriber/env-filter",
     "tracing-subscriber/fmt",
-    "ttl_cache"
+    "ttl_cache",
+    "sqlx"
 ]
 claims = [
     "bytes",

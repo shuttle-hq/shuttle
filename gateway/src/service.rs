@@ -22,6 +22,7 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
 use shuttle_common::models::project::State;
+use shuttle_common::project::ProjectName;
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
@@ -44,9 +45,7 @@ use crate::project::{Project, ProjectCreating, ProjectError, IS_HEALTHY_TIMEOUT}
 use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::TaskRouter;
-use crate::{
-    AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName, AUTH_CLIENT,
-};
+use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, AUTH_CLIENT};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -538,19 +537,11 @@ impl GatewayService {
                 )))
             }
         } else {
-            // Check if project name is valid according to new rules if it
-            // doesn't exist.
-            // TODO: remove this check when we update the project name rules
-            // in shuttle-common
-            if project_name.is_valid() {
-                // Otherwise attempt to create a new one. This will fail
-                // outright if the project already exists (this happens if
-                // it belongs to another account).
-                self.insert_project(project_name, Ulid::new(), account_name, idle_minutes)
-                    .await
-            } else {
-                Err(Error::from_kind(ErrorKind::InvalidProjectName))
-            }
+            // Otherwise attempt to create a new one. This will fail
+            // outright if the project already exists (this happens if
+            // it belongs to another account).
+            self.insert_project(project_name, Ulid::new(), account_name, idle_minutes)
+                .await
         }
     }
 
@@ -988,7 +979,7 @@ pub mod tests {
 
         // Test project pagination, first create 20 test projects (including the one from above).
         for p in (1..20).map(|p| format!("matrix-{p}")) {
-            svc.create_project(ProjectName(p.clone()), neo.clone(), false, 0)
+            svc.create_project(p.parse().unwrap(), neo.clone(), false, 0)
                 .await
                 .unwrap();
         }

@@ -14,6 +14,7 @@ use instant_acme::{
     Identifier, KeyAuthorization, LetsEncrypt, NewAccount, NewOrder, Order, OrderStatus,
 };
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
+use shuttle_common::project::ProjectName;
 
 use tokio::sync::Mutex;
 use tokio::time::sleep;
@@ -21,7 +22,7 @@ use tower::{Layer, Service};
 use tracing::{error, trace, warn};
 
 use crate::proxy::AsResponderTo;
-use crate::{Error, ProjectName};
+use crate::Error;
 
 const MAX_RETRIES: usize = 15;
 const MAX_RETRIES_CERTIFICATE_FETCHING: usize = 5;

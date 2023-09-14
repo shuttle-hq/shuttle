@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
@@ -12,7 +12,7 @@ use sqlx::{
 };
 use thiserror::Error;
 use tokio::sync::broadcast::{self, Sender};
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use tonic::transport::Uri;
 
@@ -61,6 +61,16 @@ impl Postgres {
         let (tx, mut rx): (Sender<Vec<Log>>, _) = broadcast::channel(1000);
         let pool_spawn = pool.clone();
 
+        let interval_tx = tx.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(10));
+
+            loop {
+                interval.tick().await;
+                info!("broadcast channel queue size: {}", interval_tx.len());
+            }
+        });
+
         tokio::spawn(async move {
             loop {
                 match rx.recv().await {
@@ -70,6 +80,10 @@ impl Postgres {
                         );
 
                         debug!("inserting {} logs into the database", logs.len());
+
+                        if !rx.is_empty() {
+                            debug!("database receiver queue size {}", rx.len());
+                        }
 
                         builder.push_values(logs, |mut b, log| {
                             b.push_bind(log.deployment_id)

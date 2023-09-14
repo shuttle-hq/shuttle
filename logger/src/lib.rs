@@ -11,7 +11,7 @@ use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use tracing::error;
+use tracing::{debug, error};
 
 pub mod args;
 mod dal;
@@ -124,6 +124,10 @@ where
             loop {
                 match logs_rx.recv().await {
                     Ok(logs) => {
+                        if !logs_rx.is_empty() {
+                            debug!("stream receiver queue size {}", logs_rx.len())
+                        }
+
                         for log in logs {
                             if log.deployment_id == deployment_id
                                 && log.tx_timestamp.timestamp() >= last.seconds

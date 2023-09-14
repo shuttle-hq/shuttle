@@ -58,7 +58,7 @@ where
 {
     async fn bind(mut self, _addr: SocketAddr) -> Result<(), shuttle_runtime::Error> {
         self.0
-            .start()
+            .start_autosharded()
             .await
             .map_err(shuttle_runtime::CustomError::new)?;
 

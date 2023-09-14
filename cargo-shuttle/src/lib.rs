@@ -15,7 +15,6 @@ use std::str::FromStr;
 
 use shuttle_common::deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD};
 use shuttle_common::models::deployment::CREATE_SERVICE_BODY_LIMIT;
-use shuttle_common::LogItem;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     models::{
@@ -26,6 +25,7 @@ use shuttle_common::{
     },
 };
 use shuttle_common::{project::ProjectName, resource, ApiKey};
+use shuttle_common::{LogItem, API_URL_DEFAULT};
 use shuttle_proto::runtime::{
     self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest, StorageManagerType,
 };
@@ -101,13 +101,16 @@ impl Shuttle {
         args: ShuttleArgs,
         provided_path_to_init: bool,
     ) -> Result<CommandOutcome> {
-        trace!("running local client");
-
-        if args.api_url.as_ref().is_some_and(|s| s.ends_with('/')) {
-            println!(
-                "WARNING: API URL is probably incorrect. Ends with '/': {}",
-                args.api_url.clone().unwrap()
-            );
+        if let Some(ref s) = args.api_url {
+            if s != API_URL_DEFAULT {
+                eprintln!("INFO: Targetting non-standard API: {}", s);
+            }
+            if s.ends_with('/') {
+                eprintln!(
+                    "WARNING: API URL is probably incorrect. Ends with '/': {}",
+                    args.api_url.clone().unwrap()
+                );
+            }
         }
 
         // All commands that need to know which project is being handled
@@ -515,8 +518,8 @@ impl Shuttle {
 
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                    let log_item: shuttle_common::LogItem =
-                        serde_json::from_str(&line).expect("to parse log line");
+                    let log_item: shuttle_common::LogItem = serde_json::from_str(&line)
+                        .context("Failed parsing logs. Is your cargo-shuttle outdated?")?;
                     println!("{log_item}")
                 }
             }

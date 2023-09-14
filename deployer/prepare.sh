@@ -9,34 +9,7 @@
 mkdir -p $CARGO_HOME
 touch $CARGO_HOME/config.toml
 if [[ $PROD != "true" ]]; then
-    echo '
-    [patch.crates-io]
-    shuttle-codegen = { path = "/usr/src/shuttle/codegen" }
-    shuttle-common = { path = "/usr/src/shuttle/common" }
-    shuttle-proto = { path = "/usr/src/shuttle/proto" }
-    shuttle-runtime = { path = "/usr/src/shuttle/runtime" }
-    shuttle-service = { path = "/usr/src/shuttle/service" }
-
-    shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" }
-    shuttle-persist = { path = "/usr/src/shuttle/resources/persist" }
-    shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
-    shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
-    shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }
-    shuttle-metadata = { path = "/usr/src/shuttle/resources/metadata" }
-    shuttle-turso = { path = "/usr/src/shuttle/resources/turso" }
-
-    shuttle-actix-web = { path = "/usr/src/shuttle/services/shuttle-actix-web" }
-    shuttle-axum = { path = "/usr/src/shuttle/services/shuttle-axum" }
-    shuttle-next = { path = "/usr/src/shuttle/services/shuttle-next" }
-    shuttle-poem = { path = "/usr/src/shuttle/services/shuttle-poem" }
-    shuttle-poise = { path = "/usr/src/shuttle/services/shuttle-poise" }
-    shuttle-rocket = { path = "/usr/src/shuttle/services/shuttle-rocket" }
-    shuttle-salvo = { path = "/usr/src/shuttle/services/shuttle-salvo" }
-    shuttle-serenity = { path = "/usr/src/shuttle/services/shuttle-serenity" }
-    shuttle-thruster = { path = "/usr/src/shuttle/services/shuttle-thruster" }
-    shuttle-tide = { path = "/usr/src/shuttle/services/shuttle-tide" }
-    shuttle-tower = { path = "/usr/src/shuttle/services/shuttle-tower" }
-    shuttle-warp = { path = "/usr/src/shuttle/services/shuttle-warp" }' > $CARGO_HOME/config.toml
+    bash scripts/apply-patches.sh $CARGO_HOME/config.toml /usr/src/shuttle
 fi
 
 # Add the wasm32-wasi target

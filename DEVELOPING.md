@@ -105,6 +105,8 @@ git submodule update
 
 You should now be ready to setup a local environment to test code changes to core `shuttle` packages as follows:
 
+### Building images
+
 From the root of the Shuttle repo, build the required images with:
 
 ```bash
@@ -132,44 +134,31 @@ USE_PANAMAX=disable make up
 
 The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run -p cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls.
 
-In order to test local changes to the library crates, you may want to add the below to a `.cargo/config.toml` file. (See [Overriding Dependencies](https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html) for more)
+### Apply patches
 
-```toml
-[patch.crates-io]
-shuttle-codegen = { path = "[base]/shuttle/codegen" }
-shuttle-common = { path = "[base]/shuttle/common" }
-shuttle-proto = { path = "[base]/shuttle/proto" }
-shuttle-runtime = { path = "[base]/shuttle/runtime" }
-shuttle-service = { path = "[base]/shuttle/service" }
+In order to test local changes to the library crates, you may want to add patches to a `.cargo/config.toml` file.
+(See [Overriding Dependencies](https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html) for more)
 
-shuttle-aws-rds = { path = "[base]/shuttle/resources/aws-rds" }
-shuttle-persist = { path = "[base]/shuttle/resources/persist" }
-shuttle-shared-db = { path = "[base]/shuttle/resources/shared-db" }
-shuttle-secrets = { path = "[base]/shuttle/resources/secrets" }
-shuttle-static-folder = { path = "[base]/shuttle/resources/static-folder" }
-shuttle-metadata = { path = "[base]/shuttle/resources/metadata" }
-shuttle-turso = { path = "[base]/shuttle/resources/turso" }
+The simplest way to generate this file is:
 
-shuttle-axum = { path = "[base]/shuttle/services/shuttle-axum" }
-shuttle-actix-web = { path = "[base]/shuttle/services/shuttle-actix-web" }
-shuttle-next = { path = "[base]/shuttle/services/shuttle-next" }
-shuttle-poem = { path = "[base]/shuttle/services/shuttle-poem" }
-shuttle-poise = { path = "[base]/shuttle/services/shuttle-poise" }
-shuttle-rocket = { path = "[base]/shuttle/services/shuttle-rocket" }
-shuttle-salvo = { path = "[base]/shuttle/services/shuttle-salvo" }
-shuttle-serenity = { path = "[base]/shuttle/services/shuttle-serenity" }
-shuttle-thruster = { path = "[base]/shuttle/services/shuttle-thruster" }
-shuttle-tide = { path = "[base]/shuttle/services/shuttle-tide" }
-shuttle-tower = { path = "[base]/shuttle/services/shuttle-tower" }
-shuttle-warp = { path = "[base]/shuttle/services/shuttle-warp" }
+```bash
+./scripts/apply-patches
 ```
+
+The see the files [apply-patches.sh](./scripts/apply-patches.sh) and [patches.toml](./scripts/patches.toml) for how it works.
+
+> Note: cargo and rust-analyzer will add `[[patch.unused]]` lines at the bottom of Cargo.lock when patches are applied.
+> These should not be included in commits/PRs.
+> The easiest way to get rid of them is to comment out all the patch lines in `.cargo/config.toml`, and refresh cargo/r-a.
+
+### Create an admin user
 
 Before we can login to our local instance of Shuttle, we need to create a user.
 The following command inserts a user into the `auth` state with admin privileges:
 
 ```bash
 # the --key needs to be 16 alphanumeric characters
-docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init-admin --name admin --key dh9z58jttoes3qvt
+docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/shuttle-auth --state=/var/lib/shuttle-auth init-admin --name admin --key dh9z58jttoes3qvt
 ```
 
 > Note: if you have done this already for this container you will get a "UNIQUE constraint failed"
@@ -189,8 +178,10 @@ Finally, before gateway will be able to work with some projects, we need to crea
 The following command inserts a gateway user into the `auth` state with deployer privileges:
 
 ```bash
-docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init-deployer --name gateway --key gateway4deployes
+docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/shuttle-auth --state=/var/lib/shuttle-auth init-deployer --name gateway --key gateway4deployes
 ```
+
+### Deplying locally
 
 Create a new project based on one of the examples.
 This will prompt your local gateway to start a deployer container.
@@ -344,4 +335,4 @@ git config --global core.autocrlf true
 
 After you run this command, you should be able to checkout projects that are maintained using CRLF (Windows) again.
 
-[^1]: https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration#_core_autocrlf
+[^1]: <https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration#_core_autocrlf>

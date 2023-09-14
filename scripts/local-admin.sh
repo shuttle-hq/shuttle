@@ -6,4 +6,5 @@
 
 key="dh9z58jttoes3qvt" # arbitrary test key
 export SHUTTLE_API_KEY=$key
-docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init-admin --name admin --key $key
+docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/shuttle-auth --state=/var/lib/shuttle-auth init-admin --name admin --key $key
+export PS1="(shuttle: local admin key) $PS1"

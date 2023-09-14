@@ -24,7 +24,7 @@ services:
 
         >&2 echo "DBs are available - starting provisioner"
 
-        exec /usr/local/bin/service "$${@:0}"
+        exec /usr/local/bin/shuttle-provisioner "$${@:0}"
     ports:
       - 3000:8000
   resource-recorder:
@@ -57,7 +57,7 @@ services:
 
         >&2 echo "DBs are available - starting shuttle-logger"
 
-        exec /usr/local/bin/service "$${@:0}"
+        exec /usr/local/bin/shuttle-logger "$${@:0}"
   logger-postgres:
     image: "docker.io/library/postgres:${LOGGER_POSTGRES_TAG}"
     restart: always

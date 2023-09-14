@@ -5438,7 +5438,6 @@ dependencies = [
  "opentelemetry-otlp",
  "pin-project",
  "proptest",
- "prost-types",
  "rand",
  "reqwest",
  "ring",
@@ -5471,7 +5470,10 @@ dependencies = [
  "portpicker",
  "reqwest",
  "shuttle-common",
+ "shuttle-proto",
  "tokio",
+ "tokio-stream",
+ "tonic",
  "tower",
 ]
 
@@ -5500,11 +5502,13 @@ dependencies = [
  "opentelemetry-http",
  "pipe",
  "portpicker",
+ "prost-types",
  "rand",
  "rmp-serde",
  "serde",
  "serde_json",
  "shuttle-common",
+ "shuttle-common-tests",
  "shuttle-proto",
  "shuttle-service",
  "sqlx",
@@ -5513,6 +5517,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "toml 0.5.11",
  "tonic",
  "tower",
@@ -5582,6 +5587,32 @@ dependencies = [
  "utoipa-swagger-ui",
  "uuid",
  "x509-parser",
+]
+
+[[package]]
+name = "shuttle-logger"
+version = "0.25.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "clap",
+ "ctor",
+ "once_cell",
+ "portpicker",
+ "pretty_assertions",
+ "prost-types",
+ "serde_json",
+ "shuttle-common",
+ "shuttle-common-tests",
+ "shuttle-proto",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -5660,6 +5691,7 @@ dependencies = [
  "async-trait",
  "cap-std",
  "chrono",
+ "colored",
  "crossbeam-channel",
  "futures",
  "hyper",
@@ -5678,8 +5710,8 @@ dependencies = [
  "tokio-stream",
  "tonic",
  "tower",
- "tracing",
  "tracing-subscriber",
+ "uuid",
  "wasi-common",
  "wasmtime",
  "wasmtime-wasi",

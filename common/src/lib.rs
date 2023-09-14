@@ -6,7 +6,13 @@ pub mod database;
 #[cfg(feature = "service")]
 pub mod deployment;
 #[cfg(feature = "service")]
+use uuid::Uuid;
+#[cfg(feature = "service")]
+pub type DeploymentId = Uuid;
+#[cfg(feature = "service")]
 pub mod log;
+#[cfg(feature = "service")]
+pub use log::LogItem;
 #[cfg(feature = "models")]
 pub mod models;
 #[cfg(feature = "service")]
@@ -22,17 +28,11 @@ pub mod wasm;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fmt::Display;
-#[cfg(feature = "openapi")]
-use utoipa::openapi::{Object, ObjectBuilder};
 
 use anyhow::bail;
-#[cfg(feature = "service")]
-pub use log::Item as LogItem;
-#[cfg(feature = "service")]
-pub use log::STATE_MESSAGE;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "service")]
-use uuid::Uuid;
+#[cfg(feature = "openapi")]
+use utoipa::openapi::{Object, ObjectBuilder};
 
 #[cfg(debug_assertions)]
 pub const API_URL_DEFAULT: &str = "http://localhost:8001";
@@ -42,8 +42,6 @@ pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
 
 pub type ApiUrl = String;
 pub type Host = String;
-#[cfg(feature = "service")]
-pub type DeploymentId = Uuid;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "persist", derive(sqlx::Type, PartialEq, Hash, Eq))]

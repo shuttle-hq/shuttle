@@ -22,9 +22,8 @@ hyper = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
-opentelemetry-otlp = { version = "0.12.0", optional = true }
+opentelemetry-otlp = { workspace = true,  optional = true }
 pin-project = { workspace = true, optional = true }
-prost-types = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }
@@ -36,6 +35,7 @@ sqlx = { workspace = true, optional = true, features = ["runtime-tokio-rustls"] 
 thiserror = { workspace = true, optional = true }
 tonic = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 tracing = { workspace = true, features = ["std"] }
@@ -53,6 +53,8 @@ backend = [
     "hyper/client",
     "opentelemetry-otlp",
     "thiserror",
+    "tokio",
+    "tonic",
     "tower-http",
     "tracing-subscriber/env-filter",
     "tracing-subscriber/fmt",
@@ -73,11 +75,10 @@ claims = [
     "tracing-opentelemetry",
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
-error = ["prost-types", "thiserror", "uuid"]
 openapi = ["utoipa/chrono", "utoipa/uuid"]
 models = ["async-trait", "display", "http", "reqwest", "service"]
 persist = ["sqlx/sqlite", "rand"]
-service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid"]
+service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid", "tracing-subscriber"]
 tracing = []
 wasm = [
     "chrono/clock",

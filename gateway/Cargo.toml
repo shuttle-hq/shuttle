@@ -65,7 +65,7 @@ workspace = true
 [dev-dependencies]
 anyhow = { workspace = true }
 base64 = { workspace = true }
-colored = "2.0.0"
+colored = { workspace = true }
 jsonwebtoken = { workspace = true }
 portpicker = { workspace = true }
 ring = { workspace = true }

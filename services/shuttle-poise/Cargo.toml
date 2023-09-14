@@ -10,7 +10,7 @@ keywords = ["shuttle-service", "poise", "discord-bot", "serenity"]
 
 [dependencies]
 poise = { version = "0.5.2" }
-shuttle-runtime = { path = "../../runtime", version = "0.25.0" }
+shuttle-runtime = { path = "../../runtime", version = "0.25.0", default-features = false }
 
 [dev-dependencies]
 shuttle-secrets = { path = "../../resources/secrets" }

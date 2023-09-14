@@ -219,14 +219,12 @@ pub use shuttle_codegen::main;
 
 mod alpha;
 mod args;
-mod logger;
 #[cfg(feature = "next")]
 mod next;
 mod provisioner_factory;
 mod resource_tracker;
 
 pub use alpha::{start, Alpha};
-pub use logger::Logger;
 #[cfg(feature = "next")]
 pub use next::{AxumWasm, NextArgs};
 pub use provisioner_factory::ProvisionerFactory;
@@ -236,26 +234,17 @@ pub use shuttle_service::{CustomError, Error, Factory, ResourceBuilder, Service}
 
 pub use async_trait::async_trait;
 
-/// The default tracing registry used by shuttle.
-pub type Registry = tracing_subscriber::layer::Layered<
-    tracing_subscriber::filter::Filtered<
-        crate::Logger,
-        tracing_subscriber::EnvFilter,
-        tracing_subscriber::Registry,
-    >,
-    tracing_subscriber::Registry,
->;
-
 // Dependencies required by the codegen
 pub use anyhow::Context;
 pub use strfmt::strfmt;
-pub use tracing;
-pub use tracing_subscriber;
+
+#[cfg(feature = "setup-tracing")]
+pub use {colored, tracing_subscriber};
+
+const NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Print the version of the runtime.
 pub fn print_version() {
-    let name = env!("CARGO_PKG_NAME");
-    let version = env!("CARGO_PKG_VERSION");
-
-    println!("{name} {version}");
+    println!("{NAME} {VERSION}");
 }

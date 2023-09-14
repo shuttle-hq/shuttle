@@ -1,33 +1,40 @@
-pub mod deploy_layer;
-pub mod gateway_client;
-mod queue;
-mod run;
-
 use std::{path::PathBuf, sync::Arc};
 
 pub use queue::Queued;
 pub use run::{ActiveDeploymentsGetter, Built};
-use shuttle_common::storage_manager::ArtifactsStorageManager;
-use tracing::{instrument, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
-
-use crate::{
-    persistence::{DeploymentUpdater, ResourceManager, SecretGetter, SecretRecorder, State},
-    RuntimeManager,
-};
+use shuttle_common::{log::LogRecorder, storage_manager::ArtifactsStorageManager};
+use shuttle_proto::logger::logger_client::LoggerClient;
 use tokio::{
     sync::{mpsc, Mutex},
     task::JoinSet,
 };
+use tracing::{instrument, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use self::{deploy_layer::LogRecorder, gateway_client::BuildQueueClient};
+pub mod gateway_client;
+mod queue;
+mod run;
+pub mod state_change_layer;
+
+use self::gateway_client::BuildQueueClient;
+use crate::{
+    persistence::{DeploymentUpdater, ResourceManager, SecretGetter, SecretRecorder, State},
+    RuntimeManager,
+};
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 
 pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
     build_log_recorder: Option<LR>,
+    logs_fetcher: Option<
+        LoggerClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
+    >,
     secret_recorder: Option<SR>,
     active_deployment_getter: Option<ADG>,
     artifacts_path: Option<PathBuf>,
@@ -50,6 +57,19 @@ where
 {
     pub fn build_log_recorder(mut self, build_log_recorder: LR) -> Self {
         self.build_log_recorder = Some(build_log_recorder);
+
+        self
+    }
+
+    pub fn log_fetcher(
+        mut self,
+        logs_fetcher: LoggerClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
+    ) -> Self {
+        self.logs_fetcher = Some(logs_fetcher);
 
         self
     }
@@ -122,6 +142,7 @@ where
             .expect("a deployment updater to be set");
         let secret_getter = self.secret_getter.expect("a secret getter to be set");
         let resource_manager = self.resource_manager.expect("a resource manager to be set");
+        let logs_fetcher = self.logs_fetcher.expect("a logs fetcher to be set");
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -153,6 +174,7 @@ where
             queue_send,
             run_send,
             runtime_manager,
+            logs_fetcher,
             storage_manager,
             _join_set: Arc::new(Mutex::new(set)),
         }
@@ -165,6 +187,11 @@ pub struct DeploymentManager {
     run_send: RunSender,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
     storage_manager: ArtifactsStorageManager,
+    logs_fetcher: LoggerClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >,
     _join_set: Arc<Mutex<JoinSet<()>>>,
 }
 
@@ -189,6 +216,7 @@ impl DeploymentManager {
     ) -> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
+            logs_fetcher: None,
             secret_recorder: None,
             active_deployment_getter: None,
             artifacts_path: None,
@@ -210,7 +238,7 @@ impl DeploymentManager {
         self.queue_send.send(queued).await.unwrap();
     }
 
-    #[instrument(skip(self), fields(id = %built.id, state = %State::Built))]
+    #[instrument(name = "Starting deployment", skip(self), fields(deployment_id = %built.id, state = %State::Built))]
     pub async fn run_push(&self, built: Built) {
         self.run_send.send(built).await.unwrap();
     }
@@ -221,6 +249,16 @@ impl DeploymentManager {
 
     pub fn storage_manager(&self) -> ArtifactsStorageManager {
         self.storage_manager.clone()
+    }
+
+    pub fn logs_fetcher(
+        &self,
+    ) -> &LoggerClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    > {
+        &self.logs_fetcher
     }
 }
 

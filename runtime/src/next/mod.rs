@@ -14,17 +14,15 @@ use futures::TryStreamExt;
 use hyper::body::HttpBody;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
-use shuttle_common::wasm::{Bytesable, Log, RequestWrapper, ResponseWrapper};
+use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
-    self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
-    StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
+    LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest, StopResponse,
+    SubscribeStopRequest, SubscribeStopResponse,
 };
-use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
-use tracing::{error, trace, warn};
 use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
@@ -36,34 +34,21 @@ pub use self::args::NextArgs;
 
 extern crate rmp_serde as rmps;
 
-const LOGS_FD: u32 = 20;
 const PARTS_FD: u32 = 3;
 const BODY_FD: u32 = 4;
 
 pub struct AxumWasm {
     router: Mutex<Option<Router>>,
-    logs_rx: Mutex<Option<Receiver<Result<runtime::LogItem, Status>>>>,
-    logs_tx: Sender<Result<runtime::LogItem, Status>>,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     stopped_tx: broadcast::Sender<(StopReason, String)>,
 }
 
 impl AxumWasm {
     pub fn new() -> Self {
-        // Allow about 2^15 = 32k logs of backpressure
-        // We know the wasm currently handles about 16k requests per second (req / sec) so 16k seems to be a safe number
-        // As we make performance gains elsewhere this might eventually become the new bottleneck to increase :D
-        //
-        // Testing has shown that a number half the req / sec yields poor performance. A number the same as the req / sec
-        // seems acceptable so going with double the number for some headroom
-        let (tx, rx) = mpsc::channel(1 << 15);
-
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
             router: Mutex::new(None),
-            logs_rx: Mutex::new(Some(rx)),
-            logs_tx: tx,
             kill_tx: Mutex::new(None),
             stopped_tx,
         }
@@ -83,7 +68,7 @@ impl Runtime for AxumWasm {
         request: tonic::Request<LoadRequest>,
     ) -> Result<tonic::Response<LoadResponse>, Status> {
         let wasm_path = request.into_inner().path;
-        trace!(wasm_path, "loading shuttle-next project");
+        println!("loading shuttle-next project: {wasm_path}");
 
         let router = RouterBuilder::new()
             .map_err(|err| Status::from_error(err.into()))?
@@ -112,8 +97,6 @@ impl Runtime for AxumWasm {
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        let logs_tx = self.logs_tx.clone();
-
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
@@ -128,28 +111,11 @@ impl Runtime for AxumWasm {
 
         let stopped_tx = self.stopped_tx.clone();
 
-        tokio::spawn(run_until_stopped(
-            router, address, logs_tx, kill_rx, stopped_tx,
-        ));
+        tokio::spawn(run_until_stopped(router, address, kill_rx, stopped_tx));
 
         let message = StartResponse { success: true };
 
         Ok(tonic::Response::new(message))
-    }
-
-    type SubscribeLogsStream = ReceiverStream<Result<runtime::LogItem, Status>>;
-
-    async fn subscribe_logs(
-        &self,
-        _request: tonic::Request<SubscribeLogsRequest>,
-    ) -> Result<tonic::Response<Self::SubscribeLogsStream>, Status> {
-        let logs_rx = self.logs_rx.lock().unwrap().deref_mut().take();
-
-        if let Some(logs_rx) = logs_rx {
-            Ok(tonic::Response::new(ReceiverStream::new(logs_rx)))
-        } else {
-            Err(Status::internal("logs have already been subscribed to"))
-        }
     }
 
     async fn stop(
@@ -162,13 +128,13 @@ impl Runtime for AxumWasm {
 
         if let Some(kill_tx) = kill_tx {
             if kill_tx.send("stopping deployment".to_owned()).is_err() {
-                error!("the receiver dropped");
+                println!("the receiver dropped");
                 return Err(Status::internal("failed to stop deployment"));
             }
 
             Ok(tonic::Response::new(StopResponse { success: true }))
         } else {
-            warn!("trying to stop a service that was not started");
+            println!("trying to stop a service that was not started");
 
             Ok(tonic::Response::new(StopResponse { success: false }))
         }
@@ -185,7 +151,7 @@ impl Runtime for AxumWasm {
 
         // Move the stop channel into a stream to be returned
         tokio::spawn(async move {
-            trace!("moved stop channel into thread");
+            println!("moved stop channel into thread");
             while let Ok((reason, message)) = stopped_rx.recv().await {
                 tx.send(Ok(SubscribeStopResponse {
                     reason: reason as i32,
@@ -229,7 +195,7 @@ impl RouterBuilder {
         let module = Module::from_file(&self.engine, file)?;
 
         for export in module.exports() {
-            trace!("export: {}", export.name());
+            println!("export: {}", export.name());
         }
 
         Ok(Router {
@@ -252,10 +218,10 @@ impl Router {
     async fn handle_request(
         &mut self,
         req: hyper::Request<Body>,
-        logs_tx: Sender<Result<runtime::LogItem, Status>>,
     ) -> anyhow::Result<Response<Body>> {
         let wasi = WasiCtxBuilder::new()
             .inherit_stdio()
+            .inherit_stdout()
             .inherit_args()
             .context("failed to read args")?
             .build();
@@ -263,20 +229,13 @@ impl Router {
         let mut store = Store::new(&self.engine, wasi);
         self.linker.module(&mut store, "axum", &self.module)?;
 
-        let (logs_stream, logs_client) =
-            UnixStream::pair().context("failed to open logs unixstream")?;
         let (mut parts_stream, parts_client) =
             UnixStream::pair().context("failed to open parts unixstream")?;
         let (mut body_stream, body_client) =
             UnixStream::pair().context("failed to open body write unixstream")?;
 
-        let logs_client = WasiUnixStream::from_cap_std(logs_client);
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
         let body_client = WasiUnixStream::from_cap_std(body_client);
-
-        store
-            .data_mut()
-            .insert_file(LOGS_FD, Box::new(logs_client), FileCaps::all());
 
         store
             .data_mut()
@@ -284,14 +243,6 @@ impl Router {
         store
             .data_mut()
             .insert_file(BODY_FD, Box::new(body_client), FileCaps::all());
-
-        tokio::task::spawn_blocking(move || {
-            let mut iter = logs_stream.bytes().filter_map(Result::ok);
-
-            while let Some(log) = Log::from_bytes(&mut iter) {
-                logs_tx.blocking_send(Ok(log.into())).expect("to send log");
-            }
-        });
 
         let (parts, body) = req.into_parts();
 
@@ -335,17 +286,14 @@ impl Router {
 
         // Call our function in wasm, telling it to route the request we've written to it
         // and write back a response
-        trace!("calling Router");
+        println!("calling Router");
         self.linker
             .get(&mut store, "axum", "__SHUTTLE_Axum_call")
             .context("wasm module should be loaded and the router function should be available")?
             .into_func()
             .context("router function should be a function")?
-            .typed::<(RawFd, RawFd, RawFd), ()>(&store)?
-            .call(
-                &mut store,
-                (LOGS_FD as i32, PARTS_FD as i32, BODY_FD as i32),
-            )?;
+            .typed::<(RawFd, RawFd), ()>(&store)?
+            .call(&mut store, (PARTS_FD as i32, BODY_FD as i32))?;
 
         // Read response parts from wasm
         let reader = BufReader::new(&mut parts_stream);
@@ -373,22 +321,19 @@ impl Router {
 async fn run_until_stopped(
     router: Router,
     address: SocketAddr,
-    logs_tx: Sender<Result<runtime::LogItem, Status>>,
     kill_rx: tokio::sync::oneshot::Receiver<String>,
     stopped_tx: broadcast::Sender<(StopReason, String)>,
 ) {
     let make_service = make_service_fn(move |_conn| {
         let router = router.clone();
-        let logs_tx = logs_tx.clone();
         async move {
             Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
                 let mut router = router.clone();
-                let logs_tx = logs_tx.clone();
                 async move {
-                    Ok::<_, Infallible>(match router.handle_request(req, logs_tx).await {
+                    Ok::<_, Infallible>(match router.handle_request(req).await {
                         Ok(res) => res,
                         Err(err) => {
-                            error!("error sending request: {}", err);
+                            println!("error sending request: {}", err);
                             Response::builder()
                                 .status(hyper::http::StatusCode::INTERNAL_SERVER_ERROR)
                                 .body(Body::empty())
@@ -402,23 +347,23 @@ async fn run_until_stopped(
 
     let server = hyper::Server::bind(&address).serve(make_service);
 
-    trace!("starting hyper server on: {}", &address);
+    println!("starting hyper server on: {}", &address);
     tokio::select! {
         _ = server => {
             stopped_tx.send((StopReason::End, String::new())).unwrap();
-            trace!("axum wasm server stopped");
+            println!("axum wasm server stopped");
         },
         message = kill_rx => {
             match message {
                 Ok(msg) =>{
                     stopped_tx.send((StopReason::Request, String::new())).unwrap();
-                    trace!("{msg}")
+                    println!("{msg}")
                 } ,
                 Err(_) => {
                     stopped_tx
                         .send((StopReason::Crash, "the kill sender dropped".to_string()))
                         .unwrap();
-                    trace!("the sender dropped")
+                    println!("the sender dropped")
                 }
             }
         }
@@ -455,14 +400,6 @@ pub mod tests {
             .build()
             .unwrap();
 
-        let (tx, mut rx) = mpsc::channel(1);
-
-        tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
-                println!("{log:?}");
-            }
-        });
-
         // GET /hello
         let request: Request<Body> = Request::builder()
             .method(Method::GET)
@@ -471,11 +408,7 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = router
-            .clone()
-            .handle_request(request, tx.clone())
-            .await
-            .unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -498,11 +431,7 @@ pub mod tests {
             .body(Body::from("Goodbye world body"))
             .unwrap();
 
-        let res = router
-            .clone()
-            .handle_request(request, tx.clone())
-            .await
-            .unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -525,11 +454,7 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = router
-            .clone()
-            .handle_request(request, tx.clone())
-            .await
-            .unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
 
@@ -542,7 +467,7 @@ pub mod tests {
             .body("this should be uppercased".into())
             .unwrap();
 
-        let res = router.clone().handle_request(request, tx).await.unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(

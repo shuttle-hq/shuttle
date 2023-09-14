@@ -10,7 +10,6 @@ use shuttle_common::{
 use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
 use shuttle_service::{Environment, Factory, ServiceName};
 use tonic::{transport::Channel, Request};
-use tracing::info;
 
 /// A factory (service locator) which goes through the provisioner crate
 pub struct ProvisionerFactory {
@@ -48,8 +47,6 @@ impl Factory for ProvisionerFactory {
         &mut self,
         db_type: database::Type,
     ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
-        info!("Provisioning a {db_type}. This can take a while...");
-
         let mut request = Request::new(DatabaseRequest {
             project_name: self.service_name.to_string(),
             db_type: Some(db_type.into()),
@@ -67,8 +64,6 @@ impl Factory for ProvisionerFactory {
             .into_inner();
 
         let info: DatabaseReadyInfo = response.into();
-
-        info!("Done provisioning database");
 
         Ok(info)
     }

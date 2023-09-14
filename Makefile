@@ -208,19 +208,3 @@ down: $(DOCKER_COMPOSE_FILES)
 	$(addprefix -f ,$(DOCKER_COMPOSE_FILES)) \
 	-p $(STACK) \
 	down
-
-shuttle-%:
-	$(DOCKER_BUILD) \
-		--target $(@)$(DEV_SUFFIX) \
-		--build-arg folder=$(*) \
-		--build-arg crate=$(@) \
-		--build-arg prepare_args=$(PREPARE_ARGS) \
-		--build-arg PROD=$(PROD) \
-		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
-		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
-		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
-		--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
-		--tag $(CONTAINER_REGISTRY)/$(*):latest \
-		$(BUILDX_FLAGS) \
-		-f Containerfile \
-		.

@@ -124,7 +124,10 @@ where
             loop {
                 match logs_rx.recv().await {
                     Ok(logs) => {
-                        debug!("stream receiver queue size {}", logs_rx.len());
+                        if !logs_rx.is_empty() {
+                            debug!("stream receiver queue size {}", logs_rx.len())
+                        }
+
                         for log in logs {
                             if log.deployment_id == deployment_id
                                 && log.tx_timestamp.timestamp() >= last.seconds

@@ -80,7 +80,10 @@ impl Postgres {
                         );
 
                         debug!("inserting {} logs into the database", logs.len());
-                        debug!("database receiver queue size {}", rx.len());
+
+                        if !rx.is_empty() {
+                            debug!("database receiver queue size {}", rx.len());
+                        }
 
                         builder.push_values(logs, |mut b, log| {
                             b.push_bind(log.deployment_id)

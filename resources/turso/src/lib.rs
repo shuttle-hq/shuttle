@@ -108,7 +108,7 @@ impl ResourceBuilder<Client> for Turso {
                     None => {
                         // Default to a local db of the name of the service.
                         let db_file = std::env::current_dir() // Should be root of the project's workspace
-                            .and_then(std::fs::canonicalize)
+                            .and_then(dunce::canonicalize)
                             .map(|cd| {
                                 let mut p = cd.join(md.service_name);
                                 p.set_extension("db");

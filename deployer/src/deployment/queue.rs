@@ -359,8 +359,10 @@ async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<BuiltService> {
-    let release = std::env::var("CI").is_ok_and(|s| s == "true");
-    let runtimes = build_workspace(project_path, release, tx, true)
+    // Investigate if this can be optimized for local run / CI.
+    // Remember the same flag for cargo test as well.
+    // let release = std::env::var("CI").is_ok_and(|s| s == "true") || std::env::var("PROD").is_ok_and(|s| s == "true");
+    let runtimes = build_workspace(project_path, true, tx, true)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 

@@ -618,7 +618,7 @@ impl Shuttle {
             if cfg!(debug_assertions) {
                 // Canonicalized path to shuttle-runtime for dev to work on windows
 
-                let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
+                let path = dunce::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
                     .expect("path to shuttle-runtime does not exist or is invalid");
 
                 std::process::Command::new("cargo")
@@ -1713,7 +1713,7 @@ mod tests {
                 ".gitignore",
                 ".ignore",
                 "Cargo.toml",
-                "Secrets.toml", // always included bu default
+                "Secrets.toml", // always included by default
                 "Secrets.toml.example",
                 "Shuttle.toml",
                 "asset1", // normal file

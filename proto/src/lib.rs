@@ -153,8 +153,7 @@ pub mod runtime {
             args.join(" ")
         );
         let runtime = process::Command::new(
-            std::fs::canonicalize(runtime_executable)
-                .context("canonicalize path the renamed executable")?,
+            dunce::canonicalize(runtime_executable).context("canonicalize path of executable")?,
         )
         .current_dir(project_path)
         .args(&args)

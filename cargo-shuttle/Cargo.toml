@@ -20,7 +20,7 @@ crossbeam-channel = { workspace = true }
 crossterm = { workspace = true }
 dialoguer = { version = "0.10.4", features = ["fuzzy-select"] }
 dirs = { workspace = true }
-dunce = "1.0.3"
+dunce = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
 git2 = "0.17.2"

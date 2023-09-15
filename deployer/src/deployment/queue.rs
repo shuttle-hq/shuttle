@@ -117,7 +117,7 @@ pub async fn task(
 fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        DEPLOYER_END_MSG_BUILD_ERR,
+        "{}", DEPLOYER_END_MSG_BUILD_ERR,
     );
 }
 

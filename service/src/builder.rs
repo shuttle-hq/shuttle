@@ -1,6 +1,7 @@
 use std::fs::read_to_string;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
+use std::process::Output;
 
 use anyhow::{anyhow, bail, Context};
 use cargo_metadata::Message;
@@ -141,7 +142,11 @@ pub async fn clean_crate(project_path: &Path) -> anyhow::Result<Vec<String>> {
     if !manifest_path.exists() {
         bail!("failed to read the Shuttle project manifest");
     }
-    let output = tokio::process::Command::new("cargo")
+    let Output {
+        status,
+        stdout,
+        stderr,
+    } = tokio::process::Command::new("cargo")
         .arg("clean")
         .arg("--manifest-path")
         .arg(manifest_path.to_str().unwrap())
@@ -149,17 +154,14 @@ pub async fn clean_crate(project_path: &Path) -> anyhow::Result<Vec<String>> {
         .await
         .unwrap();
 
-    if output.status.success() {
-        let lines = vec![
-            String::from_utf8(output.clone().stderr)?,
-            String::from_utf8(output.stdout)?,
-        ];
+    if status.success() {
+        let lines = vec![String::from_utf8(stderr)?, String::from_utf8(stdout)?];
         Ok(lines)
     } else {
         Err(anyhow!(
             "cargo clean failed with exit code {} and error {}",
-            output.clone().status.to_string(),
-            String::from_utf8(output.stderr)?
+            status.to_string(),
+            String::from_utf8(stderr)?
         ))
     }
 }
@@ -220,14 +222,15 @@ async fn compile(
         .arg("build")
         .arg("--manifest-path")
         .arg(manifest_path)
-        .arg("--color=always"); // piping disables auto color
+        .arg("--color=always") // piping disables auto color, but we want it
+        .current_dir(project_path.as_path());
 
     if deployment {
-        cargo.arg("-j").arg(4.to_string());
+        cargo.arg("--jobs=4");
     }
 
-    for package in packages.clone() {
-        cargo.arg("--package").arg(package.name.clone());
+    for package in &packages {
+        cargo.arg("--package").arg(package.name.as_str());
     }
 
     let profile = if release_mode {
@@ -271,7 +274,7 @@ async fn compile(
     let services = packages
         .iter()
         .map(|package| {
-            if wasm {
+            let path = if wasm {
                 let mut path: PathBuf = [
                     project_path.clone(),
                     target_path.clone(),
@@ -282,14 +285,7 @@ async fn compile(
                 .iter()
                 .collect();
                 path.set_extension("wasm");
-
-                BuiltService {
-                    workspace_path: project_path.clone(),
-                    manifest_path: package.manifest_path.clone().into_std_path_buf(),
-                    package_name: package.name.clone(),
-                    executable_path: path.clone(),
-                    is_wasm: true,
-                }
+                path
             } else {
                 let mut path: PathBuf = [
                     project_path.clone(),
@@ -300,14 +296,15 @@ async fn compile(
                 .iter()
                 .collect();
                 path.set_extension(std::env::consts::EXE_EXTENSION);
+                path
+            };
 
-                BuiltService {
-                    workspace_path: project_path.clone(),
-                    manifest_path: package.manifest_path.clone().into_std_path_buf(),
-                    package_name: package.name.clone(),
-                    executable_path: path.clone(),
-                    is_wasm: false,
-                }
+            BuiltService {
+                workspace_path: project_path.clone(),
+                manifest_path: package.manifest_path.clone().into_std_path_buf(),
+                package_name: package.name.clone(),
+                executable_path: path.clone(),
+                is_wasm: wasm,
             }
         })
         .collect();

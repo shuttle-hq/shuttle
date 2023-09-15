@@ -743,8 +743,15 @@ pub async fn get_secrets(
 )]
 pub async fn clean_project(
     Extension(deployment_manager): Extension<DeploymentManager>,
+    Path(project_name): Path<String>,
 ) -> Result<Json<Vec<String>>> {
-    let lines = clean_crate(deployment_manager.builds_path()).await?;
+    let lines = clean_crate(
+        deployment_manager
+            .builds_path()
+            .join(project_name)
+            .as_path(),
+    )
+    .await?;
 
     Ok(Json(lines))
 }

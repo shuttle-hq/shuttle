@@ -470,7 +470,7 @@ mod tests {
     };
     use tokio::{
         process::Command,
-        sync::{mpsc, oneshot, Mutex},
+        sync::{oneshot, Mutex},
         time::sleep,
     };
     use tonic::transport::Server;

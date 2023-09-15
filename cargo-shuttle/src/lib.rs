@@ -3,6 +3,7 @@ mod client;
 mod config;
 mod init;
 mod provisioner_server;
+mod suggestions;
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
@@ -395,7 +396,9 @@ impl Shuttle {
 
     async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {
         if logout_args.reset_api_key {
-            self.reset_api_key(&self.client()?).await?;
+            self.reset_api_key(&self.client()?)
+                .await
+                .map_err(suggestions::reset_api_key_failed)?;
             println!("Successfully reset the API key.");
             println!(" -> Go to {SHUTTLE_LOGIN_URL} to get a new one.\n");
         }
@@ -417,7 +420,10 @@ impl Shuttle {
 
     async fn stop(&self, client: &Client) -> Result<()> {
         let proj_name = self.ctx.project_name();
-        let mut service = client.stop_service(proj_name).await?;
+        let mut service = client
+            .stop_service(proj_name)
+            .await
+            .map_err(suggestions::stop_deployment_failure)?;
 
         let progress_bar = create_spinner();
         loop {
@@ -460,7 +466,10 @@ impl Shuttle {
     }
 
     async fn secrets(&self, client: &Client) -> Result<()> {
-        let secrets = client.get_secrets(self.ctx.project_name()).await?;
+        let secrets = client
+            .get_secrets(self.ctx.project_name())
+            .await
+            .map_err(suggestions::get_secrets_failure)?;
         let table = secret::get_table(&secrets);
 
         println!("{table}");
@@ -469,7 +478,17 @@ impl Shuttle {
     }
 
     async fn clean(&self, client: &Client) -> Result<()> {
-        let lines = client.clean_project(self.ctx.project_name()).await?;
+        let lines = client
+            .clean_project(self.ctx.project_name())
+            .await
+            .map_err(|err| {
+                suggestions::project_request_failure(
+                    err,
+                    "Project clean failed",
+                    true,
+                    "cleaning your project or checking its status fail repeteadly",
+                )
+            })?;
 
         for line in lines {
             println!("{line}");
@@ -494,7 +513,12 @@ impl Shuttle {
 
             if latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client.get_deployments(proj_name, 0, 1).await?;
+                let deployments = client
+                    .get_deployments(proj_name, 0, 1)
+                    .await
+                    .map_err(|err| {
+                        suggestions::get_logs_failure(err, "Fetching the latest deployment failed")
+                    })?;
                 let most_recent = deployments.first().context(format!(
                     "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
                 ))?;
@@ -511,7 +535,12 @@ impl Shuttle {
         };
 
         if follow {
-            let mut stream = client.get_logs_ws(self.ctx.project_name(), &id).await?;
+            let mut stream = client
+                .get_logs_ws(self.ctx.project_name(), &id)
+                .await
+                .map_err(|err| {
+                    suggestions::get_logs_failure(err, "Connecting to the logs stream failed")
+                })?;
 
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
@@ -521,7 +550,12 @@ impl Shuttle {
                 }
             }
         } else {
-            let logs = client.get_logs(self.ctx.project_name(), &id).await?;
+            let logs = client
+                .get_logs(self.ctx.project_name(), &id)
+                .await
+                .map_err(|err| {
+                    suggestions::get_logs_failure(err, "Fetching the deployment failed")
+                })?;
 
             for log in logs.into_iter() {
                 println!("{log}");
@@ -538,7 +572,10 @@ impl Shuttle {
         }
 
         let proj_name = self.ctx.project_name();
-        let deployments = client.get_deployments(proj_name, page, limit).await?;
+        let deployments = client
+            .get_deployments(proj_name, page, limit)
+            .await
+            .map_err(suggestions::get_deployments_list_failure)?;
         let table = get_deployments_table(&deployments, proj_name.as_str(), page);
 
         println!("{table}");
@@ -550,7 +587,8 @@ impl Shuttle {
     async fn deployment_get(&self, client: &Client, deployment_id: Uuid) -> Result<()> {
         let deployment = client
             .get_deployment_details(self.ctx.project_name(), &deployment_id)
-            .await?;
+            .await
+            .map_err(suggestions::get_deployment_status_failure)?;
 
         println!("{deployment}");
 
@@ -560,7 +598,8 @@ impl Shuttle {
     async fn resources_list(&self, client: &Client) -> Result<()> {
         let resources = client
             .get_service_resources(self.ctx.project_name())
-            .await?;
+            .await
+            .map_err(suggestions::get_service_resources_failure)?;
         let table = get_resources_table(&resources, self.ctx.project_name().as_str());
 
         println!("{table}");
@@ -1176,11 +1215,18 @@ impl Shuttle {
 
         let deployment = client
             .deploy(self.ctx.project_name(), deployment_req)
-            .await?;
+            .await
+            .map_err(suggestions::deploy_request_failure)?;
 
         let mut stream = client
             .get_logs_ws(self.ctx.project_name(), &deployment.id)
-            .await?;
+            .await
+            .map_err(|err| {
+                suggestions::deployment_setup_failure(
+                    err,
+                    "Connecting to the deployment logs failed",
+                )
+            })?;
 
         loop {
             let message = stream.next().await;
@@ -1219,7 +1265,13 @@ impl Shuttle {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                 stream = client
                     .get_logs_ws(self.ctx.project_name(), &deployment.id)
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        suggestions::deployment_setup_failure(
+                            err,
+                            "Connecting to the deployment logs failed",
+                        )
+                    })?;
             }
         }
 
@@ -1230,7 +1282,10 @@ impl Shuttle {
 
         let deployment = client
             .get_deployment_details(self.ctx.project_name(), &deployment.id)
-            .await?;
+            .await
+            .map_err(|err| {
+                suggestions::deployment_setup_failure(err, "Assessing deployment state failed")
+            })?;
 
         // A deployment will only exist if there is currently one in the running state
         if deployment.state != shuttle_common::deployment::State::Running {
@@ -1306,15 +1361,28 @@ impl Shuttle {
             self.ctx.project_name(),
             client,
         )
-        .await?;
+        .await
+        .map_err(|err| {
+            suggestions::project_request_failure(
+                err,
+                "Project creation failed",
+                true,
+                "the project creation or retrieving the status fails repeteadly",
+            )
+        })?;
+
         println!("Run `cargo shuttle deploy --allow-dirty` to deploy your Shuttle service.");
 
         Ok(())
     }
 
     async fn project_recreate(&self, client: &Client, idle_minutes: u64) -> Result<()> {
-        self.project_delete(client).await?;
-        self.project_create(client, idle_minutes).await?;
+        self.project_delete(client)
+            .await
+            .map_err(suggestions::project_restart_failure)?;
+        self.project_create(client, idle_minutes)
+            .await
+            .map_err(suggestions::project_restart_failure)?;
 
         Ok(())
     }
@@ -1325,7 +1393,14 @@ impl Shuttle {
             return Ok(());
         }
 
-        let projects = client.get_projects_list(page, limit).await?;
+        let projects = client.get_projects_list(page, limit).await.map_err(|err| {
+            suggestions::project_request_failure(
+                err,
+                "Getting projects list failed",
+                false,
+                "getting the projects list fails repeteadly",
+            )
+        })?;
         let projects_table = project::get_table(&projects, page);
 
         println!("{projects_table}");
@@ -1349,7 +1424,17 @@ impl Shuttle {
             )
             .await?;
         } else {
-            let project = client.get_project(self.ctx.project_name()).await?;
+            let project = client
+                .get_project(self.ctx.project_name())
+                .await
+                .map_err(|err| {
+                    suggestions::project_request_failure(
+                        err,
+                        "Getting project status failed",
+                        false,
+                        "getting project status failed repeteadly",
+                    )
+                })?;
             println!("{project}");
         }
 
@@ -1368,7 +1453,15 @@ impl Shuttle {
             self.ctx.project_name(),
             client,
         )
-        .await?;
+        .await
+        .map_err(|err| {
+            suggestions::project_request_failure(
+                err,
+                "Project destroy failed",
+                true,
+                "deleting the project or getting project status fails repeteadly",
+            )
+        })?;
         println!("Run `cargo shuttle project start` to recreate project environment on Shuttle.");
 
         Ok(())

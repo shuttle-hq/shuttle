@@ -26,6 +26,8 @@ pub use crate::persistence::Persistence;
 use crate::proxy::AddressGetter;
 pub use crate::runtime_manager::RuntimeManager;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub async fn start(
     persistence: Persistence,
     runtime_manager: Arc<Mutex<RuntimeManager>>,

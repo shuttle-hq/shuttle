@@ -718,7 +718,6 @@ impl Shuttle {
         });
 
         let load_request = tonic::Request::new(LoadRequest {
-            deployment_id: deployment_id.to_string(),
             path: service
                 .executable_path
                 .clone()

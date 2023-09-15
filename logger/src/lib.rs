@@ -1,4 +1,3 @@
-use async_broadcast::Sender;
 use async_trait::async_trait;
 use dal::Log;
 use dal::{Dal, DalError};
@@ -8,10 +7,11 @@ use shuttle_proto::logger::{
     logger_server::Logger, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
 };
 use thiserror::Error;
+use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use tracing::error;
+use tracing::{debug, error};
 
 pub mod args;
 mod dal;
@@ -65,8 +65,7 @@ where
         if !logs.is_empty() {
             _ = self
                 .logs_tx
-                .broadcast(logs.into_iter().filter_map(Log::from_log_item).collect())
-                .await
+                .send(logs.into_iter().filter_map(Log::from_log_item).collect())
                 .map_err(|err| {
                     Status::internal(format!(
                         "Errored while trying to store the logs in persistence: {err}"
@@ -99,7 +98,7 @@ where
         request.verify(Scope::Logs)?;
 
         // Subscribe as soon as possible
-        let mut logs_rx = self.logs_tx.new_receiver();
+        let mut logs_rx = self.logs_tx.subscribe();
         let LogsRequest { deployment_id } = request.into_inner();
         let (tx, rx) = mpsc::channel(1);
 
@@ -122,21 +121,32 @@ where
                 };
             }
 
-            while let Ok(logs) = logs_rx.recv().await {
-                for log in logs {
-                    if log.deployment_id == deployment_id
-                        && log.tx_timestamp.timestamp() >= last.seconds
-                        && log.tx_timestamp.timestamp_nanos() > last.nanos.into()
-                    {
-                        if let Err(error) = tx.send(Ok(log.into())).await {
-                            error!(
-                                error = &error as &dyn std::error::Error,
-                                "error sending new log"
-                            );
+            loop {
+                match logs_rx.recv().await {
+                    Ok(logs) => {
+                        if !logs_rx.is_empty() {
+                            debug!("stream receiver queue size {}", logs_rx.len())
+                        }
 
-                            // Receiver closed so end stream spawn
-                            return;
-                        };
+                        for log in logs {
+                            if log.deployment_id == deployment_id
+                                && log.tx_timestamp.timestamp() >= last.seconds
+                                && log.tx_timestamp.timestamp_nanos() > last.nanos.into()
+                            {
+                                if let Err(error) = tx.send(Ok(log.into())).await {
+                                    error!(
+                                        error = &error as &dyn std::error::Error,
+                                        "error sending new log"
+                                    );
+
+                                    // Receiver closed so end stream spawn
+                                    return;
+                                };
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        error!(error = %err, "failed to receive logs in logs stream");
                     }
                 }
             }

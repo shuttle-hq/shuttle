@@ -63,6 +63,11 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         }
     };
 
+    println!(
+        "shuttle-runtime executable started (version {})",
+        crate::VERSION
+    );
+
     // this is handled after arg parsing to not interfere with --version above
     #[cfg(feature = "setup-tracing")]
     {
@@ -159,14 +164,13 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
-        deployment_id: String,
     ) -> Result<Self::Service, shuttle_service::Error>;
 }
 
 #[async_trait]
 impl<F, O, Fac, S> Loader<Fac> for F
 where
-    F: FnOnce(Fac, ResourceTracker, String) -> O + Send,
+    F: FnOnce(Fac, ResourceTracker) -> O + Send,
     O: Future<Output = Result<S, shuttle_service::Error>> + Send,
     Fac: Factory + 'static,
     S: Service,
@@ -177,9 +181,8 @@ where
         self,
         factory: Fac,
         resource_tracker: ResourceTracker,
-        deployment_id: String,
     ) -> Result<Self::Service, shuttle_service::Error> {
-        (self)(factory, resource_tracker, deployment_id).await
+        (self)(factory, resource_tracker).await
     }
 }
 
@@ -197,7 +200,6 @@ where
             resources,
             secrets,
             service_name,
-            deployment_id,
         } = request.into_inner();
         println!("loading alpha service at {path}");
 
@@ -234,63 +236,62 @@ where
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
         // send to new thread to catch panics
-        let service =
-            match tokio::spawn(loader.load(factory, resource_tracker, deployment_id)).await {
-                Ok(res) => match res {
-                    Ok(service) => service,
-                    Err(error) => {
-                        println!("loading service failed: {error}");
-
-                        let message = LoadResponse {
-                            success: false,
-                            message: error.to_string(),
-                            resources: new_resources
-                                .lock()
-                                .expect("to get lock no new resources")
-                                .iter()
-                                .map(resource::Response::to_bytes)
-                                .collect(),
-                        };
-                        return Ok(Response::new(message));
-                    }
-                },
+        let service = match tokio::spawn(loader.load(factory, resource_tracker)).await {
+            Ok(res) => match res {
+                Ok(service) => service,
                 Err(error) => {
-                    let resources = new_resources
-                        .lock()
-                        .expect("to get lock no new resources")
-                        .iter()
-                        .map(resource::Response::to_bytes)
-                        .collect();
+                    println!("loading service failed: {error}");
 
-                    if error.is_panic() {
-                        let panic = error.into_panic();
-                        let msg = match panic.downcast_ref::<String>() {
-                            Some(msg) => msg.to_string(),
-                            None => match panic.downcast_ref::<&str>() {
-                                Some(msg) => msg.to_string(),
-                                None => "<no panic message>".to_string(),
-                            },
-                        };
-
-                        println!("loading service panicked: {msg}");
-
-                        let message = LoadResponse {
-                            success: false,
-                            message: msg,
-                            resources,
-                        };
-                        return Ok(Response::new(message));
-                    } else {
-                        println!("loading service crashed: {error}");
-                        let message = LoadResponse {
-                            success: false,
-                            message: error.to_string(),
-                            resources,
-                        };
-                        return Ok(Response::new(message));
-                    }
+                    let message = LoadResponse {
+                        success: false,
+                        message: error.to_string(),
+                        resources: new_resources
+                            .lock()
+                            .expect("to get lock no new resources")
+                            .iter()
+                            .map(resource::Response::to_bytes)
+                            .collect(),
+                    };
+                    return Ok(Response::new(message));
                 }
-            };
+            },
+            Err(error) => {
+                let resources = new_resources
+                    .lock()
+                    .expect("to get lock no new resources")
+                    .iter()
+                    .map(resource::Response::to_bytes)
+                    .collect();
+
+                if error.is_panic() {
+                    let panic = error.into_panic();
+                    let msg = match panic.downcast_ref::<String>() {
+                        Some(msg) => msg.to_string(),
+                        None => match panic.downcast_ref::<&str>() {
+                            Some(msg) => msg.to_string(),
+                            None => "<no panic message>".to_string(),
+                        },
+                    };
+
+                    println!("loading service panicked: {msg}");
+
+                    let message = LoadResponse {
+                        success: false,
+                        message: msg,
+                        resources,
+                    };
+                    return Ok(Response::new(message));
+                } else {
+                    println!("loading service crashed: {error}");
+                    let message = LoadResponse {
+                        success: false,
+                        message: error.to_string(),
+                        resources,
+                    };
+                    return Ok(Response::new(message));
+                }
+            }
+        };
 
         *self.service.lock().unwrap() = Some(service);
 
@@ -311,7 +312,6 @@ where
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        println!("alpha runtime starting");
         let service = self.service.lock().unwrap().deref_mut().take();
         let service = service.unwrap();
 
@@ -320,7 +320,7 @@ where
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        println!("starting on {service_address}");
+        println!("Starting on {service_address}");
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
         *self.kill_tx.lock().unwrap() = Some(kill_tx);

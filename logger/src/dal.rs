@@ -1,6 +1,5 @@
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
-use async_broadcast::{broadcast, Sender};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use prost_types::Timestamp;
@@ -12,7 +11,8 @@ use sqlx::{
     FromRow, PgPool, QueryBuilder,
 };
 use thiserror::Error;
-use tracing::error;
+use tokio::sync::broadcast::{self, Sender};
+use tracing::{debug, error, info};
 
 use tonic::transport::Uri;
 
@@ -58,27 +58,49 @@ impl Postgres {
             .await
             .expect("to run migrations successfully");
 
-        // TODO: we switched to async_broadcast to resolve the infinite loop bug, but it wasn't related.
-        // Should we switch back to tokio::broadcast?
-        let (tx, mut rx): (Sender<Vec<Log>>, _) = broadcast(1000);
+        let (tx, mut rx): (Sender<Vec<Log>>, _) = broadcast::channel(1000);
         let pool_spawn = pool.clone();
 
+        let interval_tx = tx.clone();
         tokio::spawn(async move {
-            while let Ok(logs) = rx.recv().await {
-                let mut builder = QueryBuilder::new(
-                    "INSERT INTO logs (deployment_id, shuttle_service_name, data, tx_timestamp)",
-                );
-                builder.push_values(logs, |mut b, log| {
-                    b.push_bind(log.deployment_id)
-                        .push_bind(log.shuttle_service_name)
-                        .push_bind(log.data)
-                        .push_bind(log.tx_timestamp);
-                });
-                let query = builder.build();
+            let mut interval = tokio::time::interval(Duration::from_secs(10));
 
-                if let Err(error) = query.execute(&pool_spawn).await {
-                    error!(error = %error, "failed to insert logs");
-                };
+            loop {
+                interval.tick().await;
+                info!("broadcast channel queue size: {}", interval_tx.len());
+            }
+        });
+
+        tokio::spawn(async move {
+            loop {
+                match rx.recv().await {
+                    Ok(logs) => {
+                        let mut builder = QueryBuilder::new(
+                            "INSERT INTO logs (deployment_id, shuttle_service_name, data, tx_timestamp)",
+                        );
+
+                        debug!("inserting {} logs into the database", logs.len());
+
+                        if !rx.is_empty() {
+                            debug!("database receiver queue size {}", rx.len());
+                        }
+
+                        builder.push_values(logs, |mut b, log| {
+                            b.push_bind(log.deployment_id)
+                                .push_bind(log.shuttle_service_name)
+                                .push_bind(log.data)
+                                .push_bind(log.tx_timestamp);
+                        });
+                        let query = builder.build();
+
+                        if let Err(error) = query.execute(&pool_spawn).await {
+                            error!(error = %error, "failed to insert logs");
+                        };
+                    }
+                    Err(err) => {
+                        error!(error = %err, "failed to receive message in database receiver");
+                    }
+                }
             }
         });
 

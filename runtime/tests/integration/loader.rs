@@ -9,7 +9,6 @@ async fn bind_panic() {
     let TestRuntime {
         bin_path,
         service_name,
-        deployment_id,
         secrets,
         mut runtime_client,
         runtime_address,
@@ -19,7 +18,6 @@ async fn bind_panic() {
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
         service_name,
-        deployment_id: deployment_id.to_string(),
         resources: Default::default(),
         secrets,
     });
@@ -58,7 +56,6 @@ async fn bind_panic_owned() {
     let TestRuntime {
         bin_path,
         service_name,
-        deployment_id,
         secrets,
         mut runtime_client,
         runtime_address,
@@ -70,7 +67,6 @@ async fn bind_panic_owned() {
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
         service_name,
-        deployment_id: deployment_id.to_string(),
         resources: Default::default(),
         secrets,
     });
@@ -109,7 +105,6 @@ async fn loader_panic() {
     let TestRuntime {
         bin_path,
         service_name,
-        deployment_id,
         secrets,
         mut runtime_client,
         runtime_address: _,
@@ -119,7 +114,6 @@ async fn loader_panic() {
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
         service_name,
-        deployment_id: deployment_id.to_string(),
         resources: Default::default(),
         secrets,
     });
@@ -140,7 +134,6 @@ async fn loader_panic_owned() {
     let TestRuntime {
         bin_path,
         service_name,
-        deployment_id,
         secrets,
         mut runtime_client,
         runtime_address: _,
@@ -152,7 +145,6 @@ async fn loader_panic_owned() {
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
         service_name,
-        deployment_id: deployment_id.to_string(),
         resources: Default::default(),
         secrets,
     });

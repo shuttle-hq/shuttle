@@ -7,9 +7,6 @@ pub struct LoadRequest {
     /// Path to compiled file to load for service
     #[prost(string, tag = "2")]
     pub path: ::prost::alloc::string::String,
-    /// The id of this deployment
-    #[prost(string, tag = "3")]
-    pub deployment_id: ::prost::alloc::string::String,
     /// A cache of resource details to use instead when asked
     #[prost(bytes = "vec", repeated, tag = "10")]
     pub resources: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,

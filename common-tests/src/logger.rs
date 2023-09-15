@@ -8,9 +8,44 @@ use shuttle_common::claims::{ClaimLayer, InjectPropagationLayer};
 use shuttle_proto::logger::{
     logger_client::LoggerClient,
     logger_server::{Logger, LoggerServer},
+    LogLine, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
 };
-use tonic::transport::{Endpoint, Server};
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use tonic::{
+    async_trait,
+    transport::{Endpoint, Server},
+    Request, Response, Status,
+};
 use tower::ServiceBuilder;
+
+pub struct MockedLogger;
+
+#[async_trait]
+impl Logger for MockedLogger {
+    async fn store_logs(
+        &self,
+        _: Request<StoreLogsRequest>,
+    ) -> Result<Response<StoreLogsResponse>, Status> {
+        Ok(Response::new(StoreLogsResponse { success: true }))
+    }
+
+    async fn get_logs(&self, _: Request<LogsRequest>) -> Result<Response<LogsResponse>, Status> {
+        Ok(Response::new(LogsResponse {
+            log_items: Vec::new(),
+        }))
+    }
+
+    type GetLogsStreamStream = ReceiverStream<Result<LogLine, Status>>;
+
+    async fn get_logs_stream(
+        &self,
+        _: Request<LogsRequest>,
+    ) -> Result<Response<Self::GetLogsStreamStream>, Status> {
+        let (_, rx) = mpsc::channel(1);
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
 
 pub async fn mocked_logger_client(
     logger: impl Logger,

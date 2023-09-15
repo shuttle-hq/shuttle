@@ -143,10 +143,10 @@ pub async fn task(
     }
 }
 
-#[instrument(skip(active_deployment_getter, runtime_manager))]
+#[instrument(skip(active_deployment_getter, deployment_id, runtime_manager))]
 async fn kill_old_deployments(
     service_id: Ulid,
-    __deployment_id: Uuid, // prefixed to not catch this span in DeploymentLogLayer
+    deployment_id: Uuid,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
 ) -> Result<()> {
@@ -158,7 +158,7 @@ async fn kill_old_deployments(
         .await
         .map_err(|e| Error::OldCleanup(Box::new(e)))?
         .into_iter()
-        .filter(|old_id| old_id != &__deployment_id)
+        .filter(|old_id| old_id != &deployment_id)
     {
         info!("stopping old deployment (id {old_id})");
 
@@ -277,7 +277,6 @@ impl Built {
         load(
             self.service_name.clone(),
             self.service_id,
-            self.id,
             executable_path.clone(),
             secret_getter,
             resource_manager,
@@ -299,12 +298,9 @@ impl Built {
     }
 }
 
-// TODO: refactor this and remove clippy allow.
-#[allow(clippy::too_many_arguments)]
 async fn load(
     service_name: String,
     service_id: Ulid,
-    deployment_id: Uuid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
     mut resource_manager: impl ResourceManager,
@@ -347,7 +343,6 @@ async fn load(
             .into_string()
             .unwrap_or_default(),
         service_name: service_name.clone(),
-        deployment_id: deployment_id.to_string(),
         resources,
         secrets,
     });
@@ -397,7 +392,6 @@ async fn load(
     }
 }
 
-// TODO: add ticket to add deployment_id to more functions that need to be instrumented in deployer.
 #[instrument(name = "Starting service", skip(runtime_client, deployment_updater, cleanup), fields(deployment_id = %id, state = %State::Running))]
 async fn run(
     id: Uuid,
@@ -464,12 +458,9 @@ mod tests {
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
     use shuttle_common::{claims::Claim, constants::EXECUTABLE_DIRNAME};
-    use shuttle_common_tests::logger::mocked_logger_client;
+    use shuttle_common_tests::logger::{mocked_logger_client, MockedLogger};
     use shuttle_proto::{
-        logger::{
-            logger_server::Logger, Batcher, LogLine, LogsRequest, LogsResponse, StoreLogsRequest,
-            StoreLogsResponse,
-        },
+        logger::Batcher,
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
@@ -482,8 +473,7 @@ mod tests {
         sync::{mpsc, oneshot, Mutex},
         time::sleep,
     };
-    use tokio_stream::wrappers::ReceiverStream;
-    use tonic::{transport::Server, Request, Response, Status};
+    use tonic::transport::Server;
     use ulid::Ulid;
     use uuid::Uuid;
 
@@ -523,37 +513,6 @@ mod tests {
             _request: tonic::Request<Ping>,
         ) -> Result<tonic::Response<Pong>, tonic::Status> {
             panic!("no run tests should do a health check");
-        }
-    }
-
-    pub struct MockedLogger;
-
-    #[async_trait]
-    impl Logger for MockedLogger {
-        async fn store_logs(
-            &self,
-            _: Request<StoreLogsRequest>,
-        ) -> Result<Response<StoreLogsResponse>, Status> {
-            Ok(Response::new(StoreLogsResponse { success: true }))
-        }
-
-        async fn get_logs(
-            &self,
-            _: Request<LogsRequest>,
-        ) -> Result<Response<LogsResponse>, Status> {
-            Ok(Response::new(LogsResponse {
-                log_items: Vec::new(),
-            }))
-        }
-
-        type GetLogsStreamStream = ReceiverStream<Result<LogLine, Status>>;
-
-        async fn get_logs_stream(
-            &self,
-            _: Request<LogsRequest>,
-        ) -> Result<Response<Self::GetLogsStreamStream>, Status> {
-            let (_, rx) = mpsc::channel(1);
-            Ok(Response::new(ReceiverStream::new(rx)))
         }
     }
 

@@ -55,48 +55,58 @@ RUN cargo build \
 # Base image for running each "shuttle-..." binary
 ARG RUSTUP_TOOLCHAIN
 FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-crate-base
-ARG CARGO_PROFILE
 ARG folder
-ARG crate
+# Some crates need additional libs
+COPY ${folder}/*.so /usr/lib/
+ENV LD_LIBRARY_PATH=/usr/lib/
+ENTRYPOINT ["/usr/local/bin/service"]
+
+
+# Targets for each crate
+# Copying of each binary is non-DRY to allow other steps to be cached
+
+FROM shuttle-crate-base AS shuttle-auth
+ARG CARGO_PROFILE
+COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-auth /usr/local/bin/service
+FROM shuttle-auth AS shuttle-auth-dev
+
+FROM shuttle-crate-base AS shuttle-deployer
+ARG CARGO_PROFILE
 ARG prepare_args
 # Fixes some dependencies compiled with incompatible versions of rustc
 ARG RUSTUP_TOOLCHAIN
 ENV RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN}
 # Used as env variable in prepare script
 ARG PROD
-
-# Some crates need additional libs
-COPY ${folder}/*.so /usr/lib/
-ENV LD_LIBRARY_PATH=/usr/lib/
-
-COPY --from=builder /build/target/${CARGO_PROFILE}/${crate} /usr/local/bin/service
-ENTRYPOINT ["/usr/local/bin/service"]
-
-
-# Targets for each crate
-
-FROM shuttle-crate-base AS shuttle-auth
-FROM shuttle-auth AS shuttle-auth-dev
-
-FROM shuttle-crate-base AS shuttle-deployer
-ARG CARGO_PROFILE
-COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin/
 COPY deployer/prepare.sh /prepare.sh
 RUN /prepare.sh "${prepare_args}"
+COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-deployer /usr/local/bin/service
+COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin/
 FROM shuttle-deployer AS shuttle-deployer-dev
 # Source code needed for compiling with [patch.crates-io]
 COPY --from=planner /build /usr/src/shuttle/
-
 FROM shuttle-crate-base AS shuttle-gateway
+ARG CARGO_PROFILE
+ARG folder
+# Some crates need additional libs
+COPY ${folder}/*.so /usr/lib/
+ENV LD_LIBRARY_PATH=/usr/lib/
+COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-gateway /usr/local/bin/service
 FROM shuttle-gateway AS shuttle-gateway-dev
 # For testing certificates locally
 COPY --from=planner /build/*.pem /usr/src/shuttle/
 
 FROM shuttle-crate-base AS shuttle-logger
+ARG CARGO_PROFILE
+COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-logger /usr/local/bin/service
 FROM shuttle-logger AS shuttle-logger-dev
 
 FROM shuttle-crate-base AS shuttle-provisioner
+ARG CARGO_PROFILE
+COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-provisioner /usr/local/bin/service
 FROM shuttle-provisioner AS shuttle-provisioner-dev
 
 FROM shuttle-crate-base AS shuttle-resource-recorder
+ARG CARGO_PROFILE
+COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-resource-recorder /usr/local/bin/service
 FROM shuttle-resource-recorder AS shuttle-resource-recorder-dev

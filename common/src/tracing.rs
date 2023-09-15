@@ -1,12 +1,6 @@
 use serde_json::json;
 use tracing::field::Visit;
 
-pub const MESSAGE_KEY: &str = "message";
-pub const FILEPATH_KEY: &str = "code.filepath";
-pub const LINENO_KEY: &str = "code.lineno";
-pub const NAMESPACE_KEY: &str = "code.namespace";
-pub const TARGET_KEY: &str = "target";
-
 // Boilerplate for extracting the fields from the event
 #[derive(Default)]
 pub struct JsonVisitor {

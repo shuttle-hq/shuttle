@@ -353,6 +353,7 @@ pub async fn create_service(
     let pid = persistence.project_id();
 
     span.in_scope(|| {
+        info!("Deployer version: {}", crate::VERSION);
         info!("Deployment ID: {}", id);
         info!("Service ID: {}", service.id);
         info!("Service name: {}", service.name);
@@ -670,7 +671,7 @@ async fn logs_websocket_handler(
             }
             Ok(Some(proto_log)) => {
                 let log = proto_log.to_log_item_with_id(deployment_id);
-                trace!(?log, "received log from broadcast channel");
+                trace!(?log, "received log from logger stream");
                 if log.id == deployment_id {
                     let msg = serde_json::to_string(&log).expect("to convert log item to json");
                     let sent = s.send(ws::Message::Text(msg)).await;

@@ -101,15 +101,12 @@ impl Shuttle {
         args: ShuttleArgs,
         provided_path_to_init: bool,
     ) -> Result<CommandOutcome> {
-        if let Some(ref s) = args.api_url {
-            if s != API_URL_DEFAULT {
-                eprintln!("INFO: Targetting non-standard API: {}", s);
+        if let Some(ref url) = args.api_url {
+            if url != API_URL_DEFAULT {
+                println!("INFO: Targetting non-standard API: {url}");
             }
-            if s.ends_with('/') {
-                eprintln!(
-                    "WARNING: API URL is probably incorrect. Ends with '/': {}",
-                    args.api_url.clone().unwrap()
-                );
+            if url.ends_with('/') {
+                eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");
             }
         }
 

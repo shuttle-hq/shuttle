@@ -15,7 +15,7 @@ use std::str::FromStr;
 
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
-    constants::{EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
+    constants::{API_URL_DEFAULT, EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
         deployment::{
@@ -108,13 +108,13 @@ impl Shuttle {
         args: ShuttleArgs,
         provided_path_to_init: bool,
     ) -> Result<CommandOutcome> {
-        trace!("running local client");
-
-        if args.api_url.as_ref().is_some_and(|s| s.ends_with('/')) {
-            println!(
-                "WARNING: API URL is probably incorrect. Ends with '/': {}",
-                args.api_url.clone().unwrap()
-            );
+        if let Some(ref url) = args.api_url {
+            if url != API_URL_DEFAULT {
+                println!("INFO: Targetting non-standard API: {url}");
+            }
+            if url.ends_with('/') {
+                eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");
+            }
         }
 
         // All commands that need to know which project is being handled
@@ -522,8 +522,8 @@ impl Shuttle {
 
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                    let log_item: shuttle_common::LogItem =
-                        serde_json::from_str(&line).expect("to parse log line");
+                    let log_item: shuttle_common::LogItem = serde_json::from_str(&line)
+                        .context("Failed parsing logs. Is your cargo-shuttle outdated?")?;
                     println!("{log_item}")
                 }
             }

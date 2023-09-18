@@ -95,43 +95,38 @@ pub mod provisioner {
 }
 
 pub mod runtime {
-    use std::{path::PathBuf, process::Stdio, time::Duration};
+    use std::{
+        path::{Path, PathBuf},
+        process::Stdio,
+        time::Duration,
+    };
 
     use anyhow::Context;
-    use shuttle_common::claims::{
-        ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer,
+    use shuttle_common::{
+        claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer},
+        deployment::Environment,
     };
     use tokio::process;
     use tonic::transport::{Channel, Endpoint};
     use tower::ServiceBuilder;
     use tracing::{info, trace};
 
-    pub enum StorageManagerType {
-        Artifacts(PathBuf),
-        WorkingDir(PathBuf),
-    }
-
     include!("generated/runtime.rs");
 
     pub async fn start(
         wasm: bool,
-        storage_manager_type: StorageManagerType,
+        environment: Environment,
         provisioner_address: &str,
         auth_uri: Option<&String>,
         port: u16,
-        get_runtime_executable: impl FnOnce() -> PathBuf,
+        runtime_executable: PathBuf,
+        project_path: &Path,
     ) -> anyhow::Result<(
         process::Child,
         runtime_client::RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     )> {
-        let (storage_manager_type, storage_manager_path) = match storage_manager_type {
-            StorageManagerType::Artifacts(path) => ("artifacts", path),
-            StorageManagerType::WorkingDir(path) => ("working-dir", path),
-        };
-
         let port = &port.to_string();
-        let storage_manager_path = &storage_manager_path.display().to_string();
-        let runtime_executable_path = get_runtime_executable();
+        let environment = &environment.to_string();
 
         let args = if wasm {
             vec!["--port", port]
@@ -141,10 +136,8 @@ pub mod runtime {
                 port,
                 "--provisioner-address",
                 provisioner_address,
-                "--storage-manager-type",
-                storage_manager_type,
-                "--storage-manager-path",
-                storage_manager_path,
+                "--env",
+                environment,
             ];
 
             if let Some(auth_uri) = auth_uri {
@@ -156,15 +149,18 @@ pub mod runtime {
 
         info!(
             "Spawning runtime process: {} {}",
-            runtime_executable_path.display(),
+            runtime_executable.display(),
             args.join(" ")
         );
-        let runtime = process::Command::new(runtime_executable_path)
-            .args(&args)
-            .stdout(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .context("spawning runtime process")?;
+        let runtime = process::Command::new(
+            dunce::canonicalize(runtime_executable).context("canonicalize path of executable")?,
+        )
+        .current_dir(project_path)
+        .args(&args)
+        .stdout(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .context("spawning runtime process")?;
 
         info!("connecting runtime client");
         let conn = Endpoint::new(format!("http://127.0.0.1:{port}"))

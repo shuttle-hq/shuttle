@@ -38,7 +38,7 @@ once_cell = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
-tracing = { workspace = true, features = ["std"] }
+tracing = { workspace = true, features = ["std"], optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 ttl_cache = { workspace = true, optional = true }
@@ -78,8 +78,8 @@ display = ["chrono/clock", "comfy-table", "crossterm"]
 openapi = ["utoipa/chrono", "utoipa/uuid"]
 models = ["async-trait", "display", "http", "reqwest", "service"]
 persist = ["sqlx/sqlite", "rand"]
-service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid", "tracing-subscriber"]
-tracing = []
+service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "tracing", "tracing-subscriber", "uuid"]
+tracing = ["dep:tracing"]
 wasm = [
     "chrono/clock",
     "http-serde",

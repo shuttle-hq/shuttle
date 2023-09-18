@@ -1,47 +1,40 @@
 use std::fs::read_to_string;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
+use std::process::Output;
 
 use anyhow::{anyhow, bail, Context};
 use cargo_metadata::Message;
 use cargo_metadata::{Package, Target};
 use crossbeam_channel::Sender;
-use shuttle_common::project::ProjectName;
+use shuttle_common::{
+    constants::{NEXT_NAME, RUNTIME_NAME},
+    project::ProjectName,
+};
 use tracing::{debug, error, trace};
-
-use crate::{NEXT_NAME, RUNTIME_NAME};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// This represents a compiled alpha or shuttle-next service.
 pub struct BuiltService {
+    pub workspace_path: PathBuf,
+    pub manifest_path: PathBuf,
+    pub package_name: String,
     pub executable_path: PathBuf,
     pub is_wasm: bool,
-    pub package_name: String,
-    pub working_directory: PathBuf,
-    pub manifest_path: PathBuf,
 }
 
 impl BuiltService {
-    pub fn new(
-        executable_path: PathBuf,
-        is_wasm: bool,
-        package_name: String,
-        working_directory: PathBuf,
-        manifest_path: PathBuf,
-    ) -> Self {
-        Self {
-            executable_path,
-            is_wasm,
-            package_name,
-            working_directory,
-            manifest_path,
-        }
+    /// The directory that contains the crate (that Cargo.toml is in)
+    pub fn crate_directory(&self) -> &Path {
+        self.manifest_path
+            .parent()
+            .expect("manifest to be in a directory")
     }
 
     /// Try to get the service name of a crate from Shuttle.toml in the crate root, if it doesn't
     /// exist get it from the Cargo.toml package name of the crate.
     pub fn service_name(&self) -> anyhow::Result<ProjectName> {
-        let shuttle_toml_path = self.working_directory.join("Shuttle.toml");
+        let shuttle_toml_path = self.crate_directory().join("Shuttle.toml");
 
         match extract_shuttle_toml_name(shuttle_toml_path) {
             Ok(service_name) => Ok(service_name.parse()?),
@@ -84,7 +77,10 @@ pub async fn build_workspace(
     let manifest_path = project_path.join("Cargo.toml");
 
     if !manifest_path.exists() {
-        return Err(anyhow!("failed to read the Shuttle project manifest"));
+        bail!(
+            "failed to read the Shuttle project manifest: {}",
+            manifest_path.display()
+        );
     }
     let metadata = cargo_metadata::MetadataCommand::new()
         .manifest_path(&manifest_path)
@@ -107,7 +103,7 @@ pub async fn build_workspace(
     let mut runtimes = Vec::new();
 
     if !alpha_packages.is_empty() {
-        let mut service = compile(
+        let mut services = compile(
             alpha_packages,
             release_mode,
             false,
@@ -119,11 +115,11 @@ pub async fn build_workspace(
         .await?;
         trace!("alpha packages compiled");
 
-        runtimes.append(&mut service);
+        runtimes.append(&mut services);
     }
 
     if !next_packages.is_empty() {
-        let mut service = compile(
+        let mut services = compile(
             next_packages,
             release_mode,
             true,
@@ -135,19 +131,22 @@ pub async fn build_workspace(
         .await?;
         trace!("next packages compiled");
 
-        runtimes.append(&mut service);
+        runtimes.append(&mut services);
     }
 
     Ok(runtimes)
 }
 
 pub async fn clean_crate(project_path: &Path) -> anyhow::Result<Vec<String>> {
-    let project_path = project_path.to_owned();
     let manifest_path = project_path.join("Cargo.toml");
     if !manifest_path.exists() {
         bail!("failed to read the Shuttle project manifest");
     }
-    let output = tokio::process::Command::new("cargo")
+    let Output {
+        status,
+        stdout,
+        stderr,
+    } = tokio::process::Command::new("cargo")
         .arg("clean")
         .arg("--manifest-path")
         .arg(manifest_path.to_str().unwrap())
@@ -155,17 +154,14 @@ pub async fn clean_crate(project_path: &Path) -> anyhow::Result<Vec<String>> {
         .await
         .unwrap();
 
-    if output.status.success() {
-        let lines = vec![
-            String::from_utf8(output.clone().stderr)?,
-            String::from_utf8(output.stdout)?,
-        ];
+    if status.success() {
+        let lines = vec![String::from_utf8(stderr)?, String::from_utf8(stdout)?];
         Ok(lines)
     } else {
         Err(anyhow!(
             "cargo clean failed with exit code {} and error {}",
-            output.clone().status.to_string(),
-            String::from_utf8(output.stderr)?
+            status.to_string(),
+            String::from_utf8(stderr)?
         ))
     }
 }
@@ -226,14 +222,15 @@ async fn compile(
         .arg("build")
         .arg("--manifest-path")
         .arg(manifest_path)
-        .arg("--color=always"); // piping disables auto color
+        .arg("--color=always") // piping disables auto color, but we want it
+        .current_dir(project_path.as_path());
 
     if deployment {
-        cargo.arg("-j").arg(4.to_string());
+        cargo.arg("--jobs=4");
     }
 
-    for package in packages.clone() {
-        cargo.arg("--package").arg(package.name.clone());
+    for package in &packages {
+        cargo.arg("--package").arg(package.name.as_str());
     }
 
     let profile = if release_mode {
@@ -274,58 +271,43 @@ async fn compile(
         bail!("Build failed. Is the Shuttle runtime missing?");
     }
 
-    let mut outputs = Vec::new();
+    let services = packages
+        .iter()
+        .map(|package| {
+            let path = if wasm {
+                let mut path: PathBuf = [
+                    project_path.clone(),
+                    target_path.clone(),
+                    "wasm32-wasi".into(),
+                    profile.into(),
+                    package.name.replace('-', "_").into(),
+                ]
+                .iter()
+                .collect();
+                path.set_extension("wasm");
+                path
+            } else {
+                let mut path: PathBuf = [
+                    project_path.clone(),
+                    target_path.clone(),
+                    profile.into(),
+                    package.name.clone().into(),
+                ]
+                .iter()
+                .collect();
+                path.set_extension(std::env::consts::EXE_EXTENSION);
+                path
+            };
 
-    for package in packages {
-        if wasm {
-            let mut path: PathBuf = [
-                project_path.clone(),
-                target_path.clone(),
-                "wasm32-wasi".into(),
-                profile.into(),
-                package.name.replace('-', "_").into(),
-            ]
-            .iter()
-            .collect();
-            path.set_extension("wasm");
+            BuiltService {
+                workspace_path: project_path.clone(),
+                manifest_path: package.manifest_path.clone().into_std_path_buf(),
+                package_name: package.name.clone(),
+                executable_path: path.clone(),
+                is_wasm: wasm,
+            }
+        })
+        .collect();
 
-            let mut working_directory = package.clone().manifest_path.into_std_path_buf();
-            working_directory.pop();
-
-            let output = BuiltService::new(
-                path.clone(),
-                true,
-                package.clone().name,
-                working_directory,
-                package.clone().manifest_path.into_std_path_buf(),
-            );
-
-            outputs.push(output);
-        } else {
-            let mut path: PathBuf = [
-                project_path.clone(),
-                target_path.clone(),
-                profile.into(),
-                package.clone().name.into(),
-            ]
-            .iter()
-            .collect();
-            path.set_extension(std::env::consts::EXE_EXTENSION);
-
-            let mut working_directory = package.clone().manifest_path.into_std_path_buf();
-            working_directory.pop();
-
-            let output = BuiltService::new(
-                path.clone(),
-                false,
-                package.clone().name,
-                working_directory,
-                package.clone().manifest_path.into_std_path_buf(),
-            );
-
-            outputs.push(output);
-        }
-    }
-
-    Ok(outputs)
+    Ok(services)
 }

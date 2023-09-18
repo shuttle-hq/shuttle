@@ -2,6 +2,7 @@
 pub mod backends;
 #[cfg(feature = "claims")]
 pub mod claims;
+pub mod constants;
 pub mod database;
 #[cfg(feature = "service")]
 pub mod deployment;
@@ -18,8 +19,6 @@ pub mod models;
 #[cfg(feature = "service")]
 pub mod project;
 pub mod resource;
-#[cfg(feature = "service")]
-pub mod storage_manager;
 #[cfg(feature = "tracing")]
 pub mod tracing;
 #[cfg(feature = "wasm")]
@@ -33,12 +32,6 @@ use anyhow::bail;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::openapi::{Object, ObjectBuilder};
-
-#[cfg(debug_assertions)]
-pub const API_URL_DEFAULT: &str = "http://localhost:8001";
-
-#[cfg(not(debug_assertions))]
-pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
 
 pub type ApiUrl = String;
 pub type Host = String;

@@ -99,15 +99,15 @@ commands:
             shuttle-service = { path = "$PWD/service" }
 
             shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
-            shuttle-persist = { path = "$PWD/resources/persist" }
-            shuttle-shared-db = { path = "$PWD/resources/shared-db" }
-            shuttle-secrets = { path = "$PWD/resources/secrets" }
-            shuttle-static-folder = { path = "$PWD/resources/static-folder" }
             shuttle-metadata = { path = "$PWD/resources/metadata" }
+            shuttle-persist = { path = "$PWD/resources/persist" }
+            shuttle-secrets = { path = "$PWD/resources/secrets" }
+            shuttle-shared-db = { path = "$PWD/resources/shared-db" }
+            shuttle-static-folder = { path = "$PWD/resources/static-folder" }
             shuttle-turso = { path = "$PWD/resources/turso" }
 
-            shuttle-axum = { path = "$PWD/services/shuttle-axum" }
             shuttle-actix-web = { path = "$PWD/services/shuttle-actix-web" }
+            shuttle-axum = { path = "$PWD/services/shuttle-axum" }
             shuttle-next = { path = "$PWD/services/shuttle-next" }
             shuttle-poem = { path = "$PWD/services/shuttle-poem" }
             shuttle-poise = { path = "$PWD/services/shuttle-poise" }
@@ -659,7 +659,6 @@ workflows:
                 - resources/metadata
                 - resources/persist
                 - resources/secrets
-                - resources/static-folder
                 - resources/turso
                 - services/shuttle-actix-web
                 - services/shuttle-axum
@@ -885,11 +884,10 @@ workflows:
               path:
                 [
                   "resources/aws-rds",
+                  "resources/metadata",
                   "resources/persist",
                   "resources/secrets",
                   "resources/shared-db",
-                  "resources/static-folder",
-                  "resources/metadata",
                   "resources/turso",
                 ]
           name: publish-<< matrix.path >>

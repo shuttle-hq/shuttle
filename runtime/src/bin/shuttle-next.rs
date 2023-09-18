@@ -10,11 +10,10 @@ use tonic::transport::Server;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
-    for arg in std::env::args() {
-        if arg == "--version" {
-            print_version();
-            return;
-        }
+    // `--version` overrides any other arguments.
+    if std::env::args().any(|arg| arg == "--version") {
+        print_version();
+        return;
     }
 
     let args = NextArgs::parse().unwrap();

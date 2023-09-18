@@ -32,13 +32,13 @@ async fn is_bin() {
         build_workspace(Path::new(&project_path), false, tx, false)
             .await
             .unwrap(),
-        vec![BuiltService::new(
-            PathBuf::from(&project_path).join("target/debug/is-bin"),
-            false,
-            "is-bin".to_string(),
-            PathBuf::from(&project_path),
-            PathBuf::from(&project_path).join("Cargo.toml")
-        ),]
+        vec![BuiltService {
+            workspace_path: PathBuf::from(&project_path),
+            manifest_path: PathBuf::from(&project_path).join("Cargo.toml"),
+            package_name: "is-bin".to_string(),
+            executable_path: PathBuf::from(&project_path).join("target/debug/is-bin"),
+            is_wasm: false,
+        }]
     );
 }
 
@@ -66,20 +66,21 @@ async fn workspace() {
             .await
             .unwrap(),
         vec![
-            BuiltService::new(
-                PathBuf::from(&project_path).join("target/debug/alpha"),
-                false,
-                "alpha".to_string(),
-                PathBuf::from(&project_path).join("alpha"),
-                PathBuf::from(&project_path).join("alpha/Cargo.toml")
-            ),
-            BuiltService::new(
-                PathBuf::from(&project_path).join("target/wasm32-wasi/debug/next.wasm"),
-                true,
-                "next".to_string(),
-                PathBuf::from(&project_path).join("next"),
-                PathBuf::from(&project_path).join("next/Cargo.toml")
-            ),
+            BuiltService {
+                workspace_path: PathBuf::from(&project_path),
+                manifest_path: PathBuf::from(&project_path).join("alpha/Cargo.toml"),
+                package_name: "alpha".to_string(),
+                executable_path: PathBuf::from(&project_path).join("target/debug/alpha"),
+                is_wasm: false,
+            },
+            BuiltService {
+                workspace_path: PathBuf::from(&project_path),
+                manifest_path: PathBuf::from(&project_path).join("next/Cargo.toml"),
+                package_name: "next".to_string(),
+                executable_path: PathBuf::from(&project_path)
+                    .join("target/wasm32-wasi/debug/next.wasm"),
+                is_wasm: true,
+            },
         ]
     );
 }

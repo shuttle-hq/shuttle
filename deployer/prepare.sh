@@ -18,11 +18,11 @@ if [[ $PROD != "true" ]]; then
     shuttle-service = { path = "/usr/src/shuttle/service" }
 
     shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" }
-    shuttle-persist = { path = "/usr/src/shuttle/resources/persist" }
-    shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
-    shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
-    shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }
     shuttle-metadata = { path = "/usr/src/shuttle/resources/metadata" }
+    shuttle-persist = { path = "/usr/src/shuttle/resources/persist" }
+    shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
+    shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
+    shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }
     shuttle-turso = { path = "/usr/src/shuttle/resources/turso" }
 
     shuttle-actix-web = { path = "/usr/src/shuttle/services/shuttle-actix-web" }
@@ -39,8 +39,10 @@ if [[ $PROD != "true" ]]; then
     shuttle-warp = { path = "/usr/src/shuttle/services/shuttle-warp" }' > $CARGO_HOME/config.toml
 fi
 
-# Add the wasm32-wasi target
+# Add the wasm32-wasi target for next
 rustup target add wasm32-wasi
+# Add the wasm32 target for frontend frameworks
+rustup target add wasm32-unknown-unknown
 
 # Install common build tools for external crates
 # The image should already have these: https://github.com/docker-library/buildpack-deps/blob/65d69325ad741cea6dee20781c1faaab2e003d87/debian/buster/Dockerfile
@@ -53,6 +55,12 @@ VERSION="22.2" && \
 curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v$VERSION/protoc-$VERSION-$ARCH.zip" && \
     unzip -o "protoc-$VERSION-$ARCH.zip" bin/protoc "include/*" -d /usr/local && \
     rm -f "protoc-$VERSION-$ARCH.zip"
+
+# Binstall
+curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+# Common cargo build tools
+cargo binstall -y --locked trunk@0.17.2
 
 while getopts "p," o; do
 case $o in

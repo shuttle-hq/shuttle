@@ -1,8 +1,9 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-pub use queue::Queued;
-pub use run::{ActiveDeploymentsGetter, Built};
-use shuttle_common::{log::LogRecorder, storage_manager::ArtifactsStorageManager};
+use shuttle_common::log::LogRecorder;
 use shuttle_proto::logger::logger_client::LoggerClient;
 use tokio::{
     sync::{mpsc, Mutex},
@@ -22,6 +23,8 @@ use crate::{
     persistence::{DeploymentUpdater, ResourceManager, SecretGetter, SecretRecorder, State},
     RuntimeManager,
 };
+pub use queue::Queued;
+pub use run::{ActiveDeploymentsGetter, Built};
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
@@ -146,20 +149,23 @@ where
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
-        let storage_manager = ArtifactsStorageManager::new(artifacts_path);
+
+        let builds_path = artifacts_path.join("shuttle-builds");
 
         let run_send_clone = run_send.clone();
         let mut set = JoinSet::new();
 
+        // Build queue. Waits for incoming deployments and builds them.
         set.spawn(queue::task(
             queue_recv,
             run_send_clone,
             deployment_updater.clone(),
             build_log_recorder,
             secret_recorder,
-            storage_manager.clone(),
             queue_client,
+            builds_path.clone(),
         ));
+        // Run queue. Waits for built deployments and runs them.
         set.spawn(run::task(
             run_recv,
             runtime_manager.clone(),
@@ -167,7 +173,7 @@ where
             active_deployment_getter,
             secret_getter,
             resource_manager,
-            storage_manager.clone(),
+            builds_path.clone(),
         ));
 
         DeploymentManager {
@@ -175,8 +181,8 @@ where
             run_send,
             runtime_manager,
             logs_fetcher,
-            storage_manager,
             _join_set: Arc::new(Mutex::new(set)),
+            builds_path,
         }
     }
 }
@@ -186,13 +192,13 @@ pub struct DeploymentManager {
     queue_send: QueueSender,
     run_send: RunSender,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
-    storage_manager: ArtifactsStorageManager,
     logs_fetcher: LoggerClient<
         shuttle_common::claims::ClaimService<
             shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
         >,
     >,
     _join_set: Arc<Mutex<JoinSet<()>>>,
+    builds_path: PathBuf,
 }
 
 /// ```no-test
@@ -247,8 +253,8 @@ impl DeploymentManager {
         self.runtime_manager.lock().await.kill(&id).await;
     }
 
-    pub fn storage_manager(&self) -> ArtifactsStorageManager {
-        self.storage_manager.clone()
+    pub fn builds_path(&self) -> &Path {
+        self.builds_path.as_path()
     }
 
     pub fn logs_fetcher(

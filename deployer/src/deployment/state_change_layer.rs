@@ -157,7 +157,6 @@ mod tests {
         },
         resource_recorder::{ResourcesResponse, ResultResponse},
     };
-    use tempfile::Builder;
     use tokio::{select, sync::mpsc, time::sleep};
     use tokio_stream::wrappers::ReceiverStream;
     use tonic::{transport::Server, Request, Response, Status};
@@ -357,15 +356,7 @@ mod tests {
                 .unwrap();
         });
 
-        let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
-        let path = tmp_dir.into_path();
-
-        RuntimeManager::new(
-            path,
-            format!("http://{}", provisioner_addr),
-            logger_client,
-            None,
-        )
+        RuntimeManager::new(format!("http://{}", provisioner_addr), logger_client, None)
     }
 
     #[async_trait::async_trait]

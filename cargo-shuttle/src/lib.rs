@@ -14,23 +14,29 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use shuttle_common::deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD};
-use shuttle_common::models::deployment::CREATE_SERVICE_BODY_LIMIT;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
+    constants::{API_URL_DEFAULT, EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
+    deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
-        deployment::{get_deployments_table, DeploymentRequest, GIT_STRINGS_MAX_LENGTH},
+        deployment::{
+            get_deployments_table, DeploymentRequest, CREATE_SERVICE_BODY_LIMIT,
+            GIT_STRINGS_MAX_LENGTH,
+        },
         project::{self, DEFAULT_IDLE_MINUTES},
         resource::get_resources_table,
         secret,
     },
+    project::ProjectName,
+    resource, ApiKey, LogItem,
 };
-use shuttle_common::{project::ProjectName, resource, ApiKey};
-use shuttle_common::{LogItem, API_URL_DEFAULT};
 use shuttle_proto::runtime::{
-    self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest, StorageManagerType,
+    self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest,
 };
-use shuttle_service::builder::{build_workspace, BuiltService};
+use shuttle_service::{
+    builder::{build_workspace, BuiltService},
+    Environment,
+};
 
 use anyhow::{anyhow, bail, Context, Result};
 use cargo_metadata::Message;
@@ -43,6 +49,7 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::{StreamExt, TryFutureExt};
 use git2::{Repository, StatusOptions};
+use globset::{Glob, GlobSetBuilder};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
@@ -69,7 +76,7 @@ use crate::provisioner_server::LocalProvisioner;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 const SHUTTLE_LOGIN_URL: &str = "https://console.shuttle.rs/new-project";
-const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new";
+const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new/choose";
 const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/shuttle-commands";
 
 pub struct Shuttle {
@@ -622,19 +629,13 @@ impl Shuttle {
             RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         )>,
     > {
-        let BuiltService {
-            executable_path,
-            is_wasm,
-            working_directory,
-            ..
-        } = service.clone();
-
-        trace!("loading secrets");
-        let secrets_path = if working_directory.join("Secrets.dev.toml").exists() {
-            working_directory.join("Secrets.dev.toml")
+        let crate_directory = service.crate_directory();
+        let secrets_path = if crate_directory.join("Secrets.dev.toml").exists() {
+            crate_directory.join("Secrets.dev.toml")
         } else {
-            working_directory.join("Secrets.toml")
+            crate_directory.join("Secrets.toml")
         };
+        trace!("Loading secrets from {}", secrets_path.display());
 
         let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)
         {
@@ -649,87 +650,86 @@ impl Shuttle {
             Default::default()
         };
 
-        let runtime_path = || {
-            if is_wasm {
-                let runtime_path = home::cargo_home()
-                    .expect("failed to find cargo home dir")
-                    .join("bin/shuttle-next");
+        let runtime_executable = if service.is_wasm {
+            let runtime_path = home::cargo_home()
+                .expect("failed to find cargo home dir")
+                .join("bin/shuttle-next");
 
-                println!("Installing shuttle-next runtime. This can take a while...");
+            println!("Installing shuttle-next runtime. This can take a while...");
 
-                if cfg!(debug_assertions) {
-                    // Canonicalized path to shuttle-runtime for dev to work on windows
+            if cfg!(debug_assertions) {
+                // Canonicalized path to shuttle-runtime for dev to work on windows
 
-                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
-                        .expect("path to shuttle-runtime does not exist or is invalid");
+                let path = dunce::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
+                    .expect("path to shuttle-runtime does not exist or is invalid");
 
+                std::process::Command::new("cargo")
+                    .arg("install")
+                    .arg("shuttle-runtime")
+                    .arg("--path")
+                    .arg(path)
+                    .arg("--bin")
+                    .arg("shuttle-next")
+                    .arg("--features")
+                    .arg("next")
+                    .output()
+                    .expect("failed to install the shuttle runtime");
+            } else {
+                // If the version of cargo-shuttle is different from shuttle-runtime,
+                // or it isn't installed, try to install shuttle-runtime from crates.io.
+                if let Err(err) = check_version(&runtime_path) {
+                    warn!("{}", err);
+
+                    trace!("installing shuttle-runtime");
                     std::process::Command::new("cargo")
                         .arg("install")
                         .arg("shuttle-runtime")
-                        .arg("--path")
-                        .arg(path)
                         .arg("--bin")
                         .arg("shuttle-next")
                         .arg("--features")
                         .arg("next")
                         .output()
                         .expect("failed to install the shuttle runtime");
-                } else {
-                    // If the version of cargo-shuttle is different from shuttle-runtime,
-                    // or it isn't installed, try to install shuttle-runtime from crates.io.
-                    if let Err(err) = check_version(&runtime_path) {
-                        warn!("{}", err);
-
-                        trace!("installing shuttle-runtime");
-                        std::process::Command::new("cargo")
-                            .arg("install")
-                            .arg("shuttle-runtime")
-                            .arg("--bin")
-                            .arg("shuttle-next")
-                            .arg("--features")
-                            .arg("next")
-                            .output()
-                            .expect("failed to install the shuttle runtime");
-                    };
                 };
+            };
 
-                runtime_path
-            } else {
-                trace!(path = ?executable_path, "using alpha runtime");
-                if let Err(err) = check_version(&executable_path) {
-                    warn!("{}", err);
-                    if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
-                        println!("Warning: {}.", mismatch);
-                        if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
-                            // The runtime is newer than cargo-shuttle so we
-                            // should help the user to update cargo-shuttle.
-                            println!(
-                                "[HINT]: You should update cargo-shuttle. \
+            runtime_path
+        } else {
+            trace!(path = ?service.executable_path, "using alpha runtime");
+            if let Err(err) = check_version(&service.executable_path) {
+                warn!("{}", err);
+                if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
+                    println!("Warning: {}.", mismatch);
+                    if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
+                        // The runtime is newer than cargo-shuttle so we
+                        // should help the user to update cargo-shuttle.
+                        println!(
+                            "[HINT]: You should update cargo-shuttle. \
                                 If cargo-shuttle was installed using cargo, \
                                 you can get the latest version by running \
                                 `cargo install cargo-shuttle`."
-                            );
-                        } else {
-                            println!(
+                        );
+                    } else {
+                        println!(
                                 "[HINT]: A newer version of shuttle-runtime is available. \
                                 Change its version to {} in this project's Cargo.toml to update it.",
                                 mismatch.cargo_shuttle
                             );
-                        }
                     }
                 }
-                executable_path.clone()
             }
+            service.executable_path.clone()
         };
 
         // Child process and gRPC client for sending requests to it
         let (mut runtime, mut runtime_client) = runtime::start(
-            is_wasm,
-            StorageManagerType::WorkingDir(working_directory.to_path_buf()),
+            service.is_wasm,
+            Environment::Local,
             &format!("http://localhost:{provisioner_port}"),
             None,
             run_args.port - idx - 1,
-            runtime_path,
+            runtime_executable,
+            service.workspace_path.as_path(),
         )
         .await
         .map_err(|err| {
@@ -760,7 +760,9 @@ impl Shuttle {
         });
 
         let load_request = tonic::Request::new(LoadRequest {
-            path: executable_path
+            path: service
+                .executable_path
+                .clone()
                 .into_os_string()
                 .into_string()
                 .expect("to convert path to string"),
@@ -795,9 +797,9 @@ impl Shuttle {
 
         let addr = SocketAddr::new(
             if run_args.external {
-                Ipv4Addr::new(0, 0, 0, 0)
+                Ipv4Addr::UNSPECIFIED // 0.0.0.0
             } else {
-                Ipv4Addr::LOCALHOST
+                Ipv4Addr::LOCALHOST // 127.0.0.1
             }
             .into(),
             run_args.port + idx,
@@ -860,8 +862,12 @@ impl Shuttle {
         extra_servers: &[&JoinHandle<Result<(), tonic::transport::Error>>],
     ) -> Result<(), Status> {
         match runtime {
-            Some(inner) => existing_runtimes.push(inner),
+            Some(inner) => {
+                trace!("Adding runtime PID: {:?}", inner.0.id());
+                existing_runtimes.push(inner);
+            }
             None => {
+                trace!("Runtime error: No runtime process. Crashed during startup?");
                 for server in extra_servers {
                     server.abort();
                 }
@@ -950,7 +956,12 @@ impl Shuttle {
             // This must stop all the existing runtimes and creating new ones.
             signal_received = tokio::select! {
                 res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
-                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &[&provisioner_server]).await?;
+                    match res {
+                        Ok(runtime) => {
+                            Shuttle::add_runtime_info(runtime, &mut runtimes, &[&provisioner_server]).await?;
+                        },
+                        Err(e) => println!("Runtime error: {e:?}"),
+                    }
                     false
                 },
                 _ = sigterm_notif.recv() => {
@@ -1185,7 +1196,7 @@ impl Shuttle {
 
             let dirty = self.is_dirty(&repo);
             if !args.allow_dirty && dirty.is_err() {
-                bail!(dirty.unwrap_err().context("dirty not allowed"));
+                bail!(dirty.unwrap_err());
             }
             deployment_req.git_dirty = Some(dirty.is_err());
 
@@ -1500,65 +1511,87 @@ impl Shuttle {
     }
 
     fn make_archive(&self) -> Result<Vec<u8>> {
+        let include_patterns = self.ctx.assets();
         let encoder = GzEncoder::new(Vec::new(), Compression::fast());
         let mut tar = Builder::new(encoder);
 
         let working_directory = self.ctx.working_directory();
-        let base_directory = working_directory
-            .parent()
-            .context("get parent directory of crate")?;
 
-        // Make sure the target  and .git folders are excluded at all times
-        let overrides = OverrideBuilder::new(working_directory)
+        //
+        // Mixing include and exclude overrides messes up the .ignore and .gitignore etc,
+        // therefore these "ignore" walk and the "include" walk are separate.
+        //
+        let mut entries = Vec::new();
+
+        // Default excludes
+        let ignore_overrides = OverrideBuilder::new(working_directory)
             .add("!.git/")
-            .context("add `!.git/` override")?
+            .context("adding override `!.git/`")?
             .add("!target/")
-            .context("add `!target/` override")?
+            .context("adding override `!target/`")?
+            // these should always be ignored when unpacked in deployment, so ignore them here as well
+            .add(&format!("!{EXECUTABLE_DIRNAME}/"))
+            .context(format!("adding override `!{EXECUTABLE_DIRNAME}/`"))?
+            .add(&format!("!{STORAGE_DIRNAME}/"))
+            .context(format!("adding override `!{STORAGE_DIRNAME}/`"))?
             .build()
-            .context("build an override")?;
-
-        // Add all the entries to a map to avoid duplication of the Secrets.toml file
-        // if it is in the root of the workspace.
-        let mut entries = BTreeMap::new();
-
-        for dir_entry in WalkBuilder::new(working_directory)
+            .context("building archive override rules")?;
+        for r in WalkBuilder::new(working_directory)
             .hidden(false)
-            .overrides(overrides)
+            .overrides(ignore_overrides)
             .build()
         {
-            let dir_entry = dir_entry.context("get directory entry")?;
+            entries.push(r.context("list dir entry")?.into_path())
+        }
 
-            let secrets_path = dir_entry.path().join("Secrets.toml");
+        let mut globs = GlobSetBuilder::new();
 
-            if dir_entry.file_type().context("get file type")?.is_dir() {
-                // Make sure to add any `Secrets.toml` files.
-                if secrets_path.exists() {
-                    let path = secrets_path
-                        .strip_prefix(base_directory)
-                        .context("strip the base of the archive entry")?
-                        .to_path_buf();
-                    entries.insert(secrets_path.clone(), path.clone());
-                }
+        // Always include secrets
+        globs.add(Glob::new("**/Secrets.toml").unwrap());
 
-                // It's not possible to add a directory to an archive
+        // User provided includes
+        if let Some(rules) = include_patterns {
+            for r in rules {
+                globs.add(Glob::new(r.as_str()).context(format!("parsing glob pattern {:?}", r))?);
+            }
+        }
+
+        // Find the files
+        let globs = globs.build().context("glob glob")?;
+        for entry in walkdir::WalkDir::new(working_directory) {
+            let path = entry.context("list dir")?.into_path();
+            if globs.is_match(
+                path.strip_prefix(working_directory)
+                    .context("strip prefix of path")?,
+            ) {
+                entries.push(path);
+            }
+        }
+
+        let mut archive_files = BTreeMap::new();
+        for path in entries {
+            // It's not possible to add a directory to an archive
+            // and symlinks == chaos
+            if path.is_dir() || path.is_symlink() {
+                trace!("Skipping {:?}", path);
                 continue;
             }
 
-            let path = dir_entry
-                .path()
-                .strip_prefix(base_directory)
-                .context("strip the base of the archive entry")?;
+            let name = path
+                .strip_prefix(working_directory.parent().context("get parent dir")?)
+                .context("strip prefix of path")?
+                .to_owned();
 
-            entries.insert(dir_entry.path().to_path_buf(), path.to_path_buf());
+            archive_files.insert(path, name);
         }
 
-        let secrets_path = self.ctx.working_directory().join("Secrets.toml");
-        if secrets_path.exists() {
-            entries.insert(secrets_path, Path::new("shuttle").join("Secrets.toml"));
+        if archive_files.is_empty() {
+            error!("No files included in upload. Aborting...");
+            bail!("No files included in upload.");
         }
 
         // Append all the entries to the archive.
-        for (k, v) in entries {
+        for (k, v) in archive_files {
             debug!("Packing {k:?}");
             tar.append_path_with_name(k, v)?;
         }
@@ -1708,7 +1741,6 @@ mod tests {
     use flate2::read::GzDecoder;
     use shuttle_common::project::ProjectName;
     use tar::Archive;
-    use tempfile::TempDir;
 
     use crate::args::ProjectArgs;
     use crate::Shuttle;
@@ -1730,7 +1762,6 @@ mod tests {
 
         let archive = shuttle.make_archive().unwrap();
 
-        // Make sure the Secrets.toml file is not initially present
         let tar = GzDecoder::new(&archive[..]);
         let mut archive = Archive::new(tar);
 
@@ -1752,6 +1783,52 @@ mod tests {
     }
 
     #[test]
+    fn make_archive_respect_rules() {
+        let working_directory = canonicalize(path_from_workspace_root(
+            "cargo-shuttle/tests/resources/archiving",
+        ))
+        .unwrap();
+
+        fs::write(working_directory.join("Secrets.toml"), "KEY = 'value'").unwrap();
+        fs::write(working_directory.join("Secrets.dev.toml"), "KEY = 'dev'").unwrap();
+        fs::write(working_directory.join("asset2"), "").unwrap();
+        fs::write(working_directory.join("asset4"), "").unwrap();
+        fs::create_dir_all(working_directory.join("dist")).unwrap();
+        fs::write(working_directory.join("dist").join("dist1"), "").unwrap();
+
+        fs::create_dir_all(working_directory.join("target")).unwrap();
+        fs::write(working_directory.join("target").join("binary"), b"12345").unwrap();
+
+        let project_args = ProjectArgs {
+            working_directory: working_directory.to_path_buf(),
+            name: Some(ProjectName::from_str("archiving-test").unwrap()),
+        };
+        let mut entries = get_archive_entries(project_args);
+        entries.sort();
+
+        assert_eq!(
+            entries,
+            vec![
+                ".gitignore",
+                ".ignore",
+                "Cargo.toml",
+                "Secrets.toml", // always included by default
+                "Secrets.toml.example",
+                "Shuttle.toml",
+                "asset1", // normal file
+                "asset2", // .gitignore'd, but included in Shuttle.toml
+                // asset3 is .ignore'd
+                "asset4",                // .gitignore'd, but un-ignored in .ignore
+                "asset5",                // .ignore'd, but included in Shuttle.toml
+                "dist/dist1",            // .gitignore'd, but included in Shuttle.toml
+                "nested/static/nested1", // normal file
+                // nested/static/nestedignore is .gitignore'd
+                "src/main.rs",
+            ]
+        );
+    }
+
+    #[test]
     fn load_project_returns_proper_working_directory_in_project_args() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
@@ -1769,110 +1846,6 @@ mod tests {
             project_args.workspace_path().unwrap(),
             path_from_workspace_root("examples/axum/hello-world")
         );
-    }
-
-    #[test]
-    fn make_archive_include_secrets() {
-        let working_directory =
-            canonicalize(path_from_workspace_root("examples/rocket/secrets")).unwrap();
-
-        fs::write(
-            working_directory.join("Secrets.toml"),
-            "MY_API_KEY = 'the contents of my API key'",
-        )
-        .unwrap();
-
-        let project_args = ProjectArgs {
-            working_directory,
-            name: None,
-        };
-
-        let mut entries = get_archive_entries(project_args);
-        entries.sort();
-
-        assert_eq!(
-            entries,
-            vec![
-                ".gitignore",
-                "Cargo.toml",
-                "README.md",
-                "Secrets.toml",
-                "Secrets.toml.example",
-                "Shuttle.toml",
-                "src/main.rs",
-            ]
-        );
-    }
-
-    #[test]
-    fn make_archive_respect_ignore() {
-        let tmp_dir = TempDir::new().unwrap();
-        let working_directory = tmp_dir.path();
-
-        fs::write(working_directory.join(".env"), "API_KEY = 'blabla'").unwrap();
-        fs::write(working_directory.join(".ignore"), ".env").unwrap();
-        fs::write(
-            working_directory.join("Cargo.toml"),
-            r#"
-[package]
-name = "secrets"
-version = "0.1.0"
-"#,
-        )
-        .unwrap();
-        fs::create_dir_all(working_directory.join("src")).unwrap();
-        fs::write(
-            working_directory.join("src").join("main.rs"),
-            "fn main() {}",
-        )
-        .unwrap();
-
-        let project_args = ProjectArgs {
-            working_directory: working_directory.to_path_buf(),
-            name: Some(ProjectName::from_str("secret").unwrap()),
-        };
-
-        let mut entries = get_archive_entries(project_args);
-        entries.sort();
-
-        assert_eq!(
-            entries,
-            vec![".ignore", "Cargo.lock", "Cargo.toml", "src/main.rs"]
-        );
-    }
-
-    #[test]
-    fn make_archive_ignore_target_folder() {
-        let tmp_dir = TempDir::new().unwrap();
-        let working_directory = tmp_dir.path();
-
-        fs::create_dir_all(working_directory.join("target")).unwrap();
-        fs::write(working_directory.join("target").join("binary"), "12345").unwrap();
-        fs::write(
-            working_directory.join("Cargo.toml"),
-            r#"
-[package]
-name = "exclude_target"
-version = "0.1.0"
-"#,
-        )
-        .unwrap();
-        fs::create_dir_all(working_directory.join("src")).unwrap();
-        fs::write(
-            working_directory.join("src").join("main.rs"),
-            "fn main() {}",
-        )
-        .unwrap();
-
-        let project_args = ProjectArgs {
-            working_directory: working_directory.to_path_buf(),
-            name: Some(ProjectName::from_str("exclude_target").unwrap()),
-        };
-
-        let mut entries = get_archive_entries(project_args);
-        entries.sort();
-
-        assert_eq!(entries, vec!["Cargo.lock", "Cargo.toml", "src/main.rs"]);
     }
 
     #[test]

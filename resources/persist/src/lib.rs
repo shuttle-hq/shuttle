@@ -1,17 +1,19 @@
+use std::{
+    fs::{self, File},
+    io::{BufReader, BufWriter},
+    path::PathBuf,
+};
+
 use async_trait::async_trait;
 use bincode::{deserialize_from, serialize_into, Error as BincodeError};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use shuttle_service::{Factory, ResourceBuilder, ServiceName, Type};
-use std::fs;
-use std::fs::File;
-use std::io::BufReader;
-use std::io::BufWriter;
-use std::path::PathBuf;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use shuttle_service::{DeploymentMetadata, Factory, ResourceBuilder, Type};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum PersistError {
+    #[error("invalid key name")]
+    InvalidKey,
     #[error("failed to open file: {0}")]
     Open(std::io::Error),
     #[error("failed to create folder: {0}")]
@@ -35,95 +37,88 @@ pub struct Persist;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PersistInstance {
-    service_name: ServiceName,
+    dir: PathBuf,
 }
 
 impl PersistInstance {
-    /// Constructs a new PersistInstance along with its associated storage folder
-    pub fn new(service_name: ServiceName) -> Result<Self, PersistError> {
-        let instance = Self { service_name };
-        let storage_folder = instance.get_storage_folder();
-        fs::create_dir_all(storage_folder).map_err(PersistError::CreateFolder)?;
+    /// Constructs a PersistInstance and creates its associated storage folder
+    pub fn new(dir: PathBuf) -> Result<Self, PersistError> {
+        fs::create_dir_all(&dir).map_err(PersistError::CreateFolder)?;
 
-        Ok(instance)
+        Ok(Self { dir })
     }
 
+    /// Save a key-value pair to disk
     pub fn save<T: Serialize>(&self, key: &str, struc: T) -> Result<(), PersistError> {
-        let file_path = self.get_storage_file(key);
+        let file_path = self.get_storage_file(key)?;
         let file = File::create(file_path).map_err(PersistError::Open)?;
         let mut writer = BufWriter::new(file);
 
-        Ok(serialize_into(&mut writer, &struc).map_err(PersistError::Serialize))?
+        serialize_into(&mut writer, &struc).map_err(PersistError::Serialize)
     }
 
-    /// Returns a vector of strings containing all the keys associated with a PersistInstance
+    fn entries(&self) -> Result<std::fs::ReadDir, PersistError> {
+        fs::read_dir(&self.dir).map_err(PersistError::ListFolder)
+    }
+
+    /// Returns the number of keys in this instance
+    pub fn size(&self) -> Result<usize, PersistError> {
+        Ok(self.entries()?.count())
+    }
+
+    /// Returns a vector of strings containing all the keys in this instance
     pub fn list(&self) -> Result<Vec<String>, PersistError> {
-        let storage_folder = self.get_storage_folder();
-
-        let mut list = Vec::new();
-
-        let entries = fs::read_dir(storage_folder).map_err(PersistError::ListFolder)?;
-        for entry in entries {
-            let key = entry.map_err(PersistError::ListFolder)?;
-            let key_name = key
-                .path()
-                .file_stem()
-                .unwrap_or_default()
-                .to_str()
-                .ok_or(PersistError::ListName(
-                    "the file name contains invalid characters".to_owned(),
-                ))?
-                .to_string();
-            list.push(key_name);
-        }
-
-        Ok(list)
+        self.entries()?
+            .map(|entry| {
+                entry
+                    .map_err(PersistError::ListFolder)?
+                    .path()
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_str()
+                    .map(ToString::to_string)
+                    .ok_or(PersistError::ListName(
+                        "the file name contains invalid characters".to_owned(),
+                    ))
+            })
+            .collect()
     }
 
-    /// Removes the keys within the PersistInstance
+    /// Removes all keys
     pub fn clear(&self) -> Result<(), PersistError> {
-        let storage_folder = self.get_storage_folder();
-        fs::remove_dir_all(&storage_folder).map_err(PersistError::RemoveFolder)?;
-        fs::create_dir_all(&storage_folder).map_err(PersistError::CreateFolder)?;
+        fs::remove_dir_all(&self.dir).map_err(PersistError::RemoveFolder)?;
+        fs::create_dir_all(&self.dir).map_err(PersistError::CreateFolder)?;
 
         Ok(())
     }
 
-    /// Returns the number of keys in a folder within a PersistInstance
-    pub fn size(&self) -> Result<usize, PersistError> {
-        Ok(self.list()?.len())
-    }
-
     /// Deletes a key from the PersistInstance
     pub fn remove(&self, key: &str) -> Result<(), PersistError> {
-        let file_path = self.get_storage_file(key);
+        let file_path = self.get_storage_file(key)?;
         fs::remove_file(file_path).map_err(PersistError::RemoveFile)?;
 
         Ok(())
     }
 
+    /// Loads a value from disk
     pub fn load<T>(&self, key: &str) -> Result<T, PersistError>
     where
         T: DeserializeOwned,
     {
-        let file_path = self.get_storage_file(key);
+        let file_path = self.get_storage_file(key)?;
         let file = File::open(file_path).map_err(PersistError::Open)?;
         let reader = BufReader::new(file);
 
         Ok(deserialize_from(reader).map_err(PersistError::Deserialize))?
     }
 
-    fn get_storage_folder(&self) -> PathBuf {
-        ["shuttle_persist", &self.service_name.to_string()]
-            .iter()
-            .collect()
-    }
-
-    fn get_storage_file(&self, key: &str) -> PathBuf {
-        let mut path = self.get_storage_folder();
-        path.push(format!("{key}.bin"));
-
-        path
+    fn get_storage_file(&self, key: &str) -> Result<PathBuf, PersistError> {
+        let p = self.dir.join(format!("{key}.bin"));
+        if p.parent().unwrap() != self.dir {
+            Err(PersistError::InvalidKey)
+        } else {
+            Ok(p)
+        }
     }
 }
 
@@ -147,12 +142,18 @@ impl ResourceBuilder<PersistInstance> for Persist {
         self,
         factory: &mut dyn Factory,
     ) -> Result<Self::Output, shuttle_service::Error> {
-        let persist_instance = match PersistInstance::new(factory.get_service_name()) {
-            Ok(persist_instance) => persist_instance,
-            Err(e) => return Err(shuttle_service::Error::Custom(e.into())),
-        };
+        let DeploymentMetadata {
+            service_name,
+            storage_path,
+            ..
+        } = factory.get_metadata();
 
-        Ok(persist_instance)
+        PersistInstance::new(
+            storage_path
+                .join(PathBuf::from("shuttle-persist"))
+                .join(PathBuf::from(service_name)), // separate persist directories per service
+        )
+        .map_err(|e| shuttle_service::Error::Custom(e.into()))
     }
 
     async fn build(build_data: &Self::Output) -> Result<PersistInstance, shuttle_service::Error> {
@@ -163,11 +164,17 @@ impl ResourceBuilder<PersistInstance> for Persist {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
+
+    fn setup(s: &str) -> PersistInstance {
+        let path = PathBuf::from(format!("test_output/{s}"));
+        let _ = std::fs::remove_dir_all(&path);
+
+        PersistInstance::new(path).unwrap()
+    }
 
     #[test]
     fn test_save_and_load() {
-        let persist = PersistInstance::new(ServiceName::from_str("test").unwrap()).unwrap();
+        let persist = setup("test_save_and_load");
 
         persist.save("test", "test").unwrap();
         let result: String = persist.load("test").unwrap();
@@ -175,60 +182,77 @@ mod tests {
     }
 
     #[test]
-    fn test_list_and_size() {
-        let persist = PersistInstance::new(ServiceName::from_str("test1").unwrap()).unwrap();
+    fn test_size() {
+        let persist = setup("test_size");
 
+        assert_eq!(persist.size().unwrap(), 0);
         persist.save("test", "test").unwrap();
-        let list_result = persist.list().unwrap().len();
-        let size_result = persist.size().unwrap();
-        assert_eq!(list_result, 1);
-        assert_eq!(size_result, 1);
+        assert_eq!(persist.size().unwrap(), 1);
+        persist.save("test", "test2").unwrap(); // overwrite
+        assert_eq!(persist.size().unwrap(), 1);
+        persist.remove("test").unwrap();
+        assert_eq!(persist.size().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_list() {
+        let persist = setup("test_list");
+
+        assert_eq!(persist.list().unwrap(), Vec::<String>::new());
+        persist.save("test", "test").unwrap();
+        assert_eq!(
+            persist.list().unwrap(),
+            Vec::<String>::from(["test".to_owned()])
+        );
+        persist.remove("test").unwrap();
+        assert_eq!(persist.list().unwrap(), Vec::<String>::new());
     }
 
     #[test]
     fn test_remove() {
-        let persist = PersistInstance::new(ServiceName::from_str("test3").unwrap()).unwrap();
+        let persist = setup("test_remove");
 
         persist.save("test", "test").unwrap();
         persist.save("test2", "test2").unwrap();
-        let list = persist.list().unwrap();
-        let key = list[0].as_str();
-        persist.remove(key).unwrap();
-        let result = persist.list().unwrap();
-        assert_eq!(result.len(), 1);
+        persist.remove(persist.list().unwrap()[0].as_str()).unwrap();
+        assert_eq!(persist.size().unwrap(), 1);
     }
 
     #[test]
     fn test_remove_error() {
-        let persist = PersistInstance::new(ServiceName::from_str("test4").unwrap()).unwrap();
+        let persist = setup("test_remove_error");
 
-        // unwrap error
-        let result = persist.remove("test4").unwrap_err();
-        assert_eq!(
-            result.to_string(),
-            "failed to remove file: No such file or directory (os error 2)"
-        );
+        assert!(persist.remove("test").is_err());
     }
 
     #[test]
     fn test_clear() {
-        let persist = PersistInstance::new(ServiceName::from_str("test5").unwrap()).unwrap();
+        let persist = setup("test_clear");
 
-        persist.save("test5", "test5").unwrap();
+        persist.save("test", "test").unwrap();
         persist.clear().unwrap();
-        let result = persist.list().unwrap();
-        assert_eq!(result.len(), 0);
+        assert_eq!(persist.size().unwrap(), 0);
     }
 
     #[test]
     fn test_load_error() {
-        let persist = PersistInstance::new(ServiceName::from_str("test").unwrap()).unwrap();
+        let persist = setup("test_load_error");
 
-        // unwrap error
-        let result = persist.load::<String>("error").unwrap_err();
-        assert_eq!(
-            result.to_string(),
-            "failed to open file: No such file or directory (os error 2)"
-        );
+        assert!(persist.load::<String>("error").is_err());
+    }
+
+    #[test]
+    fn test_weird_keys() {
+        let persist = setup("test_weird_keys");
+
+        // Linux is the main concern
+
+        assert!(persist.save(".", "test").is_ok());
+        assert!(persist.save("\\", "test").is_ok());
+
+        assert!(persist.save("test/test", "test").is_err());
+        assert!(persist.save("../test", "test").is_err());
+        assert!(persist.save("/test", "test").is_err());
+        assert!(persist.save("~/test", "test").is_err());
     }
 }

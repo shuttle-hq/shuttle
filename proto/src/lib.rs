@@ -506,3 +506,7 @@ pub mod logger {
         }
     }
 }
+
+pub mod builder {
+    include!("generated/builder.rs");
+}

@@ -49,6 +49,13 @@ message ResourcesResponse {
   repeated Resource resources = 3;
 }
 
+message ResourceResponse {
+  bool success = 1;
+  string message = 2;
+
+  Resource resource = 3;
+}
+
 message ServiceResourcesRequest {
   string service_id = 1;
 }

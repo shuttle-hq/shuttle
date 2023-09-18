@@ -10,8 +10,14 @@ use tempfile::Builder;
 // quite high timeout since the template is being cloned over network
 const EXPECT_TIMEOUT_MS: u64 = 10000;
 
+/// So that cargo-generate does not crash in CI
+fn set_user_var() {
+    std::env::set_var("USER", "CI-FIX");
+}
+
 #[tokio::test]
 async fn non_interactive_basic_init() {
+    set_user_var();
     let temp_dir = Builder::new().prefix("basic-init").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -46,6 +52,7 @@ async fn non_interactive_basic_init() {
 
 #[tokio::test]
 async fn non_interactive_rocket_init() {
+    set_user_var();
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -78,6 +85,7 @@ async fn non_interactive_rocket_init() {
 
 #[tokio::test]
 async fn non_interactive_init_with_from_url() {
+    set_user_var();
     let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -114,6 +122,7 @@ async fn non_interactive_init_with_from_url() {
 
 #[tokio::test]
 async fn non_interactive_init_with_from_gh() {
+    set_user_var();
     let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -150,6 +159,7 @@ async fn non_interactive_init_with_from_gh() {
 
 #[tokio::test]
 async fn non_interactive_init_with_from_repo_name() {
+    set_user_var();
     let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -187,6 +197,7 @@ async fn non_interactive_init_with_from_repo_name() {
 #[tokio::test]
 #[ignore] // cargo-generate hangs on this operation sometimes. Passing @ v0.26.0.
 async fn non_interactive_init_with_from_local_path() {
+    set_user_var();
     let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -223,6 +234,7 @@ async fn non_interactive_init_with_from_local_path() {
 
 #[test]
 fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
+    set_user_var();
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -264,6 +276,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std::error::Error>> {
+    set_user_var();
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -305,6 +318,7 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
 
 #[test]
 fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::error::Error>> {
+    set_user_var();
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -342,6 +356,7 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
 
 #[test]
 fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::Error>> {
+    set_user_var();
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -382,6 +397,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
 
 #[test]
 fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::error::Error>> {
+    set_user_var();
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
     std::thread::sleep(std::time::Duration::from_millis(500));

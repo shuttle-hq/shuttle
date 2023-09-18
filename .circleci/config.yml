@@ -277,7 +277,7 @@ jobs:
       - restore-cargo-cache
       - apply-patches
       - run:
-          name: Run docker integration tests
+          name: Run integration tests that need docker
           command: |
             SCCACHE_CACHE_SIZE=2G
             set +o pipefail

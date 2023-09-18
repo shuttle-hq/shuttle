@@ -698,6 +698,7 @@ impl ProjectCreating {
             image: default_image,
             prefix,
             provisioner_host,
+            builder_host,
             auth_uri,
             fqdn: public,
             ..
@@ -751,7 +752,7 @@ impl ProjectCreating {
                         "--auth-uri",
                         auth_uri,
                         "--builder-uri",
-                        "http://builder:8000",
+                        format!("http://{builder_host}:8000"),
                         "--project-id",
                         self.project_id.to_string()
                     ],

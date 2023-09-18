@@ -7,7 +7,10 @@ use shuttle_common::{
     log::{Backend, DeploymentLogLayer},
 };
 use shuttle_deployer::{start, start_proxy, Args, Persistence, RuntimeManager, StateChangeLayer};
-use shuttle_proto::logger::{logger_client::LoggerClient, Batcher};
+use shuttle_proto::{
+    builder::builder_client::BuilderClient,
+    logger::{logger_client::LoggerClient, Batcher},
+};
 use tokio::select;
 use tower::ServiceBuilder;
 use tracing::{error, trace};
@@ -41,6 +44,19 @@ async fn main() {
         );
     let logger_client = LoggerClient::new(channel);
     let logger_batcher = Batcher::wrap(logger_client.clone());
+
+    let channel = ServiceBuilder::new()
+        .layer(ClaimLayer)
+        .layer(InjectPropagationLayer)
+        .service(
+            args.builder_uri
+                .connect()
+                .await
+                .expect("failed to connect to builder"),
+        );
+
+    // TODO: use builder client to send project archives to the builder service.
+    let _builder_client = BuilderClient::new(channel);
 
     setup_tracing(
         tracing_subscriber::registry()

@@ -94,7 +94,7 @@ pub async fn task(
                         }).await {
                             Ok(inner) =>  {
                                 let response = inner.into_inner();
-                                info!(deployment_id = %queued.id, "shuttle-builder built finished with an image of {} bytes, is_wasm ({}) and {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
+                                info!(deployment_id = %queued.id, "shuttle-builder finished building the deployment: image length is {} bytes, is_wasm flag is {} and there are {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
                             },
                             Err(err) => error!(deployment_id = %queued.id, "shuttle-builder errored while building: {}", err)
                         };

@@ -277,7 +277,9 @@ jobs:
       - apply-patches
       - run:
           name: Run unit tests
-          command: cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
+          command: |
+            SCCACHE_CACHE_SIZE=2G
+            cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
       - run:
           name: Run integration tests
           command: |

@@ -192,6 +192,8 @@ jobs:
                        --no-deps -- \
                        --D warnings
       - save-cargo-cache
+      # An out of date lockfile will be modified after clippy
+      - run: git diff --exit-code Cargo.lock || "Please commit an up to date Cargo.lock"
   test-standalone:
     parameters:
       path:

@@ -176,7 +176,7 @@ commands:
             - << parameters.target >>.env
 
 jobs:
-  workspace:
+  workspace-fmt-clippy:
     executor: docker-rust
     resource_class: xlarge
     steps:
@@ -230,7 +230,7 @@ jobs:
       - run: rustup target add wasm32-wasi
       - checkout
       - restore-cargo-cache
-      - run: cargo test --package << parameters.crate >> --all-features -- --nocapture
+      - run: cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
       - save-cargo-cache
   test-workspace-member-with-integration:
     parameters:
@@ -248,7 +248,7 @@ jobs:
       - apply-patches
       - run:
           name: Run unit tests
-          command: cargo test --package << parameters.crate >> --all-features --lib -- --nocapture
+          command: cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
       - run:
           name: Run integration tests
           # Only run integration tests if there are any
@@ -651,7 +651,7 @@ jobs:
 workflows:
   ci:
     jobs:
-      - workspace
+      - workspace-fmt-clippy
       - test-standalone:
           name: << matrix.path >>
           matrix:
@@ -703,14 +703,12 @@ workflows:
                 - shuttle-auth
                 - cargo-shuttle
                 - shuttle-deployer
-                - shuttle-logger
                 - shuttle-proto
-                - shuttle-provisioner
                 - shuttle-resource-recorder
                 - shuttle-runtime
                 - shuttle-service
       - test-workspace-member-with-integration-docker:
-          name: << matrix.crate >>
+          name: << matrix.crate >> with docker
           matrix:
             parameters:
               crate:

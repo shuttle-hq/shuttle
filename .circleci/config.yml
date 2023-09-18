@@ -251,7 +251,35 @@ jobs:
           command: cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
       - run:
           name: Run integration tests
-          # Only run integration tests if there are any
+          command: |
+            set +o pipefail
+            path=$(echo "<< parameters.crate >>" | sed "s/shuttle-\(.*\)/\1/")
+            if [ -f "$path/integration.sh" ]; then
+              bash "$path/integration.sh"
+            else
+              echo "nothing to test here, adjust CI file or add an integration script"
+              exit 1
+            fi
+      - save-cargo-cache
+  test-workspace-member-with-integration-xl:
+    parameters:
+      crate:
+        description: "Crate in workspace to test"
+        type: string
+    executor: docker-rust
+    resource_class: xlarge
+    steps:
+      - install-rust
+      - install-protoc
+      - checkout
+      - run: git submodule update --init
+      - restore-cargo-cache
+      - apply-patches
+      - run:
+          name: Run unit tests
+          command: cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
+      - run:
+          name: Run integration tests
           command: |
             set +o pipefail
             path=$(echo "<< parameters.crate >>" | sed "s/shuttle-\(.*\)/\1/")
@@ -701,12 +729,17 @@ workflows:
             parameters:
               crate:
                 - shuttle-auth
-                - cargo-shuttle
-                - shuttle-deployer
                 - shuttle-proto
                 - shuttle-resource-recorder
                 - shuttle-runtime
                 - shuttle-service
+      - test-workspace-member-with-integration-xl:
+          name: << matrix.crate >>
+          matrix:
+            parameters:
+              crate:
+                - cargo-shuttle
+                - shuttle-deployer
       - test-workspace-member-with-integration-docker:
           name: << matrix.crate >> with docker
           matrix:

@@ -398,7 +398,7 @@ impl Shuttle {
         if logout_args.reset_api_key {
             self.reset_api_key(&self.client()?)
                 .await
-                .map_err(suggestions::reset_api_key_failed)?;
+                .map_err(suggestions::api_key::reset_api_key_failed)?;
             println!("Successfully reset the API key.");
             println!(" -> Go to {SHUTTLE_LOGIN_URL} to get a new one.\n");
         }
@@ -423,7 +423,7 @@ impl Shuttle {
         let mut service = client
             .stop_service(proj_name)
             .await
-            .map_err(suggestions::stop_deployment_failure)?;
+            .map_err(suggestions::deployment::stop_deployment_failure)?;
 
         let progress_bar = create_spinner();
         loop {
@@ -469,7 +469,7 @@ impl Shuttle {
         let secrets = client
             .get_secrets(self.ctx.project_name())
             .await
-            .map_err(suggestions::get_secrets_failure)?;
+            .map_err(suggestions::resources::get_secrets_failure)?;
         let table = secret::get_table(&secrets);
 
         println!("{table}");
@@ -482,7 +482,7 @@ impl Shuttle {
             .clean_project(self.ctx.project_name())
             .await
             .map_err(|err| {
-                suggestions::project_request_failure(
+                suggestions::project::project_request_failure(
                     err,
                     "Project clean failed",
                     true,
@@ -517,7 +517,10 @@ impl Shuttle {
                     .get_deployments(proj_name, 0, 1)
                     .await
                     .map_err(|err| {
-                        suggestions::get_logs_failure(err, "Fetching the latest deployment failed")
+                        suggestions::logs::get_logs_failure(
+                            err,
+                            "Fetching the latest deployment failed",
+                        )
                     })?;
                 let most_recent = deployments.first().context(format!(
                     "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
@@ -539,7 +542,7 @@ impl Shuttle {
                 .get_logs_ws(self.ctx.project_name(), &id)
                 .await
                 .map_err(|err| {
-                    suggestions::get_logs_failure(err, "Connecting to the logs stream failed")
+                    suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
                 })?;
 
             while let Some(Ok(msg)) = stream.next().await {
@@ -554,7 +557,7 @@ impl Shuttle {
                 .get_logs(self.ctx.project_name(), &id)
                 .await
                 .map_err(|err| {
-                    suggestions::get_logs_failure(err, "Fetching the deployment failed")
+                    suggestions::logs::get_logs_failure(err, "Fetching the deployment failed")
                 })?;
 
             for log in logs.into_iter() {
@@ -575,7 +578,7 @@ impl Shuttle {
         let deployments = client
             .get_deployments(proj_name, page, limit)
             .await
-            .map_err(suggestions::get_deployments_list_failure)?;
+            .map_err(suggestions::deployment::get_deployments_list_failure)?;
         let table = get_deployments_table(&deployments, proj_name.as_str(), page);
 
         println!("{table}");
@@ -588,7 +591,7 @@ impl Shuttle {
         let deployment = client
             .get_deployment_details(self.ctx.project_name(), &deployment_id)
             .await
-            .map_err(suggestions::get_deployment_status_failure)?;
+            .map_err(suggestions::deployment::get_deployment_status_failure)?;
 
         println!("{deployment}");
 
@@ -599,7 +602,7 @@ impl Shuttle {
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await
-            .map_err(suggestions::get_service_resources_failure)?;
+            .map_err(suggestions::resources::get_service_resources_failure)?;
         let table = get_resources_table(&resources, self.ctx.project_name().as_str());
 
         println!("{table}");
@@ -1216,13 +1219,13 @@ impl Shuttle {
         let deployment = client
             .deploy(self.ctx.project_name(), deployment_req)
             .await
-            .map_err(suggestions::deploy_request_failure)?;
+            .map_err(suggestions::deploy::deploy_request_failure)?;
 
         let mut stream = client
             .get_logs_ws(self.ctx.project_name(), &deployment.id)
             .await
             .map_err(|err| {
-                suggestions::deployment_setup_failure(
+                suggestions::deploy::deployment_setup_failure(
                     err,
                     "Connecting to the deployment logs failed",
                 )
@@ -1267,7 +1270,7 @@ impl Shuttle {
                     .get_logs_ws(self.ctx.project_name(), &deployment.id)
                     .await
                     .map_err(|err| {
-                        suggestions::deployment_setup_failure(
+                        suggestions::deploy::deployment_setup_failure(
                             err,
                             "Connecting to the deployment logs failed",
                         )
@@ -1284,7 +1287,10 @@ impl Shuttle {
             .get_deployment_details(self.ctx.project_name(), &deployment.id)
             .await
             .map_err(|err| {
-                suggestions::deployment_setup_failure(err, "Assessing deployment state failed")
+                suggestions::deploy::deployment_setup_failure(
+                    err,
+                    "Assessing deployment state failed",
+                )
             })?;
 
         // A deployment will only exist if there is currently one in the running state
@@ -1363,7 +1369,7 @@ impl Shuttle {
         )
         .await
         .map_err(|err| {
-            suggestions::project_request_failure(
+            suggestions::project::project_request_failure(
                 err,
                 "Project creation failed",
                 true,
@@ -1379,10 +1385,10 @@ impl Shuttle {
     async fn project_recreate(&self, client: &Client, idle_minutes: u64) -> Result<()> {
         self.project_delete(client)
             .await
-            .map_err(suggestions::project_restart_failure)?;
+            .map_err(suggestions::project::project_restart_failure)?;
         self.project_create(client, idle_minutes)
             .await
-            .map_err(suggestions::project_restart_failure)?;
+            .map_err(suggestions::project::project_restart_failure)?;
 
         Ok(())
     }
@@ -1394,7 +1400,7 @@ impl Shuttle {
         }
 
         let projects = client.get_projects_list(page, limit).await.map_err(|err| {
-            suggestions::project_request_failure(
+            suggestions::project::project_request_failure(
                 err,
                 "Getting projects list failed",
                 false,
@@ -1428,7 +1434,7 @@ impl Shuttle {
                 .get_project(self.ctx.project_name())
                 .await
                 .map_err(|err| {
-                    suggestions::project_request_failure(
+                    suggestions::project::project_request_failure(
                         err,
                         "Getting project status failed",
                         false,
@@ -1455,7 +1461,7 @@ impl Shuttle {
         )
         .await
         .map_err(|err| {
-            suggestions::project_request_failure(
+            suggestions::project::project_request_failure(
                 err,
                 "Project destroy failed",
                 true,

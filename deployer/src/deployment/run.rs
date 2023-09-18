@@ -10,6 +10,10 @@ use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
+    deployment::{
+        DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
+        DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
+    },
     resource,
     storage_manager::ArtifactsStorageManager,
 };
@@ -26,7 +30,7 @@ use tokio::{
     task::{JoinHandle, JoinSet},
 };
 use tonic::{transport::Channel, Code};
-use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
+use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -140,7 +144,7 @@ pub async fn task(
     }
 }
 
-#[instrument(skip(active_deployment_getter, runtime_manager))]
+#[instrument(skip(active_deployment_getter, deployment_id, runtime_manager))]
 async fn kill_old_deployments(
     service_id: Ulid,
     deployment_id: Uuid,
@@ -157,39 +161,39 @@ async fn kill_old_deployments(
         .into_iter()
         .filter(|old_id| old_id != &deployment_id)
     {
-        trace!(%old_id, "stopping old deployment");
+        info!("stopping old deployment (id {old_id})");
 
         if !guard.kill(&old_id).await {
-            warn!(id = %old_id, "failed to kill old deployment");
+            warn!("failed to kill old deployment (id {old_id})");
         }
     }
 
     Ok(())
 }
 
-#[instrument(skip(_id), fields(id = %_id, state = %State::Completed))]
+#[instrument(name = "Cleaning up completed deployment", skip(_id), fields(deployment_id = %_id, state = %State::Completed))]
 fn completed_cleanup(_id: &Uuid) {
-    info!("service finished all on its own");
+    info!("{}", DEPLOYER_END_MSG_COMPLETED);
 }
 
-#[instrument(skip(_id), fields(id = %_id, state = %State::Stopped))]
+#[instrument(name = "Cleaning up stopped deployment", skip(_id), fields(deployment_id = %_id, state = %State::Stopped))]
 fn stopped_cleanup(_id: &Uuid) {
-    info!("service was stopped by the user");
+    info!("{}", DEPLOYER_END_MSG_STOPPED);
 }
 
-#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
+#[instrument(name = "Cleaning up crashed deployment", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        "service encountered an error"
+        "{}", DEPLOYER_END_MSG_CRASHED
     );
 }
 
-#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
+#[instrument(name = "Cleaning up startup crashed deployment", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn start_crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        "service startup encountered an error"
+        "{}", DEPLOYER_END_MSG_STARTUP_ERR
     );
 }
 
@@ -215,7 +219,7 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, storage_manager, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(name = "Loading resources", skip(self, storage_manager, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup), fields(deployment_id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
@@ -253,7 +257,11 @@ impl Built {
         let runtime_client = runtime_manager
             .lock()
             .await
-            .get_runtime_client(self.id, alpha_runtime_path.clone())
+            .get_runtime_client(
+                self.id,
+                self.service_name.clone(),
+                alpha_runtime_path.clone(),
+            )
             .await
             .map_err(Error::Runtime)?;
 
@@ -292,22 +300,25 @@ async fn load(
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Claim,
 ) -> Result<()> {
-    info!(
-        "loading project from: {}",
-        executable_path
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap_or_default()
-    );
+    info!("Loading resources");
 
     let resources = resource_manager
         .get_resources(&service_id, claim.clone())
         .await
-        .unwrap()
+        .map_err(|err| Error::Load(err.to_string()))?
         .resources
         .into_iter()
-        .map(resource::Response::from)
+        .map(resource::Response::try_from)
+        // We ignore and trace the errors for resources with corrupted data, returning just the
+        // valid resources.
+        // TODO: investigate how the resource data can get corrupted.
+        .filter_map(|resource| {
+            resource
+                .map_err(|err| {
+                    error!(error = ?err, "failed to parse resource data");
+                })
+                .ok()
+        })
         .map(resource::Response::into_bytes)
         .collect();
 
@@ -338,10 +349,11 @@ async fn load(
     match response {
         Ok(response) => {
             let response = response.into_inner();
+            // Make sure to not log the entire response, the resources field is likely to contain secrets.
+            if response.success {
+                info!("successfully loaded service");
+            }
 
-            // Make sure to not log the entire response, the resources field is likely to contain
-            // secrets.
-            info!(success = %response.success, "loading response");
             let resources = response
                 .resources
                 .into_iter()
@@ -373,7 +385,7 @@ async fn load(
     }
 }
 
-#[instrument(skip(runtime_client, deployment_updater, cleanup), fields(state = %State::Running))]
+#[instrument(name = "Starting service", skip(runtime_client, deployment_updater, cleanup), fields(deployment_id = %id, state = %State::Running))]
 async fn run(
     id: Uuid,
     service_name: String,
@@ -398,12 +410,13 @@ async fn run(
         .unwrap()
         .into_inner();
 
-    info!("starting service");
     let response = runtime_client.start(start_request).await;
 
     match response {
         Ok(response) => {
-            info!(response = ?response.into_inner(),  "start client response: ");
+            if response.into_inner().success {
+                info!("{}", DEPLOYER_RUNTIME_START_RESPONSE);
+            }
 
             // Wait for stop reason
             let reason = stream.message().await.expect("message from tonic stream");
@@ -417,12 +430,11 @@ async fn run(
             }));
         }
         Err(ref status) => {
+            error!(%status, "failed to start service");
             start_crashed_cleanup(
                 &id,
                 Error::Start("runtime failed to start deployment".to_string()),
             );
-
-            error!(%status, "failed to start service");
         }
     }
 }
@@ -440,7 +452,9 @@ mod tests {
     use async_trait::async_trait;
     use portpicker::pick_unused_port;
     use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
+    use shuttle_common_tests::logger::{mocked_logger_client, MockedLogger};
     use shuttle_proto::{
+        logger::Batcher,
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
@@ -503,14 +517,13 @@ mod tests {
         }
     }
 
-    fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
+    async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
         let provisioner_addr =
             SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
-        let mock = ProvisionerMock;
 
         tokio::spawn(async move {
             Server::builder()
-                .add_service(ProvisionerServer::new(mock))
+                .add_service(ProvisionerServer::new(ProvisionerMock))
                 .serve(provisioner_addr)
                 .await
                 .unwrap();
@@ -518,15 +531,15 @@ mod tests {
 
         let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
-        let (tx, rx) = crossbeam_channel::unbounded();
 
-        tokio::runtime::Handle::current().spawn_blocking(move || {
-            while let Ok(log) = rx.recv() {
-                println!("test log: {log:?}");
-            }
-        });
+        let logger_client = Batcher::wrap(mocked_logger_client(MockedLogger).await);
 
-        RuntimeManager::new(path, format!("http://{}", provisioner_addr), None, tx)
+        RuntimeManager::new(
+            path,
+            format!("http://{}", provisioner_addr),
+            logger_client,
+            None,
+        )
     }
 
     #[derive(Clone)]
@@ -593,7 +606,7 @@ mod tests {
     async fn can_be_killed() {
         let (built, storage_manager) = make_and_built("sleep-async");
         let id = built.id;
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
         let handle_cleanup = |response: Option<SubscribeStopResponse>| {
@@ -636,7 +649,7 @@ mod tests {
     #[tokio::test]
     async fn self_stop() {
         let (built, storage_manager) = make_and_built("sleep-async");
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
         let handle_cleanup = |response: Option<SubscribeStopResponse>| {
@@ -676,7 +689,7 @@ mod tests {
     #[tokio::test]
     async fn panic_in_bind() {
         let (built, storage_manager) = make_and_built("bind-panic");
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
         let handle_cleanup = |response: Option<SubscribeStopResponse>| {
@@ -719,7 +732,7 @@ mod tests {
     #[should_panic(expected = "Load(\"main panic\")")]
     async fn panic_in_main() {
         let (built, storage_manager) = make_and_built("main-panic");
-        let runtime_manager = get_runtime_manager();
+        let runtime_manager = get_runtime_manager().await;
 
         let handle_cleanup = |_result| panic!("service should never be started");
 

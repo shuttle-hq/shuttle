@@ -1,24 +1,3 @@
-use super::deploy_layer::{Log, LogRecorder, LogType};
-use super::gateway_client::BuildQueueClient;
-use super::{Built, QueueReceiver, RunSender, State};
-use crate::error::{Error, Result, TestError};
-use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
-use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
-
-use cargo_metadata::Message;
-use chrono::Utc;
-use crossbeam_channel::Sender;
-use opentelemetry::global;
-use serde_json::json;
-use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_workspace, BuiltService};
-use tokio::task::JoinSet;
-use tokio::time::{sleep, timeout};
-use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
-use ulid::Ulid;
-use uuid::Uuid;
-
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::fs::remove_file;
@@ -27,9 +6,32 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use cargo_metadata::Message;
+use crossbeam_channel::Sender;
 use flate2::read::GzDecoder;
+use opentelemetry::global;
+use shuttle_common::deployment::DEPLOYER_END_MSG_BUILD_ERR;
+use shuttle_common::log::LogRecorder;
 use tar::Archive;
 use tokio::fs;
+use tokio::task::JoinSet;
+use tokio::time::{sleep, timeout};
+use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+use ulid::Ulid;
+use uuid::Uuid;
+
+use shuttle_common::{
+    claims::Claim,
+    storage_manager::{ArtifactsStorageManager, StorageManager},
+    LogItem,
+};
+use shuttle_service::builder::{build_workspace, BuiltService};
+
+use super::gateway_client::BuildQueueClient;
+use super::{Built, QueueReceiver, RunSender, State};
+use crate::error::{Error, Result, TestError};
+use crate::persistence::{DeploymentUpdater, SecretRecorder};
 
 pub async fn task(
     mut recv: QueueReceiver,
@@ -110,17 +112,16 @@ pub async fn task(
     }
 }
 
-#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
+#[instrument(name = "Build failed", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        "service build encountered an error"
+        DEPLOYER_END_MSG_BUILD_ERR,
     );
 }
 
-#[instrument(skip(queue_client), fields(state = %State::Queued))]
+#[instrument(name = "Waiting for queue slot", skip(queue_client), fields(deployment_id = %id, state = %State::Queued))]
 async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result<()> {
-    trace!("getting a build slot");
     loop {
         let got_slot = queue_client.get_slot(id).await?;
 
@@ -136,6 +137,7 @@ async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result
     Ok(())
 }
 
+#[instrument(name = "Releasing queue slot", skip(queue_client), fields(deployment_id = %id))]
 async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) {
     match queue_client.release_slot(id).await {
         Ok(_) => {}
@@ -146,7 +148,7 @@ async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) {
     }
 }
 
-#[instrument(skip(run_send), fields(id = %built.id, state = %State::Built))]
+#[instrument(name = "Starting deployment", skip(run_send), fields(deployment_id = %built.id, state = %State::Built))]
 async fn promote_to_run(mut built: Built, run_send: RunSender) {
     let cx = Span::current().context();
 
@@ -171,7 +173,7 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    #[instrument(name = "Building project", skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(deployment_id = %self.id, state = %State::Building))]
     async fn handle(
         self,
         storage_manager: ArtifactsStorageManager,
@@ -179,51 +181,31 @@ impl Queued {
         log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
     ) -> Result<Built> {
-        info!("Extracting received data");
-
         let project_path = storage_manager.service_build_path(&self.service_name)?;
 
+        info!("Extracting files");
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
-        info!("Building deployment");
-
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
-        let id = self.id;
+
         tokio::task::spawn_blocking(move || {
             while let Ok(message) = rx.recv() {
                 trace!(?message, "received cargo message");
-                // TODO: change these to `info!(...)` as [valuable] support increases.
-                // Currently it is not possible to turn these serde `message`s into a `valuable`, but once it is the passing down of `log_recorder` should be removed.
-                let log = match message {
-                    Message::TextLine(line) => Log {
-                        id,
-                        state: State::Building,
-                        level: LogLevel::Info,
-                        timestamp: Utc::now(),
-                        file: None,
-                        line: None,
-                        target: String::new(),
-                        fields: json!({ "build_line": line }),
-                        r#type: LogType::Event,
+                let log = LogItem::new(
+                    self.id,
+                    shuttle_common::log::Backend::Deployer, // will change to Builder
+                    match message {
+                        Message::TextLine(line) => line,
+                        message => serde_json::to_string(&message).unwrap(),
                     },
-                    message => Log {
-                        id,
-                        state: State::Building,
-                        level: LogLevel::Debug,
-                        timestamp: Utc::now(),
-                        file: None,
-                        line: None,
-                        target: String::new(),
-                        fields: serde_json::to_value(message).unwrap(),
-                        r#type: LogType::Event,
-                    },
-                };
+                );
                 log_recorder.record(log);
             }
         });
 
         let project_path = project_path.canonicalize()?;
 
+        info!("Building deployment");
         // Currently returns the first found shuttle service in a given workspace.
         let built_service = build_deployment(&project_path, tx.clone()).await?;
 
@@ -236,11 +218,7 @@ impl Queued {
         set_secrets(secrets, &self.service_id, secret_recorder).await?;
 
         if self.will_run_tests {
-            info!(
-                build_line = "Running tests before starting up",
-                "Running deployment's unit tests"
-            );
-
+            info!("Running tests before starting up");
             run_pre_deploy_tests(&project_path, tx).await?;
         }
 
@@ -256,7 +234,7 @@ impl Queued {
         let is_next = built_service.is_wasm;
 
         deployment_updater
-            .set_is_next(&id, is_next)
+            .set_is_next(&self.id, is_next)
             .await
             .map_err(|e| Error::Build(Box::new(e)))?;
 
@@ -375,17 +353,16 @@ async fn run_pre_deploy_tests(
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
-    // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
     tokio::task::spawn_blocking(move || {
-        for message in Message::parse_stream(read) {
-            match message {
-                Ok(message) => {
-                    if let Err(error) = tx.send(message) {
+        for line in read.lines() {
+            match line {
+                Ok(line) => {
+                    if let Err(error) = tx.send(Message::TextLine(line)) {
                         error!("failed to send cargo message on channel: {error}");
                     }
                 }
                 Err(error) => {
-                    error!("failed to parse cargo message: {error}");
+                    error!("failed to read cargo output line: {error}");
                 }
             }
         }
@@ -393,9 +370,12 @@ async fn run_pre_deploy_tests(
 
     let mut cmd = Command::new("cargo")
         .arg("test")
+        // We set the tests to build with the release profile since deployments compile
+        // with the release profile by default. This means crates don't need to be
+        // recompiled in debug mode for the tests, reducing memory usage during deployment.
         .arg("--release")
         .arg("--jobs=4")
-        .arg("--message-format=json")
+        .arg("--color=always")
         .current_dir(project_path)
         .stdout(Stdio::piped())
         .spawn()

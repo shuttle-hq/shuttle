@@ -232,7 +232,7 @@ jobs:
       - restore-cargo-cache
       - run: cargo test --package << parameters.crate >> --all-features -- --nocapture
       - save-cargo-cache
-  test-workspace-member-integration:
+  test-workspace-member-with-integration:
     parameters:
       crate:
         description: "Crate in workspace to test"
@@ -254,11 +254,15 @@ jobs:
           # Only run integration tests if there are any
           command: |
             set +o pipefail
-            (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") \
-              && echo "nothing to test" \
-              || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
+            path=$(echo "<< parameters.crate >>" | sed "s/shuttle-\(.*\)/\1/")
+            if [ -f "$path/integration.sh" ]; then
+              bash "$path/integration.sh"
+            else
+              echo "nothing to test here, adjust CI file or add an integration script"
+              exit 1
+            fi
       - save-cargo-cache
-  test-workspace-member-integration-machine:
+  test-workspace-member-with-integration-docker:
     parameters:
       crate:
         description: "Crate in workspace to test"
@@ -273,19 +277,17 @@ jobs:
       - restore-cargo-cache
       - apply-patches
       - run:
-          name: Run unit tests
-          command: |
-            SCCACHE_CACHE_SIZE=2G
-            cargo test --package << parameters.crate >> --all-features --lib -- --nocapture
-      - run:
-          name: Run integration tests
-          # Only run integration tests if there are any
+          name: Run docker integration tests
           command: |
             SCCACHE_CACHE_SIZE=2G
             set +o pipefail
-            (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") \
-              && echo "nothing to test" \
-              || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
+            path=$(echo "<< parameters.crate >>" | sed "s/shuttle-\(.*\)/\1/")
+            if [ -f "$path/integration_docker.sh" ]; then
+              bash "$path/integration_docker.sh"
+            else
+              echo "nothing to test here, adjust CI file or add an integration script"
+              exit 1
+            fi
       - save-cargo-cache
   e2e-test:
     executor: machine-ubuntu
@@ -690,21 +692,24 @@ workflows:
             parameters:
               crate:
                 # - shuttle-admin # no tests
+                - shuttle-codegen
                 - shuttle-common
                 # - shuttle-common-tests # no tests
-      - test-workspace-member-integration:
+      - test-workspace-member-with-integration:
           name: << matrix.crate >>
           matrix:
             parameters:
               crate:
                 - shuttle-auth
-                - shuttle-codegen
+                - cargo-shuttle
                 - shuttle-deployer
+                - shuttle-logger
                 - shuttle-proto
+                - shuttle-provisioner
                 - shuttle-resource-recorder
                 - shuttle-runtime
                 - shuttle-service
-      - test-workspace-member-integration-machine:
+      - test-workspace-member-with-integration-docker:
           name: << matrix.crate >>
           matrix:
             parameters:
@@ -718,7 +723,8 @@ workflows:
             - test-standalone
             - test-standalone-shared-db
             - test-workspace-member
-            - test-workspace-member-integration-machine
+            - test-workspace-member-with-integration
+            - test-workspace-member-with-integration-docker
           filters:
             branches:
               only: production

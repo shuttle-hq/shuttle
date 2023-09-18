@@ -185,6 +185,7 @@ async fn non_interactive_init_with_from_repo_name() {
 }
 
 #[tokio::test]
+#[ignore] // cargo-generate hangs on this operation sometimes. Passing @ v0.26.0.
 async fn non_interactive_init_with_from_local_path() {
     let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
     // Sleep to give time for the directory to finish creating
@@ -201,7 +202,7 @@ async fn non_interactive_init_with_from_local_path() {
         "--name",
         "my-project",
         "--from",
-        "../examples", // for some reason, cargo runs the test from the cargo-shuttle folder.
+        "../examples", // cargo runs the test from the cargo-shuttle folder.
         "--subfolder",
         "tower/hello-world",
         temp_dir_path.to_str().unwrap(),

@@ -4,7 +4,7 @@ use std::{
 };
 
 use shuttle_common::log::LogRecorder;
-use shuttle_proto::logger::logger_client::LoggerClient;
+use shuttle_proto::{builder::builder_client::BuilderClient, logger::logger_client::LoggerClient};
 use tokio::{
     sync::{mpsc, Mutex},
     task::JoinSet,
@@ -46,6 +46,13 @@ pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
     secret_getter: Option<SG>,
     resource_manager: Option<RM>,
     queue_client: Option<QC>,
+    builder_client: Option<
+        BuilderClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
+    >,
 }
 
 impl<LR, SR, ADG, DU, SG, RM, QC> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC>
@@ -73,6 +80,19 @@ where
         >,
     ) -> Self {
         self.logs_fetcher = Some(logs_fetcher);
+
+        self
+    }
+
+    pub fn builder_client(
+        mut self,
+        builder_client: BuilderClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
+    ) -> Self {
+        self.builder_client = Some(builder_client);
 
         self
     }
@@ -146,6 +166,7 @@ where
         let secret_getter = self.secret_getter.expect("a secret getter to be set");
         let resource_manager = self.resource_manager.expect("a resource manager to be set");
         let logs_fetcher = self.logs_fetcher.expect("a logs fetcher to be set");
+        let builder_client = self.builder_client.expect("a builder client to be set");
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -163,6 +184,7 @@ where
             build_log_recorder,
             secret_recorder,
             queue_client,
+            builder_client,
             builds_path.clone(),
         ));
         // Run queue. Waits for built deployments and runs them.
@@ -231,6 +253,7 @@ impl DeploymentManager {
             secret_getter: None,
             resource_manager: None,
             queue_client: None,
+            builder_client: None,
         }
     }
 

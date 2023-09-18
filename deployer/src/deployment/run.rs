@@ -199,7 +199,6 @@ fn crashed_cleanup(
     let id = *id;
     tokio::spawn(async move {
         runtime_manager.lock().await.kill_process(id);
-        info!(%id, "initiated runtime process killing");
     });
 }
 

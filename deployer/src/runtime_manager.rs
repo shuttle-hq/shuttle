@@ -18,7 +18,7 @@ use shuttle_proto::{
 use shuttle_service::Environment;
 use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
 use tonic::transport::Channel;
-use tracing::{debug, info, trace};
+use tracing::{debug, error, info, trace};
 use uuid::Uuid;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
@@ -172,7 +172,13 @@ impl RuntimeManager {
 
     pub fn kill_process(&mut self, id: Uuid) {
         if let Some((mut process, _)) = self.runtimes.lock().unwrap().remove(&id) {
-            let _ = process.start_kill();
+            match process.start_kill() {
+                Ok(_) => info!(deployment_id = %id, "initiated runtime process killing"),
+                Err(err) => error!(
+                    deployment_id = %id, "failed to start the killing of the runtime: {}",
+                    err
+                ),
+            }
         }
     }
 

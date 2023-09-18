@@ -750,6 +750,8 @@ impl ProjectCreating {
                         "/opt/shuttle/deployer.sqlite",
                         "--auth-uri",
                         auth_uri,
+                        "--builder-uri",
+                        "http://builder:8000",
                         "--project-id",
                         self.project_id.to_string()
                     ],

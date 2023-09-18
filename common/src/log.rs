@@ -25,7 +25,7 @@ pub enum Backend {
     Unknown,
 
     Auth,
-    // Builder,
+    Builder,
     Deployer,
     Gateway,
     Logger,

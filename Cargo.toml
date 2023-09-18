@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "admin",
   "auth",
+  "builder",
   "cargo-shuttle",
   "codegen",
   "common",

@@ -16,6 +16,8 @@ use shuttle_common::{
     log::LogRecorder,
     LogItem,
 };
+use shuttle_proto::builder::builder_client::BuilderClient;
+use shuttle_proto::builder::BuildRequest;
 use shuttle_service::builder::{build_workspace, BuiltService};
 use tar::Archive;
 use tokio::{
@@ -33,6 +35,7 @@ use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
 use crate::persistence::{DeploymentUpdater, SecretRecorder};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn task(
     mut recv: QueueReceiver,
     run_send: RunSender,
@@ -40,6 +43,11 @@ pub async fn task(
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
     queue_client: impl BuildQueueClient,
+    builder_client: BuilderClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >,
     builds_path: PathBuf,
 ) {
     info!("Queue task started");
@@ -58,6 +66,7 @@ pub async fn task(
                 let secret_recorder = secret_recorder.clone();
                 let queue_client = queue_client.clone();
                 let builds_path = builds_path.clone();
+                let mut builder_client = builder_client.clone();
 
                 tasks.spawn(async move {
                     let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -78,6 +87,17 @@ pub async fn task(
                             Ok(_) => {}
                             Err(err) => return build_failed(&id, err),
                         }
+
+                        match builder_client.build(BuildRequest {
+                            deployment_id: queued.id.to_string(),
+                            archive: queued.data.clone(),
+                        }).await {
+                            Ok(inner) =>  {
+                                let response = inner.into_inner();
+                                info!(deployment_id = %queued.id, "shuttle-builder built finished with an image of {} bytes, is_wasm ({}) and {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
+                            },
+                            Err(err) => error!(deployment_id = %queued.id, "shuttle-builder errored while building: {}", err)
+                        };
 
                         match queued
                             .handle(

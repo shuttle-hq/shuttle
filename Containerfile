@@ -44,6 +44,7 @@ COPY --from=planner /build .
 RUN cargo build \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
     --bin shuttle-auth \
+    --bin shuttle-builder \
     --bin shuttle-deployer \
     --bin shuttle-gateway \
     --bin shuttle-logger \
@@ -110,3 +111,8 @@ FROM shuttle-crate-base AS shuttle-resource-recorder
 ARG CARGO_PROFILE
 COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-resource-recorder /usr/local/bin/service
 FROM shuttle-resource-recorder AS shuttle-resource-recorder-dev
+
+FROM shuttle-crate-base AS shuttle-builder
+ARG CARGO_PROFILE
+COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-builder /usr/local/bin/service
+FROM shuttle-builder AS shuttle-builder-dev

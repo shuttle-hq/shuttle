@@ -698,6 +698,7 @@ impl ProjectCreating {
             image: default_image,
             prefix,
             provisioner_host,
+            builder_host,
             auth_uri,
             fqdn: public,
             ..
@@ -750,6 +751,8 @@ impl ProjectCreating {
                         "/opt/shuttle/deployer.sqlite",
                         "--auth-uri",
                         auth_uri,
+                        "--builder-uri",
+                        format!("http://{builder_host}:8000"),
                         "--project-id",
                         self.project_id.to_string()
                     ],

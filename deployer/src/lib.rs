@@ -13,7 +13,7 @@ use ulid::Ulid;
 
 mod args;
 pub mod deployment;
-mod error;
+pub mod error;
 pub mod handlers;
 pub mod persistence;
 mod proxy;

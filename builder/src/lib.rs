@@ -46,7 +46,7 @@ impl Service {
         Self
     }
 
-    #[instrument(skip(self, archive))]
+    #[instrument(name = "Building deployment", skip(self, archive))]
     async fn build(
         &self,
         deployment_id: String,
@@ -60,7 +60,7 @@ impl Service {
         build_flake_file(path)?;
 
         let mut cmd = Command::new("nix");
-        let output_path = tmp_dir.path().join("_archive");
+        let output_path = path.join("_archive");
         cmd.args([
             "build",
             "--no-write-lock-file",
@@ -79,14 +79,15 @@ impl Service {
         let mut reader = BufReader::new(stdout).lines();
 
         tokio::spawn(async move {
+            let id = deployment_id.clone();
             while let Some(line) = reader.next_line().await.expect("to get line") {
-                info!("{line}");
+                info!(deployment_id = %id, "{line}");
             }
         });
 
         let status = child.wait().await.expect("build to finish");
 
-        debug!("{status}");
+        debug!(deployment_id, "{status}");
 
         let archive = fs::read(output_path)?;
 

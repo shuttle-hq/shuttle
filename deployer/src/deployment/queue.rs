@@ -25,6 +25,7 @@ use tokio::{
     task::JoinSet,
     time::{sleep, timeout},
 };
+use tonic::Request;
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
@@ -90,11 +91,15 @@ pub async fn task(
 
                         let deployment_id = queued.id.to_string();
                         let archive = queued.data.clone();
+                        let claim = queued.claim.clone();
                         tokio::spawn(async move {
-                            match builder_client.build(BuildRequest {
+                            let mut req = Request::new(BuildRequest {
                                 deployment_id,
                                 archive,
-                            }).await {
+                            });
+                            req.extensions_mut().insert(claim);
+
+                            match builder_client.build(req).await {
                                 Ok(inner) =>  {
                                     let response = inner.into_inner();
                                     info!(id = %queued.id, "shuttle-builder finished building the deployment: image length is {} bytes, is_wasm flag is {} and there are {} secrets", response.image.len(), response.is_wasm, response.secrets.len());

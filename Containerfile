@@ -11,9 +11,11 @@ WORKDIR /build
 FROM cargo-chef as chef-planner
 WORKDIR /src
 COPY . .
+
 # Select only the essential files for copying into next steps
 # so that changes to miscellaneous files don't trigger a new cargo-chef cook.
 # Beware that .dockerignore filters files before they get here.
+
 RUN find . \( \
     -name "*.rs" -or \
     -name "*.toml" -or \
@@ -21,8 +23,7 @@ RUN find . \( \
     -name "*.sql" -or \
     -name "README.md" -or \
     # Used for local TLS testing, as described in admin/README.md
-    -name "*.pem" -or \
-    -name "ulid0.so" \
+    -name "*.pem" \
     \) -type f -exec install -D \{\} /build/\{\} \;
 WORKDIR /build
 RUN cargo chef prepare --recipe-path /recipe.json
@@ -91,6 +92,8 @@ COPY deployer/prepare.sh /prepare.sh
 RUN /prepare.sh "${prepare_args}"
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-deployer /usr/local/bin/service
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin/
+ARG TARGETPLATFORM
+RUN if [[ "${TARGETPLATFORM}" == "linux/arm64" ]]; then mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi
 FROM shuttle-deployer AS shuttle-deployer-dev
 # Source code needed for compiling with [patch.crates-io]
 COPY --from=chef-planner /build /usr/src/shuttle/
@@ -101,6 +104,8 @@ ARG folder
 COPY ${folder}/*.so /usr/lib/
 ENV LD_LIBRARY_PATH=/usr/lib/
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-gateway /usr/local/bin/service
+ARG TARGETPLATFORM
+RUN if [[ "${TARGETPLATFORM}" == "linux/arm64" ]]; then mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi
 FROM shuttle-gateway AS shuttle-gateway-dev
 # For testing certificates locally
 COPY --from=chef-planner /build/*.pem /usr/src/shuttle/

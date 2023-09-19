@@ -93,7 +93,7 @@ RUN /prepare.sh "${prepare_args}"
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-deployer /usr/local/bin/service
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin/
 ARG TARGETPLATFORM
-RUN if [[ "${TARGETPLATFORM}" == "linux/arm64" ]]; then mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi
 FROM shuttle-deployer AS shuttle-deployer-dev
 # Source code needed for compiling with [patch.crates-io]
 COPY --from=chef-planner /build /usr/src/shuttle/
@@ -105,7 +105,7 @@ COPY ${folder}/*.so /usr/lib/
 ENV LD_LIBRARY_PATH=/usr/lib/
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-gateway /usr/local/bin/service
 ARG TARGETPLATFORM
-RUN if [[ "${TARGETPLATFORM}" == "linux/arm64" ]]; then mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi
 FROM shuttle-gateway AS shuttle-gateway-dev
 # For testing certificates locally
 COPY --from=chef-planner /build/*.pem /usr/src/shuttle/

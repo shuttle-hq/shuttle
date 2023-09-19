@@ -20,6 +20,12 @@ async fn rocket_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rocket_secrets() {
+    std::fs::copy(
+        "../examples/rocket/secrets/Secrets.toml.example",
+        "../examples/rocket/secrets/Secrets.toml",
+    )
+    .unwrap();
+
     let url = cargo_shuttle_run("../examples/rocket/secrets", false).await;
 
     let request_text = reqwest::Client::new()

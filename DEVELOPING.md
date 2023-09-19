@@ -181,7 +181,7 @@ The following command inserts a gateway user into the `auth` state with deployer
 docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/shuttle-auth --state=/var/lib/shuttle-auth init-deployer --name gateway --key gateway4deployes
 ```
 
-### Deplying locally
+### Deploying locally
 
 Create a new project based on one of the examples.
 This will prompt your local gateway to start a deployer container.

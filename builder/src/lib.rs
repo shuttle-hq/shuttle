@@ -78,8 +78,8 @@ impl Service {
 
         let mut reader = BufReader::new(stdout).lines();
 
+        let id = deployment_id.clone();
         tokio::spawn(async move {
-            let id = deployment_id.clone();
             while let Some(line) = reader.next_line().await.expect("to get line") {
                 info!(deployment_id = %id, "{line}");
             }

@@ -32,12 +32,7 @@ rustls = "0.20.7"
 rustls-pemfile = "1.0.1"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sqlx = { workspace = true, features = [
-    "sqlite",
-    "json",
-    "runtime-tokio-rustls",
-    "migrate",
-] }
+sqlx = { workspace = true, features = ["sqlite", "json", "migrate"] }
 strum = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tower = { workspace = true, features = ["steer"] }

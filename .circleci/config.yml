@@ -183,7 +183,9 @@ jobs:
       - checkout
       - restore-cargo-cache
       # Check this to make sure we do not include patched dependencies in the Cargo.lock
-      - run: '[ -z $(grep "\[\[patch.unused\]\]" Cargo.lock) ]'
+      - run: |
+          [ -z "$(grep "\[\[patch.unused\]\]" Cargo.lock)" ] || \
+            ( echo "Please remove unused patches from Cargo.lock"; exit 1 )
       - run: cargo fmt --all --check
       - run: |
           cargo clippy --tests \
@@ -192,8 +194,10 @@ jobs:
                        --no-deps -- \
                        --D warnings
       - save-cargo-cache
-      # An out of date lockfile will be modified after clippy
-      - run: git diff --exit-code Cargo.lock || "Please commit an up to date Cargo.lock"
+      # An out of date lockfile will be modified after the clippy command has run
+      - run: |
+          git diff --exit-code Cargo.lock || \
+            ( echo "Please commit an up to date Cargo.lock"; exit 1 )
   test-standalone:
     parameters:
       path:

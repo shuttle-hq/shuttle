@@ -88,16 +88,20 @@ pub async fn task(
                             Err(err) => return build_failed(&id, err),
                         }
 
-                        match builder_client.build(BuildRequest {
-                            deployment_id: queued.id.to_string(),
-                            archive: queued.data.clone(),
-                        }).await {
-                            Ok(inner) =>  {
-                                let response = inner.into_inner();
-                                info!(deployment_id = %queued.id, "shuttle-builder finished building the deployment: image length is {} bytes, is_wasm flag is {} and there are {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
-                            },
-                            Err(err) => error!(deployment_id = %queued.id, "shuttle-builder errored while building: {}", err)
-                        };
+                        let deployment_id = queued.id.to_string();
+                        let archive = queued.data.clone();
+                        tokio::spawn(async move {
+                            match builder_client.build(BuildRequest {
+                                deployment_id,
+                                archive,
+                            }).await {
+                                Ok(inner) =>  {
+                                    let response = inner.into_inner();
+                                    info!(id = %queued.id, "shuttle-builder finished building the deployment: image length is {} bytes, is_wasm flag is {} and there are {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
+                                },
+                                Err(err) => error!(id = %queued.id, "shuttle-builder errored while building: {}", err)
+                            };
+                        });
 
                         match queued
                             .handle(

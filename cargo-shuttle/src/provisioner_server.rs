@@ -116,7 +116,12 @@ impl LocalProvisioner {
                     .expect("container to be created")
             }
             Err(error) => {
-                error!("got unexpected error while inspecting docker container: {error}");
+                error!("Got unexpected error while inspecting docker container: {error}.");
+                error!(
+                    "Make sure Docker is installed and running. \
+                    If you're using Podman, view these instructions: \
+                    https://docs.rs/shuttle-runtime/latest/shuttle_runtime/#using-podman-instead-of-docker"
+                );
                 return Err(Status::internal(error.to_string()));
             }
         };

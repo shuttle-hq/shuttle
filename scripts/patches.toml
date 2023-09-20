@@ -6,6 +6,7 @@ shuttle-runtime = { path = "BASE/runtime" }
 shuttle-service = { path = "BASE/service" }
 
 shuttle-aws-rds = { path = "BASE/resources/aws-rds" }
+shuttle-metadata = { path = "BASE/resources/metadata" }
 shuttle-persist = { path = "BASE/resources/persist" }
 shuttle-shared-db = { path = "BASE/resources/shared-db" }
 shuttle-secrets = { path = "BASE/resources/secrets" }

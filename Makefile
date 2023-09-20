@@ -132,11 +132,14 @@ DOCKER_COMPOSE_ENV=\
 	COMPOSE_PROFILES=$(COMPOSE_PROFILES)\
 	DOCKER_SOCK=$(DOCKER_SOCK)
 
-.PHONY: clean images the-shuttle-images shuttle-% postgres panamax otel deploy test docker-compose.rendered.yml up down
+.PHONY: clean cargo-clean images the-shuttle-images shuttle-% postgres panamax otel deploy test docker-compose.rendered.yml up down
 
 clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
+
+cargo-clean:
+	find . -type d \( -name target -or -name .shuttle-executables \) | xargs rm -rf
 
 images: the-shuttle-images postgres panamax otel
 

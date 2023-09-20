@@ -56,24 +56,27 @@ impl Service {
         let path = tmp_dir.path();
 
         extract_tar_gz_data(archive.as_slice(), path).await?;
+        info!(deployment_id, "extracted the tar archive content");
+
         let secrets = get_secrets(path).await?;
         build_flake_file(path)?;
+        info!(deployment_id, "created the project flake file successfully");
 
-        let mut cmd = Command::new("nix");
         let output_path = path.join("_archive");
-        cmd.args([
-            "build",
-            "--no-write-lock-file",
-            "--impure",
-            "--log-format",
-            "bar-with-logs",
-            "--out-link",
-            output_path.to_str().unwrap(),
-            path.to_str().unwrap(),
-        ])
-        .stdout(Stdio::piped());
+        let mut child = Command::new("nix")
+            .args([
+                "build",
+                "--no-write-lock-file",
+                "--impure",
+                "--log-format",
+                "bar-with-logs",
+                "--out-link",
+                output_path.to_str().unwrap(),
+                path.to_str().unwrap(),
+            ])
+            .stdout(Stdio::piped())
+            .spawn()?;
 
-        let mut child = cmd.spawn()?;
         let stdout = child.stdout.take().expect("to get handle on stdout");
 
         let mut reader = BufReader::new(stdout).lines();
@@ -91,7 +94,8 @@ impl Service {
 
         let archive_path = fs::read_link(output_path)?;
         info!(
-            "Built the image and reading the link: {}",
+            deployment_id,
+            "built image path: {}",
             archive_path.display()
         );
         let archive = fs::read(archive_path)?;

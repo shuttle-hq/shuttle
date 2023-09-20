@@ -20,7 +20,7 @@ networks:
     ipam:
       driver: default
       config:
-        - subnet: 11.99.0.0/16
+        - subnet: 10.100.0.0/16
 services:
   auth:
     image: "${CONTAINER_REGISTRY}/auth:${AUTH_TAG}"

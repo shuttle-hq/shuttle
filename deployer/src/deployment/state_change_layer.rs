@@ -482,7 +482,7 @@ mod tests {
         async fn get_resource(
             &self,
             _service_id: &ulid::Ulid,
-            _type: resource::Type,
+            _type: ResourceType,
             _claim: Claim,
         ) -> Result<Option<Vec<Resource>>, Self::Err> {
             Ok(None)
@@ -491,7 +491,7 @@ mod tests {
         async fn delete_resource(
             &self,
             _service_id: &ulid::Ulid,
-            _type: resource::Type,
+            _type: ResourceType,
             _claim: Claim,
         ) -> Result<(), Self::Err> {
             Ok(())

@@ -1,10 +1,11 @@
 use async_trait::async_trait;
-use shuttle_service::{error::Error, DeploymentMetadata, Factory, ResourceBuilder, Type};
+pub use shuttle_service::DeploymentMetadata as Metadata;
+use shuttle_service::{error::Error, Factory, ResourceBuilder, Type};
 
 pub struct ShuttleMetadata;
 
 #[async_trait]
-impl ResourceBuilder<DeploymentMetadata> for ShuttleMetadata {
+impl ResourceBuilder<Metadata> for ShuttleMetadata {
     fn new() -> Self {
         Self
     }
@@ -13,7 +14,7 @@ impl ResourceBuilder<DeploymentMetadata> for ShuttleMetadata {
 
     type Config = ();
 
-    type Output = DeploymentMetadata;
+    type Output = Metadata;
 
     fn config(&self) -> &Self::Config {
         &()
@@ -23,7 +24,7 @@ impl ResourceBuilder<DeploymentMetadata> for ShuttleMetadata {
         Ok(factory.get_metadata())
     }
 
-    async fn build(build_data: &Self::Output) -> Result<DeploymentMetadata, Error> {
+    async fn build(build_data: &Self::Output) -> Result<Metadata, Error> {
         Ok(build_data.clone())
     }
 }

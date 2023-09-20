@@ -116,7 +116,12 @@ impl LocalProvisioner {
                     .expect("container to be created")
             }
             Err(error) => {
-                error!("got unexpected error while inspecting docker container: {error}");
+                error!("Got unexpected error while inspecting docker container: {error}.");
+                error!(
+                    "Make sure Docker is installed and running. \
+                    If you're using Podman, view these instructions: \
+                    https://docs.rs/shuttle-runtime/latest/shuttle_runtime/#using-podman-instead-of-docker"
+                );
                 return Err(Status::internal(error.to_string()));
             }
         };
@@ -333,7 +338,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
     match db_type {
         Type::Shared(SharedEngine::Postgres) => EngineConfig {
             r#type: "shared_postgres".to_string(),
-            image: "docker.io/library/postgres:11".to_string(),
+            image: "docker.io/library/postgres:14".to_string(),
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string(),

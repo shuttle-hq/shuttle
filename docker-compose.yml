@@ -15,6 +15,12 @@ networks:
       driver: default
       config:
         - subnet: 10.99.0.0/16
+  default:
+    attachable: false
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.100.0.0/16
 services:
   auth:
     image: "${CONTAINER_REGISTRY}/auth:${AUTH_TAG}"

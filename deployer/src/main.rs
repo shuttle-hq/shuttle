@@ -1,10 +1,14 @@
 use std::process::exit;
 
 use clap::Parser;
+use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_common::{
     backends::tracing::setup_tracing,
     claims::{ClaimLayer, InjectPropagationLayer},
     log::{Backend, DeploymentLogLayer},
+};
+use shuttle_deployer::{
+    start, start_proxy, Args, DeployLayer, Persistence, ResourceManager, RuntimeManager,
 };
 use shuttle_deployer::{start, start_proxy, Args, Persistence, RuntimeManager, StateChangeLayer};
 use shuttle_proto::{
@@ -73,6 +77,10 @@ async fn main() {
         None,
     );
 
+    let resource_manager = ResourceManager::new(&args.provisioner_address)
+        .await
+        .unwrap();
+
     let runtime_manager = RuntimeManager::new(
         args.provisioner_address.uri().to_string(),
         logger_batcher.clone(),
@@ -83,7 +91,7 @@ async fn main() {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
             error!("Proxy stopped.")
         },
-        _ = start(persistence, runtime_manager, logger_batcher, logger_client, builder_client, args) => {
+        _ = start(persistence, resource_manager, runtime_manager, logger_batcher, logger_client, builder_client args) => {
             error!("Deployment service stopped.")
         },
     }

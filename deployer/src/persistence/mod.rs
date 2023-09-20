@@ -466,6 +466,35 @@ impl ResourceManager for Persistence {
 
         Ok(res)
     }
+
+    async fn get_resource(
+        &self,
+        service_id: &Ulid,
+        r#type: ResourceType,
+        claim: Claim,
+    ) -> Result<Option<Resource>> {
+        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ? AND type = ?"#)
+            .bind(service_id.to_string())
+            .bind(r#type)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Error::from)
+    }
+
+    async fn delete_resource(
+        &self,
+        service_id: &Ulid,
+        r#type: ResourceType,
+        claim: Claim,
+    ) -> Result<()> {
+        sqlx::query(r#"DELETE FROM resources WHERE service_id = ? AND type = ?"#)
+            .bind(service_id.to_string())
+            .bind(r#type)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(Error::from)
+    }
 }
 
 #[async_trait::async_trait]

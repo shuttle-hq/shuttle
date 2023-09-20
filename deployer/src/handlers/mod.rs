@@ -7,9 +7,9 @@ use axum::extract::{DefaultBodyLimit, Extension, Path, Query};
 use axum::handler::Handler;
 use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
-use axum::routing::{get, post, Router};
+use axum::routing::{delete, get, post, Router};
 use axum::Json;
-use bytes::Bytes;
+use bytes::{BufMut, Bytes};
 use chrono::{SecondsFormat, Utc};
 use fqdn::FQDN;
 use hyper::{Request, StatusCode, Uri};
@@ -20,9 +20,6 @@ use utoipa::{IntoParams, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
-use shuttle_common::backends::auth::{
-    AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
-};
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
@@ -32,11 +29,19 @@ use shuttle_common::models::deployment::{
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{request_span, LogItem};
-use shuttle_proto::logger::LogsRequest;
+use shuttle_proto::{
+    logger::LogsRequest,
+    resource_recorder::{
+        self, resource_recorder_client, resource_recorder_server::ResourceRecorder,
+    },
+};
 use shuttle_service::builder::clean_crate;
 
-use crate::deployment::{Built, DeploymentManager, Queued};
-use crate::persistence::{Deployment, Persistence, ResourceManager, SecretGetter, State};
+use crate::persistence::{Deployment, Persistence, SecretGetter, State};
+use crate::{
+    deployment::{Built, DeploymentManager, Queued},
+    persistence::ResourceManager,
+};
 pub use {self::error::Error, self::error::Result, self::local::set_jwt_bearer};
 
 mod error;
@@ -51,6 +56,7 @@ mod project;
         create_service,
         stop_service,
         get_service_resources,
+        delete_service_resource,
         get_deployments,
         get_deployment,
         delete_deployment,
@@ -95,6 +101,7 @@ impl RouterBuilder {
     pub fn new(
         persistence: Persistence,
         deployment_manager: DeploymentManager,
+        resource_manager: ResourceManager,
         proxy_fqdn: FQDN,
         project_name: ProjectName,
         project_id: Ulid,
@@ -124,6 +131,11 @@ impl RouterBuilder {
             .route(
                 "/projects/:project_name/services/:service_name/resources",
                 get(get_service_resources).layer(ScopedLayer::new(vec![Scope::Resources])),
+            )
+            .route(
+                "/projects/:project_name/services/:service_name/resources/:resource_type",
+                delete(delete_service_resource)
+                    .layer(ScopedLayer::new(vec![Scope::ResourcesWrite])),
             )
             .route(
                 "/projects/:project_name/deployments",
@@ -157,6 +169,7 @@ impl RouterBuilder {
             )
             .layer(Extension(persistence))
             .layer(Extension(deployment_manager))
+            // .layer(Extension(resource_manager))
             .layer(Extension(proxy_fqdn))
             .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
                 auth_uri.clone(),
@@ -318,6 +331,60 @@ pub async fn get_service_resources(
     } else {
         Err(Error::NotFound("service not found".to_string()))
     }
+}
+
+#[instrument(skip_all, fields(%project_name, %service_name, %resource_type))]
+#[utoipa::path(
+    delete,
+    path = "/projects/{project_name}/services/{service_name}/resources/{resource_type}",
+    responses(
+        (status = 200, description = "Deletes a resource owned by a service."),
+        (status = 500, description = "Database error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service."),
+        ("resource_type" = String, Path, description = "Resource type.")
+    )
+)]
+pub async fn delete_service_resource(
+    Extension(mut persistence): Extension<Persistence>,
+    // Extension(mut resource_manager): Extension<dyn ResourceManager>,
+    Extension(claim): Extension<Claim>,
+    Path((project_name, service_name, resource_type)): Path<(String, String, String)>,
+) -> Result<()> {
+    let service = persistence
+        .get_service_by_name(&service_name)
+        .await?
+        .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
+
+    let resource_type: shuttle_common::resource::Type =
+        resource_type
+            .parse()
+            .map_err(|e: resource::ParseError| Error::Convert {
+                from: "String".to_string(),
+                to: "ResourceType".to_string(),
+                message: e.to_string(),
+            })?;
+
+    let persistence_resource_type = resource_type.into();
+
+    persistence
+        .get_resource(&service.id, persistence_resource_type, claim)
+        .await?
+        .ok_or_else(|| Error::NotFound("resource not found".to_string()))?;
+
+    // resource_recorder_client
+    // resource_manager
+    //     .delete_resource(&project_name, &resource_type)
+    //     .await
+    //     .map_err(|e| Error::Custom(e.into()))?;
+    persistence
+        .delete_resource(&service.id, persistence_resource_type, claim)
+        .await?;
+
+    Ok(())
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]

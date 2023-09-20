@@ -4,7 +4,7 @@ use prost_types::TimestampError;
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
 use shuttle_proto::resource_recorder::{
     self, resource_recorder_server::ResourceRecorder, ProjectResourcesRequest, RecordRequest,
-    ResourcesResponse, ResultResponse, ServiceResourcesRequest,
+    ResourceResponse, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
 };
 use thiserror::Error;
 use tonic::{Request, Response, Status};
@@ -89,6 +89,16 @@ where
         Ok(resources.into_iter().map(Into::into).collect())
     }
 
+    /// Get a resource
+    async fn get_resource(
+        &self,
+        resource: resource_recorder::Resource,
+    ) -> Result<resource_recorder::Resource, Error> {
+        let resource = self.dal.get_resource(&resource.try_into()?).await?;
+
+        Ok(resource.into())
+    }
+
     /// Delete a resource
     async fn delete_resource(&self, resource: resource_recorder::Resource) -> Result<(), Error> {
         self.dal.delete_resource(&resource.try_into()?).await?;
@@ -163,6 +173,29 @@ where
                 success: false,
                 message: e.to_string(),
                 resources: Vec::new(),
+            },
+        };
+
+        Ok(Response::new(result))
+    }
+
+    async fn get_resource(
+        &self,
+        request: Request<resource_recorder::Resource>,
+    ) -> Result<Response<ResourceResponse>, Status> {
+        request.verify(Scope::Resources)?;
+
+        let request = request.into_inner();
+        let result = match self.get_resource(request).await {
+            Ok(resource) => ResourceResponse {
+                success: true,
+                message: Default::default(),
+                resource: Some(resource),
+            },
+            Err(e) => ResourceResponse {
+                success: false,
+                message: e.to_string(),
+                resource: Default::default(),
             },
         };
 

@@ -136,7 +136,9 @@ mod tests {
     };
 
     use crate::{
-        persistence::{DeploymentState, DeploymentUpdater, ResourceManager, StateRecorder},
+        persistence::{
+            DeploymentState, DeploymentUpdater, ResourceManager, ResourceType, StateRecorder,
+        },
         RuntimeManager,
     };
     use async_trait::async_trait;
@@ -156,7 +158,7 @@ mod tests {
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
         },
-        resource_recorder::{ResourcesResponse, ResultResponse},
+        resource_recorder::{Resource, ResourcesResponse, ResultResponse},
     };
     use tokio::{select, sync::mpsc, time::sleep};
     use tokio_stream::wrappers::ReceiverStream;
@@ -475,6 +477,24 @@ mod tests {
                 message: "dummy impl".to_string(),
                 resources: Vec::new(),
             })
+        }
+
+        async fn get_resource(
+            &self,
+            _service_id: &ulid::Ulid,
+            _type: resource::Type,
+            _claim: Claim,
+        ) -> Result<Option<Vec<Resource>>, Self::Err> {
+            Ok(None)
+        }
+
+        async fn delete_resource(
+            &self,
+            _service_id: &ulid::Ulid,
+            _type: resource::Type,
+            _claim: Claim,
+        ) -> Result<(), Self::Err> {
+            Ok(())
         }
     }
 

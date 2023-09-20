@@ -19,7 +19,7 @@ use shuttle_common::{
 };
 
 use shuttle_proto::{
-    resource_recorder::record_request,
+    resource_recorder::{record_request, resource_recorder_server::ResourceRecorder},
     runtime::{
         runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
         SubscribeStopResponse,
@@ -38,7 +38,7 @@ use uuid::Uuid;
 use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
-    persistence::{DeploymentUpdater, ResourceManager, SecretGetter},
+    persistence::{DeploymentUpdater, ResourceManager, ResourceType, SecretGetter},
     RuntimeManager,
 };
 

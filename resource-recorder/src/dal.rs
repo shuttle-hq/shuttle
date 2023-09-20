@@ -58,6 +58,9 @@ pub trait Dal {
     /// Get the resources that belong to a service
     async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, DalError>;
 
+    /// Get a resource
+    async fn get_resource(&self, resource: &Resource) -> Result<Resource, DalError>;
+
     /// Delete a resource
     async fn delete_resource(&self, resource: &Resource) -> Result<(), DalError>;
 }
@@ -175,6 +178,18 @@ impl Dal for Sqlite {
             .await?;
 
         Ok(result)
+    }
+
+    async fn get_resource(&self, resource: &Resource) -> Result<(), DalError> {
+        sqlx::query("DELETE FROM resources WHERE project_id = ? AND service_id = ? AND type = ?")
+            .bind(resource.project_id.map(|u| u.to_string()))
+            .bind(resource.service_id.map(|u| u.to_string()))
+            .bind(resource.r#type)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())?;
+
+        Ok(())
     }
 
     async fn delete_resource(&self, resource: &Resource) -> Result<(), DalError> {

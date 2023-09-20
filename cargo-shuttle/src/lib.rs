@@ -221,6 +221,9 @@ impl Shuttle {
             Command::Stop => self.stop().await,
             Command::Clean => self.clean().await,
             Command::Secrets => self.secrets().await,
+            Command::Resource(ResourceCommand::Delete { resource_type }) => {
+                self.resource_delete(&resource_type).await
+            }
             Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
                 self.project_create(idle_minutes).await
             }
@@ -746,6 +749,16 @@ impl Shuttle {
         println!("{table}");
 
         Ok(CommandOutcome::Ok)
+    }
+
+    async fn resource_delete(resource_type: &resource::Type) -> Result<()> {
+        self.client
+            .delete_service_resource(self.ctx.project_name(), resource_type)
+            .await?;
+
+        println!("Deleted resource {resource_type}");
+
+        Ok(())
     }
 
     async fn spin_local_runtime(

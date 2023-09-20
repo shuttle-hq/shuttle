@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
+use percent_encoding::utf8_percent_encode;
 use reqwest::Response;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
@@ -125,6 +126,24 @@ impl Client {
         );
 
         self.get(path).await
+    }
+
+    pub async fn delete_service_resource(
+        &self,
+        project: &ProjectName,
+        resource_type: &resource::Type,
+    ) -> Result<()> {
+        let path = format!(
+            "/projects/{}/services/{}/resources/{}",
+            project.as_str(),
+            project.as_str(),
+            utf8_percent_encode(
+                &resource_type.to_string(),
+                percent_encoding::NON_ALPHANUMERIC
+            ),
+        );
+
+        self.delete(path).await
     }
 
     pub async fn create_project(

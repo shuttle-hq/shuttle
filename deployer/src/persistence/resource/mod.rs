@@ -11,7 +11,6 @@ use ulid::Ulid;
 
 pub use self::database::Type as DatabaseType;
 
-/// Types that can record and retrieve resource allocations
 #[async_trait::async_trait]
 pub trait ResourceManager: Clone + Send + Sync + 'static {
     type Err: std::error::Error;
@@ -27,6 +26,18 @@ pub trait ResourceManager: Clone + Send + Sync + 'static {
         service_id: &ulid::Ulid,
         claim: Claim,
     ) -> Result<ResourcesResponse, Self::Err>;
+    async fn get_resource(
+        &self,
+        service_id: &ulid::Ulid,
+        r#type: Type,
+        claim: Claim,
+    ) -> Result<Option<Resource>, Self::Err>;
+    async fn delete_resource(
+        &self,
+        service_id: &ulid::Ulid,
+        r#type: Type,
+        claim: Claim,
+    ) -> Result<(), Self::Err>;
 }
 
 #[derive(Debug, Eq, PartialEq)]

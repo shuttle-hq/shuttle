@@ -5,6 +5,10 @@ use hyper::{
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
 };
+pub use persistence::Persistence;
+use proxy::AddressGetter;
+pub use resource::ResourceManager;
+pub use runtime_manager::RuntimeManager;
 use shuttle_common::log::LogRecorder;
 use shuttle_proto::{builder::builder_client::BuilderClient, logger::logger_client::LoggerClient};
 use tokio::sync::Mutex;
@@ -17,19 +21,18 @@ pub mod error;
 pub mod handlers;
 pub mod persistence;
 mod proxy;
+mod resource;
 mod runtime_manager;
 
 pub use crate::args::Args;
 pub use crate::deployment::state_change_layer::StateChangeLayer;
 use crate::deployment::{gateway_client::GatewayClient, DeploymentManager};
-pub use crate::persistence::Persistence;
-use crate::proxy::AddressGetter;
-pub use crate::runtime_manager::RuntimeManager;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub async fn start(
     persistence: Persistence,
+    resource_manager: ResourceManager,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
     log_recorder: impl LogRecorder,
     log_fetcher: LoggerClient<
@@ -79,6 +82,7 @@ pub async fn start(
     let mut builder = handlers::RouterBuilder::new(
         persistence,
         deployment_manager,
+        resource_manager,
         args.proxy_fqdn,
         args.project,
         project_id,

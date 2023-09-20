@@ -89,7 +89,12 @@ impl Service {
 
         debug!(deployment_id, "{status}");
 
-        let archive = fs::read(output_path)?;
+        let archive_path = fs::read_link(output_path)?;
+        info!(
+            "Built the image and reading the link: {}",
+            archive_path.display()
+        );
+        let archive = fs::read(archive_path)?;
 
         Ok((archive, secrets))
     }

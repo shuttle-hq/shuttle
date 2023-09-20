@@ -77,6 +77,7 @@ This project name will already be in use, so the file is useless.
 If we start putting more things in Shuttle.toml we may wish to re-evaluate.
 */
 fn remove_shuttle_toml(path: &Path) {
+    // TODO: Just remove the name prop
     let mut path = path.to_path_buf();
     path.push("Shuttle.toml");
 

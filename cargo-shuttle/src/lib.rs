@@ -727,7 +727,7 @@ impl Shuttle {
             Environment::Local,
             &format!("http://localhost:{provisioner_port}"),
             None,
-            run_args.port - idx - 1,
+            run_args.port - idx - 1, // TODO: check ports and ask for other port
             runtime_executable,
             service.workspace_path.as_path(),
         )
@@ -1512,7 +1512,7 @@ impl Shuttle {
 
     fn make_archive(&self) -> Result<Vec<u8>> {
         let include_patterns = self.ctx.assets();
-        let encoder = GzEncoder::new(Vec::new(), Compression::fast());
+        let encoder = GzEncoder::new(Vec::new(), Compression::best());
         let mut tar = Builder::new(encoder);
 
         let working_directory = self.ctx.working_directory();

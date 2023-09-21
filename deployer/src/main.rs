@@ -7,7 +7,10 @@ use shuttle_common::{
     log::{Backend, DeploymentLogLayer},
 };
 use shuttle_deployer::{start, start_proxy, Args, Persistence, RuntimeManager, StateChangeLayer};
-use shuttle_proto::logger::{logger_client::LoggerClient, Batcher};
+use shuttle_proto::{
+    builder::builder_client::BuilderClient,
+    logger::{logger_client::LoggerClient, Batcher},
+};
 use tokio::select;
 use tower::ServiceBuilder;
 use tracing::{error, trace};
@@ -42,6 +45,18 @@ async fn main() {
     let logger_client = LoggerClient::new(channel);
     let logger_batcher = Batcher::wrap(logger_client.clone());
 
+    let channel = ServiceBuilder::new()
+        .layer(ClaimLayer)
+        .layer(InjectPropagationLayer)
+        .service(
+            args.builder_uri
+                .connect()
+                .await
+                .expect("failed to connect to builder"),
+        );
+
+    let builder_client = BuilderClient::new(channel);
+
     setup_tracing(
         tracing_subscriber::registry()
             .with(StateChangeLayer {
@@ -54,10 +69,10 @@ async fn main() {
                 internal_service: Backend::Deployer,
             }),
         Backend::Deployer,
+        None,
     );
 
     let runtime_manager = RuntimeManager::new(
-        args.artifacts_path.clone(),
         args.provisioner_address.uri().to_string(),
         logger_batcher.clone(),
         Some(args.auth_uri.to_string()),
@@ -67,7 +82,7 @@ async fn main() {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
             error!("Proxy stopped.")
         },
-        _ = start(persistence, runtime_manager, logger_batcher, logger_client, args) => {
+        _ = start(persistence, runtime_manager, logger_batcher, logger_client, builder_client, args) => {
             error!("Deployment service stopped.")
         },
     }

@@ -1,19 +1,6 @@
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+pub use shuttle_service::DeploymentMetadata as Metadata;
 use shuttle_service::{error::Error, Factory, ResourceBuilder, Type};
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Metadata {
-    /// The Shuttle service name.
-    service_name: String,
-}
-
-impl Metadata {
-    /// Get the Shuttle service name.
-    pub fn service_name(&self) -> &str {
-        &self.service_name
-    }
-}
 
 pub struct ShuttleMetadata;
 
@@ -34,9 +21,7 @@ impl ResourceBuilder<Metadata> for ShuttleMetadata {
     }
 
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, Error> {
-        Ok(Metadata {
-            service_name: factory.get_service_name().to_string(),
-        })
+        Ok(factory.get_metadata())
     }
 
     async fn build(build_data: &Self::Output) -> Result<Metadata, Error> {

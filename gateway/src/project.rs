@@ -502,11 +502,13 @@ where
                     ContainerStateStatusEnum::RUNNING => {
                         Self::Started(ProjectStarted::new(container, VecDeque::new()))
                     }
-                    ContainerStateStatusEnum::CREATED => Self::Starting(ProjectStarting {
+                    // We can reach the starting state because either:
+                    // - The project was created for the first time
+                    // - It crashed and we are restarting it
+                    ContainerStateStatusEnum::CREATED | ContainerStateStatusEnum::EXITED => Self::Starting(ProjectStarting {
                         container,
                         restart_count,
                     }),
-                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
                     _ => {
                         return Err(Error::custom(
                             ErrorKind::Internal,
@@ -698,6 +700,7 @@ impl ProjectCreating {
             image: default_image,
             prefix,
             provisioner_host,
+            builder_host,
             auth_uri,
             fqdn: public,
             ..
@@ -750,6 +753,8 @@ impl ProjectCreating {
                         "/opt/shuttle/deployer.sqlite",
                         "--auth-uri",
                         auth_uri,
+                        "--builder-uri",
+                        format!("http://{builder_host}:8000"),
                         "--project-id",
                         self.project_id.to_string()
                     ],

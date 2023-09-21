@@ -47,12 +47,13 @@ shuttle-service = {{ path = "{}" }}
 shuttle-aws-rds = {{ path = "{}" }}
 shuttle-metadata = {{ path = "{}" }}
 shuttle-persist = {{ path = "{}" }}
-shuttle-shared-db = {{ path = "{}" }}
 shuttle-secrets = {{ path = "{}" }}
+shuttle-shared-db = {{ path = "{}" }}
 shuttle-static-folder = {{ path = "{}" }}
+shuttle-turso = {{ path = "{}" }}
 
-shuttle-axum = {{ path = "{}" }}
 shuttle-actix-web = {{ path = "{}" }}
+shuttle-axum = {{ path = "{}" }}
 shuttle-next = {{ path = "{}" }}
 shuttle-poem = {{ path = "{}" }}
 shuttle-poise = {{ path = "{}" }}
@@ -71,12 +72,13 @@ shuttle-warp = {{ path = "{}" }}"#,
                     WORKSPACE_ROOT.join("resources").join("aws-rds").display(),
                     WORKSPACE_ROOT.join("resources").join("metadata").display(),
                     WORKSPACE_ROOT.join("resources").join("persist").display(),
-                    WORKSPACE_ROOT.join("resources").join("shared-db").display(),
                     WORKSPACE_ROOT.join("resources").join("secrets").display(),
+                    WORKSPACE_ROOT.join("resources").join("shared-db").display(),
                     WORKSPACE_ROOT
                         .join("resources")
                         .join("static-folder")
                         .display(),
+                    WORKSPACE_ROOT.join("resources").join("turso").display(),
                     WORKSPACE_ROOT
                         .join("services")
                         .join("shuttle-axum")

@@ -136,32 +136,32 @@ In order to test local changes to the library crates, you may want to add the be
 
 ```toml
 [patch.crates-io]
-shuttle-codegen = { path = "[base]/shuttle/codegen" }
-shuttle-common = { path = "[base]/shuttle/common" }
-shuttle-proto = { path = "[base]/shuttle/proto" }
-shuttle-runtime = { path = "[base]/shuttle/runtime" }
-shuttle-service = { path = "[base]/shuttle/service" }
+shuttle-codegen = { path = "[base]/codegen" }
+shuttle-common = { path = "[base]/common" }
+shuttle-proto = { path = "[base]/proto" }
+shuttle-runtime = { path = "[base]/runtime" }
+shuttle-service = { path = "[base]/service" }
 
-shuttle-aws-rds = { path = "[base]/shuttle/resources/aws-rds" }
-shuttle-persist = { path = "[base]/shuttle/resources/persist" }
-shuttle-shared-db = { path = "[base]/shuttle/resources/shared-db" }
-shuttle-secrets = { path = "[base]/shuttle/resources/secrets" }
-shuttle-static-folder = { path = "[base]/shuttle/resources/static-folder" }
-shuttle-metadata = { path = "[base]/shuttle/resources/metadata" }
-shuttle-turso = { path = "[base]/shuttle/resources/turso" }
+shuttle-aws-rds = { path = "[base]/resources/aws-rds" }
+shuttle-metadata = { path = "[base]/resources/metadata" }
+shuttle-persist = { path = "[base]/resources/persist" }
+shuttle-secrets = { path = "[base]/resources/secrets" }
+shuttle-shared-db = { path = "[base]/resources/shared-db" }
+shuttle-static-folder = { path = "[base]/resources/static-folder" }
+shuttle-turso = { path = "[base]/resources/turso" }
 
-shuttle-axum = { path = "[base]/shuttle/services/shuttle-axum" }
-shuttle-actix-web = { path = "[base]/shuttle/services/shuttle-actix-web" }
-shuttle-next = { path = "[base]/shuttle/services/shuttle-next" }
-shuttle-poem = { path = "[base]/shuttle/services/shuttle-poem" }
-shuttle-poise = { path = "[base]/shuttle/services/shuttle-poise" }
-shuttle-rocket = { path = "[base]/shuttle/services/shuttle-rocket" }
-shuttle-salvo = { path = "[base]/shuttle/services/shuttle-salvo" }
-shuttle-serenity = { path = "[base]/shuttle/services/shuttle-serenity" }
-shuttle-thruster = { path = "[base]/shuttle/services/shuttle-thruster" }
-shuttle-tide = { path = "[base]/shuttle/services/shuttle-tide" }
-shuttle-tower = { path = "[base]/shuttle/services/shuttle-tower" }
-shuttle-warp = { path = "[base]/shuttle/services/shuttle-warp" }
+shuttle-actix-web = { path = "[base]/services/shuttle-actix-web" }
+shuttle-axum = { path = "[base]/services/shuttle-axum" }
+shuttle-next = { path = "[base]/services/shuttle-next" }
+shuttle-poem = { path = "[base]/services/shuttle-poem" }
+shuttle-poise = { path = "[base]/services/shuttle-poise" }
+shuttle-rocket = { path = "[base]/services/shuttle-rocket" }
+shuttle-salvo = { path = "[base]/services/shuttle-salvo" }
+shuttle-serenity = { path = "[base]/services/shuttle-serenity" }
+shuttle-thruster = { path = "[base]/services/shuttle-thruster" }
+shuttle-tide = { path = "[base]/services/shuttle-tide" }
+shuttle-tower = { path = "[base]/services/shuttle-tower" }
+shuttle-warp = { path = "[base]/services/shuttle-warp" }
 ```
 
 Before we can login to our local instance of Shuttle, we need to create a user.
@@ -228,7 +228,7 @@ USE_PANAMAX=disable make images
 make docker-compose.rendered.yml
 
 # then run
-docker compose -f docker-compose.rendered.yml up provisioner resource-recorder logger otel-collector
+docker compose -f docker-compose.rendered.yml up provisioner resource-recorder logger otel-collector builder
 ```
 
 This starts the provisioner and the auth service, while preventing `gateway` from starting up.
@@ -237,7 +237,7 @@ Make sure an admin user is inserted into auth and that the key is used by cargo-
 We're now ready to start a local run of the deployer:
 
 ```bash
-OTLP_ADDRESS=http://127.0.0.1:4317 cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --resource-recorder http://localhost:8007 --logger-uri http://localhost:8080 --proxy-fqdn local.rs --admin-secret dh9z58jttoes3qvt --local --project-id "01H7WHDK23XYGSESCBG6XWJ1V0" --project <name>
+OTLP_ADDRESS=http://127.0.0.1:4317 cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --resource-recorder http://localhost:8007 --logger-uri http://localhost:8080 --builder-uri http://localhost:8009 --proxy-fqdn local.rs --admin-secret dh9z58jttoes3qvt --local --project-id "01H7WHDK23XYGSESCBG6XWJ1V0" --project <name>
 ```
 
 The `<name>` needs to match the name of the project that will be deployed to this deployer.

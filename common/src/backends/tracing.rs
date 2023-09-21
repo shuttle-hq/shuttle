@@ -23,14 +23,14 @@ use crate::log::Backend;
 
 const OTLP_ADDRESS: &str = "http://otel-collector:4317";
 
-pub fn setup_tracing<S>(subscriber: S, backend: Backend)
+pub fn setup_tracing<S>(subscriber: S, backend: Backend, env_filter_directive: Option<&'static str>)
 where
     S: Subscriber + for<'a> LookupSpan<'a> + Send + Sync,
 {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
     let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
+        .or_else(|_| EnvFilter::try_new(env_filter_directive.unwrap_or("info")))
         .unwrap();
     let fmt_layer = fmt::layer();
 

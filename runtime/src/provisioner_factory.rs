@@ -1,20 +1,18 @@
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf};
 
 use async_trait::async_trait;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
-    database,
-    storage_manager::StorageManager,
-    DatabaseReadyInfo,
+    constants::STORAGE_DIRNAME,
+    database, DatabaseReadyInfo,
 };
 use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
-use shuttle_service::{Environment, Factory, ServiceName};
+use shuttle_service::{DeploymentMetadata, Environment, Factory, ProjectName};
 use tonic::{transport::Channel, Request};
 
 /// A factory (service locator) which goes through the provisioner crate
 pub struct ProvisionerFactory {
-    service_name: ServiceName,
-    storage_manager: Arc<dyn StorageManager>,
+    service_name: ProjectName,
     provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
     secrets: BTreeMap<String, String>,
     env: Environment,
@@ -24,16 +22,14 @@ pub struct ProvisionerFactory {
 impl ProvisionerFactory {
     pub(crate) fn new(
         provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
-        service_name: ServiceName,
+        service_name: ProjectName,
         secrets: BTreeMap<String, String>,
-        storage_manager: Arc<dyn StorageManager>,
         env: Environment,
         claim: Option<Claim>,
     ) -> Self {
         Self {
             provisioner_client,
             service_name,
-            storage_manager,
             secrets,
             env,
             claim,
@@ -72,23 +68,12 @@ impl Factory for ProvisionerFactory {
         Ok(self.secrets.clone())
     }
 
-    fn get_service_name(&self) -> ServiceName {
-        self.service_name.clone()
-    }
-
-    fn get_environment(&self) -> shuttle_service::Environment {
-        self.env
-    }
-
-    fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
-        self.storage_manager
-            .service_build_path(self.service_name.as_str())
-            .map_err(Into::into)
-    }
-
-    fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
-        self.storage_manager
-            .service_storage_path(self.service_name.as_str())
-            .map_err(Into::into)
+    fn get_metadata(&self) -> DeploymentMetadata {
+        DeploymentMetadata {
+            env: self.env,
+            project_name: self.service_name.clone(),
+            service_name: self.service_name.to_string(),
+            storage_path: PathBuf::from(STORAGE_DIRNAME),
+        }
     }
 }

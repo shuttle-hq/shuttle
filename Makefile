@@ -57,7 +57,7 @@ DD_ENV=production
 # make sure we only ever go to production with `--tls=enable`
 USE_TLS=enable
 CARGO_PROFILE=release
-RUST_LOG?=shuttle=debug,info
+RUST_LOG?=nbuild-core=warn,shuttle=debug,info
 else
 DOCKER_COMPOSE_FILES=docker-compose.yml docker-compose.dev.yml
 STACK?=shuttle-dev
@@ -68,7 +68,7 @@ DD_ENV=unstable
 USE_TLS?=disable
 # default for local run
 CARGO_PROFILE?=debug
-RUST_LOG?=shuttle=debug,info
+RUST_LOG?=nbuild-core=warn,shuttle=debug,info
 DEV_SUFFIX=-dev
 DEPLOYS_API_KEY?=gateway4deployes
 

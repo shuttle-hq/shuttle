@@ -424,10 +424,13 @@ where
             Self::Started(started) => match started.next(ctx).await {
                 Ok(ProjectReadying::Ready(ready)) => Ok(ready.into()),
                 Ok(ProjectReadying::Started(started)) => Ok(started.into()),
-                Ok(ProjectReadying::Idle(stopping)) => Ok(stopping.into()),
                 Err(err) => Ok(Self::Errored(err)),
             },
-            Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
+            Self::Ready(ready) => match ready.next(ctx).await {
+                Ok(ProjectRunning::Ready(ready)) => Ok(ready.into()),
+                Ok(ProjectRunning::Idle(stopping)) => Ok(stopping.into()),
+                Err(err) => Ok(Self::Errored(err)),
+            },
             Self::Stopped(stopped) => stopped.next(ctx).await.into_try_state(),
             Self::Stopping(stopping) => stopping.next(ctx).await.into_try_state(),
             Self::Rebooting(rebooting) => rebooting.next(ctx).await.into_try_state(),
@@ -461,7 +464,7 @@ where
     fn is_done(&self) -> bool {
         matches!(
             self,
-            Self::Errored(_) | Self::Ready(_) | Self::Destroyed(_) | Self::Stopped(_)
+            Self::Errored(_) | Self::Destroyed(_) | Self::Stopped(_)
         )
     }
 }
@@ -484,11 +487,6 @@ where
 {
     type Error = Error;
 
-    /// TODO: we could be a bit more clever than this by using the
-    /// health checks instead of matching against the raw container
-    /// state which is probably prone to erroneously setting the
-    /// project into the wrong state if the docker is transitioning
-    /// the state of its resources under us
     async fn refresh(self, ctx: &Ctx) -> Result<Self, Self::Error> {
         let refreshed = match self {
             Self::Creating(creating) => Self::Creating(creating),
@@ -525,9 +523,7 @@ where
                 }
                 Err(err) => return Err(err.into()),
             },
-            Self::Started(ProjectStarted { container, stats, .. })
-            | Self::Ready(ProjectReady { container, stats, .. })
-             => match container
+            Self::Started(ProjectStarted { container, stats, .. }) => match container
                 .clone()
                 .refresh(ctx)
                 .await
@@ -535,6 +531,33 @@ where
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
                         Self::Started(ProjectStarted::new(container, stats))
+                    }
+                    // Restart the container if it went down
+                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
+                    _ => {
+                        return Err(Error::custom(
+                            ErrorKind::Internal,
+                            "container resource has drifted out of sync from a started state: cannot recover",
+                        ))
+                    }
+                },
+                Err(DockerError::DockerResponseServerError {
+                    status_code: 404, ..
+                }) => {
+                    // container not found, let's try to recreate it
+                    // with the same image
+                    Self::Creating(ProjectCreating::from_container(container, 0)?)
+                }
+                Err(err) => return Err(err.into()),
+            },
+            Self::Ready(ProjectReady { container, service, stats, .. }) => match container
+                .clone()
+                .refresh(ctx)
+                .await
+            {
+                Ok(container) => match safe_unwrap!(container.state.status) {
+                    ContainerStateStatusEnum::RUNNING => {
+                        Self::Ready(ProjectReady::new(container, service, stats))
                     }
                     // Restart the container if it went down
                     ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
@@ -1059,7 +1082,6 @@ impl ProjectStarted {
 pub enum ProjectReadying {
     Ready(ProjectReady),
     Started(ProjectStarted),
-    Idle(ProjectStopping),
 }
 
 #[async_trait]
@@ -1075,13 +1097,86 @@ where
         let Self {
             container,
             service,
-            mut stats,
+            stats,
         } = self;
         let container = container.refresh(ctx).await?;
         let mut service = match service {
             Some(service) => service,
             None => Service::from_container(container.clone())?,
         };
+
+        if service.is_healthy().await {
+            Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+            }))
+        } else {
+            let started_at =
+                chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
+                    .map_err(|_err| {
+                        ProjectError::internal("invalid `started_at` response from Docker daemon")
+                    })?;
+            let now = chrono::offset::Utc::now();
+            if started_at + chrono::Duration::seconds(120) < now {
+                return Err(ProjectError::internal(
+                    "project did not become healthy in time",
+                ));
+            }
+
+            Ok(Self::Next::Started(ProjectStarted {
+                container,
+                service: Some(service),
+                stats,
+            }))
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectReady {
+    container: ContainerInspectResponse,
+    service: Service,
+    // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
+    #[serde(default)]
+    stats: VecDeque<Stats>,
+}
+
+impl ProjectReady {
+    pub fn new(
+        container: ContainerInspectResponse,
+        service: Service,
+        stats: VecDeque<Stats>,
+    ) -> Self {
+        Self {
+            container,
+            service,
+            stats,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ProjectRunning {
+    Ready(ProjectReady),
+    Idle(ProjectStopping),
+}
+
+#[async_trait]
+impl<Ctx> State<Ctx> for ProjectReady
+where
+    Ctx: DockerContext,
+{
+    type Next = ProjectRunning;
+    type Error = ProjectError;
+
+    #[instrument(skip_all)]
+    async fn next(mut self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+        let Self {
+            container,
+            mut service,
+            mut stats,
+        } = self;
 
         if service.is_healthy().await {
             let idle_minutes = container.idle_minutes();
@@ -1158,47 +1253,10 @@ where
                 }
             }
         } else {
-            let started_at =
-                chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
-                    .map_err(|_err| {
-                        ProjectError::internal("invalid `started_at` response from Docker daemon")
-                    })?;
-            let now = chrono::offset::Utc::now();
-            if started_at + chrono::Duration::seconds(120) < now {
-                return Err(ProjectError::internal(
-                    "project did not become healthy in time",
-                ));
-            }
-
-            Ok(Self::Next::Started(ProjectStarted {
-                container,
-                service: Some(service),
-                stats,
-            }))
+            return Err(ProjectError::internal(
+                "running project is no longer healthy",
+            ));
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ProjectReady {
-    container: ContainerInspectResponse,
-    service: Service,
-    // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
-    #[serde(default)]
-    stats: VecDeque<Stats>,
-}
-
-#[async_trait]
-impl<Ctx> State<Ctx> for ProjectReady
-where
-    Ctx: DockerContext,
-{
-    type Next = Self;
-    type Error = ProjectError;
-
-    #[instrument(skip_all)]
-    async fn next(mut self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        Ok(self)
     }
 }
 

@@ -121,12 +121,8 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                     let sender = sender.clone();
                     async move {
                         for (project_name, _) in projects {
-                            if let Ok(handle) = gateway
-                                .new_task()
-                                .project(project_name)
-                                .and_then(task::check_health())
-                                .send(&sender)
-                                .await
+                            if let Ok(handle) =
+                                gateway.new_task().project(project_name).send(&sender).await
                             {
                                 // We wait for the check to be done before
                                 // queuing up the next one.

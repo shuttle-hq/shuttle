@@ -46,14 +46,14 @@ async fn main() {
     let logger_batcher = Batcher::wrap(logger_client.clone());
 
     let builder_client = match args.builder_uri.connect().await {
-        Ok(endpoint) => Some(BuilderClient::new(
+        Ok(channel) => Some(BuilderClient::new(
             ServiceBuilder::new()
                 .layer(ClaimLayer)
                 .layer(InjectPropagationLayer)
-                .service(endpoint),
+                .service(channel),
         )),
         Err(err) => {
-            error!("Couldn't connect to the shadow-builder: {err}");
+            error!("Couldn't connect to the shuttle-builder: {err}");
             None
         }
     };

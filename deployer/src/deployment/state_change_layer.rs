@@ -800,7 +800,7 @@ mod tests {
             .secret_getter(StubSecretGetter)
             .resource_manager(StubResourceManager)
             .log_fetcher(logger_client.clone())
-            .builder_client(builder_client.clone())
+            .builder_client(Some(builder_client))
             .runtime(get_runtime_manager(Batcher::wrap(logger_client)).await)
             .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)

@@ -44,9 +44,11 @@ pub async fn task(
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
     queue_client: impl BuildQueueClient,
-    builder_client: BuilderClient<
-        shuttle_common::claims::ClaimService<
-            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+    builder_client: Option<
+        BuilderClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
         >,
     >,
     builds_path: PathBuf,
@@ -67,7 +69,7 @@ pub async fn task(
                 let secret_recorder = secret_recorder.clone();
                 let queue_client = queue_client.clone();
                 let builds_path = builds_path.clone();
-                let mut builder_client = builder_client.clone();
+                let builder_client = builder_client.clone();
 
                 tasks.spawn(async move {
                     let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -89,24 +91,26 @@ pub async fn task(
                             Err(err) => return build_failed(&id, err),
                         }
 
-                        let deployment_id = queued.id.to_string();
-                        let archive = queued.data.clone();
-                        let claim = queued.claim.clone();
-                        tokio::spawn(async move {
-                            let mut req = Request::new(BuildRequest {
-                                deployment_id,
-                                archive,
-                            });
-                            req.extensions_mut().insert(claim);
+                        if let Some(mut inner) = builder_client {
+                            let deployment_id = queued.id.to_string();
+                            let archive = queued.data.clone();
+                            let claim = queued.claim.clone();
+                            tokio::spawn(async move {
+                                let mut req = Request::new(BuildRequest {
+                                    deployment_id,
+                                    archive,
+                                });
+                                req.extensions_mut().insert(claim);
 
-                            match builder_client.build(req).await {
-                                Ok(inner) =>  {
-                                    let response = inner.into_inner();
-                                    info!(id = %queued.id, "shuttle-builder finished building the deployment: image length is {} bytes, is_wasm flag is {} and there are {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
-                                },
-                                Err(err) => error!(id = %queued.id, "shuttle-builder errored while building: {}", err)
-                            };
-                        });
+                                match inner.build(req).await {
+                                    Ok(inner) =>  {
+                                        let response = inner.into_inner();
+                                        info!(id = %queued.id, "shuttle-builder finished building the deployment: image length is {} bytes, is_wasm flag is {} and there are {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
+                                    },
+                                    Err(err) => error!(id = %queued.id, "shuttle-builder errored while building: {}", err)
+                                };
+                            });
+                        }
 
                         match queued
                             .handle(

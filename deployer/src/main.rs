@@ -45,17 +45,18 @@ async fn main() {
     let logger_client = LoggerClient::new(channel);
     let logger_batcher = Batcher::wrap(logger_client.clone());
 
-    let channel = ServiceBuilder::new()
-        .layer(ClaimLayer)
-        .layer(InjectPropagationLayer)
-        .service(
-            args.builder_uri
-                .connect()
-                .await
-                .expect("failed to connect to builder"),
-        );
-
-    let builder_client = BuilderClient::new(channel);
+    let builder_client = match args.builder_uri.connect().await {
+        Ok(endpoint) => Some(BuilderClient::new(
+            ServiceBuilder::new()
+                .layer(ClaimLayer)
+                .layer(InjectPropagationLayer)
+                .service(endpoint),
+        )),
+        Err(err) => {
+            error!("Couldn't connect to the shadow-builder: {err}");
+            None
+        }
+    };
 
     setup_tracing(
         tracing_subscriber::registry()

@@ -106,6 +106,7 @@ fn create_gitignore_file(path: &Path) -> Result<()> {
 
     file.write_all(indoc! {b"
         /target
+        .shuttle-storage
         Secrets*.toml
     "})?;
 

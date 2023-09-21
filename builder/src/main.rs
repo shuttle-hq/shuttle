@@ -17,7 +17,11 @@ use tracing::trace;
 async fn main() {
     let args = Args::parse();
 
-    setup_tracing(tracing_subscriber::registry(), Backend::Builder);
+    setup_tracing(
+        tracing_subscriber::registry(),
+        Backend::Builder,
+        Some("nbuild_core=warn,info"),
+    );
 
     trace!(args = ?args, "parsed args");
 

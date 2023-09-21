@@ -108,15 +108,6 @@ where
     }
 }
 
-pub fn refresh() -> impl Task<ProjectContext, Output = Project, Error = Error> {
-    run(|ctx: ProjectContext| async move {
-        match ctx.state.refresh(&ctx.gateway).await {
-            Ok(new) => TaskResult::Done(new),
-            Err(err) => TaskResult::Err(err),
-        }
-    })
-}
-
 pub fn destroy() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     run(|ctx| async move {
         match ctx.state.destroy() {

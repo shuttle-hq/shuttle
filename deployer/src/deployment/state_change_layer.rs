@@ -276,11 +276,7 @@ mod tests {
             &self,
             _request: tonic::Request<BuildRequest>,
         ) -> Result<tonic::Response<BuildResponse>, tonic::Status> {
-            Ok(Response::new(BuildResponse {
-                image: Vec::new(),
-                is_wasm: false,
-                secrets: Vec::new(),
-            }))
+            Ok(Response::new(BuildResponse::default()))
         }
     }
 

@@ -28,14 +28,14 @@ pub async fn mocked_builder_client(
             .await
     });
 
-    // Wait for the logger server to start before creating a client.
+    // Wait for the builder server to start before creating a client.
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     let channel = Endpoint::try_from(builder_uri.to_string())
         .unwrap()
         .connect()
         .await
-        .expect("failed to connect to logger");
+        .expect("failed to connect to builder");
 
     let channel = ServiceBuilder::new()
         .layer(ClaimLayer)

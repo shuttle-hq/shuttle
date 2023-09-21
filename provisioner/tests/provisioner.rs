@@ -56,10 +56,7 @@ async fn shared_db_role_does_exist() {
     .unwrap();
 
     exec_psql("CREATE ROLE \"user-exist\" WITH LOGIN PASSWORD 'temp'");
-    assert_eq!(
-        exec_psql("SELECT passwd FROM pg_shadow WHERE usename = 'user-exist'",),
-        "md5d44ae85dd21bda2a4f9946217adea2cc"
-    );
+    let password = exec_psql("SELECT passwd FROM pg_shadow WHERE usename = 'user-exist'");
 
     provisioner
         .request_shared_db("exist", shared::Engine::Postgres(String::new()))
@@ -69,7 +66,7 @@ async fn shared_db_role_does_exist() {
     // Make sure password got cycled
     assert_ne!(
         exec_psql("SELECT passwd FROM pg_shadow WHERE usename = 'user-exist'",),
-        "md5d44ae85dd21bda2a4f9946217adea2cc"
+        password
     );
 }
 

@@ -338,7 +338,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
     match db_type {
         Type::Shared(SharedEngine::Postgres) => EngineConfig {
             r#type: "shared_postgres".to_string(),
-            image: "docker.io/library/postgres:11".to_string(),
+            image: "docker.io/library/postgres:14".to_string(),
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string(),

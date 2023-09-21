@@ -149,21 +149,6 @@ pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project, Error
     })
 }
 
-pub fn check_health() -> impl Task<ProjectContext, Output = Project, Error = Error> {
-    run(|ctx| async move {
-        match ctx.state {
-            Project::Ready(mut ready) => {
-                if ready.is_healthy().await {
-                    TaskResult::Done(Project::Ready(ready))
-                } else {
-                    TaskResult::Done(Project::Ready(ready).reboot().unwrap())
-                }
-            }
-            update => TaskResult::Done(update),
-        }
-    })
-}
-
 pub fn run_until_done() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     RunUntilDone
 }

@@ -821,7 +821,6 @@ impl GatewayService {
                 .and_then(task::start())
                 .and_then(task::run_until_done())
                 .and_then(task::start_idle_deploys())
-                .and_then(task::check_health())
                 .send(&task_sender)
                 .await?;
 
@@ -1141,11 +1140,7 @@ pub mod tests {
 
         println!("killed container");
 
-        let mut ambulance_task = svc
-            .new_task()
-            .project(matrix.clone())
-            .and_then(task::check_health())
-            .build();
+        let mut ambulance_task = svc.new_task().project(matrix.clone()).build();
 
         // the first poll will trigger a refresh
         let _ = ambulance_task.poll(()).await;

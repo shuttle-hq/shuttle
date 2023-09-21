@@ -1255,10 +1255,6 @@ impl ProjectReady {
         &self.service.target
     }
 
-    pub async fn is_healthy(&mut self) -> bool {
-        self.service.is_healthy().await
-    }
-
     pub async fn start_last_deploy(&mut self, jwt: String, admin_secret: String) {
         if let Err(error) = self.service.start_last_deploy(jwt, admin_secret).await {
             error!(error, "failed to start last running deploy");

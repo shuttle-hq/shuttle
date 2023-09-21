@@ -288,6 +288,10 @@ impl Task<ProjectContext> for RunUntilDone {
                 Project::Ready(ready) => TaskResult::Done(Project::Ready(ready)),
                 other => TaskResult::Pending(other),
             },
+            Project::Restarting(restarting) if restarting.exhausted() => {
+                trace!("skipping project that restarted too many times");
+                TaskResult::Done(Project::Restarting(restarting))
+            }
             _ => TaskResult::Pending(project.next(&ctx.gateway).await.unwrap()),
         }
     }

@@ -25,7 +25,7 @@ use shuttle_common::backends::headers::{X_SHUTTLE_ACCOUNT_NAME, X_SHUTTLE_ADMIN_
 use shuttle_common::models::project::{default_idle_minutes, DEFAULT_IDLE_MINUTES};
 use shuttle_common::models::service;
 use tokio::time::{sleep, timeout};
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, error, info, instrument, trace, warn};
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -477,27 +477,31 @@ where
         let refreshed = match self {
             Self::Creating(creating) => Self::Creating(creating),
             Self::Attaching(attaching) => Self::Attaching(attaching),
-            Self::Starting(ProjectStarting { container, restart_count }) => match container
-                .clone()
-                .refresh(ctx)
-                .await
-            {
+            Self::Starting(ProjectStarting {
+                container,
+                restart_count,
+            }) => match container.clone().refresh(ctx).await {
                 Ok(container) => match safe_unwrap!(container.state.status) {
-                    ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ProjectStarted::new(container, VecDeque::new()))
-                    }
+                    ContainerStateStatusEnum::RUNNING => Self::Started(ProjectStarted::new(
+                        container,
+                        restart_count,
+                        VecDeque::new(),
+                    )),
                     // We can reach the starting state because either:
                     // - The project was created for the first time
                     // - It crashed and we are restarting it
-                    ContainerStateStatusEnum::CREATED | ContainerStateStatusEnum::EXITED => Self::Starting(ProjectStarting {
-                        container,
-                        restart_count,
-                    }),
+                    ContainerStateStatusEnum::CREATED | ContainerStateStatusEnum::EXITED => {
+                        Self::Starting(ProjectStarting {
+                            container,
+                            restart_count,
+                        })
+                    }
                     _ => {
-                        return Err(Error::custom(
-                            ErrorKind::Internal,
-                            "container resource has drifted out of sync from the starting state: cannot recover",
-                        ))
+                        warn!("container resource has drifted out of sync from the starting state: cannot recover");
+                        Self::Restarting(ProjectRestarting {
+                            container,
+                            restart_count,
+                        })
                     }
                 },
                 Err(DockerError::DockerResponseServerError {
@@ -509,22 +513,27 @@ where
                 }
                 Err(err) => return Err(err.into()),
             },
-            Self::Started(ProjectStarted { container, stats, .. }) => match container
-                .clone()
-                .refresh(ctx)
-                .await
-            {
+            Self::Started(ProjectStarted {
+                container,
+                stats,
+                start_count,
+                ..
+            }) => match container.clone().refresh(ctx).await {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ProjectStarted::new(container, stats))
+                        Self::Started(ProjectStarted::new(container, start_count, stats))
                     }
                     // Restart the container if it went down
-                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
+                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting {
+                        container,
+                        restart_count: start_count + 1,
+                    }),
                     _ => {
-                        return Err(Error::custom(
-                            ErrorKind::Internal,
-                            "container resource has drifted out of sync from a started state: cannot recover",
-                        ))
+                        warn!("container resource has drifted out of sync from a started state. Will now reboot it");
+                        Self::Restarting(ProjectRestarting {
+                            container,
+                            restart_count: start_count + 1,
+                        })
                     }
                 },
                 Err(DockerError::DockerResponseServerError {
@@ -536,22 +545,27 @@ where
                 }
                 Err(err) => return Err(err.into()),
             },
-            Self::Ready(ProjectReady { container, service, stats, .. }) => match container
-                .clone()
-                .refresh(ctx)
-                .await
-            {
+            Self::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+                ..
+            }) => match container.clone().refresh(ctx).await {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
                         Self::Ready(ProjectReady::new(container, service, stats))
                     }
                     // Restart the container if it went down
-                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
+                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting {
+                        container,
+                        restart_count: 0,
+                    }),
                     _ => {
-                        return Err(Error::custom(
-                            ErrorKind::Internal,
-                            "container resource has drifted out of sync from a started state: cannot recover",
-                        ))
+                        warn!("container resource has drifted out of sync from a ready state. Will now reboot it");
+                        Self::Restarting(ProjectRestarting {
+                            container,
+                            restart_count: 0,
+                        })
                     }
                 },
                 Err(DockerError::DockerResponseServerError {
@@ -563,22 +577,19 @@ where
                 }
                 Err(err) => return Err(err.into()),
             },
-            Self::Stopping(ProjectStopping { container })
-             => match container
+            Self::Stopping(ProjectStopping { container }) => match container
                 .clone()
                 .refresh(ctx)
                 .await
             {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Stopping(ProjectStopping{ container })
+                        Self::Stopping(ProjectStopping { container })
                     }
                     ContainerStateStatusEnum::EXITED => Self::Stopped(ProjectStopped { container }),
                     _ => {
-                        return Err(Error::custom(
-                            ErrorKind::Internal,
-                            "container resource has drifted out of sync from a stopping state: cannot recover",
-                        ))
+                        warn!("container resource has drifted out of sync from a stopping state");
+                        Self::Stopping(ProjectStopping { container })
                     }
                 },
                 Err(err) => return Err(err.into()),
@@ -589,7 +600,15 @@ where
             Self::Rebooting(rebooting) => Self::Rebooting(rebooting),
             Self::Destroying(destroying) => Self::Destroying(destroying),
             Self::Destroyed(destroyed) => Self::Destroyed(destroyed),
-            Self::Errored(err) => Self::Errored(err),
+            Self::Errored(err) => match err.ctx {
+                // Try to recover the error if possible
+                // This causes the state machine to eventually settle in a stable state that is not errored
+                Some(err_ctx) => match err_ctx.refresh(ctx).await {
+                    Ok(restored) => restored,
+                    error => return error,
+                },
+                None => Self::Errored(err),
+            },
         };
         Ok(refreshed)
     }
@@ -980,7 +999,10 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let Self { container, .. } = self;
+        let Self {
+            container,
+            restart_count,
+        } = self;
         let container_id = safe_unwrap!(container.id);
 
         ctx.docker()
@@ -997,7 +1019,7 @@ where
 
         let container = container.refresh(ctx).await?;
 
-        Ok(Self::Next::new(container, VecDeque::new()))
+        Ok(Self::Next::new(container, restart_count, VecDeque::new()))
     }
 }
 
@@ -1006,6 +1028,17 @@ where
 pub struct ProjectRestarting {
     container: ContainerInspectResponse,
     restart_count: usize,
+}
+
+impl ProjectRestarting {
+    /// Has the restart count been exhuasted
+    pub fn exhausted(&self) -> bool {
+        Self::reached_max_restarts(self.restart_count)
+    }
+
+    fn reached_max_restarts(restart_count: usize) -> bool {
+        restart_count >= MAX_RESTARTS
+    }
 }
 
 #[async_trait]
@@ -1033,7 +1066,7 @@ where
 
         debug!("project restarted {} times", restart_count);
 
-        if restart_count < MAX_RESTARTS {
+        if !Self::reached_max_restarts(restart_count) {
             sleep(Duration::from_secs(5)).await;
             Ok(ProjectStarting {
                 container,
@@ -1051,14 +1084,22 @@ pub struct ProjectStarted {
     service: Option<Service>,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default)]
+    start_count: usize,
+    // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
+    #[serde(default)]
     stats: VecDeque<Stats>,
 }
 
 impl ProjectStarted {
-    pub fn new(container: ContainerInspectResponse, stats: VecDeque<Stats>) -> Self {
+    pub fn new(
+        container: ContainerInspectResponse,
+        start_count: usize,
+        stats: VecDeque<Stats>,
+    ) -> Self {
         Self {
             container,
             service: None,
+            start_count,
             stats,
         }
     }
@@ -1083,6 +1124,7 @@ where
         let Self {
             container,
             service,
+            start_count,
             stats,
         } = self;
         let container = container.refresh(ctx).await?;
@@ -1113,6 +1155,7 @@ where
             Ok(Self::Next::Started(ProjectStarted {
                 container,
                 service: Some(service),
+                start_count,
                 stats,
             }))
         }

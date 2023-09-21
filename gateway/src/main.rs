@@ -81,7 +81,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
         let gateway = Arc::clone(&gateway);
         let sender = sender.clone();
         async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(10));
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
 
             // Don't try to catch up missed ticks since there is no point running a burst of checks
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);

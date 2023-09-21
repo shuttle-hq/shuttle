@@ -30,9 +30,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::service::ContainerSettings;
-use crate::{
-    DockerContext, EndState, Error, ErrorKind, IntoTryState, ProjectName, Refresh, State, TryState,
-};
+use crate::{DockerContext, Error, ErrorKind, IntoTryState, ProjectName, Refresh, State, TryState};
 
 macro_rules! safe_unwrap {
     {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
@@ -454,18 +452,6 @@ where
         debug!("{container_id}{previous_state} -> {new_state}");
 
         new
-    }
-}
-
-impl<Ctx> EndState<Ctx> for Project
-where
-    Ctx: DockerContext,
-{
-    fn is_done(&self) -> bool {
-        matches!(
-            self,
-            Self::Errored(_) | Self::Destroyed(_) | Self::Stopped(_)
-        )
     }
 }
 
@@ -1806,7 +1792,7 @@ pub mod tests {
 
     use super::*;
     use crate::tests::{assert_matches, assert_stream_matches, World};
-    use crate::EndStateExt;
+    use crate::StateExt;
 
     #[tokio::test]
     async fn create_start_stop_destroy_project() -> anyhow::Result<()> {

@@ -9,7 +9,6 @@ use shuttle_gateway::args::StartArgs;
 use shuttle_gateway::args::{Args, Commands, UseTls};
 use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
-use shuttle_gateway::task;
 use shuttle_gateway::tls::make_tls_acceptor;
 use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
 use sqlx::migrate::MigrateDatabase;

@@ -12,15 +12,15 @@ use shuttle_common::{
 use shuttle_proto::builder::builder_server::BuilderServer;
 use tonic::transport::Server;
 use tracing::trace;
-use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, EnvFilter};
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
 
     setup_tracing(
-        tracing_subscriber::registry().with(EnvFilter::from("nbuild_core=warn")),
+        tracing_subscriber::registry(),
         Backend::Builder,
+        Some("nbuild_core=warn,info"),
     );
 
     trace!(args = ?args, "parsed args");

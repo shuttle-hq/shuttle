@@ -1800,7 +1800,7 @@ mod tests {
         fs::write(working_directory.join("target").join("binary"), b"12345").unwrap();
 
         let project_args = ProjectArgs {
-            working_directory: working_directory.to_path_buf(),
+            working_directory,
             name: Some(ProjectName::from_str("archiving-test").unwrap()),
         };
         let mut entries = get_archive_entries(project_args);

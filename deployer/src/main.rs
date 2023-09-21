@@ -55,8 +55,7 @@ async fn main() {
                 .expect("failed to connect to builder"),
         );
 
-    // TODO: use builder client to send project archives to the builder service.
-    let _builder_client = BuilderClient::new(channel);
+    let builder_client = BuilderClient::new(channel);
 
     setup_tracing(
         tracing_subscriber::registry()
@@ -70,6 +69,7 @@ async fn main() {
                 internal_service: Backend::Deployer,
             }),
         Backend::Deployer,
+        None,
     );
 
     let runtime_manager = RuntimeManager::new(
@@ -82,7 +82,7 @@ async fn main() {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
             error!("Proxy stopped.")
         },
-        _ = start(persistence, runtime_manager, logger_batcher, logger_client, args) => {
+        _ = start(persistence, runtime_manager, logger_batcher, logger_client, builder_client, args) => {
             error!("Deployment service stopped.")
         },
     }

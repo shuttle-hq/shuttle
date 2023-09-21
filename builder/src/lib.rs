@@ -56,40 +56,70 @@ impl Service {
         let path = tmp_dir.path();
 
         extract_tar_gz_data(archive.as_slice(), path).await?;
+        info!(deployment_id, "extracted the tar archive content");
+
         let secrets = get_secrets(path).await?;
         build_flake_file(path)?;
+        info!(deployment_id, "created the project flake file successfully");
 
-        let mut cmd = Command::new("nix");
         let output_path = path.join("_archive");
-        cmd.args([
-            "build",
-            "--no-write-lock-file",
-            "--impure",
-            "--log-format",
-            "bar-with-logs",
-            "--out-link",
-            output_path.to_str().unwrap(),
-            path.to_str().unwrap(),
-        ])
-        .stdout(Stdio::piped());
+        let mut child = Command::new("nix")
+            .args([
+                "build",
+                "--no-write-lock-file",
+                "--impure",
+                "--log-format",
+                "bar-with-logs",
+                "--out-link",
+                output_path.to_str().unwrap(),
+                path.to_str().unwrap(),
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
 
-        let mut child = cmd.spawn()?;
-        let stdout = child.stdout.take().expect("to get handle on stdout");
-
-        let mut reader = BufReader::new(stdout).lines();
-
-        let id = deployment_id.clone();
-        tokio::spawn(async move {
-            while let Some(line) = reader.next_line().await.expect("to get line") {
-                info!(deployment_id = %id, "{line}");
+        let stdout = child.stdout.take().expect("to get handle on stderr");
+        let stderr = child.stderr.take().expect("to get handle on stderr");
+        let mut stderr_reader = BufReader::new(stderr).lines();
+        let mut stdout_reader = BufReader::new(stdout).lines();
+        let mut stdout_ended = false;
+        let mut stderr_ended = false;
+        while !(stdout_ended && stderr_ended) {
+            tokio::select! {
+                stderr_line = stderr_reader.next_line() => {
+                    match stderr_line {
+                        Ok(Some(line)) => info!(deployment_id, "{line}"),
+                        Ok(None) => stderr_ended = true,
+                        Err(err) => {
+                            error!(deployment_id, "unexpected stderr stream close: {}", err);
+                            stderr_ended = true;
+                        }
+                    }
+                },
+                stdout_line = stdout_reader.next_line() => {
+                    match stdout_line {
+                        Ok(Some(line)) => info!(deployment_id, "{line}"),
+                        Ok(None) => stdout_ended = true,
+                        Err(err) => {
+                            error!(deployment_id, "unexpected stdout stream close: {}", err);
+                            stdout_ended = true;
+                        }
+                    }
+                }
             }
-        });
+        }
 
         let status = child.wait().await.expect("build to finish");
 
         debug!(deployment_id, "{status}");
 
-        let archive = fs::read(output_path)?;
+        let archive_path = fs::read_link(output_path)?;
+        info!(
+            deployment_id,
+            "built image path: {}",
+            archive_path.display()
+        );
+        let archive = fs::read(archive_path)?;
 
         Ok((archive, secrets))
     }

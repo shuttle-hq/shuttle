@@ -29,7 +29,7 @@ async fn main() -> io::Result<()> {
 
     trace!(args = ?args, "parsed args");
 
-    setup_tracing(tracing_subscriber::registry(), Backend::Gateway);
+    setup_tracing(tracing_subscriber::registry(), Backend::Gateway, None);
 
     let db_path = args.state.join("gateway.sqlite");
     let db_uri = db_path.to_str().unwrap();

@@ -303,7 +303,7 @@ async fn compile(
                 workspace_path: project_path.clone(),
                 manifest_path: package.manifest_path.clone().into_std_path_buf(),
                 package_name: package.name.clone(),
-                executable_path: path.clone(),
+                executable_path: path,
                 is_wasm: wasm,
             }
         })

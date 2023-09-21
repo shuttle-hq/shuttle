@@ -69,7 +69,6 @@ async fn main() {
                 internal_service: Backend::Deployer,
             }),
         Backend::Deployer,
-        None,
     );
 
     let runtime_manager = RuntimeManager::new(

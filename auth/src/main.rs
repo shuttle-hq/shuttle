@@ -15,7 +15,7 @@ async fn main() -> io::Result<()> {
 
     trace!(args = ?args, "parsed args");
 
-    setup_tracing(tracing_subscriber::registry(), Backend::Auth, None);
+    setup_tracing(tracing_subscriber::registry(), Backend::Auth);
 
     let db_path = args.state.join("authentication.sqlite");
 

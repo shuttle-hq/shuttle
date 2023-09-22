@@ -704,8 +704,8 @@ workflows:
                 # - shuttle-common-tests # no tests
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
-          alias: test-workspace-member-with-integration-medium
           matrix:
+            alias: test-workspace-member-with-integration-medium
             parameters:
               resource_class:
                 - medium
@@ -714,8 +714,8 @@ workflows:
                 - shuttle-proto
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
-          alias: test-workspace-member-with-integration-large
           matrix:
+            alias: test-workspace-member-with-integration-large
             parameters:
               resource_class:
                 - large
@@ -725,8 +725,8 @@ workflows:
                 - shuttle-service
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
-          alias: test-workspace-member-with-integration-xlarge
           matrix:
+            alias: test-workspace-member-with-integration-xlarge
             parameters:
               resource_class:
                 - xlarge

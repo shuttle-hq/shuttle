@@ -502,11 +502,13 @@ where
                     ContainerStateStatusEnum::RUNNING => {
                         Self::Started(ProjectStarted::new(container, VecDeque::new()))
                     }
-                    ContainerStateStatusEnum::CREATED => Self::Starting(ProjectStarting {
+                    // We can reach the starting state because either:
+                    // - The project was created for the first time
+                    // - It crashed and we are restarting it
+                    ContainerStateStatusEnum::CREATED | ContainerStateStatusEnum::EXITED => Self::Starting(ProjectStarting {
                         container,
                         restart_count,
                     }),
-                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
                     _ => {
                         return Err(Error::custom(
                             ErrorKind::Internal,

@@ -6,7 +6,7 @@ use hyper::{
     service::{make_service_fn, service_fn},
 };
 use shuttle_common::log::LogRecorder;
-use shuttle_proto::logger::logger_client::LoggerClient;
+use shuttle_proto::{builder::builder_client::BuilderClient, logger::logger_client::LoggerClient};
 use tokio::sync::Mutex;
 use tracing::{error, info};
 use ulid::Ulid;
@@ -37,6 +37,13 @@ pub async fn start(
             shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
         >,
     >,
+    builder_client: Option<
+        BuilderClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
+    >,
     args: Args,
 ) {
     // when _set is dropped once axum exits, the deployment tasks will be aborted.
@@ -49,6 +56,7 @@ pub async fn start(
         .deployment_updater(persistence.clone())
         .secret_getter(persistence.clone())
         .resource_manager(persistence.clone())
+        .builder_client(builder_client)
         .queue_client(GatewayClient::new(args.gateway_uri))
         .log_fetcher(log_fetcher)
         .build();

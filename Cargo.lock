@@ -5465,6 +5465,7 @@ dependencies = [
  "flate2",
  "hex",
  "nbuild-core",
+ "os_pipe",
  "portpicker",
  "pretty_assertions",
  "shuttle-common",

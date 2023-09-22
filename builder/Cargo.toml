@@ -18,6 +18,7 @@ toml = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default"] }
+os_pipe = { workspace = true }
 ulid = { workspace = true }
 
 [dependencies.shuttle-common]

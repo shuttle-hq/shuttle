@@ -61,7 +61,8 @@ impl Service {
         let (reader, writer) = os_pipe::pipe()?;
         let writer_clone = writer.try_clone()?;
         let output_path = path.join("_archive");
-        let mut child = Command::new("nix")
+        let mut command = Command::new("nix");
+        command
             .args([
                 "build",
                 "--no-write-lock-file",
@@ -73,8 +74,11 @@ impl Service {
                 path.to_str().unwrap(),
             ])
             .stdout(writer)
-            .stderr(writer_clone)
-            .spawn()?;
+            .stderr(writer_clone);
+        let mut child = command.spawn()?;
+
+        // Avoid a deadlock.
+        drop(command);
 
         let reader = BufReader::new(reader);
         for line in reader.lines() {

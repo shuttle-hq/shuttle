@@ -86,13 +86,15 @@ where
 
     pub fn builder_client(
         mut self,
-        builder_client: BuilderClient<
-            shuttle_common::claims::ClaimService<
-                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        builder_client: Option<
+            BuilderClient<
+                shuttle_common::claims::ClaimService<
+                    shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+                >,
             >,
         >,
     ) -> Self {
-        self.builder_client = Some(builder_client);
+        self.builder_client = builder_client;
 
         self
     }
@@ -166,7 +168,6 @@ where
         let secret_getter = self.secret_getter.expect("a secret getter to be set");
         let resource_manager = self.resource_manager.expect("a resource manager to be set");
         let logs_fetcher = self.logs_fetcher.expect("a logs fetcher to be set");
-        let builder_client = self.builder_client.expect("a builder client to be set");
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -184,7 +185,7 @@ where
             build_log_recorder,
             secret_recorder,
             queue_client,
-            builder_client,
+            self.builder_client,
             builds_path.clone(),
         ));
         // Run queue. Waits for built deployments and runs them.

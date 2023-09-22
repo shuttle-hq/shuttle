@@ -3,6 +3,7 @@ use tonic::transport::{Endpoint, Uri};
 
 use crate::args::args;
 
+// uses custom macro instead of clap to reduce dependency weight
 args! {
     pub struct Args {
         "--port" => pub port: u16,

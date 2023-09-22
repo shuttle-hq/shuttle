@@ -839,42 +839,26 @@ workflows:
             branches:
               only: production
       - publish-crates:
-          name: publish-shuttle-codegen
-          path: codegen
+          matrix:
+            parameters:
+              path:
+                - codegen
+                - common
+          name: publish-<< matrix.path >>
           requires:
             - approve-publish-crates
           filters:
             branches:
               only: production
       - publish-crates:
-          name: publish-shuttle-common
-          path: common
+          matrix:
+            parameters:
+              path:
+                - proto
+                - service
+          name: publish-<< matrix.path >>
           requires:
-            - publish-shuttle-codegen
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-proto
-          path: proto
-          requires:
-            - publish-shuttle-common
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-service
-          path: service
-          requires:
-            - publish-shuttle-proto
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-shuttle-runtime
-          path: runtime
-          requires:
-            - publish-shuttle-service
+            - publish-common
           filters:
             branches:
               only: production
@@ -882,25 +866,17 @@ workflows:
           matrix:
             parameters:
               path:
-                [
-                  "resources/aws-rds",
-                  "resources/metadata",
-                  "resources/persist",
-                  "resources/secrets",
-                  "resources/shared-db",
-                  "resources/turso",
-                ]
+                - runtime
+                - cargo-shuttle
+                - resources/aws-rds
+                - resources/metadata
+                - resources/persist
+                - resources/secrets
+                - resources/shared-db
+                - resources/turso
           name: publish-<< matrix.path >>
           requires:
-            - publish-shuttle-runtime
-          filters:
-            branches:
-              only: production
-      - publish-crates:
-          name: publish-cargo-shuttle
-          path: cargo-shuttle
-          requires:
-            - publish-shuttle-service
+            - publish-service
           filters:
             branches:
               only: production
@@ -908,24 +884,21 @@ workflows:
           matrix:
             parameters:
               path:
-                [
-                  "services/shuttle-actix-web",
-                  "services/shuttle-axum",
-                  "services/shuttle-next",
-                  "services/shuttle-poem",
-                  "services/shuttle-poise",
-                  "services/shuttle-rocket",
-                  "services/shuttle-salvo",
-                  "services/shuttle-serenity",
-                  "services/shuttle-thruster",
-                  "services/shuttle-tide",
-                  "services/shuttle-tower",
-                  "services/shuttle-warp",
-                ]
+                - services/shuttle-actix-web
+                - services/shuttle-axum
+                - services/shuttle-next
+                - services/shuttle-poem
+                - services/shuttle-poise
+                - services/shuttle-rocket
+                - services/shuttle-salvo
+                - services/shuttle-serenity
+                - services/shuttle-thruster
+                - services/shuttle-tide
+                - services/shuttle-tower
+                - services/shuttle-warp
           name: publish-<< matrix.path >>
           requires:
-            - publish-cargo-shuttle
-            - publish-shuttle-runtime
+            - publish-runtime
           filters:
             branches:
               only: production

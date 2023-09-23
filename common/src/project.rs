@@ -56,16 +56,13 @@ impl ProjectName {
                 .contains(label)
         }
 
-        // Each label in a hostname can be between 1 and 63 chars.
-        let is_too_long = label.len() > 63;
-
-        !(label.bytes().any(|byte| !is_valid_char(byte))
-            || is_reserved(label)
-            || !is_profanity_free(label)
-            || is_too_long
-            || label.ends_with('-')
-            || label.starts_with('-')
-            || label.is_empty())
+        !label.is_empty()
+            && label.len() < 64
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+            && !is_reserved(label)
+            && label.bytes().all(is_valid_char)
+            && is_profanity_free(label)
     }
 
     pub fn as_str(&self) -> &str {
@@ -142,6 +139,7 @@ pub mod tests {
             "myassets",
             "dachterrasse",
             "another-valid-project-name",
+            "x",
         ] {
             let project_name = ProjectName::from_str(label);
             assert!(project_name.is_ok(), "{:?} was err", label);
@@ -175,6 +173,7 @@ pub mod tests {
             exactly-16-chars",
             "shuttle",
             "shuttleapp",
+            "",
         ] {
             let project_name = ProjectName::from_str(label);
             assert!(project_name.is_err(), "{:?} was ok", label);

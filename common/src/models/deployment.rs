@@ -13,6 +13,12 @@ use std::{fmt::Display, str::FromStr};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+/// Max length of strings in the git metadata
+pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
+/// Max HTTP body size for a deployment POST request
+pub const CREATE_SERVICE_BODY_LIMIT: usize = 50_000_000;
+const GIT_OPTION_NONE_TEXT: &str = "N/A";
+
 #[derive(Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::deployment::Response))]
@@ -170,7 +176,3 @@ pub struct DeploymentRequest {
     pub git_branch: Option<String>,
     pub git_dirty: Option<bool>,
 }
-
-pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
-const GIT_OPTION_NONE_TEXT: &str = "N/A";
-pub const CREATE_SERVICE_BODY_LIMIT: usize = 50_000_000;

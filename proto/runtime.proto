@@ -7,7 +7,7 @@ service Runtime {
 
   // Start a loaded service file
   rpc Start(StartRequest) returns (StartResponse);
-  
+
   // Stop a started service
   rpc Stop(StopRequest) returns (StopResponse);
 

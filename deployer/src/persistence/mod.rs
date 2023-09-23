@@ -512,7 +512,8 @@ impl AddressGetter for Persistence {
                 FROM deployments AS d
                 JOIN services AS s ON d.service_id = s.id
                 WHERE s.name = ? AND d.state = ?
-                ORDER BY d.last_update"#,
+                ORDER BY d.last_update
+                DESC"#,
         )
         .bind(service_name)
         .bind(State::Running)

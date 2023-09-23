@@ -1,0 +1,10 @@
+[package]
+name = "archiving-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.6.18"
+shuttle-axum = "0.25.0"
+shuttle-runtime = "0.25.0"
+tokio = "1.28.2"

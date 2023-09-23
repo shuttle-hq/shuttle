@@ -141,7 +141,7 @@ impl Log {
         Some(Log {
             deployment_id: log.deployment_id,
             shuttle_service_name: log_line.service_name,
-            tx_timestamp: DateTime::from_utc(
+            tx_timestamp: DateTime::from_naive_utc_and_offset(
                 NaiveDateTime::from_timestamp_opt(
                     timestamp.seconds,
                     timestamp.nanos.try_into().unwrap_or_default(),

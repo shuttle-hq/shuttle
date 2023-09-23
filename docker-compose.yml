@@ -1,6 +1,7 @@
 version: "3.7"
 volumes:
   auth-vol:
+  builder-store-vol:
   gateway-vol:
   postgres-vol:
   panamax-crates-vol:
@@ -14,6 +15,12 @@ networks:
       driver: default
       config:
         - subnet: 10.99.0.0/16
+  default:
+    attachable: false
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.100.0.0/16
 services:
   auth:
     image: "${CONTAINER_REGISTRY}/auth:${AUTH_TAG}"
@@ -45,6 +52,36 @@ services:
       - "--state=/var/lib/shuttle-auth"
       - "start"
       - "--address=0.0.0.0:8000"
+  builder:
+    image: "${CONTAINER_REGISTRY}/builder:${BUILDER_TAG}"
+    depends_on:
+      - auth
+    ports:
+      - 8009:8000
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==builder
+    networks:
+      user-net:
+    volumes:
+      - builder-store-vol:/nix/store
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--address=0.0.0.0:8000"
+      - "--auth-uri=http://auth:8000"
   gateway:
     image: "${CONTAINER_REGISTRY}/gateway:${GATEWAY_TAG}"
     depends_on:
@@ -91,6 +128,7 @@ services:
       - "--auth-uri=http://auth:8000"
       - "--deploys-api-key=${DEPLOYS_API_KEY}"
       - "--provisioner-host=provisioner"
+      - "--builder-host=builder"
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"
     healthcheck:

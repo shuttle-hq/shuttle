@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 pub use shuttle_common::{
-    database, deployment::Environment, project::ProjectName as ServiceName, resource::Type,
+    database,
+    deployment::{DeploymentMetadata, Environment},
+    project::ProjectName,
+    resource::Type,
     DatabaseReadyInfo, DbInput, DbOutput, SecretStore,
 };
 
@@ -15,14 +17,11 @@ pub use error::{CustomError, Error};
 #[cfg(feature = "builder")]
 pub mod builder;
 
-pub const NEXT_NAME: &str = "shuttle-next";
-pub const RUNTIME_NAME: &str = "shuttle-runtime";
-
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///
-/// An instance of factory is passed by the deployer as an argument to [ResourceBuilder::build][ResourceBuilder::output] in the initial phase of deployment.
+/// An instance of factory is passed by the deployer as an argument to [ResourceBuilder::output] in the initial phase of deployment.
 ///
-/// Also see the [main][main] macro.
+/// Also see the [shuttle_runtime::main] macro.
 #[async_trait]
 pub trait Factory: Send + Sync {
     /// Get a database connection
@@ -34,17 +33,8 @@ pub trait Factory: Send + Sync {
     /// Get all the secrets for a service
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, crate::Error>;
 
-    /// Get the name for the service being deployed
-    fn get_service_name(&self) -> ServiceName;
-
-    /// Get the environment for this deployment
-    fn get_environment(&self) -> Environment;
-
-    /// Get the path where the build files are stored for this service
-    fn get_build_path(&self) -> Result<PathBuf, crate::Error>;
-
-    /// Get the path where files can be stored for this deployment
-    fn get_storage_path(&self) -> Result<PathBuf, crate::Error>;
+    /// Get the metadata for this deployment
+    fn get_metadata(&self) -> DeploymentMetadata;
 }
 
 /// Used to get resources of type `T` from factories.

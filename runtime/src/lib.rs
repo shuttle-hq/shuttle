@@ -27,9 +27,9 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.26.0"
+//! shuttle-runtime = "0.27.0"
 //! axum = "0.6.10"
-//! shuttle-axum = "0.26.0"
+//! shuttle-axum = "0.27.0"
 //! tokio = "1.26"
 //! ```
 //!
@@ -113,7 +113,7 @@
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.26.0", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.27.0", features = ["postgres"] }
 //! sqlx = { version = "0.7.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
@@ -229,7 +229,6 @@ pub use alpha::{start, Alpha};
 pub use next::{AxumWasm, NextArgs};
 pub use provisioner_factory::ProvisionerFactory;
 pub use resource_tracker::{get_resource, ResourceTracker};
-pub use shuttle_common::storage_manager::StorageManager;
 pub use shuttle_service::{CustomError, Error, Factory, ResourceBuilder, Service};
 
 pub use async_trait::async_trait;

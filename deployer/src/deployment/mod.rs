@@ -1,9 +1,10 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-pub use queue::Queued;
-pub use run::{ActiveDeploymentsGetter, Built};
-use shuttle_common::{log::LogRecorder, storage_manager::ArtifactsStorageManager};
-use shuttle_proto::logger::logger_client::LoggerClient;
+use shuttle_common::log::LogRecorder;
+use shuttle_proto::{builder::builder_client::BuilderClient, logger::logger_client::LoggerClient};
 use tokio::{
     sync::{mpsc, Mutex},
     task::JoinSet,
@@ -22,6 +23,8 @@ use crate::{
     persistence::{DeploymentUpdater, ResourceManager, SecretGetter, SecretRecorder, State},
     RuntimeManager,
 };
+pub use queue::Queued;
+pub use run::{ActiveDeploymentsGetter, Built};
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
@@ -43,6 +46,13 @@ pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
     secret_getter: Option<SG>,
     resource_manager: Option<RM>,
     queue_client: Option<QC>,
+    builder_client: Option<
+        BuilderClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
+    >,
 }
 
 impl<LR, SR, ADG, DU, SG, RM, QC> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC>
@@ -70,6 +80,21 @@ where
         >,
     ) -> Self {
         self.logs_fetcher = Some(logs_fetcher);
+
+        self
+    }
+
+    pub fn builder_client(
+        mut self,
+        builder_client: Option<
+            BuilderClient<
+                shuttle_common::claims::ClaimService<
+                    shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+                >,
+            >,
+        >,
+    ) -> Self {
+        self.builder_client = builder_client;
 
         self
     }
@@ -146,20 +171,24 @@ where
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
-        let storage_manager = ArtifactsStorageManager::new(artifacts_path);
+
+        let builds_path = artifacts_path.join("shuttle-builds");
 
         let run_send_clone = run_send.clone();
         let mut set = JoinSet::new();
 
+        // Build queue. Waits for incoming deployments and builds them.
         set.spawn(queue::task(
             queue_recv,
             run_send_clone,
             deployment_updater.clone(),
             build_log_recorder,
             secret_recorder,
-            storage_manager.clone(),
             queue_client,
+            self.builder_client,
+            builds_path.clone(),
         ));
+        // Run queue. Waits for built deployments and runs them.
         set.spawn(run::task(
             run_recv,
             runtime_manager.clone(),
@@ -167,7 +196,7 @@ where
             active_deployment_getter,
             secret_getter,
             resource_manager,
-            storage_manager.clone(),
+            builds_path.clone(),
         ));
 
         DeploymentManager {
@@ -175,8 +204,8 @@ where
             run_send,
             runtime_manager,
             logs_fetcher,
-            storage_manager,
             _join_set: Arc::new(Mutex::new(set)),
+            builds_path,
         }
     }
 }
@@ -186,13 +215,13 @@ pub struct DeploymentManager {
     queue_send: QueueSender,
     run_send: RunSender,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
-    storage_manager: ArtifactsStorageManager,
     logs_fetcher: LoggerClient<
         shuttle_common::claims::ClaimService<
             shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
         >,
     >,
     _join_set: Arc<Mutex<JoinSet<()>>>,
+    builds_path: PathBuf,
 }
 
 /// ```no-test
@@ -225,6 +254,7 @@ impl DeploymentManager {
             secret_getter: None,
             resource_manager: None,
             queue_client: None,
+            builder_client: None,
         }
     }
 
@@ -247,8 +277,8 @@ impl DeploymentManager {
         self.runtime_manager.lock().await.kill(&id).await;
     }
 
-    pub fn storage_manager(&self) -> ArtifactsStorageManager {
-        self.storage_manager.clone()
+    pub fn builds_path(&self) -> &Path {
+        self.builds_path.as_path()
     }
 
     pub fn logs_fetcher(

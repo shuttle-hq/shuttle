@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddr},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -10,12 +10,12 @@ use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
+    constants::EXECUTABLE_DIRNAME,
     deployment::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
     resource,
-    storage_manager::ArtifactsStorageManager,
 };
 
 use shuttle_proto::{
@@ -51,7 +51,7 @@ pub async fn task(
     active_deployment_getter: impl ActiveDeploymentsGetter,
     secret_getter: impl SecretGetter,
     resource_manager: impl ResourceManager,
-    storage_manager: ArtifactsStorageManager,
+    builds_path: PathBuf,
 ) {
     info!("Run task started");
 
@@ -63,11 +63,10 @@ pub async fn task(
                 let id = built.id;
 
                 info!("Built deployment at the front of run queue: {id}");
-
                 let deployment_updater = deployment_updater.clone();
                 let secret_getter = secret_getter.clone();
                 let resource_manager = resource_manager.clone();
-                let storage_manager = storage_manager.clone();
+                let builds_path = builds_path.clone();
 
                 let old_deployments_killer = kill_old_deployments(
                     built.service_id,
@@ -108,13 +107,13 @@ pub async fn task(
                     async move {
                         match built
                             .handle(
-                                storage_manager,
                                 secret_getter,
                                 resource_manager,
                                 runtime_manager,
                                 deployment_updater,
                                 old_deployments_killer,
                                 cleanup,
+                                builds_path.as_path(),
                             )
                             .await
                         {
@@ -219,22 +218,29 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(name = "Loading resources", skip(self, storage_manager, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup), fields(deployment_id = %self.id, state = %State::Loading))]
+    #[instrument(
+        name = "Loading resources",
+        skip(self, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup),
+        fields(deployment_id = %self.id, state = %State::Loading)
+    )]
     #[allow(clippy::too_many_arguments)]
-    async fn handle(
+    pub async fn handle(
         self,
-        storage_manager: ArtifactsStorageManager,
         secret_getter: impl SecretGetter,
         resource_manager: impl ResourceManager,
         runtime_manager: Arc<Mutex<RuntimeManager>>,
         deployment_updater: impl DeploymentUpdater,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
+        builds_path: &Path,
     ) -> Result<JoinHandle<()>> {
+        let project_path = builds_path.join(&self.service_name);
         // For alpha this is the path to the users project with an embedded runtime.
         // For shuttle-next this is the path to the compiled .wasm file, which will be
         // used in the load request.
-        let executable_path = storage_manager.deployment_executable_path(&self.id)?;
+        let executable_path = project_path
+            .join(EXECUTABLE_DIRNAME)
+            .join(self.id.to_string());
 
         let port = match pick_unused_port() {
             Some(port) => port,
@@ -259,8 +265,9 @@ impl Built {
             .await
             .get_runtime_client(
                 self.id,
+                project_path.as_path(),
                 self.service_name.clone(),
-                alpha_runtime_path.clone(),
+                alpha_runtime_path,
             )
             .await
             .map_err(Error::Runtime)?;
@@ -436,354 +443,5 @@ async fn run(
                 Error::Start("runtime failed to start deployment".to_string()),
             );
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{
-        net::{Ipv4Addr, SocketAddr},
-        path::PathBuf,
-        process::Command,
-        sync::Arc,
-        time::Duration,
-    };
-
-    use async_trait::async_trait;
-    use portpicker::pick_unused_port;
-    use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
-    use shuttle_common_tests::logger::{mocked_logger_client, MockedLogger};
-    use shuttle_proto::{
-        logger::Batcher,
-        provisioner::{
-            provisioner_server::{Provisioner, ProvisionerServer},
-            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
-        },
-        resource_recorder::{ResourcesResponse, ResultResponse},
-        runtime::{StopReason, SubscribeStopResponse},
-    };
-    use tempfile::Builder;
-    use tokio::{
-        sync::{oneshot, Mutex},
-        time::sleep,
-    };
-    use tonic::transport::Server;
-    use ulid::Ulid;
-    use uuid::Uuid;
-
-    use crate::{
-        persistence::{DeploymentUpdater, ResourceManager, Secret, SecretGetter},
-        RuntimeManager,
-    };
-
-    use super::Built;
-
-    const RESOURCES_PATH: &str = "tests/resources";
-
-    fn get_storage_manager() -> ArtifactsStorageManager {
-        let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
-        let path = tmp_dir.into_path();
-
-        ArtifactsStorageManager::new(path)
-    }
-
-    async fn kill_old_deployments() -> crate::error::Result<()> {
-        Ok(())
-    }
-
-    struct ProvisionerMock;
-
-    #[async_trait]
-    impl Provisioner for ProvisionerMock {
-        async fn provision_database(
-            &self,
-            _request: tonic::Request<DatabaseRequest>,
-        ) -> Result<tonic::Response<DatabaseResponse>, tonic::Status> {
-            panic!("no run tests should request a db");
-        }
-
-        async fn delete_database(
-            &self,
-            _request: tonic::Request<DatabaseRequest>,
-        ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
-            panic!("no run tests should delete a db");
-        }
-
-        async fn health_check(
-            &self,
-            _request: tonic::Request<Ping>,
-        ) -> Result<tonic::Response<Pong>, tonic::Status> {
-            panic!("no run tests should do a health check");
-        }
-    }
-
-    async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
-        let provisioner_addr =
-            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
-
-        tokio::spawn(async move {
-            Server::builder()
-                .add_service(ProvisionerServer::new(ProvisionerMock))
-                .serve(provisioner_addr)
-                .await
-                .unwrap();
-        });
-
-        let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
-        let path = tmp_dir.into_path();
-
-        let logger_client = Batcher::wrap(mocked_logger_client(MockedLogger).await);
-
-        RuntimeManager::new(
-            path,
-            format!("http://{}", provisioner_addr),
-            logger_client,
-            None,
-        )
-    }
-
-    #[derive(Clone)]
-    struct StubSecretGetter;
-
-    #[async_trait]
-    impl SecretGetter for StubSecretGetter {
-        type Err = std::io::Error;
-
-        async fn get_secrets(&self, _service_id: &Ulid) -> Result<Vec<Secret>, Self::Err> {
-            Ok(Default::default())
-        }
-    }
-
-    #[derive(Clone)]
-    struct StubResourceManager;
-
-    #[async_trait]
-    impl ResourceManager for StubResourceManager {
-        type Err = std::io::Error;
-
-        async fn insert_resources(
-            &mut self,
-            _resources: Vec<shuttle_proto::resource_recorder::record_request::Resource>,
-            _service_id: &ulid::Ulid,
-            _claim: Claim,
-        ) -> Result<ResultResponse, Self::Err> {
-            Ok(ResultResponse {
-                success: true,
-                message: "dummy impl".to_string(),
-            })
-        }
-        async fn get_resources(
-            &mut self,
-            _service_id: &ulid::Ulid,
-            _claim: Claim,
-        ) -> Result<ResourcesResponse, Self::Err> {
-            Ok(ResourcesResponse {
-                success: true,
-                message: "dummy impl".to_string(),
-                resources: Vec::new(),
-            })
-        }
-    }
-
-    #[derive(Clone)]
-    struct StubDeploymentUpdater;
-
-    #[async_trait]
-    impl DeploymentUpdater for StubDeploymentUpdater {
-        type Err = std::io::Error;
-
-        async fn set_address(&self, _id: &Uuid, _address: &SocketAddr) -> Result<(), Self::Err> {
-            Ok(())
-        }
-
-        async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
-            Ok(())
-        }
-    }
-
-    // This test uses the kill signal to make sure a service does stop when asked to
-    #[tokio::test]
-    async fn can_be_killed() {
-        let (built, storage_manager) = make_and_built("sleep-async");
-        let id = built.id;
-        let runtime_manager = get_runtime_manager().await;
-        let (cleanup_send, cleanup_recv) = oneshot::channel();
-
-        let handle_cleanup = |response: Option<SubscribeStopResponse>| {
-            let response = response.unwrap();
-            match (
-                StopReason::from_i32(response.reason).unwrap(),
-                response.message,
-            ) {
-                (StopReason::Request, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
-                _ => panic!("expected stop due to request"),
-            }
-        };
-
-        built
-            .handle(
-                storage_manager,
-                StubSecretGetter,
-                StubResourceManager,
-                runtime_manager.clone(),
-                StubDeploymentUpdater,
-                kill_old_deployments(),
-                handle_cleanup,
-            )
-            .await
-            .unwrap();
-
-        // Give it some time to start up
-        sleep(Duration::from_secs(1)).await;
-
-        // Send kill signal
-        assert!(runtime_manager.lock().await.kill(&id).await);
-
-        tokio::select! {
-            _ = sleep(Duration::from_secs(1)) => panic!("cleanup should have been called"),
-            Ok(()) = cleanup_recv => {}
-        }
-    }
-
-    // This test does not use a kill signal to stop the service. Rather the service decided to stop on its own without errors
-    #[tokio::test]
-    async fn self_stop() {
-        let (built, storage_manager) = make_and_built("sleep-async");
-        let runtime_manager = get_runtime_manager().await;
-        let (cleanup_send, cleanup_recv) = oneshot::channel();
-
-        let handle_cleanup = |response: Option<SubscribeStopResponse>| {
-            let response = response.unwrap();
-            match (
-                StopReason::from_i32(response.reason).unwrap(),
-                response.message,
-            ) {
-                (StopReason::End, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
-                _ => panic!("expected stop due to self end"),
-            }
-        };
-
-        built
-            .handle(
-                storage_manager,
-                StubSecretGetter,
-                StubResourceManager,
-                runtime_manager.clone(),
-                StubDeploymentUpdater,
-                kill_old_deployments(),
-                handle_cleanup,
-            )
-            .await
-            .unwrap();
-
-        tokio::select! {
-            _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service stopped on its own"),
-            Ok(()) = cleanup_recv => {},
-        }
-
-        // Prevent the runtime manager from dropping earlier, which will kill the processes it manages
-        drop(runtime_manager);
-    }
-
-    // Test for panics in Service::bind
-    #[tokio::test]
-    async fn panic_in_bind() {
-        let (built, storage_manager) = make_and_built("bind-panic");
-        let runtime_manager = get_runtime_manager().await;
-        let (cleanup_send, cleanup_recv) = oneshot::channel();
-
-        let handle_cleanup = |response: Option<SubscribeStopResponse>| {
-            let response = response.unwrap();
-            match (
-                StopReason::from_i32(response.reason).unwrap(),
-                response.message,
-            ) {
-                (StopReason::Crash, mes) if mes.contains("panic in bind") => {
-                    cleanup_send.send(()).unwrap()
-                }
-                (_, mes) => panic!("expected stop due to crash: {mes}"),
-            }
-        };
-
-        built
-            .handle(
-                storage_manager,
-                StubSecretGetter,
-                StubResourceManager,
-                runtime_manager.clone(),
-                StubDeploymentUpdater,
-                kill_old_deployments(),
-                handle_cleanup,
-            )
-            .await
-            .unwrap();
-
-        tokio::select! {
-            _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service handle stopped after panic"),
-            Ok(()) = cleanup_recv => {}
-        }
-
-        // Prevent the runtime manager from dropping earlier, which will kill the processes it manages
-        drop(runtime_manager);
-    }
-
-    // Test for panics in the main function
-    #[tokio::test]
-    #[should_panic(expected = "Load(\"main panic\")")]
-    async fn panic_in_main() {
-        let (built, storage_manager) = make_and_built("main-panic");
-        let runtime_manager = get_runtime_manager().await;
-
-        let handle_cleanup = |_result| panic!("service should never be started");
-
-        built
-            .handle(
-                storage_manager,
-                StubSecretGetter,
-                StubResourceManager,
-                runtime_manager.clone(),
-                StubDeploymentUpdater,
-                kill_old_deployments(),
-                handle_cleanup,
-            )
-            .await
-            .unwrap();
-    }
-
-    fn make_and_built(crate_name: &str) -> (Built, ArtifactsStorageManager) {
-        let crate_dir: PathBuf = [RESOURCES_PATH, crate_name].iter().collect();
-
-        Command::new("cargo")
-            .args(["build", "--release"])
-            .current_dir(&crate_dir)
-            .spawn()
-            .unwrap()
-            .wait()
-            .unwrap();
-
-        let lib_name = if cfg!(target_os = "windows") {
-            format!("{}.exe", crate_name)
-        } else {
-            crate_name.to_string()
-        };
-
-        let id = Uuid::new_v4();
-        let so_path = crate_dir.join("target/release").join(lib_name);
-        let storage_manager = get_storage_manager();
-        let new_so_path = storage_manager.deployment_executable_path(&id).unwrap();
-
-        std::fs::copy(so_path, new_so_path).unwrap();
-        (
-            Built {
-                id,
-                service_name: crate_name.to_string(),
-                service_id: Ulid::new(),
-                project_id: Ulid::new(),
-                tracing_context: Default::default(),
-                is_next: false,
-                claim: Default::default(),
-            },
-            storage_manager,
-        )
     }
 }

@@ -18,7 +18,6 @@ use shuttle_common::{
     },
     claims::{Claim, ClaimLayer, InjectPropagationLayer},
     resource,
-    storage_manager::{ArtifactsStorageManager, StorageManager, WorkingDirStorageManager},
 };
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
@@ -28,7 +27,7 @@ use shuttle_proto::{
         StopResponse, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
-use shuttle_service::{Environment, Factory, Service, ServiceName};
+use shuttle_service::{Environment, Factory, ProjectName, Service};
 use tokio::sync::{
     broadcast::{self, Sender},
     mpsc, oneshot,
@@ -48,7 +47,7 @@ mod args;
 
 pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     // `--version` overrides any other arguments.
-    if std::env::args().any(|arg| &arg == "--version") {
+    if std::env::args().any(|arg| arg == "--version") {
         print_version();
         return;
     }
@@ -116,24 +115,8 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         )))
         .layer(ExtractPropagationLayer);
 
-    // We wrap the StorageManager trait object in an Arc rather than a Box, since we need
-    // to clone it in the `ProvisionerFactory::new` call in the alpha runtime `load` method.
-    // We might be able to optimize this by implementing clone for a Box<dyn StorageManager>
-    // or by using static dispatch instead.
-    let (storage_manager, env): (Arc<dyn StorageManager>, Environment) =
-        match args.storage_manager_type {
-            args::StorageManagerType::Artifacts => (
-                Arc::new(ArtifactsStorageManager::new(args.storage_manager_path)),
-                Environment::Production,
-            ),
-            args::StorageManagerType::WorkingDir => (
-                Arc::new(WorkingDirStorageManager::new(args.storage_manager_path)),
-                Environment::Local,
-            ),
-        };
-
     let router = {
-        let alpha = Alpha::new(provisioner_address, loader, storage_manager, env);
+        let alpha = Alpha::new(provisioner_address, loader, args.env);
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
@@ -150,26 +133,19 @@ pub struct Alpha<L, S> {
     stopped_tx: Sender<(StopReason, String)>,
     provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
-    storage_manager: Arc<dyn StorageManager>,
     loader: Mutex<Option<L>>,
     service: Mutex<Option<S>>,
     env: Environment,
 }
 
 impl<L, S> Alpha<L, S> {
-    pub fn new(
-        provisioner_address: Endpoint,
-        loader: L,
-        storage_manager: Arc<dyn StorageManager>,
-        env: Environment,
-    ) -> Self {
+    pub fn new(provisioner_address: Endpoint, loader: L, env: Environment) -> Self {
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
             stopped_tx,
             kill_tx: Mutex::new(None),
             provisioner_address,
-            storage_manager,
             loader: Mutex::new(Some(loader)),
             service: Mutex::new(None),
             env,
@@ -227,8 +203,6 @@ where
         } = request.into_inner();
         println!("loading alpha service at {path}");
 
-        let secrets = BTreeMap::from_iter(secrets);
-
         let channel = self
             .provisioner_address
             .clone()
@@ -243,7 +217,7 @@ where
 
         let provisioner_client = ProvisionerClient::new(channel);
 
-        let service_name = ServiceName::from_str(service_name.as_str())
+        let service_name = ProjectName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
         let past_resources = resources
@@ -253,14 +227,11 @@ where
         let new_resources = Arc::new(Mutex::new(Vec::new()));
         let resource_tracker = ResourceTracker::new(past_resources, new_resources.clone());
 
-        let factory = ProvisionerFactory::new(
-            provisioner_client,
-            service_name,
-            secrets,
-            self.storage_manager.clone(),
-            self.env,
-            claim,
-        );
+        // Sorts secrets by key
+        let secrets = BTreeMap::from_iter(secrets);
+
+        let factory =
+            ProvisionerFactory::new(provisioner_client, service_name, secrets, self.env, claim);
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 

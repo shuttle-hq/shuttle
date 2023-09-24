@@ -104,6 +104,21 @@ impl Shuttle {
         self.run(args, provided_path_to_init).await
     }
 
+    fn find_available_port(range_start: u16, range_end: u16) -> u16 {
+        let mut available_port = range_start;
+
+        for port in range_start..=range_end {
+            if portpicker::is_free_tcp(port) {
+                if port == available_port + 1 {
+                    available_port = port;
+                    break;
+                }
+                available_port = port;
+            }
+        }
+        available_port
+    }
+
     pub async fn run(
         mut self,
         args: ShuttleArgs,
@@ -152,7 +167,23 @@ impl Shuttle {
             Command::Login(login_args) => self.login(login_args).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback().await,
-            Command::Run(run_args) => self.local_run(run_args).await,
+            Command::Run(mut run_args) => {
+                let range_end = 65535;
+                if !portpicker::is_free_tcp(run_args.port) {
+                    let available_port = Shuttle::find_available_port(run_args.port - 1, range_end);
+                    if !Confirm::with_theme(&ColorfulTheme::default())
+                        .with_prompt(format!(
+                            "Default port {} is already in use. Would you like to continue on port {}?",
+                            run_args.port, available_port
+                        ))
+                        .default(true)
+                        .interact()? {
+                            exit(1);
+                        }
+                    run_args.port = available_port;
+                }
+                self.local_run(run_args).await
+            },
             Command::Deploy(deploy_args) => {
                 return self.deploy(&self.client()?, deploy_args).await;
             }

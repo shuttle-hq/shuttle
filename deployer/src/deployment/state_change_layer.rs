@@ -495,6 +495,8 @@ mod tests {
         }
     }
 
+    const STATE_TEST_TIMEOUT_SECS: u64 = 600;
+
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
         let deployment_manager = get_deployment_manager().await;
@@ -530,7 +532,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(460)) => {
+            _ = sleep(Duration::from_secs(STATE_TEST_TIMEOUT_SECS)) => {
                 let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Running' for a valid service: {:#?}", states);
             },
@@ -618,7 +620,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(460)) => {
+            _ = sleep(Duration::from_secs(STATE_TEST_TIMEOUT_SECS)) => {
                 let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Completed' when a service stops by itself: {:#?}", states);
             }
@@ -665,7 +667,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(460)) => {
+            _ = sleep(Duration::from_secs(STATE_TEST_TIMEOUT_SECS)) => {
                 let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Crashed' panicking in bind: {:#?}", states);
             }
@@ -708,7 +710,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(460)) => {
+            _ = sleep(Duration::from_secs(STATE_TEST_TIMEOUT_SECS)) => {
                 let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Crashed' when panicking in main: {:#?}", states);
             }

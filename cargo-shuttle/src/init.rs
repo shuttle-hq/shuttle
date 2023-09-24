@@ -65,8 +65,6 @@ fn set_crate_name(path: &Path, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// The Shuttle.toml project name override will already be in use,
-/// so that property file is disruptive to a newly cloned project.
 fn edit_shuttle_toml(path: &Path) -> Result<()> {
     let path = path.join("Shuttle.toml");
     if !path.exists() {
@@ -76,11 +74,14 @@ fn edit_shuttle_toml(path: &Path) -> Result<()> {
     let toml_str = read_to_string(&path)?;
     let mut doc = toml_str.parse::<Document>()?;
 
+    // The Shuttle.toml project name override will likely already be in use,
+    // so that field is not wanted in a newly cloned template.
+
     // remove the name
     doc.remove("name");
 
     if doc.len() == 0 {
-        // if name was the only property in the doc, delete the file
+        // if "name" was the only property in the doc, delete the file
         let _ = std::fs::remove_file(&path);
 
         return Ok(());
@@ -92,6 +93,7 @@ fn edit_shuttle_toml(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Adds any missing recommended gitignore rules
 fn create_gitignore_file(path: &Path) -> Result<()> {
     let path = path.join(".gitignore");
     let mut contents = std::fs::read_to_string(&path).unwrap_or_default();

@@ -1091,7 +1091,7 @@ dependencies = [
  "anyhow",
  "clap",
  "console",
- "dialoguer",
+ "dialoguer 0.10.4",
  "env_logger",
  "git2",
  "gix-config",
@@ -1156,7 +1156,7 @@ dependencies = [
  "clap_complete",
  "crossbeam-channel",
  "crossterm 0.27.0",
- "dialoguer",
+ "dialoguer 0.11.0",
  "dirs 5.0.1",
  "dunce",
  "flate2",
@@ -1863,9 +1863,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59c6f2989294b9a498d3ad5491a79c6deb604617378e1cdc4bfc1c1361fe2f87"
 dependencies = [
  "console",
+ "shell-words",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
+name = "dialoguer"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "658bce805d770f407bc62102fca7c2c64ceef2fbcb2b8bd19d2765ce093980de"
+dependencies = [
+ "console",
  "fuzzy-matcher",
  "shell-words",
  "tempfile",
+ "thiserror",
  "zeroize",
 ]
 
@@ -4750,9 +4763,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest-retry"
-version = "0.2.3"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c6a11c05102e5bec712c0619b8c7b7eda8b21a558a0bd981ceee15c38df8be4"
+checksum = "9af20b65c2ee9746cc575acb6bd28a05ffc0d15e25c992a8f4462d8686aacb4f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4783,9 +4796,9 @@ dependencies = [
 
 [[package]]
 name = "retry-policies"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e09bbcb5003282bcb688f0bae741b278e9c7e8f378f561522c9806c58e075d9b"
+checksum = "a715dc4d0e8aea3085a9a94d76e79c79c7df7c9f6be609da841a6d2489ca3687"
 dependencies = [
  "anyhow",
  "chrono",

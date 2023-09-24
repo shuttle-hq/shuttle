@@ -46,7 +46,7 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocat
 
     set_crate_name(&path, name.as_str())
         .with_context(|| "Failed to set crate name. No Cargo.toml in template?")?;
-    remove_shuttle_toml(&path);
+    edit_shuttle_toml(&path).with_context(|| "Failed to edit Shuttle.toml.")?;
     create_gitignore_file(&path).with_context(|| "Failed to create .gitignore file.")?;
 
     Ok(())
@@ -55,34 +55,44 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocat
 // since I can't get cargo-generate to do this for me...
 fn set_crate_name(path: &Path, name: &str) -> Result<()> {
     // read the Cargo.toml file
-    let mut path = path.to_path_buf();
-    path.push("Cargo.toml");
-
+    let path = path.join("Cargo.toml");
     let toml_str = read_to_string(&path)?;
     let mut doc = toml_str.parse::<Document>()?;
 
     // change the name
     doc["package"]["name"] = value(name);
 
-    // write the Cargo.toml file back out
+    // write the file back out
     std::fs::write(&path, doc.to_string())?;
 
     Ok(())
 }
 
-/*
-Currently Shuttle.toml only has a project name override.
-This project name will already be in use, so the file is useless.
+/// The Shuttle.toml project name override will already be in use,
+/// so that property file is disruptive to a newly cloned project.
+fn edit_shuttle_toml(path: &Path) -> Result<()> {
+    let path = path.join("Shuttle.toml");
+    if !path.exists() {
+        // Do nothing if template has no Shuttle.toml
+        return Ok(());
+    }
+    let toml_str = read_to_string(&path)?;
+    let mut doc = toml_str.parse::<Document>()?;
 
-If we start putting more things in Shuttle.toml we may wish to re-evaluate.
-*/
-fn remove_shuttle_toml(path: &Path) {
-    // TODO: Just remove the name prop
-    let mut path = path.to_path_buf();
-    path.push("Shuttle.toml");
+    // remove the name
+    doc.remove("name");
 
-    // this file only exists for some of the examples, it's fine if we don't find it
-    _ = std::fs::remove_file(path);
+    if doc.len() == 0 {
+        // if name was the only property in the doc, delete the file
+        let _ = std::fs::remove_file(&path);
+
+        return Ok(());
+    }
+
+    // write the file back out
+    std::fs::write(&path, doc.to_string())?;
+
+    Ok(())
 }
 
 fn create_gitignore_file(path: &Path) -> Result<()> {

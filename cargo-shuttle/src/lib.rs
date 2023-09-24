@@ -711,10 +711,10 @@ impl Shuttle {
                         );
                     } else {
                         println!(
-                                "[HINT]: A newer version of shuttle-runtime is available. \
-                                Change its version to {} in this project's Cargo.toml to update it.",
-                                mismatch.cargo_shuttle
-                            );
+                            "[HINT]: A newer version of shuttle-runtime is available. \
+                            Change its version to {} in this project's Cargo.toml to update it.",
+                            mismatch.cargo_shuttle
+                        );
                     }
                 }
             }
@@ -727,7 +727,7 @@ impl Shuttle {
             Environment::Local,
             &format!("http://localhost:{provisioner_port}"),
             None,
-            run_args.port - idx - 1, // TODO: check ports and ask for other port
+            run_args.port - idx - 1,
             runtime_executable,
             service.workspace_path.as_path(),
         )

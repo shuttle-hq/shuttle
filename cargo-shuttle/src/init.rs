@@ -1,13 +1,12 @@
 use std::{
-    fs::{read_to_string, OpenOptions},
-    io::{ErrorKind, Write},
+    fmt::Write,
+    fs::read_to_string,
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use cargo_generate::{GenerateArgs, TemplatePath, Vcs};
 use git2::Repository;
-use indoc::indoc;
 use shuttle_common::project::ProjectName;
 use toml_edit::{value, Document};
 
@@ -52,9 +51,7 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocat
     Ok(())
 }
 
-// since I can't get cargo-generate to do this for me...
 fn set_crate_name(path: &Path, name: &str) -> Result<()> {
-    // read the Cargo.toml file
     let path = path.join("Cargo.toml");
     let toml_str = read_to_string(&path)?;
     let mut doc = toml_str.parse::<Document>()?;
@@ -96,29 +93,16 @@ fn edit_shuttle_toml(path: &Path) -> Result<()> {
 }
 
 fn create_gitignore_file(path: &Path) -> Result<()> {
-    let mut path = path.to_path_buf();
-    path.push(".gitignore");
+    let path = path.join(".gitignore");
+    let mut contents = std::fs::read_to_string(&path).unwrap_or_default();
 
-    let mut file = match OpenOptions::new().create_new(true).write(true).open(path) {
-        Ok(f) => f,
-        Err(e) => {
-            match e.kind() {
-                ErrorKind::AlreadyExists => {
-                    // if the example already has a .gitignore file, just use that
-                    return Ok(());
-                }
-                _ => {
-                    return Err(anyhow!(e));
-                }
-            }
+    for rule in ["/target", ".shuttle-storage", "Secrets*.toml"] {
+        if !contents.lines().into_iter().any(|l| l == rule) {
+            writeln!(&mut contents, "{rule}")?;
         }
-    };
+    }
 
-    file.write_all(indoc! {b"
-        /target
-        .shuttle-storage
-        Secrets*.toml
-    "})?;
+    std::fs::write(&path, contents)?;
 
     Ok(())
 }

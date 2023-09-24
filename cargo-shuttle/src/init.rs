@@ -97,7 +97,7 @@ fn create_gitignore_file(path: &Path) -> Result<()> {
     let mut contents = std::fs::read_to_string(&path).unwrap_or_default();
 
     for rule in ["/target", ".shuttle-storage", "Secrets*.toml"] {
-        if !contents.lines().into_iter().any(|l| l == rule) {
+        if !contents.lines().any(|l| l == rule) {
             writeln!(&mut contents, "{rule}")?;
         }
     }

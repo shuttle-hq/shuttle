@@ -143,6 +143,8 @@ impl Shuttle {
             self.load_project(&args.project_args)?;
         }
 
+        let mut version_warning: Option<String> = None;
+
         // All commands that call the API
         if matches!(
             args.cmd,
@@ -159,10 +161,10 @@ impl Shuttle {
             let mut client = Client::new(self.ctx.api_url());
             client.set_api_key(self.ctx.api_key()?);
             self.client = Some(client);
-            self.check_api_version().await?;
+            version_warning = self.check_api_version().await?;
         }
 
-        match args.cmd {
+        let res = match args.cmd {
             Command::Init(init_args) => {
                 self.init(init_args, args.project_args, provided_path_to_init)
                     .await
@@ -199,47 +201,53 @@ impl Shuttle {
             }
             Command::Project(ProjectCommand::Stop) => self.project_delete().await,
         }
-        .map(|_| CommandOutcome::Ok)
+        .map(|_| CommandOutcome::Ok);
+
+        if let Some(w) = version_warning {
+            println!("{w}");
+        }
+
+        res
     }
 
-    async fn check_api_version(&self) -> Result<()> {
+    async fn check_api_version(&self) -> Result<Option<String>> {
         let client = self.client.as_ref().unwrap();
         if let Ok(gateway_version) = client.check_api_compatibility().await {
-            let my_version = semver::Version::from_str("0.27.1").unwrap();
+            let my_version = semver::Version::from_str(VERSION).unwrap();
             let gw_version = semver::Version::from_str(&gateway_version)
                 .context("parsing API semver version")?;
             if my_version != gw_version {
                 let newer_version_exists = my_version < gw_version;
                 if semvers_are_compatible(&my_version, &gw_version) {
                     if newer_version_exists {
-                        let s = format!(
-                            "Info: A newer version of cargo-shuttle exists ({gw_version})."
-                        );
-                        println!("{}", s.yellow());
+                        return Ok(Some(
+                            format!(
+                                "Info: A newer version of cargo-shuttle exists ({gw_version})."
+                            )
+                            .yellow()
+                            .to_string(),
+                        ));
                     }
                     // Having a too new but compatible version does not show warning
                 } else {
-                    let s = if newer_version_exists {
+                    return Ok(Some(if newer_version_exists {
                         formatdoc! {"
                             Warning:
                                 A newer version of cargo-shuttle exists ({gw_version}).
                                 It is recommended to upgrade.
-                                Refer to the upgrading docs: https://docs.shuttle.rs/configuration/shuttle-versions#upgrading-shuttle-version
-                            "
+                                Refer to the upgrading docs: https://docs.shuttle.rs/configuration/shuttle-versions#upgrading-shuttle-version"
                         }
                     } else {
                         formatdoc! {"
                             Warning:
                                 Your version of cargo-shuttle ({my_version}) is newer than what the API expects ({gw_version}).
-                                Things might not work until the API is updated.
-                            "
+                                Things might not work until the API is updated."
                         }
-                    };
-                    println!("{}", s.red());
+                    }.red().to_string()));
                 }
             }
         }
-        Ok(())
+        Ok(None)
     }
 
     /// Log in, initialize a project and potentially create the Shuttle environment for it.

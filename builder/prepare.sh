@@ -12,4 +12,7 @@ chmod +x install.sh
 rm install.sh
 
 # Activate the nix command
-echo "experimental-features = nix-command" >> /etc/nix/nix.conf
+echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf
+
+# Create a symbolic link to the nix binary
+ln -s /root/.nix-profile/bin/nix /usr/bin/nix

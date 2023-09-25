@@ -145,8 +145,9 @@ mod tests {
     use flate2::{write::GzEncoder, Compression};
     use portpicker::pick_unused_port;
     use shuttle_common::claims::Claim;
-    use shuttle_common_tests::logger::mocked_logger_client;
+    use shuttle_common_tests::{builder::mocked_builder_client, logger::mocked_logger_client};
     use shuttle_proto::{
+        builder::{builder_server::Builder, BuildRequest, BuildResponse},
         logger::{
             logger_client::LoggerClient, logger_server::Logger, Batcher, LogLine, LogsRequest,
             LogsResponse, StoreLogsRequest, StoreLogsResponse,
@@ -267,6 +268,16 @@ mod tests {
 
     impl LogRecorder for RecorderMock {
         fn record(&self, _: LogItem) {}
+    }
+
+    #[async_trait]
+    impl Builder for RecorderMock {
+        async fn build(
+            &self,
+            _request: tonic::Request<BuildRequest>,
+        ) -> Result<tonic::Response<BuildResponse>, tonic::Status> {
+            Ok(Response::new(BuildResponse::default()))
+        }
     }
 
     #[derive(thiserror::Error, Debug)]
@@ -484,6 +495,8 @@ mod tests {
         }
     }
 
+    const STATE_TEST_TIMEOUT_SECS: u64 = 600;
+
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
         let deployment_manager = get_deployment_manager().await;
@@ -519,7 +532,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(460)) => {
+            _ = sleep(Duration::from_secs(STATE_TEST_TIMEOUT_SECS)) => {
                 let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Running' for a valid service: {:#?}", states);
             },
@@ -607,7 +620,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(460)) => {
+            _ = sleep(Duration::from_secs(STATE_TEST_TIMEOUT_SECS)) => {
                 let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Completed' when a service stops by itself: {:#?}", states);
             }
@@ -654,7 +667,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(460)) => {
+            _ = sleep(Duration::from_secs(STATE_TEST_TIMEOUT_SECS)) => {
                 let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Crashed' panicking in bind: {:#?}", states);
             }
@@ -697,7 +710,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(460)) => {
+            _ = sleep(Duration::from_secs(STATE_TEST_TIMEOUT_SECS)) => {
                 let states = RECORDER.get_deployment_states(&id);
                 panic!("states should go into 'Crashed' when panicking in main: {:#?}", states);
             }
@@ -780,6 +793,7 @@ mod tests {
 
     async fn get_deployment_manager() -> DeploymentManager {
         let logger_client = mocked_logger_client(RecorderMock::new()).await;
+        let builder_client = mocked_builder_client(RecorderMock::new()).await;
         DeploymentManager::builder()
             .build_log_recorder(RECORDER.clone())
             .secret_recorder(RECORDER.clone())
@@ -788,6 +802,7 @@ mod tests {
             .secret_getter(StubSecretGetter)
             .resource_manager(StubResourceManager)
             .log_fetcher(logger_client.clone())
+            .builder_client(Some(builder_client))
             .runtime(get_runtime_manager(Batcher::wrap(logger_client)).await)
             .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)

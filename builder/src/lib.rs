@@ -1,9 +1,8 @@
 use std::{
     collections::BTreeMap,
     fs::{self, remove_file},
-    io::Read,
+    io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
-    process::Stdio,
 };
 
 use async_trait::async_trait;
@@ -16,10 +15,7 @@ use shuttle_proto::builder::{
 use tar::Archive;
 use tempfile::tempdir;
 use thiserror::Error;
-use tokio::{
-    io::{AsyncBufReadExt, BufReader},
-    process::Command,
-};
+use tokio::process::Command;
 use tonic::{Request, Response, Status};
 use tracing::{debug, error, info, instrument};
 
@@ -56,40 +52,60 @@ impl Service {
         let path = tmp_dir.path();
 
         extract_tar_gz_data(archive.as_slice(), path).await?;
+        info!(deployment_id, "extracted the tar archive content");
+
         let secrets = get_secrets(path).await?;
         build_flake_file(path)?;
+        info!(deployment_id, "created the project flake file successfully");
 
-        let mut cmd = Command::new("nix");
+        let (reader, writer) = os_pipe::pipe()?;
+        let writer_clone = writer.try_clone()?;
         let output_path = path.join("_archive");
-        cmd.args([
-            "build",
-            "--no-write-lock-file",
-            "--impure",
-            "--log-format",
-            "bar-with-logs",
-            "--out-link",
-            output_path.to_str().unwrap(),
-            path.to_str().unwrap(),
-        ])
-        .stdout(Stdio::piped());
+        let mut command = Command::new("nix");
+        command
+            .args([
+                "build",
+                "--no-write-lock-file",
+                "--impure",
+                "--log-format",
+                "bar-with-logs",
+                "--out-link",
+                output_path.to_str().unwrap(),
+                path.to_str().unwrap(),
+            ])
+            .stdout(writer)
+            .stderr(writer_clone);
+        let mut child = command.spawn()?;
 
-        let mut child = cmd.spawn()?;
-        let stdout = child.stdout.take().expect("to get handle on stdout");
+        // Avoid a deadlock.
+        drop(command);
 
-        let mut reader = BufReader::new(stdout).lines();
-
-        let id = deployment_id.clone();
-        tokio::spawn(async move {
-            while let Some(line) = reader.next_line().await.expect("to get line") {
-                info!(deployment_id = %id, "{line}");
+        let reader = BufReader::new(reader);
+        for line in reader.lines() {
+            match line {
+                Ok(line) => {
+                    info!(deployment_id, "{line}")
+                }
+                Err(err) => {
+                    error!(
+                        deployment_id,
+                        "unexpected stdout/stderr stream close: {}", err
+                    );
+                }
             }
-        });
+        }
 
         let status = child.wait().await.expect("build to finish");
 
         debug!(deployment_id, "{status}");
 
-        let archive = fs::read(output_path)?;
+        let archive_path = fs::read_link(output_path)?;
+        info!(
+            deployment_id,
+            "built image path: {}",
+            archive_path.display()
+        );
+        let archive = fs::read(archive_path)?;
 
         Ok((archive, secrets))
     }

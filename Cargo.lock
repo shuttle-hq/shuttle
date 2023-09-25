@@ -5653,6 +5653,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shuttle-common",
+ "shuttle-orchestrator",
  "shuttle-proto",
  "snailquote",
  "sqlx",
@@ -5699,6 +5700,10 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
 ]
+
+[[package]]
+name = "shuttle-orchestrator"
+version = "0.27.0"
 
 [[package]]
 name = "shuttle-proto"

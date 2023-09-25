@@ -11,6 +11,7 @@ members = [
   "deployer",
   "gateway",
   "logger",
+  "orchestrator",
   "proto",
   "provisioner",
   "resource-recorder",
@@ -35,6 +36,7 @@ repository = "https://github.com/shuttle-hq/shuttle"
 shuttle-codegen = { path = "codegen", version = "0.27.0" }
 shuttle-common = { path = "common", version = "0.27.0" }
 shuttle-common-tests = { path = "common-tests", version = "0.27.0" }
+shuttle-orchestrator = { path = "orchestrator", version = "0.27.0" }
 shuttle-proto = { path = "proto", version = "0.27.0" }
 shuttle-service = { path = "service", version = "0.27.0" }
 

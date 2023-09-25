@@ -31,7 +31,6 @@ services:
     ports:
       - 8007:8000
     depends_on:
-      - auth
       - control-db
     entrypoint:
       - /bin/bash

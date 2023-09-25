@@ -6,9 +6,13 @@ use chrono::Utc;
 use error::{Error, Result};
 use hyper::Uri;
 use shuttle_common::claims::{Claim, ClaimLayer, InjectPropagationLayer};
-use shuttle_proto::resource_recorder::{
-    record_request, resource_recorder_client::ResourceRecorderClient, RecordRequest,
-    ResourcesResponse, ResultResponse, ServiceResourcesRequest,
+use shuttle_proto::{
+    provisioner::provisioner_client::ProvisionerClient,
+    resource_recorder::{
+        record_request, resource_recorder_client::ResourceRecorderClient, DeleteResourceRequest,
+        GetResourceRequest, RecordRequest, ResourceResponse, ResourcesResponse, ResultResponse,
+        ServiceResourcesRequest,
+    },
 };
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
@@ -56,6 +60,7 @@ pub struct Persistence {
             >,
         >,
     >,
+    provisioner_client: ProvisionerClient<tonic::transport::Channel>,
     project_id: Ulid,
 }
 
@@ -67,6 +72,7 @@ impl Persistence {
     pub async fn new(
         path: &str,
         resource_recorder_uri: &Uri,
+        provisioner_address: Endpoint,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
         if !Path::new(path).exists() {
@@ -96,7 +102,13 @@ impl Persistence {
 
         let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
 
-        Self::configure(pool, resource_recorder_uri.to_string(), project_id).await
+        Self::configure(
+            pool,
+            resource_recorder_uri.to_string(),
+            provisioner_address,
+            project_id,
+        )
+        .await
     }
 
     #[cfg(test)]
@@ -116,6 +128,12 @@ impl Persistence {
             pool,
             state_send,
             resource_recorder_client: None,
+            provisioner_client: ProvisionerClient::new(
+                Endpoint::from_static("http://localhost:5000")
+                    .connect()
+                    .await
+                    .unwrap(),
+            ),
             project_id: Ulid::new(),
         };
 
@@ -125,6 +143,7 @@ impl Persistence {
     async fn configure(
         pool: SqlitePool,
         resource_recorder_uri: String,
+        provisioner_address: Endpoint,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
         let channel = Endpoint::from_shared(resource_recorder_uri.to_string())
@@ -137,7 +156,14 @@ impl Persistence {
             .layer(ClaimLayer)
             .layer(InjectPropagationLayer)
             .service(channel);
+
+        let provisioner_channel = provisioner_address
+            .connect()
+            .await
+            .expect("failed to connect to provisioner");
+
         let resource_recorder_client = ResourceRecorderClient::new(channel);
+        let provisioner_client = ProvisionerClient::new(provisioner_channel);
 
         let (state_send, handle) = Self::from_pool(pool.clone()).await;
 
@@ -145,6 +171,7 @@ impl Persistence {
             pool,
             state_send,
             resource_recorder_client: Some(resource_recorder_client),
+            provisioner_client,
             project_id,
         };
 
@@ -470,30 +497,49 @@ impl ResourceManager for Persistence {
     async fn get_resource(
         &self,
         service_id: &Ulid,
-        r#type: ResourceType,
+        r#type: String,
         claim: Claim,
-    ) -> Result<Option<Resource>> {
-        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ? AND type = ?"#)
-            .bind(service_id.to_string())
-            .bind(r#type)
-            .fetch_optional(&self.pool)
+    ) -> Result<ResourceResponse> {
+        let mut get_resource_req = tonic::Request::new(GetResourceRequest {
+            service_id: service_id.to_string(),
+            r#type,
+        });
+
+        get_resource_req.extensions_mut().insert(claim);
+
+        return self
+            .resource_recorder_client
+            .as_mut()
+            .expect("to have the resource recorder set up")
+            .get_resource(get_resource_req)
             .await
             .map_err(Error::from)
+            .map(|res| res.into_inner());
     }
 
     async fn delete_resource(
         &self,
         service_id: &Ulid,
-        r#type: ResourceType,
+        resource_type: String,
         claim: Claim,
-    ) -> Result<()> {
-        sqlx::query(r#"DELETE FROM resources WHERE service_id = ? AND type = ?"#)
-            .bind(service_id.to_string())
-            .bind(r#type)
-            .execute(&self.pool)
+    ) -> Result<ResultResponse> {
+        // TODO: Delete resource from provisioner
+
+        let mut delete_resource_req = tonic::Request::new(DeleteResourceRequest {
+            service_id: service_id.to_string(),
+            r#type: resource_type.to_string(),
+        });
+
+        delete_resource_req.extensions_mut().insert(claim);
+
+        return self
+            .resource_recorder_client
+            .as_mut()
+            .expect("to have the resource recorder set up")
+            .delete_resource(delete_resource_req)
             .await
-            .map(|_| ())
-            .map_err(Error::from)
+            .map(|res| res.into_inner())
+            .map_err(Error::from);
     }
 }
 

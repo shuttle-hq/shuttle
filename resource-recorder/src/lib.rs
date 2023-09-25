@@ -3,8 +3,9 @@ use dal::{Dal, DalError, Resource};
 use prost_types::TimestampError;
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
 use shuttle_proto::resource_recorder::{
-    self, resource_recorder_server::ResourceRecorder, ProjectResourcesRequest, RecordRequest,
-    ResourceResponse, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
+    self, resource_recorder_server::ResourceRecorder, DeleteResourceRequest, GetResourceRequest,
+    ProjectResourcesRequest, RecordRequest, ResourceResponse, ResourcesResponse, ResultResponse,
+    ServiceResourcesRequest,
 };
 use thiserror::Error;
 use tonic::{Request, Response, Status};
@@ -92,15 +93,18 @@ where
     /// Get a resource
     async fn get_resource(
         &self,
-        resource: resource_recorder::Resource,
+        resource: GetResourceRequest,
     ) -> Result<resource_recorder::Resource, Error> {
-        let resource = self.dal.get_resource(&resource.try_into()?).await?;
+        let resource_option = self.dal.get_resource(&resource.try_into()?).await?;
 
-        Ok(resource.into())
+        match resource_option {
+            Some(resource) => Ok(resource.into()),
+            None => Err(Error::String("not found".to_string())),
+        }
     }
 
     /// Delete a resource
-    async fn delete_resource(&self, resource: resource_recorder::Resource) -> Result<(), Error> {
+    async fn delete_resource(&self, resource: GetResourceRequest) -> Result<(), Error> {
         self.dal.delete_resource(&resource.try_into()?).await?;
 
         Ok(())
@@ -181,7 +185,7 @@ where
 
     async fn get_resource(
         &self,
-        request: Request<resource_recorder::Resource>,
+        request: tonic::Request<GetResourceRequest>,
     ) -> Result<Response<ResourceResponse>, Status> {
         request.verify(Scope::Resources)?;
 
@@ -204,7 +208,7 @@ where
 
     async fn delete_resource(
         &self,
-        request: Request<resource_recorder::Resource>,
+        request: tonic::Request<DeleteResourceRequest>,
     ) -> Result<Response<ResultResponse>, Status> {
         request.verify(Scope::ResourcesWrite)?;
 

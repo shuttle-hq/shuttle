@@ -13,7 +13,10 @@ use bytes::{BufMut, Bytes};
 use chrono::{SecondsFormat, Utc};
 use fqdn::FQDN;
 use hyper::{Request, StatusCode, Uri};
-use serde::{de::DeserializeOwned, Deserialize};
+use serde::{
+    de::{self, DeserializeOwned},
+    Deserialize,
+};
 use tracing::{error, field, info, info_span, instrument, trace, warn};
 use ulid::Ulid;
 use utoipa::{IntoParams, OpenApi};
@@ -29,12 +32,7 @@ use shuttle_common::models::deployment::{
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{request_span, LogItem};
-use shuttle_proto::{
-    logger::LogsRequest,
-    resource_recorder::{
-        self, resource_recorder_client, resource_recorder_server::ResourceRecorder,
-    },
-};
+use shuttle_proto::logger::LogsRequest;
 use shuttle_service::builder::clean_crate;
 
 use crate::persistence::{Deployment, Persistence, SecretGetter, State};
@@ -349,8 +347,7 @@ pub async fn get_service_resources(
     )
 )]
 pub async fn delete_service_resource(
-    Extension(mut persistence): Extension<Persistence>,
-    // Extension(mut resource_manager): Extension<dyn ResourceManager>,
+    Extension(persistence): Extension<Persistence>,
     Extension(claim): Extension<Claim>,
     Path((project_name, service_name, resource_type)): Path<(String, String, String)>,
 ) -> Result<()> {
@@ -359,30 +356,23 @@ pub async fn delete_service_resource(
         .await?
         .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
 
-    let resource_type: shuttle_common::resource::Type =
-        resource_type
-            .parse()
-            .map_err(|e: resource::ParseError| Error::Convert {
-                from: "String".to_string(),
-                to: "ResourceType".to_string(),
-                message: e.to_string(),
-            })?;
-
-    let persistence_resource_type = resource_type.into();
-
-    persistence
-        .get_resource(&service.id, persistence_resource_type, claim)
-        .await?
-        .ok_or_else(|| Error::NotFound("resource not found".to_string()))?;
-
-    // resource_recorder_client
-    // resource_manager
-    //     .delete_resource(&project_name, &resource_type)
-    //     .await
-    //     .map_err(|e| Error::Custom(e.into()))?;
-    persistence
-        .delete_resource(&service.id, persistence_resource_type, claim)
+    let get_resource_response = persistence
+        .get_resource(&service.id, resource_type.clone(), claim.clone())
         .await?;
+
+    if get_resource_response.resource.is_none() {
+        return Err(Error::NotFound("resource not found".to_string()));
+    }
+
+    let delete_resource_response = persistence
+        .delete_resource(&service.id, resource_type, claim)
+        .await?;
+
+    if !delete_resource_response.success {
+        return Err(Error::NotFound(
+            "Unable to delete resource from resource recorder".to_string(),
+        ));
+    }
 
     Ok(())
 }

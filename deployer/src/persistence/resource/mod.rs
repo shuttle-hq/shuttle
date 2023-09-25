@@ -31,15 +31,15 @@ pub trait ResourceManager: Clone + Send + Sync + 'static {
     async fn get_resource(
         &self,
         service_id: &ulid::Ulid,
-        r#type: Type,
+        r#type: String,
         claim: Claim,
     ) -> Result<ResourceResponse, Self::Err>;
     async fn delete_resource(
         &self,
         service_id: &ulid::Ulid,
-        r#type: Type,
+        r#type: String,
         claim: Claim,
-    ) -> Result<(), Self::Err>;
+    ) -> Result<ResultResponse, Self::Err>;
 }
 
 #[derive(Debug, Eq, PartialEq)]

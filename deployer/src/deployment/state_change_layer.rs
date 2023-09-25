@@ -158,7 +158,7 @@ mod tests {
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
         },
-        resource_recorder::{Resource, ResourcesResponse, ResultResponse},
+        resource_recorder::{Resource, ResourceResponse, ResourcesResponse, ResultResponse},
     };
     use tokio::{select, sync::mpsc, time::sleep};
     use tokio_stream::wrappers::ReceiverStream;
@@ -482,19 +482,26 @@ mod tests {
         async fn get_resource(
             &self,
             _service_id: &ulid::Ulid,
-            _type: ResourceType,
+            _type: String,
             _claim: Claim,
-        ) -> Result<Option<Vec<Resource>>, Self::Err> {
-            Ok(None)
+        ) -> Result<ResourceResponse, Self::Err> {
+            Ok(ResourceResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+                resource: None,
+            })
         }
 
         async fn delete_resource(
             &self,
             _service_id: &ulid::Ulid,
-            _type: ResourceType,
+            _type: String,
             _claim: Claim,
-        ) -> Result<(), Self::Err> {
-            Ok(())
+        ) -> Result<ResultResponse, Self::Err> {
+            Ok(ResultResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+            })
         }
     }
 

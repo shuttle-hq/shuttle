@@ -115,14 +115,14 @@ impl Shuttle {
 
         if !Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(format!(
-                "Default port {} is already in use. Would you like to continue on port {}?",
+                "Port {} is already in use. Would you like to continue on port {}?",
                 run_args.port, available_port
             ))
             .default(true)
             .interact()
             .unwrap()
         {
-            exit(1);
+            exit(0);
         }
         run_args.port = available_port;
     }

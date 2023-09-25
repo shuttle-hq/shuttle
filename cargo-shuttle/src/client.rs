@@ -19,18 +19,34 @@ use uuid::Uuid;
 pub struct Client {
     api_url: ApiUrl,
     api_key: Option<ApiKey>,
+    client: reqwest::Client,
+    retry_client: ClientWithMiddleware,
 }
 
 impl Client {
     pub fn new(api_url: ApiUrl) -> Self {
+        let client = reqwest::Client::new();
+        let retry_client = ClientBuilder::new(client.clone())
+            .with(RetryTransientMiddleware::new_with_policy(
+                ExponentialBackoff::builder().build_with_max_retries(3),
+            ))
+            .build();
         Self {
             api_url,
             api_key: None,
+            client,
+            retry_client,
         }
     }
 
     pub fn set_api_key(&mut self, api_key: ApiKey) {
         self.api_key = Some(api_key);
+    }
+
+    pub async fn check_api_compatibility(&self) -> Result<String> {
+        let url = format!("{}/version/cargo-shuttle", self.api_url);
+
+        Ok(self.client.get(url).send().await?.text().await?)
     }
 
     pub async fn deploy(
@@ -47,7 +63,7 @@ impl Client {
             .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 
         let url = format!("{}{}", self.api_url, path);
-        let mut builder = Self::get_retry_client().post(url);
+        let mut builder = self.retry_client.post(url);
         builder = self.set_builder_auth(builder);
 
         builder
@@ -234,7 +250,7 @@ impl Client {
     {
         let url = format!("{}{}", self.api_url, path);
 
-        let mut builder = Self::get_retry_client().get(url);
+        let mut builder = self.retry_client.get(url);
 
         builder = self.set_builder_auth(builder);
 
@@ -249,7 +265,7 @@ impl Client {
     async fn post<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path);
 
-        let mut builder = Self::get_retry_client().post(url);
+        let mut builder = self.retry_client.post(url);
 
         builder = self.set_builder_auth(builder);
 
@@ -265,7 +281,7 @@ impl Client {
     async fn put<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path);
 
-        let mut builder = Self::get_retry_client().put(url);
+        let mut builder = self.retry_client.put(url);
 
         builder = self.set_builder_auth(builder);
 
@@ -284,7 +300,7 @@ impl Client {
     {
         let url = format!("{}{}", self.api_url, path);
 
-        let mut builder = Self::get_retry_client().delete(url);
+        let mut builder = self.retry_client.delete(url);
 
         builder = self.set_builder_auth(builder);
 
@@ -302,13 +318,5 @@ impl Client {
         } else {
             builder
         }
-    }
-
-    fn get_retry_client() -> ClientWithMiddleware {
-        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-
-        ClientBuilder::new(reqwest::Client::new())
-            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-            .build()
     }
 }

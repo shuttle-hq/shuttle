@@ -209,6 +209,18 @@ pub fn ulid_type() -> Object {
         .build()
 }
 
+/// Check if two versions are compatible based on the rule used by cargo:
+/// "Versions `a` and `b` are compatible if their left-most nonzero digit is the same."
+pub fn semvers_are_compatible(a: &semver::Version, b: &semver::Version) -> bool {
+    if a.major != 0 || b.major != 0 {
+        a.major == b.major
+    } else if a.minor != 0 || b.minor != 0 {
+        a.minor == b.minor
+    } else {
+        a.patch == b.patch
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,5 +265,23 @@ mod tests {
         assert_eq!(iter.next(), Some(("1".to_owned(), "2".to_owned())));
         assert_eq!(iter.next(), Some(("3".to_owned(), "4".to_owned())));
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn semver_compatibility_check_works() {
+        let semver_tests = &[
+            ("1.0.0", "1.0.0", true),
+            ("1.8.0", "1.0.0", true),
+            ("0.1.0", "0.2.1", false),
+            ("0.9.0", "0.2.0", false),
+        ];
+        for (version_a, version_b, are_compatible) in semver_tests {
+            let version_a = semver::Version::from_str(version_a).unwrap();
+            let version_b = semver::Version::from_str(version_b).unwrap();
+            assert_eq!(
+                super::semvers_are_compatible(&version_a, &version_b),
+                *are_compatible
+            );
+        }
     }
 }

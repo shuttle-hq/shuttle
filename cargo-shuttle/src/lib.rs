@@ -28,7 +28,7 @@ use shuttle_common::{
         secret,
     },
     project::ProjectName,
-    resource, ApiKey, LogItem,
+    resource, semvers_are_compatible, ApiKey, LogItem,
 };
 use shuttle_proto::runtime::{
     self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest,
@@ -53,7 +53,7 @@ use globset::{Glob, GlobSetBuilder};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
-use indoc::printdoc;
+use indoc::{formatdoc, printdoc};
 use std::fmt::Write as FmtWrite;
 use strum::IntoEnumIterator;
 use tar::Builder;
@@ -81,12 +81,13 @@ const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/shut
 
 pub struct Shuttle {
     ctx: RequestContext,
+    client: Option<Client>,
 }
 
 impl Shuttle {
     pub fn new() -> Result<Self> {
         let ctx = RequestContext::load_global()?;
-        Ok(Self { ctx })
+        Ok(Self { ctx, client: None })
     }
 
     pub async fn parse_args_and_run(self) -> Result<CommandOutcome> {
@@ -117,6 +118,7 @@ impl Shuttle {
                 eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");
             }
         }
+        self.ctx.set_api_url(args.api_url);
 
         // All commands that need to know which project is being handled
         if matches!(
@@ -141,7 +143,24 @@ impl Shuttle {
             self.load_project(&args.project_args)?;
         }
 
-        self.ctx.set_api_url(args.api_url);
+        // All commands that call the API
+        if matches!(
+            args.cmd,
+            Command::Deploy(..)
+                | Command::Status
+                | Command::Logs { .. }
+                | Command::Deployment(..)
+                | Command::Resource(..)
+                | Command::Stop
+                | Command::Clean
+                | Command::Secrets
+                | Command::Project(..)
+        ) {
+            let mut client = Client::new(self.ctx.api_url());
+            client.set_api_key(self.ctx.api_key()?);
+            self.client = Some(client);
+            self.check_api_version().await?;
+        }
 
         match args.cmd {
             Command::Init(init_args) => {
@@ -154,43 +173,73 @@ impl Shuttle {
             Command::Feedback => self.feedback().await,
             Command::Run(run_args) => self.local_run(run_args).await,
             Command::Deploy(deploy_args) => {
-                return self.deploy(&self.client()?, deploy_args).await;
+                return self.deploy(deploy_args).await;
             }
-            Command::Status => self.status(&self.client()?).await,
-            Command::Logs { id, latest, follow } => {
-                self.logs(&self.client()?, id, latest, follow).await
-            }
+            Command::Status => self.status().await,
+            Command::Logs { id, latest, follow } => self.logs(id, latest, follow).await,
             Command::Deployment(DeploymentCommand::List { page, limit }) => {
-                self.deployments_list(&self.client()?, page, limit).await
+                self.deployments_list(page, limit).await
             }
-            Command::Deployment(DeploymentCommand::Status { id }) => {
-                self.deployment_get(&self.client()?, id).await
-            }
-            Command::Resource(ResourceCommand::List) => self.resources_list(&self.client()?).await,
-            Command::Stop => self.stop(&self.client()?).await,
-            Command::Clean => self.clean(&self.client()?).await,
-            Command::Secrets => self.secrets(&self.client()?).await,
+            Command::Deployment(DeploymentCommand::Status { id }) => self.deployment_get(id).await,
+            Command::Resource(ResourceCommand::List) => self.resources_list().await,
+            Command::Stop => self.stop().await,
+            Command::Clean => self.clean().await,
+            Command::Secrets => self.secrets().await,
             Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
-                self.project_create(&self.client()?, idle_minutes).await
+                self.project_create(idle_minutes).await
             }
             Command::Project(ProjectCommand::Restart(ProjectStartArgs { idle_minutes })) => {
-                self.project_recreate(&self.client()?, idle_minutes).await
+                self.project_recreate(idle_minutes).await
             }
             Command::Project(ProjectCommand::Status { follow }) => {
-                self.project_status(&self.client()?, follow).await
+                self.project_status(follow).await
             }
             Command::Project(ProjectCommand::List { page, limit }) => {
-                self.projects_list(&self.client()?, page, limit).await
+                self.projects_list(page, limit).await
             }
-            Command::Project(ProjectCommand::Stop) => self.project_delete(&self.client()?).await,
+            Command::Project(ProjectCommand::Stop) => self.project_delete().await,
         }
         .map(|_| CommandOutcome::Ok)
     }
 
-    fn client(&self) -> Result<Client> {
-        let mut client = Client::new(self.ctx.api_url());
-        client.set_api_key(self.ctx.api_key()?);
-        Ok(client)
+    async fn check_api_version(&self) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
+        if let Ok(gateway_version) = client.check_api_compatibility().await {
+            let my_version = semver::Version::from_str("0.27.1").unwrap();
+            let gw_version = semver::Version::from_str(&gateway_version)
+                .context("parsing API semver version")?;
+            if my_version != gw_version {
+                let newer_version_exists = my_version < gw_version;
+                if semvers_are_compatible(&my_version, &gw_version) {
+                    if newer_version_exists {
+                        let s = format!(
+                            "Info: A newer version of cargo-shuttle exists ({gw_version})."
+                        );
+                        println!("{}", s.yellow());
+                    }
+                    // Having a too new but compatible version does not show warning
+                } else {
+                    let s = if newer_version_exists {
+                        formatdoc! {"
+                            Warning:
+                                A newer version of cargo-shuttle exists ({gw_version}).
+                                It is recommended to upgrade.
+                                Refer to the upgrading docs: https://docs.shuttle.rs/configuration/shuttle-versions#upgrading-shuttle-version
+                            "
+                        }
+                    } else {
+                        formatdoc! {"
+                            Warning:
+                                Your version of cargo-shuttle ({my_version}) is newer than what the API expects ({gw_version}).
+                                Things might not work until the API is updated.
+                            "
+                        }
+                    };
+                    println!("{}", s.red());
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Log in, initialize a project and potentially create the Shuttle environment for it.
@@ -340,8 +389,7 @@ impl Shuttle {
             project_args.working_directory = path.clone();
 
             self.load_project(&project_args)?;
-            self.project_create(&self.client()?, DEFAULT_IDLE_MINUTES)
-                .await?;
+            self.project_create(DEFAULT_IDLE_MINUTES).await?;
         }
 
         if std::env::current_dir().is_ok_and(|d| d != path) {
@@ -403,7 +451,7 @@ impl Shuttle {
 
     async fn logout(&mut self, logout_args: LogoutArgs) -> Result<()> {
         if logout_args.reset_api_key {
-            self.reset_api_key(&self.client()?)
+            self.reset_api_key()
                 .await
                 .map_err(suggestions::api_key::reset_api_key_failed)?;
             println!("Successfully reset the API key.");
@@ -415,7 +463,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn reset_api_key(&self, client: &Client) -> Result<()> {
+    async fn reset_api_key(&self) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         client.reset_api_key().await.and_then(|res| {
             if res.status().is_success() {
                 Ok(())
@@ -425,7 +474,8 @@ impl Shuttle {
         })
     }
 
-    async fn stop(&self, client: &Client) -> Result<()> {
+    async fn stop(&self) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         let proj_name = self.ctx.project_name();
         let mut service = client
             .stop_service(proj_name)
@@ -464,7 +514,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn status(&self, client: &Client) -> Result<()> {
+    async fn status(&self) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         let summary = client.get_service(self.ctx.project_name()).await?;
 
         println!("{summary}");
@@ -472,7 +523,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn secrets(&self, client: &Client) -> Result<()> {
+    async fn secrets(&self) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         let secrets = client
             .get_secrets(self.ctx.project_name())
             .await
@@ -484,7 +536,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn clean(&self, client: &Client) -> Result<()> {
+    async fn clean(&self) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         let lines = client
             .clean_project(self.ctx.project_name())
             .await
@@ -506,13 +559,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn logs(
-        &self,
-        client: &Client,
-        id: Option<Uuid>,
-        latest: bool,
-        follow: bool,
-    ) -> Result<()> {
+    async fn logs(&self, id: Option<Uuid>, latest: bool, follow: bool) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         let id = if let Some(id) = id {
             id
         } else {
@@ -575,7 +623,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deployments_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
+    async fn deployments_list(&self, page: u32, limit: u32) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         if limit == 0 {
             println!();
             return Ok(());
@@ -594,7 +643,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deployment_get(&self, client: &Client, deployment_id: Uuid) -> Result<()> {
+    async fn deployment_get(&self, deployment_id: Uuid) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         let deployment = client
             .get_deployment_details(self.ctx.project_name(), &deployment_id)
             .await
@@ -605,7 +655,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn resources_list(&self, client: &Client) -> Result<()> {
+    async fn resources_list(&self) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await
@@ -1179,7 +1230,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deploy(&self, client: &Client, args: DeployArgs) -> Result<CommandOutcome> {
+    async fn deploy(&self, args: DeployArgs) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
         let working_directory = self.ctx.working_directory();
 
         let mut deployment_req: DeploymentRequest = DeploymentRequest {
@@ -1219,11 +1271,11 @@ impl Shuttle {
         deployment_req.data = self.make_archive()?;
         if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
             bail!(
-                r#"The project is too large - we have a {} MB project limit. \
-                Your project archive is {} MB. \
+                r#"The project is too large - the limit is {} MB. \
+                Your project archive is {:.1} MB. \
                 Run with `RUST_LOG="cargo_shuttle=debug"` to see which files are being packed."#,
                 CREATE_SERVICE_BODY_LIMIT / 1_000_000,
-                deployment_req.data.len() / 1_000_000,
+                deployment_req.data.len() as f32 / 1_000_000f32,
             );
         }
 
@@ -1337,7 +1389,6 @@ impl Shuttle {
             println!("Run the following for more details");
             println!();
             println!("cargo shuttle logs {}", &deployment.id);
-            println!();
 
             return Ok(CommandOutcome::DeploymentFailure);
         }
@@ -1353,7 +1404,8 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_create(&self, client: &Client, idle_minutes: u64) -> Result<()> {
+    async fn project_create(&self, idle_minutes: u64) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         let config = project::Config { idle_minutes };
 
         if idle_minutes > 0 {
@@ -1393,18 +1445,19 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn project_recreate(&self, client: &Client, idle_minutes: u64) -> Result<()> {
-        self.project_delete(client)
+    async fn project_recreate(&self, idle_minutes: u64) -> Result<()> {
+        self.project_delete()
             .await
             .map_err(suggestions::project::project_restart_failure)?;
-        self.project_create(client, idle_minutes)
+        self.project_create(idle_minutes)
             .await
             .map_err(suggestions::project::project_restart_failure)?;
 
         Ok(())
     }
 
-    async fn projects_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
+    async fn projects_list(&self, page: u32, limit: u32) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         if limit == 0 {
             println!();
             return Ok(());
@@ -1425,7 +1478,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn project_status(&self, client: &Client, follow: bool) -> Result<()> {
+    async fn project_status(&self, follow: bool) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         if follow {
             self.wait_with_spinner(
                 &[
@@ -1458,7 +1512,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn project_delete(&self, client: &Client) -> Result<()> {
+    async fn project_delete(&self) -> Result<()> {
+        let client = self.client.as_ref().unwrap();
         self.wait_with_spinner(
             &[
                 project::State::Destroyed,
@@ -1512,7 +1567,7 @@ impl Shuttle {
 
     fn make_archive(&self) -> Result<Vec<u8>> {
         let include_patterns = self.ctx.assets();
-        let encoder = GzEncoder::new(Vec::new(), Compression::best());
+        let encoder = GzEncoder::new(Vec::new(), Compression::new(3));
         let mut tar = Builder::new(encoder);
 
         let working_directory = self.ctx.working_directory();
@@ -1639,8 +1694,7 @@ impl Shuttle {
 }
 
 fn check_version(runtime_path: &Path) -> Result<()> {
-    let valid_version = semver::Version::from_str(VERSION)
-        .context("failed to convert cargo-shuttle version to semver")?;
+    let my_version = semver::Version::from_str(VERSION).unwrap();
 
     if !runtime_path.try_exists()? {
         bail!("shuttle-runtime is not installed");
@@ -1665,27 +1719,14 @@ fn check_version(runtime_path: &Path) -> Result<()> {
     )
     .context("failed to convert user's runtime version to semver")?;
 
-    if semvers_are_compatible(&valid_version, &runtime_version) {
+    if semvers_are_compatible(&my_version, &runtime_version) {
         Ok(())
     } else {
         Err(VersionMismatchError {
             shuttle_runtime: runtime_version,
-            cargo_shuttle: valid_version,
+            cargo_shuttle: my_version,
         })
         .context("shuttle-runtime and cargo-shuttle have incompatible versions")
-    }
-}
-
-/// Check if two versions are compatible based on the rule used by
-/// cargo: "Versions `a` and `b` are compatible if their left-most
-/// nonzero digit is the same."
-fn semvers_are_compatible(a: &semver::Version, b: &semver::Version) -> bool {
-    if a.major != 0 || b.major != 0 {
-        a.major == b.major
-    } else if a.minor != 0 || b.minor != 0 {
-        a.minor == b.minor
-    } else {
-        a.patch == b.patch
     }
 }
 
@@ -1731,6 +1772,7 @@ fn create_spinner() -> ProgressBar {
     pb
 }
 
+#[derive(PartialEq)]
 pub enum CommandOutcome {
     Ok,
     DeploymentFailure,
@@ -1846,23 +1888,5 @@ mod tests {
             project_args.workspace_path().unwrap(),
             path_from_workspace_root("examples/axum/hello-world")
         );
-    }
-
-    #[test]
-    fn semver_compatibility_check_works() {
-        let semver_tests = &[
-            ("1.0.0", "1.0.0", true),
-            ("1.8.0", "1.0.0", true),
-            ("0.1.0", "0.2.1", false),
-            ("0.9.0", "0.2.0", false),
-        ];
-        for (version_a, version_b, are_compatible) in semver_tests {
-            let version_a = semver::Version::from_str(version_a).unwrap();
-            let version_b = semver::Version::from_str(version_b).unwrap();
-            assert_eq!(
-                super::semvers_are_compatible(&version_a, &version_b),
-                *are_compatible
-            );
-        }
     }
 }

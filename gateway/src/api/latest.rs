@@ -851,6 +851,15 @@ impl ApiBuilder {
         self.router = self
             .router
             .route("/", get(get_status))
+            // version of gateway
+            .route("/version", get(|| async { env!("CARGO_PKG_VERSION") }))
+            // version of cargo-shuttle compatible with this gateway
+            // for now, the same version as gateway
+            // for now, only one version is officially compatible, but more are in reality
+            .route(
+                "/version/cargo-shuttle",
+                get(|| async { env!("CARGO_PKG_VERSION") }),
+            )
             .route(
                 "/projects",
                 get(get_projects_list.layer(ScopedLayer::new(vec![Scope::Project]))),

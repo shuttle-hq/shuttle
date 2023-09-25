@@ -14,10 +14,10 @@ service ResourceRecorder {
   rpc GetServiceResources(ServiceResourcesRequest) returns (ResourcesResponse);
 
   // Get a resource
-  rpc GetResource(Resource) returns (ResourceResponse);
+  rpc GetResource(GetResourceRequest) returns (ResourceResponse);
 
   // Delete a resource
-  rpc DeleteResource(Resource) returns (ResultResponse);
+  rpc DeleteResource(DeleteResourceRequest) returns (ResultResponse);
 }
 
 message RecordRequest {
@@ -58,6 +58,16 @@ message ResourceResponse {
 
 message ServiceResourcesRequest {
   string service_id = 1;
+}
+
+message GetResourceRequest {
+  string service_id = 1;
+  string type = 2;
+}
+
+message DeleteResourceRequest {
+  string service_id = 1;
+  string type = 2;
 }
 
 

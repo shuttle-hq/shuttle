@@ -2,7 +2,7 @@ version: "3"
 
 volumes:
   logger-postgres-vol:
-
+  control-db-postgres-vol:
 
 services:
   provisioner:
@@ -30,6 +30,22 @@ services:
   resource-recorder:
     ports:
       - 8007:8000
+    depends_on:
+      - auth
+      - control-db
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        until </dev/tcp/control-db/5432
+        do
+          >&2 echo "Control DB is not available yet - sleeping"
+          sleep 1
+        done
+
+        >&2 echo "DBs are available - starting shuttle-resource-recorder"
+
+        exec /usr/local/bin/service "$${@:0}"
   otel-collector:
     ports:
       - 4317:4317
@@ -71,3 +87,16 @@ services:
       - 8003:8000
       # the shared postgres already uses 5432
       - 5433:5432
+  control-db:
+    image: "docker.io/library/postgres:${CONTROL_DB_POSTGRES_TAG}"
+    restart: always
+    networks:
+      user-net:
+    environment:
+      POSTGRES_PASSWORD: ${CONTROL_DB_POSTGRES_PASSWORD}
+    volumes:
+      - control-db-postgres-vol:/var/lib/postgresql/data
+    ports:
+      - 8004:8000
+      # the shared postgres already uses 5432
+      - 5434:5432

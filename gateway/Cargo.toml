@@ -61,6 +61,9 @@ features = ["backend", "models", "openapi"]
 [dependencies.shuttle-proto]
 workspace = true
 
+[dependencies.shuttle-orchestrator]
+workspace = true
+
 [dev-dependencies]
 anyhow = { workspace = true }
 colored = { workspace = true }

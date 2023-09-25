@@ -734,10 +734,10 @@ impl Shuttle {
                         );
                     } else {
                         println!(
-                                "[HINT]: A newer version of shuttle-runtime is available. \
-                                Change its version to {} in this project's Cargo.toml to update it.",
-                                mismatch.cargo_shuttle
-                            );
+                            "[HINT]: A newer version of shuttle-runtime is available. \
+                            Change its version to {} in this project's Cargo.toml to update it.",
+                            mismatch.cargo_shuttle
+                        );
                     }
                 }
             }
@@ -1545,7 +1545,7 @@ impl Shuttle {
 
     fn make_archive(&self) -> Result<Vec<u8>> {
         let include_patterns = self.ctx.assets();
-        let encoder = GzEncoder::new(Vec::new(), Compression::fast());
+        let encoder = GzEncoder::new(Vec::new(), Compression::best());
         let mut tar = Builder::new(encoder);
 
         let working_directory = self.ctx.working_directory();

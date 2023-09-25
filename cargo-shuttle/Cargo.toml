@@ -18,7 +18,7 @@ clap = { workspace = true, features = ["env"] }
 clap_complete = "4.3.1"
 crossbeam-channel = { workspace = true }
 crossterm = { workspace = true }
-dialoguer = { version = "0.10.4", features = ["fuzzy-select"] }
+dialoguer = { version = "0.11.0", features = ["fuzzy-select"] }
 dirs = { workspace = true }
 dunce = { workspace = true }
 flate2 = { workspace = true }
@@ -34,7 +34,7 @@ openssl = { version = "0.10", optional = true }
 portpicker = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = "0.2.0"
-reqwest-retry = "0.2.0"
+reqwest-retry = "0.3.0"
 rmp-serde = { workspace = true }
 semver = "1.0.17"
 serde = { workspace = true, features = ["derive"] }

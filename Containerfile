@@ -88,6 +88,8 @@ ARG RUSTUP_TOOLCHAIN
 ENV RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN}
 # Used as env variable in prepare script
 ARG PROD
+# Easy way to check if you are running in Shuttle's container
+ARG SHUTTLE=true
 COPY deployer/prepare.sh /prepare.sh
 RUN /prepare.sh "${prepare_args}"
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-deployer /usr/local/bin/service

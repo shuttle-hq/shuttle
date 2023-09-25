@@ -1,13 +1,12 @@
 use std::{
-    fs::{read_to_string, OpenOptions},
-    io::{ErrorKind, Write},
+    fmt::Write,
+    fs::read_to_string,
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use cargo_generate::{GenerateArgs, TemplatePath, Vcs};
 use git2::Repository;
-use indoc::indoc;
 use shuttle_common::project::ProjectName;
 use toml_edit::{value, Document};
 
@@ -46,67 +45,66 @@ pub fn cargo_generate(path: PathBuf, name: &ProjectName, temp_loc: TemplateLocat
 
     set_crate_name(&path, name.as_str())
         .with_context(|| "Failed to set crate name. No Cargo.toml in template?")?;
-    remove_shuttle_toml(&path);
+    edit_shuttle_toml(&path).with_context(|| "Failed to edit Shuttle.toml.")?;
     create_gitignore_file(&path).with_context(|| "Failed to create .gitignore file.")?;
 
     Ok(())
 }
 
-// since I can't get cargo-generate to do this for me...
 fn set_crate_name(path: &Path, name: &str) -> Result<()> {
-    // read the Cargo.toml file
-    let mut path = path.to_path_buf();
-    path.push("Cargo.toml");
-
+    let path = path.join("Cargo.toml");
     let toml_str = read_to_string(&path)?;
     let mut doc = toml_str.parse::<Document>()?;
 
     // change the name
     doc["package"]["name"] = value(name);
 
-    // write the Cargo.toml file back out
+    // write the file back out
     std::fs::write(&path, doc.to_string())?;
 
     Ok(())
 }
 
-/*
-Currently Shuttle.toml only has a project name override.
-This project name will already be in use, so the file is useless.
+fn edit_shuttle_toml(path: &Path) -> Result<()> {
+    let path = path.join("Shuttle.toml");
+    if !path.exists() {
+        // Do nothing if template has no Shuttle.toml
+        return Ok(());
+    }
+    let toml_str = read_to_string(&path)?;
+    let mut doc = toml_str.parse::<Document>()?;
 
-If we start putting more things in Shuttle.toml we may wish to re-evaluate.
-*/
-fn remove_shuttle_toml(path: &Path) {
-    let mut path = path.to_path_buf();
-    path.push("Shuttle.toml");
+    // The Shuttle.toml project name override will likely already be in use,
+    // so that field is not wanted in a newly cloned template.
 
-    // this file only exists for some of the examples, it's fine if we don't find it
-    _ = std::fs::remove_file(path);
+    // remove the name
+    doc.remove("name");
+
+    if doc.len() == 0 {
+        // if "name" was the only property in the doc, delete the file
+        let _ = std::fs::remove_file(&path);
+
+        return Ok(());
+    }
+
+    // write the file back out
+    std::fs::write(&path, doc.to_string())?;
+
+    Ok(())
 }
 
+/// Adds any missing recommended gitignore rules
 fn create_gitignore_file(path: &Path) -> Result<()> {
-    let mut path = path.to_path_buf();
-    path.push(".gitignore");
+    let path = path.join(".gitignore");
+    let mut contents = std::fs::read_to_string(&path).unwrap_or_default();
 
-    let mut file = match OpenOptions::new().create_new(true).write(true).open(path) {
-        Ok(f) => f,
-        Err(e) => {
-            match e.kind() {
-                ErrorKind::AlreadyExists => {
-                    // if the example already has a .gitignore file, just use that
-                    return Ok(());
-                }
-                _ => {
-                    return Err(anyhow!(e));
-                }
-            }
+    for rule in ["/target", ".shuttle-storage", "Secrets*.toml"] {
+        if !contents.lines().any(|l| l == rule) {
+            writeln!(&mut contents, "{rule}")?;
         }
-    };
+    }
 
-    file.write_all(indoc! {b"
-        /target
-        Secrets*.toml
-    "})?;
+    std::fs::write(&path, contents)?;
 
     Ok(())
 }

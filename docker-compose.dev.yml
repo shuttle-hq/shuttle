@@ -38,11 +38,29 @@ services:
       - |
         until </dev/tcp/control-db/5432
         do
-          >&2 echo "Control DB is not available yet - sleeping"
+          >&2 echo "The control DB is not available yet - sleeping"
           sleep 1
         done
 
-        >&2 echo "DBs are available - starting shuttle-resource-recorder"
+        >&2 echo "The control DB is available - starting shuttle-resource-recorder"
+
+        exec /usr/local/bin/service "$${@:0}"
+  auth-dev:
+    ports:
+      - 8006:8000
+    depends_on:
+      - control-db
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        until </dev/tcp/control-db/5432
+        do
+          >&2 echo "The control DB is not available yet - sleeping"
+          sleep 1
+        done
+
+        >&2 echo "The control DB is available - starting shuttle-auth"
 
         exec /usr/local/bin/service "$${@:0}"
   otel-collector:

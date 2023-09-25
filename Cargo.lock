@@ -5701,6 +5701,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-orchestrator"
+version = "0.27.0"
+
+[[package]]
 name = "shuttle-proto"
 version = "0.27.0"
 dependencies = [

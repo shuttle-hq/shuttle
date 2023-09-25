@@ -11,6 +11,7 @@ members = [
   "deployer",
   "gateway",
   "logger",
+  "orchestrator",
   "proto",
   "provisioner",
   "resource-recorder",

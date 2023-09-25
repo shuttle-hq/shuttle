@@ -1,7 +1,9 @@
 pub mod database;
 
 use shuttle_common::claims::Claim;
-use shuttle_proto::resource_recorder::{record_request, ResourcesResponse, ResultResponse};
+use shuttle_proto::resource_recorder::{
+    record_request, ResourceResponse, ResourcesResponse, ResultResponse,
+};
 use sqlx::{
     sqlite::{SqliteArgumentValue, SqliteRow, SqliteValueRef},
     Database, FromRow, Row, Sqlite,
@@ -31,7 +33,7 @@ pub trait ResourceManager: Clone + Send + Sync + 'static {
         service_id: &ulid::Ulid,
         r#type: Type,
         claim: Claim,
-    ) -> Result<Option<Resource>, Self::Err>;
+    ) -> Result<ResourceResponse, Self::Err>;
     async fn delete_resource(
         &self,
         service_id: &ulid::Ulid,

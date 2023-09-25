@@ -754,6 +754,8 @@ workflows:
           filters:
             branches:
               only: production
+  unstable:
+    jobs:
       - approve-push-unstable:
           type: approval
           filters:
@@ -766,9 +768,6 @@ workflows:
           production: false
           requires:
             - approve-push-unstable
-          filters:
-            branches:
-              only: main
       - deploy-images:
           name: Deploy images to unstable
           postgres-password: DEV_POSTGRES_PASSWORD
@@ -831,9 +830,6 @@ workflows:
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac
-          filters:
-            branches:
-              only: production
       - approve-push-production:
           type: approval
           filters:
@@ -846,9 +842,6 @@ workflows:
           production: true
           requires:
             - approve-push-production
-          filters:
-            branches:
-              only: production
       - deploy-images:
           name: deploy-images-to-production
           postgres-password: PROD_POSTGRES_PASSWORD
@@ -862,9 +855,6 @@ workflows:
           production: true
           requires:
             - build-and-push-production
-          filters:
-            branches:
-              only: production
       - approve-publish-crates:
           type: approval
           filters:
@@ -879,9 +869,6 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - approve-publish-crates
-          filters:
-            branches:
-              only: production
       - publish-crates:
           matrix:
             parameters:
@@ -891,9 +878,6 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-common
-          filters:
-            branches:
-              only: production
       - publish-crates:
           matrix:
             parameters:
@@ -909,9 +893,6 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-service
-          filters:
-            branches:
-              only: production
       - publish-crates:
           matrix:
             parameters:
@@ -931,6 +912,3 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-runtime
-          filters:
-            branches:
-              only: production

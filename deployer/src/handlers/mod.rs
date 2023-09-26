@@ -9,22 +9,25 @@ use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
 use axum::routing::{delete, get, post, Router};
 use axum::Json;
-use bytes::{BufMut, Bytes};
+use bytes::Bytes;
 use chrono::{SecondsFormat, Utc};
 use fqdn::FQDN;
 use hyper::{Request, StatusCode, Uri};
-use serde::{
-    de::{self, DeserializeOwned},
-    Deserialize,
-};
+use serde::{de::DeserializeOwned, Deserialize};
 use tracing::{error, field, info, info_span, instrument, trace, warn};
 use ulid::Ulid;
 use utoipa::{IntoParams, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
-use shuttle_common::backends::headers::XShuttleAccountName;
-use shuttle_common::backends::metrics::{Metrics, TraceLayer};
+use shuttle_common::backends::{
+    auth::{AdminSecretLayer, ScopedLayer},
+    headers::XShuttleAccountName,
+};
+use shuttle_common::backends::{
+    auth::{AuthPublicKey, JwtAuthenticationLayer},
+    metrics::{Metrics, TraceLayer},
+};
 use shuttle_common::claims::{Claim, Scope};
 use shuttle_common::models::deployment::{
     DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
@@ -347,7 +350,7 @@ pub async fn get_service_resources(
     )
 )]
 pub async fn delete_service_resource(
-    Extension(persistence): Extension<Persistence>,
+    Extension(mut persistence): Extension<Persistence>,
     Extension(claim): Extension<Claim>,
     Path((project_name, service_name, resource_type)): Path<(String, String, String)>,
 ) -> Result<()> {

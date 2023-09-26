@@ -495,7 +495,7 @@ impl ResourceManager for Persistence {
     }
 
     async fn get_resource(
-        &self,
+        &mut self,
         service_id: &Ulid,
         r#type: String,
         claim: Claim,
@@ -518,7 +518,7 @@ impl ResourceManager for Persistence {
     }
 
     async fn delete_resource(
-        &self,
+        &mut self,
         service_id: &Ulid,
         resource_type: String,
         claim: Claim,

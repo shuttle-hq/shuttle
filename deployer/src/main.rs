@@ -1,7 +1,6 @@
 use std::process::exit;
 
 use clap::Parser;
-use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_common::{
     backends::tracing::setup_tracing,
     claims::{ClaimLayer, InjectPropagationLayer},

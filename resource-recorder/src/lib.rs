@@ -7,6 +7,7 @@ use shuttle_proto::resource_recorder::{
     ProjectResourcesRequest, RecordRequest, ResourceResponse, ResourcesResponse, ResultResponse,
     ServiceResourcesRequest,
 };
+use std::convert::TryInto;
 use thiserror::Error;
 use tonic::{Request, Response, Status};
 
@@ -95,7 +96,7 @@ where
         &self,
         resource: GetResourceRequest,
     ) -> Result<resource_recorder::Resource, Error> {
-        let resource_option = self.dal.get_resource(&resource.try_into()?).await?;
+        let resource_option = self.dal.get_resourx  ce(&resource.try_into()?).await?;
 
         match resource_option {
             Some(resource) => Ok(resource.into()),

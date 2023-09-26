@@ -29,13 +29,13 @@ pub trait ResourceManager: Clone + Send + Sync + 'static {
         claim: Claim,
     ) -> Result<ResourcesResponse, Self::Err>;
     async fn get_resource(
-        &self,
+        &mut self,
         service_id: &ulid::Ulid,
         r#type: String,
         claim: Claim,
     ) -> Result<ResourceResponse, Self::Err>;
     async fn delete_resource(
-        &self,
+        &mut self,
         service_id: &ulid::Ulid,
         r#type: String,
         claim: Claim,

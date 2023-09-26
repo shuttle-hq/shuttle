@@ -136,9 +136,7 @@ mod tests {
     };
 
     use crate::{
-        persistence::{
-            DeploymentState, DeploymentUpdater, ResourceManager, ResourceType, StateRecorder,
-        },
+        persistence::{DeploymentState, DeploymentUpdater, ResourceManager, StateRecorder},
         RuntimeManager,
     };
     use async_trait::async_trait;
@@ -158,7 +156,7 @@ mod tests {
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
         },
-        resource_recorder::{Resource, ResourceResponse, ResourcesResponse, ResultResponse},
+        resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     };
     use tokio::{select, sync::mpsc, time::sleep};
     use tokio_stream::wrappers::ReceiverStream;
@@ -480,7 +478,7 @@ mod tests {
         }
 
         async fn get_resource(
-            &self,
+            &mut self,
             _service_id: &ulid::Ulid,
             _type: String,
             _claim: Claim,
@@ -493,7 +491,7 @@ mod tests {
         }
 
         async fn delete_resource(
-            &self,
+            &mut self,
             _service_id: &ulid::Ulid,
             _type: String,
             _claim: Claim,

@@ -5,12 +5,17 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use git2::Repository;
 use regex::Regex;
 use shuttle_common::project::ProjectName;
 use tempfile::tempdir;
 use toml_edit::{value, Document};
 use url::Url;
+
+use core::sync::atomic::AtomicBool;
+
+use gix::clone::PrepareFetch;
+use gix::create::{self, Kind};
+use gix::{open, progress};
 
 use crate::args::TemplateLocation;
 
@@ -34,9 +39,9 @@ pub fn generate_project(
 
     // Initialize a Git repository in the destination directory if there
     // is no existing Git repository present in the surrounding folders.
-    let missing_git_repo = Repository::discover(&dest).is_err();
-    if missing_git_repo {
-        Repository::init(&dest).context("Failed to initialize project repository")?;
+    let no_git_repo = gix::discover(&dest).is_err();
+    if no_git_repo {
+        gix::init(&dest).context("Failed to initialize project repository")?;
     }
 
     Ok(())
@@ -162,7 +167,7 @@ impl GenerateFrom {
         url: String,
         subfolder: Option<PathBuf>,
     ) -> Result<PathBuf> {
-        Repository::clone(&url, temp_path)
+        gix_clone(&url, temp_path)
             .with_context(|| format!("Failed to clone Git repository at {url}"))?;
 
         // Extend the path to the directory that's used to generate the template
@@ -185,6 +190,41 @@ impl GenerateFrom {
             ))
         }
     }
+}
+
+/// Mimic the behavior of `git clone`, cloning the Git repository found at
+/// `from_url` into a directory `to_path`, using the API exposed by `gix`.
+fn gix_clone(from_url: &str, to_path: &Path) -> Result<()> {
+    let mut fetch = PrepareFetch::new(
+        from_url,
+        to_path,
+        Kind::WithWorktree,
+        create::Options {
+            // Could be set to `true`, since we're always cloning into newly
+            // created temporary directories. However, for this reason we
+            // may just omit the requirement, and thereby omit another check
+            // that might fail.
+            destination_must_be_empty: false,
+            fs_capabilities: None,
+        },
+        open::Options::isolated(),
+    )
+    .with_context(|| format!("Failed to prepare fetch repository '{from_url}'"))?;
+
+    let (mut prepare, _outcome) = fetch
+        .fetch_then_checkout(progress::Discard, &AtomicBool::new(false))
+        .with_context(|| format!("Failed to fetch repository '{from_url}'"))?;
+
+    let (_repo, _outcome) = prepare
+        .main_worktree(progress::Discard, &AtomicBool::new(false))
+        .with_context(|| {
+            format!(
+                "Failed to checkout worktree of '{from_url}' into {}",
+                to_path.display()
+            )
+        })?;
+
+    Ok(())
 }
 
 /// Copy everything from `src` to `dest`. The `.git` directory

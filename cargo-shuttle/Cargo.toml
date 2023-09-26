@@ -22,14 +22,12 @@ dirs = { workspace = true }
 dunce = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
-git2 = "0.17.2"
 globset = "0.4.13"
 home = { workspace = true }
 headers = { workspace = true }
 indicatif = "0.17.3"
 ignore = "0.4.20"
 indoc = "2.0.1"
-openssl = { version = "0.10", optional = true }
 portpicker = { workspace = true }
 regex = "1.9.5"
 reqwest = { workspace = true, features = ["json"] }
@@ -60,6 +58,15 @@ uuid = { workspace = true, features = ["v4"] }
 walkdir = "2.3.3"
 webbrowser = "0.8.2"
 
+[dependencies.gix]
+version = "0.54"
+default-features = false
+features = [ "blocking-http-transport-reqwest-rust-tls", "worktree-mutation" ]
+
+[dependencies.git2]
+version = "0.17.2"
+default-features = false
+
 [dependencies.shuttle-common]
 workspace = true
 features = ["models"]
@@ -70,9 +77,6 @@ workspace = true
 [dependencies.shuttle-service]
 workspace = true
 features = ["builder"]
-
-[features]
-vendored-openssl = ["openssl/vendored"]
 
 [dev-dependencies]
 assert_cmd = "2.0.6"

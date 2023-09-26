@@ -21,6 +21,13 @@ executors:
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
 commands:
   restore-cargo-cache:
+    parameters:
+      sccache-size:
+        description: Max size for the cache
+        type: string
+        # 500 MB is the recommended soft cap for a cache on circleci.
+        # Large integration tests override this default.
+        default: 500M
     steps:
       - restore_cache:
           name: Restore cargo registry cache
@@ -28,8 +35,6 @@ commands:
           # Don't use fallback key to prevent registry cache from growing indefinitely.
       - run:
           name: Install sccache
-          # 500 MB is the recommended soft cap for a cache on circleci.
-          # Large integration tests override this default.
           command: |
             SCCACHE_VERSION='v0.5.4'
             ls ~/.cargo/bin/sccache \
@@ -38,7 +43,10 @@ commands:
                 > ~/.cargo/bin/sccache \
               && chmod +x ~/.cargo/bin/sccache
             echo 'export RUSTC_WRAPPER=~/.cargo/bin/sccache' >> $BASH_ENV
-            echo 'export SCCACHE_CACHE_SIZE=500M' >> $BASH_ENV
+            echo 'export SCCACHE_CACHE_SIZE=<< parameters.sccache-size >>' >> $BASH_ENV
+      - run:
+          name: Start sccache
+          command: ~/.cargo/bin/sccache --start-server
       - restore_cache:
           name: Restore sccache cache
           keys: # This can use fallback due to size limit.

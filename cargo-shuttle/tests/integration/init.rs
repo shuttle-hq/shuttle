@@ -195,7 +195,6 @@ async fn non_interactive_init_with_from_repo_name() {
 }
 
 #[tokio::test]
-#[ignore] // cargo-generate hangs on this operation sometimes. Passing @ v0.26.0.
 async fn non_interactive_init_with_from_local_path() {
     set_user_var();
     let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();

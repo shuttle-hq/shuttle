@@ -46,14 +46,13 @@ impl Client {
     pub async fn get_api_versions(&self) -> Result<VersionInfo> {
         let url = format!("{}/versions", self.api_url);
 
-        Ok(self
-            .client
+        self.client
             .get(url)
             .send()
             .await?
             .json()
             .await
-            .context("parsing API version info")?)
+            .context("parsing API version info")
     }
 
     pub async fn deploy(

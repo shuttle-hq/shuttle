@@ -209,6 +209,16 @@ pub fn ulid_type() -> Object {
         .build()
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VersionInfo {
+    /// Version of gateway
+    pub gateway: semver::Version,
+    /// Latest version of cargo-shuttle compatible with this gateway.
+    pub cargo_shuttle: semver::Version,
+    /// Latest version of shuttle-deployer compatible with this gateway.
+    pub deployer: semver::Version,
+}
+
 /// Check if two versions are compatible based on the rule used by cargo:
 /// "Versions `a` and `b` are compatible if their left-most nonzero digit is the same."
 pub fn semvers_are_compatible(a: &semver::Version, b: &semver::Version) -> bool {
@@ -225,6 +235,7 @@ pub fn semvers_are_compatible(a: &semver::Version, b: &semver::Version) -> bool 
 mod tests {
     use super::*;
     use proptest::prelude::*;
+    use std::str::FromStr;
 
     proptest! {
         #[test]

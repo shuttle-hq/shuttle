@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::models::deployment::DeploymentRequest;
 use shuttle_common::models::{deployment, project, secret, service, ToJson};
 use shuttle_common::project::ProjectName;
-use shuttle_common::{resource, ApiKey, ApiUrl, LogItem};
+use shuttle_common::{resource, ApiKey, ApiUrl, LogItem, VersionInfo};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
@@ -43,10 +43,17 @@ impl Client {
         self.api_key = Some(api_key);
     }
 
-    pub async fn check_api_compatibility(&self) -> Result<String> {
-        let url = format!("{}/version/cargo-shuttle", self.api_url);
+    pub async fn get_api_versions(&self) -> Result<VersionInfo> {
+        let url = format!("{}/versions", self.api_url);
 
-        Ok(self.client.get(url).send().await?.text().await?)
+        Ok(self
+            .client
+            .get(url)
+            .send()
+            .await?
+            .json()
+            .await
+            .context("parsing API version info")?)
     }
 
     pub async fn deploy(

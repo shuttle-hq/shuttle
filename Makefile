@@ -77,8 +77,8 @@ CONTROL_DB_POSTGRES_TAG?=15
 CONTROL_DB_POSTGRES_PASSWORD?=postgres
 CONTROL_DB_POSTGRES_URI?=postgres://postgres:${CONTROL_DB_POSTGRES_PASSWORD}@control-postgres:5432/postgres
 
-# use the same version as control DB
-LOGGER_POSTGRES_TAG?=${CONTROL_DB_POSTGRES_TAG}
+# this should use the same version as our prod RDS logger database
+LOGGER_POSTGRES_TAG?=15
 LOGGER_POSTGRES_PASSWORD?=postgres
 LOGGER_POSTGRES_URI?=postgres://postgres:${LOGGER_POSTGRES_PASSWORD}@logger-postgres:5432/postgres
 endif

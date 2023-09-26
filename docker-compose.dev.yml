@@ -45,9 +45,7 @@ services:
         >&2 echo "The control DB is available - starting shuttle-resource-recorder"
 
         exec /usr/local/bin/service "$${@:0}"
-  auth-dev:
-    ports:
-      - 8006:8000
+  auth:
     depends_on:
       - control-db
     entrypoint:
@@ -74,7 +72,7 @@ services:
       - panamax
   logger:
     ports:
-      - 8080:8000
+      - 8010:8000
     depends_on:
       - auth
       - logger-postgres

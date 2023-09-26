@@ -56,7 +56,7 @@ pub struct Args {
     pub admin_secret: String,
 
     /// Address to reach the authentication service at
-    #[clap(long, default_value = "http://127.0.0.1:8008")]
+    #[clap(long, default_value = "http://auth:8000")]
     pub auth_uri: Uri,
 
     /// Address to reach the builder service at

@@ -217,6 +217,8 @@ pub struct VersionInfo {
     pub cargo_shuttle: semver::Version,
     /// Latest version of shuttle-deployer compatible with this gateway.
     pub deployer: semver::Version,
+    /// Latest version of shuttle-runtime compatible with the above deployer.
+    pub runtime: semver::Version,
 }
 
 /// Check if two versions are compatible based on the rule used by cargo:

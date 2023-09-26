@@ -860,6 +860,7 @@ impl ApiBuilder {
                         // Only one version is officially compatible, but more are in reality.
                         cargo_shuttle: env!("CARGO_PKG_VERSION").parse().unwrap(),
                         deployer: env!("CARGO_PKG_VERSION").parse().unwrap(),
+                        runtime: env!("CARGO_PKG_VERSION").parse().unwrap(),
                     })
                 }),
             )

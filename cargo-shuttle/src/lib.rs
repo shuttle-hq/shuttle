@@ -1309,6 +1309,7 @@ impl Shuttle {
             })?;
 
         let mut deployer_version_checked = false;
+        let mut runtime_version_checked = false;
         loop {
             let message = stream.next().await;
             if let Some(Ok(msg)) = message {
@@ -1318,6 +1319,7 @@ impl Shuttle {
 
                     println!("{log_item}");
 
+                    // Detect versions of deployer and runtime, and print warnings of outdated.
                     if !deployer_version_checked
                         && self.version_info.is_some()
                         && log_item.line.contains("Deployer version: ")
@@ -1343,7 +1345,38 @@ impl Shuttle {
                             )
                         }
                     }
+                    if !runtime_version_checked
+                        && self.version_info.is_some()
+                        && log_item
+                            .line
+                            .contains("shuttle-runtime executable started (version ")
+                    {
+                        runtime_version_checked = true;
+                        let my_version = &log_item
+                            .line
+                            .split_once("shuttle-runtime executable started (version ")
+                            .unwrap()
+                            .1
+                            .split_once(')')
+                            .unwrap()
+                            .0
+                            .parse::<semver::Version>()
+                            .context("parsing runtime version in log stream")?;
+                        let latest_version = &self.version_info.as_ref().unwrap().runtime;
+                        if latest_version > my_version {
+                            self.version_warnings.push(
+                                formatdoc! {"
+                                    Warning:
+                                        A newer version of shuttle-runtime is available ({latest_version}).
+                                        Update it and any other shuttle dependencies in Cargo.toml."
+                                }
+                                .yellow()
+                                .to_string(),
+                            )
+                        }
+                    }
 
+                    // Determine when to stop listening to the log stream
                     if DEPLOYER_END_MESSAGES_BAD
                         .iter()
                         .any(|m| log_item.line.contains(m))

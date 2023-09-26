@@ -5,6 +5,10 @@ use serde::Serialize;
 use shuttle_service::{Error, Factory, ResourceBuilder, Type};
 
 #[derive(Serialize)]
+#[deprecated(
+    since = "0.27.0",
+    note = "Folder names can now be hard coded. https://docs.shuttle.rs/configuration/files"
+)]
 pub struct StaticFolder<'a> {
     /// The folder to reach at runtime. Defaults to `static`
     folder: &'a str,

@@ -7,6 +7,7 @@ use ctor::dtor;
 use once_cell::sync::Lazy;
 use portpicker::pick_unused_port;
 use shuttle_common::claims::Scope;
+use shuttle_common_tests::docker::{exec_psql, DockerInstance};
 use shuttle_common_tests::JwtScopesLayer;
 use shuttle_logger::{Postgres, Service};
 use shuttle_proto::logger::{
@@ -20,15 +21,14 @@ use tonic::{
     Request,
 };
 
-mod helpers;
-use helpers::{exec_psql, DockerInstance};
-
 use prost_types::Timestamp;
 use uuid::Uuid;
 
 const SHUTTLE_SERVICE: &str = "test";
 
-static PG: Lazy<DockerInstance> = Lazy::new(DockerInstance::default);
+const PG_CONTAINER_NAME: &str = "shuttle_logger_test_pg";
+
+static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(PG_CONTAINER_NAME.to_string()));
 
 #[dtor]
 fn cleanup() {
@@ -197,7 +197,10 @@ mod needs_docker {
         // Get the PG uri first so the static PG is initialized.
         let pg_uri = Uri::try_from(format!("{}/{}", PG.uri, db_name)).unwrap();
 
-        exec_psql(&format!(r#"CREATE DATABASE "{}";"#, &db_name));
+        exec_psql(
+            PG_CONTAINER_NAME,
+            &format!(r#"CREATE DATABASE "{}";"#, &db_name),
+        );
 
         tokio::task::spawn(async move {
             let pg = Postgres::new(&pg_uri).await;

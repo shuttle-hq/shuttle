@@ -5,24 +5,22 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const PG_CONTAINER_NAME: &str = "shuttle_logger_test_pg";
-
 pub struct DockerInstance {
-    pub container_name: &'static str,
+    pub container_name: String,
     pub uri: String,
 }
 
 struct Config<'a> {
-    container_name: &'a str,
+    container_name: String,
     image: &'a str,
     engine: &'a str,
     port: &'a str,
     env: Vec<&'a str>,
-    is_ready_cmd: Vec<&'a str>,
+    is_ready_cmd: Vec<String>,
 }
 
-impl Default for DockerInstance {
-    fn default() -> Self {
+impl DockerInstance {
+    pub fn new(container_name: String) -> Self {
         let Config {
             engine,
             env,
@@ -31,19 +29,30 @@ impl Default for DockerInstance {
             port,
             container_name,
         } = Config {
-            container_name: PG_CONTAINER_NAME,
+            container_name: container_name.clone(),
             // The postgres version should always be in sync with the prod RDS version.
             image: "docker.io/library/postgres:15",
             engine: "postgres",
             port: "5432",
             env: vec!["POSTGRES_PASSWORD=password", "PGUSER=postgres"],
-            is_ready_cmd: vec!["exec", PG_CONTAINER_NAME, "pg_isready"],
+            is_ready_cmd: vec![
+                String::from("exec"),
+                container_name,
+                String::from("pg_isready"),
+            ],
         };
 
         let host_port = pick_unused_port().unwrap();
         let port_binding = format!("{}:{}", host_port, port);
 
-        let mut args = vec!["run", "--rm", "--name", container_name, "-p", &port_binding];
+        let mut args = vec![
+            "run",
+            "--rm",
+            "--name",
+            container_name.as_str(),
+            "-p",
+            &port_binding,
+        ];
 
         args.extend(env.iter().flat_map(|e| ["-e", e]));
 
@@ -66,7 +75,7 @@ impl Default for DockerInstance {
 }
 
 impl DockerInstance {
-    fn wait_ready(mut timeout: Duration, is_ready_cmd: &[&str]) {
+    fn wait_ready(mut timeout: Duration, is_ready_cmd: &[String]) {
         let mut now = SystemTime::now();
         while !timeout.is_zero() {
             let status = Command::new("docker")
@@ -93,21 +102,21 @@ impl DockerInstance {
 
     pub fn cleanup(&self) {
         Command::new("docker")
-            .args(["stop", self.container_name])
+            .args(["stop", &self.container_name])
             .output()
             .expect("failed to stop provisioner test DB container");
         Command::new("docker")
-            .args(["rm", self.container_name])
+            .args(["rm", &self.container_name])
             .output()
             .expect("failed to remove provisioner test DB container");
     }
 }
 
 /// Execute queries in `psql` via `docker exec`
-pub fn exec_psql(query: &str) -> String {
+pub fn exec_psql(container_name: &str, query: &str) -> String {
     let args = [
         "exec",
-        PG_CONTAINER_NAME,
+        container_name,
         "psql",
         "--username",
         "postgres",

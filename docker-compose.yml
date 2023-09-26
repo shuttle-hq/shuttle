@@ -6,7 +6,6 @@ volumes:
   postgres-vol:
   panamax-crates-vol:
   panamax-io-index-vol:
-  resource-recorder-vol:
   mongodb-vol:
 networks:
   user-net:
@@ -207,8 +206,6 @@ services:
       - RUST_LOG=${RUST_LOG}
     networks:
       user-net:
-    volumes:
-      - resource-recorder-vol:/var/lib/shuttle
     deploy:
       restart_policy:
         condition: on-failure
@@ -226,7 +223,7 @@ services:
           - node.hostname==controller
     command:
       - "--address=0.0.0.0:8000"
-      - "--state=/var/lib/shuttle"
+      - "--db-connection-uri=${CONTROL_DB_POSTGRES_URI}"
       - "--auth-uri=http://auth:8000"
   postgres:
     image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"

@@ -1,4 +1,4 @@
-use std::{fmt, path::Path, str::FromStr, time::SystemTime};
+use std::{fmt, time::SystemTime};
 
 use crate::{r#type::Type, Error};
 use async_trait::async_trait;
@@ -6,11 +6,12 @@ use chrono::{DateTime, Utc};
 use prost_types::Timestamp;
 use shuttle_proto::resource_recorder::{self, record_request};
 use sqlx::{
-    migrate::{MigrateDatabase, Migrator},
-    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow},
-    FromRow, Row, SqlitePool,
+    migrate::Migrator,
+    postgres::{PgConnectOptions, PgRow},
+    FromRow, PgPool, Row,
 };
-use tracing::{error, info};
+use tonic::transport::Uri;
+use tracing::error;
 use ulid::Ulid;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
@@ -62,54 +63,38 @@ pub trait Dal {
     async fn delete_resource(&self, resource: &Resource) -> Result<(), DalError>;
 }
 
-pub struct Sqlite {
-    pool: SqlitePool,
+#[derive(Clone)]
+pub struct Postgres {
+    pool: PgPool,
 }
 
-impl Sqlite {
+impl Postgres {
     /// This function creates all necessary tables and sets up a database connection pool.
-    pub async fn new(path: &str) -> Self {
-        if !Path::new(path).exists() {
-            sqlx::Sqlite::create_database(path).await.unwrap();
-        }
-
-        info!(
-            "state db: {}",
-            std::fs::canonicalize(path).unwrap().to_string_lossy()
-        );
-
-        // We have found in the past that setting synchronous to anything other than the default (full) breaks the
-        // broadcast channel in deployer. The broken symptoms are that the ws socket connections won't get any logs
-        // from the broadcast channel and would then close. When users did deploys, this would make it seem like the
-        // deploy is done (while it is still building for most of the time) and the status of the previous deployment
-        // would be returned to the user.
-        //
-        // If you want to activate a faster synchronous mode, then also do proper testing to confirm this bug is no
-        // longer present.
-        let sqlite_options = SqliteConnectOptions::from_str(path)
-            .unwrap()
-            .journal_mode(SqliteJournalMode::Wal);
-
-        let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
-
+    pub async fn new(connection_uri: &Uri) -> Self {
+        let pool = PgPool::connect(connection_uri.to_string().as_str())
+            .await
+            .expect("to be able to connect to the postgres db using the connection url");
         Self::from_pool(pool).await
     }
 
-    #[allow(dead_code)]
-    pub async fn new_in_memory() -> Self {
-        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    pub async fn with_options(options: PgConnectOptions) -> Self {
+        let pool = PgPool::connect_with(options)
+            .await
+            .expect("to be able to connect to the postgres db using the pg connect options");
         Self::from_pool(pool).await
     }
 
-    async fn from_pool(pool: SqlitePool) -> Self {
-        MIGRATIONS.run(&pool).await.unwrap();
-
+    async fn from_pool(pool: PgPool) -> Self {
+        MIGRATIONS
+            .run(&pool)
+            .await
+            .expect("to run migrations successfully");
         Self { pool }
     }
 }
 
 #[async_trait]
-impl Dal for Sqlite {
+impl Dal for Postgres {
     async fn add_resources(
         &self,
         project_id: Ulid,
@@ -124,7 +109,6 @@ impl Dal for Sqlite {
             .execute(&mut *transaction)
             .await?;
 
-        // Making mutliple DB "connections" is fine since the sqlite is on the same machine
         for resource in resources {
             if let Some(r_project_id) = resource.project_id {
                 if r_project_id != project_id {
@@ -202,8 +186,8 @@ pub struct Resource {
     last_updated: DateTime<Utc>,
 }
 
-impl FromRow<'_, SqliteRow> for Resource {
-    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+impl<'r> FromRow<'r, PgRow> for Resource {
+    fn from_row(row: &'r PgRow) -> Result<Self, sqlx::Error> {
         Ok(Self {
             project_id: Some(
                 Ulid::from_string(row.try_get("project_id")?)

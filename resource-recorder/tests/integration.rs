@@ -10,7 +10,7 @@ use shuttle_proto::resource_recorder::{
     resource_recorder_server::ResourceRecorderServer, ProjectResourcesRequest, RecordRequest,
     Resource, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
 };
-use shuttle_resource_recorder::{Service, Sqlite};
+use shuttle_resource_recorder::{Postgres, Service};
 use tokio::select;
 use tonic::{transport::Server, Request};
 use ulid::Ulid;

@@ -14,7 +14,7 @@ sqlx = { workspace = true, features = [
     "chrono",
     "migrate",
     "runtime-tokio-rustls",
-    "sqlite",
+    "postgres",
 ] }
 strum = { workspace = true }
 thiserror = { workspace = true }

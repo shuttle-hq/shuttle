@@ -9,7 +9,7 @@ use shuttle_common::{
     log::Backend,
 };
 use shuttle_proto::resource_recorder::resource_recorder_server::ResourceRecorderServer;
-use shuttle_resource_recorder::{args::Args, Service, Sqlite};
+use shuttle_resource_recorder::{args::Args, Postgres, Service};
 use tonic::transport::Server;
 use tracing::trace;
 
@@ -32,8 +32,7 @@ async fn main() {
         )))
         .layer(ExtractPropagationLayer);
 
-    let db_path = args.state.join("resource-recorder.sqlite");
-    let svc = Service::new(Sqlite::new(db_path.display().to_string().as_str()).await);
+    let svc = Service::new(Postgres::new(&args.db_connection_uri).await);
     let svc = ResourceRecorderServer::new(svc);
     let router = server_builder.add_service(svc);
 

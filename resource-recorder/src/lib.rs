@@ -13,7 +13,7 @@ pub mod args;
 mod dal;
 mod r#type;
 
-pub use dal::Sqlite;
+pub use dal::Postgres;
 use tracing::error;
 use ulid::DecodeError;
 

@@ -1,6 +1,9 @@
-use std::{borrow::Cow, fmt::Display, str::FromStr};
+use std::{fmt::Display, str::FromStr};
 
-use sqlx::Database;
+use sqlx::{
+    postgres::{PgArgumentBuffer, PgValueRef},
+    Database,
+};
 
 pub mod database;
 
@@ -58,23 +61,16 @@ where
     }
 }
 
-impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for Type {
-    fn encode_by_ref(
-        &self,
-        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
-    ) -> sqlx::encode::IsNull {
-        args.push(sqlx::sqlite::SqliteArgumentValue::Text(Cow::Owned(
-            self.to_string(),
-        )));
-
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Type {
+    fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> sqlx::encode::IsNull {
+        buf.extend_from_slice(self.to_string().as_bytes());
         sqlx::encode::IsNull::No
     }
 }
 
-impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for Type {
-    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let value = <&str as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
-
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Type {
+    fn decode(value: PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let value = <&str as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         Self::from_str(value).map_err(Into::into)
     }
 }

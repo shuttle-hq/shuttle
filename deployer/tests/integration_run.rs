@@ -126,10 +126,10 @@ impl ResourceManager for StubResourceManager {
 
     async fn delete_resource(
         &mut self,
-        project_name: String,
-        service_id: &Ulid,
-        resource_type: String,
-        claim: Claim,
+        _project_name: String,
+        _service_id: &Ulid,
+        _resource_type: String,
+        _claim: Claim,
     ) -> Result<ResultResponse, Self::Err> {
         Ok(ResultResponse {
             success: true,
@@ -139,9 +139,9 @@ impl ResourceManager for StubResourceManager {
 
     async fn get_resource(
         &mut self,
-        service_id: &ulid::Ulid,
-        r#type: String,
-        claim: Claim,
+        _service_id: &ulid::Ulid,
+        _type: String,
+        _claim: Claim,
     ) -> Result<ResourceResponse, Self::Err> {
         Ok(ResourceResponse {
             success: true,

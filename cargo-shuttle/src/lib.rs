@@ -154,7 +154,8 @@ impl Shuttle {
         // All commands that call the API
         if matches!(
             args.cmd,
-            Command::Deploy(..)
+            Command::Init(..)
+                | Command::Deploy(..)
                 | Command::Status
                 | Command::Logs { .. }
                 | Command::Deployment(..)
@@ -298,40 +299,21 @@ impl Shuttle {
                 It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
                 "
             );
+            let client = self.client.as_ref().unwrap();
             loop {
                 // not using validate_with due to being blocking
                 let p: ProjectName = Input::with_theme(&theme)
                     .with_prompt("Project name")
                     .interact()?;
-                enum NameCheck {
-                    Available,
-                    Taken,
-                    Failed,
-                }
-                // TODO replace this with self.client after PR 1275
-                let check =
-                    match reqwest::get(format!("{}/projects/name/{}", self.ctx.api_url(), p)).await
-                    {
-                        Ok(r) => r
-                            .json::<bool>()
-                            .await
-                            .context("parsing name check response")
-                            .map(|b| {
-                                b.then_some(NameCheck::Taken)
-                                    .unwrap_or(NameCheck::Available)
-                            })
-                            .unwrap_or(NameCheck::Failed),
-                        Err(_) => NameCheck::Failed,
-                    };
-                match check {
-                    NameCheck::Available => {
+                match client.check_project_name(&p).await {
+                    Ok(true) => {
+                        println!("{} {}", "Project name already taken:".red(), p);
+                    }
+                    Ok(false) => {
                         project_args.name = Some(p);
                         break;
                     }
-                    NameCheck::Taken => {
-                        println!("{} {}", "Project name already taken:".red(), p);
-                    }
-                    NameCheck::Failed => {
+                    Err(_) => {
                         println!(
                             "{}",
                             "Failed to check if project name is available.".yellow()

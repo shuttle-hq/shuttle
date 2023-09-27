@@ -297,12 +297,39 @@ impl Shuttle {
                 It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
                 "
             );
-            // TODO: Check whether the project name is still available
-            project_args.name = Some(
-                Input::with_theme(&theme)
+            loop {
+                // not using validate_with due to being blocking
+                let p: ProjectName = Input::with_theme(&theme)
                     .with_prompt("Project name")
-                    .interact()?,
-            );
+                    .interact()?;
+                enum NameCheck {
+                    Available,
+                    Taken,
+                    Failed,
+                }
+                // TODO replace this with self.client after PR 1275
+                match reqwest::get(format!("{}/project/name/{}", self.ctx.api_url(), p))
+                    .await
+                    .map(|r| match r.status() {
+                        reqwest::StatusCode::NOT_FOUND => NameCheck::Available,
+                        reqwest::StatusCode::OK => NameCheck::Taken,
+                        _ => NameCheck::Failed,
+                    })
+                    .unwrap_or(NameCheck::Failed)
+                {
+                    NameCheck::Available => {
+                        project_args.name = Some(p);
+                        break;
+                    }
+                    NameCheck::Taken => {
+                        println!("Project name already taken: '{}'", p.to_string());
+                    }
+                    NameCheck::Failed => {
+                        println!("Failed to check if project name is available.");
+                        break;
+                    }
+                }
+            }
             println!();
         }
 
@@ -392,9 +419,18 @@ impl Shuttle {
             true
         } else {
             let should_create = Confirm::with_theme(&theme)
-                .with_prompt("Do you want to create the project environment on Shuttle?")
+                .with_prompt(format!(
+                    "Do you want to start the project container on Shuttle and claim the project name '{}'?",
+                    project_args
+                        .name
+                        .as_ref()
+                        .expect("to have a project name provided")),
+                )
                 .default(true)
                 .interact()?;
+            if !should_create {
+                println!("Note: The project name will not be claimed until you start the project with `cargo shuttle project start`.")
+            }
             println!();
             should_create
         };
@@ -1582,7 +1618,13 @@ impl Shuttle {
                         "getting project status failed repeteadly",
                     )
                 })?;
-            println!("{project}");
+            println!(
+                "{project} (idle minutes: {})",
+                project
+                    .idle_minutes
+                    .map(|i| i.to_string())
+                    .unwrap_or("<unknown>".to_owned())
+            );
         }
 
         Ok(CommandOutcome::Ok)

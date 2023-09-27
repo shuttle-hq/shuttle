@@ -7,7 +7,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::extract::{Extension, Path, Query, State};
 use axum::handler::Handler;
-use axum::http::Request;
+use axum::http::{Request, StatusCode};
 use axum::middleware::from_extractor;
 use axum::response::Response;
 use axum::routing::{any, get, post};
@@ -124,6 +124,35 @@ async fn get_project(
     };
 
     Ok(AxumJson(response))
+}
+
+#[instrument(skip(service))]
+#[utoipa::path(
+    get,
+    path = "/projects/name/{project_name}",
+    responses(
+        (status = 200, description = "Project name is taken."),
+        (status = 404, description = "Project name is free."),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The project name to check."),
+    )
+)]
+async fn check_project_name(
+    State(RouterState { service, .. }): State<RouterState>,
+    Path(project_name): Path<ProjectName>,
+) -> StatusCode {
+    match service.project_name_exists(&project_name).await {
+        Ok(_) => StatusCode::OK,
+        Err(e) => {
+            if e.kind == ErrorKind::ProjectNotFound {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+        }
+    }
 }
 
 #[utoipa::path(
@@ -880,6 +909,7 @@ impl ApiBuilder {
                     .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate])))
                     .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate]))),
             )
+            .route("/projects/name/:project_name", get(check_project_name))
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
             .nest("/admin", admin_routes);

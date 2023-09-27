@@ -38,13 +38,10 @@ use shuttle_common::{request_span, LogItem};
 use shuttle_proto::logger::LogsRequest;
 use shuttle_service::builder::clean_crate;
 
+use crate::persistence::{Deployment, Persistence, SecretGetter, State};
 use crate::{
     deployment::{Built, DeploymentManager, Queued},
     persistence::resource::ResourceManager,
-};
-use crate::{
-    persistence::{Deployment, Persistence, SecretGetter, State},
-    Manager,
 };
 pub use {self::error::Error, self::error::Result, self::local::set_jwt_bearer};
 
@@ -105,7 +102,6 @@ impl RouterBuilder {
     pub fn new(
         persistence: Persistence,
         deployment_manager: DeploymentManager,
-        resource_manager: Manager,
         proxy_fqdn: FQDN,
         project_name: ProjectName,
         project_id: Ulid,

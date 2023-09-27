@@ -22,7 +22,7 @@ use sqlx::{
     QueryBuilder,
 };
 use tokio::task::JoinHandle;
-use tonic::transport::Endpoint;
+use tonic::{transport::Endpoint, Request};
 use tower::ServiceBuilder;
 use tracing::{error, info, instrument, trace};
 use ulid::Ulid;
@@ -63,7 +63,13 @@ pub struct Persistence {
             >,
         >,
     >,
-    provisioner_client: ProvisionerClient<tonic::transport::Channel>,
+    provisioner_client: Option<
+        ProvisionerClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
+    >,
     project_id: Ulid,
 }
 
@@ -75,7 +81,7 @@ impl Persistence {
     pub async fn new(
         path: &str,
         resource_recorder_uri: &Uri,
-        provisioner_address: &Endpoint,
+        provisioner_address: &Uri,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
         if !Path::new(path).exists() {
@@ -108,7 +114,7 @@ impl Persistence {
         Self::configure(
             pool,
             resource_recorder_uri.to_string(),
-            provisioner_address,
+            provisioner_address.to_string(),
             project_id,
         )
         .await
@@ -131,12 +137,7 @@ impl Persistence {
             pool,
             state_send,
             resource_recorder_client: None,
-            provisioner_client: ProvisionerClient::new(
-                Endpoint::from_static("http://localhost:5000")
-                    .connect()
-                    .await
-                    .unwrap(),
-            ),
+            provisioner_client: None,
             project_id: Ulid::new(),
         };
 
@@ -146,26 +147,32 @@ impl Persistence {
     async fn configure(
         pool: SqlitePool,
         resource_recorder_uri: String,
-        provisioner_address: &Endpoint,
+        provisioner_address: String,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
-        let channel = Endpoint::from_shared(resource_recorder_uri.to_string())
-            .expect("failed to convert resource recorder uri to a string")
+        let channel = Endpoint::from_shared(resource_recorder_uri)
+            .expect("to have a valid string endpoint for the resource recorder")
             .connect()
             .await
             .expect("failed to connect to resource recorder");
 
-        let channel = ServiceBuilder::new()
+        let resource_recorder_channel = ServiceBuilder::new()
             .layer(ClaimLayer)
             .layer(InjectPropagationLayer)
             .service(channel);
 
-        let provisioner_channel = provisioner_address
+        let channel = Endpoint::from_shared(provisioner_address)
+            .expect("to have a valid string endpoint for the provisioner")
             .connect()
             .await
             .expect("failed to connect to provisioner");
 
-        let resource_recorder_client = ResourceRecorderClient::new(channel);
+        let provisioner_channel = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
+
+        let resource_recorder_client = ResourceRecorderClient::new(resource_recorder_channel);
         let provisioner_client = ProvisionerClient::new(provisioner_channel);
 
         let (state_send, handle) = Self::from_pool(pool.clone()).await;
@@ -174,7 +181,7 @@ impl Persistence {
             pool,
             state_send,
             resource_recorder_client: Some(resource_recorder_client),
-            provisioner_client,
+            provisioner_client: Some(provisioner_client),
             project_id,
         };
 
@@ -532,13 +539,17 @@ impl ResourceManager for Persistence {
         if let Type::Database(db_type) = r#type {
             let proto_db_type: shuttle_proto::provisioner::database_request::DbType =
                 db_type.into();
-            self.provisioner_client
-                .delete_database(DatabaseRequest {
+            if let Some(inner) = &mut self.provisioner_client {
+                let mut db_request = Request::new(DatabaseRequest {
                     project_name,
                     db_type: Some(proto_db_type),
-                })
-                .await
-                .map_err(error::Error::Provisioner)?;
+                });
+                db_request.extensions_mut().insert(claim.clone());
+                inner
+                    .delete_database(db_request)
+                    .await
+                    .map_err(error::Error::Provisioner)?;
+            };
         }
 
         let mut delete_resource_req = tonic::Request::new(ResourceIds {

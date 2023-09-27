@@ -6,7 +6,6 @@ use hyper::{
     service::{make_service_fn, service_fn},
 };
 pub use persistence::Persistence;
-pub use provisioner::Manager;
 use proxy::AddressGetter;
 pub use runtime_manager::RuntimeManager;
 use shuttle_common::log::LogRecorder;
@@ -20,7 +19,6 @@ pub mod deployment;
 pub mod error;
 pub mod handlers;
 pub mod persistence;
-mod provisioner;
 mod proxy;
 mod runtime_manager;
 
@@ -33,7 +31,6 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub async fn start(
     persistence: Persistence,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
-    resource_manager: Manager,
     log_recorder: impl LogRecorder,
     log_fetcher: LoggerClient<
         shuttle_common::claims::ClaimService<
@@ -82,7 +79,6 @@ pub async fn start(
     let mut builder = handlers::RouterBuilder::new(
         persistence,
         deployment_manager,
-        resource_manager,
         args.proxy_fqdn,
         args.project,
         project_id,

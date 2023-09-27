@@ -74,12 +74,8 @@ async fn main() {
         None,
     );
 
-    let resource_manager = ResourceManager::new(&args.provisioner_address)
-        .await
-        .unwrap();
-
     let runtime_manager = RuntimeManager::new(
-        args.provisioner_address.uri().to_string(),
+        args.provisioner_address.to_string(),
         logger_batcher.clone(),
         Some(args.auth_uri.to_string()),
     );
@@ -88,7 +84,7 @@ async fn main() {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
             error!("Proxy stopped.")
         },
-        _ = start(persistence, runtime_manager, resource_manager, logger_batcher, logger_client, builder_client, args) => {
+        _ = start(persistence, runtime_manager, logger_batcher, logger_client, builder_client, args) => {
             error!("Deployment service stopped.")
         },
     }

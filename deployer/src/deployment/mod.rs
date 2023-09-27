@@ -20,7 +20,9 @@ pub mod state_change_layer;
 
 use self::gateway_client::BuildQueueClient;
 use crate::{
-    persistence::{DeploymentUpdater, ResourceManager, SecretGetter, SecretRecorder, State},
+    persistence::{
+        resource::ResourceManager, DeploymentUpdater, SecretGetter, SecretRecorder, State,
+    },
     RuntimeManager,
 };
 pub use queue::Queued;

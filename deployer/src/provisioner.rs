@@ -24,11 +24,11 @@ pub enum Error {
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone)]
-pub struct ResourceManager {
+pub struct Manager {
     provisioner_client: ProvisionerClient,
 }
 
-impl ResourceManager {
+impl Manager {
     pub async fn new(provisioner_address: &Endpoint) -> Result<Self> {
         let channel = provisioner_address.connect().await?;
         let service = ServiceBuilder::new()

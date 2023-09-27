@@ -5,9 +5,12 @@ use std::str::FromStr;
 use chrono::Utc;
 use error::{Error, Result};
 use hyper::Uri;
-use shuttle_common::claims::{Claim, ClaimLayer, InjectPropagationLayer};
+use shuttle_common::{
+    claims::{Claim, ClaimLayer, InjectPropagationLayer},
+    resource::Type,
+};
 use shuttle_proto::{
-    provisioner::provisioner_client::ProvisionerClient,
+    provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest},
     resource_recorder::{
         record_request, resource_recorder_client::ResourceRecorderClient, RecordRequest,
         ResourceIds, ResourceResponse, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
@@ -27,22 +30,23 @@ use uuid::Uuid;
 
 pub mod deployment;
 mod error;
-mod resource;
+pub mod resource;
 mod secret;
 pub mod service;
 mod state;
 mod user;
 
-use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
-use self::resource::Resource;
-pub use self::resource::{ResourceManager, Type as ResourceType};
 pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
 pub use self::state::DeploymentState;
 pub use self::state::{State, StateRecorder};
 pub use self::user::User;
+use self::{
+    deployment::DeploymentRunnable,
+    resource::{Resource, ResourceManager},
+};
 use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 
@@ -224,7 +228,7 @@ impl Persistence {
             .execute(&self.pool)
             .await
             .map(|_| ())
-            .map_err(Error::from)
+            .map_err(PersistenceError::from)
     }
 
     pub async fn get_deployment(&self, id: &Uuid) -> Result<Option<Deployment>> {
@@ -407,7 +411,7 @@ impl ResourceManager for Persistence {
             .expect("to have the resource recorder set up")
             .record_resources(record_req)
             .await
-            .map_err(Error::from)
+            .map_err(PersistenceError::ResourceRecorder)
             .map(|res| res.into_inner())
     }
 
@@ -428,7 +432,7 @@ impl ResourceManager for Persistence {
             .expect("to have the resource recorder set up")
             .get_service_resources(service_resources_req)
             .await
-            .map_err(Error::from)
+            .map_err(PersistenceError::ResourceRecorder)
             .map(|res| res.into_inner())?;
 
         // If the resources list is empty
@@ -485,7 +489,7 @@ impl ResourceManager for Persistence {
                     .expect("to have the resource recorder set up")
                     .get_service_resources(service_resources_req)
                     .await
-                    .map_err(Error::from)
+                    .map_err(PersistenceError::ResourceRecorder)
                     .map(|res| res.into_inner());
             }
         }
@@ -513,17 +517,29 @@ impl ResourceManager for Persistence {
             .expect("to have the resource recorder set up")
             .get_resource(get_resource_req)
             .await
-            .map_err(Error::from)
+            .map_err(PersistenceError::ResourceRecorder)
             .map(|res| res.into_inner());
     }
 
     async fn delete_resource(
         &mut self,
+        project_name: String,
         service_id: &Ulid,
         resource_type: String,
         claim: Claim,
     ) -> Result<ResultResponse> {
-        // TODO: Delete resource from provisioner
+        let r#type = Type::from_str(resource_type.as_str()).map_err(error::Error::ParseError)?;
+        if let Type::Database(db_type) = r#type {
+            let proto_db_type: shuttle_proto::provisioner::database_request::DbType =
+                db_type.into();
+            self.provisioner_client
+                .delete_database(DatabaseRequest {
+                    project_name,
+                    db_type: Some(proto_db_type),
+                })
+                .await
+                .map_err(error::Error::Provisioner)?;
+        }
 
         let mut delete_resource_req = tonic::Request::new(ResourceIds {
             project_id: self.project_id.to_string(),
@@ -540,7 +556,7 @@ impl ResourceManager for Persistence {
             .delete_resource(delete_resource_req)
             .await
             .map(|res| res.into_inner())
-            .map_err(Error::from);
+            .map_err(PersistenceError::ResourceRecorder);
     }
 }
 

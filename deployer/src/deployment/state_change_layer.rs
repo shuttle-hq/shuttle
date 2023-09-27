@@ -136,7 +136,9 @@ mod tests {
     };
 
     use crate::{
-        persistence::{DeploymentState, DeploymentUpdater, ResourceManager, StateRecorder},
+        persistence::{
+            resource::ResourceManager, DeploymentState, DeploymentUpdater, StateRecorder,
+        },
         RuntimeManager,
     };
     use async_trait::async_trait;
@@ -492,6 +494,7 @@ mod tests {
 
         async fn delete_resource(
             &mut self,
+            _project_name: String,
             _service_id: &ulid::Ulid,
             _type: String,
             _claim: Claim,

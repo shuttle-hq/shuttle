@@ -36,6 +36,7 @@ pub trait ResourceManager: Clone + Send + Sync + 'static {
     ) -> Result<ResourceResponse, Self::Err>;
     async fn delete_resource(
         &mut self,
+        project_name: String,
         service_id: &ulid::Ulid,
         r#type: String,
         claim: Claim,

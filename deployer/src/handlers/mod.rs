@@ -41,7 +41,7 @@ use shuttle_service::builder::clean_crate;
 use crate::persistence::{Deployment, Persistence, SecretGetter, State};
 use crate::{
     deployment::{Built, DeploymentManager, Queued},
-    persistence::ResourceManager,
+    persistence::resource::ResourceManager,
 };
 pub use {self::error::Error, self::error::Result, self::local::set_jwt_bearer};
 
@@ -368,7 +368,7 @@ pub async fn delete_service_resource(
     }
 
     let delete_resource_response = persistence
-        .delete_resource(&service.id, resource_type, claim)
+        .delete_resource(project_name, &service.id, resource_type, claim)
         .await?;
 
     if !delete_resource_response.success {

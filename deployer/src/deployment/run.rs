@@ -38,7 +38,7 @@ use uuid::Uuid;
 use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
-    persistence::{DeploymentUpdater, ResourceManager, SecretGetter},
+    persistence::{resource::ResourceManager, DeploymentUpdater, SecretGetter},
     RuntimeManager,
 };
 
@@ -478,7 +478,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        persistence::{DeploymentUpdater, ResourceManager, Secret, SecretGetter},
+        persistence::{resource::ResourceManager, DeploymentUpdater, Secret, SecretGetter},
         RuntimeManager,
     };
 
@@ -606,6 +606,7 @@ mod tests {
 
         async fn delete_resource(
             &mut self,
+            _project_name: String,
             _service_id: &ulid::Ulid,
             _type: String,
             _claim: Claim,

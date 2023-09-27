@@ -30,7 +30,7 @@ use uuid::Uuid;
 use shuttle_deployer::{
     deployment::Built,
     error,
-    persistence::{DeploymentUpdater, ResourceManager, Secret, SecretGetter},
+    persistence::{resource::ResourceManager, DeploymentUpdater, Secret, SecretGetter},
     RuntimeManager,
 };
 
@@ -126,6 +126,7 @@ impl ResourceManager for StubResourceManager {
 
     async fn delete_resource(
         &mut self,
+        project_name: String,
         service_id: &Ulid,
         resource_type: String,
         claim: Claim,

@@ -6,8 +6,8 @@ use hyper::{
     service::{make_service_fn, service_fn},
 };
 pub use persistence::Persistence;
+pub use provisioner::Manager;
 use proxy::AddressGetter;
-pub use resource::ResourceManager;
 pub use runtime_manager::RuntimeManager;
 use shuttle_common::log::LogRecorder;
 use shuttle_proto::{builder::builder_client::BuilderClient, logger::logger_client::LoggerClient};
@@ -20,8 +20,8 @@ pub mod deployment;
 pub mod error;
 pub mod handlers;
 pub mod persistence;
+mod provisioner;
 mod proxy;
-mod resource;
 mod runtime_manager;
 
 pub use crate::args::Args;

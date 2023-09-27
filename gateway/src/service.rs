@@ -320,12 +320,11 @@ impl GatewayService {
     }
 
     pub async fn project_name_exists(&self, project_name: &ProjectName) -> Result<(), Error> {
-        let a = query("SELECT project_name FROM projects WHERE project_name=?1")
+        query("SELECT project_name FROM projects WHERE project_name=?1")
             .bind(project_name)
             .fetch_optional(&self.db)
-            .await?;
-        println!("{}", a.is_some());
-        a.map(|_| ())
+            .await?
+            .map(|_| ())
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
 

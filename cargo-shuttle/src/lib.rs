@@ -308,7 +308,7 @@ impl Shuttle {
                     Failed,
                 }
                 // TODO replace this with self.client after PR 1275
-                match reqwest::get(format!("{}/project/name/{}", self.ctx.api_url(), p))
+                match reqwest::get(format!("{}/projects/name/{}", self.ctx.api_url(), p))
                     .await
                     .map(|r| match r.status() {
                         reqwest::StatusCode::NOT_FOUND => NameCheck::Available,
@@ -322,10 +322,13 @@ impl Shuttle {
                         break;
                     }
                     NameCheck::Taken => {
-                        println!("Project name already taken: '{}'", p.to_string());
+                        println!("{} {}", "Project name already taken:".red(), p);
                     }
                     NameCheck::Failed => {
-                        println!("Failed to check if project name is available.");
+                        println!(
+                            "{}",
+                            "Failed to check if project name is available.".yellow()
+                        );
                         break;
                     }
                 }

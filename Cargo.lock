@@ -5075,9 +5075,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest-retry"
-version = "0.2.3"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c6a11c05102e5bec712c0619b8c7b7eda8b21a558a0bd981ceee15c38df8be4"
+checksum = "9af20b65c2ee9746cc575acb6bd28a05ffc0d15e25c992a8f4462d8686aacb4f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6948,18 +6948,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cda73e2f1397b1262d6dfdcef8aafae14d1de7748d66822d3bfeeb6d03e5e4b"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "toml_edit"
-version = "0.19.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd30deba9a1cd7153c22aecf93e86df639e7b81c622b0af8d9255e989991a7b7"
-dependencies = [
- "indexmap 1.9.3",
- "itertools 0.10.5",
- "nom8",
- "toml_datetime 0.5.1",
 ]
 
 [[package]]

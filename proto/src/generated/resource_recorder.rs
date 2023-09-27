@@ -63,18 +63,12 @@ pub struct ServiceResourcesRequest {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetResourceRequest {
+pub struct ResourceIds {
     #[prost(string, tag = "1")]
-    pub service_id: ::prost::alloc::string::String,
+    pub project_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub r#type: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DeleteResourceRequest {
-    #[prost(string, tag = "1")]
     pub service_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag = "3")]
     pub r#type: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -229,7 +223,7 @@ pub mod resource_recorder_client {
         /// Get a resource
         pub async fn get_resource(
             &mut self,
-            request: impl tonic::IntoRequest<super::GetResourceRequest>,
+            request: impl tonic::IntoRequest<super::ResourceIds>,
         ) -> Result<tonic::Response<super::ResourceResponse>, tonic::Status> {
             self.inner
                 .ready()
@@ -249,7 +243,7 @@ pub mod resource_recorder_client {
         /// Delete a resource
         pub async fn delete_resource(
             &mut self,
-            request: impl tonic::IntoRequest<super::DeleteResourceRequest>,
+            request: impl tonic::IntoRequest<super::ResourceIds>,
         ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status> {
             self.inner
                 .ready()
@@ -293,12 +287,12 @@ pub mod resource_recorder_server {
         /// Get a resource
         async fn get_resource(
             &self,
-            request: tonic::Request<super::GetResourceRequest>,
+            request: tonic::Request<super::ResourceIds>,
         ) -> Result<tonic::Response<super::ResourceResponse>, tonic::Status>;
         /// Delete a resource
         async fn delete_resource(
             &self,
-            request: tonic::Request<super::DeleteResourceRequest>,
+            request: tonic::Request<super::ResourceIds>,
         ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status>;
     }
     #[derive(Debug)]
@@ -485,7 +479,7 @@ pub mod resource_recorder_server {
                     struct GetResourceSvc<T: ResourceRecorder>(pub Arc<T>);
                     impl<
                         T: ResourceRecorder,
-                    > tonic::server::UnaryService<super::GetResourceRequest>
+                    > tonic::server::UnaryService<super::ResourceIds>
                     for GetResourceSvc<T> {
                         type Response = super::ResourceResponse;
                         type Future = BoxFuture<
@@ -494,7 +488,7 @@ pub mod resource_recorder_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::GetResourceRequest>,
+                            request: tonic::Request<super::ResourceIds>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move {
@@ -525,7 +519,7 @@ pub mod resource_recorder_server {
                     struct DeleteResourceSvc<T: ResourceRecorder>(pub Arc<T>);
                     impl<
                         T: ResourceRecorder,
-                    > tonic::server::UnaryService<super::DeleteResourceRequest>
+                    > tonic::server::UnaryService<super::ResourceIds>
                     for DeleteResourceSvc<T> {
                         type Response = super::ResultResponse;
                         type Future = BoxFuture<
@@ -534,7 +528,7 @@ pub mod resource_recorder_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::DeleteResourceRequest>,
+                            request: tonic::Request<super::ResourceIds>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move {

@@ -3,9 +3,8 @@ use dal::{Dal, DalError, Resource};
 use prost_types::TimestampError;
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
 use shuttle_proto::resource_recorder::{
-    self, resource_recorder_server::ResourceRecorder, DeleteResourceRequest, GetResourceRequest,
-    ProjectResourcesRequest, RecordRequest, ResourceResponse, ResourcesResponse, ResultResponse,
-    ServiceResourcesRequest,
+    self, resource_recorder_server::ResourceRecorder, ProjectResourcesRequest, RecordRequest,
+    ResourceIds, ResourceResponse, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
 };
 use std::convert::TryInto;
 use thiserror::Error;
@@ -94,9 +93,9 @@ where
     /// Get a resource
     async fn get_resource(
         &self,
-        resource: GetResourceRequest,
+        resource: ResourceIds,
     ) -> Result<resource_recorder::Resource, Error> {
-        let resource_option = self.dal.get_resourx  ce(&resource.try_into()?).await?;
+        let resource_option = self.dal.get_resource(resource).await?;
 
         match resource_option {
             Some(resource) => Ok(resource.into()),
@@ -105,8 +104,8 @@ where
     }
 
     /// Delete a resource
-    async fn delete_resource(&self, resource: GetResourceRequest) -> Result<(), Error> {
-        self.dal.delete_resource(&resource.try_into()?).await?;
+    async fn delete_resource(&self, resource: ResourceIds) -> Result<(), Error> {
+        self.dal.delete_resource(resource).await?;
 
         Ok(())
     }
@@ -186,7 +185,7 @@ where
 
     async fn get_resource(
         &self,
-        request: tonic::Request<GetResourceRequest>,
+        request: tonic::Request<ResourceIds>,
     ) -> Result<Response<ResourceResponse>, Status> {
         request.verify(Scope::Resources)?;
 
@@ -209,7 +208,7 @@ where
 
     async fn delete_resource(
         &self,
-        request: tonic::Request<DeleteResourceRequest>,
+        request: tonic::Request<ResourceIds>,
     ) -> Result<Response<ResultResponse>, Status> {
         request.verify(Scope::ResourcesWrite)?;
 

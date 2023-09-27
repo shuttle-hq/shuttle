@@ -7,7 +7,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::extract::{Extension, Path, Query, State};
 use axum::handler::Handler;
-use axum::http::{Request, StatusCode};
+use axum::http::Request;
 use axum::middleware::from_extractor;
 use axum::response::Response;
 use axum::routing::{any, get, post};
@@ -131,8 +131,8 @@ async fn get_project(
     get,
     path = "/projects/name/{project_name}",
     responses(
-        (status = 200, description = "Project name is taken."),
-        (status = 404, description = "Project name is free."),
+        (status = 200, description = "True if project name is taken. False if free.", body = bool),
+        (status = 400, description = "Invalid project name.", body = String),
         (status = 500, description = "Server internal error.")
     ),
     params(
@@ -142,17 +142,11 @@ async fn get_project(
 async fn check_project_name(
     State(RouterState { service, .. }): State<RouterState>,
     Path(project_name): Path<ProjectName>,
-) -> StatusCode {
-    match service.project_name_exists(&project_name).await {
-        Ok(_) => StatusCode::OK,
-        Err(e) => {
-            if e.kind == ErrorKind::ProjectNotFound {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
-        }
-    }
+) -> Result<AxumJson<bool>, Error> {
+    service
+        .project_name_exists(&project_name)
+        .await
+        .map(AxumJson)
 }
 
 #[utoipa::path(

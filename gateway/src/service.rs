@@ -319,13 +319,14 @@ impl GatewayService {
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
 
-    pub async fn project_name_exists(&self, project_name: &ProjectName) -> Result<(), Error> {
-        query("SELECT project_name FROM projects WHERE project_name=?1")
-            .bind(project_name)
-            .fetch_optional(&self.db)
-            .await?
-            .map(|_| ())
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
+    pub async fn project_name_exists(&self, project_name: &ProjectName) -> Result<bool, Error> {
+        Ok(
+            query("SELECT project_name FROM projects WHERE project_name=?1")
+                .bind(project_name)
+                .fetch_optional(&self.db)
+                .await?
+                .is_some(),
+        )
     }
 
     pub async fn iter_user_projects_detailed(

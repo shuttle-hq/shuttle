@@ -71,7 +71,7 @@ impl Persistence {
     pub async fn new(
         path: &str,
         resource_recorder_uri: &Uri,
-        provisioner_address: Endpoint,
+        provisioner_address: &Endpoint,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
         if !Path::new(path).exists() {
@@ -142,7 +142,7 @@ impl Persistence {
     async fn configure(
         pool: SqlitePool,
         resource_recorder_uri: String,
-        provisioner_address: Endpoint,
+        provisioner_address: &Endpoint,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
         let channel = Endpoint::from_shared(resource_recorder_uri.to_string())

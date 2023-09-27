@@ -6,9 +6,6 @@ use shuttle_common::{
     claims::{ClaimLayer, InjectPropagationLayer},
     log::{Backend, DeploymentLogLayer},
 };
-use shuttle_deployer::{
-    start, start_proxy, Args, DeployLayer, Persistence, ResourceManager, RuntimeManager,
-};
 use shuttle_deployer::{start, start_proxy, Args, Persistence, RuntimeManager, StateChangeLayer};
 use shuttle_proto::{
     builder::builder_client::BuilderClient,

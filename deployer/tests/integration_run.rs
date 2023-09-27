@@ -15,7 +15,7 @@ use shuttle_proto::{
         provisioner_server::{Provisioner, ProvisionerServer},
         DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
     },
-    resource_recorder::{ResourcesResponse, ResultResponse},
+    resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     runtime::{StopReason, SubscribeStopResponse},
 };
 use tokio::{
@@ -121,6 +121,31 @@ impl ResourceManager for StubResourceManager {
             success: true,
             message: "dummy impl".to_string(),
             resources: Vec::new(),
+        })
+    }
+
+    async fn delete_resource(
+        &mut self,
+        service_id: &Ulid,
+        resource_type: String,
+        claim: Claim,
+    ) -> Result<ResultResponse, Self::Err> {
+        Ok(ResultResponse {
+            success: true,
+            message: "dummy impl".to_string(),
+        })
+    }
+
+    async fn get_resource(
+        &mut self,
+        service_id: &ulid::Ulid,
+        r#type: String,
+        claim: Claim,
+    ) -> Result<ResourceResponse, Self::Err> {
+        Ok(ResourceResponse {
+            success: true,
+            message: "dummy impl".to_string(),
+            resource: None,
         })
     }
 }

@@ -220,6 +220,7 @@ impl Shuttle {
             self.version_info = Some(versions);
 
             // check cargo-shuttle version
+            // should always be a valid semver
             let my_version = &semver::Version::from_str(VERSION).unwrap();
             let latest_version = &self.version_info.as_ref().unwrap().cargo_shuttle;
             if my_version != latest_version {
@@ -241,7 +242,8 @@ impl Shuttle {
                         Some(formatdoc! {"
                             Warning:
                                 Your version of cargo-shuttle ({my_version}) is newer than what the API expects ({latest_version}).
-                                Things might not work until the API is updated."
+                                This means a new release is likely underway!
+                                Unexpected behavior can occur until the API is updated."
                         })
                     )
                 };
@@ -1768,6 +1770,7 @@ impl Shuttle {
 }
 
 fn check_version(runtime_path: &Path) -> Result<()> {
+    // should always be a valid semver
     let my_version = semver::Version::from_str(VERSION).unwrap();
 
     if !runtime_path.try_exists()? {

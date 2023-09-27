@@ -36,7 +36,7 @@ reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = "0.2.0"
 reqwest-retry = "0.3.0"
 rmp-serde = { workspace = true }
-semver = "1.0.17"
+semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 strum = { workspace = true }

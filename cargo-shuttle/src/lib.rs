@@ -166,7 +166,10 @@ impl Shuttle {
                 | Command::Project(..)
         ) {
             let mut client = Client::new(self.ctx.api_url());
-            client.set_api_key(self.ctx.api_key()?);
+            if !matches!(args.cmd, Command::Init(..)) {
+                // init command will handle this by itself (log in and set key) if there is no key yet
+                client.set_api_key(self.ctx.api_key()?);
+            }
             self.client = Some(client);
             self.check_api_versions().await?;
         }
@@ -485,14 +488,15 @@ impl Shuttle {
 
                 Password::with_theme(&ColorfulTheme::default())
                     .with_prompt("API key")
-                    .validate_with(|input: &String| ApiKey::parse(input).map(|_| {}))
+                    .validate_with(|input: &String| ApiKey::parse(input).map(|_| ()))
                     .interact()?
             }
         };
 
         let api_key = ApiKey::parse(&api_key_str)?;
 
-        self.ctx.set_api_key(api_key)?;
+        self.ctx.set_api_key(api_key.clone())?;
+        self.client.as_mut().unwrap().set_api_key(api_key);
 
         Ok(CommandOutcome::Ok)
     }

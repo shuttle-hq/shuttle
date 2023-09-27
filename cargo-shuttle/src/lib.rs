@@ -314,6 +314,7 @@ impl Shuttle {
                         break;
                     }
                     Err(_) => {
+                        project_args.name = Some(p);
                         println!(
                             "{}",
                             "Failed to check if project name is available.".yellow()

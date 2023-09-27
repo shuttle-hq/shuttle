@@ -478,7 +478,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        persistence::{DeploymentUpdater, ResourceManager, ResourceType, Secret, SecretGetter},
+        persistence::{DeploymentUpdater, ResourceManager, Secret, SecretGetter},
         RuntimeManager,
     };
 

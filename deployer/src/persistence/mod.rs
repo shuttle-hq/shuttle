@@ -9,9 +9,8 @@ use shuttle_common::claims::{Claim, ClaimLayer, InjectPropagationLayer};
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     resource_recorder::{
-        record_request, resource_recorder_client::ResourceRecorderClient, DeleteResourceRequest,
-        GetResourceRequest, RecordRequest, ResourceResponse, ResourcesResponse, ResultResponse,
-        ServiceResourcesRequest,
+        record_request, resource_recorder_client::ResourceRecorderClient, RecordRequest,
+        ResourceIds, ResourceResponse, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
     },
 };
 use sqlx::{
@@ -500,7 +499,8 @@ impl ResourceManager for Persistence {
         r#type: String,
         claim: Claim,
     ) -> Result<ResourceResponse> {
-        let mut get_resource_req = tonic::Request::new(GetResourceRequest {
+        let mut get_resource_req = tonic::Request::new(ResourceIds {
+            project_id: self.project_id.to_string(),
             service_id: service_id.to_string(),
             r#type,
         });
@@ -525,7 +525,8 @@ impl ResourceManager for Persistence {
     ) -> Result<ResultResponse> {
         // TODO: Delete resource from provisioner
 
-        let mut delete_resource_req = tonic::Request::new(DeleteResourceRequest {
+        let mut delete_resource_req = tonic::Request::new(ResourceIds {
+            project_id: self.project_id.to_string(),
             service_id: service_id.to_string(),
             r#type: resource_type.to_string(),
         });

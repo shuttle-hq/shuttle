@@ -88,7 +88,7 @@ async fn main() {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
             error!("Proxy stopped.")
         },
-        _ = start(persistence, resource_manager, runtime_manager, logger_batcher, logger_client, builder_client args) => {
+        _ = start(persistence, runtime_manager, resource_manager, logger_batcher, logger_client, builder_client, args) => {
             error!("Deployment service stopped.")
         },
     }

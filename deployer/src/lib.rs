@@ -33,7 +33,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub async fn start(
     persistence: Persistence,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
-    resource_manager: ResourceManager,
+    resource_manager: Manager,
     log_recorder: impl LogRecorder,
     log_fetcher: LoggerClient<
         shuttle_common::claims::ClaimService<

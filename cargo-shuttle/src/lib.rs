@@ -751,14 +751,16 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn resource_delete(resource_type: &resource::Type) -> Result<()> {
+    async fn resource_delete(&self, resource_type: &resource::Type) -> Result<CommandOutcome> {
         self.client
+            .as_ref()
+            .unwrap()
             .delete_service_resource(self.ctx.project_name(), resource_type)
             .await?;
 
         println!("Deleted resource {resource_type}");
 
-        Ok(())
+        Ok(CommandOutcome::Ok)
     }
 
     async fn spin_local_runtime(

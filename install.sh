@@ -92,7 +92,7 @@ _install_binary() {
 _install_cargo() {
   echo "Attempting install with cargo"
   if ! command -v cargo &>/dev/null; then
-    echo "cargo not found! Attempting to install rustup"
+    echo "cargo not found! Attempting to install Rust and cargo via rustup"
     if command -v rustup &>/dev/null; then
       echo "rustup was found, but cargo wasn't. Something is up with your install"
       exit 1

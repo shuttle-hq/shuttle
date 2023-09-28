@@ -97,7 +97,7 @@ _install_cargo() {
       echo "rustup was found, but cargo wasn't. Something is up with your install"
       exit 1
     fi
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -q
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s
     echo "rustup installed! Attempting cargo install"
   fi
 

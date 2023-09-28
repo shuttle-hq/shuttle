@@ -28,6 +28,7 @@ rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }
 rustrict = { version = "0.7.4", optional = true }
+semver = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 strum = { workspace = true, features = ["derive"] }

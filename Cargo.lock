@@ -1069,7 +1069,7 @@ version = "9.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e11c675378efb449ed3ce8de78d75d0d80542fc98487c26aba28eb3b82feac72"
 dependencies = [
- "semver 1.0.18",
+ "semver 1.0.19",
  "serde",
  "toml 0.7.8",
  "url",
@@ -1118,7 +1118,7 @@ dependencies = [
  "reqwest-retry",
  "rexpect",
  "rmp-serde",
- "semver 1.0.18",
+ "semver 1.0.19",
  "serde",
  "serde_json",
  "shuttle-common",
@@ -1150,7 +1150,7 @@ checksum = "eee4243f1f26fc7a42710e7439c149e2b10b05472f88090acce52632f231a73a"
 dependencies = [
  "camino",
  "cargo-platform",
- "semver 1.0.18",
+ "semver 1.0.19",
  "serde",
  "serde_json",
  "thiserror",
@@ -5121,7 +5121,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366"
 dependencies = [
- "semver 1.0.18",
+ "semver 1.0.19",
 ]
 
 [[package]]
@@ -5360,9 +5360,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.18"
+version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918"
+checksum = "ad977052201c6de01a8ef2aa3378c4bd23217a056337d1d6da40468d267a4fb0"
 dependencies = [
  "serde",
 ]
@@ -5688,6 +5688,7 @@ dependencies = [
  "ring",
  "rmp-serde",
  "rustrict",
+ "semver 1.0.19",
  "serde",
  "serde_json",
  "sqlx",

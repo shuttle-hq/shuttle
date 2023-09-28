@@ -97,7 +97,17 @@ _install_cargo() {
       echo "rustup was found, but cargo wasn't. Something is up with your install"
       exit 1
     fi
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s
+    while true; do
+      read -r -p "cargo not found! Do you wish to attempt to install Rust and cargo via rustup? [Y/N] " yn
+      case $yn in
+      [Yy]*)
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s
+        source "$HOME/.cargo/env"
+        ;;
+      [Nn]*) exit ;;
+      *) echo "Please answer yes or no." ;;
+      esac
+    done
     echo "rustup installed! Attempting cargo install"
   fi
 

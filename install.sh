@@ -109,7 +109,7 @@ _install_unsupported() {
 
   if command -v cargo-binstall &>/dev/null; then
     echo "Installing with cargo-binstall"
-    cargo binstall cargo-shuttle
+    cargo binstall -y --locked cargo-shuttle
     return 0
   fi
 

@@ -1,4 +1,5 @@
 use std::fs::{self, read_to_string};
+use std::num::NonZeroU32;
 use std::{
     fmt::Write,
     path::{Path, PathBuf},
@@ -7,7 +8,7 @@ use std::{
 use anyhow::{Context, Result};
 use regex::Regex;
 use shuttle_common::project::ProjectName;
-use tempfile::tempdir;
+use tempfile::Builder;
 use toml_edit::{value, Document};
 use url::Url;
 
@@ -15,9 +16,13 @@ use core::sync::atomic::AtomicBool;
 
 use gix::clone::PrepareFetch;
 use gix::create::{self, Kind};
+use gix::remote::fetch::Shallow;
 use gix::{open, progress};
 
 use crate::args::TemplateLocation;
+
+const SHUTTLE_EXAMPLES_README: &str = "https://github.com/shuttle\
+		     -hq/shuttle-examples#how-to-clone-run-and-deploy-an-example";
 
 pub fn generate_project(
     dest: PathBuf,
@@ -48,7 +53,7 @@ pub fn generate_project(
 }
 
 /// Location where the template to generate a project is found.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum GenerateFrom {
     /// `LocalPath` also supports sub-folders, but it doesn't need
     /// multiple entries for this. The primary path and the sub-folder
@@ -113,9 +118,8 @@ impl GenerateFrom {
 		     , or use another method of specifying the template location."
                 );
                 println!(
-                    "HINT: Here you can find examples of how to \
-		     select a template: https://github.com/shuttle\
-		     -hq/shuttle-examples#how-to-clone-run-and-deploy-an-example"
+                    "HINT: You can find examples of how to select \
+		     a template here: {SHUTTLE_EXAMPLES_README}"
                 );
                 anyhow::bail!("invalid URL scheme")
             }
@@ -128,8 +132,10 @@ impl GenerateFrom {
     where
         F: FnOnce(&Path) -> Result<()>,
     {
-        let temp_dir =
-            tempdir().context("Failed to create a temporary directory to generate project into")?;
+        let temp_dir = Builder::new()
+            .prefix("cargo-shuttle-init")
+            .tempdir()
+            .context("Failed to create a temporary directory to generate project into")?;
 
         // `gen` is the path to the directory inside `temp_dir` where the
         // template is generated. It differs from `temp_dir` only if a
@@ -209,7 +215,8 @@ fn gix_clone(from_url: &str, to_path: &Path) -> Result<()> {
         },
         open::Options::isolated(),
     )
-    .with_context(|| format!("Failed to prepare fetch repository '{from_url}'"))?;
+    .with_context(|| format!("Failed to prepare fetch repository '{from_url}'"))?
+    .with_shallow(Shallow::DepthAtRemote(NonZeroU32::new(1).unwrap())); // Like `--depth 1`.
 
     let (mut prepare, _outcome) = fetch
         .fetch_then_checkout(progress::Discard, &AtomicBool::new(false))
@@ -263,7 +270,7 @@ fn copy_template(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum GitVendor {
     GitHub,
     BitBucket,
@@ -369,7 +376,15 @@ mod tests {
     #[test]
     fn parse_valid_template_location() {
         test_gen_from!("blah/eww", "foo").unwrap();
-        test_gen_from!("blah/eww", "foo/bar").unwrap();
+        assert_eq!(
+            test_gen_from!("blah/eww", "foo/bar").unwrap(),
+            GenerateFrom::RemoteRepo {
+                vendor: GitVendor::GitHub,
+                owner: "blah".to_owned(),
+                name: "eww".to_owned(),
+                subfolder: Some("foo/bar".into()),
+            },
+        );
         test_gen_from!("gh:blah/eww", None).unwrap();
         test_gen_from!("gl:blah/eww", None).unwrap();
         test_gen_from!("bb:blah/eww", None).unwrap();
@@ -380,11 +395,17 @@ mod tests {
         )
         .unwrap();
         test_gen_from!("https://github.com/shuttle-hq/shuttle-examples.git", None).unwrap();
-        test_gen_from!(
-            "https://github.com/shuttle-hq/shuttle-examples.git",
-            "rocket/hello-world"
-        )
-        .unwrap();
+        assert_eq!(
+            test_gen_from!(
+                "https://github.com/shuttle-hq/shuttle-examples.git",
+                "rocket/hello-world"
+            )
+            .unwrap(),
+            GenerateFrom::Url {
+                url: "https://github.com/shuttle-hq/shuttle-examples.git".to_owned(),
+                subfolder: Some(Path::new("rocket/hello-world").to_owned())
+            }
+        );
         test_gen_from!("./", None).unwrap();
         test_gen_from!("./foo", None).unwrap();
         test_gen_from!("./foo/bar", None).unwrap();
@@ -395,7 +416,10 @@ mod tests {
         test_gen_from!("./foo/bar", "warp/hello-world").unwrap();
         test_gen_from!("./foo/bar/baz", "warp/hello-world").unwrap();
         test_gen_from!("../foo/bar", "warp/hello-world").unwrap();
-        test_gen_from!("../foo/bar/baz", "warp/hello-world").unwrap();
+        assert_eq!(
+            test_gen_from!("../foo/bar/baz", "warp/hello-world").unwrap(),
+            GenerateFrom::LocalPath(Path::new("../foo/bar/baz/warp/hello-world").to_owned()),
+        );
         test_gen_from!("/", None).unwrap();
         test_gen_from!("/foo", None).unwrap();
         test_gen_from!("/foo/bar", None).unwrap();
@@ -416,9 +440,8 @@ mod tests {
 
         // Also GitHub
         // cargo shuttle init --from username/repository
-        let gen = test_gen_from!("username/repsoitory", None).unwrap();
         assert!(matches!(
-            gen,
+            test_gen_from!("username/repsoitory", None).unwrap(),
             GenerateFrom::RemoteRepo {
                 vendor: GitVendor::GitHub,
                 ..

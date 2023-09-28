@@ -101,7 +101,7 @@ _install_cargo() {
     echo "rustup installed! Attempting cargo install"
   fi
 
-  cargo install cargo-shuttle
+  cargo install --locked cargo-shuttle
 }
 
 _install_unsupported() {

@@ -137,6 +137,15 @@ _install_unsupported() {
   done
 }
 
+if command -v cargo-shuttle &>/dev/null; then
+  if [[ "$(cargo-shuttle -V)" = *"${LATEST_VERSION#v}" ]]; then
+    echo "cargo-shuttle is already at the latest version!"
+    exit
+  else
+    echo "Updating cargo-shuttle to $LATEST_VERSION"
+  fi
+fi
+
 case "$OSTYPE" in
 linux*) _install_linux ;;
 darwin*) _install_mac ;;

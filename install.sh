@@ -105,7 +105,7 @@ _install_cargo() {
 }
 
 _install_unsupported() {
-  echo "Unknown or unsupported OS or architecture"
+  echo "Installing with package manager is not supported"
 
   if command -v cargo-binstall &>/dev/null; then
     echo "Installing with cargo-binstall"

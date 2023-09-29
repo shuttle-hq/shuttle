@@ -19,12 +19,15 @@ EOF
 if ! command -v curl &>/dev/null; then
   echo "curl not installed. Please install curl."
   exit
+elif ! command -v sed &>/dev/null; then
+  echo "sed not installed. Please install sed."
+  exit
 fi
 
 REPO_URL="https://github.com/shuttle-hq/shuttle"
 LATEST_RELEASE=$(curl -L -s -H 'Accept: application/json' "$REPO_URL/releases/latest")
-LATEST_VERSION="${LATEST_RELEASE#*\"tag_name\":\"}"
-LATEST_VERSION="${LATEST_VERSION%%\"*}"
+# shellcheck disable=SC2001
+LATEST_VERSION=$(echo "$LATEST_RELEASE" | sed -e 's/.*"tag_name":"\([^"]*\)".*/\1/')
 
 _install_linux() {
   echo "Detected Linux!"
@@ -54,8 +57,14 @@ _install_linux() {
 _install_arch_linux() {
   echo "Arch Linux detected!"
   if command -v pacman &>/dev/null; then
-    echo "Installing with pacman"
-    sudo pacman -S cargo-shuttle
+    pacman_version=$(sudo pacman -Si cargo-shuttle | sed -n 's/^Version *: \(.*\)/\1/p')
+    if [[ "${pacman_version}" != "${LATEST_VERSION#v}"* ]]; then
+      echo "cargo-shuttle is not updated in the repos, ping @orhun!!!"
+      _install_unsupported
+    else
+      echo "Installing with pacman"
+      sudo pacman -S cargo-shuttle
+    fi
   else
     echo "Pacman not found"
     exit 1

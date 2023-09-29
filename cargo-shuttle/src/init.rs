@@ -58,10 +58,7 @@ pub fn generate_project(
     copy_dirs(&path, &dest, GitDir::Ignore)
         .context("Failed to copy the prepared template to the destination")?;
 
-    // `close` is kind of optional, but the dtor will ignore potential errors.
-    temp_dir
-        .close()
-        .context("Failed to close the temporary directory that the project was generated into")?;
+    drop(temp_dir);
 
     // Initialize a Git repository in the destination directory if there
     // is no existing Git repository present in the surrounding folders.
@@ -197,20 +194,22 @@ fn copy_dirs(src: &Path, dest: &Path, git_policy: GitDir) -> Result<()> {
         } else if entry_type.is_file() {
             if entry_dest.exists() {
                 println!(
-                    "Error: file '{}' already exists. Cannot overwrite",
+                    "Warning: file '{}' already exists. Cannot overwrite",
                     entry_dest.display()
                 );
             } else {
                 // Copy this file.
                 fs::copy(&entry.path(), &entry_dest)?;
             }
+        } else if entry_type.is_symlink() {
+            println!("Warning: symlink '{entry_name}' is ignored");
         }
     }
 
     Ok(())
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 enum GitDir {
     Ignore,
     Copy,

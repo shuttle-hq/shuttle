@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result};
 use regex::Regex;
 use shuttle_common::project::ProjectName;
-use tempfile::Builder;
+use tempfile::{Builder, TempDir};
 use toml_edit::{value, Document};
 use url::Url;
 
@@ -29,18 +29,39 @@ pub fn generate_project(
     name: &ProjectName,
     temp_loc: TemplateLocation,
 ) -> Result<()> {
-    let gen = GenerateFrom::from(temp_loc).context("Failed to parse template location")?;
-
     println!(r#"Creating project "{name}" in "{}""#, dest.display());
 
-    gen.generate(&dest, |path: &Path| {
-        // Modifications applied to the content of the template:
-        set_crate_name(path, name.as_str())
-            .with_context(|| "Failed to set crate name. No Cargo.toml in template?")?;
-        edit_shuttle_toml(path).with_context(|| "Failed to edit Shuttle.toml.")?;
-        create_gitignore_file(path).with_context(|| "Failed to create .gitignore file.")?;
-        Ok(())
-    })?;
+    let temp_dir: TempDir = setup_template(&temp_loc.auto_path)
+        .context("Failed to setup template generation directory")?;
+
+    let path = match temp_loc.subfolder {
+        Some(subfolder) => {
+            let path = temp_dir.path().join(&subfolder);
+            if path.exists() {
+                path
+            } else {
+                anyhow::bail!(format!(
+                    r#"There is no sub-folder "{}" in the template found at "{}""#,
+                    subfolder, temp_loc.auto_path
+                ))
+            }
+        }
+        None => temp_dir.path().to_owned(),
+    };
+
+    // Prepare the template by changing its default contents.
+    set_crate_name(&path, name.as_str())
+        .context("Failed to set crate name. No Cargo.toml in template?")?;
+    edit_shuttle_toml(&path).context("Failed to edit Shuttle.toml")?;
+    create_gitignore_file(&path).context("Failed to create .gitignore file")?;
+
+    copy_dirs(&path, &dest, GitDir::Ignore)
+        .context("Failed to copy the prepared template to the destination")?;
+
+    // `close` is kind of optional, but the dtor will ignore potential errors.
+    temp_dir
+        .close()
+        .context("Failed to close the temporary directory that the project was generated into")?;
 
     // Initialize a Git repository in the destination directory if there
     // is no existing Git repository present in the surrounding folders.
@@ -52,150 +73,66 @@ pub fn generate_project(
     Ok(())
 }
 
-/// Location where the template to generate a project is found.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum GenerateFrom {
-    /// `LocalPath` also supports sub-folders, but it doesn't need
-    /// multiple entries for this. The primary path and the sub-folder
-    /// path are simply concatenated when the `LocalPath` is constructed.
-    LocalPath(PathBuf),
-    Url {
-        url: String,                // e.g. `https://github.com/shuttle-hq/shuttle
-        subfolder: Option<PathBuf>, // e.g. `cargo-shuttle`
-    },
-    RemoteRepo {
-        vendor: GitVendor,
-        owner: String,              // e.g. `shuttle-hq`
-        name: String,               // e.g. `shuttle`
-        subfolder: Option<PathBuf>, // e.g. `cargo-shuttle`
-    },
-}
+// Very loose restrictions are applied to repository names.
+// What's important is that all names that are valid by the vendor's
+// rules are accepted here. There is no need to check that the user
+// actually provided a name that the vendor would accept.
+const GIT_PATTERN: &str = "^(?:(?<vendor>gh|gl|bb):)?(?<owner>[^/.:]+)/(?<name>[^/.:]+)$";
 
-impl GenerateFrom {
-    // Very loose restrictions are applied to repository names.
-    // What's important is that all names that are valid by the vendor's
-    // rules are accepted here. There is no need to check that the user
-    // actually provided a name that the vendor would accept.
-    const GIT_PATTERN: &str = "^(?:(?<vendor>gh|gl|bb):)?(?<owner>[^/.:]+)/(?<name>[^/.:]+)$";
+/// Create a temporary directory and copy the template found at
+/// `auto_path` into this directory. On success, a handle to this
+/// directory is returned. It can then be used to modify the
+/// template and lastly copy it to the actual destination.
+fn setup_template(auto_path: &str) -> Result<TempDir> {
+    let temp_dir = Builder::new()
+        .prefix("cargo-shuttle-init")
+        .tempdir()
+        .context("Failed to create a temporary directory to generate the project into")?;
 
-    fn from(loc: TemplateLocation) -> Result<Self> {
-        let git_re = Regex::new(Self::GIT_PATTERN).unwrap();
+    let git_re = Regex::new(GIT_PATTERN).unwrap();
 
-        if let Some(caps) = git_re.captures(&loc.auto_path) {
-            let vendor = match caps.name("vendor").map(|v| v.as_str()) {
-                Some("gl") => GitVendor::GitLab,
-                Some("bb") => GitVendor::BitBucket,
-                // GitHub is the default vendor if no other vendor is specified.
-                Some("gh") | None => GitVendor::GitHub,
-                Some(_) => unreachable!("should never match unknown vendor"),
-            };
-
-            Ok(Self::RemoteRepo {
-                vendor,
-                // `owner` and `name` are required for the regex to
-                // match. Thus, we don't need to check if they exist.
-                owner: caps["owner"].to_owned(),
-                name: caps["name"].to_owned(),
-                subfolder: loc.subfolder.map(PathBuf::from),
-            })
-        } else if Path::new(&loc.auto_path).is_absolute() || loc.auto_path.starts_with('.') {
-            // Local paths to template locations must be absolute or start with a
-            // dot pattern. This way, conflicts between relative path in the form
-            // `foo/bar` and repository name in the form `owner/name` are avoided.
-            match loc.subfolder {
-                Some(subfolder) => Ok(Self::LocalPath(Path::new(&loc.auto_path).join(subfolder))),
-                None => Ok(Self::LocalPath(PathBuf::from(loc.auto_path))),
-            }
-        } else if let Ok(url) = loc.auto_path.parse::<Url>() {
-            if url.scheme() == "http" || url.scheme() == "https" {
-                Ok(Self::Url {
-                    url: loc.auto_path,
-                    subfolder: loc.subfolder.map(PathBuf::from),
-                })
-            } else {
-                println!(
-                    "URL scheme is not supported. Please use HTTP of HTTPS for URLs\
-		     , or use another method of specifying the template location."
-                );
-                println!(
-                    "HINT: You can find examples of how to select \
-		     a template here: {SHUTTLE_EXAMPLES_README}"
-                );
-                anyhow::bail!("invalid URL scheme")
-            }
-        } else {
-            anyhow::bail!("template location is invalid")
-        }
-    }
-
-    fn generate<F>(self, dest: &Path, prepare: F) -> Result<()>
-    where
-        F: FnOnce(&Path) -> Result<()>,
-    {
-        let temp_dir = Builder::new()
-            .prefix("cargo-shuttle-init")
-            .tempdir()
-            .context("Failed to create a temporary directory to generate project into")?;
-
-        // `gen` is the path to the directory inside `temp_dir` where the
-        // template is generated. It differs from `temp_dir` only if a
-        // remote repository is used with a sub-folder.
-        let gen = match self {
-            Self::RemoteRepo {
-                vendor,
-                owner,
-                name,
-                subfolder,
-            } => {
-                let url = format!("{vendor}{owner}/{name}.git");
-                Self::generate_remote_repo(temp_dir.path(), url, subfolder)?
-            }
-            Self::Url { url, subfolder } => {
-                Self::generate_remote_repo(temp_dir.path(), url, subfolder)?
-            }
-            Self::LocalPath(path) => Self::generate_local_path(temp_dir.path(), path)?,
+    if let Some(caps) = git_re.captures(auto_path) {
+        let vendor = match caps.name("vendor").map(|v| v.as_str()) {
+            Some("gl") => "https://gitlab.com/",
+            Some("bb") => "https://bitbucket.org/",
+            // GitHub is the default vendor if no other vendor is specified.
+            Some("gh") | None => "https://github.com/",
+            Some(_) => unreachable!("should never match unknown vendor"),
         };
 
-        // Modify the template.
-        prepare(&gen).context("Failed to prepare template")?;
-
-        copy_template(&gen, dest)
-            .context("Failed to copy the prepared template to the destination")?;
-
-        temp_dir
-            .close()
-            .context("Failed to close temporary directory that the project was generated into")?;
-        Ok(())
-    }
-
-    fn generate_remote_repo(
-        temp_path: &Path,
-        url: String,
-        subfolder: Option<PathBuf>,
-    ) -> Result<PathBuf> {
-        gix_clone(&url, temp_path)
-            .with_context(|| format!("Failed to clone Git repository at {url}"))?;
-
-        // Extend the path to the directory that's used to generate the template
-        // with the path to the specified sub-folder in the cloned repository.
-        if let Some(subfolder) = subfolder {
-            Ok(temp_path.join(subfolder))
-        } else {
-            Ok(temp_path.into())
-        }
-    }
-
-    fn generate_local_path(temp_path: &Path, path: PathBuf) -> Result<PathBuf> {
-        if path.exists() {
-            copy_template(&path, temp_path)?;
-            Ok(temp_path.into())
+        // `owner` and `name` are required for the regex to
+        // match. Thus, we don't need to check if they exist.
+        let url = format!("{vendor}{}/{}.git", &caps["owner"], &caps["name"]);
+        gix_clone(&url, temp_dir.path())
+            .with_context(|| format!("Failed to clone template Git repository at {url}"))?;
+    } else if Path::new(auto_path).is_absolute() || auto_path.starts_with('.') {
+        if Path::new(auto_path).exists() {
+            copy_dirs(Path::new(auto_path), temp_dir.path(), GitDir::Copy)?;
         } else {
             anyhow::bail!(format!(
-                "Template directory {} doesn't exist",
-                path.display()
+                "Local template directory \"{auto_path}\" with doesn't exist"
             ))
         }
+    } else if let Ok(url) = auto_path.parse::<Url>() {
+        if url.scheme() == "http" || url.scheme() == "https" {
+            gix_clone(auto_path, temp_dir.path())
+                .with_context(|| format!("Failed to clone Git repository at {url}"))?;
+        } else {
+            println!(
+                "URL scheme is not supported. Please use HTTP of HTTPS for URLs\
+		 , or use another method of specifying the template location."
+            );
+            println!(
+                "HINT: You can find examples of how to select \
+		 a template here: {SHUTTLE_EXAMPLES_README}"
+            );
+            anyhow::bail!("invalid URL scheme")
+        }
+    } else {
+        anyhow::bail!("template location is invalid")
     }
+
+    Ok(temp_dir)
 }
 
 /// Mimic the behavior of `git clone`, cloning the Git repository found at
@@ -234,10 +171,13 @@ fn gix_clone(from_url: &str, to_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Copy everything from `src` to `dest`. The `.git` directory
-/// is not copied. The general procedure is the same as the one
-/// used in `cargo-generate` (https://github.com/cargo-generate/cargo-generate/blob/073b938b5205678bb25bd05aa8036b96ed5f22a7/src/lib.rs#L450).
-fn copy_template(src: &Path, dest: &Path) -> Result<()> {
+/// Recursively copy all files and directories from `src` to `dest`. If
+/// `git_policy` is set to `Ignore`, the `.git` directory is not copied.
+/// If `git_policy` is set to `Copy`, then the `.git` directory is copied.
+/// The procedure is the same as the one used in `cargo-generate`
+/// (https://github.com/cargo-generate/cargo-generate/ blob/
+/// 073b938b5205678bb25bd05aa8036b96ed5f22a7/src/lib.rs#L450).
+fn copy_dirs(src: &Path, dest: &Path, git_policy: GitDir) -> Result<()> {
     std::fs::create_dir_all(dest)?;
 
     for entry in fs::read_dir(src)? {
@@ -248,12 +188,12 @@ fn copy_template(src: &Path, dest: &Path) -> Result<()> {
         let entry_dest = dest.join(&entry_name);
 
         if entry_type.is_dir() {
-            if entry_name == ".git" {
+            if git_policy == GitDir::Ignore && entry_name == ".git" {
                 continue;
             }
 
             // Recursion!
-            copy_template(&entry.path(), &entry_dest)?;
+            copy_dirs(&entry.path(), &entry_dest, git_policy)?;
         } else if entry_type.is_file() {
             if entry_dest.exists() {
                 println!(
@@ -271,26 +211,9 @@ fn copy_template(src: &Path, dest: &Path) -> Result<()> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum GitVendor {
-    GitHub,
-    BitBucket,
-    GitLab,
-}
-
-impl GitVendor {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::GitHub => "https://github.com/",
-            Self::BitBucket => "https://bitbucket.org/",
-            Self::GitLab => "https://gitlab.com/",
-        }
-    }
-}
-
-impl std::fmt::Display for GitVendor {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
+enum GitDir {
+    Ignore,
+    Copy,
 }
 
 fn set_crate_name(path: &Path, name: &str) -> Result<()> {
@@ -355,111 +278,57 @@ fn create_gitignore_file(path: &Path) -> Result<()> {
 mod tests {
     use super::*;
 
-    macro_rules! test_gen_from {
-        // Two string literals, the second of which becomes an `Option`.
-        ($auto_path:literal, $subfolder:literal) => {
-            GenerateFrom::from(TemplateLocation {
-                auto_path: $auto_path.to_owned(),
-                subfolder: Some($subfolder.to_owned()),
-            })
-        };
-
-        // A string literal and an expression (`None`).
-        ($auto_path:literal, $subfolder:expr) => {
-            GenerateFrom::from(TemplateLocation {
-                auto_path: $auto_path.to_owned(),
-                subfolder: $subfolder,
-            })
-        };
-    }
-
     #[test]
-    fn parse_valid_template_location() {
-        test_gen_from!("blah/eww", "foo").unwrap();
-        assert_eq!(
-            test_gen_from!("blah/eww", "foo/bar").unwrap(),
-            GenerateFrom::RemoteRepo {
-                vendor: GitVendor::GitHub,
-                owner: "blah".to_owned(),
-                name: "eww".to_owned(),
-                subfolder: Some("foo/bar".into()),
-            },
-        );
-        test_gen_from!("gh:blah/eww", None).unwrap();
-        test_gen_from!("gl:blah/eww", None).unwrap();
-        test_gen_from!("bb:blah/eww", None).unwrap();
-        test_gen_from!("https://github.com/shuttle-hq/shuttle-examples", None).unwrap();
-        test_gen_from!(
-            "https://github.com/shuttle-hq/shuttle-examples",
-            "rocket/hello-world"
+    fn gix_clone_works() {
+        let temp_dir = Builder::new()
+            .prefix("shuttle-clone-test")
+            .tempdir()
+            .unwrap();
+        gix_clone(
+            "https://github.com/shuttle-hq/awesome-shuttle.git",
+            temp_dir.path(),
         )
         .unwrap();
-        test_gen_from!("https://github.com/shuttle-hq/shuttle-examples.git", None).unwrap();
-        assert_eq!(
-            test_gen_from!(
-                "https://github.com/shuttle-hq/shuttle-examples.git",
-                "rocket/hello-world"
-            )
-            .unwrap(),
-            GenerateFrom::Url {
-                url: "https://github.com/shuttle-hq/shuttle-examples.git".to_owned(),
-                subfolder: Some(Path::new("rocket/hello-world").to_owned())
-            }
-        );
-        test_gen_from!("./", None).unwrap();
-        test_gen_from!("./foo", None).unwrap();
-        test_gen_from!("./foo/bar", None).unwrap();
-        test_gen_from!("./foo/bar/baz", None).unwrap();
-        test_gen_from!("../foo/bar", None).unwrap();
-        test_gen_from!("../foo/bar/baz", None).unwrap();
-        test_gen_from!("./foo", "warp/hello-world").unwrap();
-        test_gen_from!("./foo/bar", "warp/hello-world").unwrap();
-        test_gen_from!("./foo/bar/baz", "warp/hello-world").unwrap();
-        test_gen_from!("../foo/bar", "warp/hello-world").unwrap();
-        assert_eq!(
-            test_gen_from!("../foo/bar/baz", "warp/hello-world").unwrap(),
-            GenerateFrom::LocalPath(Path::new("../foo/bar/baz/warp/hello-world").to_owned()),
-        );
-        test_gen_from!("/", None).unwrap();
-        test_gen_from!("/foo", None).unwrap();
-        test_gen_from!("/foo/bar", None).unwrap();
-        test_gen_from!("/foo/bar/baz", None).unwrap();
-        test_gen_from!("/foo/bar", None).unwrap();
-        test_gen_from!("/foo/bar/baz", None).unwrap();
-        test_gen_from!("/foo", "warp/hello-world").unwrap();
-        test_gen_from!("/foo/bar", "warp/hello-world").unwrap();
-        test_gen_from!("/foo/bar/baz", "warp/hello-world").unwrap();
-        test_gen_from!("/foo/bar", "warp/hello-world").unwrap();
-        test_gen_from!("/foo/bar/baz", "warp/hello-world").unwrap();
-
-        // Examples from the `shuttle-examples` repo.
-
-        // GitHub prefix. Change to 'gl:' or 'bb:' for GitLab or BitBucket
-        // cargo shuttle init --from gh:username/repository
-        test_gen_from!("gh:username/repository", None).unwrap();
-
-        // Also GitHub
-        // cargo shuttle init --from username/repository
-        assert!(matches!(
-            test_gen_from!("username/repsoitory", None).unwrap(),
-            GenerateFrom::RemoteRepo {
-                vendor: GitVendor::GitHub,
-                ..
-            }
-        ));
-
-        // From local folder
-        test_gen_from!("../path/to/folder", None).unwrap();
-        test_gen_from!("/home/user/some/folder", None).unwrap();
+        // Check that some file we know to exist in
+        // the Repository exists in the clone.
+        assert!(temp_dir.path().join("src/main.rs").exists());
+        temp_dir.close().unwrap();
     }
 
     #[test]
-    fn parse_invalid_template_location() {
-        test_gen_from!("blah/eww/woo", "foo").expect_err("ambiguous path");
-        test_gen_from!("blah/eww/woo", "foo/bar").expect_err("ambiguous path");
-        test_gen_from!("gh:blah/eww/woo", None).expect_err("ambiguous path");
-        test_gen_from!("gl:blah/eww/woo", None).expect_err("ambiguous path");
-        test_gen_from!("bb:blah/eww/woo", None).expect_err("ambiguous path");
-        test_gen_from!("xy:blah/eww", None).expect_err("unknown vendor");
+    fn copy_dirs_works() {
+        let temp_dir = Builder::new()
+            .prefix("shuttle-copy-test")
+            .tempdir()
+            .unwrap();
+        let from = temp_dir.path().join("from");
+        let with_git = temp_dir.path().join("with-git");
+        let without_git = temp_dir.path().join("without-git");
+
+        // First, create a normal copy of the test resource.
+        copy_dirs(
+            Path::new("tests/resources/copyable-project/"),
+            &from,
+            GitDir::Ignore,
+        )
+        .unwrap();
+        assert!(from.join("src/main.rs").exists());
+        assert!(from.join("Cargo.toml").exists());
+
+        // Create a pseudo Git folder in the example project.
+        std::fs::create_dir(from.join(".git")).unwrap();
+
+        copy_dirs(&from, &with_git, GitDir::Copy).unwrap();
+        assert!(with_git.join(".git").exists());
+        assert!(with_git.join("src/main.rs").exists());
+        assert!(with_git.join("Cargo.toml").exists());
+
+        // Copy the same directory again, this time ignoring the `.git` folder.
+        copy_dirs(&from, &without_git, GitDir::Ignore).unwrap();
+        assert!(!without_git.join(".git").exists());
+        assert!(without_git.join("src/main.rs").exists());
+        assert!(without_git.join("Cargo.toml").exists());
+
+        temp_dir.close().unwrap();
     }
 }

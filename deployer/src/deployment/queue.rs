@@ -428,7 +428,8 @@ async fn run_pre_deploy_tests(
         // We set the tests to build with the release profile since deployments compile
         // with the release profile by default. This means crates don't need to be
         // recompiled in debug mode for the tests, reducing memory usage during deployment.
-        .arg("--release")
+        // When running unit tests, it can compile in debug mode.
+        .arg(if cfg!(not(test)) { "--release" } else { "" })
         .arg("--jobs=4")
         .arg("--color=always")
         .current_dir(project_path)

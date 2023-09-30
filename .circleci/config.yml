@@ -20,7 +20,7 @@ executors:
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
 commands:
-  restore-cargo-cache:
+  restore-cargo-and-sccache:
     parameters:
       sccache-size:
         description: Max size for the cache
@@ -29,10 +29,6 @@ commands:
         # Large integration tests override this default.
         default: 500M
     steps:
-      - restore_cache:
-          name: Restore cargo registry cache
-          key: cargo-{{ checksum "Cargo.lock" }}
-          # Don't use fallback key to prevent registry cache from growing indefinitely.
       - run:
           name: Install sccache
           command: |
@@ -46,15 +42,18 @@ commands:
             echo 'export SCCACHE_CACHE_SIZE=<< parameters.sccache-size >>' >> $BASH_ENV
       - run:
           name: Start sccache
-          command: |
-            ~/.cargo/bin/sccache --start-server
-            ~/.cargo/bin/sccache --show-stats
+          command: ~/.cargo/bin/sccache --start-server
       - restore_cache:
           name: Restore sccache cache
-          keys: # This can use fallback due to size limit.
+          keys: # Find latest cache for this job on same branch, else fall back to older cache.
             - sccache-cache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
             - sccache-cache-{{ .Environment.CIRCLE_JOB }}-
-  save-cargo-cache:
+      - restore_cache:
+          name: Restore cargo registry cache
+          keys: # This is saved once per lockfile update. If new lockfile, get an older cache.
+            - cargo-{{ checksum "Cargo.lock" }}
+            - cargo-
+  save-sccache:
     steps:
       - run:
           name: Sccache stats
@@ -65,13 +64,23 @@ commands:
           # If a new commit is built, it will fall back on the most recent cache from the same branch.
           key: sccache-cache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
           paths:
-            - "~/.cache/sccache"
+            - ~/.cache/sccache
+  # This is only performed by the workspace clippy job, since it does the largest cargo fetch.
+  # Other jobs might restore a slightly older copy of this cache.
+  save-cargo-cache:
+    steps:
+      # Discard crates.io patches so that it produces a re-usable cache key checksum.
+      - run:
+          name: Restore Cargo.lock
+          command: git restore Cargo.lock
       - save_cache:
           name: Save cargo cache
+          # This is saved once per lockfile update.
           key: cargo-{{ checksum "Cargo.lock" }}
           paths:
-            - ~/.cargo/registry
-            - ~/.cargo/git
+            - ~/.cargo/registry/cache
+            - ~/.cargo/registry/index
+            - ~/.cargo/git/db
   restore-buildx-cache:
     steps:
       - docker-buildx/install:
@@ -190,7 +199,7 @@ jobs:
     resource_class: xlarge
     steps:
       - checkout
-      - restore-cargo-cache
+      - restore-cargo-and-sccache
       # Check this to make sure we do not include patched dependencies in the Cargo.lock
       - run: |
           [ -z "$(grep "\[\[patch.unused\]\]" Cargo.lock)" ] || \
@@ -202,11 +211,12 @@ jobs:
                        --all-features \
                        --no-deps -- \
                        --D warnings
-      - save-cargo-cache
       # An out of date lockfile will be modified after the clippy command has run
       - run: |
           git diff --exit-code Cargo.lock || \
             ( echo "Please commit an up to date Cargo.lock"; exit 1 )
+      - save-sccache
+      - save-cargo-cache
   test-standalone:
     parameters:
       path:
@@ -219,7 +229,7 @@ jobs:
     executor: docker-rust
     steps:
       - checkout
-      - restore-cargo-cache
+      - restore-cargo-and-sccache
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
       - run: |
@@ -234,7 +244,7 @@ jobs:
                      --manifest-path << parameters.path >>/Cargo.toml \
                      -- \
                      --nocapture
-      - save-cargo-cache
+      - save-sccache
   test-workspace-member:
     parameters:
       crate:
@@ -244,9 +254,9 @@ jobs:
     steps:
       - install-rust
       - checkout
-      - restore-cargo-cache
+      - restore-cargo-and-sccache
       - run: cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
-      - save-cargo-cache
+      - save-sccache
   test-workspace-member-with-integration:
     parameters:
       crate:
@@ -262,7 +272,7 @@ jobs:
       - install-protoc
       - checkout
       - run: git submodule update --init
-      - restore-cargo-cache
+      - restore-cargo-and-sccache
       - apply-patches
       - run:
           name: Run unit tests
@@ -278,7 +288,7 @@ jobs:
               echo "nothing to test here, adjust CI file or add an integration script"
               exit 1
             fi
-      - save-cargo-cache
+      - save-sccache
   test-workspace-member-with-integration-docker:
     parameters:
       crate:
@@ -291,7 +301,7 @@ jobs:
       - install-protoc
       - checkout
       - run: git submodule update --init
-      - restore-cargo-cache:
+      - restore-cargo-and-sccache:
           sccache-size: 2G
       - apply-patches
       - run:
@@ -305,7 +315,7 @@ jobs:
               echo "nothing to test here, adjust CI file or add an integration script"
               exit 1
             fi
-      - save-cargo-cache
+      - save-sccache
   e2e-test:
     executor: machine-ubuntu
     steps:
@@ -722,6 +732,7 @@ workflows:
               crate:
                 - shuttle-auth
                 - shuttle-proto
+                - shuttle-resource-recorder
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
           matrix:
@@ -730,7 +741,6 @@ workflows:
               resource_class:
                 - large
               crate:
-                - shuttle-resource-recorder
                 - shuttle-runtime
                 - shuttle-service
       - test-workspace-member-with-integration:

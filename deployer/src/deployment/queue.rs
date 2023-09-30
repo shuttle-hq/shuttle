@@ -342,11 +342,6 @@ async fn set_secrets(
 /// Akin to the command: `tar -xzf --strip-components 1`
 #[instrument(skip(data, dest))]
 async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
-    debug!("Unpacking archive into {:?}", dest.as_ref());
-    let tar = GzDecoder::new(data);
-    let mut archive = Archive::new(tar);
-    archive.set_overwrite(true);
-
     // Clear directory first
     trace!("Clearing old files");
     let mut entries = fs::read_dir(&dest).await?;
@@ -366,6 +361,10 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
         }
     }
 
+    debug!("Unpacking archive into {:?}", dest.as_ref());
+    let tar = GzDecoder::new(data);
+    let mut archive = Archive::new(tar);
+    archive.set_overwrite(true);
     for entry in archive.entries()? {
         let mut entry = entry?;
         let name = entry.path()?;

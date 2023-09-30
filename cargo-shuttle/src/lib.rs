@@ -311,6 +311,7 @@ impl Shuttle {
                 match client.check_project_name(&p).await {
                     Ok(true) => {
                         println!("{} {}", "Project name already taken:".red(), p);
+                        println!("{}", "Try a different name.".yellow());
                     }
                     Ok(false) => {
                         project_args.name = Some(p);

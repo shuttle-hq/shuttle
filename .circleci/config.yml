@@ -46,7 +46,9 @@ commands:
             echo 'export SCCACHE_CACHE_SIZE=<< parameters.sccache-size >>' >> $BASH_ENV
       - run:
           name: Start sccache
-          command: ~/.cargo/bin/sccache --start-server
+          command: |
+            ~/.cargo/bin/sccache --start-server
+            ~/.cargo/bin/sccache --show-stats
       - restore_cache:
           name: Restore sccache cache
           keys: # This can use fallback due to size limit.
@@ -289,12 +291,12 @@ jobs:
       - install-protoc
       - checkout
       - run: git submodule update --init
-      - restore-cargo-cache
+      - restore-cargo-cache:
+          sccache-size: 2G
       - apply-patches
       - run:
           name: Run integration tests that need docker
           command: |
-            SCCACHE_CACHE_SIZE=2G
             set +o pipefail
             path=$(echo "<< parameters.crate >>" | sed "s/shuttle-\(.*\)/\1/")
             if [ -f "$path/integration_docker.sh" ]; then

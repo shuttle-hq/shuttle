@@ -248,7 +248,7 @@ jobs:
   test-workspace-member:
     parameters:
       crate:
-        description: "Crate in workspace to test"
+        description: Crate in workspace to test
         type: string
     executor: docker-rust
     steps:
@@ -260,11 +260,14 @@ jobs:
   test-workspace-member-with-integration:
     parameters:
       crate:
-        description: "Crate in workspace to test"
+        description: Crate in workspace to test
         type: string
       resource_class:
-        description: "The resource type to use for the machine"
+        description: The resource type to use for the machine
         type: string
+      sccache-size:
+        type: string
+        default: ""
     executor: docker-rust
     resource_class: << parameters.resource_class >>
     steps:
@@ -272,7 +275,8 @@ jobs:
       - install-protoc
       - checkout
       - run: git submodule update --init
-      - restore-cargo-and-sccache
+      - restore-cargo-and-sccache:
+          sccache-size: << parameters.sccache-size >>
       - apply-patches
       - run:
           name: Run unit tests
@@ -294,6 +298,9 @@ jobs:
       crate:
         description: "Crate in workspace to test"
         type: string
+      sccache-size:
+        type: string
+        default: ""
     # Using a machine image since tests will start a docker container
     executor: machine-ubuntu
     steps:
@@ -302,7 +309,7 @@ jobs:
       - checkout
       - run: git submodule update --init
       - restore-cargo-and-sccache:
-          sccache-size: 2G
+          sccache-size: << parameters.sccache-size >>
       - apply-patches
       - run:
           name: Run integration tests that need docker
@@ -345,7 +352,7 @@ jobs:
       - save_cache:
           name: Save buildx cache
           paths:
-            - "/tmp/cache/buildx"
+            - /tmp/cache/buildx
           key: docker-buildx-{{ .Branch }}-{{ .Revision }}
           when: always
   build-and-push:
@@ -750,6 +757,8 @@ workflows:
             parameters:
               resource_class:
                 - xlarge
+              sccache-size:
+                - 2G
               crate:
                 - cargo-shuttle
                 - shuttle-deployer
@@ -757,6 +766,8 @@ workflows:
           name: << matrix.crate >> with docker
           matrix:
             parameters:
+              sccache-size:
+                - 1G
               crate:
                 # need to spawn docker containers, therefore in a machine
                 - cargo-shuttle

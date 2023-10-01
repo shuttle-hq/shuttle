@@ -115,7 +115,7 @@ impl Shuttle {
     fn find_available_port(run_args: &mut RunArgs) {
         let mut available_port = 8010;
         for port in (available_port..=std::u16::MAX).step_by(10) {
-            if portpicker::is_free_tcp(port) {
+            if portpicker::is_free_tcp(port) && portpicker::is_free_tcp(port + 1) {
                 available_port = port;
                 break;
             }
@@ -1025,7 +1025,7 @@ impl Shuttle {
     }
 
     #[cfg(target_family = "unix")]
-    async fn local_run(&self, run_args: RunArgs) -> Result<CommandOutcome> {
+    async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
         let mut sigterm_notif =
@@ -1187,7 +1187,7 @@ impl Shuttle {
     }
 
     #[cfg(target_family = "windows")]
-    async fn local_run(&self, run_args: RunArgs) -> Result<CommandOutcome> {
+    async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
 

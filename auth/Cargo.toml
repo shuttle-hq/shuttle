@@ -23,6 +23,7 @@ sqlx = { workspace = true, features = [
     "runtime-tokio-rustls",
     "migrate",
 ] }
+async-stripe = { version = "0.25.1", default-features = false, features = ["checkout", "runtime-tokio-hyper-rustls"] }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

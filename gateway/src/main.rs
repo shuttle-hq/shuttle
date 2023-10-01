@@ -9,7 +9,6 @@ use shuttle_gateway::args::StartArgs;
 use shuttle_gateway::args::{Args, Commands, UseTls};
 use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
-use shuttle_gateway::task;
 use shuttle_gateway::tls::make_tls_acceptor;
 use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
 use sqlx::migrate::MigrateDatabase;
@@ -76,28 +75,16 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
             .map_err(|err| error!("worker error: {}", err)),
     );
 
-    for (project_name, _) in gateway
-        .iter_projects()
-        .await
-        .expect("could not list projects")
-    {
-        gateway
-            .clone()
-            .new_task()
-            .project(project_name)
-            .and_then(task::refresh())
-            .send(&sender)
-            .await
-            .expect("to refresh old projects");
-    }
-
     // Every 60 secs go over all `::Ready` projects and check their health.
+    // Also syncs the state of all projects on startup
     let ambulance_handle = tokio::spawn({
         let gateway = Arc::clone(&gateway);
         let sender = sender.clone();
         async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
-            interval.tick().await; // first tick is immediate
+
+            // Don't try to catch up missed ticks since there is no point running a burst of checks
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
             loop {
                 interval.tick().await;
@@ -121,12 +108,8 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                     let sender = sender.clone();
                     async move {
                         for (project_name, _) in projects {
-                            if let Ok(handle) = gateway
-                                .new_task()
-                                .project(project_name)
-                                .and_then(task::check_health())
-                                .send(&sender)
-                                .await
+                            if let Ok(handle) =
+                                gateway.new_task().project(project_name).send(&sender).await
                             {
                                 // We wait for the check to be done before
                                 // queuing up the next one.

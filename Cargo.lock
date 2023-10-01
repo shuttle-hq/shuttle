@@ -1091,7 +1091,7 @@ dependencies = [
  "anyhow",
  "clap",
  "console",
- "dialoguer",
+ "dialoguer 0.10.4",
  "env_logger",
  "git2",
  "gix-config",
@@ -1112,7 +1112,7 @@ dependencies = [
  "remove_dir_all",
  "rhai",
  "sanitize-filename",
- "semver 1.0.18",
+ "semver 1.0.19",
  "serde",
  "tempfile",
  "thiserror",
@@ -1126,7 +1126,7 @@ version = "9.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e11c675378efb449ed3ce8de78d75d0d80542fc98487c26aba28eb3b82feac72"
 dependencies = [
- "semver 1.0.18",
+ "semver 1.0.19",
  "serde",
  "toml 0.7.8",
  "url",
@@ -1156,7 +1156,7 @@ dependencies = [
  "clap_complete",
  "crossbeam-channel",
  "crossterm 0.27.0",
- "dialoguer",
+ "dialoguer 0.11.0",
  "dirs 5.0.1",
  "dunce",
  "flate2",
@@ -1175,7 +1175,7 @@ dependencies = [
  "reqwest-retry",
  "rexpect",
  "rmp-serde",
- "semver 1.0.18",
+ "semver 1.0.19",
  "serde",
  "serde_json",
  "shuttle-common",
@@ -1207,7 +1207,7 @@ checksum = "eee4243f1f26fc7a42710e7439c149e2b10b05472f88090acce52632f231a73a"
 dependencies = [
  "camino",
  "cargo-platform",
- "semver 1.0.18",
+ "semver 1.0.19",
  "serde",
  "serde_json",
  "thiserror",
@@ -1863,9 +1863,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59c6f2989294b9a498d3ad5491a79c6deb604617378e1cdc4bfc1c1361fe2f87"
 dependencies = [
  "console",
+ "shell-words",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
+name = "dialoguer"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "658bce805d770f407bc62102fca7c2c64ceef2fbcb2b8bd19d2765ce093980de"
+dependencies = [
+ "console",
  "fuzzy-matcher",
  "shell-words",
  "tempfile",
+ "thiserror",
  "zeroize",
 ]
 
@@ -4750,9 +4763,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest-retry"
-version = "0.2.3"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c6a11c05102e5bec712c0619b8c7b7eda8b21a558a0bd981ceee15c38df8be4"
+checksum = "9af20b65c2ee9746cc575acb6bd28a05ffc0d15e25c992a8f4462d8686aacb4f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4783,9 +4796,9 @@ dependencies = [
 
 [[package]]
 name = "retry-policies"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e09bbcb5003282bcb688f0bae741b278e9c7e8f378f561522c9806c58e075d9b"
+checksum = "a715dc4d0e8aea3085a9a94d76e79c79c7df7c9f6be609da841a6d2489ca3687"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4952,7 +4965,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366"
 dependencies = [
- "semver 1.0.18",
+ "semver 1.0.19",
 ]
 
 [[package]]
@@ -5201,9 +5214,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.18"
+version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918"
+checksum = "ad977052201c6de01a8ef2aa3378c4bd23217a056337d1d6da40468d267a4fb0"
 dependencies = [
  "serde",
 ]
@@ -5465,6 +5478,7 @@ dependencies = [
  "flate2",
  "hex",
  "nbuild-core",
+ "os_pipe",
  "portpicker",
  "pretty_assertions",
  "shuttle-common",
@@ -5528,6 +5542,7 @@ dependencies = [
  "ring",
  "rmp-serde",
  "rustrict",
+ "semver 1.0.19",
  "serde",
  "serde_json",
  "sqlx",
@@ -5652,6 +5667,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shuttle-common",
+ "shuttle-orchestrator",
  "shuttle-proto",
  "snailquote",
  "sqlx",
@@ -5698,6 +5714,10 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
 ]
+
+[[package]]
+name = "shuttle-orchestrator"
+version = "0.27.0"
 
 [[package]]
 name = "shuttle-proto"

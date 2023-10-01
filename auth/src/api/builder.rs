@@ -23,7 +23,7 @@ use crate::{
 
 use super::handlers::{
     convert_cookie, convert_key, get_public_key, get_user, health_check, logout, post_user,
-    put_user_reset_key, refresh_token,
+    put_user_reset_key, refresh_token, update_user_tier,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -53,6 +53,7 @@ pub struct ApiBuilder {
     router: Router<RouterState>,
     pool: Option<SqlitePool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
+    stripe_secret_key: Option<String>,
 }
 
 impl Default for ApiBuilder {
@@ -71,7 +72,10 @@ impl ApiBuilder {
             .route("/auth/refresh", post(refresh_token))
             .route("/public-key", get(get_public_key))
             .route("/users/:account_name", get(get_user))
-            .route("/users/:account_name/:account_tier", post(post_user))
+            .route(
+                "/users/:account_name/:account_tier",
+                post(post_user).put(update_user_tier),
+            )
             .route("/users/reset-api-key", put(put_user_reset_key))
             .route_layer(from_extractor::<Metrics>())
             .layer(
@@ -90,6 +94,7 @@ impl ApiBuilder {
             router,
             pool: None,
             session_layer: None,
+            stripe_secret_key: None,
         }
     }
 
@@ -112,11 +117,21 @@ impl ApiBuilder {
         self
     }
 
+    pub fn with_stripe_secret_key(mut self, stripe_secret_key: String) -> Self {
+        self.stripe_secret_key = Some(stripe_secret_key);
+        self
+    }
+
     pub fn into_router(self) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
         let session_layer = self.session_layer.expect("a session layer is required");
-
-        let user_manager = UserManager { pool };
+        let user_manager = UserManager {
+            pool,
+            stripe_client: stripe::Client::new(
+                self.stripe_secret_key
+                    .expect("to have a stripe secret key for the user manager"),
+            ),
+        };
         let key_manager = EdDsaManager::new();
 
         let state = RouterState {

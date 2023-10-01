@@ -12,14 +12,23 @@ use shuttle_common::{
     claims::{Scope, ScopeBuilder},
     ApiKey,
 };
-use sqlx::{query, Row, SqlitePool};
+use sqlx::{query, sqlite::SqliteRow, FromRow, Row, SqlitePool};
 use tracing::{debug, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
+use stripe::{
+    CheckoutSession, CheckoutSessionStatus, Expandable, SubscriptionId, SubscriptionStatus,
+};
 
 #[async_trait]
 pub trait UserManagement: Send + Sync {
     async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error>;
+    async fn upgrade_to_pro(
+        &self,
+        name: &AccountName,
+        checkout_session_metadata: CheckoutSession,
+    ) -> Result<(), Error>;
+    async fn update_tier(&self, name: &AccountName, tier: AccountTier) -> Result<(), Error>;
     async fn get_user(&self, name: AccountName) -> Result<User, Error>;
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
     async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
@@ -28,6 +37,7 @@ pub trait UserManagement: Send + Sync {
 #[derive(Clone)]
 pub struct UserManager {
     pub pool: SqlitePool,
+    pub stripe_client: stripe::Client,
 }
 
 #[async_trait]
@@ -42,33 +52,69 @@ impl UserManagement for UserManager {
             .execute(&self.pool)
             .await?;
 
-        Ok(User::new(name, key, tier))
+        Ok(User::new(name, key, tier, None))
     }
 
-    async fn get_user(&self, name: AccountName) -> Result<User, Error> {
-        query("SELECT account_name, key, account_tier FROM users WHERE account_name = ?1")
-            .bind(&name)
-            .fetch_optional(&self.pool)
+    // Update user tier to pro and update the subscription id.
+    async fn upgrade_to_pro(
+        &self,
+        name: &AccountName,
+        checkout_session_metadata: CheckoutSession,
+    ) -> Result<(), Error> {
+        // Update the user tier and store the subscription id. We expect the checkout session to be
+        // completed when it is sent. In case of incomplete checkout sessions, auth backend will not
+        // fulfill the request.
+        if checkout_session_metadata
+            .status
+            .filter(|inner| inner == &CheckoutSessionStatus::Complete)
+            .is_some()
+        {
+            // Extract the checkout session status if any, otherwise return with error.
+            let subscription_id = checkout_session_metadata
+                .subscription
+                .map(|s| match s {
+                    Expandable::Id(id) => id.to_string(),
+                    Expandable::Object(obj) => obj.id.to_string(),
+                })
+                .ok_or(Error::MissingSubscriptionId)?;
+
+            // Update the user account tier and subscription_id.
+            let rows_affected = query(
+                "UPDATE users SET account_tier = ?1, subscription_id = ?2 WHERE account_name = ?3",
+            )
+            .bind(AccountTier::Pro)
+            .bind(subscription_id)
+            .bind(name)
+            .execute(&self.pool)
             .await?
-            .map(|row| User {
-                name,
-                key: row.try_get("key").unwrap(),
-                account_tier: row.try_get("account_tier").unwrap(),
-            })
-            .ok_or(Error::UserNotFound)
+            .rows_affected();
+
+            // In case no rows were updated, this means the account doesn't exist.
+            if rows_affected > 0 {
+                return Ok(());
+            } else {
+                return Err(Error::UserNotFound);
+            }
+        }
+
+        Ok(())
     }
 
-    async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error> {
-        query("SELECT account_name, key, account_tier FROM users WHERE key = ?1")
-            .bind(&key)
-            .fetch_optional(&self.pool)
+    // Update tier leaving the subscription_id untouched.
+    async fn update_tier(&self, name: &AccountName, tier: AccountTier) -> Result<(), Error> {
+        let rows_affected = query("UPDATE users SET account_tier = ?1 WHERE account_name = ?2")
+            .bind(tier)
+            .bind(name)
+            .execute(&self.pool)
             .await?
-            .map(|row| User {
-                name: row.try_get("account_name").unwrap(),
-                key,
-                account_tier: row.try_get("account_tier").unwrap(),
-            })
-            .ok_or(Error::UserNotFound)
+            .rows_affected();
+
+        if rows_affected > 0 {
+            Ok(())
+        } else {
+            Err(Error::UserNotFound)
+        }
+    }
     }
 
     async fn reset_key(&self, name: AccountName) -> Result<(), Error> {
@@ -94,6 +140,7 @@ pub struct User {
     pub name: AccountName,
     pub key: ApiKey,
     pub account_tier: AccountTier,
+    pub subscription_id: Option<SubscriptionId>,
 }
 
 impl User {
@@ -101,12 +148,32 @@ impl User {
         self.account_tier == AccountTier::Admin
     }
 
-    pub fn new(name: AccountName, key: ApiKey, account_tier: AccountTier) -> Self {
+    pub fn new(
+        name: AccountName,
+        key: ApiKey,
+        account_tier: AccountTier,
+        session_id: Option<SubscriptionId>,
+    ) -> Self {
         Self {
             name,
             key,
             account_tier,
+            subscription_id: session_id,
         }
+    }
+        }
+
+impl FromRow<'_, SqliteRow> for User {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        let subscription_id =
+            SubscriptionId::from_str(row.try_get("subscription_id").unwrap()).ok();
+
+        Ok(User {
+            name: row.try_get("account_name").unwrap(),
+            key: row.try_get("key").unwrap(),
+            account_tier: row.try_get("account_tier").unwrap(),
+            subscription_id,
+        })
     }
 }
 
@@ -188,6 +255,8 @@ where
 pub enum AccountTier {
     #[default]
     Basic,
+    // A basic user that is pending a payment on the backend.
+    PendingPaymentPro,
     Pro,
     Team,
     Admin,
@@ -280,6 +349,28 @@ mod tests {
         #[test]
         fn basic() {
             let scopes: Vec<Scope> = AccountTier::Basic.into();
+
+            assert_eq!(
+                scopes,
+                vec![
+                    Scope::Deployment,
+                    Scope::DeploymentPush,
+                    Scope::Logs,
+                    Scope::Service,
+                    Scope::ServiceCreate,
+                    Scope::Project,
+                    Scope::ProjectCreate,
+                    Scope::Resources,
+                    Scope::ResourcesWrite,
+                    Scope::Secret,
+                    Scope::SecretWrite,
+                ]
+            );
+        }
+
+        #[test]
+        fn pending_payment_pro() {
+            let scopes: Vec<Scope> = AccountTier::PendingPaymentPro.into();
 
             assert_eq!(
                 scopes,

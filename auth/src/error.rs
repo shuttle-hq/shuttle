@@ -6,6 +6,7 @@ use axum::Json;
 
 use serde::{ser::SerializeMap, Serialize};
 use shuttle_common::models::error::ApiError;
+use stripe::StripeError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -21,6 +22,12 @@ pub enum Error {
     Database(#[from] sqlx::Error),
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
+    #[error("Missing checkout session.")]
+    MissingCheckoutSession,
+    #[error("Interacting with stripe resulted in error: {0}.")]
+    StripeError(#[from] StripeError),
+    #[error("Missing subscription ID from the checkout session.")]
+    MissingSubscriptionId,
 }
 
 impl Serialize for Error {

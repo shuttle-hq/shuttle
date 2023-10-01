@@ -758,7 +758,7 @@ workflows:
               resource_class:
                 - xlarge
               sccache-size:
-                - 2G
+                - 1G
               crate:
                 - cargo-shuttle
                 - shuttle-deployer

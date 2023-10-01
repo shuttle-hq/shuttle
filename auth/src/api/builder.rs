@@ -53,7 +53,6 @@ pub struct ApiBuilder {
     router: Router<RouterState>,
     pool: Option<SqlitePool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
-    stripe_secret_key: Option<String>,
 }
 
 impl Default for ApiBuilder {
@@ -94,7 +93,6 @@ impl ApiBuilder {
             router,
             pool: None,
             session_layer: None,
-            stripe_secret_key: None,
         }
     }
 
@@ -117,20 +115,12 @@ impl ApiBuilder {
         self
     }
 
-    pub fn with_stripe_secret_key(mut self, stripe_secret_key: String) -> Self {
-        self.stripe_secret_key = Some(stripe_secret_key);
-        self
-    }
-
-    pub fn into_router(self) -> Router {
+    pub fn into_router(self, stripe_client: stripe::Client) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
         let session_layer = self.session_layer.expect("a session layer is required");
         let user_manager = UserManager {
             pool,
-            stripe_client: stripe::Client::new(
-                self.stripe_secret_key
-                    .expect("to have a stripe secret key for the user manager"),
-            ),
+            stripe_client,
         };
         let key_manager = EdDsaManager::new();
 

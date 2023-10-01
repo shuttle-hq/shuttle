@@ -24,6 +24,8 @@ pub enum Error {
     UnexpectedError(#[from] anyhow::Error),
     #[error("Missing checkout session.")]
     MissingCheckoutSession,
+    #[error("Incomplete checkout session.")]
+    IncompleteCheckoutSession,
     #[error("Interacting with stripe resulted in error: {0}.")]
     StripeError(#[from] StripeError),
     #[error("Missing subscription ID from the checkout session.")]
@@ -49,6 +51,9 @@ impl IntoResponse for Error {
             Error::Forbidden => StatusCode::FORBIDDEN,
             Error::Unauthorized | Error::KeyMissing => StatusCode::UNAUTHORIZED,
             Error::Database(_) | Error::UserNotFound => StatusCode::NOT_FOUND,
+            Error::MissingCheckoutSession
+            | Error::MissingSubscriptionId
+            | Error::IncompleteCheckoutSession => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 

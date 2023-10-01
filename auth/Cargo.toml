@@ -40,3 +40,4 @@ axum-extra = { version = "0.7.1", features = ["cookie"] }
 hyper = { workspace = true }
 serde_json = { workspace = true }
 tower = { workspace = true, features = ["util"] }
+portpicker = { workspace = true }

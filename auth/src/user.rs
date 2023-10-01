@@ -13,7 +13,7 @@ use shuttle_common::{
     ApiKey,
 };
 use sqlx::{query, sqlite::SqliteRow, FromRow, Row, SqlitePool};
-use tracing::{debug, trace, Span};
+use tracing::{debug, error, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
 use stripe::{
@@ -91,13 +91,13 @@ impl UserManagement for UserManager {
 
             // In case no rows were updated, this means the account doesn't exist.
             if rows_affected > 0 {
-                return Ok(());
+                Ok(())
             } else {
-                return Err(Error::UserNotFound);
+                Err(Error::UserNotFound)
             }
+        } else {
+            Err(Error::IncompleteCheckoutSession)
         }
-
-        Ok(())
     }
 
     // Update tier leaving the subscription_id untouched.
@@ -125,7 +125,10 @@ impl UserManagement for UserManager {
                 .ok_or(Error::UserNotFound)?;
 
         // Sync the user tier based on the subscription validity, if any.
-        if user.sync_tier(self).await? {
+        if let Err(err) = user.sync_tier(self).await {
+            error!("failed syncing account");
+            return Err(err);
+        } else {
             debug!("synced account");
         }
 
@@ -196,7 +199,6 @@ impl User {
 
     /// In case of an existing subscription, check if valid.
     async fn subscription_is_valid(&self, client: &stripe::Client) -> Result<bool, Error> {
-        debug!("prior subscription id: {:?}", self.subscription_id);
         if let Some(subscription_id) = self.subscription_id.as_ref() {
             let subscription = stripe::Subscription::retrieve(client, subscription_id, &[]).await?;
             debug!("subscription: {:#?}", subscription);

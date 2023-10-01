@@ -113,35 +113,29 @@ impl Shuttle {
     }
 
     fn find_available_port(run_args: &mut RunArgs, services_len: usize) {
-        let mut available_port = 8010;
-        for port in (available_port..=std::u16::MAX).step_by(services_len.max(10)) {
-            if portpicker::is_free_tcp(port) {
-                let mut is_inner_ports_free = true;
-                for inner_port in port..(port + services_len as u16) {
-                    if !portpicker::is_free_tcp(inner_port) {
-                        is_inner_ports_free = false;
-                    }
-                }
-
-                if is_inner_ports_free {
-                    available_port = port;
-                    break;
+        let default_port = run_args.port;
+        'outer: for port in (run_args.port..=std::u16::MAX).step_by(services_len.max(10)) {
+            for inner_port in port..(port + services_len as u16) {
+                if !portpicker::is_free_tcp(inner_port) {
+                    continue 'outer;
                 }
             }
+            run_args.port = port;
+            break;
         }
 
-        if !Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt(format!(
-                "Port {} is already in use. Would you like to continue on port {}?",
-                run_args.port, available_port
-            ))
-            .default(true)
-            .interact()
-            .unwrap()
+        if run_args.port != default_port
+            && !Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt(format!(
+                    "Port {} is already in use. Would you like to continue on port {}?",
+                    default_port, run_args.port
+                ))
+                .default(true)
+                .interact()
+                .unwrap()
         {
             exit(0);
         }
-        run_args.port = available_port;
     }
 
     pub async fn run(
@@ -1050,9 +1044,7 @@ impl Shuttle {
             RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         )> = Vec::new();
 
-        if !portpicker::is_free_tcp(run_args.port) {
-            Shuttle::find_available_port(&mut run_args, services.len());
-        }
+        Shuttle::find_available_port(&mut run_args, services.len());
 
         let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {
@@ -1206,9 +1198,7 @@ impl Shuttle {
             RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         )> = Vec::new();
 
-        if !portpicker::is_free_tcp(run_args.port) {
-            Shuttle::find_available_port(&mut run_args, services.len());
-        }
+        Shuttle::find_available_port(&mut run_args, services.len());
 
         let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {

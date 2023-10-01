@@ -72,7 +72,6 @@ pub(crate) async fn put_user_reset_key(
 ) -> Result<(), Error> {
     let account_name = match session.get::<String>("account_name") {
         Some(account_name) => account_name.into(),
-
         None => match key {
             Some(key) => user_manager.get_user_by_key(key.into()).await?.name,
             None => return Err(Error::Unauthorized),

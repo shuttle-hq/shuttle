@@ -115,6 +115,38 @@ impl UserManagement for UserManager {
             Err(Error::UserNotFound)
         }
     }
+
+    async fn get_user(&self, name: AccountName) -> Result<User, Error> {
+        let mut user: User =
+            sqlx::query_as("SELECT account_name, key, account_tier, subscription_id FROM users WHERE account_name = ?")
+                .bind(&name)
+                .fetch_optional(&self.pool)
+                .await?
+                .ok_or(Error::UserNotFound)?;
+
+        // Sync the user tier based on the subscription validity, if any.
+        if user.sync_tier(self).await? {
+            debug!("synced account");
+        }
+
+        Ok(user)
+    }
+
+    async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error> {
+        let mut user: User = sqlx::query_as(
+            "SELECT account_name, key, account_tier, subscription_id FROM users WHERE key = ?",
+        )
+        .bind(&key)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(Error::UserNotFound)?;
+
+        // Sync the user tier based on the subscription validity, if any.
+        if user.sync_tier(self).await? {
+            debug!("synced account");
+        }
+
+        Ok(user)
     }
 
     async fn reset_key(&self, name: AccountName) -> Result<(), Error> {
@@ -161,7 +193,45 @@ impl User {
             subscription_id: session_id,
         }
     }
+
+    /// In case of an existing subscription, check if valid.
+    async fn subscription_is_valid(&self, client: &stripe::Client) -> Result<bool, Error> {
+        debug!("prior subscription id: {:?}", self.subscription_id);
+        if let Some(subscription_id) = self.subscription_id.as_ref() {
+            let subscription = stripe::Subscription::retrieve(client, subscription_id, &[]).await?;
+            debug!("subscription: {:#?}", subscription);
+            return Ok(subscription.status == SubscriptionStatus::Active
+                || subscription.status == SubscriptionStatus::Trialing);
         }
+
+        Ok(false)
+    }
+
+    // Synchronize the tiers with the subscription validity.
+    async fn sync_tier(&mut self, user_manager: &UserManager) -> Result<bool, Error> {
+        let subscription_is_valid = self
+            .subscription_is_valid(&user_manager.stripe_client)
+            .await?;
+        debug!(%subscription_is_valid, "to be or not to be");
+        if self.account_tier == AccountTier::Pro && !subscription_is_valid {
+            self.account_tier = AccountTier::PendingPaymentPro;
+            user_manager
+                .update_tier(&self.name, self.account_tier)
+                .await?;
+            return Ok(true);
+        }
+
+        if self.account_tier == AccountTier::PendingPaymentPro && subscription_is_valid {
+            self.account_tier = AccountTier::Pro;
+            user_manager
+                .update_tier(&self.name, self.account_tier)
+                .await?;
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+}
 
 impl FromRow<'_, SqliteRow> for User {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {

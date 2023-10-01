@@ -279,6 +279,7 @@ impl From<User> for shuttle_common::models::user::Response {
             name: user.name.to_string(),
             key: user.key.as_ref().to_string(),
             account_tier: user.account_tier.to_string(),
+            subscription_id: user.subscription_id.map(|inner| inner.to_string()),
         }
     }
 }

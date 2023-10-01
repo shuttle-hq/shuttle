@@ -112,12 +112,21 @@ impl Shuttle {
         self.run(args, provided_path_to_init).await
     }
 
-    fn find_available_port(run_args: &mut RunArgs) {
+    fn find_available_port(run_args: &mut RunArgs, services_len: usize) {
         let mut available_port = 8010;
-        for port in (available_port..=std::u16::MAX).step_by(10) {
-            if portpicker::is_free_tcp(port) && portpicker::is_free_tcp(port + 1) {
-                available_port = port;
-                break;
+        for port in (available_port..=std::u16::MAX).step_by(services_len.max(10)) {
+            if portpicker::is_free_tcp(port) {
+                let mut is_inner_ports_free = true;
+                for inner_port in port..(port + services_len as u16) {
+                    if !portpicker::is_free_tcp(inner_port) {
+                        is_inner_ports_free = false;
+                    }
+                }
+
+                if is_inner_ports_free {
+                    available_port = port;
+                    break;
+                }
             }
         }
 
@@ -1042,7 +1051,7 @@ impl Shuttle {
         )> = Vec::new();
 
         if !portpicker::is_free_tcp(run_args.port) {
-            Shuttle::find_available_port(&mut run_args);
+            Shuttle::find_available_port(&mut run_args, services.len());
         }
 
         let mut signal_received = false;
@@ -1198,7 +1207,7 @@ impl Shuttle {
         )> = Vec::new();
 
         if !portpicker::is_free_tcp(run_args.port) {
-            Shuttle::find_available_port(&mut run_args);
+            Shuttle::find_available_port(&mut run_args, services.len());
         }
 
         let mut signal_received = false;

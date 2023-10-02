@@ -287,6 +287,13 @@ Finally, configure Docker Compose. You can either
 
 If you are using `nftables`, even with `iptables-nft`, it may be necessary to install and configure the [nftables CNI plugins](https://github.com/greenpau/cni-plugins)
 
+## Testing the Pro tier
+
+We use Stripe to start Pro subscriptions and verify them with a Stripe client that needs a secret key. The `STRIPE_SECRET_KEY` environment variable
+should be set to test upgrading a user to Pro tier, or to use a Pro tier feature with cargo-shuttle CLI. On a local environment, that requires
+setting up a Stripe account and generating a test API key. Auth can still be initialised and used without a Stripe secret key, but it will fail if
+when retrieving a user, and when we'll verify the subscription validity.
+
 ## Running Tests
 
 Shuttle has reasonable test coverage - and we are working on improving this

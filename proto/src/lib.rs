@@ -387,7 +387,7 @@ pub mod logger {
             }
         }
 
-        /// Background task to forward the items ones the batch capacity has been reached
+        /// Background task to forward the items once the batch capacity has been reached
         async fn batch(
             mut inner: I,
             mut rx: mpsc::UnboundedReceiver<I::Item>,

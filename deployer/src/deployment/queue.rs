@@ -81,14 +81,13 @@ pub async fn task(
                     async move {
                         // Timeout after 3 minutes if the build queue hangs or it takes
                         // too long for a slot to become available
-                        match timeout(
+                        if let Err(err) = timeout(
                             Duration::from_secs(60 * 3),
                             wait_for_queue(queue_client.clone(), id),
                         )
                         .await
                         {
-                            Ok(_) => {}
-                            Err(err) => return build_failed(&id, err),
+                            return build_failed(&id, err);
                         }
 
                         if let Some(mut inner) = builder_client {

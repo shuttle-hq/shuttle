@@ -128,7 +128,7 @@ impl ResourceManager for StubResourceManager {
         &mut self,
         _project_name: String,
         _service_id: &Ulid,
-        _resource_type: String,
+        _resource_type: shuttle_common::resource::Type,
         _claim: Claim,
     ) -> Result<ResultResponse, Self::Err> {
         Ok(ResultResponse {
@@ -140,7 +140,7 @@ impl ResourceManager for StubResourceManager {
     async fn get_resource(
         &mut self,
         _service_id: &ulid::Ulid,
-        _type: String,
+        _resource_type: shuttle_common::resource::Type,
         _claim: Claim,
     ) -> Result<ResourceResponse, Self::Err> {
         Ok(ResourceResponse {

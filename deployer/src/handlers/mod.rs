@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use async_trait::async_trait;
 use axum::extract::{
     ws::{self, WebSocket},
@@ -169,7 +171,6 @@ impl RouterBuilder {
             )
             .layer(Extension(persistence))
             .layer(Extension(deployment_manager))
-            // .layer(Extension(resource_manager))
             .layer(Extension(proxy_fqdn))
             .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
                 auth_uri.clone(),
@@ -358,8 +359,17 @@ pub async fn delete_service_resource(
         .await?
         .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
 
+    let r#type =
+        shuttle_common::resource::Type::from_str(resource_type.as_str()).map_err(|err| {
+            error::Error::Convert {
+                from: "str".to_string(),
+                to: "shuttle_common::resource::Type".to_string(),
+                message: format!("Not a valid resource type representation: {}", err).to_string(),
+            }
+        })?;
+
     let get_resource_response = persistence
-        .get_resource(&service.id, resource_type.clone(), claim.clone())
+        .get_resource(&service.id, r#type.clone(), claim.clone())
         .await?;
 
     if get_resource_response.resource.is_none() {
@@ -367,7 +377,7 @@ pub async fn delete_service_resource(
     }
 
     let delete_resource_response = persistence
-        .delete_resource(project_name, &service.id, resource_type, claim)
+        .delete_resource(project_name, &service.id, r#type, claim)
         .await?;
 
     if !delete_resource_response.success {

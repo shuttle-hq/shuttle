@@ -482,7 +482,7 @@ mod tests {
         async fn get_resource(
             &mut self,
             _service_id: &ulid::Ulid,
-            _type: String,
+            _type: shuttle_common::resource::Type,
             _claim: Claim,
         ) -> Result<ResourceResponse, Self::Err> {
             Ok(ResourceResponse {
@@ -496,7 +496,7 @@ mod tests {
             &mut self,
             _project_name: String,
             _service_id: &ulid::Ulid,
-            _type: String,
+            _type: shuttle_common::resource::Type,
             _claim: Claim,
         ) -> Result<ResultResponse, Self::Err> {
             Ok(ResultResponse {

@@ -507,13 +507,13 @@ impl ResourceManager for Persistence {
     async fn get_resource(
         &mut self,
         service_id: &Ulid,
-        r#type: String,
+        r#type: shuttle_common::resource::Type,
         claim: Claim,
     ) -> Result<ResourceResponse> {
         let mut get_resource_req = tonic::Request::new(ResourceIds {
             project_id: self.project_id.to_string(),
             service_id: service_id.to_string(),
-            r#type,
+            r#type: r#type.to_string(),
         });
 
         get_resource_req.extensions_mut().insert(claim);
@@ -532,11 +532,10 @@ impl ResourceManager for Persistence {
         &mut self,
         project_name: String,
         service_id: &Ulid,
-        resource_type: String,
+        resource_type: shuttle_common::resource::Type,
         claim: Claim,
     ) -> Result<ResultResponse> {
-        let r#type = Type::from_str(resource_type.as_str()).map_err(error::Error::ParseError)?;
-        if let Type::Database(db_type) = r#type {
+        if let Type::Database(db_type) = resource_type {
             let proto_db_type: shuttle_proto::provisioner::database_request::DbType =
                 db_type.into();
             if let Some(inner) = &mut self.provisioner_client {

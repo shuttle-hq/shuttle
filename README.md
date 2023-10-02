@@ -78,15 +78,19 @@ The `cargo-shuttle` CLI can be installed with a pre-built binary or from source 
 Shuttle provides pre-built binaries of the `cargo-shuttle` CLI with every release
 for most platforms, they can be found on [our GitHub](https://github.com/shuttle-hq/shuttle/releases/latest).
 
-Our binaries can also be installed using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
-which will automatically install the correct target for your system.
+On Linux and macOS, you can use this install script, which will automatically install the correct target for your OS and distro:
+
+```sh
+curl -sSfL https://shuttle.rs/install | bash
+```
+
+Our binaries can also be installed using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall).
 To install with `cargo-binstall`, run:
 
 ```sh
 # cargo-binstall can also be installed directly as a binary to skip the compilation time: https://github.com/cargo-bins/cargo-binstall#installation
 cargo install cargo-binstall
 cargo binstall cargo-shuttle
-# If installing binstall or cargo-shuttle fails, try adding `--locked` to the install command
 ```
 
 Although a bit slower, you can also install directly with cargo:
@@ -94,6 +98,8 @@ Although a bit slower, you can also install directly with cargo:
 ```sh
 cargo install cargo-shuttle
 ```
+
+> If installing binstall or cargo-shuttle fails, try adding `--locked` to the install command
 
 After installing, log in with:
 

@@ -35,7 +35,15 @@
 <!-- markdownlint-disable-next-line -->
 <a id="installation"><h1>Installation</h1></a>
 
-`cargo-shuttle` is available for macOS, Linux, and Windows. To install the commandline tool, run:
+`cargo-shuttle` is available for macOS, Linux, and Windows.
+
+To install on Linux or macOS, run:
+
+```sh
+curl -sSfL https://shuttle.rs/install | bash
+```
+
+On Windows, you can default to installing from source:
 
 ```bash
 cargo install cargo-shuttle
@@ -43,7 +51,9 @@ cargo install cargo-shuttle
 
 ### Distro Packages
 
+<!-- markdownlint-disable-next-line -->
 <details>
+<!-- markdownlint-disable-next-line -->
   <summary>Packaging status</summary>
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/cargo-shuttle.svg)](https://repology.org/project/cargo-shuttle/versions)

@@ -392,10 +392,8 @@ async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<BuiltService> {
-    // Investigate if this can be optimized for local run / CI.
-    // Remember the same flag for cargo test as well.
-    // let release = std::env::var("CI").is_ok_and(|s| s == "true") || std::env::var("PROD").is_ok_and(|s| s == "true");
-    let runtimes = build_workspace(project_path, true, tx, true)
+    // Build in release mode, except for when testing, such as in CI
+    let runtimes = build_workspace(project_path, cfg!(not(test)), tx, true)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 
@@ -430,7 +428,8 @@ async fn run_pre_deploy_tests(
         // We set the tests to build with the release profile since deployments compile
         // with the release profile by default. This means crates don't need to be
         // recompiled in debug mode for the tests, reducing memory usage during deployment.
-        .arg("--release")
+        // When running unit tests, it can compile in debug mode.
+        .arg(if cfg!(not(test)) { "--release" } else { "" })
         .arg("--jobs=4")
         .arg("--color=always")
         .current_dir(project_path)

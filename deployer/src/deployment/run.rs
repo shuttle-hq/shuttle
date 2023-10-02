@@ -281,7 +281,7 @@ impl Built {
                 self.id,
                 project_path.as_path(),
                 self.service_name.clone(),
-                alpha_runtime_path.clone(),
+                alpha_runtime_path,
             )
             .await
             .map_err(Error::Runtime)?;

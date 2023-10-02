@@ -237,8 +237,4 @@ cargo shuttle stop
 
 Thanks for using `cargo-shuttle`! We’re very happy to have you with us!
 
-During our alpha period, API keys are completely free and you can deploy as many services as you want.
-
-Just keep in mind that there may be some kinks that require us to take all deployments down once in a while. In certain circumstances we may also have to delete all the data associated with those deployments.
-
 To contribute to `cargo-shuttle` or stay updated with our development, please [open an issue, discussion or PR on Github](https://github.com/shuttle-hq/shuttle) and [join our Discord](https://discord.gg/shuttle)! 🚀

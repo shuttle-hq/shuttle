@@ -112,6 +112,32 @@ impl Shuttle {
         self.run(args, provided_path_to_init).await
     }
 
+    fn find_available_port(run_args: &mut RunArgs, services_len: usize) {
+        let default_port = run_args.port;
+        'outer: for port in (run_args.port..=std::u16::MAX).step_by(services_len.max(10)) {
+            for inner_port in port..(port + services_len as u16) {
+                if !portpicker::is_free_tcp(inner_port) {
+                    continue 'outer;
+                }
+            }
+            run_args.port = port;
+            break;
+        }
+
+        if run_args.port != default_port
+            && !Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt(format!(
+                    "Port {} is already in use. Would you like to continue on port {}?",
+                    default_port, run_args.port
+                ))
+                .default(true)
+                .interact()
+                .unwrap()
+        {
+            exit(0);
+        }
+    }
+
     pub async fn run(
         mut self,
         args: ShuttleArgs,
@@ -794,7 +820,7 @@ impl Shuttle {
             Environment::Local,
             &format!("http://localhost:{provisioner_port}"),
             None,
-            run_args.port - idx - 1,
+            portpicker::pick_unused_port().expect("unable to find available port for gRPC server"),
             runtime_executable,
             service.workspace_path.as_path(),
         )
@@ -1002,7 +1028,7 @@ impl Shuttle {
     }
 
     #[cfg(target_family = "unix")]
-    async fn local_run(&self, run_args: RunArgs) -> Result<CommandOutcome> {
+    async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
         let mut sigterm_notif =
@@ -1017,6 +1043,9 @@ impl Shuttle {
             Child,
             RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         )> = Vec::new();
+
+        Shuttle::find_available_port(&mut run_args, services.len());
+
         let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {
             // We must cover the case of starting multiple workspace services and receiving a signal in parallel.
@@ -1159,7 +1188,7 @@ impl Shuttle {
     }
 
     #[cfg(target_family = "windows")]
-    async fn local_run(&self, run_args: RunArgs) -> Result<CommandOutcome> {
+    async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
 
@@ -1168,6 +1197,9 @@ impl Shuttle {
             Child,
             RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         )> = Vec::new();
+
+        Shuttle::find_available_port(&mut run_args, services.len());
+
         let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {
             signal_received = tokio::select! {

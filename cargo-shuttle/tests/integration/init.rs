@@ -221,7 +221,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     // Partial input should be enough to match "rocket"
     session.send_line("roc")?;
     session.exp_string("Creating project")?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.exp_string("container on Shuttle?")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -262,7 +262,7 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
     // Partial input should be enough to match "rocket"
     session.send_line("roc")?;
     session.exp_string("Creating project")?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.exp_string("container on Shuttle?")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -299,7 +299,7 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     session.exp_string("Directory")?;
     session.send_line(temp_dir_path.to_str().unwrap())?;
     session.exp_string("Creating project")?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.exp_string("container on Shuttle?")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -339,7 +339,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     // Partial input should be enough to match "rocket"
     session.send_line("roc")?;
     session.exp_string("Creating project")?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.exp_string("container on Shuttle?")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -381,7 +381,7 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
     session.flush()?;
     session.exp_string("yes")?;
     session.exp_string("Creating project")?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.exp_string("container on Shuttle?")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;

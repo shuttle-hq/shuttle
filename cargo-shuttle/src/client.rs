@@ -55,6 +55,18 @@ impl Client {
             .context("parsing API version info")
     }
 
+    pub async fn check_project_name(&self, project_name: &ProjectName) -> Result<bool> {
+        let url = format!("{}/projects/name/{project_name}", self.api_url);
+
+        self.client
+            .get(url)
+            .send()
+            .await?
+            .json()
+            .await
+            .context("parsing name check response")
+    }
+
     pub async fn deploy(
         &self,
         project: &ProjectName,

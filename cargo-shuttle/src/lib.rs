@@ -78,6 +78,7 @@ const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 const SHUTTLE_LOGIN_URL: &str = "https://console.shuttle.rs/new-project";
 const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new/choose";
 const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/shuttle-commands";
+const SHUTTLE_IDLE_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/idle-projects";
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -179,7 +180,8 @@ impl Shuttle {
         // All commands that call the API
         if matches!(
             args.cmd,
-            Command::Deploy(..)
+            Command::Init(..)
+                | Command::Deploy(..)
                 | Command::Status
                 | Command::Logs { .. }
                 | Command::Deployment(..)
@@ -190,7 +192,10 @@ impl Shuttle {
                 | Command::Project(..)
         ) {
             let mut client = Client::new(self.ctx.api_url());
-            client.set_api_key(self.ctx.api_key()?);
+            if !matches!(args.cmd, Command::Init(..)) {
+                // init command will handle this by itself (log in and set key) if there is no key yet
+                client.set_api_key(self.ctx.api_key()?);
+            }
             self.client = Some(client);
             self.check_api_versions().await?;
         }
@@ -323,12 +328,31 @@ impl Shuttle {
                 It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
                 "
             );
-            // TODO: Check whether the project name is still available
-            project_args.name = Some(
-                Input::with_theme(&theme)
+            let client = self.client.as_ref().unwrap();
+            loop {
+                // not using validate_with due to being blocking
+                let p: ProjectName = Input::with_theme(&theme)
                     .with_prompt("Project name")
-                    .interact()?,
-            );
+                    .interact()?;
+                match client.check_project_name(&p).await {
+                    Ok(true) => {
+                        println!("{} {}", "Project name already taken:".red(), p);
+                        println!("{}", "Try a different name.".yellow());
+                    }
+                    Ok(false) => {
+                        project_args.name = Some(p);
+                        break;
+                    }
+                    Err(_) => {
+                        project_args.name = Some(p);
+                        println!(
+                            "{}",
+                            "Failed to check if project name is available.".yellow()
+                        );
+                        break;
+                    }
+                }
+            }
             println!();
         }
 
@@ -418,9 +442,21 @@ impl Shuttle {
             true
         } else {
             let should_create = Confirm::with_theme(&theme)
-                .with_prompt("Do you want to create the project environment on Shuttle?")
+                .with_prompt(format!(
+                    r#"Claim the project name "{}" by starting a project container on Shuttle?"#,
+                    project_args
+                        .name
+                        .as_ref()
+                        .expect("to have a project name provided")
+                ))
                 .default(true)
                 .interact()?;
+            if !should_create {
+                println!(
+                    "Note: The project name will not be claimed until \
+                    you start the project with `cargo shuttle project start`."
+                )
+            }
             println!();
             should_create
         };
@@ -446,7 +482,7 @@ impl Shuttle {
                 printdoc!(
                     "
                     Hint: Discord bots might want to use `--idle-minutes 0` when starting the
-                    project so that they don't go offline: https://docs.shuttle.rs/getting-started/idle-projects
+                    project so that they don't go offline: {SHUTTLE_IDLE_DOCS_URL}
                     "
                 );
             }
@@ -479,14 +515,15 @@ impl Shuttle {
 
                 Password::with_theme(&ColorfulTheme::default())
                     .with_prompt("API key")
-                    .validate_with(|input: &String| ApiKey::parse(input).map(|_| {}))
+                    .validate_with(|input: &String| ApiKey::parse(input).map(|_| ()))
                     .interact()?
             }
         };
 
         let api_key = ApiKey::parse(&api_key_str)?;
 
-        self.ctx.set_api_key(api_key)?;
+        self.ctx.set_api_key(api_key.clone())?;
+        self.client.as_mut().unwrap().set_api_key(api_key);
 
         Ok(CommandOutcome::Ok)
     }
@@ -629,7 +666,8 @@ impl Shuttle {
                 deployment.id
             } else {
                 bail!(
-                    "Could not find a running deployment for '{proj_name}'. Try with '--latest', or pass a deployment ID manually"
+                    "Could not find a running deployment for '{proj_name}'. \
+                    Try with '--latest', or pass a deployment ID manually"
                 );
             }
         };
@@ -1516,17 +1554,6 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let config = project::Config { idle_minutes };
 
-        if idle_minutes > 0 {
-            let idle_msg = format!(
-                "Your project will sleep if it is idle for {} minutes.",
-                idle_minutes
-            );
-            println!();
-            println!("{}", idle_msg.yellow());
-            println!("To change the idle time refer to the docs: https://docs.shuttle.rs/getting-started/idle-projects");
-            println!();
-        }
-
         self.wait_with_spinner(
             &[
                 project::State::Ready,
@@ -1547,6 +1574,16 @@ impl Shuttle {
                 "the project creation or retrieving the status fails repeteadly",
             )
         })?;
+
+        if idle_minutes > 0 {
+            let idle_msg = format!(
+                "Your project will sleep if it is idle for {} minutes.",
+                idle_minutes
+            );
+            println!("{}", idle_msg.yellow());
+            println!("To change the idle time refer to the docs: {SHUTTLE_IDLE_DOCS_URL}");
+            println!();
+        }
 
         println!("Run `cargo shuttle deploy --allow-dirty` to deploy your Shuttle service.");
 
@@ -1614,7 +1651,13 @@ impl Shuttle {
                         "getting project status failed repeteadly",
                     )
                 })?;
-            println!("{project}");
+            println!(
+                "{project}\nIdle minutes: {}",
+                project
+                    .idle_minutes
+                    .map(|i| i.to_string())
+                    .unwrap_or("<unknown>".to_owned())
+            );
         }
 
         Ok(CommandOutcome::Ok)

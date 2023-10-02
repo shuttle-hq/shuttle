@@ -363,14 +363,12 @@ impl RequestContext {
     /// Set the API key to the global configuration. Will persist the file.
     pub fn set_api_key(&mut self, api_key: ApiKey) -> Result<()> {
         self.global.as_mut().unwrap().set_api_key(api_key);
-        self.global.save()?;
-        Ok(())
+        self.global.save()
     }
 
     pub fn clear_api_key(&mut self) -> Result<()> {
         self.global.as_mut().unwrap().clear_api_key();
-        self.global.save()?;
-        Ok(())
+        self.global.save()
     }
     /// Get the current project name.
     ///

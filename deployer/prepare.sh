@@ -19,7 +19,7 @@ rustup target add wasm32-unknown-unknown
 # Install common build tools for external crates
 # The image should already have these: https://github.com/docker-library/buildpack-deps/blob/65d69325ad741cea6dee20781c1faaab2e003d87/debian/buster/Dockerfile
 apt update
-apt install -y curl llvm-dev libclang-dev clang cmake
+apt install -y curl llvm-dev libclang-dev clang cmake lld mold
 
 # Install protoc since some users may need it
 ARCH="linux-x86_64" && \

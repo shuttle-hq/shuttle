@@ -1667,6 +1667,8 @@ impl Shuttle {
 
             progress_bar.set_message(format!("{project}"));
             project = client.get_project(project_name).await?;
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
         }
         progress_bar.finish_and_clear();
         println!("{project}");

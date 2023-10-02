@@ -1,6 +1,6 @@
 mod args;
 mod client;
-mod config;
+pub mod config;
 mod init;
 mod provisioner_server;
 mod suggestions;
@@ -390,7 +390,7 @@ impl Shuttle {
         };
 
         // 5. Initialize locally
-        init::cargo_generate(
+        init::generate_project(
             path.clone(),
             project_args
                 .name

@@ -1,0 +1,27 @@
+[patch.crates-io]
+shuttle-codegen = { path = "BASE/codegen" }
+shuttle-common = { path = "BASE/common" }
+shuttle-proto = { path = "BASE/proto" }
+shuttle-runtime = { path = "BASE/runtime" }
+shuttle-service = { path = "BASE/service" }
+
+shuttle-aws-rds = { path = "BASE/resources/aws-rds" }
+shuttle-metadata = { path = "BASE/resources/metadata" }
+shuttle-persist = { path = "BASE/resources/persist" }
+shuttle-shared-db = { path = "BASE/resources/shared-db" }
+shuttle-secrets = { path = "BASE/resources/secrets" }
+shuttle-static-folder = { path = "BASE/resources/static-folder" }
+shuttle-turso = { path = "BASE/resources/turso" }
+
+shuttle-axum = { path = "BASE/services/shuttle-axum" }
+shuttle-actix-web = { path = "BASE/services/shuttle-actix-web" }
+shuttle-next = { path = "BASE/services/shuttle-next" }
+shuttle-poem = { path = "BASE/services/shuttle-poem" }
+shuttle-poise = { path = "BASE/services/shuttle-poise" }
+shuttle-rocket = { path = "BASE/services/shuttle-rocket" }
+shuttle-salvo = { path = "BASE/services/shuttle-salvo" }
+shuttle-serenity = { path = "BASE/services/shuttle-serenity" }
+shuttle-thruster = { path = "BASE/services/shuttle-thruster" }
+shuttle-tide = { path = "BASE/services/shuttle-tide" }
+shuttle-tower = { path = "BASE/services/shuttle-tower" }
+shuttle-warp = { path = "BASE/services/shuttle-warp" }

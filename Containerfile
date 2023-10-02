@@ -54,79 +54,97 @@ RUN cargo build \
     --bin shuttle-next -F next
 
 
-# Base image for running each "shuttle-..." binary
-ARG RUSTUP_TOOLCHAIN
-FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-crate-base
-ARG folder
-# Some crates need additional libs
-COPY ${folder}/*.so /usr/lib/
-ENV LD_LIBRARY_PATH=/usr/lib/
-ENTRYPOINT ["/usr/local/bin/service"]
+####### Targets for each crate
 
-
-# Targets for each crate
-# Copying of each binary is non-DRY to allow other steps to be cached
-
-FROM shuttle-crate-base AS shuttle-auth
+#### AUTH
+FROM docker.io/library/debian:bookworm-20230904-slim AS shuttle-auth
 ARG CARGO_PROFILE
-COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-auth /usr/local/bin/service
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-auth /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-auth"]
 FROM shuttle-auth AS shuttle-auth-dev
 
-FROM shuttle-crate-base AS shuttle-builder
+
+#### BUILDER
+ARG RUSTUP_TOOLCHAIN
+FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-bookworm AS shuttle-builder
 ARG CARGO_PROFILE
 ARG prepare_args
 COPY builder/prepare.sh /prepare.sh
 RUN /prepare.sh "${prepare_args}"
-COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-builder /usr/local/bin/service
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-builder /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-builder"]
 FROM shuttle-builder AS shuttle-builder-dev
 
-FROM shuttle-crate-base AS shuttle-deployer
+
+#### DEPLOYER
+ARG RUSTUP_TOOLCHAIN
+FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-bookworm AS shuttle-deployer
 ARG CARGO_PROFILE
 ARG prepare_args
 # Fixes some dependencies compiled with incompatible versions of rustc
 ARG RUSTUP_TOOLCHAIN
 ENV RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN}
+COPY gateway/ulid0.so /usr/lib/
+COPY gateway/ulid0_aarch64.so /usr/lib/
+ENV LD_LIBRARY_PATH=/usr/lib/
+ARG TARGETPLATFORM
+RUN for target_platform in "linux/arm64" "linux/arm64/v8"; do \
+    if [ "$TARGETPLATFORM" = "$target_platform" ]; then \
+      mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi; done
 # Used as env variable in prepare script
 ARG PROD
 # Easy way to check if you are running in Shuttle's container
 ARG SHUTTLE=true
 COPY deployer/prepare.sh /prepare.sh
+COPY scripts/apply-patches.sh /scripts/apply-patches.sh
+COPY scripts/patches.toml /scripts/patches.toml
 RUN /prepare.sh "${prepare_args}"
-COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-deployer /usr/local/bin/service
-COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin/
-ARG TARGETPLATFORM
-RUN for target_platform in "linux/arm64" "linux/arm64/v8"; do \
-    if [ "$TARGETPLATFORM" = "$target_platform" ]; then \
-      mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi; done
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-deployer /usr/local/bin
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-deployer"]
 FROM shuttle-deployer AS shuttle-deployer-dev
-# Source code needed for compiling with [patch.crates-io]
+# Source code needed for compiling local deploys with [patch.crates-io]
 COPY --from=chef-planner /build /usr/src/shuttle/
-FROM shuttle-crate-base AS shuttle-gateway
+
+
+#### GATEWAY
+FROM docker.io/library/debian:bookworm-20230904 AS shuttle-gateway
 ARG CARGO_PROFILE
-ARG folder
-# Some crates need additional libs
-COPY ${folder}/*.so /usr/lib/
+COPY gateway/ulid0.so /usr/lib/
+COPY gateway/ulid0_aarch64.so /usr/lib/
 ENV LD_LIBRARY_PATH=/usr/lib/
-COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-gateway /usr/local/bin/service
 ARG TARGETPLATFORM
 RUN for target_platform in "linux/arm64" "linux/arm64/v8"; do \
     if [ "$TARGETPLATFORM" = "$target_platform" ]; then \
       mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi; done
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-gateway /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-gateway"]
 FROM shuttle-gateway AS shuttle-gateway-dev
 # For testing certificates locally
 COPY --from=chef-planner /build/*.pem /usr/src/shuttle/
 
-FROM shuttle-crate-base AS shuttle-logger
+
+#### LOGGER
+FROM docker.io/library/debian:bookworm-20230904-slim AS shuttle-logger
 ARG CARGO_PROFILE
-COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-logger /usr/local/bin/service
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-logger /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-logger"]
 FROM shuttle-logger AS shuttle-logger-dev
 
-FROM shuttle-crate-base AS shuttle-provisioner
+
+#### PROVISIONER
+# for some reason, hyper-rustls 0.24.1 does not work in a plain debian image
+ARG RUSTUP_TOOLCHAIN
+FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-bookworm AS shuttle-provisioner
 ARG CARGO_PROFILE
-COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-provisioner /usr/local/bin/service
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-provisioner /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-provisioner"]
 FROM shuttle-provisioner AS shuttle-provisioner-dev
 
-FROM shuttle-crate-base AS shuttle-resource-recorder
+
+#### RESOURCE RECORDER
+FROM docker.io/library/debian:bookworm-20230904-slim AS shuttle-resource-recorder
 ARG CARGO_PROFILE
-COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-resource-recorder /usr/local/bin/service
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-resource-recorder /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-resource-recorder"]
 FROM shuttle-resource-recorder AS shuttle-resource-recorder-dev

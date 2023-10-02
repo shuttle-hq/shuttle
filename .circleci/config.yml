@@ -107,37 +107,8 @@ commands:
   apply-patches:
     steps:
       - run:
-          name: Patch service
-          command: |
-            cat\<< EOF > ~/.cargo/config.toml
-            [patch.crates-io]
-            shuttle-codegen = { path = "$PWD/codegen" }
-            shuttle-common = { path = "$PWD/common" }
-            shuttle-proto = { path = "$PWD/proto" }
-            shuttle-runtime = { path = "$PWD/runtime" }
-            shuttle-service = { path = "$PWD/service" }
-
-            shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
-            shuttle-metadata = { path = "$PWD/resources/metadata" }
-            shuttle-persist = { path = "$PWD/resources/persist" }
-            shuttle-secrets = { path = "$PWD/resources/secrets" }
-            shuttle-shared-db = { path = "$PWD/resources/shared-db" }
-            shuttle-static-folder = { path = "$PWD/resources/static-folder" }
-            shuttle-turso = { path = "$PWD/resources/turso" }
-
-            shuttle-actix-web = { path = "$PWD/services/shuttle-actix-web" }
-            shuttle-axum = { path = "$PWD/services/shuttle-axum" }
-            shuttle-next = { path = "$PWD/services/shuttle-next" }
-            shuttle-poem = { path = "$PWD/services/shuttle-poem" }
-            shuttle-poise = { path = "$PWD/services/shuttle-poise" }
-            shuttle-rocket = { path = "$PWD/services/shuttle-rocket" }
-            shuttle-salvo = { path = "$PWD/services/shuttle-salvo" }
-            shuttle-serenity = { path = "$PWD/services/shuttle-serenity" }
-            shuttle-thruster = { path = "$PWD/services/shuttle-thruster" }
-            shuttle-tide = { path = "$PWD/services/shuttle-tide" }
-            shuttle-tower = { path = "$PWD/services/shuttle-tower" }
-            shuttle-warp = { path = "$PWD/services/shuttle-warp" }
-            EOF
+          name: Patch crates
+          command: ./scripts/apply-patches.sh
   install-rust:
     steps:
       - run:

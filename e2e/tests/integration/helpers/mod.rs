@@ -35,98 +35,11 @@ impl TempCargoHome {
 
                 // Apply the `patch.crates-io` for `shuttle-service`
                 let mut config = std::fs::File::create(dir.path().join("config.toml")).unwrap();
+                let p = include_str!("../../../../scripts/patches.toml");
                 write!(
                     config,
-                    r#"[patch.crates-io]
-shuttle-codegen = {{ path = "{}" }}
-shuttle-common = {{ path = "{}" }}
-shuttle-proto = {{ path = "{}" }}
-shuttle-runtime = {{ path = "{}" }}
-shuttle-service = {{ path = "{}" }}
-
-shuttle-aws-rds = {{ path = "{}" }}
-shuttle-metadata = {{ path = "{}" }}
-shuttle-persist = {{ path = "{}" }}
-shuttle-secrets = {{ path = "{}" }}
-shuttle-shared-db = {{ path = "{}" }}
-shuttle-static-folder = {{ path = "{}" }}
-shuttle-turso = {{ path = "{}" }}
-
-shuttle-actix-web = {{ path = "{}" }}
-shuttle-axum = {{ path = "{}" }}
-shuttle-next = {{ path = "{}" }}
-shuttle-poem = {{ path = "{}" }}
-shuttle-poise = {{ path = "{}" }}
-shuttle-rocket = {{ path = "{}" }}
-shuttle-salvo = {{ path = "{}" }}
-shuttle-serenity = {{ path = "{}" }}
-shuttle-thruster = {{ path = "{}" }}
-shuttle-tide = {{ path = "{}" }}
-shuttle-tower = {{ path = "{}" }}
-shuttle-warp = {{ path = "{}" }}"#,
-                    WORKSPACE_ROOT.join("codegen").display(),
-                    WORKSPACE_ROOT.join("common").display(),
-                    WORKSPACE_ROOT.join("proto").display(),
-                    WORKSPACE_ROOT.join("runtime").display(),
-                    WORKSPACE_ROOT.join("service").display(),
-                    WORKSPACE_ROOT.join("resources").join("aws-rds").display(),
-                    WORKSPACE_ROOT.join("resources").join("metadata").display(),
-                    WORKSPACE_ROOT.join("resources").join("persist").display(),
-                    WORKSPACE_ROOT.join("resources").join("secrets").display(),
-                    WORKSPACE_ROOT.join("resources").join("shared-db").display(),
-                    WORKSPACE_ROOT
-                        .join("resources")
-                        .join("static-folder")
-                        .display(),
-                    WORKSPACE_ROOT.join("resources").join("turso").display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-axum")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-actix-web")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-next")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-poem")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-poise")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-rocket")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-salvo")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-serenity")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-thruster")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-tide")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-tower")
-                        .display(),
-                    WORKSPACE_ROOT
-                        .join("services")
-                        .join("shuttle-warp")
-                        .display(),
+                    "{}",
+                    p.replace("BASE", &format!("{}", WORKSPACE_ROOT.display()))
                 )
                 .unwrap();
 
@@ -203,7 +116,7 @@ CARGO_HOME: {}
                 "shuttle-dev",
                 "exec",
                 "auth",
-                "/usr/local/bin/service",
+                "/usr/local/bin/shuttle-auth",
                 "--state=/var/lib/shuttle-auth",
                 "init",
                 "--name",

@@ -77,7 +77,7 @@ impl Eq for State {}
 
 impl Display for Response {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "project '{}' is {}", self.name, self.state)
+        write!(f, r#"Project "{}" is {}"#, self.name, self.state)
     }
 }
 

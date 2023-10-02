@@ -250,7 +250,7 @@ pub struct InitArgs {
     #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub path: PathBuf,
 
-    /// Whether to create the environment for this project on Shuttle
+    /// Whether to start the container for this project on Shuttle, and claim the project name
     #[arg(long)]
     pub create_env: bool,
     #[command(flatten)]

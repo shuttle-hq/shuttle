@@ -126,6 +126,29 @@ async fn get_project(
     Ok(AxumJson(response))
 }
 
+#[instrument(skip(service))]
+#[utoipa::path(
+    get,
+    path = "/projects/name/{project_name}",
+    responses(
+        (status = 200, description = "True if project name is taken. False if free.", body = bool),
+        (status = 400, description = "Invalid project name.", body = String),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The project name to check."),
+    )
+)]
+async fn check_project_name(
+    State(RouterState { service, .. }): State<RouterState>,
+    Path(project_name): Path<ProjectName>,
+) -> Result<AxumJson<bool>, Error> {
+    service
+        .project_name_exists(&project_name)
+        .await
+        .map(AxumJson)
+}
+
 #[utoipa::path(
     get,
     path = "/projects",
@@ -880,6 +903,7 @@ impl ApiBuilder {
                     .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate])))
                     .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate]))),
             )
+            .route("/projects/name/:project_name", get(check_project_name))
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
             .nest("/admin", admin_routes);

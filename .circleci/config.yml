@@ -705,7 +705,6 @@ workflows:
               resource_class:
                 - medium
               crate:
-                - shuttle-auth
                 - shuttle-proto
                 - shuttle-resource-recorder
       - test-workspace-member-with-integration:
@@ -716,6 +715,7 @@ workflows:
               resource_class:
                 - large
               crate:
+                - shuttle-auth
                 - shuttle-runtime
                 - shuttle-service
       - test-workspace-member-with-integration:

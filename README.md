@@ -81,7 +81,7 @@ for most platforms, they can be found on [our GitHub](https://github.com/shuttle
 On Linux and macOS, you can use this install script, which will automatically install the correct target for your OS and distro:
 
 ```sh
-curl -sSfL https://shuttle.rs/install | bash
+curl -sSfL https://www.shuttle.rs/install | bash
 ```
 
 Our binaries can also be installed using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall).

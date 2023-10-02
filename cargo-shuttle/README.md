@@ -40,7 +40,7 @@
 To install on Linux or macOS, run:
 
 ```sh
-curl -sSfL https://shuttle.rs/install | bash
+curl -sSfL https://www.shuttle.rs/install | bash
 ```
 
 On Windows, you can default to installing from source:

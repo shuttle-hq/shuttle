@@ -1,9 +1,8 @@
 use std::{
     collections::BTreeMap,
     fs::{self, remove_file},
-    io::Read,
+    io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
-    process::Stdio,
 };
 
 use async_trait::async_trait;
@@ -16,10 +15,7 @@ use shuttle_proto::builder::{
 use tar::Archive;
 use tempfile::tempdir;
 use thiserror::Error;
-use tokio::{
-    io::{AsyncBufReadExt, BufReader},
-    process::Command,
-};
+use tokio::process::Command;
 use tonic::{Request, Response, Status};
 use tracing::{debug, error, info, instrument};
 
@@ -62,8 +58,11 @@ impl Service {
         build_flake_file(path)?;
         info!(deployment_id, "created the project flake file successfully");
 
+        let (reader, writer) = os_pipe::pipe()?;
+        let writer_clone = writer.try_clone()?;
         let output_path = path.join("_archive");
-        let mut child = Command::new("nix")
+        let mut command = Command::new("nix");
+        command
             .args([
                 "build",
                 "--no-write-lock-file",
@@ -74,37 +73,24 @@ impl Service {
                 output_path.to_str().unwrap(),
                 path.to_str().unwrap(),
             ])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+            .stdout(writer)
+            .stderr(writer_clone);
+        let mut child = command.spawn()?;
 
-        let stdout = child.stdout.take().expect("to get handle on stderr");
-        let stderr = child.stderr.take().expect("to get handle on stderr");
-        let mut stderr_reader = BufReader::new(stderr).lines();
-        let mut stdout_reader = BufReader::new(stdout).lines();
-        let mut stdout_ended = false;
-        let mut stderr_ended = false;
-        while !(stdout_ended && stderr_ended) {
-            tokio::select! {
-                stderr_line = stderr_reader.next_line() => {
-                    match stderr_line {
-                        Ok(Some(line)) => info!(deployment_id, "{line}"),
-                        Ok(None) => stderr_ended = true,
-                        Err(err) => {
-                            error!(deployment_id, "unexpected stderr stream close: {}", err);
-                            stderr_ended = true;
-                        }
-                    }
-                },
-                stdout_line = stdout_reader.next_line() => {
-                    match stdout_line {
-                        Ok(Some(line)) => info!(deployment_id, "{line}"),
-                        Ok(None) => stdout_ended = true,
-                        Err(err) => {
-                            error!(deployment_id, "unexpected stdout stream close: {}", err);
-                            stdout_ended = true;
-                        }
-                    }
+        // Avoid a deadlock.
+        drop(command);
+
+        let reader = BufReader::new(reader);
+        for line in reader.lines() {
+            match line {
+                Ok(line) => {
+                    info!(deployment_id, "{line}")
+                }
+                Err(err) => {
+                    error!(
+                        deployment_id,
+                        "unexpected stdout/stderr stream close: {}", err
+                    );
                 }
             }
         }

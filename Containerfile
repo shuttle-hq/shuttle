@@ -88,9 +88,13 @@ COPY gateway/ulid0.so /usr/lib/
 COPY gateway/ulid0_aarch64.so /usr/lib/
 ENV LD_LIBRARY_PATH=/usr/lib/
 ARG TARGETPLATFORM
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi
+RUN for target_platform in "linux/arm64" "linux/arm64/v8"; do \
+    if [ "$TARGETPLATFORM" = "$target_platform" ]; then \
+      mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi; done
 # Used as env variable in prepare script
 ARG PROD
+# Easy way to check if you are running in Shuttle's container
+ARG SHUTTLE=true
 COPY deployer/prepare.sh /prepare.sh
 COPY scripts/apply-patches.sh /scripts/apply-patches.sh
 COPY scripts/patches.toml /scripts/patches.toml
@@ -110,7 +114,9 @@ COPY gateway/ulid0.so /usr/lib/
 COPY gateway/ulid0_aarch64.so /usr/lib/
 ENV LD_LIBRARY_PATH=/usr/lib/
 ARG TARGETPLATFORM
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi
+RUN for target_platform in "linux/arm64" "linux/arm64/v8"; do \
+    if [ "$TARGETPLATFORM" = "$target_platform" ]; then \
+      mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi; done
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-gateway /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/shuttle-gateway"]
 FROM shuttle-gateway AS shuttle-gateway-dev

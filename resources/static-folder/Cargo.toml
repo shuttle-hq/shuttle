@@ -1,7 +1,7 @@
 [package]
 # TODO: remove me from shuttle repo after 0.28.0
 name = "shuttle-static-folder"
-version = "0.27.0"
+version = "0.28.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Plugin to get a static folder at runtime on shuttle"

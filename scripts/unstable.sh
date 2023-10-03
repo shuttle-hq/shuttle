@@ -5,4 +5,4 @@
 
 export SHUTTLE_API="https://api.unstable.shuttle.rs"
 unset SHUTTLE_API_KEY
-export PS1="(shuttle: unstable) $PS1"
+export PS1="(shuttle: unstable) $(echo $PS1 | sed -e "s/(shuttle: .*) //")"

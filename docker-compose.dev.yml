@@ -44,7 +44,7 @@ services:
 
         >&2 echo "The control DB is available - starting shuttle-resource-recorder"
 
-        exec /usr/local/bin/service "$${@:0}"
+        exec /usr/local/bin/shuttle-resource-recorder "$${@:0}"
   auth:
     depends_on:
       - control-db
@@ -60,7 +60,7 @@ services:
 
         >&2 echo "The control DB is available - starting shuttle-auth"
 
-        exec /usr/local/bin/service "$${@:0}"
+        exec /usr/local/bin/shuttle-auth "$${@:0}"
   otel-collector:
     ports:
       - 4317:4317

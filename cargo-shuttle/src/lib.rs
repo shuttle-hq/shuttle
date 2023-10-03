@@ -836,9 +836,8 @@ impl Shuttle {
                         // should help the user to update cargo-shuttle.
                         println!(
                             "[HINT]: You should update cargo-shuttle. \
-                                If cargo-shuttle was installed using cargo, \
-                                you can get the latest version by running \
-                                `cargo install cargo-shuttle`."
+                            Check out the installation docs for how to update: \
+                            https://docs.shuttle.rs/getting-started/installation"
                         );
                     } else {
                         println!(

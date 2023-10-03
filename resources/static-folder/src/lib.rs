@@ -6,7 +6,7 @@ use shuttle_service::{Error, Factory, ResourceBuilder, Type};
 
 #[derive(Serialize)]
 #[deprecated(
-    since = "0.28.0",
+    since = "0.27.0",
     note = "Folder names can now be hard coded. More about deployment files: https://docs.shuttle.rs/configuration/files"
 )]
 pub struct StaticFolder<'a> {

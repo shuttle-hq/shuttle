@@ -118,6 +118,8 @@ ARG TARGETPLATFORM
 RUN for target_platform in "linux/arm64" "linux/arm64/v8"; do \
     if [ "$TARGETPLATFORM" = "$target_platform" ]; then \
       mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi; done
+# curl is needed for health checks
+RUN apt update && apt install -y curl
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-gateway /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/shuttle-gateway"]
 FROM shuttle-gateway AS shuttle-gateway-dev

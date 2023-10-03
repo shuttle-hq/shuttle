@@ -319,6 +319,16 @@ impl GatewayService {
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
 
+    pub async fn project_name_exists(&self, project_name: &ProjectName) -> Result<bool, Error> {
+        Ok(
+            query("SELECT project_name FROM projects WHERE project_name=?1")
+                .bind(project_name)
+                .fetch_optional(&self.db)
+                .await?
+                .is_some(),
+        )
+    }
+
     pub async fn iter_user_projects_detailed(
         &self,
         account_name: &AccountName,
@@ -821,7 +831,6 @@ impl GatewayService {
                 .and_then(task::start())
                 .and_then(task::run_until_done())
                 .and_then(task::start_idle_deploys())
-                .and_then(task::check_health())
                 .send(&task_sender)
                 .await?;
 
@@ -1141,11 +1150,7 @@ pub mod tests {
 
         println!("killed container");
 
-        let mut ambulance_task = svc
-            .new_task()
-            .project(matrix.clone())
-            .and_then(task::check_health())
-            .build();
+        let mut ambulance_task = svc.new_task().project(matrix.clone()).build();
 
         // the first poll will trigger a refresh
         let _ = ambulance_task.poll(()).await;

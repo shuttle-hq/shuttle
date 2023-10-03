@@ -72,7 +72,7 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::UserAlreadyExists => (StatusCode::BAD_REQUEST, "user already exists"),
             ErrorKind::ProjectNotFound => (
                 StatusCode::NOT_FOUND,
-                "project not found. Run `cargo shuttle project start` to create a new project.",
+                "project not found. Make sure you are the owner of this project name. Run `cargo shuttle project start` to create a new project.",
             ),
             ErrorKind::ProjectNotReady => (
                 StatusCode::SERVICE_UNAVAILABLE,

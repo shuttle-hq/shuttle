@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-pub use shuttle_service::DeploymentMetadata as Metadata;
 use shuttle_service::{error::Error, Factory, ResourceBuilder, Type};
+pub use shuttle_service::{DeploymentMetadata as Metadata, Environment, ProjectName};
 
 pub struct ShuttleMetadata;
 

@@ -58,7 +58,7 @@ impl Postgres {
             .await
             .expect("to run migrations successfully");
 
-        let (tx, mut rx): (Sender<Vec<Log>>, _) = broadcast::channel(1000);
+        let (tx, mut rx) = broadcast::channel::<Vec<Log>>(1000);
         let pool_spawn = pool.clone();
 
         let interval_tx = tx.clone();

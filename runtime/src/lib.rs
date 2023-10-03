@@ -27,9 +27,9 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.27.0"
+//! shuttle-runtime = "0.28.0"
 //! axum = "0.6.10"
-//! shuttle-axum = "0.27.0"
+//! shuttle-axum = "0.28.0"
 //! tokio = "1.26"
 //! ```
 //!
@@ -113,7 +113,7 @@
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.27.0", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.28.0", features = ["postgres"] }
 //! sqlx = { version = "0.7.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
@@ -197,16 +197,6 @@
 //! ```
 //!
 //! this will open a browser window and prompt you to connect using your GitHub account.
-//!
-//! ## We're in alpha 🤗
-//!
-//! Thanks for using shuttle! We're very happy to have you with us!
-//!
-//! During our alpha period, API keys are completely free and you can deploy as many services as you want.
-//!
-//! Just keep in mind that there may be some kinks that require us to take all deployments down once in a while. In certain circumstances we may also have to delete all the data associated with those deployments.
-//!
-//! To stay updated with the release status of shuttle, [join our Discord](https://discord.gg/shuttle)!
 //!
 //! ## Join Discord
 //!

@@ -234,10 +234,9 @@ async fn compile(
     }
 
     let profile = if release_mode {
-        cargo.arg("--profile").arg("release");
+        cargo.arg("--release");
         "release"
     } else {
-        cargo.arg("--profile").arg("dev");
         "debug"
     };
 

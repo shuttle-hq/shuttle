@@ -12,10 +12,10 @@ use tracing::{error, info};
 use ulid::Ulid;
 
 mod args;
-mod deployment;
-mod error;
+pub mod deployment;
+pub mod error;
 pub mod handlers;
-mod persistence;
+pub mod persistence;
 mod proxy;
 mod runtime_manager;
 
@@ -37,9 +37,11 @@ pub async fn start(
             shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
         >,
     >,
-    builder_client: BuilderClient<
-        shuttle_common::claims::ClaimService<
-            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+    builder_client: Option<
+        BuilderClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
         >,
     >,
     args: Args,

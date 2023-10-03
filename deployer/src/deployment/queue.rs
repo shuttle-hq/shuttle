@@ -44,9 +44,11 @@ pub async fn task(
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
     queue_client: impl BuildQueueClient,
-    builder_client: BuilderClient<
-        shuttle_common::claims::ClaimService<
-            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+    builder_client: Option<
+        BuilderClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
         >,
     >,
     builds_path: PathBuf,
@@ -67,7 +69,7 @@ pub async fn task(
                 let secret_recorder = secret_recorder.clone();
                 let queue_client = queue_client.clone();
                 let builds_path = builds_path.clone();
-                let mut builder_client = builder_client.clone();
+                let builder_client = builder_client.clone();
 
                 tasks.spawn(async move {
                     let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -79,34 +81,35 @@ pub async fn task(
                     async move {
                         // Timeout after 3 minutes if the build queue hangs or it takes
                         // too long for a slot to become available
-                        match timeout(
+                        if let Err(err) = timeout(
                             Duration::from_secs(60 * 3),
                             wait_for_queue(queue_client.clone(), id),
                         )
                         .await
                         {
-                            Ok(_) => {}
-                            Err(err) => return build_failed(&id, err),
+                            return build_failed(&id, err);
                         }
 
-                        let deployment_id = queued.id.to_string();
-                        let archive = queued.data.clone();
-                        let claim = queued.claim.clone();
-                        tokio::spawn(async move {
-                            let mut req = Request::new(BuildRequest {
-                                deployment_id,
-                                archive,
-                            });
-                            req.extensions_mut().insert(claim);
+                        if let Some(mut inner) = builder_client {
+                            let deployment_id = queued.id.to_string();
+                            let archive = queued.data.clone();
+                            let claim = queued.claim.clone();
+                            tokio::spawn(async move {
+                                let mut req = Request::new(BuildRequest {
+                                    deployment_id,
+                                    archive,
+                                });
+                                req.extensions_mut().insert(claim);
 
-                            match builder_client.build(req).await {
-                                Ok(inner) =>  {
-                                    let response = inner.into_inner();
-                                    info!(id = %queued.id, "shuttle-builder finished building the deployment: image length is {} bytes, is_wasm flag is {} and there are {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
-                                },
-                                Err(err) => error!(id = %queued.id, "shuttle-builder errored while building: {}", err)
-                            };
-                        });
+                                match inner.build(req).await {
+                                    Ok(inner) =>  {
+                                        let response = inner.into_inner();
+                                        info!(id = %queued.id, "shuttle-builder finished building the deployment: image length is {} bytes, is_wasm flag is {} and there are {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
+                                    },
+                                    Err(err) => error!(id = %queued.id, "shuttle-builder errored while building: {}", err)
+                                };
+                            });
+                        }
 
                         match queued
                             .handle(
@@ -338,11 +341,6 @@ async fn set_secrets(
 /// Akin to the command: `tar -xzf --strip-components 1`
 #[instrument(skip(data, dest))]
 async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
-    debug!("Unpacking archive into {:?}", dest.as_ref());
-    let tar = GzDecoder::new(data);
-    let mut archive = Archive::new(tar);
-    archive.set_overwrite(true);
-
     // Clear directory first
     trace!("Clearing old files");
     let mut entries = fs::read_dir(&dest).await?;
@@ -362,6 +360,10 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
         }
     }
 
+    debug!("Unpacking archive into {:?}", dest.as_ref());
+    let tar = GzDecoder::new(data);
+    let mut archive = Archive::new(tar);
+    archive.set_overwrite(true);
     for entry in archive.entries()? {
         let mut entry = entry?;
         let name = entry.path()?;
@@ -388,10 +390,8 @@ async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<BuiltService> {
-    // Investigate if this can be optimized for local run / CI.
-    // Remember the same flag for cargo test as well.
-    // let release = std::env::var("CI").is_ok_and(|s| s == "true") || std::env::var("PROD").is_ok_and(|s| s == "true");
-    let runtimes = build_workspace(project_path, true, tx, true)
+    // Build in release mode, except for when testing, such as in CI
+    let runtimes = build_workspace(project_path, cfg!(not(test)), tx, true)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 
@@ -426,7 +426,8 @@ async fn run_pre_deploy_tests(
         // We set the tests to build with the release profile since deployments compile
         // with the release profile by default. This means crates don't need to be
         // recompiled in debug mode for the tests, reducing memory usage during deployment.
-        .arg("--release")
+        // When running unit tests, it can compile in debug mode.
+        .arg(if cfg!(not(test)) { "--release" } else { "" })
         .arg("--jobs=4")
         .arg("--color=always")
         .current_dir(project_path)

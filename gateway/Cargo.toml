@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-gateway"
-version = "0.27.0"
+version = "0.28.0"
 edition.workspace = true
 license.workspace = true
 publish = false
@@ -59,6 +59,9 @@ workspace = true
 features = ["backend", "models", "openapi"]
 
 [dependencies.shuttle-proto]
+workspace = true
+
+[dependencies.shuttle-orchestrator]
 workspace = true
 
 [dev-dependencies]

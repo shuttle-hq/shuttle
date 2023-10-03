@@ -36,11 +36,6 @@ async fn non_interactive_basic_init() {
     assert!(cargo_toml.contains("name = \"my-project\""));
     assert!(cargo_toml.contains("shuttle-runtime = "));
 
-    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
-    // attempts to enter the original (temp) working directory again.
-    // If both are dropped at the same time, the test can sometimes crash.
-    // Added sleep here to prevent.
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     drop(temp_dir);
 }
 
@@ -68,11 +63,6 @@ async fn non_interactive_rocket_init() {
 
     assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
 
-    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
-    // attempts to enter the original (temp) working directory again.
-    // If both are dropped at the same time, the test can sometimes crash.
-    // Added sleep here to prevent.
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     drop(temp_dir);
 }
 
@@ -104,11 +94,6 @@ async fn non_interactive_init_with_from_url() {
     assert!(cargo_toml.contains("name = \"my-project\""));
     assert!(cargo_toml.contains("shuttle-tower ="));
 
-    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
-    // attempts to enter the original (temp) working directory again.
-    // If both are dropped at the same time, the test can sometimes crash.
-    // Added sleep here to prevent.
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     drop(temp_dir);
 }
 
@@ -140,11 +125,6 @@ async fn non_interactive_init_with_from_gh() {
     assert!(cargo_toml.contains("name = \"my-project\""));
     assert!(cargo_toml.contains("shuttle-tower ="));
 
-    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
-    // attempts to enter the original (temp) working directory again.
-    // If both are dropped at the same time, the test can sometimes crash.
-    // Added sleep here to prevent.
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     drop(temp_dir);
 }
 
@@ -176,11 +156,6 @@ async fn non_interactive_init_with_from_repo_name() {
     assert!(cargo_toml.contains("name = \"my-project\""));
     assert!(cargo_toml.contains("shuttle-tower ="));
 
-    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
-    // attempts to enter the original (temp) working directory again.
-    // If both are dropped at the same time, the test can sometimes crash.
-    // Added sleep here to prevent.
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     drop(temp_dir);
 }
 
@@ -201,7 +176,7 @@ async fn non_interactive_init_with_from_local_path() {
         "--name",
         "my-project",
         "--from",
-        "../examples", // for some reason, cargo runs the test from the cargo-shuttle folder.
+        "../examples", // cargo runs the test from the cargo-shuttle folder.
         "--subfolder",
         "tower/hello-world",
         temp_dir_path.to_str().unwrap(),
@@ -212,11 +187,6 @@ async fn non_interactive_init_with_from_local_path() {
     assert!(cargo_toml.contains("name = \"my-project\""));
     assert!(cargo_toml.contains("shuttle-tower ="));
 
-    // CI DEBUG: Dropping the underlying cargo generate `ScopedWorkingDirectory`
-    // attempts to enter the original (temp) working directory again.
-    // If both are dropped at the same time, the test can sometimes crash.
-    // Added sleep here to prevent.
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     drop(temp_dir);
 }
 
@@ -251,7 +221,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     // Partial input should be enough to match "rocket"
     session.send_line("roc")?;
     session.exp_string("Creating project")?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.exp_string("container on Shuttle?")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -292,7 +262,7 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
     // Partial input should be enough to match "rocket"
     session.send_line("roc")?;
     session.exp_string("Creating project")?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.exp_string("container on Shuttle?")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -329,7 +299,7 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     session.exp_string("Directory")?;
     session.send_line(temp_dir_path.to_str().unwrap())?;
     session.exp_string("Creating project")?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.exp_string("container on Shuttle?")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -369,7 +339,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     // Partial input should be enough to match "rocket"
     session.send_line("roc")?;
     session.exp_string("Creating project")?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.exp_string("container on Shuttle?")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
@@ -411,7 +381,7 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
     session.flush()?;
     session.exp_string("yes")?;
     session.exp_string("Creating project")?;
-    session.exp_string("Do you want to create the project environment on Shuttle?")?;
+    session.exp_string("container on Shuttle?")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;

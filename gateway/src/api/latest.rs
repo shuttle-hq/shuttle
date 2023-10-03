@@ -23,7 +23,7 @@ use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Scope, EXP_MINUTES};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
-use shuttle_common::request_span;
+use shuttle_common::{request_span, VersionInfo};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
@@ -124,6 +124,29 @@ async fn get_project(
     };
 
     Ok(AxumJson(response))
+}
+
+#[instrument(skip(service))]
+#[utoipa::path(
+    get,
+    path = "/projects/name/{project_name}",
+    responses(
+        (status = 200, description = "True if project name is taken. False if free.", body = bool),
+        (status = 400, description = "Invalid project name.", body = String),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The project name to check."),
+    )
+)]
+async fn check_project_name(
+    State(RouterState { service, .. }): State<RouterState>,
+    Path(project_name): Path<ProjectName>,
+) -> Result<AxumJson<bool>, Error> {
+    service
+        .project_name_exists(&project_name)
+        .await
+        .map(AxumJson)
 }
 
 #[utoipa::path(
@@ -848,9 +871,28 @@ impl ApiBuilder {
             .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
             .layer(ScopedLayer::new(vec![Scope::Admin]));
 
+        const CARGO_SHUTTLE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
         self.router = self
             .router
             .route("/", get(get_status))
+            .route(
+                "/versions",
+                get(|| async {
+                    axum::Json(VersionInfo {
+                        gateway: env!("CARGO_PKG_VERSION").parse().unwrap(),
+                        // For now, these use the same version as gateway (we release versions in lockstep).
+                        // Only one version is officially compatible, but more are in reality.
+                        cargo_shuttle: env!("CARGO_PKG_VERSION").parse().unwrap(),
+                        deployer: env!("CARGO_PKG_VERSION").parse().unwrap(),
+                        runtime: CARGO_SHUTTLE_VERSION.parse().unwrap(),
+                    })
+                }),
+            )
+            .route(
+                "/version/cargo-shuttle",
+                get(|| async { CARGO_SHUTTLE_VERSION }),
+            )
             .route(
                 "/projects",
                 get(get_projects_list.layer(ScopedLayer::new(vec![Scope::Project]))),
@@ -861,6 +903,7 @@ impl ApiBuilder {
                     .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate])))
                     .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate]))),
             )
+            .route("/projects/name/:project_name", get(check_project_name))
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
             .nest("/admin", admin_routes);

@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
 use crate::worker::TaskRouter;
-use crate::{AccountName, EndState, Error, ErrorKind, ProjectName, Refresh, State};
+use crate::{AccountName, Error, ErrorKind, ProjectName, Refresh, State};
 
 // Default maximum _total_ time a task is allowed to run
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
@@ -108,15 +108,6 @@ where
     }
 }
 
-pub fn refresh() -> impl Task<ProjectContext, Output = Project, Error = Error> {
-    run(|ctx: ProjectContext| async move {
-        match ctx.state.refresh(&ctx.gateway).await {
-            Ok(new) => TaskResult::Done(new),
-            Err(err) => TaskResult::Err(err),
-        }
-    })
-}
-
 pub fn destroy() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     run(|ctx| async move {
         match ctx.state.destroy() {
@@ -145,22 +136,6 @@ pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project, Error
                 TaskResult::Done(Project::Ready(ready))
             }
             other => TaskResult::Done(other),
-        }
-    })
-}
-
-pub fn check_health() -> impl Task<ProjectContext, Output = Project, Error = Error> {
-    run(|ctx| async move {
-        match ctx.state.refresh(&ctx.gateway).await {
-            Ok(Project::Ready(mut ready)) => {
-                if ready.is_healthy().await {
-                    TaskResult::Done(Project::Ready(ready))
-                } else {
-                    TaskResult::Done(Project::Ready(ready).reboot().unwrap())
-                }
-            }
-            Ok(update) => TaskResult::Done(update),
-            Err(err) => TaskResult::Err(err),
         }
     })
 }
@@ -298,10 +273,26 @@ impl Task<ProjectContext> for RunUntilDone {
     type Error = Error;
 
     async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output, Self::Error> {
-        if !<Project as EndState<GatewayContext>>::is_done(&ctx.state) {
-            TaskResult::Pending(ctx.state.next(&ctx.gateway).await.unwrap())
-        } else {
-            TaskResult::Done(ctx.state)
+        // Make sure the project state has not changed from Docker
+        // Else we will make assumptions when trying to run next which can cause a failure
+        let project = match ctx.state.refresh(&ctx.gateway).await {
+            Ok(project) => project,
+            Err(error) => return TaskResult::Err(error),
+        };
+
+        match project {
+            Project::Errored(_) | Project::Destroyed(_) | Project::Stopped(_) => {
+                TaskResult::Done(project)
+            }
+            Project::Ready(_) => match project.next(&ctx.gateway).await.unwrap() {
+                Project::Ready(ready) => TaskResult::Done(Project::Ready(ready)),
+                other => TaskResult::Pending(other),
+            },
+            Project::Restarting(restarting) if restarting.exhausted() => {
+                trace!("skipping project that restarted too many times");
+                TaskResult::Done(Project::Restarting(restarting))
+            }
+            _ => TaskResult::Pending(project.next(&ctx.gateway).await.unwrap()),
         }
     }
 }

@@ -355,9 +355,14 @@ pub(crate) fn parse_init_path(path: OsString) -> Result<PathBuf, io::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::path_from_workspace_root;
-
     use super::*;
+    use crate::tests::path_from_workspace_root;
+    use clap::CommandFactory;
+
+    #[test]
+    fn test_shuttle_args() {
+        ShuttleArgs::command().debug_assert();
+    }
 
     #[test]
     fn test_init_args_framework() {

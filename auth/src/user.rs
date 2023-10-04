@@ -187,13 +187,13 @@ impl User {
         name: AccountName,
         key: ApiKey,
         account_tier: AccountTier,
-        session_id: Option<SubscriptionId>,
+        subscription_id: Option<SubscriptionId>,
     ) -> Self {
         Self {
             name,
             key,
             account_tier,
-            subscription_id: session_id,
+            subscription_id,
         }
     }
 

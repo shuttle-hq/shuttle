@@ -22,13 +22,18 @@ use libsql_client::client::Client;
 use shuttle_axum::ShuttleAxum;
 
 #[shuttle_runtime::main]
-async fn app(#[shuttle_turso::Turso(addr="libsql://my-turso-db-name.turso.io", token="{secrets.DB_TURSO_TOKEN}")] client: Client) -> ShuttleAxum { }
+async fn app(
+    #[shuttle_turso::Turso(
+        addr="libsql://my-turso-db-name.turso.io",
+        token="{secrets.DB_TURSO_TOKEN}"
+    )] client: Client,
+) -> ShuttleAxum {}
 ```
 
 ### Parameters
 
-| Parameter  | Type        | Default | Description                                                                                                                                        |
-| ---------- | ----------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| addr       | str         | `""`    | URL of the database to connect to. If `libsql://` is missing at the beginning, it will be automatically added.                                     |
-| token      | str         | `""`    | The value of the token to authenticate against the Turso database. You can use string interpolation to read a secret from your `Secret.toml` file. |
-| local_addr | Option<str> | `None`  | The URL to use when running your service locally. If not provided, this will default to a local file named `<service name>.db`                     |
+| Parameter  | Type          | Default | Description |
+| ---------- | ------------- | ------- | ----------- |
+| addr       | `str`         | `""`    | URL of the database to connect to. If `libsql://` is missing at the beginning, it will be automatically added. |
+| token      | `str`         | `""`    | The value of the token to authenticate against the Turso database. You can use string interpolation to read a secret from your `Secret.toml` file. |
+| local_addr | `Option<str>` | `None`  | The URL to use when running your service locally. If not provided, this will default to a local file named `<service name>.db` |

@@ -1,6 +1,7 @@
 [package]
+# TODO: remove me from shuttle repo after 0.28.0
 name = "shuttle-static-folder"
-version = "0.22.0"
+version = "0.28.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Plugin to get a static folder at runtime on shuttle"
@@ -8,12 +9,5 @@ keywords = ["shuttle-service", "static-folder"]
 
 [dependencies]
 async-trait = "0.1.56"
-dunce = "1.0.3"
-fs_extra = "1.3.0"
 serde = { version = "1.0.148", features = ["derive"] }
-shuttle-service = { path = "../../service", version = "0.22.0" }
-tracing = "0.1.37"
-
-[dev-dependencies]
-tempfile = "3.3.0"
-tokio = { version = "1.22.0", features = ["macros", "rt"] }
+shuttle-service = { path = "../../service", version = ">=0.27.0, <0.31.0" }

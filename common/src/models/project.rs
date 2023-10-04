@@ -1,3 +1,5 @@
+#[cfg(feature = "openapi")]
+use crate::ulid_type;
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, Color,
     ContentArrangement, Table,
@@ -11,20 +13,23 @@ use strum::EnumString;
 use utoipa::ToSchema;
 
 /// Timeframe before a project is considered idle
-pub const IDLE_MINUTES: u64 = 30;
+pub const DEFAULT_IDLE_MINUTES: u64 = 30;
 
-/// Function to set [IDLE_MINUTES] as a serde default
-pub const fn idle_minutes() -> u64 {
-    IDLE_MINUTES
+/// Function to set [DEFAULT_IDLE_MINUTES] as a serde default
+pub const fn default_idle_minutes() -> u64 {
+    DEFAULT_IDLE_MINUTES
 }
 
 #[derive(Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::Response))]
 pub struct Response {
+    #[cfg_attr(feature = "openapi", schema(schema_with = ulid_type))]
+    pub id: String,
     pub name: String,
     #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::models::project::State))]
     pub state: State,
+    pub idle_minutes: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
@@ -72,7 +77,7 @@ impl Eq for State {}
 
 impl Display for Response {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "project '{}' is {}", self.name, self.state)
+        write!(f, r#"Project "{}" is {}"#, self.name, self.state)
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-deployer"
-version = "0.22.0"
+version = "0.28.0"
 edition.workspace = true
 license.workspace = true
 description = "Service with instances created per project for handling the compilation, loading, and execution of Shuttle services"
@@ -24,6 +24,7 @@ once_cell = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-http = { workspace = true }
 pipe = { workspace = true }
+prost-types = { workspace = true }
 portpicker = { workspace = true }
 rmp-serde = { workspace = true }
 serde = { workspace = true }
@@ -53,6 +54,7 @@ tracing-subscriber = { workspace = true, features = [
 ] }
 utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
+ulid = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
@@ -70,4 +72,6 @@ features = ["builder"]
 ctor = { workspace = true }
 hex = "0.4.3"
 rand = { workspace = true }
+shuttle-common-tests = { workspace = true }
 tempfile = { workspace = true }
+tokio-stream = { workspace = true }

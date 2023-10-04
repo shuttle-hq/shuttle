@@ -22,6 +22,7 @@ pub fn get_resources_table(resources: &Vec<Response>, service_name: &str) -> Str
                 Type::StaticFolder => "Static Folder",
                 Type::Persist => "Persist",
                 Type::Turso => "Turso",
+                Type::Metadata => "Metadata",
                 Type::Custom => "Custom",
             };
 

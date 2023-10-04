@@ -378,7 +378,12 @@ mod tests {
 
             assert_eq!(
                 scopes,
-                vec![Scope::DeploymentPush, Scope::Resources, Scope::Service]
+                vec![
+                    Scope::DeploymentPush,
+                    Scope::Resources,
+                    Scope::Service,
+                    Scope::ResourcesWrite
+                ]
             );
         }
     }

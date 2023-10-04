@@ -3,63 +3,151 @@
 
 # Base image for builds and cache
 ARG RUSTUP_TOOLCHAIN
-FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-build
-RUN cargo install cargo-chef --locked
+FROM docker.io/lukemathwalker/cargo-chef:latest-rust-${RUSTUP_TOOLCHAIN}-buster as cargo-chef
 WORKDIR /build
 
 
-# Stores source cache
-FROM shuttle-build as cache
-ARG CARGO_PROFILE
+# Stores source cache and cargo chef recipe
+FROM cargo-chef as chef-planner
 WORKDIR /src
 COPY . .
-RUN find ${SRC_CRATES} \( -name "*.proto" -or -name "*.rs" -or -name "*.toml" -or -name "Cargo.lock" -or -name "README.md" -or -name "*.sql" -or -name "ulid0.so" \) -type f -exec install -D \{\} /build/\{\} \;
-# This is used to carry over in the docker images any *.pem files from shuttle root directory,
-# to be used for TLS testing, as described here in the admin README.md.
-RUN if [ "$CARGO_PROFILE" != "release" ]; then \
-    find ${SRC_CRATES} -name "*.pem" -type f -exec install -D \{\} /build/\{\} \;; \
-    fi
+
+# Select only the essential files for copying into next steps
+# so that changes to miscellaneous files don't trigger a new cargo-chef cook.
+# Beware that .dockerignore filters files before they get here.
+
+RUN find . \( \
+    -name "*.rs" -or \
+    -name "*.toml" -or \
+    -name "Cargo.lock" -or \
+    -name "*.sql" -or \
+    -name "README.md" -or \
+    # Used for local TLS testing, as described in admin/README.md
+    -name "*.pem" \
+    \) -type f -exec install -D \{\} /build/\{\} \;
+WORKDIR /build
+RUN cargo chef prepare --recipe-path /recipe.json
+# TODO upstream: Reduce the cooking by allowing multiple --bin args to prepare, or like this https://github.com/LukeMathWalker/cargo-chef/issues/181
 
 
-# Stores cargo chef recipe
-FROM shuttle-build AS planner
-COPY --from=cache /build .
-RUN cargo chef prepare --recipe-path recipe.json
-
-
-# Builds crate according to cargo chef recipe
-FROM shuttle-build AS builder
+# Builds crate according to cargo chef recipe.
+# This step is skipped if the recipe is unchanged from previous build (no dependencies changed).
+FROM cargo-chef AS chef-builder
 ARG CARGO_PROFILE
-ARG folder
-COPY --from=planner /build/recipe.json recipe.json
+COPY --from=chef-planner /recipe.json /
+# https://i.imgflip.com/2/74bvex.jpg
 RUN cargo chef cook \
-    # if CARGO_PROFILE is release, pass --release, else use default debug profile
+    --all-features \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
-    --recipe-path recipe.json
-COPY --from=cache /build .
-RUN cargo build --bin shuttle-${folder} \
-    $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi)
+    --recipe-path /recipe.json
+COPY --from=chef-planner /build .
+# Building all at once to share build artifacts in the "cook" layer
+RUN cargo build \
+    $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
+    --bin shuttle-auth \
+    --bin shuttle-builder \
+    --bin shuttle-deployer \
+    --bin shuttle-gateway \
+    --bin shuttle-logger \
+    --bin shuttle-provisioner \
+    --bin shuttle-resource-recorder \
+    --bin shuttle-next -F next
 
 
-# The final image for this "shuttle-..." crate
-ARG RUSTUP_TOOLCHAIN
-FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-crate
-ARG folder
-ARG prepare_args
-# used as env variable in prepare script
-ARG PROD
+####### Targets for each crate
+
+#### AUTH
+FROM docker.io/library/debian:bookworm-20230904-slim AS shuttle-auth
 ARG CARGO_PROFILE
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-auth /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-auth"]
+FROM shuttle-auth AS shuttle-auth-dev
+
+
+#### BUILDER
+ARG RUSTUP_TOOLCHAIN
+FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-bookworm AS shuttle-builder
+ARG CARGO_PROFILE
+ARG prepare_args
+COPY builder/prepare.sh /prepare.sh
+RUN /prepare.sh "${prepare_args}"
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-builder /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-builder"]
+FROM shuttle-builder AS shuttle-builder-dev
+
+
+#### DEPLOYER
+ARG RUSTUP_TOOLCHAIN
+FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-bookworm AS shuttle-deployer
+ARG CARGO_PROFILE
+ARG prepare_args
+# Fixes some dependencies compiled with incompatible versions of rustc
 ARG RUSTUP_TOOLCHAIN
 ENV RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN}
-
-COPY ${folder}/prepare.sh /prepare.sh
+COPY gateway/ulid0.so /usr/lib/
+COPY gateway/ulid0_aarch64.so /usr/lib/
+ENV LD_LIBRARY_PATH=/usr/lib/
+ARG TARGETPLATFORM
+RUN for target_platform in "linux/arm64" "linux/arm64/v8"; do \
+    if [ "$TARGETPLATFORM" = "$target_platform" ]; then \
+      mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi; done
+# Used as env variable in prepare script
+ARG PROD
+# Easy way to check if you are running in Shuttle's container
+ARG SHUTTLE=true
+ENV SHUTTLE=${SHUTTLE}
+COPY deployer/prepare.sh /prepare.sh
+COPY scripts/apply-patches.sh /scripts/apply-patches.sh
+COPY scripts/patches.toml /scripts/patches.toml
 RUN /prepare.sh "${prepare_args}"
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-deployer /usr/local/bin
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-deployer"]
+FROM shuttle-deployer AS shuttle-deployer-dev
+# Source code needed for compiling local deploys with [patch.crates-io]
+COPY --from=chef-planner /build /usr/src/shuttle/
 
-COPY --from=cache /build /usr/src/shuttle/
 
-# Any prepare steps that depend on the COPY from src cache.
-# In the deployer shuttle-next is installed and the panamax mirror config is added in this step.
-RUN /prepare.sh --after-src "${prepare_args}"
+#### GATEWAY
+FROM docker.io/library/debian:bookworm-20230904 AS shuttle-gateway
+ARG CARGO_PROFILE
+COPY gateway/ulid0.so /usr/lib/
+COPY gateway/ulid0_aarch64.so /usr/lib/
+ENV LD_LIBRARY_PATH=/usr/lib/
+ARG TARGETPLATFORM
+RUN for target_platform in "linux/arm64" "linux/arm64/v8"; do \
+    if [ "$TARGETPLATFORM" = "$target_platform" ]; then \
+      mv /usr/lib/ulid0_aarch64.so /usr/lib/ulid0.so; fi; done
+# curl is needed for health checks
+RUN apt update && apt install -y curl
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-gateway /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-gateway"]
+FROM shuttle-gateway AS shuttle-gateway-dev
+# For testing certificates locally
+COPY --from=chef-planner /build/*.pem /usr/src/shuttle/
 
-COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-${folder} /usr/local/bin/service
-ENTRYPOINT ["/usr/local/bin/service"]
+
+#### LOGGER
+FROM docker.io/library/debian:bookworm-20230904-slim AS shuttle-logger
+ARG CARGO_PROFILE
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-logger /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-logger"]
+FROM shuttle-logger AS shuttle-logger-dev
+
+
+#### PROVISIONER
+# for some reason, hyper-rustls 0.24.1 does not work in a plain debian image
+ARG RUSTUP_TOOLCHAIN
+FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-bookworm AS shuttle-provisioner
+ARG CARGO_PROFILE
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-provisioner /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-provisioner"]
+FROM shuttle-provisioner AS shuttle-provisioner-dev
+
+
+#### RESOURCE RECORDER
+FROM docker.io/library/debian:bookworm-20230904-slim AS shuttle-resource-recorder
+ARG CARGO_PROFILE
+COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-resource-recorder /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/shuttle-resource-recorder"]
+FROM shuttle-resource-recorder AS shuttle-resource-recorder-dev

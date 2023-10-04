@@ -1,37 +1,54 @@
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 
-pub use args::Args;
-pub use deployment::deploy_layer::DeployLayer;
-use deployment::DeploymentManager;
 use fqdn::FQDN;
 use hyper::{
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
 };
-pub use persistence::Persistence;
-use proxy::AddressGetter;
-pub use runtime_manager::RuntimeManager;
+use shuttle_common::log::LogRecorder;
+use shuttle_proto::{builder::builder_client::BuilderClient, logger::logger_client::LoggerClient};
 use tokio::sync::Mutex;
 use tracing::{error, info};
-
-use crate::deployment::gateway_client::GatewayClient;
+use ulid::Ulid;
 
 mod args;
-mod deployment;
-mod error;
+pub mod deployment;
+pub mod error;
 pub mod handlers;
-mod persistence;
+pub mod persistence;
 mod proxy;
 mod runtime_manager;
+
+pub use crate::args::Args;
+pub use crate::deployment::state_change_layer::StateChangeLayer;
+use crate::deployment::{gateway_client::GatewayClient, DeploymentManager};
+pub use crate::persistence::Persistence;
+use crate::proxy::AddressGetter;
+pub use crate::runtime_manager::RuntimeManager;
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub async fn start(
     persistence: Persistence,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
+    log_recorder: impl LogRecorder,
+    log_fetcher: LoggerClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >,
+    builder_client: Option<
+        BuilderClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
+    >,
     args: Args,
 ) {
     // when _set is dropped once axum exits, the deployment tasks will be aborted.
     let deployment_manager = DeploymentManager::builder()
-        .build_log_recorder(persistence.clone())
+        .build_log_recorder(log_recorder)
         .secret_recorder(persistence.clone())
         .active_deployment_getter(persistence.clone())
         .artifacts_path(args.artifacts_path)
@@ -39,7 +56,9 @@ pub async fn start(
         .deployment_updater(persistence.clone())
         .secret_getter(persistence.clone())
         .resource_manager(persistence.clone())
+        .builder_client(builder_client)
         .queue_client(GatewayClient::new(args.gateway_uri))
+        .log_fetcher(log_fetcher)
         .build();
 
     persistence.cleanup_invalid_states().await.unwrap();
@@ -48,6 +67,8 @@ pub async fn start(
     info!(count = %runnable_deployments.len(), "stopping all but last running deploy");
 
     // Make sure we don't stop the last running deploy. This works because they are returned in descending order.
+    let project_id = Ulid::from_string(args.project_id.as_str())
+        .expect("to have a valid ULID as project_id arg");
     for existing_deployment in runnable_deployments.into_iter().skip(1) {
         persistence
             .stop_running_deployment(existing_deployment)
@@ -60,6 +81,7 @@ pub async fn start(
         deployment_manager,
         args.proxy_fqdn,
         args.project,
+        project_id,
         args.auth_uri,
     );
 

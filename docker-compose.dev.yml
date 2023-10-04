@@ -1,5 +1,9 @@
 version: "3"
 
+volumes:
+  logger-postgres-vol:
+  control-db-postgres-vol:
+
 services:
   provisioner:
     entrypoint:
@@ -20,12 +24,94 @@ services:
 
         >&2 echo "DBs are available - starting provisioner"
 
-        exec /usr/local/bin/service "$${@:0}"
+        exec /usr/local/bin/shuttle-provisioner "$${@:0}"
     ports:
       - 3000:8000
+  resource-recorder:
+    ports:
+      - 8007:8000
+    depends_on:
+      - control-db
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        until </dev/tcp/control-db/5432
+        do
+          >&2 echo "The control DB is not available yet - sleeping"
+          sleep 1
+        done
+
+        >&2 echo "The control DB is available - starting shuttle-resource-recorder"
+
+        exec /usr/local/bin/shuttle-resource-recorder "$${@:0}"
+  auth:
+    depends_on:
+      - control-db
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        until </dev/tcp/control-db/5432
+        do
+          >&2 echo "The control DB is not available yet - sleeping"
+          sleep 1
+        done
+
+        >&2 echo "The control DB is available - starting shuttle-auth"
+
+        exec /usr/local/bin/shuttle-auth "$${@:0}"
+  otel-collector:
+    ports:
+      - 4317:4317
   panamax:
     profiles:
       - panamax
   deck-chores:
     profiles:
       - panamax
+  logger:
+    ports:
+      - 8010:8000
+    depends_on:
+      - auth
+      - logger-postgres
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        until </dev/tcp/logger-postgres/5432
+        do
+          >&2 echo "PG is not available yet - sleeping"
+          sleep 1
+        done
+
+        >&2 echo "DBs are available - starting shuttle-logger"
+
+        exec /usr/local/bin/shuttle-logger "$${@:0}"
+  logger-postgres:
+    image: "docker.io/library/postgres:${LOGGER_POSTGRES_TAG}"
+    restart: always
+    networks:
+      user-net:
+    environment:
+      POSTGRES_PASSWORD: ${LOGGER_POSTGRES_PASSWORD}
+    volumes:
+      - logger-postgres-vol:/var/lib/postgresql/data
+    ports:
+      - 8003:8000
+      # the shared postgres already uses 5432
+      - 5433:5432
+  control-db:
+    image: "docker.io/library/postgres:${CONTROL_DB_POSTGRES_TAG}"
+    restart: always
+    networks:
+      user-net:
+    environment:
+      POSTGRES_PASSWORD: ${CONTROL_DB_POSTGRES_PASSWORD}
+    volumes:
+      - control-db-postgres-vol:/var/lib/postgresql/data
+    ports:
+      - 8004:8000
+      # the shared postgres already uses 5432
+      - 5434:5432

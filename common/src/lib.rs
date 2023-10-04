@@ -2,18 +2,23 @@
 pub mod backends;
 #[cfg(feature = "claims")]
 pub mod claims;
+pub mod constants;
 pub mod database;
 #[cfg(feature = "service")]
 pub mod deployment;
 #[cfg(feature = "service")]
+use uuid::Uuid;
+#[cfg(feature = "service")]
+pub type DeploymentId = Uuid;
+#[cfg(feature = "service")]
 pub mod log;
+#[cfg(feature = "service")]
+pub use log::LogItem;
 #[cfg(feature = "models")]
 pub mod models;
 #[cfg(feature = "service")]
 pub mod project;
 pub mod resource;
-#[cfg(feature = "service")]
-pub mod storage_manager;
 #[cfg(feature = "tracing")]
 pub mod tracing;
 #[cfg(feature = "wasm")]
@@ -24,24 +29,12 @@ use std::fmt::Debug;
 use std::fmt::Display;
 
 use anyhow::bail;
-#[cfg(feature = "service")]
-pub use log::Item as LogItem;
-#[cfg(feature = "service")]
-pub use log::STATE_MESSAGE;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "service")]
-use uuid::Uuid;
-
-#[cfg(debug_assertions)]
-pub const API_URL_DEFAULT: &str = "http://localhost:8001";
-
-#[cfg(not(debug_assertions))]
-pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
+#[cfg(feature = "openapi")]
+use utoipa::openapi::{Object, ObjectBuilder};
 
 pub type ApiUrl = String;
 pub type Host = String;
-#[cfg(feature = "service")]
-pub type DeploymentId = Uuid;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "persist", derive(sqlx::Type, PartialEq, Hash, Eq))]
@@ -205,10 +198,46 @@ impl IntoIterator for SecretStore {
     }
 }
 
+#[cfg(feature = "openapi")]
+pub fn ulid_type() -> Object {
+    ObjectBuilder::new()
+        .schema_type(utoipa::openapi::SchemaType::String)
+        .format(Some(utoipa::openapi::SchemaFormat::Custom(
+            "ulid".to_string(),
+        )))
+        .description(Some("String represention of an Ulid according to the spec found here: https://github.com/ulid/spec."))
+        .build()
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VersionInfo {
+    /// Version of gateway
+    pub gateway: semver::Version,
+    /// Latest version of cargo-shuttle compatible with this gateway.
+    pub cargo_shuttle: semver::Version,
+    /// Latest version of shuttle-deployer compatible with this gateway.
+    pub deployer: semver::Version,
+    /// Latest version of shuttle-runtime compatible with the above deployer.
+    pub runtime: semver::Version,
+}
+
+/// Check if two versions are compatible based on the rule used by cargo:
+/// "Versions `a` and `b` are compatible if their left-most nonzero digit is the same."
+pub fn semvers_are_compatible(a: &semver::Version, b: &semver::Version) -> bool {
+    if a.major != 0 || b.major != 0 {
+        a.major == b.major
+    } else if a.minor != 0 || b.minor != 0 {
+        a.minor == b.minor
+    } else {
+        a.patch == b.patch
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use proptest::prelude::*;
+    use std::str::FromStr;
 
     proptest! {
         #[test]
@@ -249,5 +278,23 @@ mod tests {
         assert_eq!(iter.next(), Some(("1".to_owned(), "2".to_owned())));
         assert_eq!(iter.next(), Some(("3".to_owned(), "4".to_owned())));
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn semver_compatibility_check_works() {
+        let semver_tests = &[
+            ("1.0.0", "1.0.0", true),
+            ("1.8.0", "1.0.0", true),
+            ("0.1.0", "0.2.1", false),
+            ("0.9.0", "0.2.0", false),
+        ];
+        for (version_a, version_b, are_compatible) in semver_tests {
+            let version_a = semver::Version::from_str(version_a).unwrap();
+            let version_b = semver::Version::from_str(version_b).unwrap();
+            assert_eq!(
+                super::semvers_are_compatible(&version_a, &version_b),
+                *are_compatible
+            );
+        }
     }
 }

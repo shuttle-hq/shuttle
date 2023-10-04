@@ -1,4 +1,6 @@
 use crate::deployment::State;
+#[cfg(feature = "openapi")]
+use crate::ulid_type;
 use chrono::{DateTime, Utc};
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Attribute, Cell, CellAlignment, Color,
@@ -11,14 +13,20 @@ use std::{fmt::Display, str::FromStr};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+/// Max length of strings in the git metadata
+pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
+/// Max HTTP body size for a deployment POST request
+pub const CREATE_SERVICE_BODY_LIMIT: usize = 50_000_000;
+const GIT_OPTION_NONE_TEXT: &str = "N/A";
+
 #[derive(Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::deployment::Response))]
 pub struct Response {
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
     pub id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
-    pub service_id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(schema_with = ulid_type))]
+    pub service_id: String,
     #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::deployment::State))]
     pub state: State,
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]
@@ -168,7 +176,3 @@ pub struct DeploymentRequest {
     pub git_branch: Option<String>,
     pub git_dirty: Option<bool>,
 }
-
-pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
-const GIT_OPTION_NONE_TEXT: &str = "N/A";
-pub const CREATE_SERVICE_BODY_LIMIT: usize = 50_000_000;

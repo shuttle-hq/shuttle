@@ -4,8 +4,7 @@
 Both the alpha and next examples can be run using the local client:
 
 ``` bash
-cd path/to/example
-cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- run
+cargo run -p cargo-shuttle -- --wd path/to/example run
 ```
 
 When a more fine controlled testing is needed, use the instructions below.

@@ -23,7 +23,7 @@ use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Scope, EXP_MINUTES};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
-use shuttle_common::request_span;
+use shuttle_common::{request_span, VersionInfo};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
@@ -113,13 +113,40 @@ async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let state = service.find_project(&scope).await?.into();
+    let project = service.find_project(&scope).await?;
+    let idle_minutes = project.state.idle_minutes();
+
     let response = project::Response {
+        id: project.project_id.to_uppercase(),
         name: scope.to_string(),
-        state,
+        state: project.state.into(),
+        idle_minutes,
     };
 
     Ok(AxumJson(response))
+}
+
+#[instrument(skip(service))]
+#[utoipa::path(
+    get,
+    path = "/projects/name/{project_name}",
+    responses(
+        (status = 200, description = "True if project name is taken. False if free.", body = bool),
+        (status = 400, description = "Invalid project name.", body = String),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The project name to check."),
+    )
+)]
+async fn check_project_name(
+    State(RouterState { service, .. }): State<RouterState>,
+    Path(project_name): Path<ProjectName>,
+) -> Result<AxumJson<bool>, Error> {
+    service
+        .project_name_exists(&project_name)
+        .await
+        .map(AxumJson)
 }
 
 #[utoipa::path(
@@ -145,15 +172,17 @@ async fn get_projects_list(
         .iter_user_projects_detailed(&name, limit * page, limit)
         .await?
         .map(|project| project::Response {
-            name: project.0.to_string(),
-            state: project.1.into(),
+            id: project.0.to_uppercase(),
+            name: project.1.to_string(),
+            idle_minutes: project.2.idle_minutes(),
+            state: project.2.into(),
         })
         .collect();
 
     Ok(AxumJson(projects))
 }
 
-#[instrument(skip_all, fields(%project))]
+#[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(
     post,
     path = "/projects/{project_name}",
@@ -170,32 +199,40 @@ async fn create_project(
         service, sender, ..
     }): State<RouterState>,
     User { name, claim, .. }: User,
-    Path(project): Path<ProjectName>,
+    Path(project_name): Path<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
     let is_admin = claim.scopes.contains(&Scope::Admin);
 
-    let state = service
-        .create_project(project.clone(), name.clone(), is_admin, config.idle_minutes)
+    let project = service
+        .create_project(
+            project_name.clone(),
+            name.clone(),
+            is_admin,
+            config.idle_minutes,
+        )
         .await?;
+    let idle_minutes = project.state.idle_minutes();
 
     service
         .new_task()
-        .project(project.clone())
+        .project(project_name.clone())
         .and_then(task::run_until_done())
         .and_then(task::start_idle_deploys())
         .send(&sender)
         .await?;
 
     let response = project::Response {
-        name: project.to_string(),
-        state: state.into(),
+        id: project.project_id.to_string().to_uppercase(),
+        name: project_name.to_string(),
+        state: project.state.into(),
+        idle_minutes,
     };
 
     Ok(AxumJson(response))
 }
 
-#[instrument(skip_all, fields(%project))]
+#[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(
     delete,
     path = "/projects/{project_name}",
@@ -211,13 +248,19 @@ async fn destroy_project(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
-    ScopedUser { scope: project, .. }: ScopedUser,
+    ScopedUser {
+        scope: project_name,
+        ..
+    }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let state = service.find_project(&project).await?;
+    let project = service.find_project(&project_name).await?;
+    let idle_minutes = project.state.idle_minutes();
 
     let mut response = project::Response {
-        name: project.to_string(),
-        state: state.into(),
+        id: project.project_id.to_uppercase(),
+        name: project_name.to_string(),
+        state: project.state.into(),
+        idle_minutes,
     };
 
     if response.state == shuttle_common::models::project::State::Destroyed {
@@ -227,7 +270,7 @@ async fn destroy_project(
     // if project exists and isn't `Destroyed`, send destroy task
     service
         .new_task()
-        .project(project)
+        .project(project_name)
         .and_then(task::destroy())
         .send(&sender)
         .await?;
@@ -247,9 +290,8 @@ async fn route_project(
 ) -> Result<Response<Body>, Error> {
     let project_name = scoped_user.scope;
     let project = service.find_or_start_project(&project_name, sender).await?;
-
     service
-        .route(&project, &project_name, &scoped_user.user.name, req)
+        .route(&project.state, &project_name, &scoped_user.user.name, req)
         .await
 }
 
@@ -502,7 +544,15 @@ async fn request_custom_domain_acme_certificate(
         .await?;
 
     let project = service.find_project(&project_name).await?;
-    let idle_minutes = project.container().unwrap().idle_minutes();
+    let project_id = project
+        .state
+        .container()
+        .unwrap()
+        .project_id()
+        .map_err(|_| Error::custom(ErrorKind::Internal, "Missing project_id from the container"))?;
+
+    let container = project.state.container().unwrap();
+    let idle_minutes = container.idle_minutes();
 
     // Destroy and recreate the project with the new domain.
     service
@@ -517,6 +567,7 @@ async fn request_custom_domain_acme_certificate(
                 async move {
                     let creating = ProjectCreating::new_with_random_initial_key(
                         ctx.project_name,
+                        project_id,
                         idle_minutes,
                     )
                     .with_fqdn(fqdn);
@@ -524,6 +575,8 @@ async fn request_custom_domain_acme_certificate(
                 }
             }
         }))
+        .and_then(task::run_until_done())
+        .and_then(task::start_idle_deploys())
         .send(&sender)
         .await?;
 
@@ -564,27 +617,38 @@ async fn renew_custom_domain_acme_certificate(
         .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
     // Try retrieve the current certificate if any.
     match service.project_details_for_custom_domain(&fqdn).await {
-        Ok(CustomDomain { certificate, .. }) => {
-            let (_, pem) = parse_x509_pem(certificate.as_bytes()).unwrap_or_else(|_| {
-                panic!(
-                    "Malformed existing PEM certificate for {} project.",
-                    project_name
+        Ok(CustomDomain {
+            mut certificate,
+            private_key,
+            ..
+        }) => {
+            certificate.push('\n');
+            certificate.push('\n');
+            certificate.push_str(private_key.as_str());
+            let (_, pem) = parse_x509_pem(certificate.as_bytes()).map_err(|err| {
+                Error::custom(
+                    ErrorKind::Internal,
+                    format!("Error while parsing the pem certificate for {project_name}: {err}"),
                 )
-            });
-            let (_, x509_cert_chain) = parse_x509_certificate(pem.contents.as_bytes())
-                .unwrap_or_else(|_| {
-                    panic!(
-                        "Malformed existing X509 certificate for {} project.",
-                        project_name
+            })?;
+
+            let (_, x509_cert_chain) =
+                parse_x509_certificate(pem.contents.as_bytes()).map_err(|err| {
+                    Error::custom(
+                        ErrorKind::Internal,
+                        format!(
+                            "Error while parsing the certificate chain for {project_name}: {err}"
+                        ),
                     )
-                });
+                })?;
+
             let diff = x509_cert_chain
                 .validity()
                 .not_after
                 .sub(ASN1Time::now())
-                .unwrap();
+                .unwrap_or_default();
 
-            // If current certificate validity less_or_eq than 30 days, attempt renewal.
+            // Renew only when the difference is `None` (meaning certificate expired) or we're within the last 30 days of validity.
             if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
                 return match acme_client
                     .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)
@@ -807,9 +871,28 @@ impl ApiBuilder {
             .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
             .layer(ScopedLayer::new(vec![Scope::Admin]));
 
+        const CARGO_SHUTTLE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
         self.router = self
             .router
             .route("/", get(get_status))
+            .route(
+                "/versions",
+                get(|| async {
+                    axum::Json(VersionInfo {
+                        gateway: env!("CARGO_PKG_VERSION").parse().unwrap(),
+                        // For now, these use the same version as gateway (we release versions in lockstep).
+                        // Only one version is officially compatible, but more are in reality.
+                        cargo_shuttle: env!("CARGO_PKG_VERSION").parse().unwrap(),
+                        deployer: env!("CARGO_PKG_VERSION").parse().unwrap(),
+                        runtime: CARGO_SHUTTLE_VERSION.parse().unwrap(),
+                    })
+                }),
+            )
+            .route(
+                "/version/cargo-shuttle",
+                get(|| async { CARGO_SHUTTLE_VERSION }),
+            )
             .route(
                 "/projects",
                 get(get_projects_list.layer(ScopedLayer::new(vec![Scope::Project]))),
@@ -820,6 +903,7 @@ impl ApiBuilder {
                     .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate])))
                     .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate]))),
             )
+            .route("/projects/name/:project_name", get(check_project_name))
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
             .nest("/admin", admin_routes);

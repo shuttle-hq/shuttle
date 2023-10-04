@@ -30,7 +30,7 @@ impl Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, strum::Display)]
 pub enum ErrorKind {
     KeyMissing,
     BadHost,
@@ -42,6 +42,10 @@ pub enum ErrorKind {
     ProjectNotFound,
     InvalidProjectName,
     ProjectAlreadyExists,
+    /// Contains a message describing a running state of the project.
+    /// Used if the project already exists but is owned
+    /// by the caller, which means they can modify the project.
+    OwnProjectAlreadyExists(String),
     ProjectNotReady,
     ProjectUnavailable,
     CustomDomainNotFound,
@@ -68,9 +72,12 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::UserAlreadyExists => (StatusCode::BAD_REQUEST, "user already exists"),
             ErrorKind::ProjectNotFound => (
                 StatusCode::NOT_FOUND,
-                "project not found. Run `cargo shuttle project start` to create a new project.",
+                "project not found. Make sure you are the owner of this project name. Run `cargo shuttle project start` to create a new project.",
             ),
-            ErrorKind::ProjectNotReady => (StatusCode::SERVICE_UNAVAILABLE, "project not ready"),
+            ErrorKind::ProjectNotReady => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "project not ready. Try running `cargo shuttle project restart`.",
+            ),
             ErrorKind::ProjectUnavailable => {
                 (StatusCode::BAD_GATEWAY, "project returned invalid response")
             }
@@ -94,6 +101,12 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::BAD_REQUEST,
                 "a project with the same name already exists",
             ),
+            ErrorKind::OwnProjectAlreadyExists(message) => {
+                return Self {
+                    message,
+                    status_code: StatusCode::BAD_REQUEST.as_u16(),
+                }
+            }
             ErrorKind::InvalidCustomDomain => (StatusCode::BAD_REQUEST, "invalid custom domain"),
             ErrorKind::CustomDomainNotFound => (StatusCode::NOT_FOUND, "custom domain not found"),
             ErrorKind::CustomDomainAlreadyExists => {
@@ -131,8 +144,9 @@ impl From<StatusCode> for ApiError {
                 "we don't serve this resource"
             },
             StatusCode::BAD_GATEWAY => {
-                warn!("got a bad response from a deployer");
-                "response from deployer is invalid. Please create a ticket to report this"
+                warn!("got a bad response from the gateway");
+                // Gateway's default response when a request handler panicks is a 502 with some HTML.
+                "response from gateway is invalid. Please create a ticket to report this"
             },
             _ => {
                 error!(%code, "got an unexpected status code");

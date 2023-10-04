@@ -72,7 +72,7 @@ impl Error {
     }
 
     pub fn kind(&self) -> ErrorKind {
-        self.kind
+        self.kind.clone()
     }
 }
 
@@ -227,21 +227,6 @@ pub trait DockerContext: Send + Sync {
     fn container_settings(&self) -> &ContainerSettings;
 }
 
-#[async_trait]
-pub trait Service {
-    type Context;
-
-    type State: EndState<Self::Context>;
-
-    type Error;
-
-    /// Asks for the latest available context for task execution
-    fn context(&self) -> Self::Context;
-
-    /// Commit a state update to persistence
-    async fn update(&self, state: &Self::State) -> Result<(), Self::Error>;
-}
-
 /// A generic state which can, when provided with a [`Context`], do
 /// some work and advance itself
 #[async_trait]
@@ -255,14 +240,7 @@ pub trait State<Ctx>: Send {
 
 pub type StateTryStream<'c, St, Err> = Pin<Box<dyn Stream<Item = Result<St, Err>> + Send + 'c>>;
 
-pub trait EndState<Ctx>
-where
-    Self: State<Ctx, Error = Infallible, Next = Self>,
-{
-    fn is_done(&self) -> bool;
-}
-
-pub trait EndStateExt<Ctx>: TryState + EndState<Ctx>
+pub trait StateExt<Ctx>: TryState + State<Ctx, Error = Infallible, Next = Self>
 where
     Ctx: Sync,
     Self: Clone,
@@ -286,9 +264,9 @@ where
     }
 }
 
-impl<Ctx, S> EndStateExt<Ctx> for S
+impl<Ctx, S> StateExt<Ctx> for S
 where
-    S: Clone + TryState + EndState<Ctx>,
+    S: Clone + TryState + State<Ctx, Error = Infallible, Next = Self>,
     Ctx: Send + Sync,
 {
 }
@@ -424,7 +402,7 @@ pub mod tests {
             $($(#[$($meta:tt)*])* $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
         } => {{
             let state = $state;
-            let mut stream = crate::EndStateExt::into_stream(state, &$ctx);
+            let mut stream = crate::StateExt::into_stream(state, &$ctx);
             assert_stream_matches!(
                 stream,
                 $($(#[$($meta)*])* $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
@@ -606,6 +584,7 @@ pub mod tests {
                 env::var("SHUTTLE_TESTS_NETWORK").unwrap_or_else(|_| "shuttle_default".to_string());
 
             let provisioner_host = "provisioner".to_string();
+            let builder_host = "builder".to_string();
 
             let docker_host = "/var/run/docker.sock".to_string();
 
@@ -619,6 +598,7 @@ pub mod tests {
                     image,
                     prefix,
                     provisioner_host,
+                    builder_host,
                     auth_uri: auth_uri.clone(),
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),

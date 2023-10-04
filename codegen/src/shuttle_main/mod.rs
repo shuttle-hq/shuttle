@@ -256,22 +256,9 @@ impl ToTokens for Loader {
             async fn loader(
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory,
                 mut #resource_tracker_ident: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
             ) -> #return_type {
                 use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
                 #extra_imports
-
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
-
-                shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger)
-                    .init();
-
                 #vars
                 #(let #fn_inputs = shuttle_runtime::get_resource(
                     #fn_inputs_builder::new()#fn_inputs_builder_options,
@@ -338,21 +325,8 @@ mod tests {
             async fn loader(
                 mut _factory: shuttle_runtime::ProvisionerFactory,
                 mut _resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
             ) -> ShuttleSimple {
                 use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
-
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
-
-                shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger)
-                    .init();
-
                 simple().await
             }
         };
@@ -419,22 +393,9 @@ mod tests {
             async fn loader(
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 mut resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
                 use shuttle_runtime::{Factory, ResourceBuilder};
-
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
-
-                shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger)
-                    .init();
-
                 let pool = shuttle_runtime::get_resource(
                     shuttle_shared_db::Postgres::new(),
                     &mut factory,
@@ -543,22 +504,9 @@ mod tests {
             async fn loader(
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 mut resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
                 use shuttle_runtime::{Factory, ResourceBuilder};
-
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
-
-                shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger)
-                    .init();
-
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
                 let pool = shuttle_runtime::get_resource (
                     shuttle_shared_db::Postgres::new().size(&shuttle_runtime::strfmt("10Gb", &vars)?).public(false),

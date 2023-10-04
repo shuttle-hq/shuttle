@@ -6,4 +6,4 @@
 
 # We're using rustls for the async-stripe crate and that needs certificates installed.
 apt-get update
-apt install ca-certificates
+apt install -y ca-certificates

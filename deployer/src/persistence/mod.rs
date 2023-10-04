@@ -156,7 +156,7 @@ impl Persistence {
             .await
             .expect("failed to connect to resource recorder");
 
-        let resource_recorder_channel = ServiceBuilder::new()
+        let resource_recorder_service = ServiceBuilder::new()
             .layer(ClaimLayer)
             .layer(InjectPropagationLayer)
             .service(channel);
@@ -167,13 +167,13 @@ impl Persistence {
             .await
             .expect("failed to connect to provisioner");
 
-        let provisioner_channel = ServiceBuilder::new()
+        let provisioner_service = ServiceBuilder::new()
             .layer(ClaimLayer)
             .layer(InjectPropagationLayer)
             .service(channel);
 
-        let resource_recorder_client = ResourceRecorderClient::new(resource_recorder_channel);
-        let provisioner_client = ProvisionerClient::new(provisioner_channel);
+        let resource_recorder_client = ResourceRecorderClient::new(resource_recorder_service);
+        let provisioner_client = ProvisionerClient::new(provisioner_service);
 
         let (state_send, handle) = Self::from_pool(pool.clone()).await;
 

@@ -53,6 +53,7 @@ pub struct ApiBuilder {
     router: Router<RouterState>,
     pool: Option<SqlitePool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
+    stripe_client: Option<stripe::Client>,
 }
 
 impl Default for ApiBuilder {
@@ -93,6 +94,7 @@ impl ApiBuilder {
             router,
             pool: None,
             session_layer: None,
+            stripe_client: None,
         }
     }
 
@@ -115,9 +117,15 @@ impl ApiBuilder {
         self
     }
 
-    pub fn into_router(self, stripe_client: stripe::Client) -> Router {
+    pub fn with_stripe_client(mut self, stripe_client: stripe::Client) -> Self {
+        self.stripe_client = Some(stripe_client);
+        self
+    }
+
+    pub fn into_router(self) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
         let session_layer = self.session_layer.expect("a session layer is required");
+        let stripe_client = self.stripe_client.expect("a stripe client is required");
         let user_manager = UserManager {
             pool,
             stripe_client,

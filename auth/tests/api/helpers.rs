@@ -36,10 +36,11 @@ pub(crate) async fn app() -> TestApp {
     let router = ApiBuilder::new()
         .with_sqlite_pool(sqlite_pool)
         .with_sessions()
-        .into_router(stripe::Client::from_url(
+        .with_stripe_client(stripe::Client::from_url(
             mocked_stripe_server.uri.to_string().as_str(),
             "",
-        ));
+        ))
+        .into_router();
 
     TestApp {
         router,

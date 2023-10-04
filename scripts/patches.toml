@@ -10,7 +10,6 @@ shuttle-metadata = { path = "BASE/resources/metadata" }
 shuttle-persist = { path = "BASE/resources/persist" }
 shuttle-shared-db = { path = "BASE/resources/shared-db" }
 shuttle-secrets = { path = "BASE/resources/secrets" }
-shuttle-static-folder = { path = "BASE/resources/static-folder" }
 shuttle-turso = { path = "BASE/resources/turso" }
 
 shuttle-axum = { path = "BASE/services/shuttle-axum" }

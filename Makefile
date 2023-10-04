@@ -199,7 +199,9 @@ deploy: docker-compose.yml
 	$(DOCKER_COMPOSE_ENV) docker stack deploy -c $< $(STACK)
 
 test:
-	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test $(CARGO_TEST_FLAGS) -- --nocapture
+	POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) \
+	APPS_FQDN=$(APPS_FQDN) \
+	cargo test --manifest-path=e2e/Cargo.toml $(CARGO_TEST_FLAGS) -- --nocapture
 
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@

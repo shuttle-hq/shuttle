@@ -35,7 +35,15 @@
 <!-- markdownlint-disable-next-line -->
 <a id="installation"><h1>Installation</h1></a>
 
-`cargo-shuttle` is available for macOS, Linux, and Windows. To install the commandline tool, run:
+`cargo-shuttle` is available for macOS, Linux, and Windows.
+
+To install on Linux or macOS, run:
+
+```sh
+curl -sSfL https://www.shuttle.rs/install | bash
+```
+
+On Windows, you can default to installing from source:
 
 ```bash
 cargo install cargo-shuttle
@@ -43,7 +51,9 @@ cargo install cargo-shuttle
 
 ### Distro Packages
 
+<!-- markdownlint-disable-next-line -->
 <details>
+<!-- markdownlint-disable-next-line -->
   <summary>Packaging status</summary>
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/cargo-shuttle.svg)](https://repology.org/project/cargo-shuttle/versions)
@@ -125,8 +135,8 @@ This should generate the following dependency in `Cargo.toml`:
 
 ```toml
 rocket = "0.5.0-rc.2"
-shuttle-rocket = { version = "0.27.0" }
-shuttle-runtime = { version = "0.27.0" }
+shuttle-rocket = { version = "0.28.0" }
+shuttle-runtime = { version = "0.28.0" }
 tokio = { version = "1.26.0" }
 ```
 
@@ -226,9 +236,5 @@ cargo shuttle stop
 <a id="development"><h1>Development</h1></a>
 
 Thanks for using `cargo-shuttle`! We’re very happy to have you with us!
-
-During our alpha period, API keys are completely free and you can deploy as many services as you want.
-
-Just keep in mind that there may be some kinks that require us to take all deployments down once in a while. In certain circumstances we may also have to delete all the data associated with those deployments.
 
 To contribute to `cargo-shuttle` or stay updated with our development, please [open an issue, discussion or PR on Github](https://github.com/shuttle-hq/shuttle) and [join our Discord](https://discord.gg/shuttle)! 🚀

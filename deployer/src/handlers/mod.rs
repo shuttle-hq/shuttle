@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::extract::{
     ws::{self, WebSocket},
@@ -381,9 +382,7 @@ pub async fn delete_service_resource(
         .await?;
 
     if !delete_resource_response.success {
-        return Err(Error::NotFound(
-            "Unable to delete resource from resource recorder".to_string(),
-        ));
+        return Err(anyhow!("Unable to delete resource from resource recorder").into());
     }
 
     Ok(())

@@ -89,14 +89,3 @@ impl Display for Type {
         }
     }
 }
-
-#[derive(Debug)]
-pub struct ParseError;
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid resource type")
-    }
-}
-
-impl std::error::Error for ParseError {}

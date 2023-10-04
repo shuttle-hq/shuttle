@@ -237,14 +237,16 @@ impl User {
 
 impl FromRow<'_, SqliteRow> for User {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        let subscription_id =
-            SubscriptionId::from_str(row.try_get("subscription_id").unwrap()).ok();
-
+        let x: &str = row.try_get("subscription_id").unwrap();
+        println!("{:?}", x);
         Ok(User {
             name: row.try_get("account_name").unwrap(),
             key: row.try_get("key").unwrap(),
             account_tier: row.try_get("account_tier").unwrap(),
-            subscription_id,
+            subscription_id: row
+                .try_get("subscription_id")
+                .ok()
+                .and_then(|inner| SubscriptionId::from_str(inner).ok()),
         })
     }
 }

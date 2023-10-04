@@ -369,7 +369,7 @@ pub async fn delete_service_resource(
         })?;
 
     let get_resource_response = persistence
-        .get_resource(&service.id, r#type.clone(), claim.clone())
+        .get_resource(&service.id, r#type, claim.clone())
         .await?;
 
     if get_resource_response.resource.is_none() {

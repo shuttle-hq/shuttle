@@ -214,7 +214,7 @@ impl User {
         let subscription_is_valid = self
             .subscription_is_valid(&user_manager.stripe_client)
             .await?;
-        debug!(%subscription_is_valid, "to be or not to be");
+
         if self.account_tier == AccountTier::Pro && !subscription_is_valid {
             self.account_tier = AccountTier::PendingPaymentPro;
             user_manager

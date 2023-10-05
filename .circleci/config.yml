@@ -238,7 +238,7 @@ jobs:
         type: string
       sccache-size:
         type: string
-        default: ""
+        default: 500M
     executor: docker-rust
     resource_class: << parameters.resource_class >>
     steps:
@@ -274,7 +274,7 @@ jobs:
         type: string
       sccache-size:
         type: string
-        default: ""
+        default: 500M
     # Using a machine image since tests will start a docker container
     executor: machine-ubuntu
     resource_class: << parameters.resource_class >>

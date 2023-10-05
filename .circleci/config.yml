@@ -15,7 +15,7 @@ executors:
     machine:
       image: ubuntu-2204:2023.07.2
       docker_layer_caching: true
-    resource_class: xlarge
+    resource_class: large
 
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
@@ -269,11 +269,15 @@ jobs:
       crate:
         description: "Crate in workspace to test"
         type: string
+      resource_class:
+        description: The resource type to use for the machine
+        type: string
       sccache-size:
         type: string
         default: ""
     # Using a machine image since tests will start a docker container
     executor: machine-ubuntu
+    resource_class: << parameters.resource_class >>
     steps:
       - install-rust
       - install-protoc
@@ -296,6 +300,7 @@ jobs:
       - save-sccache
   e2e-test:
     executor: machine-ubuntu
+    resource_class: medium
     steps:
       - install-rust
       - checkout
@@ -733,14 +738,22 @@ workflows:
       - test-workspace-member-with-integration-docker:
           name: << matrix.crate >> with docker
           matrix:
+            alias: test-workspace-member-with-integration-docker-medium
             parameters:
-              sccache-size:
-                - 1G
+              resource_class:
+                - medium
               crate:
-                # need to spawn docker containers, therefore in a machine
-                - cargo-shuttle
                 - shuttle-provisioner
                 - shuttle-logger
+      - test-workspace-member-with-integration-docker:
+          name: << matrix.crate >> with docker
+          matrix:
+            alias: test-workspace-member-with-integration-docker-large
+            parameters:
+              resource_class:
+                - large
+              crate:
+                - cargo-shuttle
       - e2e-test:
           requires:
             - test-standalone
@@ -749,7 +762,8 @@ workflows:
             - test-workspace-member-with-integration-medium
             - test-workspace-member-with-integration-large
             - test-workspace-member-with-integration-xlarge
-            - test-workspace-member-with-integration-docker
+            - test-workspace-member-with-integration-docker-medium
+            - test-workspace-member-with-integration-docker-large
           filters:
             branches:
               only: production

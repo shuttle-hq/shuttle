@@ -752,6 +752,20 @@ impl Shuttle {
     }
 
     async fn resource_delete(&self, resource_type: &resource::Type) -> Result<CommandOutcome> {
+        Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt(format!(
+                "{}",
+                format!(
+                    "Are you sure you want to delete this project's {}? This action is permanent.",
+                    resource_type
+                )
+                .bold()
+                .red(),
+            ))
+            .default(false)
+            .interact()
+            .unwrap();
+
         self.client
             .as_ref()
             .unwrap()
@@ -759,6 +773,16 @@ impl Shuttle {
             .await?;
 
         println!("Deleted resource {resource_type}");
+        println!(
+            "{}",
+            formatdoc! {"
+                Note:
+                    Remember to remove the resource annotation from your #[shuttle_runtime::main] function.
+                    Otherwise, it will be provisioned again during the next deployment."
+            }
+            .yellow()
+            .to_string(),
+        );
 
         Ok(CommandOutcome::Ok)
     }

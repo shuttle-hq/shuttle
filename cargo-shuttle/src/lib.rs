@@ -166,6 +166,7 @@ impl Shuttle {
                         | ProjectCommand::Stop { .. }
                         | ProjectCommand::Restart { .. }
                         | ProjectCommand::Status { .. }
+                        | ProjectCommand::Delete
                 )
                 | Command::Stop
                 | Command::Clean
@@ -237,7 +238,8 @@ impl Shuttle {
             Command::Project(ProjectCommand::List { page, limit }) => {
                 self.projects_list(page, limit).await
             }
-            Command::Project(ProjectCommand::Stop) => self.project_delete().await,
+            Command::Project(ProjectCommand::Stop) => self.project_stop().await,
+            Command::Project(ProjectCommand::Delete) => self.project_delete().await,
         };
 
         for w in self.version_warnings {
@@ -1646,7 +1648,7 @@ impl Shuttle {
     }
 
     async fn project_recreate(&self, idle_minutes: u64) -> Result<CommandOutcome> {
-        self.project_delete()
+        self.project_stop()
             .await
             .map_err(suggestions::project::project_restart_failure)?;
         self.project_create(idle_minutes)
@@ -1718,7 +1720,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_delete(&self) -> Result<CommandOutcome> {
+    async fn project_stop(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         self.wait_with_spinner(
             &[
@@ -1727,7 +1729,7 @@ impl Shuttle {
                     message: Default::default(),
                 },
             ],
-            client.delete_project(self.ctx.project_name()),
+            client.stop_project(self.ctx.project_name()),
             self.ctx.project_name(),
             client,
         )
@@ -1735,12 +1737,53 @@ impl Shuttle {
         .map_err(|err| {
             suggestions::project::project_request_failure(
                 err,
-                "Project destroy failed",
+                "Project stop failed",
                 true,
-                "deleting the project or getting project status fails repeteadly",
+                "stopping the project or getting project status fails repeteadly",
             )
         })?;
         println!("Run `cargo shuttle project start` to recreate project environment on Shuttle.");
+
+        Ok(CommandOutcome::Ok)
+    }
+
+    async fn project_delete(&self) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        println!(
+            "{}",
+            formatdoc!(
+                r#"
+                WARNING:
+                    Are you sure you want to delete "{}"?
+                    This will...
+                    - Delete all Secrets and Persist data in this project.
+                    - Release the project name from your account.
+                    This action is permanent."#,
+                self.ctx.project_name()
+            )
+            .bold()
+            .red()
+        );
+        if !Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt("Are you sure?")
+            .default(false)
+            .interact()
+            .unwrap()
+        {
+            return Ok(CommandOutcome::Ok);
+        }
+
+        client
+            .delete_project(self.ctx.project_name())
+            .await
+            .map_err(|err| {
+                suggestions::project::project_request_failure(
+                    err,
+                    "Project delete failed",
+                    true,
+                    "deleting the project or getting project status fails repeteadly",
+                )
+            })?;
 
         Ok(CommandOutcome::Ok)
     }

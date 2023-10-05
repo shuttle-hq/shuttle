@@ -182,8 +182,14 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn delete_project(&self, project: &ProjectName) -> Result<project::Response> {
+    pub async fn stop_project(&self, project: &ProjectName) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
+
+        self.delete(path).await
+    }
+
+    pub async fn delete_project(&self, project: &ProjectName) -> Result<project::Response> {
+        let path = format!("/projects/{}/delete", project.as_str());
 
         self.delete(path).await
     }

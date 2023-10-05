@@ -354,7 +354,7 @@ pub async fn delete_service_resource(
     Extension(mut persistence): Extension<Persistence>,
     Extension(claim): Extension<Claim>,
     Path((project_name, service_name, resource_type)): Path<(String, String, String)>,
-) -> Result<()> {
+) -> Result<Json<()>> {
     let service = persistence
         .get_service_by_name(&service_name)
         .await?
@@ -385,7 +385,7 @@ pub async fn delete_service_resource(
         return Err(anyhow!("Unable to delete resource from resource recorder").into());
     }
 
-    Ok(())
+    Ok(Json(()))
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]

@@ -164,7 +164,9 @@ pub enum ResourceCommand {
     List,
     /// Delete a resource
     Delete {
-        /// Type of the resource to delete
+        /// Type of the resource to delete.
+        /// Use the string in the 'Type' column as displayed in the `resource list` command.
+        /// For example, 'database::shared::postgres'.
         resource_type: resource::Type,
     },
 }

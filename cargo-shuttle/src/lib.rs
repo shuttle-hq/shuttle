@@ -755,23 +755,29 @@ impl Shuttle {
     }
 
     async fn resource_delete(&self, resource_type: &resource::Type) -> Result<CommandOutcome> {
-        Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt(format!(
-                "{}",
-                format!(
-                    "Are you sure you want to delete this project's {}? This action is permanent.",
-                    resource_type
-                )
-                .bold()
-                .red(),
-            ))
+        let client = self.client.as_ref().unwrap();
+        println!(
+            "{}",
+            formatdoc!(
+                "
+            WARNING:
+                Are you sure you want to delete this project's {}?
+                This action is permanent.",
+                resource_type
+            )
+            .bold()
+            .red()
+        );
+        if !Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt("Are you sure?")
             .default(false)
             .interact()
-            .unwrap();
-
-        self.client
-            .as_ref()
             .unwrap()
+        {
+            return Ok(CommandOutcome::Ok);
+        }
+
+        client
             .delete_service_resource(self.ctx.project_name(), resource_type)
             .await?;
 

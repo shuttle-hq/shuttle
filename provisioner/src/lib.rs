@@ -353,21 +353,23 @@ impl MyProvisioner {
         let database_name = format!("db-{project_name}");
         let role_name = format!("user-{project_name}");
 
-        // Idenfitiers cannot be used as query parameters
-        let drop_db_query = format!("DROP DATABASE \"{database_name}\";");
+        // Identifiers cannot be used as query parameters.
+        let drop_db_query = format!("DROP DATABASE \"{database_name}\" WITH (FORCE);");
 
-        // Drop the database. Note that this can fail if there are still active connections to it
+        // Drop the database with force, which will try to terminate existing connections to the
+        // database. This can fail if prepared transactions, active logical replication slots or
+        // subscriptions are present in the database.
         sqlx::query(&drop_db_query)
             .execute(&self.pool)
             .await
-            .map_err(|e| Error::DeleteRole(e.to_string()))?;
+            .map_err(|e| Error::DeleteDB(e.to_string()))?;
 
-        // Drop the role
+        // Drop the role.
         let drop_role_query = format!("DROP ROLE IF EXISTS \"{role_name}\"");
         sqlx::query(&drop_role_query)
             .execute(&self.pool)
             .await
-            .map_err(|e| Error::DeleteDB(e.to_string()))?;
+            .map_err(|e| Error::DeleteRole(e.to_string()))?;
 
         Ok(())
     }

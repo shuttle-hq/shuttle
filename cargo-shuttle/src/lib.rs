@@ -205,10 +205,10 @@ impl Shuttle {
                 self.init(init_args, args.project_args, provided_path_to_init)
                     .await
             }
-            Command::Generate { shell, output } => self.complete(shell, output).await,
+            Command::Generate { shell, output } => self.complete(shell, output),
             Command::Login(login_args) => self.login(login_args).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
-            Command::Feedback => self.feedback().await,
+            Command::Feedback => self.feedback(),
             Command::Run(run_args) => self.local_run(run_args).await,
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
@@ -498,7 +498,7 @@ impl Shuttle {
     }
 
     /// Provide feedback on GitHub.
-    async fn feedback(&self) -> Result<CommandOutcome> {
+    fn feedback(&self) -> Result<CommandOutcome> {
         let _ = webbrowser::open(SHUTTLE_GH_ISSUE_URL);
         println!("If your browser did not open automatically, go to {SHUTTLE_GH_ISSUE_URL}");
 
@@ -523,7 +523,10 @@ impl Shuttle {
         let api_key = ApiKey::parse(&api_key_str)?;
 
         self.ctx.set_api_key(api_key.clone())?;
-        self.client.as_mut().unwrap().set_api_key(api_key);
+
+        if let Some(client) = self.client.as_mut() {
+            client.set_api_key(api_key);
+        }
 
         Ok(CommandOutcome::Ok)
     }
@@ -582,7 +585,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn complete(&self, shell: Shell, output: Option<PathBuf>) -> Result<CommandOutcome> {
+    fn complete(&self, shell: Shell, output: Option<PathBuf>) -> Result<CommandOutcome> {
         let name = env!("CARGO_PKG_NAME");
         let mut app = Command::command();
         match output {

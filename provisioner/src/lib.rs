@@ -364,12 +364,15 @@ impl MyProvisioner {
             .await
             .map_err(|e| Error::DeleteDB(e.to_string()))?;
 
+        info!("dropped shared postgres database: {database_name}");
         // Drop the role.
         let drop_role_query = format!("DROP ROLE IF EXISTS \"{role_name}\"");
         sqlx::query(&drop_role_query)
             .execute(&self.pool)
             .await
             .map_err(|e| Error::DeleteRole(e.to_string()))?;
+
+        info!("dropped shared postgres role: {role_name}");
 
         Ok(())
     }
@@ -378,9 +381,8 @@ impl MyProvisioner {
         let database_name = format!("mongodb-{project_name}");
         let db = self.mongodb_client.database(&database_name);
 
-        // dropping a database in mongodb doesn't delete any associated users
-        // so do that first
-
+        // Dropping a database in mongodb doesn't delete any associated users
+        // so do that first.
         let drop_users_command = doc! {
             "dropAllUsersFromDatabase": 1
         };
@@ -389,11 +391,14 @@ impl MyProvisioner {
             .await
             .map_err(|e| Error::DeleteRole(e.to_string()))?;
 
-        // drop the actual database
+        info!("dropped users from shared mongodb database: {database_name}");
 
+        // Drop the actual database.
         db.drop(None)
             .await
             .map_err(|e| Error::DeleteDB(e.to_string()))?;
+
+        info!("dropped shared mongodb database: {database_name}");
 
         Ok(())
     }

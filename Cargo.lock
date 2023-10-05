@@ -5825,7 +5825,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.28.0"
+version = "0.28.1"
 dependencies = [
  "anyhow",
  "async-trait",

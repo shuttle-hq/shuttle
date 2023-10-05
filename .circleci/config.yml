@@ -752,6 +752,8 @@ workflows:
             parameters:
               resource_class:
                 - large
+              sccache-size:
+                - 750M
               crate:
                 - cargo-shuttle
       - e2e-test:

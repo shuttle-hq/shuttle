@@ -780,8 +780,7 @@ impl Shuttle {
                     Remember to remove the resource annotation from your #[shuttle_runtime::main] function.
                     Otherwise, it will be provisioned again during the next deployment."
             }
-            .yellow()
-            .to_string(),
+            .yellow(),
         );
 
         Ok(CommandOutcome::Ok)

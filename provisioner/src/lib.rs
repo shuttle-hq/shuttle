@@ -411,22 +411,14 @@ impl MyProvisioner {
         let client = &self.rds_client;
         let instance_name = format!("{project_name}-{engine}");
 
-        // try to delete the db instance
-        let delete_result = client
+        // Try to delete the db instance.
+        client
             .delete_db_instance()
             .db_instance_identifier(&instance_name)
             .send()
-            .await;
+            .await?;
 
-        // Did we get an error that wasn't "db instance not found"
-        if let Err(SdkError::ServiceError(err)) = delete_result {
-            if !err.err().is_db_instance_not_found_fault() {
-                return Err(Error::Plain(format!(
-                    "got unexpected error from AWS RDS service: {}",
-                    err.err()
-                )));
-            }
-        }
+        info!("deleted database instance: {instance_name}");
 
         Ok(DatabaseDeletionResponse {})
     }

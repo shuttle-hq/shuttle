@@ -10,11 +10,11 @@ use axum::handler::Handler;
 use axum::http::Request;
 use axum::middleware::from_extractor;
 use axum::response::Response;
-use axum::routing::{any, get, post};
+use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::Uri;
+use http::{Method, StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
@@ -278,6 +278,36 @@ async fn destroy_project(
     response.state = shuttle_common::models::project::State::Destroying;
 
     Ok(AxumJson(response))
+}
+
+#[instrument(skip_all, fields(scope = %scoped_user.scope))]
+async fn delete_project(
+    State(state): State<RouterState>,
+    scoped_user: ScopedUser,
+    mut req: Request<Body>,
+) -> Result<StatusCode, Error> {
+    let project_name = scoped_user.scope.clone();
+    *req.method_mut() = Method::GET;
+    *req.uri_mut() = format!("/projects/{project_name}/services/{project_name}/resources")
+        .parse()
+        .unwrap();
+    let res = route_project(State(state), scoped_user, req).await?;
+    let body_bytes = hyper::body::to_bytes(res.into_body())
+        .await
+        .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+    let resources: Vec<shuttle_common::resource::Response> =
+        serde_json::from_slice(&body_bytes).map_err(|e| Error::source(ErrorKind::Internal, e))?;
+
+    if resources
+        .into_iter()
+        .any(|s| matches!(s.r#type, shuttle_common::resource::Type::Database(_)))
+    {
+        return Err(Error::from_kind(ErrorKind::ProjectHasDatabase));
+    }
+
+    // TODO: do the deletion
+
+    Ok(StatusCode::NOT_IMPLEMENTED)
 }
 
 #[instrument(skip_all, fields(scope = %scoped_user.scope))]
@@ -904,6 +934,7 @@ impl ApiBuilder {
                     .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate]))),
             )
             .route("/projects/name/:project_name", get(check_project_name))
+            .route("/projects/:project_name/delete", delete(delete_project))
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
             .nest("/admin", admin_routes);

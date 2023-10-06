@@ -48,6 +48,7 @@ pub enum ErrorKind {
     OwnProjectAlreadyExists(String),
     ProjectNotReady,
     ProjectUnavailable,
+    ProjectHasDatabase,
     CustomDomainNotFound,
     InvalidCustomDomain,
     CustomDomainAlreadyExists,
@@ -78,9 +79,8 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 "project not ready. Try running `cargo shuttle project restart`.",
             ),
-            ErrorKind::ProjectUnavailable => {
-                (StatusCode::BAD_GATEWAY, "project returned invalid response")
-            }
+            ErrorKind::ProjectUnavailable => (StatusCode::BAD_GATEWAY, "project returned invalid response"),
+            ErrorKind::ProjectHasDatabase => (StatusCode::FORBIDDEN, "project has databases linked"),
             ErrorKind::InvalidProjectName => (
                 StatusCode::BAD_REQUEST,
                 r#"
@@ -93,14 +93,8 @@ impl From<ErrorKind> for ApiError {
             6. not contain profanity.
             7. not be a reserved word."#,
             ),
-            ErrorKind::InvalidOperation => (
-                StatusCode::BAD_REQUEST,
-                "the requested operation is invalid",
-            ),
-            ErrorKind::ProjectAlreadyExists => (
-                StatusCode::BAD_REQUEST,
-                "a project with the same name already exists",
-            ),
+            ErrorKind::InvalidOperation => (StatusCode::BAD_REQUEST, "the requested operation is invalid"),
+            ErrorKind::ProjectAlreadyExists => (StatusCode::BAD_REQUEST, "a project with the same name already exists"),
             ErrorKind::OwnProjectAlreadyExists(message) => {
                 return Self {
                     message,
@@ -109,9 +103,7 @@ impl From<ErrorKind> for ApiError {
             }
             ErrorKind::InvalidCustomDomain => (StatusCode::BAD_REQUEST, "invalid custom domain"),
             ErrorKind::CustomDomainNotFound => (StatusCode::NOT_FOUND, "custom domain not found"),
-            ErrorKind::CustomDomainAlreadyExists => {
-                (StatusCode::BAD_REQUEST, "custom domain already in use")
-            }
+            ErrorKind::CustomDomainAlreadyExists => (StatusCode::BAD_REQUEST, "custom domain already in use"),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),

@@ -149,7 +149,7 @@ impl Client {
     pub async fn create_project(
         &self,
         project: &ProjectName,
-        config: project::Config,
+        config: &project::Config,
     ) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
 

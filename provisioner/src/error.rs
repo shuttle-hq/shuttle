@@ -40,6 +40,17 @@ unsafe impl Send for Error {}
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
         error!(error = &err as &dyn std::error::Error, "provision failed");
-        Status::internal("failed to provision a database")
+
+        let message = match err {
+            Error::CreateRDSInstance(_) | Error::CreateDB(_) | Error::CreateRole(_) => {
+                "failed to provision a database"
+            }
+            Error::DeleteDB(_) | Error::DeleteRole(_) | Error::DeleteRDSInstance(_) => {
+                "failed to delete a database"
+            }
+            _ => "an unexpected error occurred",
+        };
+
+        Status::internal(message)
     }
 }

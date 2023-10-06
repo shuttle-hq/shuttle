@@ -414,6 +414,7 @@ impl MyProvisioner {
         // Try to delete the db instance.
         client
             .delete_db_instance()
+            .skip_final_snapshot(true)
             .db_instance_identifier(&instance_name)
             .send()
             .await?;

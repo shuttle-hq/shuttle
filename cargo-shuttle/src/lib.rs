@@ -1795,22 +1795,8 @@ impl Shuttle {
     async fn project_delete(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
 
-        let service = client.get_service(self.ctx.project_name()).await?;
-        if service.deployment.is_some() {
-            println!("A deployment is running. Stop it with `cargo shuttle stop` first.");
-            return Ok(CommandOutcome::Ok);
-        }
-
-        let resources = client
-            .get_service_resources(self.ctx.project_name())
-            .await?;
-        if resources
-            .into_iter()
-            .any(|r| matches!(r.r#type, resource::Type::Database(_)))
-        {
-            println!("Delete the project's database(s) first. Use `cargo shuttle resource list` and `cargo shuttle resource delete <type>`.");
-            return Ok(CommandOutcome::Ok);
-        }
+        // If a check fails, print the returned error
+        client.delete_project(self.ctx.project_name(), true).await?;
 
         println!(
             "{}",
@@ -1837,7 +1823,7 @@ impl Shuttle {
         }
 
         client
-            .delete_project(self.ctx.project_name())
+            .delete_project(self.ctx.project_name(), false)
             .await
             .map_err(|err| {
                 suggestions::project::project_request_failure(

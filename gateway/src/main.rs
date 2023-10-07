@@ -64,12 +64,12 @@ async fn main() -> io::Result<()> {
 async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await);
 
-    let worker = Worker::new();
+    let ambulance_worker = Worker::new();
 
-    let sender = worker.sender();
+    let sender = ambulance_worker.sender();
 
     let worker_handle = tokio::spawn(
-        worker
+        ambulance_worker
             .start()
             .map_ok(|_| info!("worker terminated successfully"))
             .map_err(|err| error!("worker error: {}", err)),
@@ -78,7 +78,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     // Every 60 secs go over all `::Ready` projects and check their health.
     // Also syncs the state of all projects on startup
     let ambulance_handle = tokio::spawn({
-        let gateway = Arc::clone(&gateway);
+        let gateway = gateway.clone();
         let sender = sender.clone();
         async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));

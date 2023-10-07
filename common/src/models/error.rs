@@ -49,6 +49,7 @@ pub enum ErrorKind {
     ProjectNotReady,
     ProjectUnavailable,
     ProjectHasDatabase,
+    ProjectHasRunningDeployment,
     CustomDomainNotFound,
     InvalidCustomDomain,
     CustomDomainAlreadyExists,
@@ -56,6 +57,7 @@ pub enum ErrorKind {
     Internal,
     NotReady,
     ServiceUnavailable,
+    DeleteProjectFailed,
 }
 
 impl From<ErrorKind> for ApiError {
@@ -80,7 +82,14 @@ impl From<ErrorKind> for ApiError {
                 "project not ready. Try running `cargo shuttle project restart`.",
             ),
             ErrorKind::ProjectUnavailable => (StatusCode::BAD_GATEWAY, "project returned invalid response"),
-            ErrorKind::ProjectHasDatabase => (StatusCode::FORBIDDEN, "project has databases linked"),
+            ErrorKind::ProjectHasRunningDeployment => (
+                StatusCode::FORBIDDEN,
+                "A deployment is running. Stop it with `cargo shuttle stop` first."
+            ),
+            ErrorKind::ProjectHasDatabase => (
+                StatusCode::FORBIDDEN,
+                "Project has database resources. Use `cargo shuttle resource list` and `cargo shuttle resource delete <type>` to delete them."
+            ),
             ErrorKind::InvalidProjectName => (
                 StatusCode::BAD_REQUEST,
                 r#"
@@ -107,6 +116,7 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),
+            ErrorKind::DeleteProjectFailed => (StatusCode::INTERNAL_SERVER_ERROR, "deleting project failed"),
         };
         Self {
             message: error_message.to_string(),

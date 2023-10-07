@@ -305,7 +305,7 @@ impl GatewayService {
         &self,
         project_name: &ProjectName,
     ) -> Result<FindProjectPayload, Error> {
-        query("SELECT project_id, project_state FROM projects WHERE project_name=?1")
+        query("SELECT project_id, project_state FROM projects WHERE project_name = ?1")
             .bind(project_name)
             .fetch_optional(&self.db)
             .await?
@@ -313,8 +313,13 @@ impl GatewayService {
                 project_id: r.get("project_id"),
                 state: r
                     .try_get::<SqlxJson<Project>, _>("project_state")
-                    .unwrap()
-                    .0,
+                    .map(|p| p.0)
+                    .unwrap_or_else(|e| {
+                        error!("Failed to deser `project_state`: {:?}", e);
+                        Project::Errored(ProjectError::internal(
+                            "Error when trying to deserialize state of project.",
+                        ))
+                    }),
             })
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
@@ -386,7 +391,14 @@ impl GatewayService {
                 .map(|row| {
                     (
                         row.get("project_name"),
-                        row.get::<SqlxJson<Project>, _>("project_state").0,
+                        row.try_get::<SqlxJson<Project>, _>("project_state")
+                        .map(|p| p.0)
+                        .unwrap_or_else(|e| {
+                            error!("Failed to deser `project_state`: {:?}", e);
+                            Project::Errored(ProjectError::internal(
+                                "Error when trying to deserialize state of project.",
+                            ))
+                        }),
                     )
                 });
         Ok(iter)
@@ -472,7 +484,15 @@ impl GatewayService {
         .await?
         {
             // If the project already exists and belongs to this account
-            let project = row.get::<SqlxJson<Project>, _>("project_state").0;
+            let project = row
+                .try_get::<SqlxJson<Project>, _>("project_state")
+                .map(|p| p.0)
+                .unwrap_or_else(|e| {
+                    error!("Failed to deser `project_state`: {:?}", e);
+                    Project::Errored(ProjectError::internal(
+                        "Error when trying to deserialize state of project.",
+                    ))
+                });
             let project_id = row.get::<String, _>("project_id");
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
@@ -532,6 +552,9 @@ impl GatewayService {
                     State::Errored { message } => {
                         format!("project '{project_name}' is in an errored state.\nproject message: {message}")
                     }
+                    State::Deleted => unreachable!(
+                        "deleted project should not never remain in gateway. please report this."
+                    ),
                 };
                 Err(Error::from_kind(ErrorKind::OwnProjectAlreadyExists(
                     message,
@@ -594,6 +617,15 @@ impl GatewayService {
             project_id: project_id.to_string(),
             state: project,
         })
+    }
+
+    pub async fn delete_project(&self, project_name: &ProjectName) -> Result<(), Error> {
+        query("DELETE FROM projects WHERE project_name = ?1")
+            .bind(project_name)
+            .execute(&self.db)
+            .await?;
+
+        Ok(())
     }
 
     pub async fn create_custom_domain(

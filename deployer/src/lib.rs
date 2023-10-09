@@ -5,6 +5,9 @@ use hyper::{
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
 };
+pub use persistence::Persistence;
+use proxy::AddressGetter;
+pub use runtime_manager::RuntimeManager;
 use shuttle_common::log::LogRecorder;
 use shuttle_proto::{builder::builder_client::BuilderClient, logger::logger_client::LoggerClient};
 use tokio::sync::Mutex;
@@ -22,9 +25,6 @@ mod runtime_manager;
 pub use crate::args::Args;
 pub use crate::deployment::state_change_layer::StateChangeLayer;
 use crate::deployment::{gateway_client::GatewayClient, DeploymentManager};
-pub use crate::persistence::Persistence;
-use crate::proxy::AddressGetter;
-pub use crate::runtime_manager::RuntimeManager;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 

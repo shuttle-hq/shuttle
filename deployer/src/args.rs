@@ -17,7 +17,7 @@ pub struct Args {
 
     /// Address to connect to the provisioning service
     #[clap(long, default_value = "http://provisioner:3000")]
-    pub provisioner_address: Endpoint,
+    pub provisioner_address: Uri,
 
     /// Address to connect to the logger service
     #[clap(long, default_value = "http://logger:8000")]

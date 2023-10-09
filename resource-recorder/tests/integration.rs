@@ -8,7 +8,7 @@ use shuttle_common_tests::JwtScopesLayer;
 use shuttle_proto::resource_recorder::{
     record_request, resource_recorder_client::ResourceRecorderClient,
     resource_recorder_server::ResourceRecorderServer, ProjectResourcesRequest, RecordRequest,
-    Resource, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
+    Resource, ResourceIds, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
 };
 use shuttle_resource_recorder::{Service, Sqlite};
 use tokio::select;
@@ -160,15 +160,10 @@ async fn manage_resources() {
             .unwrap()
             .into_inner();
 
-        let service2_static_folder = Resource {
+        let service2_static_folder = ResourceIds {
             project_id: project_id.clone(),
             service_id: service_id2.clone(),
             r#type: "static_folder".to_string(),
-            config: serde_json::to_vec(&json!({"folder": "static"})).unwrap(),
-            data: serde_json::to_vec(&json!({"path": "/tmp/static"})).unwrap(),
-            is_active: true,
-            created_at: response.resources[2].created_at.clone(),
-            last_updated: response.resources[2].last_updated.clone(),
         };
 
         let expected = ResourcesResponse {
@@ -177,7 +172,16 @@ async fn manage_resources() {
             resources: vec![
                 service_db.clone(),
                 service_secrets.clone(),
-                service2_static_folder.clone(),
+                Resource {
+                    config: serde_json::to_vec(&json!({"folder": "static"})).unwrap(),
+                    data: serde_json::to_vec(&json!({"path": "/tmp/static"})).unwrap(),
+                    is_active: true,
+                    created_at: response.resources[2].created_at.clone(),
+                    last_updated: response.resources[2].last_updated.clone(),
+                    project_id: service2_static_folder.project_id.clone(),
+                    service_id: service2_static_folder.service_id.clone(),
+                    r#type: service2_static_folder.r#type.clone(),
+                },
             ],
         };
 

@@ -52,6 +52,7 @@ services:
       - "--state=/var/lib/shuttle-auth"
       - "start"
       - "--address=0.0.0.0:8000"
+      - "--stripe-secret-key=${STRIPE_SECRET_KEY}"
   builder:
     image: "${CONTAINER_REGISTRY}/builder:${BUILDER_TAG}"
     depends_on:

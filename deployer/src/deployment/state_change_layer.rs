@@ -136,7 +136,9 @@ mod tests {
     };
 
     use crate::{
-        persistence::{DeploymentState, DeploymentUpdater, ResourceManager, StateRecorder},
+        persistence::{
+            resource::ResourceManager, DeploymentState, DeploymentUpdater, StateRecorder,
+        },
         RuntimeManager,
     };
     use async_trait::async_trait;
@@ -156,7 +158,7 @@ mod tests {
             provisioner_server::{Provisioner, ProvisionerServer},
             DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
         },
-        resource_recorder::{ResourcesResponse, ResultResponse},
+        resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     };
     use tokio::{select, sync::mpsc, time::sleep};
     use tokio_stream::wrappers::ReceiverStream;
@@ -474,6 +476,32 @@ mod tests {
                 success: true,
                 message: "dummy impl".to_string(),
                 resources: Vec::new(),
+            })
+        }
+
+        async fn get_resource(
+            &mut self,
+            _service_id: &ulid::Ulid,
+            _type: shuttle_common::resource::Type,
+            _claim: Claim,
+        ) -> Result<ResourceResponse, Self::Err> {
+            Ok(ResourceResponse {
+                success: true,
+                message: "dummy impl".to_string(),
+                resource: None,
+            })
+        }
+
+        async fn delete_resource(
+            &mut self,
+            _project_name: String,
+            _service_id: &ulid::Ulid,
+            _type: shuttle_common::resource::Type,
+            _claim: Claim,
+        ) -> Result<ResultResponse, Self::Err> {
+            Ok(ResultResponse {
+                success: true,
+                message: "dummy impl".to_string(),
             })
         }
     }

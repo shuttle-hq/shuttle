@@ -47,9 +47,29 @@ pub struct ResourcesResponse {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResourceResponse {
+    #[prost(bool, tag = "1")]
+    pub success: bool,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub resource: ::core::option::Option<Resource>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServiceResourcesRequest {
     #[prost(string, tag = "1")]
     pub service_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResourceIds {
+    #[prost(string, tag = "1")]
+    pub project_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub service_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub r#type: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -200,10 +220,30 @@ pub mod resource_recorder_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
+        /// Get a resource
+        pub async fn get_resource(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ResourceIds>,
+        ) -> Result<tonic::Response<super::ResourceResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/resource_recorder.ResourceRecorder/GetResource",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
         /// Delete a resource
         pub async fn delete_resource(
             &mut self,
-            request: impl tonic::IntoRequest<super::Resource>,
+            request: impl tonic::IntoRequest<super::ResourceIds>,
         ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status> {
             self.inner
                 .ready()
@@ -244,10 +284,15 @@ pub mod resource_recorder_server {
             &self,
             request: tonic::Request<super::ServiceResourcesRequest>,
         ) -> Result<tonic::Response<super::ResourcesResponse>, tonic::Status>;
+        /// Get a resource
+        async fn get_resource(
+            &self,
+            request: tonic::Request<super::ResourceIds>,
+        ) -> Result<tonic::Response<super::ResourceResponse>, tonic::Status>;
         /// Delete a resource
         async fn delete_resource(
             &self,
-            request: tonic::Request<super::Resource>,
+            request: tonic::Request<super::ResourceIds>,
         ) -> Result<tonic::Response<super::ResultResponse>, tonic::Status>;
     }
     #[derive(Debug)]
@@ -429,12 +474,52 @@ pub mod resource_recorder_server {
                     };
                     Box::pin(fut)
                 }
+                "/resource_recorder.ResourceRecorder/GetResource" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetResourceSvc<T: ResourceRecorder>(pub Arc<T>);
+                    impl<
+                        T: ResourceRecorder,
+                    > tonic::server::UnaryService<super::ResourceIds>
+                    for GetResourceSvc<T> {
+                        type Response = super::ResourceResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ResourceIds>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).get_resource(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = GetResourceSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/resource_recorder.ResourceRecorder/DeleteResource" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteResourceSvc<T: ResourceRecorder>(pub Arc<T>);
                     impl<
                         T: ResourceRecorder,
-                    > tonic::server::UnaryService<super::Resource>
+                    > tonic::server::UnaryService<super::ResourceIds>
                     for DeleteResourceSvc<T> {
                         type Response = super::ResultResponse;
                         type Future = BoxFuture<
@@ -443,7 +528,7 @@ pub mod resource_recorder_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::Resource>,
+                            request: tonic::Request<super::ResourceIds>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move {

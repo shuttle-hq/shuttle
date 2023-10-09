@@ -58,8 +58,17 @@ pub trait Dal {
     /// Get the resources that belong to a service
     async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, DalError>;
 
+    /// Get a resource
+    async fn get_resource(
+        &self,
+        resource: resource_recorder::ResourceIds,
+    ) -> Result<Option<Resource>, DalError>;
+
     /// Delete a resource
-    async fn delete_resource(&self, resource: &Resource) -> Result<(), DalError>;
+    async fn delete_resource(
+        &self,
+        resource: resource_recorder::ResourceIds,
+    ) -> Result<(), DalError>;
 }
 
 pub struct Sqlite {
@@ -177,10 +186,29 @@ impl Dal for Sqlite {
         Ok(result)
     }
 
-    async fn delete_resource(&self, resource: &Resource) -> Result<(), DalError> {
+    async fn get_resource(
+        &self,
+        resource: resource_recorder::ResourceIds,
+    ) -> Result<Option<Resource>, DalError> {
+        let result = sqlx::query_as(
+            "SELECT * FROM resources WHERE project_id = ? AND service_id = ? AND type = ?",
+        )
+        .bind(resource.project_id)
+        .bind(resource.service_id)
+        .bind(resource.r#type)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    async fn delete_resource(
+        &self,
+        resource: resource_recorder::ResourceIds,
+    ) -> Result<(), DalError> {
         sqlx::query("DELETE FROM resources WHERE project_id = ? AND service_id = ? AND type = ?")
-            .bind(resource.project_id.map(|u| u.to_string()))
-            .bind(resource.service_id.map(|u| u.to_string()))
+            .bind(resource.project_id)
+            .bind(resource.service_id)
             .bind(resource.r#type)
             .execute(&self.pool)
             .await

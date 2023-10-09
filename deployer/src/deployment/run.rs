@@ -38,7 +38,7 @@ use uuid::Uuid;
 use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
-    persistence::{DeploymentUpdater, ResourceManager, SecretGetter},
+    persistence::{resource::ResourceManager, DeploymentUpdater, SecretGetter},
     RuntimeManager,
 };
 

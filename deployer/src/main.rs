@@ -28,6 +28,7 @@ async fn main() {
     let (persistence, _) = Persistence::new(
         &args.state,
         &args.resource_recorder,
+        &args.provisioner_address,
         Ulid::from_string(args.project_id.as_str())
             .expect("to get a valid ULID for project_id arg"),
     )
@@ -74,7 +75,7 @@ async fn main() {
     );
 
     let runtime_manager = RuntimeManager::new(
-        args.provisioner_address.uri().to_string(),
+        args.provisioner_address.to_string(),
         logger_batcher.clone(),
         Some(args.auth_uri.to_string()),
     );

@@ -14,3 +14,7 @@ charset = utf-8
 indent_style = space
 indent_size = 4
 
+# Indentation settings for shell scripts
+[*.sh]
+indent_style = space
+indent_size = 2

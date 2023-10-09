@@ -184,6 +184,7 @@ impl Shuttle {
                 | Command::Deploy(..)
                 | Command::Status
                 | Command::Logs { .. }
+                | Command::Logout(..)
                 | Command::Deployment(..)
                 | Command::Resource(..)
                 | Command::Stop
@@ -221,6 +222,9 @@ impl Shuttle {
             Command::Stop => self.stop().await,
             Command::Clean => self.clean().await,
             Command::Secrets => self.secrets().await,
+            Command::Resource(ResourceCommand::Delete { resource_type }) => {
+                self.resource_delete(&resource_type).await
+            }
             Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
                 self.project_create(idle_minutes).await
             }
@@ -302,22 +306,30 @@ impl Shuttle {
         // Turns the template or git args (if present) to a repo+folder.
         let git_templates = args.git_template()?;
 
-        let interactive =
-            project_args.name.is_none() || git_templates.is_none() || !provided_path_to_init;
+        let unauthorized = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
+
+        let interactive = project_args.name.is_none()
+            || git_templates.is_none()
+            || !provided_path_to_init
+            || unauthorized;
 
         let theme = ColorfulTheme::default();
 
         // 1. Log in (if not logged in yet)
-        if self.ctx.api_key().is_err() {
-            if interactive {
-                println!("First, let's log in to your Shuttle account.");
-                self.login(args.login_args.clone()).await?;
-                println!();
-            } else if args.login_args.api_key.is_some() {
-                self.login(args.login_args.clone()).await?;
-            } else if args.create_env {
-                bail!("Tried to login to create a Shuttle environment, but no API key was set.")
-            }
+        if let Ok(api_key) = self.ctx.api_key() {
+            let login_args = LoginArgs {
+                api_key: Some(api_key.as_ref().to_string()),
+            };
+
+            self.login(login_args).await?;
+        } else if interactive {
+            println!("First, let's log in to your Shuttle account.");
+            self.login(args.login_args.clone()).await?;
+            println!();
+        } else if args.login_args.api_key.is_some() {
+            self.login(args.login_args.clone()).await?;
+        } else if args.create_env {
+            bail!("Tried to login to create a Shuttle environment, but no API key was set.")
         }
 
         // 2. Ask for project name
@@ -747,6 +759,47 @@ impl Shuttle {
         let table = get_resources_table(&resources, self.ctx.project_name().as_str());
 
         println!("{table}");
+
+        Ok(CommandOutcome::Ok)
+    }
+
+    async fn resource_delete(&self, resource_type: &resource::Type) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        println!(
+            "{}",
+            formatdoc!(
+                "
+            WARNING:
+                Are you sure you want to delete this project's {}?
+                This action is permanent.",
+                resource_type
+            )
+            .bold()
+            .red()
+        );
+        if !Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt("Are you sure?")
+            .default(false)
+            .interact()
+            .unwrap()
+        {
+            return Ok(CommandOutcome::Ok);
+        }
+
+        client
+            .delete_service_resource(self.ctx.project_name(), resource_type)
+            .await?;
+
+        println!("Deleted resource {resource_type}");
+        println!(
+            "{}",
+            formatdoc! {"
+                Note:
+                    Remember to remove the resource annotation from your #[shuttle_runtime::main] function.
+                    Otherwise, it will be provisioned again during the next deployment."
+            }
+            .yellow(),
+        );
 
         Ok(CommandOutcome::Ok)
     }

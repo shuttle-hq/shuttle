@@ -303,22 +303,30 @@ impl Shuttle {
         // Turns the template or git args (if present) to a repo+folder.
         let git_templates = args.git_template()?;
 
-        let interactive =
-            project_args.name.is_none() || git_templates.is_none() || !provided_path_to_init;
+        let unauthorized = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
+
+        let interactive = project_args.name.is_none()
+            || git_templates.is_none()
+            || !provided_path_to_init
+            || unauthorized;
 
         let theme = ColorfulTheme::default();
 
         // 1. Log in (if not logged in yet)
-        if self.ctx.api_key().is_err() {
-            if interactive {
-                println!("First, let's log in to your Shuttle account.");
-                self.login(args.login_args.clone()).await?;
-                println!();
-            } else if args.login_args.api_key.is_some() {
-                self.login(args.login_args.clone()).await?;
-            } else if args.create_env {
-                bail!("Tried to login to create a Shuttle environment, but no API key was set.")
-            }
+        if let Ok(api_key) = self.ctx.api_key() {
+            let login_args = LoginArgs {
+                api_key: Some(api_key.as_ref().to_string()),
+            };
+
+            self.login(login_args).await?;
+        } else if interactive {
+            println!("First, let's log in to your Shuttle account.");
+            self.login(args.login_args.clone()).await?;
+            println!();
+        } else if args.login_args.api_key.is_some() {
+            self.login(args.login_args.clone()).await?;
+        } else if args.create_env {
+            bail!("Tried to login to create a Shuttle environment, but no API key was set.")
         }
 
         // 2. Ask for project name

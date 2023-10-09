@@ -319,16 +319,14 @@ impl Shuttle {
             };
 
             self.login(login_args).await?;
-        } else {
-            if interactive {
-                println!("First, let's log in to your Shuttle account.");
-                self.login(args.login_args.clone()).await?;
-                println!();
-            } else if args.login_args.api_key.is_some() {
-                self.login(args.login_args.clone()).await?;
-            } else if args.create_env {
-                bail!("Tried to login to create a Shuttle environment, but no API key was set.")
-            }
+        } else if interactive {
+            println!("First, let's log in to your Shuttle account.");
+            self.login(args.login_args.clone()).await?;
+            println!();
+        } else if args.login_args.api_key.is_some() {
+            self.login(args.login_args.clone()).await?;
+        } else if args.create_env {
+            bail!("Tried to login to create a Shuttle environment, but no API key was set.")
         }
 
         // 2. Ask for project name

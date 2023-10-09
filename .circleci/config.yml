@@ -903,8 +903,6 @@ workflows:
           matrix:
             parameters:
               path:
-                - runtime
-                - cargo-shuttle
                 - resources/aws-rds
                 - resources/metadata
                 - resources/persist
@@ -914,6 +912,16 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-service
+      - publish-crates:
+          matrix:
+            parameters:
+              path:
+                - runtime
+                - cargo-shuttle
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-service
+            - publish-proto
       - publish-crates:
           matrix:
             parameters:

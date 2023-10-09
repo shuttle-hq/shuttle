@@ -309,7 +309,13 @@ impl Shuttle {
         let theme = ColorfulTheme::default();
 
         // 1. Log in (if not logged in yet)
-        if self.ctx.api_key().is_err() {
+        if let Ok(api_key) = self.ctx.api_key() {
+            let login_args = LoginArgs {
+                api_key: Some(api_key.as_ref().to_string()),
+            };
+
+            self.login(login_args).await?;
+        } else {
             if interactive {
                 println!("First, let's log in to your Shuttle account.");
                 self.login(args.login_args.clone()).await?;

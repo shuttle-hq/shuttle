@@ -303,8 +303,12 @@ impl Shuttle {
         // Turns the template or git args (if present) to a repo+folder.
         let git_templates = args.git_template()?;
 
-        let interactive =
-            project_args.name.is_none() || git_templates.is_none() || !provided_path_to_init;
+        let unauthorized = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
+
+        let interactive = project_args.name.is_none()
+            || git_templates.is_none()
+            || !provided_path_to_init
+            || unauthorized;
 
         let theme = ColorfulTheme::default();
 

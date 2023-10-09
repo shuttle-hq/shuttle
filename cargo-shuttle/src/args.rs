@@ -12,7 +12,7 @@ use clap::{
     Parser, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::{models::project::DEFAULT_IDLE_MINUTES, project::ProjectName};
+use shuttle_common::{models::project::DEFAULT_IDLE_MINUTES, project::ProjectName, resource};
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -162,6 +162,13 @@ pub enum DeploymentCommand {
 pub enum ResourceCommand {
     /// List all the resources for a project
     List,
+    /// Delete a resource
+    Delete {
+        /// Type of the resource to delete.
+        /// Use the string in the 'Type' column as displayed in the `resource list` command.
+        /// For example, 'database::shared::postgres'.
+        resource_type: resource::Type,
+    },
 }
 
 #[derive(Parser)]

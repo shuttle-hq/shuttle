@@ -131,7 +131,8 @@ where
                         for log in logs {
                             if log.deployment_id == deployment_id
                                 && log.tx_timestamp.timestamp() >= last.seconds
-                                && log.tx_timestamp.timestamp_nanos() > last.nanos.into()
+                                && log.tx_timestamp.timestamp_nanos_opt().unwrap_or_default()
+                                    > last.nanos.into()
                             {
                                 if let Err(error) = tx.send(Ok(log.into())).await {
                                     error!(

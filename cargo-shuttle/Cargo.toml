@@ -28,6 +28,7 @@ headers = { workspace = true }
 indicatif = "0.17.3"
 ignore = "0.4.20"
 indoc = "2.0.1"
+percent-encoding = { workspace = true }
 portpicker = { workspace = true }
 regex = "1.9.5"
 reqwest = { workspace = true, features = ["json"] }

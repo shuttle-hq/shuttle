@@ -91,20 +91,6 @@ impl Display for ApiKey {
     }
 }
 
-#[cfg(feature = "error")]
-/// Errors that can occur when changing types. Especially from prost
-#[derive(thiserror::Error, Debug)]
-pub enum ParseError {
-    #[error("failed to parse UUID: {0}")]
-    Uuid(#[from] uuid::Error),
-    #[error("failed to parse timestamp: {0}")]
-    Timestamp(#[from] prost_types::TimestampError),
-    #[error("failed to parse serde: {0}")]
-    Serde(#[from] serde_json::Error),
-    #[error("failed to parse state: {0}")]
-    State(String),
-}
-
 /// Holds the input for a DB resource
 #[derive(Deserialize, Serialize, Default)]
 pub struct DbInput {

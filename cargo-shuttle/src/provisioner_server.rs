@@ -155,6 +155,12 @@ impl LocalProvisioner {
                 .expect("failed to start none running container");
         }
 
+        self.wait_for_ready(&container_name, is_ready_cmd.clone())
+            .await?;
+
+        // The container enters the ready state, runs an init script and then reboots, so we sleep
+        // a little and then check if it's ready again afterwards.
+        sleep(Duration::from_millis(450)).await;
         self.wait_for_ready(&container_name, is_ready_cmd).await?;
 
         let res = DatabaseResponse {

@@ -176,7 +176,7 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_projects_list(&self, page: u32, limit: u32) -> Result<Vec<project::Response>> {
+    pub async fn get_projects_list(&self, page: u32, limit: u32) -> Result<project::Page> {
         let path = format!("/projects?page={}&limit={}", page.saturating_sub(1), limit);
 
         self.get(path).await
@@ -233,7 +233,7 @@ impl Client {
         project: &ProjectName,
         page: u32,
         limit: u32,
-    ) -> Result<Vec<deployment::Response>> {
+    ) -> Result<deployment::Page> {
         let path = format!(
             "/projects/{}/deployments?page={}&limit={}",
             project.as_str(),

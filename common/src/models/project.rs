@@ -22,6 +22,14 @@ pub const fn default_idle_minutes() -> u64 {
 
 #[derive(Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::Page))]
+pub struct Page {
+    pub data: Vec<Response>,
+    pub has_next_page: bool,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::Response))]
 pub struct Response {
     #[cfg_attr(feature = "openapi", schema(schema_with = ulid_type))]
@@ -190,10 +198,10 @@ pub struct AdminResponse {
     pub account_name: String,
 }
 
-pub fn get_table(projects: &Vec<Response>, page: u32) -> String {
-    if projects.is_empty() {
+pub fn get_table(page: &Page, page_num: u32) -> String {
+    if page.data.is_empty() {
         // The page starts at 1 in the CLI.
-        if page <= 1 {
+        if page_num <= 1 {
             format!(
                 "{}\n",
                 "No projects are linked to this account".yellow().bold()
@@ -215,7 +223,7 @@ pub fn get_table(projects: &Vec<Response>, page: u32) -> String {
                 Cell::new("Status").set_alignment(CellAlignment::Center),
             ]);
 
-        for project in projects.iter() {
+        for project in page.data.iter() {
             table.add_row(vec![
                 Cell::new(&project.name),
                 Cell::new(&project.state)
@@ -224,14 +232,14 @@ pub fn get_table(projects: &Vec<Response>, page: u32) -> String {
             ]);
         }
 
-        format!(
-            r#"
-These projects are linked to this account
-{table}
-
-{}
-"#,
-            "More projects might be available on the next page using --page.".bold()
-        )
+        let formatted_table = format!("These projects are linked to this account\n{table}");
+        if page.has_next_page {
+            format!(
+                "{formatted_table}\n\n{notice}",
+                notice = "More projects available on the next page using --page.".bold()
+            )
+        } else {
+            formatted_table
+        }
     }
 }

@@ -24,10 +24,6 @@ use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
 use shuttle_common::backends::{
-    auth::{AdminSecretLayer, ScopedLayer},
-    headers::XShuttleAccountName,
-};
-use shuttle_common::backends::{
     auth::{AuthPublicKey, JwtAuthenticationLayer},
     metrics::{Metrics, TraceLayer},
 };
@@ -37,6 +33,13 @@ use shuttle_common::models::deployment::{
 };
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
+use shuttle_common::{
+    backends::{
+        auth::{AdminSecretLayer, ScopedLayer},
+        headers::XShuttleAccountName,
+    },
+    models::deployment,
+};
 use shuttle_common::{request_span, LogItem};
 use shuttle_proto::logger::LogsRequest;
 use shuttle_service::builder::clean_crate;
@@ -525,18 +528,28 @@ pub async fn get_deployments(
     Extension(persistence): Extension<Persistence>,
     Path(project_name): Path<String>,
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
-) -> Result<Json<Vec<shuttle_common::models::deployment::Response>>> {
+) -> Result<Json<deployment::Page>> {
     if let Some(service) = persistence.get_service_by_name(&project_name).await? {
-        let limit = limit.unwrap_or(u32::MAX);
+        let limit = limit.unwrap_or(u32::MAX - 1) + 1;
         let page = page.unwrap_or(0);
-        let deployments = persistence
+        let mut deployments: Vec<deployment::Response> = persistence
             .get_deployments(&service.id, page * limit, limit)
             .await?
             .into_iter()
             .map(Into::into)
             .collect();
 
-        Ok(Json(deployments))
+        let has_next_page = deployments.len() == limit as usize;
+        if has_next_page {
+            deployments.pop();
+        }
+
+        let page = deployment::Page {
+            data: deployments,
+            has_next_page,
+        };
+
+        Ok(Json(page))
     } else {
         Err(Error::NotFound("service not found".to_string()))
     }

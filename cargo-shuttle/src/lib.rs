@@ -671,7 +671,7 @@ impl Shuttle {
                             "Fetching the latest deployment failed",
                         )
                     })?;
-                let most_recent = deployments.first().context(format!(
+                let most_recent = deployments.data.first().context(format!(
                     "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
                 ))?;
 

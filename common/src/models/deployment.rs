@@ -21,6 +21,14 @@ const GIT_OPTION_NONE_TEXT: &str = "N/A";
 
 #[derive(Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::deployment::Page))]
+pub struct Page {
+    pub data: Vec<Response>,
+    pub has_next_page: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::deployment::Response))]
 pub struct Response {
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
@@ -67,9 +75,9 @@ impl State {
     }
 }
 
-pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, page: u32) -> String {
-    if deployments.is_empty() {
-        if page <= 1 {
+pub fn get_deployments_table(page: &Page, service_name: &str, page_num: u32) -> String {
+    if page.data.is_empty() {
+        if page_num <= 1 {
             format!(
                 "{}\n",
                 "No deployments are linked to this service".yellow().bold()
@@ -110,7 +118,7 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, pa
                     .add_attribute(Attribute::Bold),
             ]);
 
-        for deploy in deployments.iter() {
+        for deploy in page.data.iter() {
             let truncated_commit_id = deploy
                 .git_commit_id
                 .as_ref()
@@ -150,18 +158,21 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, pa
             ]);
         }
 
-        format!(
-            r#"
-Most recent {} for {}
-{}
-
-{}
-"#,
+        let formatted_table = format!(
+            "Most recent {} for {}\n{}\n\n",
             "deployments".bold(),
             service_name,
-            table,
-            "More projects might be available on the next page using --page.".bold()
-        )
+            table
+        );
+
+        if page.has_next_page {
+            format!(
+                "{formatted_table}{notice}",
+                notice = "More deployments available on the next page using --page.".bold()
+            )
+        } else {
+            formatted_table
+        }
     }
 }
 

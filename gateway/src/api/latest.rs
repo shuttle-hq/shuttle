@@ -164,10 +164,10 @@ async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
     User { name, .. }: User,
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
-) -> Result<AxumJson<Vec<project::Response>>, Error> {
-    let limit = limit.unwrap_or(u32::MAX);
+) -> Result<AxumJson<project::Page>, Error> {
+    let limit = limit.unwrap_or(u32::MAX - 1) + 1;
     let page = page.unwrap_or(0);
-    let projects = service
+    let mut projects: Vec<project::Response> = service
         // The `offset` is page size * amount of pages
         .iter_user_projects_detailed(&name, limit * page, limit)
         .await?
@@ -179,7 +179,17 @@ async fn get_projects_list(
         })
         .collect();
 
-    Ok(AxumJson(projects))
+    let has_next_page = projects.len() == limit as usize;
+    if has_next_page {
+        projects.pop();
+    }
+
+    let page = project::Page {
+        data: projects,
+        has_next_page,
+    };
+
+    Ok(AxumJson(page))
 }
 
 #[instrument(skip_all, fields(%project_name))]

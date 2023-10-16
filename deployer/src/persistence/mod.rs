@@ -248,10 +248,14 @@ impl Persistence {
         offset: u32,
         limit: u32,
     ) -> Result<Vec<Deployment>> {
-        let mut query = QueryBuilder::new("SELECT * FROM deployments WHERE service_id = ");
+        let mut query =
+            QueryBuilder::new("SELECT *, (SELECT COUNT(*) FROM deployments WHERE service_id = ");
 
+        let service_id = service_id.to_string();
         query
-            .push_bind(service_id.to_string())
+            .push_bind(&service_id)
+            .push(") as cnt FROM deployments WHERE service_id = ")
+            .push_bind(&service_id)
             .push(" ORDER BY last_update DESC LIMIT ")
             .push_bind(limit);
 
@@ -766,6 +770,7 @@ mod tests {
                 git_commit_msg: None,
                 git_branch: None,
                 git_dirty: None,
+                count: None,
             })
             .collect();
 

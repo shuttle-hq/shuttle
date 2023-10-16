@@ -450,6 +450,7 @@ pub async fn create_service(
             .git_branch
             .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
         git_dirty: deployment_req.git_dirty,
+        count: None,
     };
 
     persistence.insert_deployment(deployment.clone()).await?;
@@ -515,7 +516,7 @@ pub async fn stop_service(
     get,
     path = "/projects/{project_name}/deployments",
     responses(
-        (status = 200, description = "Gets deployments information associated to a specific project.", body = shuttle_common::models::deployment::Response),
+        (status = 200, description = "Gets deployments information associated to a specific project.", body = shuttle_common::models::deployment::Page),
         (status = 500, description = "Database error.", body = String),
         (status = 404, description = "Record could not be found.", body = String),
     ),
@@ -530,23 +531,19 @@ pub async fn get_deployments(
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<Json<deployment::Page>> {
     if let Some(service) = persistence.get_service_by_name(&project_name).await? {
-        let limit = limit.unwrap_or(u32::MAX - 1) + 1;
+        let limit = limit.unwrap_or(u32::MAX);
         let page = page.unwrap_or(0);
-        let mut deployments: Vec<deployment::Response> = persistence
+        tracing::info!("test l = {} p = {}", limit, page);
+        let deployments = persistence
             .get_deployments(&service.id, page * limit, limit)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
+            .await?;
+        let count = deployments.first().and_then(|d| d.count).unwrap_or(0);
 
-        let has_next_page = deployments.len() == limit as usize;
-        if has_next_page {
-            deployments.pop();
-        }
+        let deployments = deployments.into_iter().map(Into::into).collect();
 
         let page = deployment::Page {
             data: deployments,
-            has_next_page,
+            count,
         };
 
         Ok(Json(page))
@@ -561,7 +558,7 @@ pub async fn get_deployments(
     get,
     path = "/projects/{project_name}/deployments/{deployment_id}",
     responses(
-        (status = 200, description = "Gets a specific deployment information.", body = shuttle_common::models::deployment::Response),
+        (status = 200, description = "Gets a specific deployment information.", body = shuttle_common::models::deployment::Page),
         (status = 500, description = "Database or streaming error.", body = String),
         (status = 404, description = "Record could not be found.", body = String),
     ),
@@ -573,7 +570,7 @@ pub async fn get_deployments(
 pub async fn get_deployment(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
-) -> Result<Json<shuttle_common::models::deployment::Response>> {
+) -> Result<Json<deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         Ok(Json(deployment.into()))
     } else {
@@ -599,7 +596,7 @@ pub async fn delete_deployment(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(persistence): Extension<Persistence>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
-) -> Result<Json<shuttle_common::models::deployment::Response>> {
+) -> Result<Json<deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         deployment_manager.kill(deployment.id).await;
 

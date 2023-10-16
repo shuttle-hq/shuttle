@@ -25,7 +25,7 @@ pub const fn default_idle_minutes() -> u64 {
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::Page))]
 pub struct Page {
     pub data: Vec<Response>,
-    pub has_next_page: bool,
+    pub count: u32,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -198,7 +198,7 @@ pub struct AdminResponse {
     pub account_name: String,
 }
 
-pub fn get_table(page: &Page, page_num: u32) -> String {
+pub fn get_table(page: &Page, page_num: u32, limit: u32) -> String {
     if page.data.is_empty() {
         // The page starts at 1 in the CLI.
         if page_num <= 1 {
@@ -233,7 +233,7 @@ pub fn get_table(page: &Page, page_num: u32) -> String {
         }
 
         let formatted_table = format!("These projects are linked to this account\n{table}");
-        if page.has_next_page {
+        if page.count > page_num * limit {
             format!(
                 "{formatted_table}\n\n{notice}",
                 notice = "More projects available on the next page using --page.".bold()

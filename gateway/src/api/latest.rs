@@ -165,12 +165,17 @@ async fn get_projects_list(
     User { name, .. }: User,
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<AxumJson<project::Page>, Error> {
-    let limit = limit.unwrap_or(u32::MAX - 1) + 1;
+    let limit = limit.unwrap_or(u32::MAX);
     let page = page.unwrap_or(0);
-    let mut projects: Vec<project::Response> = service
+    let projects_detailed = service
         // The `offset` is page size * amount of pages
         .iter_user_projects_detailed(&name, limit * page, limit)
         .await?
+        .collect::<Vec<_>>();
+
+    let count = projects_detailed.first().map(|p| p.3).unwrap_or(0);
+    let projects: Vec<project::Response> = projects_detailed
+        .into_iter()
         .map(|project| project::Response {
             id: project.0.to_uppercase(),
             name: project.1.to_string(),
@@ -179,14 +184,9 @@ async fn get_projects_list(
         })
         .collect();
 
-    let has_next_page = projects.len() == limit as usize;
-    if has_next_page {
-        projects.pop();
-    }
-
     let page = project::Page {
         data: projects,
-        has_next_page,
+        count,
     };
 
     Ok(AxumJson(page))

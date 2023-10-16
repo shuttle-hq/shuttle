@@ -334,12 +334,14 @@ impl GatewayService {
         account_name: &AccountName,
         offset: u32,
         limit: u32,
-    ) -> Result<impl Iterator<Item = (String, ProjectName, Project)>, Error> {
+    ) -> Result<impl Iterator<Item = (String, ProjectName, Project, u32)>, Error> {
         let mut query = QueryBuilder::new(
-            "SELECT project_id, project_name, project_state FROM projects WHERE account_name = ",
+            "SELECT project_id, project_name, project_state, (SELECT COUNT(*) FROM projects WHERE account_name = ",
         );
 
         query
+            .push_bind(account_name)
+            .push(") as cnt FROM projects WHERE account_name = ")
             .push_bind(account_name)
             .push(" ORDER BY project_id DESC, project_name LIMIT ")
             .push_bind(limit);
@@ -366,6 +368,7 @@ impl GatewayService {
                                 "Error when trying to deserialize state of project.",
                             ))
                         }),
+                    row.get("cnt"),
                 )
             });
         Ok(iter)

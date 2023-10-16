@@ -23,6 +23,7 @@ pub struct Deployment {
     pub git_commit_msg: Option<String>,
     pub git_branch: Option<String>,
     pub git_dirty: Option<bool>,
+    pub count: Option<u32>,
 }
 
 impl FromRow<'_, SqliteRow> for Deployment {
@@ -51,6 +52,7 @@ impl FromRow<'_, SqliteRow> for Deployment {
             git_commit_msg: row.try_get("git_commit_msg")?,
             git_branch: row.try_get("git_branch")?,
             git_dirty: row.try_get("git_dirty")?,
+            count: row.try_get("cnt").ok(),
         })
     }
 }

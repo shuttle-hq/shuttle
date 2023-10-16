@@ -24,7 +24,7 @@ const GIT_OPTION_NONE_TEXT: &str = "N/A";
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::deployment::Page))]
 pub struct Page {
     pub data: Vec<Response>,
-    pub has_next_page: bool,
+    pub count: u32,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -75,7 +75,7 @@ impl State {
     }
 }
 
-pub fn get_deployments_table(page: &Page, service_name: &str, page_num: u32) -> String {
+pub fn get_deployments_table(page: &Page, service_name: &str, page_num: u32, limit: u32) -> String {
     if page.data.is_empty() {
         if page_num <= 1 {
             format!(
@@ -165,7 +165,7 @@ pub fn get_deployments_table(page: &Page, service_name: &str, page_num: u32) -> 
             table
         );
 
-        if page.has_next_page {
+        if page.count > page_num * limit {
             format!(
                 "{formatted_table}{notice}",
                 notice = "More deployments available on the next page using --page.".bold()

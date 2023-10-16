@@ -376,34 +376,6 @@ impl GatewayService {
         Ok(iter)
     }
 
-    pub async fn iter_user_projects_detailed_filtered(
-        &self,
-        account_name: AccountName,
-        filter: String,
-    ) -> Result<impl Iterator<Item = (ProjectName, Project)>, Error> {
-        let iter =
-            query("SELECT project_name, project_state FROM projects WHERE account_name = ?1 AND project_state = ?2")
-                .bind(account_name)
-                .bind(filter)
-                .fetch_all(&self.db)
-                .await?
-                .into_iter()
-                .map(|row| {
-                    (
-                        row.get("project_name"),
-                        row.try_get::<SqlxJson<Project>, _>("project_state")
-                        .map(|p| p.0)
-                        .unwrap_or_else(|e| {
-                            error!("Failed to deser `project_state`: {:?}", e);
-                            Project::Errored(ProjectError::internal(
-                                "Error when trying to deserialize state of project.",
-                            ))
-                        }),
-                    )
-                });
-        Ok(iter)
-    }
-
     pub async fn update_project(
         &self,
         project_name: &ProjectName,

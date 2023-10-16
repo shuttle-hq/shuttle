@@ -14,7 +14,7 @@ use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::Uri;
+use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
@@ -303,32 +303,67 @@ async fn delete_project(
     State(state): State<RouterState>,
     scoped_user: ScopedUser,
     Query(DeleteProjectParams { dry_run }): Query<DeleteProjectParams>,
-    _req: Request<Body>,
+    req: Request<Body>,
 ) -> Result<AxumJson<String>, Error> {
     let project_name = scoped_user.scope.clone();
     let service = state.service.clone();
     let sender = state.sender.clone();
 
-    // TODO: check that deployment is not running
-    // format!("/projects/{project_name}/deployments")
-    // use ErrorKind::ProjectHasRunningDeployment
+    // check that deployment is not running
+    let mut rb = hyper::Request::builder();
+    rb.headers_mut().unwrap().clone_from(req.headers());
+    let deployment_req = rb
+        .uri(
+            format!("/projects/{project_name}/deployments")
+                .parse::<Uri>()
+                .unwrap(),
+        )
+        .method("GET")
+        .body(hyper::Body::empty())
+        .unwrap();
+    let res = route_project(State(state.clone()), scoped_user.clone(), deployment_req).await?;
+    if res.status() != StatusCode::OK {
+        return Err(Error::from_kind(ErrorKind::Internal));
+    }
+    let body_bytes = hyper::body::to_bytes(res.into_body())
+        .await
+        .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+    let deployments: Vec<shuttle_common::models::deployment::Response> =
+        serde_json::from_slice(&body_bytes).map_err(|e| Error::source(ErrorKind::Internal, e))?;
+    if deployments
+        .into_iter()
+        .any(|d| d.state == shuttle_common::deployment::State::Running)
+    {
+        return Err(Error::from_kind(ErrorKind::ProjectHasRunningDeployment));
+    }
 
-    // TODO: check if database in resources
-    // format!("/projects/{project_name}/services/{project_name}/resources")
-    // if res.as_ref().is_ok_and(|r| r.status() == StatusCode::OK) {
-    //     let body_bytes = hyper::body::to_bytes(res.unwrap().into_body())
-    //         .await
-    //         .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-    //     let resources: Vec<shuttle_common::resource::Response> =
-    //         serde_json::from_slice(&body_bytes)
-    //             .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-    //     if resources
-    //         .into_iter()
-    //         .any(|s| matches!(s.r#type, shuttle_common::resource::Type::Database(_)))
-    //     {
-    //         return Err(Error::from_kind(ErrorKind::ProjectHasDatabase));
-    //     }
-    // }
+    // check if database in resources
+    let mut rb = hyper::Request::builder();
+    rb.headers_mut().unwrap().clone_from(req.headers());
+    let resource_req = rb
+        .uri(
+            format!("/projects/{project_name}/services/{project_name}/resources")
+                .parse::<Uri>()
+                .unwrap(),
+        )
+        .method("GET")
+        .body(hyper::Body::empty())
+        .unwrap();
+    let res = route_project(State(state.clone()), scoped_user, resource_req).await?;
+    if res.status() != StatusCode::OK {
+        return Err(Error::from_kind(ErrorKind::Internal));
+    }
+    let body_bytes = hyper::body::to_bytes(res.into_body())
+        .await
+        .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+    let resources: Vec<shuttle_common::resource::Response> =
+        serde_json::from_slice(&body_bytes).map_err(|e| Error::source(ErrorKind::Internal, e))?;
+    if resources
+        .into_iter()
+        .any(|s| matches!(s.r#type, shuttle_common::resource::Type::Database(_)))
+    {
+        return Err(Error::from_kind(ErrorKind::ProjectHasDatabase));
+    }
 
     if dry_run.is_some_and(|d| d) {
         return Ok(AxumJson("project not deleted due to dry run".to_owned()));

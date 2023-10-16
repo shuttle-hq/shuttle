@@ -486,25 +486,22 @@ pub async fn stop_service(
     Extension(proxy_fqdn): Extension<FQDN>,
     Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Summary>> {
-    if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let running_deployment = persistence.get_active_deployment(&service.id).await?;
+    let Some(service) = persistence.get_service_by_name(&service_name).await? else {
+        return Err(Error::NotFound("service not found".to_string()));
+    };
+    let running_deployment = persistence.get_active_deployment(&service.id).await?;
+    let Some(ref deployment) = running_deployment else {
+        return Err(Error::NotFound("no running deployment found".to_string()));
+    };
+    deployment_manager.kill(deployment.id).await;
 
-        if let Some(ref deployment) = running_deployment {
-            deployment_manager.kill(deployment.id).await;
-        } else {
-            return Err(Error::NotFound("no running deployment found".to_string()));
-        }
+    let response = shuttle_common::models::service::Summary {
+        name: service.name,
+        deployment: running_deployment.map(Into::into),
+        uri: format!("https://{proxy_fqdn}"),
+    };
 
-        let response = shuttle_common::models::service::Summary {
-            name: service.name,
-            deployment: running_deployment.map(Into::into),
-            uri: format!("https://{proxy_fqdn}"),
-        };
-
-        Ok(Json(response))
-    } else {
-        Err(Error::NotFound("service not found".to_string()))
-    }
+    Ok(Json(response))
 }
 
 #[instrument(skip(persistence))]

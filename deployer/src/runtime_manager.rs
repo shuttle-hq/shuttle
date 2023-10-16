@@ -186,22 +186,20 @@ impl RuntimeManager {
     pub async fn kill(&mut self, id: &Uuid) -> bool {
         let value = self.runtimes.lock().unwrap().remove(id);
 
-        if let Some((mut process, mut runtime_client)) = value {
-            trace!(%id, "sending stop signal for deployment");
-
-            let stop_request = tonic::Request::new(StopRequest {});
-            let response = runtime_client.stop(stop_request).await.unwrap();
-
-            trace!(?response, "stop deployment response");
-
-            let result = response.into_inner().success;
-            let _ = process.start_kill();
-
-            result
-        } else {
+        let Some((mut process, mut runtime_client)) = value else {
             trace!("no client running");
-            true
-        }
+            return true;
+        };
+
+        trace!(%id, "sending stop signal for deployment");
+        let stop_request = tonic::Request::new(StopRequest {});
+        let response = runtime_client.stop(stop_request).await.unwrap();
+        trace!(?response, "stop deployment response");
+
+        let result = response.into_inner().success;
+        let _ = process.start_kill();
+
+        result
     }
 }
 

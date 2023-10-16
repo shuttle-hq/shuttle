@@ -575,9 +575,9 @@ impl Shuttle {
         let p = self.ctx.project_name();
         wait_with_spinner(|i, pb| async move {
             let service = if i == 0 {
-                client.stop_service(&p).await?
+                client.stop_service(p).await?
             } else {
-                client.get_service(&p).await?
+                client.get_service(p).await?
             };
 
             let service_str = format!("{service}");
@@ -1620,9 +1620,9 @@ impl Shuttle {
         let p = self.ctx.project_name();
         wait_with_spinner(|i, pb| async move {
             let project = if i == 0 {
-                client.create_project(&p, config).await?
+                client.create_project(p, config).await?
             } else {
-                client.get_project(&p).await?
+                client.get_project(p).await?
             };
             pb.set_message(format!("{project}"));
 
@@ -1705,7 +1705,7 @@ impl Shuttle {
         if follow {
             let p = self.ctx.project_name();
             wait_with_spinner(|_, pb| async move {
-                let project = client.get_project(&p).await?;
+                let project = client.get_project(p).await?;
                 pb.set_message(format!("{project}"));
 
                 let done = [
@@ -1756,9 +1756,9 @@ impl Shuttle {
         let p = self.ctx.project_name();
         wait_with_spinner(|i, pb| async move {
             let project = if i == 0 {
-                client.stop_project(&p).await?
+                client.stop_project(p).await?
             } else {
-                client.get_project(&p).await?
+                client.get_project(p).await?
             };
             pb.set_message(format!("{project}"));
 

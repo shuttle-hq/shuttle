@@ -533,7 +533,6 @@ pub async fn get_deployments(
     if let Some(service) = persistence.get_service_by_name(&project_name).await? {
         let limit = limit.unwrap_or(u32::MAX);
         let page = page.unwrap_or(0);
-        tracing::info!("test l = {} p = {}", limit, page);
         let deployments = persistence
             .get_deployments(&service.id, page * limit, limit)
             .await?;

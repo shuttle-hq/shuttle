@@ -42,7 +42,7 @@ strum = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal", "rt-multi-thread"] }
-tokio-tungstenite = { version = "0.20.0", features = [
+tokio-tungstenite = { version = "0.20.1", features = [
   "rustls-tls-webpki-roots",
 ] }
 toml = { workspace = true }

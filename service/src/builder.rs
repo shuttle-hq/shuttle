@@ -43,7 +43,7 @@ impl BuiltService {
                 debug!(?error, "failed to get service name from Shuttle.toml");
 
                 // Try getting it from {package,workspace}.metadata.shuttle from Cargo.toml
-                if let Some(name) = extract_name_from_crate_metadata(&crate_directory)? {
+                if let Some(name) = extract_name_from_crate_metadata(crate_directory)? {
                     return Ok(ProjectName::from_str(&name)?);
                 }
 

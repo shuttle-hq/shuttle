@@ -1,10 +1,12 @@
-use std::fs::File;
+use std::fs::{read_to_string, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use shuttle_common::{constants::API_URL_DEFAULT, project::ProjectName, ApiKey, ApiUrl};
+use toml_edit::{Document, Item};
 use tracing::trace;
 
 use crate::args::ProjectArgs;
@@ -266,6 +268,25 @@ impl RequestContext {
         Ok(())
     }
 
+    fn get_package_metadata(workspace_path: &Path) -> Result<Option<Item>> {
+        let path = workspace_path.join("Cargo.toml");
+        let toml_str = read_to_string(&path)?;
+        let toml = toml_str.parse::<Document>()?;
+        for root_key in ["workspace", "package"] {
+            if toml.get(root_key).is_none() {
+                continue;
+            }
+            if let Some(metadata) = toml
+                .get(root_key)
+                .and_then(|v| v.get("metadata"))
+                .and_then(|v| v.get("shuttle"))
+            {
+                return Ok(Some(metadata.clone()));
+            }
+        }
+        Ok(None)
+    }
+
     pub fn get_local_config(
         project_args: &ProjectArgs,
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
@@ -274,7 +295,7 @@ impl RequestContext {
             .unwrap_or(project_args.working_directory.clone());
 
         trace!("looking for Shuttle.toml in {}", workspace_path.display());
-        let local_manager = LocalConfigManager::new(workspace_path, "Shuttle.toml".to_string());
+        let local_manager = LocalConfigManager::new(&workspace_path, "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
 
         if !project.exists() {
@@ -290,7 +311,7 @@ impl RequestContext {
         // Project names are preferred in this order:
         // 1. Name given on command line
         // 2. Name from Shuttle.toml file
-        // 3. Name from Cargo.toml package if it's a crate
+        // 3. Name from Cargo.toml package if it's a crate or metadata exists
         // 3. Name from the workspace directory if it's a workspace
         match (&project_args.name, &config.name) {
             // Command-line name parameter trumps everything
@@ -302,12 +323,21 @@ impl RequestContext {
             (None, Some(_)) => {
                 trace!("using Shuttle.toml project name");
             }
-            // If name key is not in project config, then we infer from crate name
+            // If name key is not in project config, then we infer from crate name or metadata
             (None, None) => {
-                trace!("using crate name as project name");
-                config.name = Some(project_args.project_name()?);
+                let metadata = Self::get_package_metadata(&workspace_path)?;
+                if let Some(metadata) = metadata {
+                    if let Some(name) = metadata.get("name").and_then(|v| v.as_str()) {
+                        config.name = Some(ProjectName::from_str(name)?);
+                    }
+                    trace!("using crate name from metadata");
+                } else {
+                    trace!("using crate name as project name");
+                    config.name = Some(project_args.project_name()?);
+                }
             }
         };
+
         Ok(project)
     }
 

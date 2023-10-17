@@ -2,6 +2,7 @@ use std::fs::read_to_string;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::Output;
+use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context};
 use cargo_metadata::Message;
@@ -32,16 +33,21 @@ impl BuiltService {
     }
 
     /// Try to get the service name of a crate from Shuttle.toml in the crate root, if it doesn't
-    /// exist get it from the Cargo.toml package name of the crate.
+    /// exist get it from the Cargo.toml.
     pub fn service_name(&self) -> anyhow::Result<ProjectName> {
-        let shuttle_toml_path = self.crate_directory().join("Shuttle.toml");
-
+        let crate_directory = self.crate_directory();
+        let shuttle_toml_path = crate_directory.join("Shuttle.toml");
         match extract_shuttle_toml_name(shuttle_toml_path) {
             Ok(service_name) => Ok(service_name.parse()?),
             Err(error) => {
                 debug!(?error, "failed to get service name from Shuttle.toml");
 
-                // Couldn't get name from Shuttle.toml, use package name instead.
+                // Try getting it from {package,workspace}.metadata.shuttle from Cargo.toml
+                if let Some(name) = extract_name_from_crate_metadata(&crate_directory)? {
+                    return Ok(ProjectName::from_str(&name)?);
+                }
+
+                // Use the package name from Cargo.toml
                 Ok(self.package_name.parse()?)
             }
         }
@@ -63,6 +69,26 @@ fn extract_shuttle_toml_name(path: PathBuf) -> anyhow::Result<String> {
         .to_string();
 
     Ok(name)
+}
+
+fn extract_name_from_crate_metadata(workspace_path: &Path) -> anyhow::Result<Option<String>> {
+    let path = workspace_path.join("Cargo.toml");
+    let toml_str = read_to_string(&path)?;
+    let toml: toml::Value = toml::from_str(&toml_str).context("failed to parse Cargo.toml")?;
+    for root_key in ["workspace", "package"] {
+        if toml.get(root_key).is_none() {
+            continue;
+        }
+        if let Some(name) = toml
+            .get(root_key)
+            .and_then(|v| v.get("metadata"))
+            .and_then(|v| v.get("shuttle"))
+            .and_then(|v| v.get("name"))
+        {
+            return Ok(name.as_str().map(String::from));
+        }
+    }
+    Ok(None)
 }
 
 /// Given a project directory path, builds the crate

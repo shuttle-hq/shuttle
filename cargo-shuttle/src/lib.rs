@@ -16,7 +16,10 @@ use std::str::FromStr;
 
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
-    constants::{API_URL_DEFAULT, EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
+    constants::{
+        API_URL_DEFAULT, EXECUTABLE_DIRNAME, SHUTTLE_CLI_DOCS_URL, SHUTTLE_GH_ISSUE_URL,
+        SHUTTLE_IDLE_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
+    },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
         deployment::{
@@ -74,10 +77,6 @@ use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
-const SHUTTLE_LOGIN_URL: &str = "https://console.shuttle.rs/new-project";
-const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new/choose";
-const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/shuttle-commands";
-const SHUTTLE_IDLE_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/idle-projects";
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -1462,7 +1461,7 @@ impl Shuttle {
             if let Some(Ok(msg)) = message {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
                     let log_item: shuttle_common::LogItem =
-                        serde_json::from_str(&line).expect("to parse log line");
+                        serde_json::from_str(&line).context("parsing log line")?;
 
                     println!("{log_item}");
 

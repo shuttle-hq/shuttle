@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use regex::Regex;
-use shuttle_common::project::ProjectName;
+use shuttle_common::{constants::SHUTTLE_EXAMPLES_README, project::ProjectName};
 use tempfile::{Builder, TempDir};
 use toml_edit::{value, Document};
 use url::Url;
@@ -20,9 +20,6 @@ use gix::remote::fetch::Shallow;
 use gix::{open, progress};
 
 use crate::args::TemplateLocation;
-
-const SHUTTLE_EXAMPLES_README: &str = "https://github.com/shuttle\
-		     -hq/shuttle-examples#how-to-clone-run-and-deploy-an-example";
 
 pub fn generate_project(
     dest: PathBuf,
@@ -116,12 +113,11 @@ fn setup_template(auto_path: &str) -> Result<TempDir> {
                 .with_context(|| format!("Failed to clone Git repository at {url}"))?;
         } else {
             println!(
-                "URL scheme is not supported. Please use HTTP of HTTPS for URLs\
-		 , or use another method of specifying the template location."
+                "URL scheme is not supported. Please use HTTP of HTTPS for URLs, \
+                or use another method of specifying the template location."
             );
             println!(
-                "HINT: You can find examples of how to select \
-		 a template here: {SHUTTLE_EXAMPLES_README}"
+                "HINT: You can find examples of how to select a template here: {SHUTTLE_EXAMPLES_README}"
             );
             anyhow::bail!("invalid URL scheme")
         }

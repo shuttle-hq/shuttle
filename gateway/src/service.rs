@@ -592,6 +592,17 @@ impl GatewayService {
     }
 
     pub async fn delete_project(&self, project_name: &ProjectName) -> Result<(), Error> {
+        let project_id = query("SELECT project_id FROM projects WHERE project_name = ?1")
+            .bind(project_name)
+            .fetch_one(&self.db)
+            .await?
+            .get::<String, _>("project_id");
+
+        query("DELETE FROM custom_domains WHERE project_id = ?1")
+            .bind(project_id)
+            .execute(&self.db)
+            .await?;
+
         query("DELETE FROM projects WHERE project_name = ?1")
             .bind(project_name)
             .execute(&self.db)

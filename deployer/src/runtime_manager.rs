@@ -196,10 +196,9 @@ impl RuntimeManager {
         let response = runtime_client.stop(stop_request).await.unwrap();
         trace!(?response, "stop deployment response");
 
-        let result = response.into_inner().success;
         let _ = process.start_kill();
 
-        result
+        response.into_inner().success
     }
 }
 

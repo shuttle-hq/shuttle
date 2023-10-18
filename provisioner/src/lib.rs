@@ -435,6 +435,9 @@ impl Provisioner for MyProvisioner {
         request.verify(Scope::ResourcesWrite)?;
 
         let request = request.into_inner();
+        if !shuttle_common::project::ProjectName::is_valid(&request.project_name) {
+            return Err(Status::invalid_argument("invalid project name"));
+        }
         let db_type = request.db_type.unwrap();
 
         let reply = match db_type {
@@ -459,6 +462,9 @@ impl Provisioner for MyProvisioner {
         request.verify(Scope::ResourcesWrite)?;
 
         let request = request.into_inner();
+        if !shuttle_common::project::ProjectName::is_valid(&request.project_name) {
+            return Err(Status::invalid_argument("invalid project name"));
+        }
         let db_type = request.db_type.unwrap();
 
         let reply = match db_type {

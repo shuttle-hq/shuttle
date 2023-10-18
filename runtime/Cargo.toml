@@ -27,7 +27,7 @@ tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
-cap-std = { workspace = true, optional = true }
+cap-std = { version = "1.0.15", optional = true }
 futures = { workspace = true, optional = true }
 hyper = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }

@@ -9,6 +9,7 @@ description = "Library for all the gRPC definitions used by shuttle"
 anyhow = { workspace = true }
 chrono = { workspace = true }
 dunce = { workspace = true }
+futures-core = "0.3.28"
 home = { workspace = true }
 prost = { workspace = true }
 prost-types = { workspace = true }
@@ -21,7 +22,3 @@ serde_json = { workspace = true }
 [dependencies.shuttle-common]
 workspace = true
 features = ["claims", "service", "wasm", "models", "backend"]
-
-[dev-dependencies]
-tonic-build = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread"] }

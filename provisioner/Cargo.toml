@@ -33,6 +33,3 @@ ctor = { workspace = true }
 once_cell = { workspace = true }
 portpicker = { workspace = true }
 serde_json = { workspace = true }
-
-[build-dependencies]
-tonic-build = { workspace = true }

@@ -1,6 +1,4 @@
-// This clippy is disabled as per this prost comment
-// https://github.com/tokio-rs/prost/issues/661#issuecomment-1156606409
-#![allow(clippy::derive_partial_eq_without_eq)]
+mod generated;
 
 pub mod provisioner {
     use std::fmt::Display;
@@ -10,7 +8,7 @@ pub mod provisioner {
         DatabaseReadyInfo,
     };
 
-    include!("generated/provisioner.rs");
+    pub use super::generated::provisioner::*;
 
     impl From<DatabaseResponse> for DatabaseReadyInfo {
         fn from(response: DatabaseResponse) -> Self {
@@ -111,7 +109,7 @@ pub mod runtime {
     use tower::ServiceBuilder;
     use tracing::{info, trace};
 
-    include!("generated/runtime.rs");
+    pub use super::generated::runtime::*;
 
     pub async fn start(
         wasm: bool,
@@ -198,7 +196,7 @@ pub mod resource_recorder {
     use anyhow::Context;
     use std::str::FromStr;
 
-    include!("generated/resource_recorder.rs");
+    pub use super::generated::resource_recorder::*;
 
     impl TryFrom<record_request::Resource> for shuttle_common::resource::Response {
         type Error = anyhow::Error;
@@ -240,6 +238,10 @@ pub mod resource_recorder {
     }
 }
 
+pub mod builder {
+    pub use super::generated::builder::*;
+}
+
 pub mod logger {
     use std::str::FromStr;
     use std::time::Duration;
@@ -261,7 +263,7 @@ pub mod logger {
 
     use self::logger_client::LoggerClient;
 
-    include!("generated/logger.rs");
+    pub use super::generated::logger::*;
 
     impl From<LogItemCommon> for LogItem {
         fn from(value: LogItemCommon) -> Self {
@@ -459,7 +461,7 @@ pub mod logger {
             }
         }
 
-        #[tokio::test(flavor = "multi_thread")]
+        #[tokio::test]
         async fn capacity_reached() {
             let mock = MockGroupReceiver::default();
             let batcher = Batcher::new(mock.clone(), 2, Duration::from_secs(120));
@@ -481,7 +483,7 @@ pub mod logger {
             assert_eq!(*mock.0.lock().unwrap(), Some(vec![3, 4]));
         }
 
-        #[tokio::test(flavor = "multi_thread")]
+        #[tokio::test]
         async fn interval_reached() {
             let mock = MockGroupReceiver::default();
             let batcher = Batcher::new(mock.clone(), 2, Duration::from_millis(300));
@@ -501,8 +503,4 @@ pub mod logger {
             assert_eq!(*mock.0.lock().unwrap(), Some(vec![1]));
         }
     }
-}
-
-pub mod builder {
-    include!("generated/builder.rs");
 }

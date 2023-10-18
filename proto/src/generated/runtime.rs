@@ -12,10 +12,8 @@ pub struct LoadRequest {
     pub resources: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     /// Secrets that belong to this deployment
     #[prost(map = "string, string", tag = "20")]
-    pub secrets: ::std::collections::HashMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub secrets:
+        ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -102,8 +100,8 @@ impl StopReason {
 /// Generated client implementations.
 pub mod runtime_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     #[derive(Debug, Clone)]
     pub struct RuntimeClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -112,7 +110,7 @@ pub mod runtime_client {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
-            D: std::convert::TryInto<tonic::transport::Endpoint>,
+            D: TryInto<tonic::transport::Endpoint>,
             D::Error: Into<StdError>,
         {
             let conn = tonic::transport::Endpoint::new(dst)?.connect().await?;
@@ -147,9 +145,8 @@ pub mod runtime_client {
                     <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-            >>::Error: Into<StdError> + Send + Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
+                Into<StdError> + Send + Sync,
         {
             RuntimeClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -168,82 +165,96 @@ pub mod runtime_client {
             self.inner = self.inner.accept_compressed(encoding);
             self
         }
+        /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
+        #[must_use]
+        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_decoding_message_size(limit);
+            self
+        }
+        /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
+        #[must_use]
+        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_encoding_message_size(limit);
+            self
+        }
         /// Load a service file to be ready to start it
         pub async fn load(
             &mut self,
             request: impl tonic::IntoRequest<super::LoadRequest>,
-        ) -> Result<tonic::Response<super::LoadResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::LoadResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/runtime.Runtime/Load");
-            self.inner.unary(request.into_request(), path, codec).await
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("runtime.Runtime", "Load"));
+            self.inner.unary(req, path, codec).await
         }
         /// Start a loaded service file
         pub async fn start(
             &mut self,
             request: impl tonic::IntoRequest<super::StartRequest>,
-        ) -> Result<tonic::Response<super::StartResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::StartResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/runtime.Runtime/Start");
-            self.inner.unary(request.into_request(), path, codec).await
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("runtime.Runtime", "Start"));
+            self.inner.unary(req, path, codec).await
         }
         /// Stop a started service
         pub async fn stop(
             &mut self,
             request: impl tonic::IntoRequest<super::StopRequest>,
-        ) -> Result<tonic::Response<super::StopResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::StopResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/runtime.Runtime/Stop");
-            self.inner.unary(request.into_request(), path, codec).await
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("runtime.Runtime", "Stop"));
+            self.inner.unary(req, path, codec).await
         }
         /// Channel to notify a service has been stopped
         pub async fn subscribe_stop(
             &mut self,
             request: impl tonic::IntoRequest<super::SubscribeStopRequest>,
-        ) -> Result<
+        ) -> std::result::Result<
             tonic::Response<tonic::codec::Streaming<super::SubscribeStopResponse>>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/runtime.Runtime/SubscribeStop",
-            );
-            self.inner.server_streaming(request.into_request(), path, codec).await
+            let path = http::uri::PathAndQuery::from_static("/runtime.Runtime/SubscribeStop");
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("runtime.Runtime", "SubscribeStop"));
+            self.inner.server_streaming(req, path, codec).await
         }
     }
 }
@@ -258,34 +269,35 @@ pub mod runtime_server {
         async fn load(
             &self,
             request: tonic::Request<super::LoadRequest>,
-        ) -> Result<tonic::Response<super::LoadResponse>, tonic::Status>;
+        ) -> std::result::Result<tonic::Response<super::LoadResponse>, tonic::Status>;
         /// Start a loaded service file
         async fn start(
             &self,
             request: tonic::Request<super::StartRequest>,
-        ) -> Result<tonic::Response<super::StartResponse>, tonic::Status>;
+        ) -> std::result::Result<tonic::Response<super::StartResponse>, tonic::Status>;
         /// Stop a started service
         async fn stop(
             &self,
             request: tonic::Request<super::StopRequest>,
-        ) -> Result<tonic::Response<super::StopResponse>, tonic::Status>;
+        ) -> std::result::Result<tonic::Response<super::StopResponse>, tonic::Status>;
         /// Server streaming response type for the SubscribeStop method.
         type SubscribeStopStream: futures_core::Stream<
-                Item = Result<super::SubscribeStopResponse, tonic::Status>,
-            >
-            + Send
+                Item = std::result::Result<super::SubscribeStopResponse, tonic::Status>,
+            > + Send
             + 'static;
         /// Channel to notify a service has been stopped
         async fn subscribe_stop(
             &self,
             request: tonic::Request<super::SubscribeStopRequest>,
-        ) -> Result<tonic::Response<Self::SubscribeStopStream>, tonic::Status>;
+        ) -> std::result::Result<tonic::Response<Self::SubscribeStopStream>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct RuntimeServer<T: Runtime> {
         inner: _Inner<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
+        max_decoding_message_size: Option<usize>,
+        max_encoding_message_size: Option<usize>,
     }
     struct _Inner<T>(Arc<T>);
     impl<T: Runtime> RuntimeServer<T> {
@@ -298,12 +310,11 @@ pub mod runtime_server {
                 inner,
                 accept_compression_encodings: Default::default(),
                 send_compression_encodings: Default::default(),
+                max_decoding_message_size: None,
+                max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -321,6 +332,22 @@ pub mod runtime_server {
             self.send_compression_encodings.enable(encoding);
             self
         }
+        /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
+        #[must_use]
+        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+            self.max_decoding_message_size = Some(limit);
+            self
+        }
+        /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
+        #[must_use]
+        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+            self.max_encoding_message_size = Some(limit);
+            self
+        }
     }
     impl<T, B> tonic::codegen::Service<http::Request<B>> for RuntimeServer<T>
     where
@@ -334,7 +361,7 @@ pub mod runtime_server {
         fn poll_ready(
             &mut self,
             _cx: &mut Context<'_>,
-        ) -> Poll<Result<(), Self::Error>> {
+        ) -> Poll<std::result::Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
@@ -343,24 +370,22 @@ pub mod runtime_server {
                 "/runtime.Runtime/Load" => {
                     #[allow(non_camel_case_types)]
                     struct LoadSvc<T: Runtime>(pub Arc<T>);
-                    impl<T: Runtime> tonic::server::UnaryService<super::LoadRequest>
-                    for LoadSvc<T> {
+                    impl<T: Runtime> tonic::server::UnaryService<super::LoadRequest> for LoadSvc<T> {
                         type Response = super::LoadResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::LoadRequest>,
                         ) -> Self::Future {
-                            let inner = self.0.clone();
+                            let inner = Arc::clone(&self.0);
                             let fut = async move { (*inner).load(request).await };
                             Box::pin(fut)
                         }
                     }
                     let accept_compression_encodings = self.accept_compression_encodings;
                     let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
@@ -370,6 +395,10 @@ pub mod runtime_server {
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
                             );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
@@ -379,24 +408,22 @@ pub mod runtime_server {
                 "/runtime.Runtime/Start" => {
                     #[allow(non_camel_case_types)]
                     struct StartSvc<T: Runtime>(pub Arc<T>);
-                    impl<T: Runtime> tonic::server::UnaryService<super::StartRequest>
-                    for StartSvc<T> {
+                    impl<T: Runtime> tonic::server::UnaryService<super::StartRequest> for StartSvc<T> {
                         type Response = super::StartResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::StartRequest>,
                         ) -> Self::Future {
-                            let inner = self.0.clone();
+                            let inner = Arc::clone(&self.0);
                             let fut = async move { (*inner).start(request).await };
                             Box::pin(fut)
                         }
                     }
                     let accept_compression_encodings = self.accept_compression_encodings;
                     let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
@@ -406,6 +433,10 @@ pub mod runtime_server {
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
                             );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
@@ -415,24 +446,22 @@ pub mod runtime_server {
                 "/runtime.Runtime/Stop" => {
                     #[allow(non_camel_case_types)]
                     struct StopSvc<T: Runtime>(pub Arc<T>);
-                    impl<T: Runtime> tonic::server::UnaryService<super::StopRequest>
-                    for StopSvc<T> {
+                    impl<T: Runtime> tonic::server::UnaryService<super::StopRequest> for StopSvc<T> {
                         type Response = super::StopResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::StopRequest>,
                         ) -> Self::Future {
-                            let inner = self.0.clone();
+                            let inner = Arc::clone(&self.0);
                             let fut = async move { (*inner).stop(request).await };
                             Box::pin(fut)
                         }
                     }
                     let accept_compression_encodings = self.accept_compression_encodings;
                     let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
@@ -442,6 +471,10 @@ pub mod runtime_server {
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
                             );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
@@ -451,29 +484,27 @@ pub mod runtime_server {
                 "/runtime.Runtime/SubscribeStop" => {
                     #[allow(non_camel_case_types)]
                     struct SubscribeStopSvc<T: Runtime>(pub Arc<T>);
-                    impl<
-                        T: Runtime,
-                    > tonic::server::ServerStreamingService<super::SubscribeStopRequest>
-                    for SubscribeStopSvc<T> {
+                    impl<T: Runtime>
+                        tonic::server::ServerStreamingService<super::SubscribeStopRequest>
+                        for SubscribeStopSvc<T>
+                    {
                         type Response = super::SubscribeStopResponse;
                         type ResponseStream = T::SubscribeStopStream;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
-                        >;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::SubscribeStopRequest>,
                         ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move {
-                                (*inner).subscribe_stop(request).await
-                            };
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move { (*inner).subscribe_stop(request).await };
                             Box::pin(fut)
                         }
                     }
                     let accept_compression_encodings = self.accept_compression_encodings;
                     let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
@@ -483,24 +514,24 @@ pub mod runtime_server {
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
                             );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        Ok(
-                            http::Response::builder()
-                                .status(200)
-                                .header("grpc-status", "12")
-                                .header("content-type", "application/grpc")
-                                .body(empty_body())
-                                .unwrap(),
-                        )
-                    })
-                }
+                _ => Box::pin(async move {
+                    Ok(http::Response::builder()
+                        .status(200)
+                        .header("grpc-status", "12")
+                        .header("content-type", "application/grpc")
+                        .body(empty_body())
+                        .unwrap())
+                }),
             }
         }
     }
@@ -511,12 +542,14 @@ pub mod runtime_server {
                 inner,
                 accept_compression_encodings: self.accept_compression_encodings,
                 send_compression_encodings: self.send_compression_encodings,
+                max_decoding_message_size: self.max_decoding_message_size,
+                max_encoding_message_size: self.max_encoding_message_size,
             }
         }
     }
     impl<T: Runtime> Clone for _Inner<T> {
         fn clone(&self) -> Self {
-            Self(self.0.clone())
+            Self(Arc::clone(&self.0))
         }
     }
     impl<T: std::fmt::Debug> std::fmt::Debug for _Inner<T> {

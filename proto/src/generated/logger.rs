@@ -43,8 +43,8 @@ pub struct LogLine {
 /// Generated client implementations.
 pub mod logger_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     #[derive(Debug, Clone)]
     pub struct LoggerClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -53,7 +53,7 @@ pub mod logger_client {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
-            D: std::convert::TryInto<tonic::transport::Endpoint>,
+            D: TryInto<tonic::transport::Endpoint>,
             D::Error: Into<StdError>,
         {
             let conn = tonic::transport::Endpoint::new(dst)?.connect().await?;
@@ -88,9 +88,8 @@ pub mod logger_client {
                     <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-            >>::Error: Into<StdError> + Send + Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
+                Into<StdError> + Send + Sync,
         {
             LoggerClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -109,64 +108,78 @@ pub mod logger_client {
             self.inner = self.inner.accept_compressed(encoding);
             self
         }
+        /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
+        #[must_use]
+        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_decoding_message_size(limit);
+            self
+        }
+        /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
+        #[must_use]
+        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_encoding_message_size(limit);
+            self
+        }
         /// Store logs
         pub async fn store_logs(
             &mut self,
             request: impl tonic::IntoRequest<super::StoreLogsRequest>,
-        ) -> Result<tonic::Response<super::StoreLogsResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::StoreLogsResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/logger.Logger/StoreLogs");
-            self.inner.unary(request.into_request(), path, codec).await
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("logger.Logger", "StoreLogs"));
+            self.inner.unary(req, path, codec).await
         }
         /// Get stored logs
         pub async fn get_logs(
             &mut self,
             request: impl tonic::IntoRequest<super::LogsRequest>,
-        ) -> Result<tonic::Response<super::LogsResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::LogsResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/logger.Logger/GetLogs");
-            self.inner.unary(request.into_request(), path, codec).await
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("logger.Logger", "GetLogs"));
+            self.inner.unary(req, path, codec).await
         }
         /// Get fresh logs as they are incoming
         pub async fn get_logs_stream(
             &mut self,
             request: impl tonic::IntoRequest<super::LogsRequest>,
-        ) -> Result<
+        ) -> std::result::Result<
             tonic::Response<tonic::codec::Streaming<super::LogLine>>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/logger.Logger/GetLogsStream",
-            );
-            self.inner.server_streaming(request.into_request(), path, codec).await
+            let path = http::uri::PathAndQuery::from_static("/logger.Logger/GetLogsStream");
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("logger.Logger", "GetLogsStream"));
+            self.inner.server_streaming(req, path, codec).await
         }
     }
 }
@@ -181,29 +194,29 @@ pub mod logger_server {
         async fn store_logs(
             &self,
             request: tonic::Request<super::StoreLogsRequest>,
-        ) -> Result<tonic::Response<super::StoreLogsResponse>, tonic::Status>;
+        ) -> std::result::Result<tonic::Response<super::StoreLogsResponse>, tonic::Status>;
         /// Get stored logs
         async fn get_logs(
             &self,
             request: tonic::Request<super::LogsRequest>,
-        ) -> Result<tonic::Response<super::LogsResponse>, tonic::Status>;
+        ) -> std::result::Result<tonic::Response<super::LogsResponse>, tonic::Status>;
         /// Server streaming response type for the GetLogsStream method.
-        type GetLogsStreamStream: futures_core::Stream<
-                Item = Result<super::LogLine, tonic::Status>,
-            >
+        type GetLogsStreamStream: futures_core::Stream<Item = std::result::Result<super::LogLine, tonic::Status>>
             + Send
             + 'static;
         /// Get fresh logs as they are incoming
         async fn get_logs_stream(
             &self,
             request: tonic::Request<super::LogsRequest>,
-        ) -> Result<tonic::Response<Self::GetLogsStreamStream>, tonic::Status>;
+        ) -> std::result::Result<tonic::Response<Self::GetLogsStreamStream>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct LoggerServer<T: Logger> {
         inner: _Inner<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
+        max_decoding_message_size: Option<usize>,
+        max_encoding_message_size: Option<usize>,
     }
     struct _Inner<T>(Arc<T>);
     impl<T: Logger> LoggerServer<T> {
@@ -216,12 +229,11 @@ pub mod logger_server {
                 inner,
                 accept_compression_encodings: Default::default(),
                 send_compression_encodings: Default::default(),
+                max_decoding_message_size: None,
+                max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -239,6 +251,22 @@ pub mod logger_server {
             self.send_compression_encodings.enable(encoding);
             self
         }
+        /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
+        #[must_use]
+        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+            self.max_decoding_message_size = Some(limit);
+            self
+        }
+        /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
+        #[must_use]
+        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+            self.max_encoding_message_size = Some(limit);
+            self
+        }
     }
     impl<T, B> tonic::codegen::Service<http::Request<B>> for LoggerServer<T>
     where
@@ -252,7 +280,7 @@ pub mod logger_server {
         fn poll_ready(
             &mut self,
             _cx: &mut Context<'_>,
-        ) -> Poll<Result<(), Self::Error>> {
+        ) -> Poll<std::result::Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
@@ -261,24 +289,22 @@ pub mod logger_server {
                 "/logger.Logger/StoreLogs" => {
                     #[allow(non_camel_case_types)]
                     struct StoreLogsSvc<T: Logger>(pub Arc<T>);
-                    impl<T: Logger> tonic::server::UnaryService<super::StoreLogsRequest>
-                    for StoreLogsSvc<T> {
+                    impl<T: Logger> tonic::server::UnaryService<super::StoreLogsRequest> for StoreLogsSvc<T> {
                         type Response = super::StoreLogsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::StoreLogsRequest>,
                         ) -> Self::Future {
-                            let inner = self.0.clone();
+                            let inner = Arc::clone(&self.0);
                             let fut = async move { (*inner).store_logs(request).await };
                             Box::pin(fut)
                         }
                     }
                     let accept_compression_encodings = self.accept_compression_encodings;
                     let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
@@ -288,6 +314,10 @@ pub mod logger_server {
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
                             );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
@@ -297,24 +327,22 @@ pub mod logger_server {
                 "/logger.Logger/GetLogs" => {
                     #[allow(non_camel_case_types)]
                     struct GetLogsSvc<T: Logger>(pub Arc<T>);
-                    impl<T: Logger> tonic::server::UnaryService<super::LogsRequest>
-                    for GetLogsSvc<T> {
+                    impl<T: Logger> tonic::server::UnaryService<super::LogsRequest> for GetLogsSvc<T> {
                         type Response = super::LogsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::LogsRequest>,
                         ) -> Self::Future {
-                            let inner = self.0.clone();
+                            let inner = Arc::clone(&self.0);
                             let fut = async move { (*inner).get_logs(request).await };
                             Box::pin(fut)
                         }
                     }
                     let accept_compression_encodings = self.accept_compression_encodings;
                     let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
@@ -324,6 +352,10 @@ pub mod logger_server {
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
                             );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
@@ -333,29 +365,24 @@ pub mod logger_server {
                 "/logger.Logger/GetLogsStream" => {
                     #[allow(non_camel_case_types)]
                     struct GetLogsStreamSvc<T: Logger>(pub Arc<T>);
-                    impl<
-                        T: Logger,
-                    > tonic::server::ServerStreamingService<super::LogsRequest>
-                    for GetLogsStreamSvc<T> {
+                    impl<T: Logger> tonic::server::ServerStreamingService<super::LogsRequest> for GetLogsStreamSvc<T> {
                         type Response = super::LogLine;
                         type ResponseStream = T::GetLogsStreamStream;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
-                        >;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::LogsRequest>,
                         ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move {
-                                (*inner).get_logs_stream(request).await
-                            };
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move { (*inner).get_logs_stream(request).await };
                             Box::pin(fut)
                         }
                     }
                     let accept_compression_encodings = self.accept_compression_encodings;
                     let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
@@ -365,24 +392,24 @@ pub mod logger_server {
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
                             );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        Ok(
-                            http::Response::builder()
-                                .status(200)
-                                .header("grpc-status", "12")
-                                .header("content-type", "application/grpc")
-                                .body(empty_body())
-                                .unwrap(),
-                        )
-                    })
-                }
+                _ => Box::pin(async move {
+                    Ok(http::Response::builder()
+                        .status(200)
+                        .header("grpc-status", "12")
+                        .header("content-type", "application/grpc")
+                        .body(empty_body())
+                        .unwrap())
+                }),
             }
         }
     }
@@ -393,12 +420,14 @@ pub mod logger_server {
                 inner,
                 accept_compression_encodings: self.accept_compression_encodings,
                 send_compression_encodings: self.send_compression_encodings,
+                max_decoding_message_size: self.max_decoding_message_size,
+                max_encoding_message_size: self.max_encoding_message_size,
             }
         }
     }
     impl<T: Logger> Clone for _Inner<T> {
         fn clone(&self) -> Self {
-            Self(self.0.clone())
+            Self(Arc::clone(&self.0))
         }
     }
     impl<T: std::fmt::Debug> std::fmt::Debug for _Inner<T> {

@@ -5,7 +5,7 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 
-use crate::project::ProjectNameError;
+use crate::project::InvalidProjectName;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiError {
@@ -32,7 +32,7 @@ impl Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
-#[derive(Debug, Clone, PartialEq, Eq, strum::Display)]
+#[derive(Debug, Clone, PartialEq, strum::Display)]
 pub enum ErrorKind {
     KeyMissing,
     BadHost,
@@ -42,7 +42,7 @@ pub enum ErrorKind {
     UserNotFound,
     UserAlreadyExists,
     ProjectNotFound,
-    InvalidProjectName(ProjectNameError),
+    InvalidProjectName(InvalidProjectName),
     ProjectAlreadyExists,
     /// Contains a message describing a running state of the project.
     /// Used if the project already exists but is owned
@@ -85,7 +85,7 @@ impl From<ErrorKind> for ApiError {
             }
             ErrorKind::InvalidProjectName(err) => {
                 return Self {
-                    message: format!("{err}"),
+                    message: err.to_string(),
                     status_code: StatusCode::BAD_REQUEST.as_u16(),
                 }
             }

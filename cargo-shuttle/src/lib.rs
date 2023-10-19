@@ -27,7 +27,6 @@ use shuttle_common::{
         resource::get_resources_table,
         secret,
     },
-    project::ProjectName,
     resource, semvers_are_compatible, ApiKey, LogItem, VersionInfo,
 };
 use shuttle_proto::runtime::{
@@ -343,7 +342,7 @@ impl Shuttle {
             let client = self.client.as_ref().unwrap();
             loop {
                 // not using validate_with due to being blocking
-                let p: ProjectName = Input::with_theme(&theme)
+                let p: String = Input::with_theme(&theme)
                     .with_prompt("Project name")
                     .interact()?;
                 match client.check_project_name(&p).await {
@@ -730,7 +729,7 @@ impl Shuttle {
             .get_deployments(proj_name, page, limit)
             .await
             .map_err(suggestions::deployment::get_deployments_list_failure)?;
-        let table = get_deployments_table(&deployments, proj_name.as_str(), page);
+        let table = get_deployments_table(&deployments, proj_name, page);
 
         println!("{table}");
         println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
@@ -756,7 +755,7 @@ impl Shuttle {
             .get_service_resources(self.ctx.project_name())
             .await
             .map_err(suggestions::resources::get_service_resources_failure)?;
-        let table = get_resources_table(&resources, self.ctx.project_name().as_str());
+        let table = get_resources_table(&resources, self.ctx.project_name());
 
         println!("{table}");
 
@@ -1598,7 +1597,7 @@ impl Shuttle {
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await?;
-        let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
+        let resources = get_resources_table(&resources, self.ctx.project_name());
 
         println!("{resources}{service}");
 
@@ -1749,7 +1748,7 @@ impl Shuttle {
         &self,
         states_to_check: &[project::State],
         fut: Fut,
-        project_name: &'a ProjectName,
+        project_name: &'a str,
         client: &'a Client,
     ) -> Result<(), anyhow::Error>
     where
@@ -1990,14 +1989,12 @@ pub enum CommandOutcome {
 #[cfg(test)]
 mod tests {
     use flate2::read::GzDecoder;
-    use shuttle_common::project::ProjectName;
     use tar::Archive;
 
     use crate::args::ProjectArgs;
     use crate::Shuttle;
     use std::fs::{self, canonicalize};
     use std::path::PathBuf;
-    use std::str::FromStr;
 
     pub fn path_from_workspace_root(path: &str) -> PathBuf {
         let path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -2052,7 +2049,7 @@ mod tests {
 
         let project_args = ProjectArgs {
             working_directory,
-            name: Some(ProjectName::from_str("archiving-test").unwrap()),
+            name: Some("archiving-test".to_owned()),
         };
         let mut entries = get_archive_entries(project_args);
         entries.sort();

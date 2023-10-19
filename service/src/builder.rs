@@ -7,10 +7,7 @@ use anyhow::{anyhow, bail, Context};
 use cargo_metadata::Message;
 use cargo_metadata::{Package, Target};
 use crossbeam_channel::Sender;
-use shuttle_common::{
-    constants::{NEXT_NAME, RUNTIME_NAME},
-    project::ProjectName,
-};
+use shuttle_common::constants::{NEXT_NAME, RUNTIME_NAME};
 use tracing::{debug, error, trace};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -33,16 +30,16 @@ impl BuiltService {
 
     /// Try to get the service name of a crate from Shuttle.toml in the crate root, if it doesn't
     /// exist get it from the Cargo.toml package name of the crate.
-    pub fn service_name(&self) -> anyhow::Result<ProjectName> {
+    pub fn service_name(&self) -> anyhow::Result<String> {
         let shuttle_toml_path = self.crate_directory().join("Shuttle.toml");
 
         match extract_shuttle_toml_name(shuttle_toml_path) {
-            Ok(service_name) => Ok(service_name.parse()?),
+            Ok(service_name) => Ok(service_name),
             Err(error) => {
                 debug!(?error, "failed to get service name from Shuttle.toml");
 
                 // Couldn't get name from Shuttle.toml, use package name instead.
-                Ok(self.package_name.parse()?)
+                Ok(self.package_name.clone())
             }
         }
     }

@@ -23,7 +23,7 @@ jsonwebtoken = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
-opentelemetry-otlp = { workspace = true,  optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
 pin-project = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
@@ -61,7 +61,7 @@ backend = [
     "tracing-subscriber/fmt",
     "ttl_cache",
     "sqlx",
-    "sqlx/postgres", # Fix for derive macro error when different backends enable sqlite & postgres (mainly for grouped compilation in clippy CI and Docker build)
+    "sqlx/postgres",                 # Fix for derive macro error when different backends enable sqlite & postgres (mainly for grouped compilation in clippy CI and Docker build)
 ]
 claims = [
     "bytes",
@@ -81,7 +81,16 @@ display = ["chrono/clock", "comfy-table", "crossterm"]
 openapi = ["utoipa/chrono", "utoipa/uuid"]
 models = ["async-trait", "display", "http", "reqwest", "service"]
 persist = ["sqlx/sqlite", "rand"]
-service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "tracing", "tracing-subscriber", "uuid"]
+service = [
+    "chrono/serde",
+    "once_cell",
+    "rustrict",
+    "serde/derive",
+    "thiserror",
+    "tracing",
+    "tracing-subscriber",
+    "uuid",
+]
 tracing = ["dep:tracing"]
 wasm = [
     "chrono/clock",

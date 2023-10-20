@@ -561,6 +561,18 @@ impl GatewayService {
         account_name: AccountName,
         idle_minutes: u64,
     ) -> Result<FindProjectPayload, Error> {
+        const MAX_PROJECTS: u32 = 100;
+
+        let proj_count: u32 = query("SELECT COUNT(*) FROM projects WHERE account_name = ?1")
+            .bind(&account_name)
+            .fetch_one(&self.db)
+            .await?
+            .get::<_, usize>(0usize);
+
+        if proj_count >= MAX_PROJECTS {
+            return Err(Error::from_kind(ErrorKind::TooManyProjects));
+        }
+
         let project = SqlxJson(Project::Creating(
             ProjectCreating::new_with_random_initial_key(
                 project_name.clone(),

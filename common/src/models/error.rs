@@ -48,6 +48,7 @@ pub enum ErrorKind {
     OwnProjectAlreadyExists(String),
     ProjectNotReady,
     ProjectUnavailable,
+    TooManyProjects,
     CustomDomainNotFound,
     InvalidCustomDomain,
     CustomDomainAlreadyExists,
@@ -80,7 +81,10 @@ impl From<ErrorKind> for ApiError {
             ),
             ErrorKind::ProjectUnavailable => {
                 (StatusCode::BAD_GATEWAY, "project returned invalid response")
-            }
+            },
+            ErrorKind::TooManyProjects => {
+                (StatusCode::FORBIDDEN, "you cannot create more projects. delete some first.")
+            },
             ErrorKind::InvalidProjectName => (
                 StatusCode::BAD_REQUEST,
                 r#"
@@ -111,7 +115,7 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::CustomDomainNotFound => (StatusCode::NOT_FOUND, "custom domain not found"),
             ErrorKind::CustomDomainAlreadyExists => {
                 (StatusCode::BAD_REQUEST, "custom domain already in use")
-            }
+            },
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),

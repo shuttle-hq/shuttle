@@ -83,7 +83,7 @@ impl From<ErrorKind> for ApiError {
                 (StatusCode::BAD_GATEWAY, "project returned invalid response")
             },
             ErrorKind::TooManyProjects => {
-                (StatusCode::FORBIDDEN, "you cannot create more projects. delete some first.")
+                (StatusCode::FORBIDDEN, "You cannot create more projects. Delete some projects first.")
             },
             ErrorKind::InvalidProjectName => (
                 StatusCode::BAD_REQUEST,

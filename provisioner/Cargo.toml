@@ -7,8 +7,11 @@ description = "Service responsible for provisioning and managing resources for s
 publish = false
 
 [dependencies]
-aws-config = "0.55.2"
-aws-sdk-rds = "0.27.0"
+shuttle-common = { workspace = true, features = ["backend", "tonic"] }
+shuttle-proto = { workspace = true }
+
+aws-config = "0.56.1"
+aws-sdk-rds = "0.33.1"
 clap = { workspace = true, features = ["env"] }
 fqdn = { workspace = true }
 mongodb = "2.4.0"
@@ -20,13 +23,6 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tonic = { workspace = true }
 tracing = { workspace = true, features = ["default"] }
 tracing-subscriber = { workspace = true, features = ["default", "fmt"] }
-
-[dependencies.shuttle-common]
-workspace = true
-features = ["backend", "tonic"]
-
-[dependencies.shuttle-proto]
-workspace = true
 
 [dev-dependencies]
 ctor = { workspace = true }

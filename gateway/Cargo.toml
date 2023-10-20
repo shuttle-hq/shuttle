@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["default", "headers"] }
-axum-server = { version = "0.4.4", features = ["tls-rustls"] }
+axum-server = { version = "0.5.1", features = ["tls-rustls"] }
 bollard = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
@@ -26,9 +26,9 @@ opentelemetry-http = { workspace = true }
 pem = "1.1.1"
 pin-project = { workspace = true }
 rand = { workspace = true }
-rcgen = "0.10.0"
+rcgen = "0.11.3"
 reqwest = { workspace = true }
-rustls = "0.20.7"
+rustls = "0.21.7"
 rustls-pemfile = "1.0.1"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -49,7 +49,7 @@ ttl_cache = { workspace = true }
 utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
-x509-parser = "0.14.0"
+x509-parser = "0.15.1"
 tonic = { workspace = true }
 tower-sanitize-path = "0.2.0"
 ulid = { workspace = true, features = ["serde"] }

@@ -16,6 +16,7 @@ async-trait = { workspace = true }
 cargo_metadata = { workspace = true, optional = true }
 crossbeam-channel = { workspace = true, optional = true }
 os_pipe = { workspace = true, optional = true }
+reqwest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 strfmt = { workspace = true }
 thiserror = { workspace = true }

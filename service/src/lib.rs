@@ -1,5 +1,5 @@
-use std::collections::BTreeMap;
 use std::net::SocketAddr;
+use std::{collections::BTreeMap, num::NonZeroU32};
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
@@ -83,13 +83,39 @@ pub trait ResourceBuilder<T> {
     async fn build(build_data: &Self::Output) -> Result<T, crate::Error>;
 }
 
-/// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.
+pub enum Idle {
+    DoIdle(NonZeroU32),
+    AlwaysOn,
+}
+
+/// The core trait of the Shuttle platform. Every crate deployed to Shuttle needs to implement this trait.
 ///
-/// Use the [main][main] macro to expose your implementation to the deployment backend.
+/// Use the [shuttle_runtime::main] macro to expose your implementation to the deployment backend.
 #[async_trait]
-pub trait Service: Send {
-    /// This function is run exactly once on each instance of a deployment.
+pub trait Service: Send + Clone {
+    const IDLE: Idle = Idle::DoIdle(unsafe { NonZeroU32::new_unchecked(30) });
+
+    /// This function is run on startup after loading the service.
     ///
-    /// The deployer expects this instance of [Service][Service] to bind to the passed [SocketAddr][SocketAddr].
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error>;
+    /// The service can bind to the passed [SocketAddr][SocketAddr] if desired.
+    async fn bind(self, addr: SocketAddr) -> Result<(), error::Error>;
+
+    /// This is called after startup to check if the service is healthy.
+    ///
+    /// Default implementation assumes the service is bound to `addr` and responds with 200 OK on '/_shuttle/healthz'.
+    /// Override this if not relevant.
+    async fn health_check(self, addr: &SocketAddr) -> Result<(), error::Error> {
+        reqwest::get(reqwest::Url::parse(&format!("http://{addr}/_shuttle/healthz")).unwrap())
+            .await
+            .map_err(|e| Error::HeathCheckFailed(e.to_string()))?
+            .status()
+            .is_success()
+            .then(|| ())
+            .ok_or(Error::HeathCheckFailed("Health check unsuccessful".into()))
+    }
+
+    /// Called before shutdown of this service happens. Gives time for service to do graceful shutdown.
+    async fn shutdown(self) -> Result<(), error::Error> {
+        Ok(())
+    }
 }

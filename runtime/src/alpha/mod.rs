@@ -330,8 +330,9 @@ where
         let handle = tokio::runtime::Handle::current();
 
         // start service as a background task with a kill receiver
+        let service_cl = service.clone();
         tokio::spawn(async move {
-            let mut background = handle.spawn(service.bind(service_address));
+            let mut background = handle.spawn(service_cl.bind(service_address.clone()));
 
             tokio::select! {
                 res = &mut background => {
@@ -383,6 +384,19 @@ where
                 }
             }
         });
+
+        // seems enough for binding to the port in simple cases
+        tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+        for i in (0..10).rev() {
+            let s = service.clone();
+            let health = s.health_check(&service_address).await;
+            if health.is_ok() {
+                break;
+            } else if i == 0 {
+                health.map_err(|e| Status::from_error(Box::new(e)))?;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        }
 
         let message = StartResponse { success: true };
 

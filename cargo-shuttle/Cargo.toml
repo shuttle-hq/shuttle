@@ -9,6 +9,10 @@ homepage = "https://www.shuttle.rs"
 rust-version = "1.70"
 
 [dependencies]
+shuttle-common = { workspace = true, features = ["models"] }
+shuttle-proto = { workspace = true }
+shuttle-service = { workspace = true, features = ["builder"] }
+
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bollard = { workspace = true }
@@ -64,20 +68,9 @@ uuid = { workspace = true, features = ["v4"] }
 walkdir = "2.3.3"
 webbrowser = "0.8.2"
 
-[dependencies.shuttle-common]
-workspace = true
-features = ["models"]
-
-[dependencies.shuttle-proto]
-workspace = true
-
-[dependencies.shuttle-service]
-workspace = true
-features = ["builder"]
-
 [dev-dependencies]
 assert_cmd = "2.0.6"
 rexpect = "0.5.0"
 # Tmp until this branch is merged and released
 tokiotest-httpserver = { git = "https://github.com/shuttle-hq/tokiotest-httpserver", branch = "feat/body" }
-shuttle-common-tests = { path = "../common-tests" }
+shuttle-common-tests = { workspace = true }

@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+shuttle-common = { workspace = true, features = ["backend", "tonic"] }
+shuttle-proto = { workspace = true }
+
 async-trait = { workspace = true }
 clap = { workspace = true }
 flate2 = { workspace = true }
@@ -13,20 +16,19 @@ nbuild-core = "0.1.2"
 tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["fs", "macros", "io-util", "process", "rt-multi-thread"] }
+tokio = { workspace = true, features = [
+    "fs",
+    "macros",
+    "io-util",
+    "process",
+    "rt-multi-thread",
+] }
 toml = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default"] }
 os_pipe = "1.1.4"
 ulid = { workspace = true }
-
-[dependencies.shuttle-common]
-workspace = true
-features = ["backend", "tonic"]
-
-[dependencies.shuttle-proto]
-workspace = true
 
 [dev-dependencies]
 hex = "0.4.3"

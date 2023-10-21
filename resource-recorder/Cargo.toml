@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+shuttle-common = { workspace = true, features = ["backend", "tonic"] }
+shuttle-proto = { workspace = true }
+
 async-trait = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
@@ -23,13 +26,6 @@ tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default"] }
 ulid = { workspace = true }
-
-[dependencies.shuttle-common]
-workspace = true
-features = ["backend", "tonic"]
-
-[dependencies.shuttle-proto]
-workspace = true
 
 [dev-dependencies]
 portpicker = { workspace = true }

@@ -6,6 +6,14 @@ license.workspace = true
 description = "Library for all the gRPC definitions used by shuttle"
 
 [dependencies]
+shuttle-common = { workspace = true, features = [
+    "claims",
+    "service",
+    "wasm",
+    "models",
+    "backend",
+] }
+
 anyhow = { workspace = true }
 chrono = { workspace = true }
 dunce = { workspace = true }
@@ -17,10 +25,6 @@ tonic = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
 serde_json = { workspace = true }
-
-[dependencies.shuttle-common]
-workspace = true
-features = ["claims", "service", "wasm", "models", "backend"]
 
 [dev-dependencies]
 tonic-build = { workspace = true }

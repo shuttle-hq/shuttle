@@ -1,23 +1,21 @@
 use std::fs::{self, read_to_string};
 use std::num::NonZeroU32;
+use std::sync::atomic::AtomicBool;
 use std::{
     fmt::Write,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
+use gix::clone::PrepareFetch;
+use gix::create::{self, Kind};
+use gix::remote::fetch::Shallow;
+use gix::{open, progress};
 use regex::Regex;
 use shuttle_common::{constants::SHUTTLE_EXAMPLES_README, project::ProjectName};
 use tempfile::{Builder, TempDir};
 use toml_edit::{value, Document};
 use url::Url;
-
-use core::sync::atomic::AtomicBool;
-
-use gix::clone::PrepareFetch;
-use gix::create::{self, Kind};
-use gix::remote::fetch::Shallow;
-use gix::{open, progress};
 
 use crate::args::TemplateLocation;
 
@@ -168,8 +166,7 @@ fn gix_clone(from_url: &str, to_path: &Path) -> Result<()> {
 /// `git_policy` is set to `Ignore`, the `.git` directory is not copied.
 /// If `git_policy` is set to `Copy`, then the `.git` directory is copied.
 /// The procedure is the same as the one used in `cargo-generate`
-/// (https://github.com/cargo-generate/cargo-generate/ blob/
-/// 073b938b5205678bb25bd05aa8036b96ed5f22a7/src/lib.rs#L450).
+/// https://github.com/cargo-generate/cargo-generate/blob/073b938b5205678bb25bd05aa8036b96ed5f22a7/src/lib.rs#L450
 fn copy_dirs(src: &Path, dest: &Path, git_policy: GitDir) -> Result<()> {
     std::fs::create_dir_all(dest)?;
 
@@ -280,13 +277,12 @@ mod tests {
             .tempdir()
             .unwrap();
         gix_clone(
-            "https://github.com/shuttle-hq/awesome-shuttle.git",
+            "https://github.com/shuttle-hq/shuttle-examples.git",
             temp_dir.path(),
         )
         .unwrap();
-        // Check that some file we know to exist in
-        // the Repository exists in the clone.
-        assert!(temp_dir.path().join("src/main.rs").exists());
+        // Check that some file we know to exist in the Repository exists in the clone.
+        assert!(temp_dir.path().join("README.md").exists());
         temp_dir.close().unwrap();
     }
 

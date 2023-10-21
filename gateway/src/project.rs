@@ -1268,84 +1268,83 @@ where
             mut stats,
         } = self;
 
-        if service.is_healthy().await {
-            let idle_minutes = container.idle_minutes();
-
-            // Idle minutes of `0` means it is disabled and the project will always stay up
-            if idle_minutes < 1 {
-                Ok(Self::Next::Ready(ProjectReady {
-                    container,
-                    service,
-                    stats,
-                }))
-            } else {
-                let new_stat = ctx
-                    .docker()
-                    .stats(
-                        safe_unwrap!(container.id),
-                        Some(StatsOptions {
-                            one_shot: true,
-                            stream: false,
-                        }),
-                    )
-                    .next()
-                    .await
-                    .unwrap()?;
-
-                stats.push_back(new_stat.clone());
-
-                let mut last = None;
-
-                while stats.len() > (idle_minutes as usize) {
-                    last = stats.pop_front();
-                }
-
-                if let Some(last) = last {
-                    let cpu_per_minute = (new_stat.cpu_stats.cpu_usage.total_usage
-                        - last.cpu_stats.cpu_usage.total_usage)
-                        / idle_minutes;
-
-                    debug!(
-                        "{} has {} CPU usage per minute",
-                        service.name, cpu_per_minute
-                    );
-
-                    // From analysis we know the following kind of CPU usage for different kinds of idle projects
-                    // Web framework uses 6_200_000 CPU per minute
-                    // Serenity uses 20_000_000 CPU per minute
-                    //
-                    // We want to make sure we are able to stop these kinds of projects
-                    //
-                    // Now, the following kind of CPU usage has been observed for different kinds of projects having
-                    // 2 web requests / processing 2 discord messages per minute
-                    // Web framework uses 100_000_000 CPU per minute
-                    // Serenity uses 30_000_000 CPU per minute
-                    //
-                    // And projects at these levels we will want to keep active. However, the 30_000_000
-                    // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
-                    // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
-                    // active framework for now
-                    if cpu_per_minute < 100_000_000 {
-                        Ok(Self::Next::Idle(ProjectStopping { container }))
-                    } else {
-                        Ok(Self::Next::Ready(ProjectReady {
-                            container,
-                            service,
-                            stats,
-                        }))
-                    }
-                } else {
-                    Ok(Self::Next::Ready(ProjectReady {
-                        container,
-                        service,
-                        stats,
-                    }))
-                }
-            }
-        } else {
+        if !service.is_healthy().await {
             return Err(ProjectError::internal(
                 "running project is no longer healthy",
             ));
+        }
+        let idle_minutes = container.idle_minutes();
+
+        // Idle minutes of `0` means it is disabled and the project will always stay up
+        if idle_minutes < 1 {
+            return Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+            }));
+        }
+
+        let new_stat = ctx
+            .docker()
+            .stats(
+                safe_unwrap!(container.id),
+                Some(StatsOptions {
+                    one_shot: true,
+                    stream: false,
+                }),
+            )
+            .next()
+            .await
+            .unwrap()?;
+
+        stats.push_back(new_stat.clone());
+
+        let mut last = None;
+
+        while stats.len() > idle_minutes as usize {
+            last = stats.pop_front();
+        }
+
+        let Some(last) = last else {
+            return Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+            }));
+        };
+
+        let cpu_per_minute = (new_stat.cpu_stats.cpu_usage.total_usage
+            - last.cpu_stats.cpu_usage.total_usage)
+            / idle_minutes;
+
+        debug!(
+            "{} has {} CPU usage per minute",
+            service.name, cpu_per_minute
+        );
+
+        // From analysis we know the following kind of CPU usage for different kinds of idle projects
+        // Web framework uses 6_200_000 CPU per minute
+        // Serenity uses 20_000_000 CPU per minute
+        //
+        // We want to make sure we are able to stop these kinds of projects
+        //
+        // Now, the following kind of CPU usage has been observed for different kinds of projects having
+        // 2 web requests / processing 2 discord messages per minute
+        // Web framework uses 100_000_000 CPU per minute
+        // Serenity uses 30_000_000 CPU per minute
+        //
+        // And projects at these levels we will want to keep active. However, the 30_000_000
+        // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
+        // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
+        // active framework for now
+        if cpu_per_minute < 100_000_000 {
+            Ok(Self::Next::Idle(ProjectStopping { container }))
+        } else {
+            Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+            }))
         }
     }
 }

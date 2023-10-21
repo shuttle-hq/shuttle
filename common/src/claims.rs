@@ -85,6 +85,9 @@ pub enum Scope {
     /// of DNS-01 challenge completion.
     GatewayCertificateRenew,
 
+    /// Perform Pro tier action
+    Pro,
+
     /// Admin level scope to internals
     Admin,
 }
@@ -108,6 +111,12 @@ impl ScopeBuilder {
             Scope::GatewayCertificateRenew,
             Scope::Admin,
         ]);
+        self
+    }
+
+    /// Extend the current scopes with Pro rights.
+    pub fn with_pro(mut self) -> Self {
+        self.0.push(Scope::Pro);
         self
     }
 

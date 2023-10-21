@@ -203,12 +203,14 @@ async fn create_project(
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
     let is_admin = claim.scopes.contains(&Scope::Admin);
+    let is_pro = claim.scopes.contains(&Scope::Pro);
 
     let project = service
         .create_project(
             project_name.clone(),
             name.clone(),
             is_admin,
+            is_pro,
             config.idle_minutes,
         )
         .await?;

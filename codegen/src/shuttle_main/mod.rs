@@ -14,9 +14,13 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let loader = Loader::from_item_fn(&mut fn_decl);
 
     quote! {
-        #[shuttle_runtime::tokio::main]
-        async fn main() {
-            shuttle_runtime::__internals::start(loader).await;
+        fn main() {
+            use ::shuttle_runtime::tokio;
+            #[tokio::main]
+            async fn main() {
+                ::shuttle_runtime::__internals::start(loader).await;
+            }
+            main()
         }
 
         #loader
@@ -200,7 +204,7 @@ impl ToTokens for Loader {
                             lit: Lit::Str(str), ..
                         }) => {
                             needs_vars = true;
-                            quote!(&shuttle_runtime::__internals::strfmt(#str, &vars)?)
+                            quote!(&::shuttle_runtime::__internals::strfmt(#str, &vars)?)
                         }
                         other => quote!(#other),
                     };
@@ -228,7 +232,7 @@ impl ToTokens for Loader {
             None
         } else {
             Some(parse_quote!(
-                use shuttle_runtime::__internals::{Factory, ResourceBuilder};
+                use ::shuttle_runtime::__internals::{Factory, ResourceBuilder};
             ))
         };
 
@@ -254,13 +258,13 @@ impl ToTokens for Loader {
 
         let loader = quote! {
             async fn loader(
-                mut #factory_ident: shuttle_runtime::__internals::ProvisionerFactory,
-                mut #resource_tracker_ident: shuttle_runtime::__internals::ResourceTracker,
+                mut #factory_ident: ::shuttle_runtime::__internals::ProvisionerFactory,
+                mut #resource_tracker_ident: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> #return_type {
-                use shuttle_runtime::__internals::Context;
+                use ::shuttle_runtime::__internals::Context;
                 #extra_imports
                 #vars
-                #(let #fn_inputs = shuttle_runtime::__internals::get_resource(
+                #(let #fn_inputs = ::shuttle_runtime::__internals::get_resource(
                     #fn_inputs_builder::new()#fn_inputs_builder_options,
                     &mut #factory_ident,
                     &mut #resource_tracker_ident,
@@ -323,10 +327,10 @@ mod tests {
         let actual = quote!(#input);
         let expected = quote! {
             async fn loader(
-                mut _factory: shuttle_runtime::__internals::ProvisionerFactory,
-                mut _resource_tracker: shuttle_runtime::__internals::ResourceTracker,
+                mut _factory: ::shuttle_runtime::__internals::ProvisionerFactory,
+                mut _resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> ShuttleSimple {
-                use shuttle_runtime::__internals::Context;
+                use ::shuttle_runtime::__internals::Context;
                 simple().await
             }
         };
@@ -391,17 +395,17 @@ mod tests {
         let actual = quote!(#input);
         let expected = quote! {
             async fn loader(
-                mut factory: shuttle_runtime::__internals::ProvisionerFactory,
-                mut resource_tracker: shuttle_runtime::__internals::ResourceTracker,
+                mut factory: ::shuttle_runtime::__internals::ProvisionerFactory,
+                mut resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> ShuttleComplex {
-                use shuttle_runtime::__internals::Context;
-                use shuttle_runtime::__internals::{Factory, ResourceBuilder};
-                let pool = shuttle_runtime::__internals::get_resource(
+                use ::shuttle_runtime::__internals::Context;
+                use ::shuttle_runtime::__internals::{Factory, ResourceBuilder};
+                let pool = ::shuttle_runtime::__internals::get_resource(
                     shuttle_shared_db::Postgres::new(),
                     &mut factory,
                     &mut resource_tracker,
                 ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
-                let redis = shuttle_runtime::__internals::get_resource(
+                let redis = ::shuttle_runtime::__internals::get_resource(
                     shuttle_shared_db::Redis::new(),
                     &mut factory,
                     &mut resource_tracker,
@@ -502,14 +506,14 @@ mod tests {
         let actual = quote!(#input);
         let expected = quote! {
             async fn loader(
-                mut factory: shuttle_runtime::__internals::ProvisionerFactory,
-                mut resource_tracker: shuttle_runtime::__internals::ResourceTracker,
+                mut factory: ::shuttle_runtime::__internals::ProvisionerFactory,
+                mut resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> ShuttleComplex {
-                use shuttle_runtime::__internals::Context;
-                use shuttle_runtime::__internals::{Factory, ResourceBuilder};
+                use ::shuttle_runtime::__internals::Context;
+                use ::shuttle_runtime::__internals::{Factory, ResourceBuilder};
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
-                let pool = shuttle_runtime::__internals::get_resource (
-                    shuttle_shared_db::Postgres::new().size(&shuttle_runtime::__internals::strfmt("10Gb", &vars)?).public(false),
+                let pool = ::shuttle_runtime::__internals::get_resource (
+                    shuttle_shared_db::Postgres::new().size(&::shuttle_runtime::__internals::strfmt("10Gb", &vars)?).public(false),
                     &mut factory,
                     &mut resource_tracker,
                 ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;

@@ -27,10 +27,10 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.30.0"
-//! axum = "0.6.10"
+//! axum = "0.6.20"
 //! shuttle-axum = "0.30.0"
-//! tokio = "1.26"
+//! shuttle-runtime = "0.30.0"
+//! tokio = "1.28.2"
 //! ```
 //!
 //! A boilerplate code for your axum project can also be found in `src/main.rs`:

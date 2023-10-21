@@ -232,7 +232,7 @@ impl ToTokens for Loader {
             None
         } else {
             Some(parse_quote!(
-                use ::shuttle_runtime::__internals::{Factory, ResourceBuilder};
+                use ::shuttle_runtime::{Factory, ResourceBuilder};
             ))
         };
 
@@ -399,7 +399,7 @@ mod tests {
                 mut resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> ShuttleComplex {
                 use ::shuttle_runtime::__internals::Context;
-                use ::shuttle_runtime::__internals::{Factory, ResourceBuilder};
+                use ::shuttle_runtime::{Factory, ResourceBuilder};
                 let pool = ::shuttle_runtime::__internals::get_resource(
                     shuttle_shared_db::Postgres::new(),
                     &mut factory,
@@ -510,7 +510,7 @@ mod tests {
                 mut resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> ShuttleComplex {
                 use ::shuttle_runtime::__internals::Context;
-                use ::shuttle_runtime::__internals::{Factory, ResourceBuilder};
+                use ::shuttle_runtime::{Factory, ResourceBuilder};
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
                 let pool = ::shuttle_runtime::__internals::get_resource (
                     shuttle_shared_db::Postgres::new().size(&::shuttle_runtime::__internals::strfmt("10Gb", &vars)?).public(false),

@@ -730,7 +730,7 @@ impl Shuttle {
             .get_deployments(proj_name, page, limit)
             .await
             .map_err(suggestions::deployment::get_deployments_list_failure)?;
-        let table = get_deployments_table(&deployments, proj_name.as_str(), page);
+        let table = get_deployments_table(&deployments, proj_name.as_str(), page, limit);
 
         println!("{table}");
         println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
@@ -1671,7 +1671,7 @@ impl Shuttle {
                 "getting the projects list fails repeteadly",
             )
         })?;
-        let projects_table = project::get_table(&projects, page);
+        let projects_table = project::get_table(&projects, page, limit);
 
         println!("{projects_table}");
 

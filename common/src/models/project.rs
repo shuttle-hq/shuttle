@@ -190,7 +190,7 @@ pub struct AdminResponse {
     pub account_name: String,
 }
 
-pub fn get_table(projects: &Vec<Response>, page: u32) -> String {
+pub fn get_table(projects: &Vec<Response>, page: u32, limit: u32) -> String {
     if projects.is_empty() {
         // The page starts at 1 in the CLI.
         if page <= 1 {
@@ -224,14 +224,15 @@ pub fn get_table(projects: &Vec<Response>, page: u32) -> String {
             ]);
         }
 
-        format!(
-            r#"
-These projects are linked to this account
-{table}
+        let formatted_table = format!("These projects are linked to this account\n{table}");
 
-{}
-"#,
-            "More projects might be available on the next page using --page.".bold()
-        )
+        if projects.len() == limit as usize {
+            format!(
+                "{formatted_table}\n\n{page_hint}",
+                page_hint = "More projects might be available on the next page using --page.".bold()
+            )
+        } else {
+            formatted_table
+        }
     }
 }

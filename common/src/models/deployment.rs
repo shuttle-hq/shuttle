@@ -67,7 +67,12 @@ impl State {
     }
 }
 
-pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, page: u32, limit: u32) -> String {
+pub fn get_deployments_table(
+    deployments: &Vec<Response>,
+    service_name: &str,
+    page: u32,
+    limit: u32,
+) -> String {
     if deployments.is_empty() {
         if page <= 1 {
             format!(
@@ -159,8 +164,9 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str, pa
 
         if deployments.len() == limit as usize {
             format!(
-                "{formatted_table}\n\n{page_hint}", 
-                page_hint = "More projects might be available on the next page using --page.".bold()
+                "{formatted_table}\n\n{page_hint}",
+                page_hint =
+                    "More projects might be available on the next page using --page.".bold()
             )
         } else {
             formatted_table

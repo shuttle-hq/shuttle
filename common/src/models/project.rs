@@ -229,7 +229,8 @@ pub fn get_table(projects: &Vec<Response>, page: u32, limit: u32) -> String {
         if projects.len() == limit as usize {
             format!(
                 "{formatted_table}\n\n{page_hint}",
-                page_hint = "More projects might be available on the next page using --page.".bold()
+                page_hint =
+                    "More projects might be available on the next page using --page.".bold()
             )
         } else {
             formatted_table

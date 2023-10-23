@@ -18,7 +18,7 @@ use shuttle_proto::{
 use shuttle_service::Environment;
 use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
 use tonic::transport::Channel;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
@@ -193,7 +193,10 @@ impl RuntimeManager {
 
         trace!(%id, "sending stop signal for deployment");
         let stop_request = tonic::Request::new(StopRequest {});
-        let response = runtime_client.stop(stop_request).await.unwrap();
+        let Ok(response) = runtime_client.stop(stop_request).await else {
+            warn!(%id, "stop request failed");
+            return false;
+        };
         trace!(?response, "stop deployment response");
 
         let _ = process.start_kill();

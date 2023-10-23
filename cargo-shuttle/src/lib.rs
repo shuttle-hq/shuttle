@@ -1806,6 +1806,7 @@ impl Shuttle {
                     Are you sure you want to delete "{}"?
                     This will...
                     - Delete all Secrets and Persist data in this project.
+                    - Delete any custom domains linked to this project.
                     - Release the project name from your account.
                     This action is permanent."#,
                 self.ctx.project_name()

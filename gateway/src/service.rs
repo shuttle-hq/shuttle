@@ -959,7 +959,7 @@ pub mod tests {
     use crate::{Error, ErrorKind};
 
     #[tokio::test]
-    async fn service_create_find_delete_project() -> anyhow::Result<()> {
+    async fn service_create_find_stop_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
         let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
 
@@ -1126,15 +1126,36 @@ pub mod tests {
             })
         ));
 
-        // If recreated by an adamin again while it's running
+        // If recreated by an admin again while it's running
         assert!(matches!(
-            svc.create_project(matrix, trinity, true, 0).await,
+            svc.create_project(matrix.clone(), trinity.clone(), true, 0)
+                .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
                 ..
             })
         ));
 
+        // We can delete a project
+        assert!(matches!(svc.delete_project(&matrix).await, Ok(())));
+
+        // Project is gone
+        assert!(matches!(
+            svc.find_project(&matrix).await,
+            Err(Error {
+                kind: ErrorKind::ProjectNotFound,
+                ..
+            })
+        ));
+
+        // It can be re-created by anyone, with the same project name
+        assert!(matches!(
+            svc.create_project(matrix, trinity, false, 0).await,
+            Ok(FindProjectPayload {
+                project_id: _,
+                state: Project::Creating(_),
+            })
+        ));
         Ok(())
     }
 

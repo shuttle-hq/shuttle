@@ -66,8 +66,10 @@ where
         let logs = request.logs;
 
         if !logs.is_empty() {
-            Span::current().record("deployment_id", &logs[0].deployment_id);
-            Span::current().record("batch_size", logs.len());
+            let span = Span::current();
+            span.record("deployment_id", &logs[0].deployment_id);
+            span.record("batch_size", logs.len());
+
             tracing::info!("storing logs for deployment");
 
             _ = self

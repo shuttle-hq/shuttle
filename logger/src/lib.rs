@@ -45,7 +45,6 @@ where
     }
 
     async fn get_logs(&self, deployment_id: String) -> Result<Vec<LogLine>, Error> {
-        tracing::info!(deployment_id = %deployment_id, "fetching logs for deployment");
         let logs = self.dal.get_logs(deployment_id).await?;
 
         Ok(logs.into_iter().map(Into::into).collect())
@@ -69,8 +68,6 @@ where
             let span = Span::current();
             span.record("deployment_id", &logs[0].deployment_id);
             span.record("batch_size", logs.len());
-
-            tracing::info!("storing logs for deployment");
 
             _ = self
                 .logs_tx
@@ -116,7 +113,6 @@ where
         // Get logs before stream was started
         let logs = self.get_logs(deployment_id.clone()).await?;
 
-        tracing::info!(deployment_id = %deployment_id.clone(), "starting logs stream for deployment");
         tokio::spawn(async move {
             let mut last = Default::default();
 

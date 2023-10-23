@@ -21,7 +21,7 @@ use shuttle_proto::provisioner::{Ping, Pong};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 mod args;
 mod error;
@@ -353,26 +353,47 @@ impl MyProvisioner {
         let database_name = format!("db-{project_name}");
         let role_name = format!("user-{project_name}");
 
-        // Identifiers cannot be used as query parameters.
-        let drop_db_query = format!("DROP DATABASE \"{database_name}\" WITH (FORCE);");
-
-        // Drop the database with force, which will try to terminate existing connections to the
-        // database. This can fail if prepared transactions, active logical replication slots or
-        // subscriptions are present in the database.
-        sqlx::query(&drop_db_query)
-            .execute(&self.pool)
+        if sqlx::query("SELECT 1 FROM pg_database WHERE datname = $1")
+            .bind(&database_name)
+            .fetch_optional(&self.pool)
             .await
-            .map_err(|e| Error::DeleteDB(e.to_string()))?;
+            .map_err(|e| Error::DeleteDB(e.to_string()))?
+            .is_some()
+        {
+            // Identifiers cannot be used as query parameters.
+            let drop_db_query = format!("DROP DATABASE \"{database_name}\" WITH (FORCE)");
 
-        info!("dropped shared postgres database: {database_name}");
-        // Drop the role.
-        let drop_role_query = format!("DROP ROLE IF EXISTS \"{role_name}\"");
-        sqlx::query(&drop_role_query)
-            .execute(&self.pool)
+            // Drop the database with force, which will try to terminate existing connections to the
+            // database. This can fail if prepared transactions, active logical replication slots or
+            // subscriptions are present in the database.
+            sqlx::query(&drop_db_query)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| Error::DeleteDB(e.to_string()))?;
+
+            info!("dropped shared postgres database: {database_name}");
+        } else {
+            warn!("did not drop shared postgres database: {database_name}. Does not exist.");
+        }
+
+        if sqlx::query("SELECT 1 FROM pg_roles WHERE rolname = $1")
+            .bind(&role_name)
+            .fetch_optional(&self.pool)
             .await
-            .map_err(|e| Error::DeleteRole(e.to_string()))?;
+            .map_err(|e| Error::DeleteRole(e.to_string()))?
+            .is_some()
+        {
+            // Drop the role.
+            let drop_role_query = format!("DROP ROLE IF EXISTS \"{role_name}\"");
+            sqlx::query(&drop_role_query)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| Error::DeleteRole(e.to_string()))?;
 
-        info!("dropped shared postgres role: {role_name}");
+            info!("dropped shared postgres role: {role_name}");
+        } else {
+            warn!("did not drop shared postgres role: {role_name}. Does not exist.");
+        }
 
         Ok(())
     }
@@ -435,6 +456,9 @@ impl Provisioner for MyProvisioner {
         request.verify(Scope::ResourcesWrite)?;
 
         let request = request.into_inner();
+        if !shuttle_common::project::ProjectName::is_valid(&request.project_name) {
+            return Err(Status::invalid_argument("invalid project name"));
+        }
         let db_type = request.db_type.unwrap();
 
         let reply = match db_type {
@@ -459,6 +483,9 @@ impl Provisioner for MyProvisioner {
         request.verify(Scope::ResourcesWrite)?;
 
         let request = request.into_inner();
+        if !shuttle_common::project::ProjectName::is_valid(&request.project_name) {
+            return Err(Status::invalid_argument("invalid project name"));
+        }
         let db_type = request.db_type.unwrap();
 
         let reply = match db_type {

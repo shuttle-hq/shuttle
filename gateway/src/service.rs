@@ -305,7 +305,7 @@ impl GatewayService {
         &self,
         project_name: &ProjectName,
     ) -> Result<FindProjectPayload, Error> {
-        query("SELECT project_id, project_state FROM projects WHERE project_name=?1")
+        query("SELECT project_id, project_state FROM projects WHERE project_name = ?1")
             .bind(project_name)
             .fetch_optional(&self.db)
             .await?
@@ -313,8 +313,13 @@ impl GatewayService {
                 project_id: r.get("project_id"),
                 state: r
                     .try_get::<SqlxJson<Project>, _>("project_state")
-                    .unwrap()
-                    .0,
+                    .map(|p| p.0)
+                    .unwrap_or_else(|e| {
+                        error!("Failed to deser `project_state`: {:?}", e);
+                        Project::Errored(ProjectError::internal(
+                            "Error when trying to deserialize state of project.",
+                        ))
+                    }),
             })
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
@@ -368,27 +373,6 @@ impl GatewayService {
                         }),
                 )
             });
-        Ok(iter)
-    }
-
-    pub async fn iter_user_projects_detailed_filtered(
-        &self,
-        account_name: AccountName,
-        filter: String,
-    ) -> Result<impl Iterator<Item = (ProjectName, Project)>, Error> {
-        let iter =
-            query("SELECT project_name, project_state FROM projects WHERE account_name = ?1 AND project_state = ?2")
-                .bind(account_name)
-                .bind(filter)
-                .fetch_all(&self.db)
-                .await?
-                .into_iter()
-                .map(|row| {
-                    (
-                        row.get("project_name"),
-                        row.get::<SqlxJson<Project>, _>("project_state").0,
-                    )
-                });
         Ok(iter)
     }
 
@@ -472,7 +456,15 @@ impl GatewayService {
         .await?
         {
             // If the project already exists and belongs to this account
-            let project = row.get::<SqlxJson<Project>, _>("project_state").0;
+            let project = row
+                .try_get::<SqlxJson<Project>, _>("project_state")
+                .map(|p| p.0)
+                .unwrap_or_else(|e| {
+                    error!("Failed to deser `project_state`: {:?}", e);
+                    Project::Errored(ProjectError::internal(
+                        "Error when trying to deserialize state of project.",
+                    ))
+                });
             let project_id = row.get::<String, _>("project_id");
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
@@ -532,6 +524,9 @@ impl GatewayService {
                     State::Errored { message } => {
                         format!("project '{project_name}' is in an errored state.\nproject message: {message}")
                     }
+                    State::Deleted => unreachable!(
+                        "deleted project should not never remain in gateway. please report this."
+                    ),
                 };
                 Err(Error::from_kind(ErrorKind::OwnProjectAlreadyExists(
                     message,
@@ -594,6 +589,30 @@ impl GatewayService {
             project_id: project_id.to_string(),
             state: project,
         })
+    }
+
+    pub async fn delete_project(&self, project_name: &ProjectName) -> Result<(), Error> {
+        let project_id = query("SELECT project_id FROM projects WHERE project_name = ?1")
+            .bind(project_name)
+            .fetch_one(&self.db)
+            .await?
+            .get::<String, _>("project_id");
+
+        let mut transaction = self.db.begin().await?;
+
+        query("DELETE FROM custom_domains WHERE project_id = ?1")
+            .bind(project_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        query("DELETE FROM projects WHERE project_name = ?1")
+            .bind(project_name)
+            .execute(&mut *transaction)
+            .await?;
+
+        transaction.commit().await?;
+
+        Ok(())
     }
 
     pub async fn create_custom_domain(
@@ -940,7 +959,7 @@ pub mod tests {
     use crate::{Error, ErrorKind};
 
     #[tokio::test]
-    async fn service_create_find_delete_project() -> anyhow::Result<()> {
+    async fn service_create_find_stop_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
         let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
 
@@ -1107,15 +1126,36 @@ pub mod tests {
             })
         ));
 
-        // If recreated by an adamin again while it's running
+        // If recreated by an admin again while it's running
         assert!(matches!(
-            svc.create_project(matrix, trinity, true, 0).await,
+            svc.create_project(matrix.clone(), trinity.clone(), true, 0)
+                .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
                 ..
             })
         ));
 
+        // We can delete a project
+        assert!(matches!(svc.delete_project(&matrix).await, Ok(())));
+
+        // Project is gone
+        assert!(matches!(
+            svc.find_project(&matrix).await,
+            Err(Error {
+                kind: ErrorKind::ProjectNotFound,
+                ..
+            })
+        ));
+
+        // It can be re-created by anyone, with the same project name
+        assert!(matches!(
+            svc.create_project(matrix, trinity, false, 0).await,
+            Ok(FindProjectPayload {
+                project_id: _,
+                state: Project::Creating(_),
+            })
+        ));
         Ok(())
     }
 

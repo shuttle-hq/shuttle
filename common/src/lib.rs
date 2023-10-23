@@ -156,22 +156,22 @@ impl DatabaseReadyInfo {
 /// Store that holds all the secrets available to a deployment
 #[derive(Deserialize, Serialize, Clone)]
 pub struct SecretStore {
-    pub(crate) secrets: BTreeMap<String, String>,
+    pub(crate) secrets: BTreeMap<String, Secret<String>>,
 }
 
 impl SecretStore {
-    pub fn new(secrets: BTreeMap<String, String>) -> Self {
+    pub fn new(secrets: BTreeMap<String, Secret<String>>) -> Self {
         Self { secrets }
     }
 
     pub fn get(&self, key: &str) -> Option<String> {
-        self.secrets.get(key).map(ToOwned::to_owned)
+        self.secrets.get(key).map(|k| ToOwned::to_owned(k.expose()))
     }
 }
 
 impl IntoIterator for SecretStore {
-    type Item = (String, String);
-    type IntoIter = <BTreeMap<String, String> as IntoIterator>::IntoIter;
+    type Item = (String, Secret<String>);
+    type IntoIter = <BTreeMap<String, Secret<String>> as IntoIterator>::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
         self.secrets.into_iter()
     }
@@ -248,14 +248,20 @@ mod tests {
     #[test]
     fn secretstore_intoiter() {
         let bt = BTreeMap::from([
-            ("1".to_owned(), "2".to_owned()),
-            ("3".to_owned(), "4".to_owned()),
+            ("1".to_owned(), "2".to_owned().into()),
+            ("3".to_owned(), "4".to_owned().into()),
         ]);
         let ss = SecretStore::new(bt);
 
         let mut iter = ss.into_iter();
-        assert_eq!(iter.next(), Some(("1".to_owned(), "2".to_owned())));
-        assert_eq!(iter.next(), Some(("3".to_owned(), "4".to_owned())));
+        assert_eq!(
+            iter.next(),
+            Some(("1".to_owned().into(), "2".to_owned().into()))
+        );
+        assert_eq!(
+            iter.next(),
+            Some(("3".to_owned().into(), "4".to_owned().into()))
+        );
         assert_eq!(iter.next(), None);
     }
 

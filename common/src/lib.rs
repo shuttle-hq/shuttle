@@ -20,15 +20,15 @@ pub mod models;
 pub mod project;
 pub mod resource;
 pub mod secrets;
+pub use secrets::{Secret, SecretStore};
 #[cfg(feature = "tracing")]
 pub mod tracing;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-use std::{collections::BTreeMap, fmt::Debug};
+use std::fmt::Debug;
 
 use anyhow::bail;
-use secrets::Secret;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::openapi::{Object, ObjectBuilder};
@@ -145,35 +145,11 @@ impl DatabaseReadyInfo {
             "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
-            self.role_password,
+            self.role_password.redacted(),
             self.address_public,
             self.port,
             self.database_name
         )
-    }
-}
-
-/// Store that holds all the secrets available to a deployment
-#[derive(Deserialize, Serialize, Clone)]
-pub struct SecretStore {
-    pub(crate) secrets: BTreeMap<String, Secret<String>>,
-}
-
-impl SecretStore {
-    pub fn new(secrets: BTreeMap<String, Secret<String>>) -> Self {
-        Self { secrets }
-    }
-
-    pub fn get(&self, key: &str) -> Option<String> {
-        self.secrets.get(key).map(|k| ToOwned::to_owned(k.expose()))
-    }
-}
-
-impl IntoIterator for SecretStore {
-    type Item = (String, Secret<String>);
-    type IntoIter = <BTreeMap<String, Secret<String>> as IntoIterator>::IntoIter;
-    fn into_iter(self) -> Self::IntoIter {
-        self.secrets.into_iter()
     }
 }
 
@@ -243,26 +219,6 @@ mod tests {
     #[should_panic(expected = "The API key should consist of only alphanumeric characters.")]
     fn non_alphanumeric_api_key() {
         ApiKey::parse("dh9z58jttoes3qv@").unwrap();
-    }
-
-    #[test]
-    fn secretstore_intoiter() {
-        let bt = BTreeMap::from([
-            ("1".to_owned(), "2".to_owned().into()),
-            ("3".to_owned(), "4".to_owned().into()),
-        ]);
-        let ss = SecretStore::new(bt);
-
-        let mut iter = ss.into_iter();
-        assert_eq!(
-            iter.next(),
-            Some(("1".to_owned().into(), "2".to_owned().into()))
-        );
-        assert_eq!(
-            iter.next(),
-            Some(("3".to_owned().into(), "4".to_owned().into()))
-        );
-        assert_eq!(iter.next(), None);
     }
 
     #[test]

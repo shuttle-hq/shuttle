@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
-use shuttle_common::secrets::Secret;
+pub use shuttle_common::secrets::Secret;
 pub use shuttle_common::{
     database,
     deployment::{DeploymentMetadata, Environment},

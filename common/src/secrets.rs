@@ -1,8 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    fmt::{Debug, Display},
-};
+use std::{collections::BTreeMap, fmt::Debug};
 use zeroize::Zeroize;
 
 /// Wrapper type for secret values such as passwords or authentication keys.
@@ -23,12 +20,6 @@ impl<T: Zeroize> Debug for Secret<T> {
     }
 }
 
-impl<T: Zeroize> Display for Secret<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "********")
-    }
-}
-
 impl<T: Zeroize> Drop for Secret<T> {
     fn drop(&mut self) {
         self.0.zeroize();
@@ -46,8 +37,14 @@ impl<T: Zeroize> Secret<T> {
         Self(secret)
     }
 
+    /// Expose the underlying value of the secret
     pub fn expose(&self) -> &T {
         &self.0
+    }
+
+    /// Display a placeholder for the secret
+    pub fn redacted(&self) -> &str {
+        "********"
     }
 }
 
@@ -63,9 +60,20 @@ impl SecretStore {
     }
 
     pub fn get(&self, key: &str) -> Option<String> {
+        self.secrets.get(key).map(|s| s.expose().to_owned())
+    }
+}
+
+impl IntoIterator for SecretStore {
+    type Item = (String, String);
+    type IntoIter = <BTreeMap<String, String> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
         self.secrets
-            .get(key)
-            .map(|secret| secret.expose().to_owned())
+            .into_iter()
+            .map(|(k, s)| (k, s.expose().to_owned()))
+            .collect::<BTreeMap<String, String>>()
+            .into_iter()
     }
 }
 
@@ -75,11 +83,10 @@ mod secrets_tests {
     use super::*;
 
     #[test]
-    fn display() {
+    fn redacted() {
         let password_string = String::from("VERYSECRET");
         let secret = Secret::new(password_string);
-        let printed = format!("{}", secret);
-        assert_eq!(printed, "[REDACTED \"alloc::string::String\"]");
+        assert_eq!(secret.redacted(), "********");
     }
 
     #[test]
@@ -113,5 +120,19 @@ mod secrets_tests {
             printed,
             "Wrapper { password: [REDACTED \"alloc::string::String\"] }"
         );
+    }
+
+    #[test]
+    fn secretstore_intoiter() {
+        let bt = BTreeMap::from([
+            ("1".to_owned(), "2".to_owned().into()),
+            ("3".to_owned(), "4".to_owned().into()),
+        ]);
+        let ss = SecretStore::new(bt);
+
+        let mut iter = ss.into_iter();
+        assert_eq!(iter.next(), Some(("1".to_owned(), "2".to_owned())));
+        assert_eq!(iter.next(), Some(("3".to_owned(), "4".to_owned())));
+        assert_eq!(iter.next(), None);
     }
 }

@@ -16,7 +16,9 @@ pub enum Error {
     PrepareRun(String),
     #[error("Run error: {0}")]
     Run(#[from] shuttle_service::Error),
-    #[error("Pre-deployment test failure: {0}")]
+    #[error(
+        "Pre-deployment test failure: {0}. HINT: re-run deploy with `--no-test` to skip tests."
+    )]
     PreDeployTestFailure(#[from] TestError),
     #[error("Failed to parse secrets: {0}")]
     SecretsParse(#[from] toml::de::Error),
@@ -36,7 +38,7 @@ pub enum Error {
 
 #[derive(Error, Debug)]
 pub enum TestError {
-    #[error("The deployment's tests failed.")]
+    #[error("The deployed application's tests failed")]
     Failed,
     #[error("Failed to setup tests run: {0}")]
     Setup(#[from] anyhow::Error),

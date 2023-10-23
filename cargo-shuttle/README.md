@@ -62,7 +62,7 @@ cargo install cargo-shuttle
 
 #### Arch Linux
 
-`cargo-shuttle` can be installed from the [community repository](https://archlinux.org/packages/community/x86_64/cargo-shuttle) using [pacman](https://wiki.archlinux.org/title/Pacman):
+`cargo-shuttle` can be installed from the [extra repository](https://archlinux.org/packages/extra/x86_64/cargo-shuttle) using [pacman](https://wiki.archlinux.org/title/Pacman):
 
 ```sh
 pacman -S cargo-shuttle

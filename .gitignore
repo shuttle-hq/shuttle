@@ -16,6 +16,9 @@ recipe.json
 *.iml
 .idea/
 
+# Credentials for running ACME commands
+acme.json
+
 # VS Code
 .vscode/
 

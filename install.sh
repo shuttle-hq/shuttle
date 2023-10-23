@@ -107,7 +107,7 @@ _install_cargo() {
       exit 1
     fi
     while true; do
-      read -r -p "cargo not found! Do you wish to attempt to install Rust and cargo via rustup? [Y/N] " yn
+      read -r -p "cargo not found! Do you wish to attempt to install Rust and cargo via rustup? [Y/N] " yn </dev/tty
       case $yn in
       [Yy]*)
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s
@@ -133,14 +133,14 @@ _install_unsupported() {
   fi
 
   while true; do
-    read -r -p "Do you wish to attempt to install the pre-built binary? [Y/N] " yn
+    read -r -p "Do you wish to attempt to install the pre-built binary? [Y/N] " yn </dev/tty
     case $yn in
     [Yy]*)
       _install_binary
       break
       ;;
     [Nn]*)
-      read -r -p "Do you wish to attempt an install with 'cargo'? [Y/N] " yn
+      read -r -p "Do you wish to attempt an install with 'cargo'? [Y/N] " yn </dev/tty
       case $yn in
       [Yy]*)
         echo "Installing with 'cargo'..."

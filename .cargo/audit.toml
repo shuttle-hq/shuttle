@@ -1,0 +1,7 @@
+[advisories]
+ignore = [
+  # Advisory about the crate `mach` being unmaintained.
+  # This is a dependency from `wasmtime`. A fork exists (`mach2`) but they haven't yet audited it.
+  # Corresponding issue: https://github.com/bytecodealliance/wasmtime/issues/6000
+  "RUSTSEC-2020-0168"
+]

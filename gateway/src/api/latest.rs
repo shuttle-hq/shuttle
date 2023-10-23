@@ -361,11 +361,21 @@ async fn delete_project(
         let resources: Vec<shuttle_common::resource::Response> =
             serde_json::from_slice(&body_bytes)
                 .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-        if resources
+
+        let resources = resources
             .into_iter()
-            .any(|s| matches!(s.r#type, shuttle_common::resource::Type::Database(_)))
-        {
-            return Err(Error::from_kind(ErrorKind::ProjectHasDatabase));
+            .filter(|resource| {
+                matches!(
+                    resource.r#type,
+                    shuttle_common::resource::Type::Database(_)
+                        | shuttle_common::resource::Type::Secrets
+                )
+            })
+            .map(|resource| resource.r#type.to_string())
+            .collect::<Vec<_>>();
+
+        if !resources.is_empty() {
+            return Err(Error::from_kind(ErrorKind::ProjectHasResources(resources)));
         }
     }
 

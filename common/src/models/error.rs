@@ -48,7 +48,7 @@ pub enum ErrorKind {
     OwnProjectAlreadyExists(String),
     ProjectNotReady,
     ProjectUnavailable,
-    ProjectHasDatabase,
+    ProjectHasResources(Vec<String>),
     ProjectHasRunningDeployment,
     CustomDomainNotFound,
     InvalidCustomDomain,
@@ -86,10 +86,13 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::FORBIDDEN,
                 "A deployment is running. Stop it with `cargo shuttle stop` first."
             ),
-            ErrorKind::ProjectHasDatabase => (
-                StatusCode::FORBIDDEN,
-                "Project has database resources. Use `cargo shuttle resource list` and `cargo shuttle resource delete <type>` to delete them."
-            ),
+            ErrorKind::ProjectHasResources(resources) => {
+                let resources = resources.join(", ");
+                return Self {
+                    message: format!("Project has resources: {}. Use `cargo shuttle resource list` and `cargo shuttle resource delete <type>` to delete them.", resources),
+                    status_code: StatusCode::FORBIDDEN.as_u16(),
+                }
+            }
             ErrorKind::InvalidProjectName => (
                 StatusCode::BAD_REQUEST,
                 r#"

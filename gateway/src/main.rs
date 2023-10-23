@@ -64,12 +64,12 @@ async fn main() -> io::Result<()> {
 async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await);
 
-    let ambulance_worker = Worker::new();
+    let worker = Worker::new();
 
-    let sender = ambulance_worker.sender();
+    let sender = worker.sender();
 
     let worker_handle = tokio::spawn(
-        ambulance_worker
+        worker
             .start()
             .map_ok(|_| info!("worker terminated successfully"))
             .map_err(|err| error!("worker error: {}", err)),

@@ -45,6 +45,7 @@ where
     }
 
     async fn get_logs(&self, deployment_id: String) -> Result<Vec<LogLine>, Error> {
+        tracing::info!(deployment_id = %deployment_id, "fetching logs for deployment");
         let logs = self.dal.get_logs(deployment_id).await?;
 
         Ok(logs.into_iter().map(Into::into).collect())
@@ -56,13 +57,20 @@ impl<D> Logger for Service<D>
 where
     D: Dal + Send + Sync + 'static,
 {
+    #[tracing::instrument(skip(self, request))]
     async fn store_logs(
         &self,
         request: Request<StoreLogsRequest>,
     ) -> Result<Response<StoreLogsResponse>, Status> {
         let request = request.into_inner();
         let logs = request.logs;
+
         if !logs.is_empty() {
+            tracing::info!(
+                deployment_id = logs[0].deployment_id,
+                batch_size = logs.len(),
+                "storing logs for deployment"
+            );
             _ = self
                 .logs_tx
                 .send(logs.into_iter().filter_map(Log::from_log_item).collect())
@@ -76,6 +84,7 @@ where
         Ok(Response::new(StoreLogsResponse { success: true }))
     }
 
+    #[tracing::instrument(skip(self))]
     async fn get_logs(
         &self,
         request: Request<LogsRequest>,
@@ -91,6 +100,7 @@ where
 
     type GetLogsStreamStream = ReceiverStream<Result<LogLine, Status>>;
 
+    #[tracing::instrument(skip(self))]
     async fn get_logs_stream(
         &self,
         request: Request<LogsRequest>,
@@ -105,6 +115,7 @@ where
         // Get logs before stream was started
         let logs = self.get_logs(deployment_id.clone()).await?;
 
+        tracing::info!(deployment_id = %deployment_id.clone(), "starting logs stream for deployment");
         tokio::spawn(async move {
             let mut last = Default::default();
 

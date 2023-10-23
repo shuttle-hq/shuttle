@@ -598,15 +598,19 @@ impl GatewayService {
             .await?
             .get::<String, _>("project_id");
 
+        let mut transaction = self.db.begin().await?;
+
         query("DELETE FROM custom_domains WHERE project_id = ?1")
             .bind(project_id)
-            .execute(&self.db)
+            .execute(&mut *transaction)
             .await?;
 
         query("DELETE FROM projects WHERE project_name = ?1")
             .bind(project_name)
-            .execute(&self.db)
+            .execute(&mut *transaction)
             .await?;
+
+        transaction.commit().await?;
 
         Ok(())
     }

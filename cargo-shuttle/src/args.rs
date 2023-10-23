@@ -195,6 +195,8 @@ pub enum ProjectCommand {
         /// How many projects per page to display
         limit: u32,
     },
+    /// Delete project. This also deletes associated Secrets and Persist data.
+    Delete,
 }
 
 #[derive(Parser, Debug)]

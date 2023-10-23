@@ -9,7 +9,7 @@ publish = false
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["default", "headers"] }
 axum-server = { version = "0.4.4", features = ["tls-rustls"] }
-bollard = "0.14.0"
+bollard = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 fqdn = { workspace = true }

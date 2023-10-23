@@ -50,6 +50,7 @@ pub enum State {
     Destroying,
     Destroyed,
     Errored { message: String },
+    Deleted,
 }
 
 impl PartialEq for State {
@@ -155,6 +156,7 @@ impl Display for State {
                 writeln!(f, "{}", "errored".red())?;
                 write!(f, "\tmessage: {message}")
             }
+            State::Deleted => write!(f, "{}", "deleted".red()),
         }
     }
 }
@@ -171,7 +173,7 @@ impl State {
             | Self::Rebooting => Color::Cyan,
             Self::Ready => Color::Green,
             Self::Stopped | Self::Stopping | Self::Destroying | Self::Destroyed => Color::Blue,
-            Self::Errored { .. } => Color::Red,
+            Self::Errored { .. } | Self::Deleted => Color::Red,
         }
     }
 }

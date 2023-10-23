@@ -10,9 +10,15 @@ use crossterm::style::Stylize;
 use crate::{
     resource::{Response, Type},
     secrets::SecretStore,
+    DbOutput,
 };
 
-pub fn get_resources_table(resources: &Vec<Response>, service_name: &str, raw: bool) -> String {
+pub fn get_resources_table(
+    resources: &Vec<Response>,
+    service_name: &str,
+    raw: bool,
+    show_secrets: bool,
+) -> String {
     if resources.is_empty() {
         if raw {
             "No resources are linked to this service\n".to_string()
@@ -40,7 +46,12 @@ pub fn get_resources_table(resources: &Vec<Response>, service_name: &str, raw: b
         let mut output = Vec::new();
 
         if let Some(databases) = resource_groups.get("Databases") {
-            output.push(get_databases_table(databases, service_name, raw));
+            output.push(get_databases_table(
+                databases,
+                service_name,
+                raw,
+                show_secrets,
+            ));
         };
 
         if let Some(secrets) = resource_groups.get("Secrets") {
@@ -59,11 +70,16 @@ pub fn get_resources_table(resources: &Vec<Response>, service_name: &str, raw: b
             output.push(get_custom_resources_table(custom, service_name, raw));
         };
 
-       output.join("\n")
+        output.join("\n")
     }
 }
 
-fn get_databases_table(databases: &Vec<&Response>, service_name: &str, raw: bool) -> String {
+fn get_databases_table(
+    databases: &Vec<&Response>,
+    service_name: &str,
+    raw: bool,
+    show_secrets: bool,
+) -> String {
     let mut table = Table::new();
 
     if raw {
@@ -72,6 +88,7 @@ fn get_databases_table(databases: &Vec<&Response>, service_name: &str, raw: bool
             .set_content_arrangement(ContentArrangement::Disabled)
             .set_header(vec![
                 Cell::new("Type").set_alignment(CellAlignment::Left),
+                Cell::new("Connection string").set_alignment(CellAlignment::Left),
             ]);
     } else {
         table
@@ -82,11 +99,25 @@ fn get_databases_table(databases: &Vec<&Response>, service_name: &str, raw: bool
                 Cell::new("Type")
                     .set_alignment(CellAlignment::Center)
                     .add_attribute(Attribute::Bold),
+                Cell::new("Connection string")
+                    .add_attribute(Attribute::Bold)
+                    .set_alignment(CellAlignment::Center),
             ]);
     }
 
     for database in databases {
-        table.add_row(vec![database.r#type.to_string()]);
+        let info = serde_json::from_value::<DbOutput>(database.data.clone()).expect("");
+        let conn_string = match info {
+            DbOutput::Local(info) => info.clone(),
+            DbOutput::Info(local_uri) => {
+                if show_secrets {
+                    local_uri.connection_string_private()
+                } else {
+                    local_uri.connection_string_public()
+                }
+            }
+        };
+        table.add_row(vec![database.r#type.to_string(), conn_string]);
     }
 
     format!("These databases are linked to {service_name}\n{table}\n")

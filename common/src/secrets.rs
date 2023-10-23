@@ -25,7 +25,7 @@ impl<T: Zeroize> Debug for Secret<T> {
 
 impl<T: Zeroize> Display for Secret<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
+        write!(f, "********")
     }
 }
 

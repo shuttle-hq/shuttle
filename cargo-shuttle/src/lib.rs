@@ -219,7 +219,7 @@ impl Shuttle {
                 self.deployments_list(page, limit, raw).await
             }
             Command::Deployment(DeploymentCommand::Status { id }) => self.deployment_get(id).await,
-            Command::Resource(ResourceCommand::List { raw }) => self.resources_list(raw).await,
+            Command::Resource(ResourceCommand::List { raw, show_secrets }) => self.resources_list(raw, show_secrets).await,
             Command::Stop => self.stop().await,
             Command::Clean => self.clean().await,
             Command::Secrets { raw } => self.secrets(raw).await,
@@ -758,13 +758,13 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn resources_list(&self, raw: bool) -> Result<CommandOutcome> {
+    async fn resources_list(&self, raw: bool, show_secrets: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await
             .map_err(suggestions::resources::get_service_resources_failure)?;
-        let table = get_resources_table(&resources, self.ctx.project_name().as_str(), raw);
+        let table = get_resources_table(&resources, self.ctx.project_name().as_str(), raw, show_secrets);
 
         println!("{table}");
 

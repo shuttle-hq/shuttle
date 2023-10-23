@@ -145,7 +145,7 @@ impl DatabaseReadyInfo {
             "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
-            self.role_password.expose(),
+            self.role_password,
             self.address_public,
             self.port,
             self.database_name

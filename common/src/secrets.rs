@@ -72,7 +72,7 @@ impl IntoIterator for SecretStore {
         self.secrets
             .into_iter()
             .map(|(k, s)| (k, s.expose().to_owned()))
-            .collect::<BTreeMap<String, String>>()
+            .collect::<BTreeMap<_, _>>()
             .into_iter()
     }
 }

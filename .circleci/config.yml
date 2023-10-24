@@ -10,7 +10,7 @@ executors:
   docker-rust:
     docker:
       - image: cimg/rust:1.72.0
-    resource_class: small
+    resource_class: medium
   machine-ubuntu:
     machine:
       image: ubuntu-2204:2023.07.2
@@ -188,6 +188,26 @@ jobs:
             ( echo "Please commit an up to date Cargo.lock"; exit 1 )
       - save-sccache
       - save-cargo-cache
+  cargo-audit:
+    executor: docker-rust
+    resource_class: small
+    steps:
+      - checkout
+      - run: |
+          echo "$(cargo search cargo-audit | grep '^cargo-audit =' | sha256sum)" > /tmp/cargo-audit-cache-key
+      - restore_cache:
+          name: Restore Cargo audit cache
+          keys: 
+            - cargo-audit-{{ checksum "/tmp/cargo-audit-cache-key" }}
+      - run: |
+          cargo install cargo-audit
+      - save_cache:
+          name: Save Cargo audit cache
+          key: cargo-audit-{{ checksum "/tmp/cargo-audit-cache-key" }}
+          paths:
+            - ~/.cargo/bin/cargo-audit
+      - run: |
+          cargo audit -D warnings
   test-standalone:
     parameters:
       path:
@@ -663,6 +683,7 @@ workflows:
   ci:
     jobs:
       - workspace-fmt-clippy
+      - cargo-audit
       - test-standalone:
           name: << matrix.path >>
           matrix:

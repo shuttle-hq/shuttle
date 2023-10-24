@@ -34,7 +34,7 @@ repository = "https://github.com/shuttle-hq/shuttle"
 # https://doc.rust-lang.org/cargo/reference/workspaces.html#the-workspacedependencies-table
 [workspace.dependencies]
 shuttle-codegen = { path = "codegen", version = "0.30.0" }
-shuttle-common = { path = "common", version = "0.30.0" }
+shuttle-common = { path = "common", version = "0.30.1" }
 shuttle-common-tests = { path = "common-tests", version = "0.30.0" }
 shuttle-orchestrator = { path = "orchestrator", version = "0.30.0" }
 shuttle-proto = { path = "proto", version = "0.30.0" }

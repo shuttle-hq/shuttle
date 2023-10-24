@@ -192,13 +192,15 @@ jobs:
     executor: docker-rust
     steps:
       - checkout
-      - run: |
-          CARGO_AUDIT_VERSION='v0.18.3'
-          ls ~/.cargo/bin/cargo-audit \
-            || curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$CARGO_AUDIT_VERSION/cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION.tgz \
-            | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION/cargo-audit \
-             > ~/.cargo/bin/cargo-audit \
-             && chmod +x ~/.cargo/bin/cargo-audit
+      - run: 
+          name: Install cargo-audit
+          command: |
+            CARGO_AUDIT_VERSION='v0.18.3'
+            ls ~/.cargo/bin/cargo-audit \
+              || curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$CARGO_AUDIT_VERSION/cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION.tgz \
+              | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION/cargo-audit \
+              > ~/.cargo/bin/cargo-audit \
+              && chmod +x ~/.cargo/bin/cargo-audit
       - run: |
           cargo audit -D warnings
   test-standalone:

@@ -170,7 +170,7 @@ impl Shuttle {
                 )
                 | Command::Stop
                 | Command::Clean
-                | Command::Secrets
+                | Command::Secrets { .. }
                 | Command::Status
                 | Command::Logs { .. }
                 | Command::Run(..)
@@ -190,7 +190,7 @@ impl Shuttle {
                 | Command::Resource(..)
                 | Command::Stop
                 | Command::Clean
-                | Command::Secrets
+                | Command::Secrets { .. }
                 | Command::Project(..)
         ) {
             let mut client = Client::new(self.ctx.api_url());
@@ -215,14 +215,14 @@ impl Shuttle {
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
             Command::Logs { id, latest, follow } => self.logs(id, latest, follow).await,
-            Command::Deployment(DeploymentCommand::List { page, limit }) => {
-                self.deployments_list(page, limit).await
+            Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
+                self.deployments_list(page, limit, raw).await
             }
             Command::Deployment(DeploymentCommand::Status { id }) => self.deployment_get(id).await,
-            Command::Resource(ResourceCommand::List) => self.resources_list().await,
+            Command::Resource(ResourceCommand::List { raw }) => self.resources_list(raw).await,
             Command::Stop => self.stop().await,
             Command::Clean => self.clean().await,
-            Command::Secrets => self.secrets().await,
+            Command::Secrets { raw } => self.secrets(raw).await,
             Command::Resource(ResourceCommand::Delete { resource_type }) => {
                 self.resource_delete(&resource_type).await
             }
@@ -235,8 +235,8 @@ impl Shuttle {
             Command::Project(ProjectCommand::Status { follow }) => {
                 self.project_status(follow).await
             }
-            Command::Project(ProjectCommand::List { page, limit }) => {
-                self.projects_list(page, limit).await
+            Command::Project(ProjectCommand::List { page, limit, raw }) => {
+                self.projects_list(page, limit, raw).await
             }
             Command::Project(ProjectCommand::Stop) => self.project_stop().await,
             Command::Project(ProjectCommand::Delete) => self.project_delete().await,
@@ -625,13 +625,13 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn secrets(&self) -> Result<CommandOutcome> {
+    async fn secrets(&self, raw: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let secrets = client
             .get_secrets(self.ctx.project_name())
             .await
             .map_err(suggestions::resources::get_secrets_failure)?;
-        let table = secret::get_table(&secrets);
+        let table = secret::get_secrets_table(&secrets, raw);
 
         println!("{table}");
 
@@ -726,7 +726,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn deployments_list(&self, page: u32, limit: u32) -> Result<CommandOutcome> {
+    async fn deployments_list(&self, page: u32, limit: u32, raw: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         if limit == 0 {
             println!();
@@ -738,7 +738,7 @@ impl Shuttle {
             .get_deployments(proj_name, page, limit)
             .await
             .map_err(suggestions::deployment::get_deployments_list_failure)?;
-        let table = get_deployments_table(&deployments, proj_name.as_str(), page);
+        let table = get_deployments_table(&deployments, proj_name.as_str(), page, raw);
 
         println!("{table}");
         println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
@@ -758,13 +758,13 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn resources_list(&self) -> Result<CommandOutcome> {
+    async fn resources_list(&self, raw: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await
             .map_err(suggestions::resources::get_service_resources_failure)?;
-        let table = get_resources_table(&resources, self.ctx.project_name().as_str());
+        let table = get_resources_table(&resources, self.ctx.project_name().as_str(), raw);
 
         println!("{table}");
 
@@ -987,7 +987,10 @@ impl Shuttle {
             .map(resource::Response::from_bytes)
             .collect();
 
-        println!("{}", get_resources_table(&resources, service_name.as_str()));
+        println!(
+            "{}",
+            get_resources_table(&resources, service_name.as_str(), false)
+        );
 
         let addr = SocketAddr::new(
             if run_args.external {
@@ -1606,7 +1609,7 @@ impl Shuttle {
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await?;
-        let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
+        let resources = get_resources_table(&resources, self.ctx.project_name().as_str(), false);
 
         println!("{resources}{service}");
 
@@ -1678,7 +1681,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn projects_list(&self, page: u32, limit: u32) -> Result<CommandOutcome> {
+    async fn projects_list(&self, page: u32, limit: u32, raw: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         if limit == 0 {
             println!();
@@ -1693,7 +1696,7 @@ impl Shuttle {
                 "getting the projects list fails repeteadly",
             )
         })?;
-        let projects_table = project::get_table(&projects, page);
+        let projects_table = project::get_projects_table(&projects, page, raw);
 
         println!("{projects_table}");
 

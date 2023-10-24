@@ -10,7 +10,7 @@ executors:
   docker-rust:
     docker:
       - image: cimg/rust:1.72.0
-    resource_class: medium
+    resource_class: small
   machine-ubuntu:
     machine:
       image: ubuntu-2204:2023.07.2
@@ -190,22 +190,15 @@ jobs:
       - save-cargo-cache
   cargo-audit:
     executor: docker-rust
-    resource_class: small
     steps:
       - checkout
       - run: |
-          echo "$(cargo search cargo-audit | grep '^cargo-audit =' | sha256sum)" > /tmp/cargo-audit-cache-key
-      - restore_cache:
-          name: Restore Cargo audit cache
-          keys: 
-            - cargo-audit-{{ checksum "/tmp/cargo-audit-cache-key" }}
-      - run: |
-          cargo install cargo-audit
-      - save_cache:
-          name: Save Cargo audit cache
-          key: cargo-audit-{{ checksum "/tmp/cargo-audit-cache-key" }}
-          paths:
-            - ~/.cargo/bin/cargo-audit
+          CARGO_AUDIT_VERSION='v0.18.3'
+          ls ~/.cargo/bin/cargo-audit \
+            || curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$CARGO_AUDIT_VERSION/cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION.tgz \
+            | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION/cargo-audit \
+             > ~/.cargo/bin/cargo-audit \
+             && chmod +x ~/.cargo/bin/cargo-audit
       - run: |
           cargo audit -D warnings
   test-standalone:

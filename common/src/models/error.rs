@@ -48,6 +48,8 @@ pub enum ErrorKind {
     OwnProjectAlreadyExists(String),
     ProjectNotReady,
     ProjectUnavailable,
+    ProjectHasResources(Vec<String>),
+    ProjectHasRunningDeployment,
     CustomDomainNotFound,
     InvalidCustomDomain,
     CustomDomainAlreadyExists,
@@ -55,6 +57,7 @@ pub enum ErrorKind {
     Internal,
     NotReady,
     ServiceUnavailable,
+    DeleteProjectFailed,
 }
 
 impl From<ErrorKind> for ApiError {
@@ -78,8 +81,17 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 "project not ready. Try running `cargo shuttle project restart`.",
             ),
-            ErrorKind::ProjectUnavailable => {
-                (StatusCode::BAD_GATEWAY, "project returned invalid response")
+            ErrorKind::ProjectUnavailable => (StatusCode::BAD_GATEWAY, "project returned invalid response"),
+            ErrorKind::ProjectHasRunningDeployment => (
+                StatusCode::FORBIDDEN,
+                "A deployment is running. Stop it with `cargo shuttle stop` first."
+            ),
+            ErrorKind::ProjectHasResources(resources) => {
+                let resources = resources.join(", ");
+                return Self {
+                    message: format!("Project has resources: {}. Use `cargo shuttle resource list` and `cargo shuttle resource delete <type>` to delete them.", resources),
+                    status_code: StatusCode::FORBIDDEN.as_u16(),
+                }
             }
             ErrorKind::InvalidProjectName => (
                 StatusCode::BAD_REQUEST,
@@ -93,14 +105,8 @@ impl From<ErrorKind> for ApiError {
             6. not contain profanity.
             7. not be a reserved word."#,
             ),
-            ErrorKind::InvalidOperation => (
-                StatusCode::BAD_REQUEST,
-                "the requested operation is invalid",
-            ),
-            ErrorKind::ProjectAlreadyExists => (
-                StatusCode::BAD_REQUEST,
-                "a project with the same name already exists",
-            ),
+            ErrorKind::InvalidOperation => (StatusCode::BAD_REQUEST, "the requested operation is invalid"),
+            ErrorKind::ProjectAlreadyExists => (StatusCode::BAD_REQUEST, "a project with the same name already exists"),
             ErrorKind::OwnProjectAlreadyExists(message) => {
                 return Self {
                     message,
@@ -109,12 +115,11 @@ impl From<ErrorKind> for ApiError {
             }
             ErrorKind::InvalidCustomDomain => (StatusCode::BAD_REQUEST, "invalid custom domain"),
             ErrorKind::CustomDomainNotFound => (StatusCode::NOT_FOUND, "custom domain not found"),
-            ErrorKind::CustomDomainAlreadyExists => {
-                (StatusCode::BAD_REQUEST, "custom domain already in use")
-            }
+            ErrorKind::CustomDomainAlreadyExists => (StatusCode::BAD_REQUEST, "custom domain already in use"),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),
+            ErrorKind::DeleteProjectFailed => (StatusCode::INTERNAL_SERVER_ERROR, "deleting project failed"),
         };
         Self {
             message: error_message.to_string(),

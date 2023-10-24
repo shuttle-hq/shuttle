@@ -23,7 +23,7 @@ use shuttle_proto::runtime::{
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
-use wasi_common::file::FileCaps;
+use wasi_common::file::FileAccessMode;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
@@ -239,10 +239,10 @@ impl Router {
 
         store
             .data_mut()
-            .insert_file(PARTS_FD, Box::new(parts_client), FileCaps::all());
+            .insert_file(PARTS_FD, Box::new(parts_client), FileAccessMode::all());
         store
             .data_mut()
-            .insert_file(BODY_FD, Box::new(body_client), FileCaps::all());
+            .insert_file(BODY_FD, Box::new(body_client), FileAccessMode::all());
 
         let (parts, body) = req.into_parts();
 

@@ -62,7 +62,7 @@ cargo install cargo-shuttle
 
 #### Arch Linux
 
-`cargo-shuttle` can be installed from the [community repository](https://archlinux.org/packages/community/x86_64/cargo-shuttle) using [pacman](https://wiki.archlinux.org/title/Pacman):
+`cargo-shuttle` can be installed from the [extra repository](https://archlinux.org/packages/extra/x86_64/cargo-shuttle) using [pacman](https://wiki.archlinux.org/title/Pacman):
 
 ```sh
 pacman -S cargo-shuttle
@@ -135,8 +135,8 @@ This should generate the following dependency in `Cargo.toml`:
 
 ```toml
 rocket = "0.5.0-rc.2"
-shuttle-rocket = { version = "0.29.0" }
-shuttle-runtime = { version = "0.29.0" }
+shuttle-rocket = { version = "0.30.0" }
+shuttle-runtime = { version = "0.30.0" }
 tokio = { version = "1.26.0" }
 ```
 

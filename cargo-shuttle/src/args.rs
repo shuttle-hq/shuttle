@@ -119,7 +119,11 @@ pub enum Command {
     #[command(subcommand)]
     Resource(ResourceCommand),
     /// Manage secrets for this Shuttle service
-    Secrets,
+    Secrets {
+        #[arg(long, default_value_t = false)]
+        /// Output table in `raw` format
+        raw: bool,
+    },
     /// Remove cargo build artifacts in the Shuttle environment
     Clean,
     /// Login to the Shuttle platform
@@ -150,6 +154,10 @@ pub enum DeploymentCommand {
         #[arg(long, default_value = "10")]
         /// How many projects per page to display
         limit: u32,
+
+        #[arg(long, default_value_t = false)]
+        /// Output table in `raw` format
+        raw: bool,
     },
     /// View status of a deployment
     Status {
@@ -161,7 +169,11 @@ pub enum DeploymentCommand {
 #[derive(Parser)]
 pub enum ResourceCommand {
     /// List all the resources for a project
-    List,
+    List {
+        #[arg(long, default_value_t = false)]
+        /// Output table in `raw` format
+        raw: bool,
+    },
     /// Delete a resource
     Delete {
         /// Type of the resource to delete.
@@ -194,7 +206,13 @@ pub enum ProjectCommand {
         #[arg(long, default_value = "10")]
         /// How many projects per page to display
         limit: u32,
+
+        #[arg(long, default_value_t = false)]
+        /// Output table in `raw` format
+        raw: bool,
     },
+    /// Delete project. This also deletes associated Secrets and Persist data.
+    Delete,
 }
 
 #[derive(Parser, Debug)]

@@ -51,6 +51,7 @@ pub enum Scope {
     Project,
 
     /// Create and delete projects
+    #[serde(rename = "project_create")] // compatibility
     ProjectWrite,
 
     /// Get the resources for a project

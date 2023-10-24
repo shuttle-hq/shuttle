@@ -418,7 +418,7 @@ async fn run(
     if let Err(err) = deployment_updater.set_address(&id, &address).await {
         // Clean up based on a stop response built outside the runtime
         cleanup(Some(SubscribeStopResponse {
-            reason: 2,
+            reason: StopReason::Crash as i32,
             message: format!("errored while setting the new deployer address: {}", err),
         }));
         return;
@@ -437,7 +437,7 @@ async fn run(
         Err(err) => {
             // Clean up based on a stop response built outside the runtime
             cleanup(Some(SubscribeStopResponse {
-                reason: 2,
+                reason: StopReason::Crash as i32,
                 message: format!("errored while opening the StopSubscribe channel: {}", err),
             }));
             return;
@@ -457,7 +457,7 @@ async fn run(
                 Ok(reason) => cleanup(reason),
                 // Stream closed abruptly, most probably runtime crashed.
                 Err(err) => cleanup(Some(SubscribeStopResponse {
-                    reason: 2,
+                    reason: StopReason::Crash as i32,
                     message: format!("runtime StopSubscribe channel errored: {}", err),
                 })),
             }

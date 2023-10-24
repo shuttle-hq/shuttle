@@ -275,6 +275,7 @@ impl DeploymentManager {
         self.run_send.send(built).await.unwrap();
     }
 
+    #[instrument(name = "Killing deployment", skip(self), fields(deployment_id = %id, state = %State::Stopped))]
     pub async fn kill(&self, id: Uuid) {
         self.runtime_manager.lock().await.kill(&id).await;
     }

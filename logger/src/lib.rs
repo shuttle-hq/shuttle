@@ -11,7 +11,7 @@ use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use tracing::{debug, error};
+use tracing::{debug, error, field, Span};
 
 pub mod args;
 mod dal;
@@ -56,13 +56,19 @@ impl<D> Logger for Service<D>
 where
     D: Dal + Send + Sync + 'static,
 {
+    #[tracing::instrument(skip(self, request), fields(deployment_id = field::Empty, batch_size = field::Empty))]
     async fn store_logs(
         &self,
         request: Request<StoreLogsRequest>,
     ) -> Result<Response<StoreLogsResponse>, Status> {
         let request = request.into_inner();
         let logs = request.logs;
+
         if !logs.is_empty() {
+            let span = Span::current();
+            span.record("deployment_id", &logs[0].deployment_id);
+            span.record("batch_size", logs.len());
+
             _ = self
                 .logs_tx
                 .send(logs.into_iter().filter_map(Log::from_log_item).collect())
@@ -76,6 +82,7 @@ where
         Ok(Response::new(StoreLogsResponse { success: true }))
     }
 
+    #[tracing::instrument(skip(self))]
     async fn get_logs(
         &self,
         request: Request<LogsRequest>,
@@ -91,6 +98,7 @@ where
 
     type GetLogsStreamStream = ReceiverStream<Result<LogLine, Status>>;
 
+    #[tracing::instrument(skip(self))]
     async fn get_logs_stream(
         &self,
         request: Request<LogsRequest>,

@@ -57,6 +57,7 @@ where
 ///
 /// It is guaranteed that [`ScopedUser::scope`] exists and is owned
 /// by [`ScopedUser::name`].
+#[derive(Clone)]
 pub struct ScopedUser {
     pub user: User,
     pub scope: ProjectName,

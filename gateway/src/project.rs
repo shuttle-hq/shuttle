@@ -10,7 +10,9 @@ use bollard::container::{
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
 use bollard::network::{ConnectNetworkOptions, DisconnectNetworkOptions};
+use bollard::service::MountTypeEnum;
 use bollard::system::EventsOptions;
+use bollard::volume::RemoveVolumeOptions;
 use fqdn::FQDN;
 use futures::prelude::*;
 use http::header::AUTHORIZATION;
@@ -184,6 +186,7 @@ pub enum Project {
     Destroying(ProjectDestroying),
     Destroyed(ProjectDestroyed),
     Errored(ProjectError),
+    Deleted,
 }
 
 impl_from_variant!(Project:
@@ -230,6 +233,52 @@ impl Project {
         } else {
             Ok(Self::Destroyed(ProjectDestroyed { destroyed: None }))
         }
+    }
+
+    pub async fn delete<Ctx>(self, ctx: &Ctx) -> Result<(), Error>
+    where
+        Ctx: DockerContext,
+    {
+        let Some(ref id) = self.container_id() else {
+            error!("No container id found for deleting");
+            return Err(Error::custom(
+                ErrorKind::ProjectUnavailable,
+                "container id not found",
+            ));
+        };
+        ctx.docker()
+            .remove_container(
+                id,
+                Some(RemoveContainerOptions {
+                    v: true, // This only deletes anonymous volumes (there should be none)
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await?;
+
+        let Some(mounts) = self
+            .container()
+            .and_then(|c| c.host_config)
+            .and_then(|hc| hc.mounts)
+        else {
+            warn!("No mounts found when deleting container {}", id);
+            return Ok(());
+        };
+        // Delete the volume linked to this container.
+        // This, along with the DB row removal is what separates a
+        // project stop (destroy) from a project delete.
+        for mount in mounts {
+            if mount.typ.is_some_and(|t| t == MountTypeEnum::VOLUME) && mount.source.is_some() {
+                let name = mount.source.unwrap();
+                ctx.docker()
+                    .remove_volume(name.as_str(), Some(RemoveVolumeOptions { force: true }))
+                    .await?;
+                info!("deleted volume {name}");
+            }
+        }
+
+        Ok(())
     }
 
     pub fn start(self) -> Result<Self, Error> {
@@ -308,6 +357,7 @@ impl Project {
             Self::Destroying(_) => "destroying".to_string(),
             Self::Destroyed(_) => "destroyed".to_string(),
             Self::Errored(_) => "error".to_string(),
+            Self::Deleted => "deleted".to_string(),
         }
     }
 
@@ -324,7 +374,7 @@ impl Project {
             | Self::Rebooting(ProjectRebooting { container, .. })
             | Self::Destroying(ProjectDestroying { container }) => Some(container.clone()),
             Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container(),
-            Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) => None,
+            Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) | Self::Deleted => None,
         }
     }
 
@@ -371,6 +421,7 @@ impl From<Project> for shuttle_common::models::project::State {
             Project::Destroying(_) => Self::Destroying,
             Project::Destroyed(_) => Self::Destroyed,
             Project::Errored(ProjectError { message, .. }) => Self::Errored { message },
+            Project::Deleted => Self::Deleted,
         }
     }
 }
@@ -435,6 +486,7 @@ where
             Self::Destroying(destroying) => destroying.next(ctx).await.into_try_state(),
             Self::Destroyed(destroyed) => destroyed.next(ctx).await.into_try_state(),
             Self::Errored(errored) => Ok(Self::Errored(errored)),
+            Self::Deleted => Ok(Self::Deleted),
         };
 
         if let Ok(Self::Errored(errored)) = &mut new {
@@ -609,6 +661,7 @@ where
                 },
                 None => Self::Errored(err),
             },
+            Self::Deleted => Self::Deleted,
         };
         Ok(refreshed)
     }
@@ -720,6 +773,14 @@ impl ProjectCreating {
         format!("{prefix}{project_name}_run")
     }
 
+    fn volume_name<C: DockerContext>(&self, ctx: &C) -> String {
+        let prefix = &ctx.container_settings().prefix;
+
+        let Self { project_name, .. } = &self;
+
+        format!("{prefix}{project_name}_vol")
+    }
+
     fn generate_container_config<C: DockerContext>(
         &self,
         ctx: &C,
@@ -794,7 +855,7 @@ impl ProjectCreating {
         config.host_config = deserialize_json!({
             "Mounts": [{
                 "Target": "/opt/shuttle",
-                "Source": format!("{prefix}{project_name}_vol"),
+                "Source": self.volume_name(ctx),
                 "Type": "volume"
             }],
             // https://docs.docker.com/config/containers/resource_constraints/#memory

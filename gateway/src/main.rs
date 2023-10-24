@@ -78,7 +78,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     // Every 60 secs go over all `::Ready` projects and check their health.
     // Also syncs the state of all projects on startup
     let ambulance_handle = tokio::spawn({
-        let gateway = Arc::clone(&gateway);
+        let gateway = gateway.clone();
         let sender = sender.clone();
         async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));

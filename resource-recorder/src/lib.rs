@@ -55,6 +55,11 @@ where
 
     /// Record the addition of a new resource
     async fn add(&self, request: RecordRequest) -> Result<(), Error> {
+        tracing::info!(
+            project_id = %request.project_id,
+            service_id = %request.service_id,
+            "adding new resources for service"
+        );
         self.dal
             .add_resources(
                 request.project_id.parse()?,
@@ -75,6 +80,8 @@ where
         &self,
         project_id: String,
     ) -> Result<Vec<resource_recorder::Resource>, Error> {
+        tracing::info!("fetching resources for project");
+
         let resources = self.dal.get_project_resources(project_id.parse()?).await?;
 
         Ok(resources.into_iter().map(Into::into).collect())
@@ -85,6 +92,8 @@ where
         &self,
         service_id: String,
     ) -> Result<Vec<resource_recorder::Resource>, Error> {
+        tracing::info!("fetching resources for service");
+
         let resources = self.dal.get_service_resources(service_id.parse()?).await?;
 
         Ok(resources.into_iter().map(Into::into).collect())
@@ -95,6 +104,7 @@ where
         &self,
         resource: ResourceIds,
     ) -> Result<resource_recorder::Resource, Error> {
+        tracing::info!(resource_type = %resource.r#type, "fetching resource for service");
         let resource_option = self.dal.get_resource(resource).await?;
 
         match resource_option {
@@ -105,6 +115,7 @@ where
 
     /// Delete a resource
     async fn delete_resource(&self, resource: ResourceIds) -> Result<(), Error> {
+        tracing::info!(resource_type = %resource.r#type, "deleting resource for service");
         self.dal.delete_resource(resource).await?;
 
         Ok(())
@@ -116,6 +127,7 @@ impl<D> ResourceRecorder for Service<D>
 where
     D: Dal + Send + Sync + 'static,
 {
+    #[tracing::instrument(skip(self, request))]
     async fn record_resources(
         &self,
         request: Request<RecordRequest>,
@@ -137,6 +149,7 @@ where
         Ok(Response::new(result))
     }
 
+    #[tracing::instrument(skip(self))]
     async fn get_project_resources(
         &self,
         request: Request<ProjectResourcesRequest>,
@@ -160,6 +173,7 @@ where
         Ok(Response::new(result))
     }
 
+    #[tracing::instrument(skip(self))]
     async fn get_service_resources(
         &self,
         request: Request<ServiceResourcesRequest>,
@@ -183,6 +197,7 @@ where
         Ok(Response::new(result))
     }
 
+    #[tracing::instrument(skip(self))]
     async fn get_resource(
         &self,
         request: tonic::Request<ResourceIds>,
@@ -206,6 +221,7 @@ where
         Ok(Response::new(result))
     }
 
+    #[tracing::instrument(skip(self))]
     async fn delete_resource(
         &self,
         request: tonic::Request<ResourceIds>,

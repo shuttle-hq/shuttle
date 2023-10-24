@@ -120,7 +120,16 @@ fn get_databases_table(
         table.add_row(vec![database.r#type.to_string(), conn_string]);
     }
 
-    format!("These databases are linked to {service_name}\n{table}\n")
+    let show_secret_hint = if databases.is_empty() || show_secrets {
+        ""
+    } else {
+        "Hint: you can show the secrets of these resources using --show-secrets\n"
+    };
+
+    format!(
+        "These databases are linked to {service_name}\n{table}\n{}",
+        show_secret_hint
+    )
 }
 
 fn get_secrets_table(secrets: &[&Response], service_name: &str, raw: bool) -> String {

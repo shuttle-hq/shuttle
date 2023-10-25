@@ -80,8 +80,13 @@ impl Postgres {
                         );
 
                         parent_span.in_scope(|| {
-                            if rx.len() > 200 {
-                                warn!("database receiver queue size: {}", rx.len());
+                            if rx.len() >= 200 {
+                                warn!(
+                                    queue_size = rx.len(),
+                                    // This string is matched in a honeycomb trigger, changing it will
+                                    // break the trigger.
+                                    "database receiver queue is filling up"
+                                );
                             } else if !rx.is_empty() {
                                 info!("database receiver queue size: {}", rx.len());
                             }

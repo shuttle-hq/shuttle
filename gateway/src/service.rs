@@ -21,6 +21,7 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
+use shuttle_common::constants::limits::{MAX_PROJECTS_BASIC, MAX_PROJECTS_PRO};
 use shuttle_common::models::project::State;
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
@@ -567,10 +568,6 @@ impl GatewayService {
             .fetch_one(&self.db)
             .await?
             .get::<_, usize>(0);
-
-        // Looser limits in initial release, in case there are struggles with deleting projects
-        const MAX_PROJECTS_BASIC: u32 = 10;
-        const MAX_PROJECTS_PRO: u32 = 20;
 
         if (is_pro && proj_count >= MAX_PROJECTS_PRO)
             || (!is_pro && proj_count >= MAX_PROJECTS_BASIC)

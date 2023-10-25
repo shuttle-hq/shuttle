@@ -9,11 +9,14 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-#[derive(Deserialize, Serialize)]
+use crate::secrets::Secret;
+
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::secret::Response))]
 pub struct Response {
     pub key: String,
+    pub value: Secret<String>,
     #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]
     pub last_update: DateTime<Utc>,
 }

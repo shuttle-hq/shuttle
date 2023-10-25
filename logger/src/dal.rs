@@ -12,7 +12,7 @@ use sqlx::{
 };
 use thiserror::Error;
 use tokio::sync::broadcast::{self, Sender};
-use tracing::{debug, error, info};
+use tracing::{error, info, warn, Instrument, Span};
 
 use tonic::transport::Uri;
 
@@ -33,7 +33,7 @@ pub trait Dal {
 #[derive(Clone)]
 pub struct Postgres {
     pool: PgPool,
-    tx: Sender<Vec<Log>>,
+    tx: Sender<(Vec<Log>, Span)>,
 }
 
 impl Postgres {
@@ -58,7 +58,7 @@ impl Postgres {
             .await
             .expect("to run migrations successfully");
 
-        let (tx, mut rx) = broadcast::channel::<Vec<Log>>(1000);
+        let (tx, mut rx) = broadcast::channel::<(Vec<Log>, Span)>(1000);
         let pool_spawn = pool.clone();
 
         let interval_tx = tx.clone();
@@ -74,16 +74,18 @@ impl Postgres {
         tokio::spawn(async move {
             loop {
                 match rx.recv().await {
-                    Ok(logs) => {
+                    Ok((logs, parent_span)) => {
                         let mut builder = QueryBuilder::new(
                             "INSERT INTO logs (deployment_id, shuttle_service_name, data, tx_timestamp)",
                         );
 
-                        debug!("inserting {} logs into the database", logs.len());
-
-                        if !rx.is_empty() {
-                            debug!("database receiver queue size {}", rx.len());
-                        }
+                        parent_span.in_scope(|| {
+                            if rx.len() > 200 {
+                                warn!("database receiver queue size: {}", rx.len());
+                            } else if !rx.is_empty() {
+                                info!("database receiver queue size: {}", rx.len());
+                            }
+                        });
 
                         builder.push_values(logs, |mut b, log| {
                             b.push_bind(log.deployment_id)
@@ -93,7 +95,8 @@ impl Postgres {
                         });
                         let query = builder.build();
 
-                        if let Err(error) = query.execute(&pool_spawn).await {
+                        if let Err(error) = query.execute(&pool_spawn).instrument(parent_span).await
+                        {
                             error!(error = %error, "failed to insert logs");
                         };
                     }
@@ -108,7 +111,7 @@ impl Postgres {
     }
 
     /// Get the sender to broadcast logs into
-    pub fn get_sender(&self) -> Sender<Vec<Log>> {
+    pub fn get_sender(&self) -> Sender<(Vec<Log>, Span)> {
         self.tx.clone()
     }
 }

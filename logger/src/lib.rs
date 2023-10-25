@@ -33,14 +33,14 @@ impl From<Error> for Status {
 
 pub struct Service<D> {
     dal: D,
-    logs_tx: Sender<Vec<Log>>,
+    logs_tx: Sender<(Vec<Log>, Span)>,
 }
 
 impl<D> Service<D>
 where
     D: Dal + Send + Sync + 'static,
 {
-    pub fn new(logs_tx: Sender<Vec<Log>>, dal: D) -> Self {
+    pub fn new(logs_tx: Sender<(Vec<Log>, Span)>, dal: D) -> Self {
         Self { dal, logs_tx }
     }
 
@@ -71,7 +71,10 @@ where
 
             _ = self
                 .logs_tx
-                .send(logs.into_iter().filter_map(Log::from_log_item).collect())
+                .send((
+                    logs.into_iter().filter_map(Log::from_log_item).collect(),
+                    span,
+                ))
                 .map_err(|err| {
                     Status::internal(format!(
                         "Errored while trying to store the logs in persistence: {err}"
@@ -136,7 +139,7 @@ where
                             debug!("stream receiver queue size {}", logs_rx.len())
                         }
 
-                        for log in logs {
+                        for log in logs.0 {
                             if log.deployment_id == deployment_id
                                 && log.tx_timestamp.timestamp() >= last.seconds
                                 && log.tx_timestamp.timestamp_nanos_opt().unwrap_or_default()

@@ -165,10 +165,11 @@ impl Shuttle {
                         | ProjectCommand::Stop { .. }
                         | ProjectCommand::Restart { .. }
                         | ProjectCommand::Status { .. }
+                        | ProjectCommand::Delete
                 )
                 | Command::Stop
                 | Command::Clean
-                | Command::Secrets
+                | Command::Secrets { .. }
                 | Command::Status
                 | Command::Logs { .. }
                 | Command::Run(..)
@@ -188,7 +189,7 @@ impl Shuttle {
                 | Command::Resource(..)
                 | Command::Stop
                 | Command::Clean
-                | Command::Secrets
+                | Command::Secrets { .. }
                 | Command::Project(..)
         ) {
             let mut client = Client::new(self.ctx.api_url());
@@ -213,14 +214,14 @@ impl Shuttle {
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
             Command::Logs { id, latest, follow } => self.logs(id, latest, follow).await,
-            Command::Deployment(DeploymentCommand::List { page, limit }) => {
-                self.deployments_list(page, limit).await
+            Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
+                self.deployments_list(page, limit, raw).await
             }
             Command::Deployment(DeploymentCommand::Status { id }) => self.deployment_get(id).await,
-            Command::Resource(ResourceCommand::List) => self.resources_list().await,
+            Command::Resource(ResourceCommand::List { raw }) => self.resources_list(raw).await,
             Command::Stop => self.stop().await,
             Command::Clean => self.clean().await,
-            Command::Secrets => self.secrets().await,
+            Command::Secrets { raw } => self.secrets(raw).await,
             Command::Resource(ResourceCommand::Delete { resource_type }) => {
                 self.resource_delete(&resource_type).await
             }
@@ -233,10 +234,11 @@ impl Shuttle {
             Command::Project(ProjectCommand::Status { follow }) => {
                 self.project_status(follow).await
             }
-            Command::Project(ProjectCommand::List { page, limit }) => {
-                self.projects_list(page, limit).await
+            Command::Project(ProjectCommand::List { page, limit, raw }) => {
+                self.projects_list(page, limit, raw).await
             }
-            Command::Project(ProjectCommand::Stop) => self.project_delete().await,
+            Command::Project(ProjectCommand::Stop) => self.project_stop().await,
+            Command::Project(ProjectCommand::Delete) => self.project_delete().await,
         };
 
         for w in self.version_warnings {
@@ -569,29 +571,35 @@ impl Shuttle {
 
     async fn stop(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        let proj_name = self.ctx.project_name();
-        let mut service = client
-            .stop_service(proj_name)
-            .await
-            .map_err(suggestions::deployment::stop_deployment_failure)?;
-
-        let progress_bar = create_spinner();
-        loop {
-            let Some(ref deployment) = service.deployment else {
-                break;
+        let p = self.ctx.project_name();
+        wait_with_spinner(|i, pb| async move {
+            let service = if i == 0 {
+                client.stop_service(p).await?
+            } else {
+                client.get_service(p).await?
             };
 
-            if let shuttle_common::deployment::State::Stopped = deployment.state {
-                break;
+            let service_str = format!("{service}");
+            let cleanup = move || {
+                println!("{}", "Successfully stopped service".bold());
+                println!("{service_str}");
+                println!("Run `cargo shuttle deploy` to re-deploy your service.");
+            };
+
+            let Some(ref deployment) = service.deployment else {
+                return Ok(Some(cleanup));
+            };
+
+            pb.set_message(format!("Stopping {}", deployment.id));
+
+            if deployment.state == shuttle_common::deployment::State::Stopped {
+                Ok(Some(cleanup))
+            } else {
+                Ok(None)
             }
-
-            progress_bar.set_message(format!("Stopping {}", deployment.id));
-            service = client.get_service(proj_name).await?;
-        }
-        progress_bar.finish_and_clear();
-
-        println!("{}\n{}", "Successfully stopped service".bold(), service);
-        println!("Run `cargo shuttle deploy` to re-deploy your service.");
+        })
+        .await
+        .map_err(suggestions::deployment::stop_deployment_failure)?;
 
         Ok(CommandOutcome::Ok)
     }
@@ -616,13 +624,13 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn secrets(&self) -> Result<CommandOutcome> {
+    async fn secrets(&self, raw: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let secrets = client
             .get_secrets(self.ctx.project_name())
             .await
             .map_err(suggestions::resources::get_secrets_failure)?;
-        let table = secret::get_table(&secrets);
+        let table = secret::get_secrets_table(&secrets, raw);
 
         println!("{table}");
 
@@ -717,7 +725,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn deployments_list(&self, page: u32, limit: u32) -> Result<CommandOutcome> {
+    async fn deployments_list(&self, page: u32, limit: u32, raw: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         if limit == 0 {
             println!();
@@ -729,7 +737,7 @@ impl Shuttle {
             .get_deployments(proj_name, page, limit)
             .await
             .map_err(suggestions::deployment::get_deployments_list_failure)?;
-        let table = get_deployments_table(&deployments, proj_name, page);
+        let table = get_deployments_table(&deployments, proj_name, page, raw);
 
         println!("{table}");
         println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
@@ -749,13 +757,13 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn resources_list(&self) -> Result<CommandOutcome> {
+    async fn resources_list(&self, raw: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await
             .map_err(suggestions::resources::get_service_resources_failure)?;
-        let table = get_resources_table(&resources, self.ctx.project_name());
+        let table = get_resources_table(&resources, self.ctx.project_name(), raw);
 
         println!("{table}");
 
@@ -978,7 +986,10 @@ impl Shuttle {
             .map(resource::Response::from_bytes)
             .collect();
 
-        println!("{}", get_resources_table(&resources, service_name.as_str()));
+        println!(
+            "{}",
+            get_resources_table(&resources, service_name.as_str(), false)
+        );
 
         let addr = SocketAddr::new(
             if run_args.external {
@@ -1386,7 +1397,7 @@ impl Shuttle {
             let repo_path = dunce::canonicalize(repo_path)?;
             trace!(?repo_path, "found git repository");
 
-            let dirty = self.is_dirty(&repo);
+            let dirty = is_dirty(&repo);
             if !args.allow_dirty && dirty.is_err() {
                 bail!(dirty.unwrap_err());
             }
@@ -1597,7 +1608,7 @@ impl Shuttle {
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await?;
-        let resources = get_resources_table(&resources, self.ctx.project_name());
+        let resources = get_resources_table(&resources, self.ctx.project_name(), false);
 
         println!("{resources}{service}");
 
@@ -1606,19 +1617,33 @@ impl Shuttle {
 
     async fn project_create(&self, idle_minutes: u64) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        let config = project::Config { idle_minutes };
+        let config = &project::Config { idle_minutes };
 
-        self.wait_with_spinner(
-            &[
+        let p = self.ctx.project_name();
+        wait_with_spinner(|i, pb| async move {
+            let project = if i == 0 {
+                client.create_project(p, config).await?
+            } else {
+                client.get_project(p).await?
+            };
+            pb.set_message(format!("{project}"));
+
+            let done = [
                 project::State::Ready,
                 project::State::Errored {
                     message: Default::default(),
                 },
-            ],
-            client.create_project(self.ctx.project_name(), config),
-            self.ctx.project_name(),
-            client,
-        )
+            ]
+            .contains(&project.state);
+
+            if done {
+                Ok(Some(move || {
+                    println!("{project}");
+                }))
+            } else {
+                Ok(None)
+            }
+        })
         .await
         .map_err(|err| {
             suggestions::project::project_request_failure(
@@ -1645,7 +1670,7 @@ impl Shuttle {
     }
 
     async fn project_recreate(&self, idle_minutes: u64) -> Result<CommandOutcome> {
-        self.project_delete()
+        self.project_stop()
             .await
             .map_err(suggestions::project::project_restart_failure)?;
         self.project_create(idle_minutes)
@@ -1655,7 +1680,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn projects_list(&self, page: u32, limit: u32) -> Result<CommandOutcome> {
+    async fn projects_list(&self, page: u32, limit: u32, raw: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         if limit == 0 {
             println!();
@@ -1670,7 +1695,7 @@ impl Shuttle {
                 "getting the projects list fails repeteadly",
             )
         })?;
-        let projects_table = project::get_table(&projects, page);
+        let projects_table = project::get_projects_table(&projects, page, raw);
 
         println!("{projects_table}");
 
@@ -1680,18 +1705,28 @@ impl Shuttle {
     async fn project_status(&self, follow: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         if follow {
-            self.wait_with_spinner(
-                &[
+            let p = self.ctx.project_name();
+            wait_with_spinner(|_, pb| async move {
+                let project = client.get_project(p).await?;
+                pb.set_message(format!("{project}"));
+
+                let done = [
                     project::State::Ready,
                     project::State::Destroyed,
                     project::State::Errored {
                         message: Default::default(),
                     },
-                ],
-                client.get_project(self.ctx.project_name()),
-                self.ctx.project_name(),
-                client,
-            )
+                ]
+                .contains(&project.state);
+
+                if done {
+                    Ok(Some(move || {
+                        println!("{project}");
+                    }))
+                } else {
+                    Ok(None)
+                }
+            })
             .await?;
         } else {
             let project = client
@@ -1717,26 +1752,41 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_delete(&self) -> Result<CommandOutcome> {
+    async fn project_stop(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        self.wait_with_spinner(
-            &[
+
+        let p = self.ctx.project_name();
+        wait_with_spinner(|i, pb| async move {
+            let project = if i == 0 {
+                client.stop_project(p).await?
+            } else {
+                client.get_project(p).await?
+            };
+            pb.set_message(format!("{project}"));
+
+            let done = [
                 project::State::Destroyed,
                 project::State::Errored {
                     message: Default::default(),
                 },
-            ],
-            client.delete_project(self.ctx.project_name()),
-            self.ctx.project_name(),
-            client,
-        )
+            ]
+            .contains(&project.state);
+
+            if done {
+                Ok(Some(move || {
+                    println!("{project}");
+                }))
+            } else {
+                Ok(None)
+            }
+        })
         .await
         .map_err(|err| {
             suggestions::project::project_request_failure(
                 err,
-                "Project destroy failed",
+                "Project stop failed",
                 true,
-                "deleting the project or getting project status fails repeteadly",
+                "stopping the project or getting project status fails repeteadly",
             )
         })?;
         println!("Run `cargo shuttle project start` to recreate project environment on Shuttle.");
@@ -1744,32 +1794,50 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn wait_with_spinner<'a, Fut>(
-        &self,
-        states_to_check: &[project::State],
-        fut: Fut,
-        project_name: &'a str,
-        client: &'a Client,
-    ) -> Result<(), anyhow::Error>
-    where
-        Fut: std::future::Future<Output = Result<project::Response>> + 'a,
-    {
-        let mut project = fut.await?;
+    async fn project_delete(&self) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
 
-        let progress_bar = create_spinner();
-        loop {
-            if states_to_check.contains(&project.state) {
-                break;
-            }
+        // If a check fails, print the returned error
+        client.delete_project(self.ctx.project_name(), true).await?;
 
-            progress_bar.set_message(format!("{project}"));
-            project = client.get_project(project_name).await?;
-
-            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+        println!(
+            "{}",
+            formatdoc!(
+                r#"
+                WARNING:
+                    Are you sure you want to delete "{}"?
+                    This will...
+                    - Delete any shuttle-persist data in this project.
+                    - Delete any custom domains linked to this project.
+                    - Release the project name from your account.
+                    This action is permanent."#,
+                self.ctx.project_name()
+            )
+            .bold()
+            .red()
+        );
+        if !Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt("Are you sure?")
+            .default(false)
+            .interact()
+            .unwrap()
+        {
+            return Ok(CommandOutcome::Ok);
         }
-        progress_bar.finish_and_clear();
-        println!("{project}");
-        Ok(())
+
+        client
+            .delete_project(self.ctx.project_name(), false)
+            .await
+            .map_err(|err| {
+                suggestions::project::project_request_failure(
+                    err,
+                    "Project delete failed",
+                    true,
+                    "deleting the project or getting project status fails repeteadly",
+                )
+            })?;
+
+        Ok(CommandOutcome::Ok)
     }
 
     fn make_archive(&self) -> Result<Vec<u8>> {
@@ -1864,40 +1932,40 @@ impl Shuttle {
 
         Ok(bytes)
     }
+}
 
-    fn is_dirty(&self, repo: &Repository) -> Result<()> {
-        let mut status_options = StatusOptions::new();
-        status_options.include_untracked(true);
-        let statuses = repo
-            .statuses(Some(&mut status_options))
-            .context("getting status of repository files")?;
+fn is_dirty(repo: &Repository) -> Result<()> {
+    let mut status_options = StatusOptions::new();
+    status_options.include_untracked(true);
+    let statuses = repo
+        .statuses(Some(&mut status_options))
+        .context("getting status of repository files")?;
 
-        if !statuses.is_empty() {
-            let mut error = format!(
-                "{} files in the working directory contain changes that were not yet committed into git:\n",
-                statuses.len()
+    if !statuses.is_empty() {
+        let mut error = format!(
+            "{} files in the working directory contain changes that were not yet committed into git:\n",
+            statuses.len()
+        );
+
+        for status in statuses.iter() {
+            trace!(
+                path = status.path(),
+                status = ?status.status(),
+                "found file with updates"
             );
 
-            for status in statuses.iter() {
-                trace!(
-                    path = status.path(),
-                    status = ?status.status(),
-                    "found file with updates"
-                );
+            let rel_path = status.path().context("getting path of changed file")?;
 
-                let rel_path = status.path().context("getting path of changed file")?;
-
-                writeln!(error, "{rel_path}").expect("to append error");
-            }
-
-            writeln!(error).expect("to append error");
-            writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
-
-            bail!(error);
+            writeln!(error, "{rel_path}").expect("to append error");
         }
 
-        Ok(())
+        writeln!(error).expect("to append error");
+        writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
+
+        bail!(error);
     }
+
+    Ok(())
 }
 
 fn check_version(runtime_path: &Path) -> Result<()> {
@@ -1955,6 +2023,32 @@ impl std::fmt::Display for VersionMismatchError {
 }
 
 impl std::error::Error for VersionMismatchError {}
+
+/// Calls async function `f` in a loop with sleep,
+/// while providing iteration count and reference to update the progress bar.
+/// `f` returns Some with a cleanup function if done.
+/// The cleanup function is called after teardown of progress bar,
+/// and its return value is returned from here.
+async fn wait_with_spinner<Fut, C, O>(
+    f: impl Fn(usize, ProgressBar) -> Fut,
+) -> Result<O, anyhow::Error>
+where
+    Fut: std::future::Future<Output = Result<Option<C>>>,
+    C: FnOnce() -> O,
+{
+    let progress_bar = create_spinner();
+    let mut count = 0usize;
+    let cleanup = loop {
+        if let Some(cleanup) = f(count, progress_bar.clone()).await? {
+            break cleanup;
+        }
+        count += 1;
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    };
+    progress_bar.finish_and_clear();
+
+    Ok(cleanup())
+}
 
 fn create_spinner() -> ProgressBar {
     let pb = indicatif::ProgressBar::new_spinner();

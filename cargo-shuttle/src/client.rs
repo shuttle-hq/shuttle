@@ -127,7 +127,7 @@ impl Client {
     pub async fn create_project(
         &self,
         project: &str,
-        config: project::Config,
+        config: &project::Config,
     ) -> Result<project::Response> {
         let path = format!("/projects/{project}");
 
@@ -160,8 +160,17 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn delete_project(&self, project: &str) -> Result<project::Response> {
+    pub async fn stop_project(&self, project: &str) -> Result<project::Response> {
         let path = format!("/projects/{project}");
+
+        self.delete(path).await
+    }
+
+    pub async fn delete_project(&self, project: &str, dry_run: bool) -> Result<String> {
+        let path = format!(
+            "/projects/{project}/delete{}",
+            if dry_run { "?dry_run=true" } else { "" }
+        );
 
         self.delete(path).await
     }

@@ -10,11 +10,11 @@ use axum::handler::Handler;
 use axum::http::Request;
 use axum::middleware::from_extractor;
 use axum::response::Response;
-use axum::routing::{any, get, post};
+use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::Uri;
+use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
@@ -278,6 +278,122 @@ async fn destroy_project(
     response.state = shuttle_common::models::project::State::Destroying;
 
     Ok(AxumJson(response))
+}
+
+#[derive(Deserialize, IntoParams)]
+struct DeleteProjectParams {
+    dry_run: Option<bool>,
+}
+
+#[instrument(skip_all, fields(project_name = %scoped_user.scope))]
+#[utoipa::path(
+    delete,
+    path = "/projects/{project_name}/delete",
+    responses(
+        (status = 200, description = "Successfully deleted a project, unless dry run.", body = shuttle_common::models::project::Response),
+        (status = 403, description = "Project cannot be deleted now."),
+        (status = 500, description = "Server internal error."),
+    ),
+    params(
+        ("project_name" = String, Path, description = "The name of the project."),
+        DeleteProjectParams,
+    )
+)]
+async fn delete_project(
+    State(state): State<RouterState>,
+    scoped_user: ScopedUser,
+    Query(DeleteProjectParams { dry_run }): Query<DeleteProjectParams>,
+    req: Request<Body>,
+) -> Result<AxumJson<String>, Error> {
+    let project_name = scoped_user.scope.clone();
+    let service = state.service.clone();
+    let sender = state.sender.clone();
+
+    // check that deployment is not running
+    let mut rb = Request::builder();
+    rb.headers_mut().unwrap().clone_from(req.headers());
+    let service_req = rb
+        .uri(
+            format!("/projects/{project_name}/services/{project_name}")
+                .parse::<Uri>()
+                .unwrap(),
+        )
+        .method("GET")
+        .body(hyper::Body::empty())
+        .unwrap();
+    let res = route_project(State(state.clone()), scoped_user.clone(), service_req).await?;
+    // 404 == no service == no deployments
+    if res.status() != StatusCode::NOT_FOUND {
+        if res.status() != StatusCode::OK {
+            return Err(Error::from_kind(ErrorKind::Internal));
+        }
+        let body_bytes = hyper::body::to_bytes(res.into_body())
+            .await
+            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+        let summary: shuttle_common::models::service::Summary = serde_json::from_slice(&body_bytes)
+            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+        if summary.deployment.is_some() {
+            return Err(Error::from_kind(ErrorKind::ProjectHasRunningDeployment));
+        }
+    }
+
+    // check if database in resources
+    let mut rb = hyper::Request::builder();
+    rb.headers_mut().unwrap().clone_from(req.headers());
+    let resource_req = rb
+        .uri(
+            format!("/projects/{project_name}/services/{project_name}/resources")
+                .parse::<Uri>()
+                .unwrap(),
+        )
+        .method("GET")
+        .body(hyper::Body::empty())
+        .unwrap();
+    let res = route_project(State(state.clone()), scoped_user, resource_req).await?;
+    // 404 == no service == no resources
+    if res.status() != StatusCode::NOT_FOUND {
+        if res.status() != StatusCode::OK {
+            return Err(Error::from_kind(ErrorKind::Internal));
+        }
+        let body_bytes = hyper::body::to_bytes(res.into_body())
+            .await
+            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+        let resources: Vec<shuttle_common::resource::Response> =
+            serde_json::from_slice(&body_bytes)
+                .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+
+        let resources = resources
+            .into_iter()
+            .filter(|resource| {
+                matches!(
+                    resource.r#type,
+                    shuttle_common::resource::Type::Database(_)
+                        | shuttle_common::resource::Type::Secrets
+                )
+            })
+            .map(|resource| resource.r#type.to_string())
+            .collect::<Vec<_>>();
+
+        if !resources.is_empty() {
+            return Err(Error::from_kind(ErrorKind::ProjectHasResources(resources)));
+        }
+    }
+
+    if dry_run.is_some_and(|d| d) {
+        return Ok(AxumJson("project not deleted due to dry run".to_owned()));
+    }
+
+    let task = service
+        .new_task()
+        .project(project_name.clone())
+        .and_then(task::delete_project())
+        .send(&sender)
+        .await?;
+    task.await;
+
+    service.delete_project(&project_name).await?;
+
+    Ok(AxumJson("project successfully deleted".to_owned()))
 }
 
 #[instrument(skip_all, fields(scope = %scoped_user.scope))]
@@ -657,6 +773,10 @@ async fn renew_custom_domain_acme_certificate(
                     // If successfuly created, save the certificate in memory to be
                     // served in the future.
                     Ok((certs, private_key)) => {
+                        service
+                            .create_custom_domain(&project_name, &fqdn, &certs, &private_key)
+                            .await?;
+
                         let mut buf = Vec::new();
                         buf.extend(certs.as_bytes());
                         buf.extend(private_key.as_bytes());
@@ -900,8 +1020,12 @@ impl ApiBuilder {
             .route(
                 "/projects/:project_name",
                 get(get_project.layer(ScopedLayer::new(vec![Scope::Project])))
-                    .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate])))
-                    .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate]))),
+                    .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite])))
+                    .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
+            )
+            .route(
+                "/projects/:project_name/delete",
+                delete(delete_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
             )
             .route("/projects/name/:project_name", get(check_project_name))
             .route("/projects/:project_name/*any", any(route_project))

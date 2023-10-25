@@ -608,7 +608,7 @@ pub mod tests {
                 .lock()
                 .unwrap()
                 .users
-                .insert(user.to_string(), vec![Scope::Project, Scope::ProjectCreate]);
+                .insert(user.to_string(), vec![Scope::Project, Scope::ProjectWrite]);
 
             user.to_string()
         }

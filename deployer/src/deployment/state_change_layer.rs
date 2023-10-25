@@ -597,6 +597,10 @@ mod tests {
                     id,
                     state: State::Stopped,
                 },
+                MockStateLog {
+                    id,
+                    state: State::Stopped,
+                },
             ],
         );
 

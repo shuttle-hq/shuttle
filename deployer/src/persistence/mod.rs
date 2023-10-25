@@ -221,8 +221,8 @@ impl Persistence {
         self.project_id
     }
 
-    pub async fn insert_deployment(&self, deployment: impl Into<Deployment>) -> Result<()> {
-        let deployment: Deployment = deployment.into();
+    pub async fn insert_deployment(&self, deployment: impl Into<&Deployment>) -> Result<()> {
+        let deployment: &Deployment = deployment.into();
 
         sqlx::query("INSERT INTO deployments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(deployment.id)
@@ -231,9 +231,9 @@ impl Persistence {
             .bind(deployment.last_update)
             .bind(deployment.address.map(|socket| socket.to_string()))
             .bind(deployment.is_next)
-            .bind(deployment.git_commit_id)
-            .bind(deployment.git_commit_msg)
-            .bind(deployment.git_branch)
+            .bind(deployment.git_commit_id.as_ref())
+            .bind(deployment.git_commit_msg.as_ref())
+            .bind(deployment.git_branch.as_ref())
             .bind(deployment.git_dirty)
             .execute(&self.pool)
             .await
@@ -743,7 +743,7 @@ mod tests {
         };
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 12345);
 
-        p.insert_deployment(deployment.clone()).await.unwrap();
+        p.insert_deployment(&deployment).await.unwrap();
         assert_eq!(p.get_deployment(&id).await.unwrap().unwrap(), deployment);
 
         update_deployment(
@@ -790,7 +790,7 @@ mod tests {
             .collect();
 
         for deployment in &deployments {
-            p.insert_deployment(deployment.clone()).await.unwrap();
+            p.insert_deployment(deployment).await.unwrap();
         }
 
         // Reverse to match last_updated desc order
@@ -856,7 +856,7 @@ mod tests {
             &deployment_other,
             &deployment_running,
         ] {
-            p.insert_deployment(deployment.clone()).await.unwrap();
+            p.insert_deployment(deployment).await.unwrap();
         }
 
         assert_eq!(
@@ -915,7 +915,7 @@ mod tests {
             &deployment_stopped,
             &deployment_running,
         ] {
-            p.insert_deployment(deployment.clone()).await.unwrap();
+            p.insert_deployment(deployment).await.unwrap();
         }
 
         let actual = p.get_deployments(&service_id, 0, u32::MAX).await.unwrap();
@@ -1009,7 +1009,7 @@ mod tests {
             &deployment_building,
             &deployment_loading,
         ] {
-            p.insert_deployment(deployment.clone()).await.unwrap();
+            p.insert_deployment(deployment).await.unwrap();
         }
 
         p.cleanup_invalid_states().await.unwrap();
@@ -1050,7 +1050,7 @@ mod tests {
         let id_3 = Uuid::new_v4();
         let id_crashed = Uuid::new_v4();
 
-        for deployment in [
+        for deployment in &[
             Deployment {
                 id: Uuid::new_v4(),
                 service_id,
@@ -1260,7 +1260,7 @@ mod tests {
         let id_1 = Uuid::new_v4();
         let id_2 = Uuid::new_v4();
 
-        for deployment in [
+        for deployment in &[
             Deployment {
                 id: Uuid::new_v4(),
                 service_id,

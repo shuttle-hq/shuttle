@@ -9,10 +9,16 @@ use crossterm::style::Stylize;
 
 use crate::{
     resource::{Response, Type},
-    DbOutput, SecretStore,
+    secrets::SecretStore,
+    DbOutput,
 };
 
-pub fn get_resources_table(resources: &Vec<Response>, service_name: &str, raw: bool) -> String {
+pub fn get_resources_table(
+    resources: &Vec<Response>,
+    service_name: &str,
+    raw: bool,
+    show_secrets: bool,
+) -> String {
     if resources.is_empty() {
         if raw {
             "No resources are linked to this service\n".to_string()
@@ -40,7 +46,12 @@ pub fn get_resources_table(resources: &Vec<Response>, service_name: &str, raw: b
         let mut output = Vec::new();
 
         if let Some(databases) = resource_groups.get("Databases") {
-            output.push(get_databases_table(databases, service_name, raw));
+            output.push(get_databases_table(
+                databases,
+                service_name,
+                raw,
+                show_secrets,
+            ));
         };
 
         if let Some(secrets) = resource_groups.get("Secrets") {
@@ -63,7 +74,12 @@ pub fn get_resources_table(resources: &Vec<Response>, service_name: &str, raw: b
     }
 }
 
-fn get_databases_table(databases: &Vec<&Response>, service_name: &str, raw: bool) -> String {
+fn get_databases_table(
+    databases: &Vec<&Response>,
+    service_name: &str,
+    raw: bool,
+    show_secrets: bool,
+) -> String {
     let mut table = Table::new();
 
     if raw {
@@ -84,22 +100,36 @@ fn get_databases_table(databases: &Vec<&Response>, service_name: &str, raw: bool
                     .set_alignment(CellAlignment::Center)
                     .add_attribute(Attribute::Bold),
                 Cell::new("Connection string")
-                    .set_alignment(CellAlignment::Center)
-                    .add_attribute(Attribute::Bold),
+                    .add_attribute(Attribute::Bold)
+                    .set_alignment(CellAlignment::Center),
             ]);
     }
 
     for database in databases {
-        let info = serde_json::from_value::<DbOutput>(database.data.clone()).unwrap();
-        let connection_string = match info {
-            DbOutput::Local(local_uri) => local_uri.clone(),
-            DbOutput::Info(info) => info.connection_string_public(),
+        let info = serde_json::from_value::<DbOutput>(database.data.clone()).expect("");
+        let conn_string = match info {
+            DbOutput::Local(info) => info.clone(),
+            DbOutput::Info(local_uri) => {
+                if show_secrets {
+                    local_uri.connection_string_private()
+                } else {
+                    local_uri.connection_string_public()
+                }
+            }
         };
-
-        table.add_row(vec![database.r#type.to_string(), connection_string]);
+        table.add_row(vec![database.r#type.to_string(), conn_string]);
     }
 
-    format!("These databases are linked to {service_name}\n{table}\n")
+    let show_secret_hint = if databases.is_empty() || show_secrets {
+        ""
+    } else {
+        "Hint: you can show the secrets of these resources using --show-secrets\n"
+    };
+
+    format!(
+        "These databases are linked to {service_name}\n{table}\n{}",
+        show_secret_hint
+    )
 }
 
 fn get_secrets_table(secrets: &[&Response], service_name: &str, raw: bool) -> String {

@@ -173,6 +173,13 @@ pub enum ResourceCommand {
         #[arg(long, default_value_t = false)]
         /// Output table in `raw` format
         raw: bool,
+
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Show secrets from resources (e.g. a password in a connection string)"
+        )]
+        show_secrets: bool,
     },
     /// Delete a resource
     Delete {

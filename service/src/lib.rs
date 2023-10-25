@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
+pub use shuttle_common::secrets::Secret;
 pub use shuttle_common::{
     database,
     deployment::{DeploymentMetadata, Environment},
@@ -31,7 +32,7 @@ pub trait Factory: Send + Sync {
     ) -> Result<DatabaseReadyInfo, crate::Error>;
 
     /// Get all the secrets for a service
-    async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, crate::Error>;
+    async fn get_secrets(&mut self) -> Result<BTreeMap<String, Secret<String>>, crate::Error>;
 
     /// Get the metadata for this deployment
     fn get_metadata(&self) -> DeploymentMetadata;

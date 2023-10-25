@@ -773,6 +773,10 @@ async fn renew_custom_domain_acme_certificate(
                     // If successfuly created, save the certificate in memory to be
                     // served in the future.
                     Ok((certs, private_key)) => {
+                        service
+                            .create_custom_domain(&project_name, &fqdn, &certs, &private_key)
+                            .await?;
+
                         let mut buf = Vec::new();
                         buf.extend(certs.as_bytes());
                         buf.extend(private_key.as_bytes());

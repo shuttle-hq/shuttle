@@ -241,7 +241,7 @@ impl ToTokens for Loader {
                             .get_secrets()
                             .await?
                             .into_iter()
-                            .map(|(key, value)| (format!("secrets.{}", key), value))
+                            .map(|(key, value)| (format!("secrets.{}", key), value.expose().clone()))
                     );
                 )),
                 Some(parse_quote!(

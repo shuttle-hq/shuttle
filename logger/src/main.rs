@@ -31,7 +31,7 @@ async fn main() {
     // The server can receive no more than 6 requests per peer address per second.
     let governor_config = GovernorConfigBuilder::default()
         .per_second(1)
-        .burst_size(6)
+        .burst_size(3)
         .use_headers()
         .key_extractor(TonicPeerIpKeyExtractor)
         .finish()

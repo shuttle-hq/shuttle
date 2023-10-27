@@ -43,7 +43,7 @@ async fn is_bin() {
 }
 
 #[tokio::test]
-#[should_panic(expected = "failed to read the Shuttle project manifest")]
+#[should_panic(expected = "Cargo manifest file not found")]
 async fn not_found() {
     let (tx, _) = tokio::sync::mpsc::channel::<String>(256);
     let project_path = format!(
@@ -58,7 +58,12 @@ async fn not_found() {
 // Test that alpha and next projects are compiled correctly. Any shared library crates should not be compiled too
 #[tokio::test]
 async fn workspace() {
-    let (tx, _) = tokio::sync::mpsc::channel::<String>(256);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
+    tokio::spawn(async move {
+        while let Some(l) = rx.recv().await {
+            println!("{l}");
+        }
+    });
     let project_path = format!("{}/tests/resources/workspace", env!("CARGO_MANIFEST_DIR"));
 
     assert_eq!(

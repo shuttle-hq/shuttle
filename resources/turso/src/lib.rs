@@ -140,6 +140,7 @@ impl ResourceBuilder<Client> for Turso {
 #[cfg(test)]
 mod test {
     use super::*;
+    use shuttle_service::Secret;
     use std::str::FromStr;
 
     struct MockFactory {
@@ -163,7 +164,8 @@ mod test {
 
         async fn get_secrets(
             &mut self,
-        ) -> Result<std::collections::BTreeMap<String, String>, shuttle_service::Error> {
+        ) -> Result<std::collections::BTreeMap<String, Secret<String>>, shuttle_service::Error>
+        {
             panic!("no turso test should try to get secrets")
         }
 

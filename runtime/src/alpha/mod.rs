@@ -18,6 +18,7 @@ use shuttle_common::{
     },
     claims::{Claim, ClaimLayer, InjectPropagationLayer},
     resource,
+    secrets::Secret,
 };
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
@@ -228,7 +229,7 @@ where
         let resource_tracker = ResourceTracker::new(past_resources, new_resources.clone());
 
         // Sorts secrets by key
-        let secrets = BTreeMap::from_iter(secrets);
+        let secrets = BTreeMap::from_iter(secrets.into_iter().map(|(k, v)| (k, Secret::new(v))));
 
         let factory =
             ProvisionerFactory::new(provisioner_client, service_name, secrets, self.env, claim);
@@ -240,7 +241,7 @@ where
             Ok(res) => match res {
                 Ok(service) => service,
                 Err(error) => {
-                    println!("loading service failed: {error}");
+                    println!("loading service failed: {error:#}");
 
                     let message = LoadResponse {
                         success: false,
@@ -282,7 +283,7 @@ where
                     };
                     return Ok(Response::new(message));
                 } else {
-                    println!("loading service crashed: {error}");
+                    println!("loading service crashed: {error:#}");
                     let message = LoadResponse {
                         success: false,
                         message: error.to_string(),

@@ -19,28 +19,35 @@ pub mod models;
 #[cfg(feature = "service")]
 pub mod project;
 pub mod resource;
+pub mod secrets;
+pub use secrets::{Secret, SecretStore};
 #[cfg(feature = "tracing")]
 pub mod tracing;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::fmt::Display;
 
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::openapi::{Object, ObjectBuilder};
+use zeroize::Zeroize;
 
 pub type ApiUrl = String;
 pub type Host = String;
 
 #[derive(Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "persist", derive(sqlx::Type, PartialEq, Hash, Eq))]
+#[cfg_attr(feature = "persist", derive(PartialEq, Eq, Hash, sqlx::Type))]
 #[cfg_attr(feature = "persist", serde(transparent))]
 #[cfg_attr(feature = "persist", sqlx(transparent))]
 pub struct ApiKey(String);
+
+impl Zeroize for ApiKey {
+    fn zeroize(&mut self) {
+        self.0.zeroize()
+    }
+}
 
 impl ApiKey {
     pub fn parse(key: &str) -> anyhow::Result<Self> {
@@ -77,20 +84,6 @@ impl AsRef<str> for ApiKey {
     }
 }
 
-// Ensure we can't accidentaly log an ApiKey
-impl Debug for ApiKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ApiKey: REDACTED")
-    }
-}
-
-// Ensure we can't accidentaly log an ApiKey
-impl Display for ApiKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
 /// Holds the input for a DB resource
 #[derive(Deserialize, Serialize, Default)]
 pub struct DbInput {
@@ -109,7 +102,7 @@ pub enum DbOutput {
 pub struct DatabaseReadyInfo {
     engine: String,
     role_name: String,
-    role_password: String,
+    role_password: Secret<String>,
     database_name: String,
     port: String,
     address_private: String,
@@ -129,7 +122,7 @@ impl DatabaseReadyInfo {
         Self {
             engine,
             role_name,
-            role_password,
+            role_password: Secret::new(role_password),
             database_name,
             port,
             address_private,
@@ -141,7 +134,7 @@ impl DatabaseReadyInfo {
             "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
-            self.role_password,
+            self.role_password.expose(),
             self.address_private,
             self.port,
             self.database_name
@@ -152,35 +145,11 @@ impl DatabaseReadyInfo {
             "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
-            self.role_password,
+            self.role_password.redacted(),
             self.address_public,
             self.port,
             self.database_name
         )
-    }
-}
-
-/// Store that holds all the secrets available to a deployment
-#[derive(Deserialize, Serialize, Clone)]
-pub struct SecretStore {
-    pub(crate) secrets: BTreeMap<String, String>,
-}
-
-impl SecretStore {
-    pub fn new(secrets: BTreeMap<String, String>) -> Self {
-        Self { secrets }
-    }
-
-    pub fn get(&self, key: &str) -> Option<String> {
-        self.secrets.get(key).map(ToOwned::to_owned)
-    }
-}
-
-impl IntoIterator for SecretStore {
-    type Item = (String, String);
-    type IntoIter = <BTreeMap<String, String> as IntoIterator>::IntoIter;
-    fn into_iter(self) -> Self::IntoIter {
-        self.secrets.into_iter()
     }
 }
 
@@ -250,20 +219,6 @@ mod tests {
     #[should_panic(expected = "The API key should consist of only alphanumeric characters.")]
     fn non_alphanumeric_api_key() {
         ApiKey::parse("dh9z58jttoes3qv@").unwrap();
-    }
-
-    #[test]
-    fn secretstore_intoiter() {
-        let bt = BTreeMap::from([
-            ("1".to_owned(), "2".to_owned()),
-            ("3".to_owned(), "4".to_owned()),
-        ]);
-        let ss = SecretStore::new(bt);
-
-        let mut iter = ss.into_iter();
-        assert_eq!(iter.next(), Some(("1".to_owned(), "2".to_owned())));
-        assert_eq!(iter.next(), Some(("3".to_owned(), "4".to_owned())));
-        assert_eq!(iter.next(), None);
     }
 
     #[test]

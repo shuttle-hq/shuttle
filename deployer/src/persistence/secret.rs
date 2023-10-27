@@ -35,6 +35,7 @@ impl From<Secret> for shuttle_common::models::secret::Response {
     fn from(secret: Secret) -> Self {
         Self {
             key: secret.key,
+            value: secret.value.into(),
             last_update: secret.last_update,
         }
     }

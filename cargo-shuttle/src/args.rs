@@ -51,6 +51,8 @@ impl ProjectArgs {
     pub fn workspace_path(&self) -> anyhow::Result<PathBuf> {
         let path = MetadataCommand::new()
             .current_dir(&self.working_directory)
+            // don't fetch crates in blocking part of code, let other cargo commands do it
+            .other_options(vec!["--offline".into()])
             .exec()
             .context("failed to get cargo metadata")?
             .workspace_root
@@ -64,8 +66,10 @@ impl ProjectArgs {
 
         let meta = MetadataCommand::new()
             .current_dir(&workspace_path)
+            // don't fetch crates in blocking part of code, let other cargo commands do it
+            .other_options(vec!["--offline".into()])
             .exec()
-            .unwrap();
+            .context("failed to get cargo metadata")?;
         let package_name = if let Some(root_package) = meta.root_package() {
             root_package.name.clone().parse()?
         } else {

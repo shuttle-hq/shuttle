@@ -24,7 +24,7 @@ strfmt = { workspace = true }
 thiserror = { workspace = true }
 tracing-subscriber = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["full"] }
-tokio-stream = "0.1.11"
+tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
 cap-std = { workspace = true, optional = true }
@@ -50,7 +50,6 @@ workspace = true
 workspace = true
 
 [dev-dependencies]
-crossbeam-channel = { workspace = true }
 portpicker = "0.1.1"
 futures = { workspace = true }
 shuttle-service = { workspace = true, features = ["builder"] }

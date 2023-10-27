@@ -1,12 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
-use std::io::{BufRead, BufReader, Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::Duration;
 
-use cargo_metadata::Message;
-use crossbeam_channel::Sender;
 use flate2::read::GzDecoder;
 use opentelemetry::global;
 use shuttle_common::{
@@ -22,6 +20,7 @@ use shuttle_service::builder::{build_workspace, BuiltService};
 use tar::Archive;
 use tokio::{
     fs,
+    io::AsyncBufReadExt,
     task::JoinSet,
     time::{sleep, timeout},
 };
@@ -147,10 +146,7 @@ pub async fn task(
 
 #[instrument(name = "Build failed", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
-    error!(
-        error = &error as &dyn std::error::Error,
-        "{}", DEPLOYER_END_MSG_BUILD_ERR,
-    );
+    error!("{DEPLOYER_END_MSG_BUILD_ERR}: {error}");
 }
 
 #[instrument(name = "Waiting for queue slot", skip(queue_client), fields(deployment_id = %id, state = %State::Queued))]
@@ -224,18 +220,15 @@ impl Queued {
         fs::create_dir_all(&project_path).await?;
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
-        let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
 
-        tokio::task::spawn_blocking(move || {
-            while let Ok(message) = rx.recv() {
-                trace!(?message, "received cargo message");
+        tokio::task::spawn(async move {
+            while let Some(line) = rx.recv().await {
+                trace!(?line, "received build message");
                 let log = LogItem::new(
                     self.id,
                     shuttle_common::log::Backend::Deployer, // will change to Builder
-                    match message {
-                        Message::TextLine(line) => line,
-                        message => serde_json::to_string(&message).unwrap(),
-                    },
+                    line,
                 );
                 log_recorder.record(log);
             }
@@ -388,7 +381,7 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 #[instrument(skip(project_path, tx))]
 async fn build_deployment(
     project_path: &Path,
-    tx: crossbeam_channel::Sender<Message>,
+    tx: tokio::sync::mpsc::Sender<String>,
 ) -> Result<BuiltService> {
     // Build in release mode, except for when testing, such as in CI
     let runtimes = build_workspace(project_path, cfg!(not(test)), tx, true)
@@ -401,28 +394,12 @@ async fn build_deployment(
 #[instrument(skip(project_path, tx))]
 async fn run_pre_deploy_tests(
     project_path: &Path,
-    tx: Sender<Message>,
+    tx: tokio::sync::mpsc::Sender<String>,
 ) -> std::result::Result<(), TestError> {
-    let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
-    tokio::task::spawn_blocking(move || {
-        for line in read.lines() {
-            match line {
-                Ok(line) => {
-                    if let Err(error) = tx.send(Message::TextLine(line)) {
-                        error!("failed to send cargo message on channel: {error}");
-                    }
-                }
-                Err(error) => {
-                    error!("failed to read cargo output line: {error}");
-                }
-            }
-        }
-    });
-
-    let mut cmd = Command::new("cargo")
-        .arg("test")
+    let mut cmd = tokio::process::Command::new("cargo");
+    cmd.arg("test")
         // We set the tests to build with the release profile since deployments compile
         // with the release profile by default. This means crates don't need to be
         // recompiled in debug mode for the tests, reducing memory usage during deployment.
@@ -432,18 +409,27 @@ async fn run_pre_deploy_tests(
         .arg("--color=always")
         .current_dir(project_path)
         .stdout(Stdio::piped())
-        .spawn()
-        .map_err(TestError::Run)?;
+        .stderr(Stdio::piped());
 
-    let stdout = cmd.stdout.take().unwrap();
-    let stdout_reader = BufReader::new(stdout);
-    for line in stdout_reader.lines().flatten() {
-        if let Err(error) = write.send(format!("{}\n", line.trim_end_matches('\n'))) {
-            error!("failed to send to pipe: {error}");
+    let mut handle = cmd.spawn().map_err(TestError::Run)?;
+    let tx2 = tx.clone();
+    let reader = tokio::io::BufReader::new(handle.stdout.take().unwrap());
+    tokio::spawn(async move {
+        let mut lines = reader.lines();
+        while let Some(line) = lines.next_line().await.unwrap() {
+            let _ = tx.send(line).await.map_err(|e| error!("{e}"));
         }
-    }
+    });
+    let reader = tokio::io::BufReader::new(handle.stderr.take().unwrap());
+    tokio::spawn(async move {
+        let mut lines = reader.lines();
+        while let Some(line) = lines.next_line().await.unwrap() {
+            let _ = tx2.send(line).await.map_err(|e| error!("{e}"));
+        }
+    });
+    let status = handle.wait().await.map_err(TestError::Run)?;
 
-    if cmd.wait().map_err(TestError::Run)?.success() {
+    if status.success() {
         Ok(())
     } else {
         Err(TestError::Failed)
@@ -580,9 +566,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     #[tokio::test(flavor = "multi_thread")]
     async fn run_pre_deploy_tests() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let (tx, rx) = crossbeam_channel::unbounded();
-
-        tokio::task::spawn_blocking(move || while rx.recv().is_ok() {});
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(256);
 
         let failure_project_path = root.join("tests/resources/tests-fail");
         assert!(matches!(

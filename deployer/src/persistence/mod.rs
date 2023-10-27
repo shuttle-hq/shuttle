@@ -55,7 +55,7 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 #[derive(Clone)]
 pub struct Persistence {
     pool: SqlitePool,
-    state_send: crossbeam_channel::Sender<DeploymentState>,
+    state_send: tokio::sync::mpsc::Sender<DeploymentState>,
     resource_recorder_client: Option<
         ResourceRecorderClient<
             shuttle_common::claims::ClaimService<
@@ -190,15 +190,13 @@ impl Persistence {
 
     async fn from_pool(
         pool: SqlitePool,
-    ) -> (crossbeam_channel::Sender<DeploymentState>, JoinHandle<()>) {
+    ) -> (tokio::sync::mpsc::Sender<DeploymentState>, JoinHandle<()>) {
         MIGRATIONS.run(&pool).await.unwrap();
 
-        let (state_send, state_recv): (crossbeam_channel::Sender<DeploymentState>, _) =
-            crossbeam_channel::bounded(0);
+        let (state_send, mut state_recv) = tokio::sync::mpsc::channel::<DeploymentState>(5);
 
         let handle = tokio::spawn(async move {
-            // State change logs are received on this non-async channel.
-            while let Ok(state) = state_recv.recv() {
+            while let Some(state) = state_recv.recv().await {
                 trace!(?state, "persistence received state change");
                 update_deployment(&pool, state)
                     .await
@@ -691,7 +689,11 @@ impl StateRecorder for Persistence {
     type Err = Error;
 
     fn record_state(&self, state: DeploymentState) -> Result<()> {
-        self.state_send.send(state).map_err(Error::from)
+        let s = self.state_send.clone();
+        // move out of async context to be able to send
+        std::thread::spawn(move || s.blocking_send(state).map_err(Error::from))
+            .join()
+            .map_err(|_| Error::ChannelSendThreadError)?
     }
 }
 

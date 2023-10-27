@@ -15,12 +15,14 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     quote! {
         fn main() {
-            use ::shuttle_runtime::tokio;
-            #[tokio::main]
-            async fn main() {
-                ::shuttle_runtime::__internals::start(loader).await;
-            }
-            main()
+            // manual expansion of #[tokio::main]
+            ::shuttle_runtime::tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    ::shuttle_runtime::__internals::start(loader).await;
+                })
         }
 
         #loader

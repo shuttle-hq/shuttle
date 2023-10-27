@@ -1,6 +1,7 @@
 //! Shuttle service integration for the Poise discord bot framework.
 //! ## Example
 //! ```rust,no_run
+//! use anyhow::Context as _;
 //! use poise::serenity_prelude as serenity;
 //! use shuttle_secrets::SecretStore;
 //! use shuttle_poise::ShuttlePoise;
@@ -21,7 +22,7 @@
 //!     // Get the discord token set in `Secrets.toml`
 //!     let discord_token = secret_store
 //!         .get("DISCORD_TOKEN")
-//!         .expect("'DISCORD_TOKEN' was not found");
+//!         .context("'DISCORD_TOKEN' was not found")?;
 //!
 //!     let framework = poise::Framework::builder()
 //!         .options(poise::FrameworkOptions {

@@ -1,1514 +1,333 @@
-use std::fs::{read_to_string, File};
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::fs::{self, read_to_string};
+use std::num::NonZeroU32;
+use std::{
+    fmt::Write,
+    path::{Path, PathBuf},
+};
 
-use anyhow::{bail, Result};
-use cargo_edit::{find, get_latest_dependency, registry_url};
-use indoc::indoc;
+use anyhow::{Context, Result};
+use regex::Regex;
 use shuttle_common::project::ProjectName;
-use toml_edit::{value, Array, Document, Table};
+use tempfile::{Builder, TempDir};
+use toml_edit::{value, Document};
 use url::Url;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::Display, strum::EnumIter)]
-#[strum(serialize_all = "kebab-case")]
-pub enum Template {
-    ActixWeb,
-    Axum,
-    Poise,
-    Poem,
-    Rocket,
-    Salvo,
-    Serenity,
-    Tide,
-    Thruster,
-    Tower,
-    Warp,
-    None,
-}
+use core::sync::atomic::AtomicBool;
 
-impl Template {
-    /// Returns a framework-specific struct that implements the trait `ShuttleInit`
-    /// for writing framework-specific dependencies to `Cargo.toml` and generating
-    /// boilerplate code in `src/main.rs`.
-    pub fn init_config(&self) -> Box<dyn ShuttleInit> {
-        use Template::*;
-        match self {
-            ActixWeb => Box::new(ShuttleInitActixWeb),
-            Axum => Box::new(ShuttleInitAxum),
-            Rocket => Box::new(ShuttleInitRocket),
-            Tide => Box::new(ShuttleInitTide),
-            Tower => Box::new(ShuttleInitTower),
-            Poem => Box::new(ShuttleInitPoem),
-            Salvo => Box::new(ShuttleInitSalvo),
-            Serenity => Box::new(ShuttleInitSerenity),
-            Poise => Box::new(ShuttleInitPoise),
-            Warp => Box::new(ShuttleInitWarp),
-            Thruster => Box::new(ShuttleInitThruster),
-            None => Box::new(ShuttleInitNoOp),
-        }
-    }
-}
+use gix::clone::PrepareFetch;
+use gix::create::{self, Kind};
+use gix::remote::fetch::Shallow;
+use gix::{open, progress};
 
-pub trait ShuttleInit {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    );
-    fn get_boilerplate_code_for_framework(&self) -> &'static str;
-}
+use crate::args::TemplateLocation;
 
-pub struct ShuttleInitActixWeb;
+const SHUTTLE_EXAMPLES_README: &str = "https://github.com/shuttle\
+		     -hq/shuttle-examples#how-to-clone-run-and-deploy-an-example";
 
-impl ShuttleInit for ShuttleInitActixWeb {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-        set_key_value_dependency_version(
-            "actix-web",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
+pub fn generate_project(
+    dest: PathBuf,
+    name: &ProjectName,
+    temp_loc: TemplateLocation,
+) -> Result<()> {
+    println!(r#"Creating project "{name}" in "{}""#, dest.display());
 
-        set_key_value_dependency_version(
-            "shuttle-actix-web",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
+    let temp_dir: TempDir = setup_template(&temp_loc.auto_path)
+        .context("Failed to setup template generation directory")?;
 
-        set_key_value_dependency_version(
-            "tokio",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-    }
-
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        use actix_web::{get, web::ServiceConfig};
-        use shuttle_actix_web::ShuttleActixWeb;
-
-        #[get("/")]
-        async fn hello_world() -> &'static str {
-            "Hello World!"
-        }
-
-        #[shuttle_runtime::main]
-        async fn actix_web(
-        ) -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
-            let config = move |cfg: &mut ServiceConfig| {
-                cfg.service(hello_world);
-            };
-
-            Ok(config.into())
-        }"#}
-    }
-}
-
-pub struct ShuttleInitAxum;
-
-impl ShuttleInit for ShuttleInitAxum {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-        set_key_value_dependency_version(
-            "axum",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "shuttle-axum",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "tokio",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-    }
-
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        use axum::{routing::get, Router};
-
-        async fn hello_world() -> &'static str {
-            "Hello, world!"
-        }
-
-        #[shuttle_runtime::main]
-        async fn axum() -> shuttle_axum::ShuttleAxum {
-            let router = Router::new().route("/", get(hello_world));
-
-            Ok(router.into())
-        }"#}
-    }
-}
-
-pub struct ShuttleInitRocket;
-
-impl ShuttleInit for ShuttleInitRocket {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-        set_key_value_dependency_version(
-            "rocket",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "shuttle-rocket",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "tokio",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-    }
-
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        #[macro_use]
-        extern crate rocket;
-
-        #[get("/")]
-        fn index() -> &'static str {
-            "Hello, world!"
-        }
-
-        #[shuttle_runtime::main]
-        async fn rocket() -> shuttle_rocket::ShuttleRocket {
-            let rocket = rocket::build().mount("/", routes![index]);
-
-            Ok(rocket.into())
-        }"#}
-    }
-}
-
-pub struct ShuttleInitTide;
-
-impl ShuttleInit for ShuttleInitTide {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-        set_key_value_dependency_version(
-            "shuttle-tide",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "tokio",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "tide",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-    }
-
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        #[shuttle_runtime::main]
-        async fn tide() -> shuttle_tide::ShuttleTide<()> {
-            let mut app = tide::new();
-            app.with(tide::log::LogMiddleware::new());
-
-            app.at("/").get(|_| async { Ok("Hello, world!") });
-
-            Ok(app.into())
-        }"#}
-    }
-}
-
-pub struct ShuttleInitPoem;
-
-impl ShuttleInit for ShuttleInitPoem {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-        set_key_value_dependency_version(
-            "poem",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "shuttle-poem",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "tokio",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-    }
-
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        use poem::{get, handler, Route};
-        use shuttle_poem::ShuttlePoem;
-
-        #[handler]
-        fn hello_world() -> &'static str {
-            "Hello, world!"
-        }
-
-        #[shuttle_runtime::main]
-        async fn poem() -> ShuttlePoem<impl poem::Endpoint> {
-            let app = Route::new().at("/", get(hello_world));
-
-            Ok(app.into())
-        }"#}
-    }
-}
-
-pub struct ShuttleInitSalvo;
-
-impl ShuttleInit for ShuttleInitSalvo {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-        set_key_value_dependency_version(
-            "salvo",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "shuttle-salvo",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "tokio",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-    }
-
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        use salvo::prelude::*;
-
-        #[handler]
-        async fn hello_world(res: &mut Response) {
-            res.render(Text::Plain("Hello, world!"));
-        }
-
-        #[shuttle_runtime::main]
-        async fn salvo() -> shuttle_salvo::ShuttleSalvo {
-            let router = Router::with_path("hello").get(hello_world);
-
-            Ok(router.into())
-        }"#}
-    }
-}
-
-pub struct ShuttleInitSerenity;
-
-impl ShuttleInit for ShuttleInitSerenity {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-        set_key_value_dependency_version(
-            "anyhow",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_inline_table_dependency_version(
-            "serenity",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        dependencies["serenity"]["default-features"] = value(false);
-
-        set_inline_table_dependency_features(
-            "serenity",
-            dependencies,
-            vec![
-                "client".into(),
-                "gateway".into(),
-                "rustls_backend".into(),
-                "model".into(),
-            ],
-        );
-
-        set_key_value_dependency_version(
-            "shuttle-secrets",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "shuttle-serenity",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "tokio",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "tracing",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-    }
-
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        use anyhow::anyhow;
-        use serenity::async_trait;
-        use serenity::model::channel::Message;
-        use serenity::model::gateway::Ready;
-        use serenity::prelude::*;
-        use shuttle_secrets::SecretStore;
-        use tracing::{error, info};
-
-        struct Bot;
-
-        #[async_trait]
-        impl EventHandler for Bot {
-            async fn message(&self, ctx: Context, msg: Message) {
-                if msg.content == "!hello" {
-                    if let Err(e) = msg.channel_id.say(&ctx.http, "world!").await {
-                        error!("Error sending message: {:?}", e);
-                    }
-                }
-            }
-
-            async fn ready(&self, _: Context, ready: Ready) {
-                info!("{} is connected!", ready.user.name);
-            }
-        }
-
-        #[shuttle_runtime::main]
-        async fn serenity(
-            #[shuttle_secrets::Secrets] secret_store: SecretStore,
-        ) -> shuttle_serenity::ShuttleSerenity {
-            // Get the discord token set in `Secrets.toml`
-            let token = if let Some(token) = secret_store.get("DISCORD_TOKEN") {
-                token
+    let path = match temp_loc.subfolder {
+        Some(subfolder) => {
+            let path = temp_dir.path().join(&subfolder);
+            if path.exists() {
+                path
             } else {
-                return Err(anyhow!("'DISCORD_TOKEN' was not found").into());
-            };
-
-            // Set gateway intents, which decides what events the bot will be notified about
-            let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
-
-            let client = Client::builder(&token, intents)
-                .event_handler(Bot)
-                .await
-                .expect("Err creating client");
-
-            Ok(client.into())
-        }"#}
-    }
-}
-
-pub struct ShuttleInitPoise;
-
-impl ShuttleInit for ShuttleInitPoise {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-        set_key_value_dependency_version(
-            "anyhow",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "poise",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "shuttle-poise",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "shuttle-secrets",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "tokio",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "tracing",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-    }
-
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        use anyhow::Context as _;
-        use poise::serenity_prelude as serenity;
-        use shuttle_secrets::SecretStore;
-        use shuttle_poise::ShuttlePoise;
-
-        struct Data {} // User data, which is stored and accessible in all command invocations
-        type Error = Box<dyn std::error::Error + Send + Sync>;
-        type Context<'a> = poise::Context<'a, Data, Error>;
-
-        /// Responds with "world!"
-        #[poise::command(slash_command)]
-        async fn hello(ctx: Context<'_>) -> Result<(), Error> {
-            ctx.say("world!").await?;
-            Ok(())
-        }
-
-        #[shuttle_runtime::main]
-        async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> ShuttlePoise<Data, Error> {
-            // Get the discord token set in `Secrets.toml`
-            let discord_token = secret_store
-                .get("DISCORD_TOKEN")
-                .context("'DISCORD_TOKEN' was not found")?;
-
-            let framework = poise::Framework::builder()
-                .options(poise::FrameworkOptions {
-                    commands: vec![hello()],
-                    ..Default::default()
-                })
-                .token(discord_token)
-                .intents(serenity::GatewayIntents::non_privileged())
-                .setup(|ctx, _ready, framework| {
-                    Box::pin(async move {
-                        poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                        Ok(Data {})
-                    })
-                })
-                .build()
-                .await
-                .map_err(shuttle_runtime::CustomError::new)?;
-
-            Ok(framework.into())
-        }"#}
-    }
-}
-
-pub struct ShuttleInitTower;
-
-impl ShuttleInit for ShuttleInitTower {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-        set_inline_table_dependency_version(
-            "hyper",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_inline_table_dependency_features("hyper", dependencies, vec!["full".to_string()]);
-
-        set_key_value_dependency_version(
-            "shuttle-tower",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
-            "tokio",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_inline_table_dependency_version(
-            "tower",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_inline_table_dependency_features("tower", dependencies, vec!["full".to_string()]);
-    }
-
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        use std::convert::Infallible;
-        use std::future::Future;
-        use std::pin::Pin;
-        use std::task::{Context, Poll};
-
-        #[derive(Clone)]
-        struct HelloWorld;
-
-        impl tower::Service<hyper::Request<hyper::Body>> for HelloWorld {
-            type Response = hyper::Response<hyper::Body>;
-            type Error = Infallible;
-            type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
-
-            fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-                Poll::Ready(Ok(()))
-            }
-
-            fn call(&mut self, _req: hyper::Request<hyper::Body>) -> Self::Future {
-                let body = hyper::Body::from("Hello, world!");
-                let resp = hyper::Response::builder()
-                    .status(200)
-                    .body(body)
-                    .expect("Unable to create the `hyper::Response` object");
-
-                let fut = async { Ok(resp) };
-
-                Box::pin(fut)
+                anyhow::bail!(format!(
+                    r#"There is no sub-folder "{}" in the template found at "{}""#,
+                    subfolder, temp_loc.auto_path
+                ))
             }
         }
+        None => temp_dir.path().to_owned(),
+    };
 
-        #[shuttle_runtime::main]
-        async fn tower() -> shuttle_tower::ShuttleTower<HelloWorld> {
-            let service = HelloWorld;
+    // Prepare the template by changing its default contents.
+    set_crate_name(&path, name.as_str())
+        .context("Failed to set crate name. No Cargo.toml in template?")?;
+    edit_shuttle_toml(&path).context("Failed to edit Shuttle.toml")?;
+    create_gitignore_file(&path).context("Failed to create .gitignore file")?;
 
-            Ok(service.into())
-        }"#}
+    copy_dirs(&path, &dest, GitDir::Ignore)
+        .context("Failed to copy the prepared template to the destination")?;
+
+    drop(temp_dir);
+
+    // Initialize a Git repository in the destination directory if there
+    // is no existing Git repository present in the surrounding folders.
+    let no_git_repo = gix::discover(&dest).is_err();
+    if no_git_repo {
+        gix::init(&dest).context("Failed to initialize project repository")?;
     }
+
+    Ok(())
 }
 
-pub struct ShuttleInitWarp;
+// Very loose restrictions are applied to repository names.
+// What's important is that all names that are valid by the vendor's
+// rules are accepted here. There is no need to check that the user
+// actually provided a name that the vendor would accept.
+const GIT_PATTERN: &str = "^(?:(?<vendor>gh|gl|bb):)?(?<owner>[^/.:]+)/(?<name>[^/.:]+)$";
 
-impl ShuttleInit for ShuttleInitWarp {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-        set_key_value_dependency_version(
-            "shuttle-warp",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
+/// Create a temporary directory and copy the template found at
+/// `auto_path` into this directory. On success, a handle to this
+/// directory is returned. It can then be used to modify the
+/// template and lastly copy it to the actual destination.
+fn setup_template(auto_path: &str) -> Result<TempDir> {
+    let temp_dir = Builder::new()
+        .prefix("cargo-shuttle-init")
+        .tempdir()
+        .context("Failed to create a temporary directory to generate the project into")?;
 
-        set_key_value_dependency_version(
-            "tokio",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
+    let git_re = Regex::new(GIT_PATTERN).unwrap();
 
-        set_key_value_dependency_version(
-            "warp",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-    }
-
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        use warp::Filter;
-        use warp::Reply;
-        
-        #[shuttle_runtime::main]
-        async fn warp() -> shuttle_warp::ShuttleWarp<(impl Reply,)> {
-            let route = warp::any().map(|| "Hello, World!");
-            Ok(route.boxed().into())
-        }"#}
-    }
-}
-
-pub struct ShuttleInitThruster;
-
-impl ShuttleInit for ShuttleInitThruster {
-    fn set_cargo_dependencies(
-        &self,
-        dependencies: &mut Table,
-        manifest_path: &Path,
-        url: &Url,
-        get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-        set_key_value_dependency_version(
-            "shuttle-thruster",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_inline_table_dependency_version(
-            "thruster",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_inline_table_dependency_features(
-            "thruster",
-            dependencies,
-            vec!["hyper_server".to_string()],
-        );
-
-        set_key_value_dependency_version(
-            "tokio",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-    }
-
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        use thruster::{
-            context::basic_hyper_context::{generate_context, BasicHyperContext as Ctx, HyperRequest},
-            m, middleware_fn, App, HyperServer, MiddlewareNext, MiddlewareResult, ThrusterServer,
+    if let Some(caps) = git_re.captures(auto_path) {
+        let vendor = match caps.name("vendor").map(|v| v.as_str()) {
+            Some("gl") => "https://gitlab.com/",
+            Some("bb") => "https://bitbucket.org/",
+            // GitHub is the default vendor if no other vendor is specified.
+            Some("gh") | None => "https://github.com/",
+            Some(_) => unreachable!("should never match unknown vendor"),
         };
-        
-        #[middleware_fn]
-        async fn hello(mut context: Ctx, _next: MiddlewareNext<Ctx>) -> MiddlewareResult<Ctx> {
-            context.body("Hello, World!");
-            Ok(context)
+
+        // `owner` and `name` are required for the regex to
+        // match. Thus, we don't need to check if they exist.
+        let url = format!("{vendor}{}/{}.git", &caps["owner"], &caps["name"]);
+        gix_clone(&url, temp_dir.path())
+            .with_context(|| format!("Failed to clone template Git repository at {url}"))?;
+    } else if Path::new(auto_path).is_absolute() || auto_path.starts_with('.') {
+        if Path::new(auto_path).exists() {
+            copy_dirs(Path::new(auto_path), temp_dir.path(), GitDir::Copy)?;
+        } else {
+            anyhow::bail!(format!(
+                "Local template directory \"{auto_path}\" with doesn't exist"
+            ))
         }
-        
-        #[shuttle_runtime::main]
-        async fn thruster() -> shuttle_thruster::ShuttleThruster<HyperServer<Ctx, ()>> {
-            let server = HyperServer::new(
-                App::<HyperRequest, Ctx, ()>::create(generate_context, ()).get("/", m![hello]),
+    } else if let Ok(url) = auto_path.parse::<Url>() {
+        if url.scheme() == "http" || url.scheme() == "https" {
+            gix_clone(auto_path, temp_dir.path())
+                .with_context(|| format!("Failed to clone Git repository at {url}"))?;
+        } else {
+            println!(
+                "URL scheme is not supported. Please use HTTP of HTTPS for URLs\
+		 , or use another method of specifying the template location."
             );
-            
-            Ok(server.into())
-        }"#}
+            println!(
+                "HINT: You can find examples of how to select \
+		 a template here: {SHUTTLE_EXAMPLES_README}"
+            );
+            anyhow::bail!("invalid URL scheme")
+        }
+    } else {
+        anyhow::bail!("template location is invalid")
     }
+
+    Ok(temp_dir)
 }
 
-pub struct ShuttleInitNoOp;
-impl ShuttleInit for ShuttleInitNoOp {
-    fn set_cargo_dependencies(
-        &self,
-        _dependencies: &mut Table,
-        _manifest_path: &Path,
-        _url: &Url,
-        _get_dependency_version_fn: GetDependencyVersionFn,
-    ) {
-    }
+/// Mimic the behavior of `git clone`, cloning the Git repository found at
+/// `from_url` into a directory `to_path`, using the API exposed by `gix`.
+fn gix_clone(from_url: &str, to_path: &Path) -> Result<()> {
+    let mut fetch = PrepareFetch::new(
+        from_url,
+        to_path,
+        Kind::WithWorktree,
+        create::Options {
+            // Could be set to `true`, since we're always cloning into newly
+            // created temporary directories. However, for this reason we
+            // may just omit the requirement, and thereby omit another check
+            // that might fail.
+            destination_must_be_empty: false,
+            fs_capabilities: None,
+        },
+        open::Options::isolated(),
+    )
+    .with_context(|| format!("Failed to prepare fetch repository '{from_url}'"))?
+    .with_shallow(Shallow::DepthAtRemote(NonZeroU32::new(1).unwrap())); // Like `--depth 1`.
 
-    fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        ""
-    }
-}
+    let (mut prepare, _outcome) = fetch
+        .fetch_then_checkout(progress::Discard, &AtomicBool::new(false))
+        .with_context(|| format!("Failed to fetch repository '{from_url}'"))?;
 
-pub fn cargo_init(path: PathBuf, name: ProjectName) -> Result<()> {
-    let mut cmd = std::process::Command::new("cargo");
-    cmd.arg("init")
-        .arg("--bin")
-        .arg("--name")
-        .arg(name.as_str())
-        .arg(path.as_os_str());
-    println!(r#"    Creating project "{name}" in {path:?}"#);
-    let output = cmd.output().expect("Failed to initialize with cargo init.");
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    if !output.status.success() {
-        bail!("cargo init failed:\n{}", stderr)
-    }
-    print!("{}", stderr);
+    let (_repo, _outcome) = prepare
+        .main_worktree(progress::Discard, &AtomicBool::new(false))
+        .with_context(|| {
+            format!(
+                "Failed to checkout worktree of '{from_url}' into {}",
+                to_path.display()
+            )
+        })?;
 
     Ok(())
 }
 
-/// Performs shuttle init on the existing files generated by `cargo init [path]`.
-pub fn cargo_shuttle_init(path: PathBuf, framework: Template) -> Result<()> {
-    println!(r#"     Setting up "{framework}" template"#);
-    let cargo_toml_path = path.join("Cargo.toml");
-    let mut cargo_doc = read_to_string(cargo_toml_path.clone())
-        .unwrap()
-        .parse::<Document>()
-        .unwrap();
+/// Recursively copy all files and directories from `src` to `dest`. If
+/// `git_policy` is set to `Ignore`, the `.git` directory is not copied.
+/// If `git_policy` is set to `Copy`, then the `.git` directory is copied.
+/// The procedure is the same as the one used in `cargo-generate`
+/// (https://github.com/cargo-generate/cargo-generate/ blob/
+/// 073b938b5205678bb25bd05aa8036b96ed5f22a7/src/lib.rs#L450).
+fn copy_dirs(src: &Path, dest: &Path, git_policy: GitDir) -> Result<()> {
+    std::fs::create_dir_all(dest)?;
 
-    // Add publish: false to avoid accidental `cargo publish`
-    cargo_doc["package"]["publish"] = value(false);
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let entry_type = entry.file_type()?;
+        let entry_name = entry.file_name().to_string_lossy().to_string();
 
-    // Get `[dependencies]` table
-    let dependencies = cargo_doc["dependencies"]
-        .as_table_mut()
-        .expect("manifest to have a dependencies table");
+        let entry_dest = dest.join(&entry_name);
 
-    let manifest_path = find(Some(path.as_path())).unwrap();
-    let url = registry_url(manifest_path.as_path(), None).expect("Could not find registry URL");
+        if entry_type.is_dir() {
+            if git_policy == GitDir::Ignore && entry_name == ".git" {
+                continue;
+            }
 
-    let init_config = framework.init_config();
-
-    set_key_value_dependency_version(
-        "shuttle-runtime",
-        dependencies,
-        &manifest_path,
-        &url,
-        true, // TODO: disallow pre-release when releasing 0.12?
-        get_latest_dependency_version,
-    );
-
-    // Set framework-specific dependencies to the `dependencies` table
-    init_config.set_cargo_dependencies(
-        dependencies,
-        &manifest_path,
-        &url,
-        get_latest_dependency_version,
-    );
-
-    // Truncate Cargo.toml and write the updated `Document` to it
-    let mut cargo_toml = File::create(cargo_toml_path)?;
-
-    cargo_toml.write_all(cargo_doc.to_string().as_bytes())?;
-
-    // Write boilerplate to `src/main.rs` file
-    let main_path = path.join("src").join("main.rs");
-    let boilerplate = init_config.get_boilerplate_code_for_framework();
-    if !boilerplate.is_empty() {
-        write_main_file(boilerplate, &main_path)?;
+            // Recursion!
+            copy_dirs(&entry.path(), &entry_dest, git_policy)?;
+        } else if entry_type.is_file() {
+            if entry_dest.exists() {
+                println!(
+                    "Warning: file '{}' already exists. Cannot overwrite",
+                    entry_dest.display()
+                );
+            } else {
+                // Copy this file.
+                fs::copy(&entry.path(), &entry_dest)?;
+            }
+        } else if entry_type.is_symlink() {
+            println!("Warning: symlink '{entry_name}' is ignored");
+        }
     }
 
     Ok(())
 }
 
-/// Sets dependency version for a key-value pair:
-/// `crate_name = "version"`
-fn set_key_value_dependency_version(
-    crate_name: &str,
-    dependencies: &mut Table,
-    manifest_path: &Path,
-    url: &Url,
-    flag_allow_prerelease: bool,
-    get_dependency_version_fn: GetDependencyVersionFn,
-) {
-    let dependency_version =
-        get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
-    dependencies[crate_name] = value(dependency_version);
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum GitDir {
+    Ignore,
+    Copy,
 }
 
-/// Sets dependency version for an inline table:
-/// `crate_name = { version = "version" }`
-fn set_inline_table_dependency_version(
-    crate_name: &str,
-    dependencies: &mut Table,
-    manifest_path: &Path,
-    url: &Url,
-    flag_allow_prerelease: bool,
-    get_dependency_version_fn: GetDependencyVersionFn,
-) {
-    let dependency_version =
-        get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
-    dependencies[crate_name]["version"] = value(dependency_version);
+fn set_crate_name(path: &Path, name: &str) -> Result<()> {
+    let path = path.join("Cargo.toml");
+    let toml_str = read_to_string(&path)?;
+    let mut doc = toml_str.parse::<Document>()?;
+
+    // change the name
+    doc["package"]["name"] = value(name);
+
+    // write the file back out
+    std::fs::write(&path, doc.to_string())?;
+
+    Ok(())
 }
 
-/// Sets dependency features for an inline table:
-/// `crate_name = { features = ["some-feature"] }`
-fn set_inline_table_dependency_features(
-    crate_name: &str,
-    dependencies: &mut Table,
-    features: Vec<String>,
-) {
-    let features = Array::from_iter(features);
-    dependencies[crate_name]["features"] = value(features);
+fn edit_shuttle_toml(path: &Path) -> Result<()> {
+    let path = path.join("Shuttle.toml");
+    if !path.exists() {
+        // Do nothing if template has no Shuttle.toml
+        return Ok(());
+    }
+    let toml_str = read_to_string(&path)?;
+    let mut doc = toml_str.parse::<Document>()?;
+
+    // The Shuttle.toml project name override will likely already be in use,
+    // so that field is not wanted in a newly cloned template.
+
+    // remove the name
+    doc.remove("name");
+
+    if doc.len() == 0 {
+        // if "name" was the only property in the doc, delete the file
+        let _ = std::fs::remove_file(&path);
+
+        return Ok(());
+    }
+
+    // write the file back out
+    std::fs::write(&path, doc.to_string())?;
+
+    Ok(())
 }
 
-/// Abstract type for `get_latest_dependency_version` function.
-type GetDependencyVersionFn = fn(&str, bool, &Path, &Url) -> String;
+/// Adds any missing recommended gitignore rules
+fn create_gitignore_file(path: &Path) -> Result<()> {
+    let path = path.join(".gitignore");
+    let mut contents = std::fs::read_to_string(&path).unwrap_or_default();
 
-/// Gets the latest version for a dependency of `crate_name`.
-/// This is a wrapper function for `cargo_edit::get_latest_dependency` function.
-fn get_latest_dependency_version(
-    crate_name: &str,
-    flag_allow_prerelease: bool,
-    manifest_path: &Path,
-    url: &Url,
-) -> String {
-    let latest_version =
-        get_latest_dependency(crate_name, flag_allow_prerelease, manifest_path, Some(url))
-            .unwrap_or_else(|_| panic!("Could not query the latest version of {crate_name}"));
-    let latest_version = latest_version
-        .version()
-        .expect("No latest shuttle-service version available");
+    for rule in ["/target", ".shuttle-storage", "Secrets*.toml"] {
+        if !contents.lines().any(|l| l == rule) {
+            writeln!(&mut contents, "{rule}")?;
+        }
+    }
 
-    latest_version.to_string()
-}
-
-/// Writes `boilerplate` code to the specified `main.rs` file path.
-pub fn write_main_file(boilerplate: &'static str, main_path: &Path) -> Result<()> {
-    let mut main_file = File::create(main_path)?;
-    main_file.write_all(boilerplate.as_bytes())?;
+    std::fs::write(&path, contents)?;
 
     Ok(())
 }
 
 #[cfg(test)]
-mod shuttle_init_tests {
+mod tests {
     use super::*;
 
-    fn cargo_toml_factory() -> Document {
-        indoc! {r#"
-            [dependencies]
-        "#}
-        .parse::<Document>()
-        .unwrap()
-    }
-
-    fn mock_get_latest_dependency_version(
-        _crate_name: &str,
-        _flag_allow_prerelease: bool,
-        _manifest_path: &Path,
-        _url: &Url,
-    ) -> String {
-        "1.0".to_string()
+    #[test]
+    fn gix_clone_works() {
+        let temp_dir = Builder::new()
+            .prefix("shuttle-clone-test")
+            .tempdir()
+            .unwrap();
+        gix_clone(
+            "https://github.com/shuttle-hq/awesome-shuttle.git",
+            temp_dir.path(),
+        )
+        .unwrap();
+        // Check that some file we know to exist in
+        // the Repository exists in the clone.
+        assert!(temp_dir.path().join("src/main.rs").exists());
+        temp_dir.close().unwrap();
     }
 
     #[test]
-    fn test_set_inline_table_dependency_features() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-
-        set_inline_table_dependency_features(
-            "shuttle-service",
-            dependencies,
-            vec!["builder".to_string()],
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { features = ["builder"] }
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_inline_table_dependency_version() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0" }
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_key_value_dependency_version() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = "1.0"
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-    #[test]
-    fn test_set_cargo_dependencies_actix_web() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitActixWeb.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-runtime = "1.0"
-            actix-web = "1.0"
-            shuttle-actix-web = "1.0"
-            tokio = "1.0"
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_cargo_dependencies_axum() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitAxum.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-runtime = "1.0"
-            axum = "1.0"
-            shuttle-axum = "1.0"
-            tokio = "1.0"
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_cargo_dependencies_rocket() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitRocket.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-runtime = "1.0"
-            rocket = "1.0"
-            shuttle-rocket = "1.0"
-            tokio = "1.0"
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_cargo_dependencies_tide() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitTide.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-runtime = "1.0"
-            shuttle-tide = "1.0"
-            tokio = "1.0"
-            tide = "1.0"
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_cargo_dependencies_tower() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitTower.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-runtime = "1.0"
-            hyper = { version = "1.0", features = ["full"] }
-            shuttle-tower = "1.0"
-            tokio = "1.0"
-            tower = { version = "1.0", features = ["full"] }
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_cargo_dependencies_poem() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitPoem.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-runtime = "1.0"
-            poem = "1.0"
-            shuttle-poem = "1.0"
-            tokio = "1.0"
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_cargo_dependencies_salvo() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitSalvo.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-runtime = "1.0"
-            salvo = "1.0"
-            shuttle-salvo = "1.0"
-            tokio = "1.0"
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_cargo_dependencies_serenity() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitSerenity.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-runtime = "1.0"
-            anyhow = "1.0"
-            serenity = { version = "1.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-            shuttle-secrets = "1.0"
-            shuttle-serenity = "1.0"
-            tokio = "1.0"
-            tracing = "1.0"
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_cargo_dependencies_poise() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitPoise.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-runtime = "1.0"
-            anyhow = "1.0"
-            poise = "1.0"
-            shuttle-poise = "1.0"
-            shuttle-secrets = "1.0"
-            tokio = "1.0"
-            tracing = "1.0"
-		"#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_cargo_dependencies_warp() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitWarp.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-runtime = "1.0"
-            shuttle-warp = "1.0"
-            tokio = "1.0"
-            warp = "1.0"
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_cargo_dependencies_thruster() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitThruster.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-runtime = "1.0"
-            shuttle-thruster = "1.0"
-            thruster = { version = "1.0", features = ["hyper_server"] }
-            tokio = "1.0"
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    // TODO: unignore this test when we publish shuttle-rocket
-    #[ignore]
-    #[test]
-    /// Makes sure that Rocket uses allow_prerelease flag when fetching the latest version
-    fn test_get_latest_dependency_version_rocket() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://github.com/rust-lang/crates.io-index").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-runtime",
-            dependencies,
-            &manifest_path,
-            &url,
-            true,
-            mock_get_latest_dependency_version,
-        );
-
-        ShuttleInitRocket.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            get_latest_dependency_version,
-        );
-
-        let version = dependencies["rocket"].as_str().unwrap();
-
-        let expected = get_latest_dependency("rocket", true, &manifest_path, Some(&url))
-            .expect("Could not query the latest version of rocket")
-            .version()
-            .expect("no rocket version found")
-            .to_string();
-
-        assert_eq!(version, expected);
+    fn copy_dirs_works() {
+        let temp_dir = Builder::new()
+            .prefix("shuttle-copy-test")
+            .tempdir()
+            .unwrap();
+        let from = temp_dir.path().join("from");
+        let with_git = temp_dir.path().join("with-git");
+        let without_git = temp_dir.path().join("without-git");
+
+        // First, create a normal copy of the test resource.
+        copy_dirs(
+            Path::new("tests/resources/copyable-project/"),
+            &from,
+            GitDir::Ignore,
+        )
+        .unwrap();
+        assert!(from.join("src/main.rs").exists());
+        assert!(from.join("Cargo.toml").exists());
+
+        // Create a pseudo Git folder in the example project.
+        std::fs::create_dir(from.join(".git")).unwrap();
+
+        copy_dirs(&from, &with_git, GitDir::Copy).unwrap();
+        assert!(with_git.join(".git").exists());
+        assert!(with_git.join("src/main.rs").exists());
+        assert!(with_git.join("Cargo.toml").exists());
+
+        // Copy the same directory again, this time ignoring the `.git` folder.
+        copy_dirs(&from, &without_git, GitDir::Ignore).unwrap();
+        assert!(!without_git.join(".git").exists());
+        assert!(without_git.join("src/main.rs").exists());
+        assert!(without_git.join("Cargo.toml").exists());
+
+        temp_dir.close().unwrap();
     }
 }

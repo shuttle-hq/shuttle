@@ -2,33 +2,28 @@
 //! [Shuttle AWS RDS](https://docs.shuttle.rs/resources/shuttle-aws-rds)
 //! Plugin to provision databases using AWS RDS on Shuttle.
 
-use async_trait::async_trait;
-use paste::paste;
-use serde::Serialize;
-use shuttle_service::{
-    database::{self, AwsRdsEngine},
-    error::CustomError,
-    DbInput, DbOutput, Factory, ResourceBuilder, Type,
-};
-
 macro_rules! aws_engine {
     ($feature:expr, $pool_path:path, $options_path:path, $struct_ident:ident) => {
-        paste! {
-            #[derive(Serialize)]
+        paste::paste! {
+            #[derive(serde::Serialize)]
             #[cfg(feature = $feature)]
             #[doc = "A resource connected to an AWS RDS " $struct_ident " instance"]
             pub struct $struct_ident{
-                config: DbInput,
+                config: shuttle_service::DbInput,
             }
 
             #[cfg(feature = $feature)]
             #[doc = "Gets a `sqlx::Pool` connected to an AWS RDS " $struct_ident " instance"]
-            #[async_trait]
-            impl ResourceBuilder<$pool_path> for $struct_ident {
-                const TYPE: Type = Type::Database(database::Type::AwsRds(AwsRdsEngine::$struct_ident));
+            #[async_trait::async_trait]
+            impl shuttle_service::ResourceBuilder<$pool_path> for $struct_ident {
+                const TYPE: shuttle_service::Type = shuttle_service::Type::Database(
+                    shuttle_service::database::Type::AwsRds(
+                        shuttle_service::database::AwsRdsEngine::$struct_ident
+                    )
+                );
 
-                type Config = DbInput;
-                type Output = DbOutput;
+                type Config = shuttle_service::DbInput;
+                type Output = shuttle_service::DbOutput;
 
                 fn new() -> Self {
                     Self { config: Default::default() }
@@ -38,20 +33,20 @@ macro_rules! aws_engine {
                     &self.config
                 }
 
-                async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, shuttle_service::Error> {
-                    let info = match factory.get_environment() {
-                        shuttle_service::Environment::Production => DbOutput::Info(
+                async fn output(self, factory: &mut dyn shuttle_service::Factory) -> Result<Self::Output, shuttle_service::Error> {
+                    let info = match factory.get_metadata().env {
+                        shuttle_service::Environment::Deployment => shuttle_service::DbOutput::Info(
                             factory
-                                .get_db_connection(database::Type::AwsRds(AwsRdsEngine::$struct_ident))
+                                .get_db_connection(shuttle_service::database::Type::AwsRds(shuttle_service::database::AwsRdsEngine::$struct_ident))
                                 .await?
                         ),
                         shuttle_service::Environment::Local => {
                             if let Some(local_uri) = self.config.local_uri {
-                                DbOutput::Local(local_uri)
+                                shuttle_service::DbOutput::Local(local_uri)
                             } else {
-                                DbOutput::Info(
+                                shuttle_service::DbOutput::Info(
                                     factory
-                                        .get_db_connection(database::Type::AwsRds(AwsRdsEngine::$struct_ident))
+                                        .get_db_connection(shuttle_service::database::Type::AwsRds(shuttle_service::database::AwsRdsEngine::$struct_ident))
                                         .await?
                                 )
                             }
@@ -63,8 +58,8 @@ macro_rules! aws_engine {
 
                 async fn build(build_data: &Self::Output) -> Result<$pool_path, shuttle_service::Error> {
                     let connection_string = match build_data {
-                        DbOutput::Local(local_uri) => local_uri.clone(),
-                        DbOutput::Info(info) => info.connection_string_private(),
+                        shuttle_service::DbOutput::Local(local_uri) => local_uri.clone(),
+                        shuttle_service::DbOutput::Info(info) => info.connection_string_private(),
                     };
 
                     let pool = $options_path::new()
@@ -72,7 +67,7 @@ macro_rules! aws_engine {
                         .max_connections(5)
                         .connect(&connection_string)
                         .await
-                        .map_err(CustomError::new)?;
+                        .map_err(shuttle_service::error::CustomError::new)?;
 
                     Ok(pool)
                 }

@@ -7,7 +7,7 @@ mkdir -p /tmp/qa-$1
 cd /tmp/qa-$1
 
 # Init app
-cargo shuttle init --name qa-$1 --axum
+cargo shuttle init --name qa-$1 --template axum
 
 # Start locally
 cargo shuttle run &

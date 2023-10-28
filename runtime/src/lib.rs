@@ -20,16 +20,16 @@
 //!
 //! Now that shuttle is installed, you can initialize a project with Axum boilerplate:
 //! ```bash
-//! $ cargo shuttle init --axum my-axum-app
+//! $ cargo shuttle init --template axum my-axum-app
 //! ```
 //!
 //! By looking at the `Cargo.toml` file of the generated `my-axum-app` project you will see it has been made to
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.16.0"
+//! shuttle-runtime = "0.30.1"
 //! axum = "0.6.10"
-//! shuttle-axum = "0.16.0"
+//! shuttle-axum = "0.30.1"
 //! tokio = "1.26"
 //! ```
 //!
@@ -106,15 +106,15 @@
 //!
 //! Initialize a project with Rocket boilerplate:
 //! ```bash
-//! $ cargo shuttle init --rocket my-rocket-app
+//! $ cargo shuttle init --template rocket my-rocket-app
 //! ```
 //!
 //! Add `shuttle-shared-db` as a dependency with the `postgres` feature, and add `sqlx` as a dependency with the
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.16.0", features = ["postgres"] }
-//! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
+//! shuttle-shared-db = { version = "0.30.1", features = ["postgres"] }
+//! sqlx = { version = "0.7.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
 //! Now update the `#[shuttle_runtime::main]` function to take in a `PgPool`:
@@ -198,41 +198,42 @@
 //!
 //! this will open a browser window and prompt you to connect using your GitHub account.
 //!
-//! ## We're in alpha 🤗
-//!
-//! Thanks for using shuttle! We're very happy to have you with us!
-//!
-//! During our alpha period, API keys are completely free and you can deploy as many services as you want.
-//!
-//! Just keep in mind that there may be some kinks that require us to take all deployments down once in a while. In certain circumstances we may also have to delete all the data associated with those deployments.
-//!
-//! To stay updated with the release status of shuttle, [join our Discord](https://discord.gg/shuttle)!
-//!
 //! ## Join Discord
 //!
 //! If you have any questions, [join our Discord server](https://discord.gg/shuttle). There's always someone on there that can help!
 //!
 //! You can also [open an issue or a discussion on GitHub](https://github.com/shuttle-hq/shuttle).
 //!
+
+pub use shuttle_codegen::main;
+
 mod alpha;
-mod logger;
+mod args;
 #[cfg(feature = "next")]
 mod next;
 mod provisioner_factory;
 mod resource_tracker;
 
 pub use alpha::{start, Alpha};
-pub use async_trait::async_trait;
-pub use logger::Logger;
 #[cfg(feature = "next")]
 pub use next::{AxumWasm, NextArgs};
 pub use provisioner_factory::ProvisionerFactory;
 pub use resource_tracker::{get_resource, ResourceTracker};
-pub use shuttle_common::storage_manager::StorageManager;
-pub use shuttle_service::{main, CustomError, Error, Factory, ResourceBuilder, Service};
+pub use shuttle_service::{CustomError, Error, Factory, ResourceBuilder, Service};
+
+pub use async_trait::async_trait;
 
 // Dependencies required by the codegen
 pub use anyhow::Context;
 pub use strfmt::strfmt;
-pub use tracing;
-pub use tracing_subscriber;
+
+#[cfg(feature = "setup-tracing")]
+pub use {colored, tracing_subscriber};
+
+const NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// Print the version of the runtime.
+pub fn print_version() {
+    println!("{NAME} {VERSION}");
+}

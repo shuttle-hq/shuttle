@@ -1,63 +1,94 @@
-use std::fmt::Write;
-
 use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
+use percent_encoding::utf8_percent_encode;
 use reqwest::Response;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
+use shuttle_common::models::deployment::DeploymentRequest;
 use shuttle_common::models::{deployment, project, secret, service, ToJson};
 use shuttle_common::project::ProjectName;
-use shuttle_common::{resource, ApiKey, ApiUrl, LogItem};
+use shuttle_common::secrets::Secret;
+use shuttle_common::{resource, ApiKey, ApiUrl, LogItem, VersionInfo};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use tracing::error;
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub struct Client {
     api_url: ApiUrl,
-    api_key: Option<ApiKey>,
+    api_key: Option<Secret<ApiKey>>,
+    client: reqwest::Client,
+    retry_client: ClientWithMiddleware,
 }
 
 impl Client {
     pub fn new(api_url: ApiUrl) -> Self {
+        let client = reqwest::Client::new();
+        let retry_client = ClientBuilder::new(client.clone())
+            .with(RetryTransientMiddleware::new_with_policy(
+                ExponentialBackoff::builder().build_with_max_retries(3),
+            ))
+            .build();
         Self {
             api_url,
             api_key: None,
+            client,
+            retry_client,
         }
     }
 
     pub fn set_api_key(&mut self, api_key: ApiKey) {
-        self.api_key = Some(api_key);
+        self.api_key = Some(Secret::new(api_key));
+    }
+
+    pub async fn get_api_versions(&self) -> Result<VersionInfo> {
+        let url = format!("{}/versions", self.api_url);
+
+        self.client
+            .get(url)
+            .send()
+            .await?
+            .json()
+            .await
+            .context("parsing API version info")
+    }
+
+    pub async fn check_project_name(&self, project_name: &ProjectName) -> Result<bool> {
+        let url = format!("{}/projects/name/{project_name}", self.api_url);
+
+        self.client
+            .get(url)
+            .send()
+            .await?
+            .json()
+            .await
+            .context("parsing name check response")
     }
 
     pub async fn deploy(
         &self,
-        data: Vec<u8>,
         project: &ProjectName,
-        no_test: bool,
+        deployment_req: DeploymentRequest,
     ) -> Result<deployment::Response> {
-        let mut path = format!(
+        let path = format!(
             "/projects/{}/services/{}",
             project.as_str(),
             project.as_str()
         );
-
-        if no_test {
-            let _ = write!(path, "?no-test");
-        }
+        let deployment_req = rmp_serde::to_vec(&deployment_req)
+            .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 
         let url = format!("{}{}", self.api_url, path);
-
-        let mut builder = Self::get_retry_client().post(url);
-
+        let mut builder = self.retry_client.post(url);
         builder = self.set_builder_auth(builder);
 
         builder
-            .body(data)
             .header("Transfer-Encoding", "chunked")
+            .body(deployment_req)
             .send()
             .await
             .context("failed to send deployment to the Shuttle server")?
@@ -92,16 +123,34 @@ impl Client {
         let path = format!(
             "/projects/{}/services/{}/resources",
             project.as_str(),
-            project.as_str()
+            project.as_str(),
         );
 
         self.get(path).await
     }
 
+    pub async fn delete_service_resource(
+        &self,
+        project: &ProjectName,
+        resource_type: &resource::Type,
+    ) -> Result<()> {
+        let path = format!(
+            "/projects/{}/services/{}/resources/{}",
+            project.as_str(),
+            project.as_str(),
+            utf8_percent_encode(
+                &resource_type.to_string(),
+                percent_encoding::NON_ALPHANUMERIC
+            ),
+        );
+
+        self.delete(path).await
+    }
+
     pub async fn create_project(
         &self,
         project: &ProjectName,
-        config: project::Config,
+        config: &project::Config,
     ) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
 
@@ -128,14 +177,24 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
-        let path = "/projects".to_string();
+    pub async fn get_projects_list(&self, page: u32, limit: u32) -> Result<Vec<project::Response>> {
+        let path = format!("/projects?page={}&limit={}", page.saturating_sub(1), limit);
 
         self.get(path).await
     }
 
-    pub async fn delete_project(&self, project: &ProjectName) -> Result<project::Response> {
+    pub async fn stop_project(&self, project: &ProjectName) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
+
+        self.delete(path).await
+    }
+
+    pub async fn delete_project(&self, project: &ProjectName, dry_run: bool) -> Result<String> {
+        let path = format!(
+            "/projects/{}/delete{}",
+            project.as_str(),
+            if dry_run { "?dry_run=true" } else { "" }
+        );
 
         self.delete(path).await
     }
@@ -161,7 +220,9 @@ impl Client {
             deployment_id
         );
 
-        self.get(path).await
+        self.get(path)
+            .await
+            .context("Failed parsing logs. Is your cargo-shuttle outdated?")
     }
 
     pub async fn get_logs_ws(
@@ -181,8 +242,15 @@ impl Client {
     pub async fn get_deployments(
         &self,
         project: &ProjectName,
+        page: u32,
+        limit: u32,
     ) -> Result<Vec<deployment::Response>> {
-        let path = format!("/projects/{}/deployments", project.as_str());
+        let path = format!(
+            "/projects/{}/deployments?page={}&limit={}",
+            project.as_str(),
+            page.saturating_sub(1),
+            limit,
+        );
 
         self.get(path).await
     }
@@ -201,13 +269,18 @@ impl Client {
         self.get(path).await
     }
 
+    pub async fn reset_api_key(&self) -> Result<Response> {
+        self.put("/users/reset-api-key".into(), Option::<()>::None)
+            .await
+    }
+
     async fn ws_get(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let ws_scheme = self.api_url.clone().replace("http", "ws");
         let url = format!("{ws_scheme}{path}");
         let mut request = url.into_client_request()?;
 
         if let Some(ref api_key) = self.api_key {
-            let auth_header = Authorization::bearer(api_key.as_ref())?;
+            let auth_header = Authorization::bearer(api_key.expose().as_ref())?;
             request.headers_mut().typed_insert(auth_header);
         }
 
@@ -225,7 +298,7 @@ impl Client {
     {
         let url = format!("{}{}", self.api_url, path);
 
-        let mut builder = Self::get_retry_client().get(url);
+        let mut builder = self.retry_client.get(url);
 
         builder = self.set_builder_auth(builder);
 
@@ -240,7 +313,23 @@ impl Client {
     async fn post<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path);
 
-        let mut builder = Self::get_retry_client().post(url);
+        let mut builder = self.retry_client.post(url);
+
+        builder = self.set_builder_auth(builder);
+
+        if let Some(body) = body {
+            let body = serde_json::to_string(&body)?;
+            builder = builder.body(body);
+            builder = builder.header("Content-Type", "application/json");
+        }
+
+        Ok(builder.send().await?)
+    }
+
+    async fn put<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = self.retry_client.put(url);
 
         builder = self.set_builder_auth(builder);
 
@@ -259,7 +348,7 @@ impl Client {
     {
         let url = format!("{}{}", self.api_url, path);
 
-        let mut builder = Self::get_retry_client().delete(url);
+        let mut builder = self.retry_client.delete(url);
 
         builder = self.set_builder_auth(builder);
 
@@ -273,17 +362,9 @@ impl Client {
 
     fn set_builder_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         if let Some(ref api_key) = self.api_key {
-            builder.bearer_auth(api_key.as_ref())
+            builder.bearer_auth(api_key.expose().as_ref())
         } else {
             builder
         }
-    }
-
-    fn get_retry_client() -> ClientWithMiddleware {
-        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-
-        ClientBuilder::new(reqwest::Client::new())
-            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-            .build()
     }
 }

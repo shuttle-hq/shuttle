@@ -15,7 +15,8 @@ pub struct Args {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     Start(StartArgs),
-    Init(InitArgs),
+    InitAdmin(InitArgs),
+    InitDeployer(InitArgs),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -23,6 +24,10 @@ pub struct StartArgs {
     /// Address to bind to
     #[arg(long, default_value = "127.0.0.1:8000")]
     pub address: SocketAddr,
+
+    /// Stripe client secret key
+    #[arg(long, default_value = "")]
+    pub stripe_secret_key: String,
 }
 
 #[derive(clap::Args, Debug, Clone)]

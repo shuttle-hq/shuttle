@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-gateway"
-version = "0.16.0"
+version = "0.30.1"
 edition.workspace = true
 license.workspace = true
 publish = false
@@ -9,16 +9,14 @@ publish = false
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["default", "headers"] }
 axum-server = { version = "0.4.4", features = ["tls-rustls"] }
-base64 = { workspace = true }
-bollard = "0.14.0"
+bollard = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 fqdn = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 hyper = { workspace = true, features = ["stream"] }
-# not great, but waiting for WebSocket changes to be merged
-hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "bug/host_header" }
+hyper-reverse-proxy = { workspace = true }
 instant-acme = "0.2.0"
 lazy_static = "1.4.0"
 num_cpus = "1.15.0"
@@ -29,6 +27,7 @@ pem = "1.1.1"
 pin-project = { workspace = true }
 rand = { workspace = true }
 rcgen = "0.10.0"
+reqwest = { workspace = true }
 rustls = "0.20.7"
 rustls-pemfile = "1.0.1"
 serde = { workspace = true, features = ["derive"] }
@@ -36,7 +35,7 @@ serde_json = { workspace = true }
 sqlx = { workspace = true, features = [
     "sqlite",
     "json",
-    "runtime-tokio-native-tls",
+    "runtime-tokio-rustls",
     "migrate",
 ] }
 strum = { workspace = true }
@@ -51,15 +50,23 @@ utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 x509-parser = "0.14.0"
+tonic = { workspace = true }
+tower-sanitize-path = "0.2.0"
+ulid = { workspace = true, features = ["serde"] }
 
 [dependencies.shuttle-common]
 workspace = true
 features = ["backend", "models", "openapi"]
 
+[dependencies.shuttle-proto]
+workspace = true
+
+[dependencies.shuttle-orchestrator]
+workspace = true
+
 [dev-dependencies]
 anyhow = { workspace = true }
-base64 = { workspace = true }
-colored = "2.0.0"
+colored = { workspace = true }
 jsonwebtoken = { workspace = true }
 portpicker = { workspace = true }
 ring = { workspace = true }

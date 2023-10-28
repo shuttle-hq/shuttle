@@ -13,6 +13,9 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bollard::Docker;
 use futures::prelude::*;
+use hyper::client::HttpConnector;
+use hyper::Client;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
@@ -29,6 +32,8 @@ pub mod service;
 pub mod task;
 pub mod tls;
 pub mod worker;
+
+static AUTH_CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 
 /// Server-side errors that do not have to do with the user runtime
 /// should be [`Error`]s.
@@ -67,7 +72,7 @@ impl Error {
     }
 
     pub fn kind(&self) -> ErrorKind {
-        self.kind
+        self.kind.clone()
     }
 }
 
@@ -222,21 +227,6 @@ pub trait DockerContext: Send + Sync {
     fn container_settings(&self) -> &ContainerSettings;
 }
 
-#[async_trait]
-pub trait Service {
-    type Context;
-
-    type State: EndState<Self::Context>;
-
-    type Error;
-
-    /// Asks for the latest available context for task execution
-    fn context(&self) -> Self::Context;
-
-    /// Commit a state update to persistence
-    async fn update(&self, state: &Self::State) -> Result<(), Self::Error>;
-}
-
 /// A generic state which can, when provided with a [`Context`], do
 /// some work and advance itself
 #[async_trait]
@@ -250,14 +240,7 @@ pub trait State<Ctx>: Send {
 
 pub type StateTryStream<'c, St, Err> = Pin<Box<dyn Stream<Item = Result<St, Err>> + Send + 'c>>;
 
-pub trait EndState<Ctx>
-where
-    Self: State<Ctx, Error = Infallible, Next = Self>,
-{
-    fn is_done(&self) -> bool;
-}
-
-pub trait EndStateExt<Ctx>: TryState + EndState<Ctx>
+pub trait StateExt<Ctx>: TryState + State<Ctx, Error = Infallible, Next = Self>
 where
     Ctx: Sync,
     Self: Clone,
@@ -281,9 +264,9 @@ where
     }
 }
 
-impl<Ctx, S> EndStateExt<Ctx> for S
+impl<Ctx, S> StateExt<Ctx> for S
 where
-    S: Clone + TryState + EndState<Ctx>,
+    S: Clone + TryState + State<Ctx, Error = Infallible, Next = Self>,
     Ctx: Send + Sync,
 {
 }
@@ -346,6 +329,7 @@ pub mod tests {
     use shuttle_common::backends::auth::ConvertResponse;
     use shuttle_common::claims::{Claim, Scope};
     use shuttle_common::models::project;
+    use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
 
@@ -418,7 +402,7 @@ pub mod tests {
             $($(#[$($meta:tt)*])* $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
         } => {{
             let state = $state;
-            let mut stream = crate::EndStateExt::into_stream(state, &$ctx);
+            let mut stream = crate::StateExt::into_stream(state, &$ctx);
             assert_stream_matches!(
                 stream,
                 $($(#[$($meta)*])* $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
@@ -582,6 +566,11 @@ pub mod tests {
             let auth_uri: Uri = format!("http://{auth}").parse().unwrap();
 
             let auth_service = AuthService::new(auth);
+            auth_service
+                .lock()
+                .unwrap()
+                .users
+                .insert("gateway".to_string(), vec![Scope::Resources]);
 
             let prefix = format!(
                 "shuttle_test_{}_",
@@ -595,6 +584,7 @@ pub mod tests {
                 env::var("SHUTTLE_TESTS_NETWORK").unwrap_or_else(|_| "shuttle_default".to_string());
 
             let provisioner_host = "provisioner".to_string();
+            let builder_host = "builder".to_string();
 
             let docker_host = "/var/run/docker.sock".to_string();
 
@@ -608,9 +598,11 @@ pub mod tests {
                     image,
                     prefix,
                     provisioner_host,
+                    builder_host,
                     auth_uri: auth_uri.clone(),
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
+                    deploys_api_key: "gateway".to_string(),
                 },
             };
 
@@ -618,7 +610,16 @@ pub mod tests {
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
 
-            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+            let pool = SqlitePool::connect_with(
+                SqliteConnectOptions::from_str("sqlite::memory:")
+                    .unwrap()
+                    // Set the ulid0 extension for generating ULID's in migrations.
+                    // This uses the ulid0.so file in the crate root, with the
+                    // LD_LIBRARY_PATH env set in build.rs.
+                    .extension("ulid0"),
+            )
+            .await
+            .unwrap();
             MIGRATIONS.run(&pool).await.unwrap();
 
             let acme_client = AcmeClient::new();
@@ -660,7 +661,7 @@ pub mod tests {
                 .lock()
                 .unwrap()
                 .users
-                .insert(user.to_string(), vec![Scope::Project, Scope::ProjectCreate]);
+                .insert(user.to_string(), vec![Scope::Project, Scope::ProjectWrite]);
 
             user.to_string()
         }

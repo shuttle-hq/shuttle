@@ -16,7 +16,7 @@ error: no method provided
 2 |     #[shuttle_codegen::endpoint(method = pet, route = "/hello")]
   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: expected expression
+error: expected an expression
  --> tests/ui/next/invalid-method.rs:7:41
   |
 7 |     #[shuttle_codegen::endpoint(method =, route = "/hello")]

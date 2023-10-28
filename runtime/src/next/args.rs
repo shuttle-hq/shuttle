@@ -1,9 +1,7 @@
-use clap::Parser;
+use crate::args::args;
 
-#[derive(Parser, Debug)]
-#[command(version)]
-pub struct NextArgs {
-    /// Port to start runtime on
-    #[arg(long)]
-    pub port: u16,
+args! {
+    pub struct NextArgs {
+        "--port" => pub port: u16,
+    }
 }

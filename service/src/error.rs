@@ -14,7 +14,7 @@ pub enum Error {
     BindPanic(String),
     #[error("Failed to interpolate string. Is your Secrets.toml correct?")]
     StringInterpolation(#[from] strfmt::FmtError),
-    #[error("Custom error: {0}")]
+    #[error(transparent)]
     Custom(#[from] CustomError),
 }
 

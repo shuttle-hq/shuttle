@@ -23,8 +23,10 @@ pub enum Error {
     },
     #[error("{0}, try running `cargo shuttle deploy`")]
     NotFound(String),
-    #[error("Custom error: {0}")]
-    Custom(#[from] anyhow::Error),
+    #[error("Internal error: {0}")]
+    Internal(#[from] anyhow::Error),
+    #[error("Missing header: {0}")]
+    MissingHeader(String),
 }
 
 impl Serialize for Error {

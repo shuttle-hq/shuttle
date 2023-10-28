@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-service"
-version = "0.16.0"
+version = "0.30.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -13,38 +13,24 @@ doctest = false
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-cargo = { workspace = true, optional = true }
 cargo_metadata = { workspace = true, optional = true }
 crossbeam-channel = { workspace = true, optional = true }
-pipe = { workspace = true, optional = true }
+os_pipe = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
-strfmt = "0.2.2"
+strfmt = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["sync"], optional = true }
+tokio = { workspace = true, features = ["process"], optional = true }
 toml = { workspace = true, optional = true  }
 tracing = { workspace = true, optional = true }
 
-[dependencies.shuttle-codegen]
-workspace = true
-optional = true
-
 [dependencies.shuttle-common]
 workspace = true
-features = ["service"]
+features = ["service", "tracing", "display"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
 
 [features]
-default = ["codegen"]
+default = []
 
-codegen = ["shuttle-codegen/frameworks"]
-builder = [
-    "cargo",
-    "cargo_metadata",
-    "crossbeam-channel",
-    "pipe",
-    "tokio",
-    "toml",
-    "tracing",
-]
+builder = ["cargo_metadata", "crossbeam-channel", "os_pipe", "tokio", "toml", "tracing"]

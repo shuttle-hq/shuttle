@@ -7,11 +7,11 @@ in
   stdenv.mkDerivation {
     name = "moz_overlay_shell";
     nativeBuildInputs = with nixpkgs; [
-      openssl
       pkg-config
+      openssl
     ];
     buildInputs = with nixpkgs; [
-      ((rustChannelOf{ channel = "1.68.0"; }).rust.override {
+      ((rustChannelOf{ channel = "1.72.0"; }).rust.override {
         extensions = ["rust-src"];
         targets = ["wasm32-wasi"];
       })

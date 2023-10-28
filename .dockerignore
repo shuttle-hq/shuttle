@@ -1,9 +1,10 @@
 **/target/
 **/*Containerfile*
-terraform/
-examples/
+/examples
 **/.cargo/
 **/docker/
 **/*.md
 !**/README.md
 Makefile
+/assets
+/e2e

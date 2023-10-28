@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-deployer"
-version = "0.16.0"
+version = "0.30.1"
 edition.workspace = true
 license.workspace = true
 description = "Service with instances created per project for handling the compilation, loading, and execution of Shuttle services"
@@ -19,17 +19,18 @@ fqdn = { workspace = true }
 futures = { workspace = true }
 home = { workspace = true }
 hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
-# not great, but waiting for WebSocket changes to be merged
-hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
+hyper-reverse-proxy = { workspace = true }
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-http = { workspace = true }
 pipe = { workspace = true }
+prost-types = { workspace = true }
 portpicker = { workspace = true }
+rmp-serde = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = [
-  "runtime-tokio-native-tls",
+  "runtime-tokio-rustls",
   "sqlite",
   "chrono",
   "json",
@@ -39,7 +40,7 @@ sqlx = { workspace = true, features = [
 strum = { workspace = true }
 tar = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["fs", "process"] }
+tokio = { workspace = true, features = ["fs", "process", "rt-multi-thread"] }
 toml = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true, features = ["make"] }
@@ -53,6 +54,7 @@ tracing-subscriber = { workspace = true, features = [
 ] }
 utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
+ulid = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
@@ -70,4 +72,6 @@ features = ["builder"]
 ctor = { workspace = true }
 hex = "0.4.3"
 rand = { workspace = true }
+shuttle-common-tests = { workspace = true }
 tempfile = { workspace = true }
+tokio-stream = { workspace = true }

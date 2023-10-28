@@ -4,8 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use shuttle_common::project::ProjectName;
-use shuttle_common::{ApiKey, ApiUrl, API_URL_DEFAULT};
+use shuttle_common::{constants::API_URL_DEFAULT, project::ProjectName, ApiKey, ApiUrl};
 use tracing::trace;
 
 use crate::args::ProjectArgs;
@@ -40,14 +39,14 @@ pub trait ConfigManager: Sized {
         C: for<'de> Deserialize<'de>,
     {
         let path = self.path();
-        let config_bytes = File::open(&path)
+        let config_string = File::open(&path)
             .and_then(|mut f| {
-                let mut buf = Vec::new();
-                f.read_to_end(&mut buf)?;
+                let mut buf = String::new();
+                f.read_to_string(&mut buf)?;
                 Ok(buf)
             })
             .with_context(|| anyhow!("Unable to read configuration file: {}", path.display()))?;
-        toml::from_slice(config_bytes.as_slice())
+        toml::from_str(config_string.as_str())
             .with_context(|| anyhow!("Invalid global configuration file: {}", path.display()))
     }
 
@@ -148,6 +147,7 @@ impl GlobalConfig {
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
     pub name: Option<ProjectName>,
+    pub assets: Option<Vec<String>>,
 }
 
 /// A handler for configuration files. The type parameter `M` is the [`ConfigManager`] which handles
@@ -269,11 +269,16 @@ impl RequestContext {
     pub fn get_local_config(
         project_args: &ProjectArgs,
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
-        let local_manager =
-            LocalConfigManager::new(project_args.workspace_path()?, "Shuttle.toml".to_string());
+        let workspace_path = project_args
+            .workspace_path()
+            .unwrap_or(project_args.working_directory.clone());
+
+        trace!("looking for Shuttle.toml in {}", workspace_path.display());
+        let local_manager = LocalConfigManager::new(workspace_path, "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
 
         if !project.exists() {
+            trace!("no local Shuttle.toml found");
             project.replace(ProjectConfig::default());
         } else {
             trace!("found a local Shuttle.toml");
@@ -358,14 +363,12 @@ impl RequestContext {
     /// Set the API key to the global configuration. Will persist the file.
     pub fn set_api_key(&mut self, api_key: ApiKey) -> Result<()> {
         self.global.as_mut().unwrap().set_api_key(api_key);
-        self.global.save()?;
-        Ok(())
+        self.global.save()
     }
 
     pub fn clear_api_key(&mut self) -> Result<()> {
         self.global.as_mut().unwrap().clear_api_key();
-        self.global.save()?;
-        Ok(())
+        self.global.save()
     }
     /// Get the current project name.
     ///
@@ -380,6 +383,18 @@ impl RequestContext {
             .name
             .as_ref()
             .unwrap()
+    }
+
+    /// # Panics
+    /// Panics if the project configuration has not been loaded.
+    pub fn assets(&self) -> Option<&Vec<String>> {
+        self.project
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .assets
+            .as_ref()
     }
 }
 

@@ -2,60 +2,85 @@ version: 2.1
 
 orbs:
   docker-buildx: sensu/docker-buildx@1.1.1
-  aws-ecr: circleci/aws-ecr@8.1.2
+  aws-ecr: circleci/aws-ecr@8.2.1
   win: circleci/windows@5.0
+  macos: circleci/macos@2.3.6
 
 executors:
   docker-rust:
     docker:
-      - image: cimg/rust:1.68.0
+      - image: cimg/rust:1.72.0
     resource_class: small
-  image-ubuntu:
+  machine-ubuntu:
     machine:
-      image: ubuntu-2204:2022.04.1
+      image: ubuntu-2204:2023.07.2
       docker_layer_caching: true
-    resource_class: xlarge
+    resource_class: large
 
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
 commands:
-  restore-cargo-cache:
+  restore-cargo-and-sccache:
+    parameters:
+      sccache-size:
+        description: Max size for the cache
+        type: string
+        # 500 MB is the recommended soft cap for a cache on circleci.
+        # Large integration tests override this default.
+        default: 500M
     steps:
-      # Restore cargo cache before installing anything with the cargo command (ie cargo install ...)
-      - restore_cache:
-          name: Restore cargo cache
-          keys:
-            - cargo-{{ checksum "Cargo.lock" }}
       - run:
           name: Install sccache
           command: |
-            export SCCACHE_VERSION='v0.4.2'
-            ls ~/.cargo/bin/sccache || curl -L https://github.com/mozilla/sccache/releases/download/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz | tar -xOz sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache > ~/.cargo/bin/sccache && chmod +x ~/.cargo/bin/sccache
-            # This configures Rust to use sccache.
-            echo 'export "RUSTC_WRAPPER"="sccache"' >> $BASH_ENV
-            sccache --version
+            SCCACHE_VERSION='v0.5.4'
+            ls ~/.cargo/bin/sccache \
+              || curl -L https://github.com/mozilla/sccache/releases/download/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz \
+                | tar -xOz sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache \
+                > ~/.cargo/bin/sccache \
+              && chmod +x ~/.cargo/bin/sccache
+            echo 'export RUSTC_WRAPPER=~/.cargo/bin/sccache' >> $BASH_ENV
+            echo 'export SCCACHE_CACHE_SIZE=<< parameters.sccache-size >>' >> $BASH_ENV
+      - run:
+          name: Start sccache
+          command: ~/.cargo/bin/sccache --start-server
       - restore_cache:
           name: Restore sccache cache
-          key: sccache-cache-{{ .Environment.CIRCLE_JOB }}
-  save-cargo-cache:
+          keys: # Find latest cache for this job on same branch, else fall back to older cache.
+            - sccache-cache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
+            - sccache-cache-{{ .Environment.CIRCLE_JOB }}-
+      - restore_cache:
+          name: Restore cargo registry cache
+          keys: # This is saved once per lockfile update. If new lockfile, get an older cache.
+            - cargo-{{ checksum "Cargo.lock" }}
+            - cargo-
+  save-sccache:
     steps:
       - run:
           name: Sccache stats
           command: sccache --show-stats
       - save_cache:
           name: Save sccache cache
-          # We use {{ epoch }} to always upload a fresh cache:
-          # Of course, restore_cache will not find this exact key,
-          # but it will fall back to the closest key (aka the most recent).
-          # See https://discuss.circleci.com/t/add-mechanism-to-update-existing-cache-key/9014/13
-          key: sccache-cache-{{ .Environment.CIRCLE_JOB }}-{{ epoch }}
+          # We use {{ .Branch }}-{{ .Revision }} to upload a fresh cache for each commit on a branch.
+          # If a new commit is built, it will fall back on the most recent cache from the same branch.
+          key: sccache-cache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
           paths:
-            - "~/.cache/sccache"
+            - ~/.cache/sccache
+  # This is only performed by the workspace clippy job, since it does the largest cargo fetch.
+  # Other jobs might restore a slightly older copy of this cache.
+  save-cargo-cache:
+    steps:
+      # Discard crates.io patches so that it produces a re-usable cache key checksum.
+      - run:
+          name: Restore Cargo.lock
+          command: git restore Cargo.lock
       - save_cache:
           name: Save cargo cache
-          key: cargo-{{ checksum "Cargo.lock" }}-{{ epoch }}
+          # This is saved once per lockfile update.
+          key: cargo-{{ checksum "Cargo.lock" }}
           paths:
-            - ~/.cargo
+            - ~/.cargo/registry/cache
+            - ~/.cargo/registry/index
+            - ~/.cargo/git/db
   restore-buildx-cache:
     steps:
       - docker-buildx/install:
@@ -65,11 +90,9 @@ commands:
           name: Restore buildx cache
           keys:
             # Try lock cache first
-            - docker-buildx-{{ checksum "./Cargo.lock" }}
+            - docker-buildx-{{ checksum "Cargo.lock" }}
             # Try branch cache next
             - docker-buildx-{{ .Branch }}
-            # Fallback to main cache
-            - docker-buildx-main
       - run:
           name: Configure buildx cache
           command: export BUILDX_CACHE=/tmp/cache/buildx
@@ -79,58 +102,31 @@ commands:
           name: Save buildx cache
           paths:
             - "/tmp/cache/buildx"
-          key: docker-buildx-{{ checksum "./Cargo.lock" }}-{{ epoch }}
+          key: docker-buildx-{{ checksum "Cargo.lock" }}-{{ epoch }}
           when: always
   apply-patches:
     steps:
       - run:
-          name: Patch service
-          command: |
-            cat\<< EOF > ~/.cargo/config.toml
-            [patch.crates-io]
-            shuttle-service = { path = "$PWD/service" }
-            shuttle-runtime = { path = "$PWD/runtime" }
-
-            shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
-            shuttle-persist = { path = "$PWD/resources/persist" }
-            shuttle-shared-db = { path = "$PWD/resources/shared-db" }
-            shuttle-secrets = { path = "$PWD/resources/secrets" }
-            shuttle-static-folder = { path = "$PWD/resources/static-folder" }
-
-            shuttle-axum = { path = "$PWD/services/shuttle-axum" }
-            shuttle-actix-web = { path = "$PWD/services/shuttle-actix-web" }
-            shuttle-next = { path = "$PWD/services/shuttle-next" }
-            shuttle-poem = { path = "$PWD/services/shuttle-poem" }
-            shuttle-poise = { path = "$PWD/services/shuttle-poise" }
-            shuttle-rocket = { path = "$PWD/services/shuttle-rocket" }
-            shuttle-salvo = { path = "$PWD/services/shuttle-salvo" }
-            shuttle-serenity = { path = "$PWD/services/shuttle-serenity" }
-            shuttle-thruster = { path = "$PWD/services/shuttle-thruster" }
-            shuttle-tide = { path = "$PWD/services/shuttle-tide" }
-            shuttle-tower = { path = "$PWD/services/shuttle-tower" }
-            shuttle-warp = { path = "$PWD/services/shuttle-warp" }
-            EOF
+          name: Patch crates
+          command: ./scripts/apply-patches.sh
   install-rust:
     steps:
       - run:
           name: Install Rust
           command: |
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --target add wasm32-wasi
-            sudo apt update && sudo apt install -y libssl1.1
+            which cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.72.0
+      - run: rustup target add wasm32-wasi
   install-protoc:
-    parameters:
-      arch:
-        description: "The architecture of protoc to install"
-        type: string
-        default: "linux-x86_64"
     steps:
       - run:
           name: Install protoc
+          environment:
+            ARCH: "linux-x86_64"
+            VERSION: "22.2"
           command: |
-            curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-<< parameters.arch >>.zip &&\
-              sudo unzip -o protoc-21.9-<< parameters.arch >>.zip -d /usr/local bin/protoc &&\
-              sudo unzip -o protoc-21.9-<< parameters.arch >>.zip -d /usr/local 'include/*' &&\
-              rm -f protoc-21.9-<< parameters.arch >>.zip
+            curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v$VERSION/protoc-$VERSION-$ARCH.zip" && \
+                sudo unzip -o "protoc-$VERSION-$ARCH.zip" bin/protoc "include/*" -d /usr/local && \
+                rm -f "protoc-$VERSION-$ARCH.zip"
   make-artifact:
     parameters:
       target:
@@ -169,35 +165,45 @@ commands:
             - << parameters.target >>.env
 
 jobs:
-  workspace:
+  workspace-fmt-clippy:
     executor: docker-rust
     resource_class: xlarge
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
-      - restore-cargo-cache
-      - install-protoc
-      # Check this to make sure we do not include patched dependencies in
-      # the Cargo.lock.
-      - run:
-          command: |
-            [[ -z $(cat Cargo.lock | grep "\[\[patch.unused\]\]") ]]
+      - restore-cargo-and-sccache
+      # Check this to make sure we do not include patched dependencies in the Cargo.lock
+      - run: |
+          [ -z "$(grep "\[\[patch.unused\]\]" Cargo.lock)" ] || \
+            ( echo "Please remove unused patches from Cargo.lock"; exit 1 )
       - run: cargo fmt --all --check
-      # TODO: this is incompatible with workspace inheritance, uncomment when
-      # https://github.com/DevinR528/cargo-sort/pull/29 is merged
-      # - run: cargo install cargo-sort
-      # - run: cargo sort --check --workspace
       - run: |
           cargo clippy --tests \
                        --all-targets \
                        --all-features \
                        --no-deps -- \
-                       --D warnings \
-                       -A clippy::let-unit-value \
-                       -A clippy::format-push-string
+                       --D warnings
+      # An out of date lockfile will be modified after the clippy command has run
+      - run: |
+          git diff --exit-code Cargo.lock || \
+            ( echo "Please commit an up to date Cargo.lock"; exit 1 )
+      - save-sccache
       - save-cargo-cache
-  check-standalone:
+  cargo-audit:
+    executor: docker-rust
+    steps:
+      - checkout
+      - run: 
+          name: Install cargo-audit
+          command: |
+            CARGO_AUDIT_VERSION='v0.18.3'
+            ls ~/.cargo/bin/cargo-audit \
+              || curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$CARGO_AUDIT_VERSION/cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION.tgz \
+              | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION/cargo-audit \
+              > ~/.cargo/bin/cargo-audit \
+              && chmod +x ~/.cargo/bin/cargo-audit
+      - run: |
+          cargo audit -D warnings
+  test-standalone:
     parameters:
       path:
         description: "Path to crate external from workspace"
@@ -207,62 +213,112 @@ jobs:
         type: string
         default: --all-features
     executor: docker-rust
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
-      - restore-cargo-cache
-      - install-protoc
+      - restore-cargo-and-sccache
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
-      # TODO: this is incompatible with workspace inheritance, uncomment when
-      # https://github.com/DevinR528/cargo-sort/pull/29 is merged
-      # - run: cargo install cargo-sort
-      # - run: cargo sort --check << parameters.path >>
       - run: |
           cargo clippy --tests \
                        --all-targets \
                        << parameters.features >> \
                        --manifest-path << parameters.path >>/Cargo.toml \
                        --no-deps -- \
-                       --D warnings \
-                       -A clippy::let-unit-value \
-                       -A clippy::format-push-string
-      - run: cargo test << parameters.features >> --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
-      - save-cargo-cache
-  platform-test:
+                       --D warnings
+      - run: |
+          cargo test << parameters.features >> \
+                     --manifest-path << parameters.path >>/Cargo.toml \
+                     -- \
+                     --nocapture
+      - save-sccache
+  test-workspace-member:
     parameters:
       crate:
-        description: "Crate to test"
+        description: Crate in workspace to test
         type: string
-    # Using an image since tests will start a docker container
-    executor: image-ubuntu
+    executor: docker-rust
+    steps:
+      - install-rust
+      - checkout
+      - restore-cargo-and-sccache
+      - run: cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
+      - save-sccache
+  test-workspace-member-with-integration:
+    parameters:
+      crate:
+        description: Crate in workspace to test
+        type: string
+      resource_class:
+        description: The resource type to use for the machine
+        type: string
+      sccache-size:
+        type: string
+        default: 500M
+    executor: docker-rust
+    resource_class: << parameters.resource_class >>
     steps:
       - install-rust
       - install-protoc
       - checkout
-      - run: git submodule sync
       - run: git submodule update --init
-      - restore-cargo-cache
+      - restore-cargo-and-sccache:
+          sccache-size: << parameters.sccache-size >>
       - apply-patches
       - run:
           name: Run unit tests
-          command: cargo test --package << parameters.crate >> --all-features --lib -- --nocapture
+          command: cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
       - run:
           name: Run integration tests
-          # Only run integration tests if there are any
           command: |
             set +o pipefail
-            (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") && echo "nothing to test" || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
-      - save-cargo-cache
+            path=$(echo "<< parameters.crate >>" | sed "s/shuttle-\(.*\)/\1/")
+            if [ -f "$path/integration.sh" ]; then
+              bash "$path/integration.sh"
+            else
+              echo "nothing to test here, adjust CI file or add an integration script"
+              exit 1
+            fi
+      - save-sccache
+  test-workspace-member-with-integration-docker:
+    parameters:
+      crate:
+        description: "Crate in workspace to test"
+        type: string
+      resource_class:
+        description: The resource type to use for the machine
+        type: string
+      sccache-size:
+        type: string
+        default: 500M
+    # Using a machine image since tests will start a docker container
+    executor: machine-ubuntu
+    resource_class: << parameters.resource_class >>
+    steps:
+      - install-rust
+      - install-protoc
+      - checkout
+      - run: git submodule update --init
+      - restore-cargo-and-sccache:
+          sccache-size: << parameters.sccache-size >>
+      - apply-patches
+      - run:
+          name: Run integration tests that need docker
+          command: |
+            set +o pipefail
+            path=$(echo "<< parameters.crate >>" | sed "s/shuttle-\(.*\)/\1/")
+            if [ -f "$path/integration_docker.sh" ]; then
+              bash "$path/integration_docker.sh"
+            else
+              echo "nothing to test here, adjust CI file or add an integration script"
+              exit 1
+            fi
+      - save-sccache
   e2e-test:
-    executor: image-ubuntu
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
+    executor: machine-ubuntu
+    resource_class: medium
     steps:
       - install-rust
       - checkout
-      - run: git submodule sync
       - run: git submodule update --init
       - restore-buildx-cache
       - run:
@@ -282,64 +338,134 @@ jobs:
 
             SHUTTLE_TESTS_NETWORK=shuttle-dev_user-net SHUTTLE_TESTS_RUNTIME_IMAGE=public.ecr.aws/shuttle-dev/deployer:latest cargo test --package shuttle-gateway --all-features --lib -- --nocapture
 
+            # runs tests in e2e crate
             BUILDX_CACHE=/tmp/cache/buildx make test
       - save_cache:
+          name: Save buildx cache
           paths:
-            - "/tmp/cache/buildx"
-          key: docker-buildx-{{ .Branch }}
+            - /tmp/cache/buildx
+          key: docker-buildx-{{ .Branch }}-{{ .Revision }}
           when: always
   build-and-push:
-    executor: image-ubuntu
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
+    executor: machine-ubuntu
+    parameters:
+      aws-access-key-id:
+        description: "AWS cli access key id"
+        type: env_var_name
+      aws-secret-access-key:
+        description: "AWS cli secret access key"
+        type: env_var_name
+      public-registry:
+        description: "Use public registry"
+        type: boolean
+        default: true
+      production:
+        description: "Push and deploy to production"
+        type: boolean
+        default: false
     steps:
       - checkout
-      - run: 
+      - run:
           name: Set git tag in bash_env
           command: |
             echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
       - restore-buildx-cache
       - aws-ecr/ecr-login:
-          aws-access-key-id: AWS_ACCESS_KEY_ID
-          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
-          public-registry: true
+          aws-access-key-id: << parameters.aws-access-key-id >>
+          aws-secret-access-key: << parameters.aws-secret-access-key >>
+          public-registry: << parameters.public-registry >>
+          # `registry-id`` field is required, although we don't need it (used for private registry).
+          # We give it a non-empty env variable name to bypass the `ecr-login` empty check.
+          registry-id: TAG
       - run:
           name: Make and push images
           command: |
-            PUSH=true PROD=false PLATFORMS=linux/amd64 TAG=$TAG make images
+            PUSH=true PROD=<< parameters.production >> PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
   deploy-images:
-    executor: image-ubuntu
+    executor: machine-ubuntu
+    resource_class: medium
+    parameters:
+      ssh-fingerprint:
+        description: "SSH-key fingerprint"
+        type: string
+        default: 6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78
+      ssh-config-script:
+        description: "SSH config script to use."
+        type: string
+        default: unstable-ssh-config.sh
+      ssh-host:
+        description: "Shuttle SSH host"
+        type: string
+        default: shuttle.internal
+      postgres-password:
+        description: "Shuttle shared postgres password"
+        type: env_var_name
+      mongodb-password:
+        description: "Shuttle shared mongodb password"
+        type: env_var_name
+      honeycomb-api-key:
+        description: "Shuttle honeycomb api key for observability based on environment"
+        type: env_var_name
+      deploys-api-key:
+        description: "Shuttle api key used by the gateway to authorise starting idle deployments"
+        type: env_var_name
+      logger-postgres-uri:
+        description: "URI used to connect to the logger RDS postgres database."
+        type: string
+      stripe-secret-key:
+        description: "Stripe secret key used to connect a client to Stripe backend"
+        type: string
+      production:
+        description: "Push and deploy to production"
+        type: boolean
+        default: false
     steps:
-    - checkout
-    - run: 
-        name: Set git tag in bash_env
-        command: |
-          echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
-    - add_ssh_keys:
-        fingerprints:
-          - "6f:b3:35:dc:2d:f4:3c:e4:d1:4a:7c:a5:70:e3:b3:78"
-    - run:
-        name: Generate ssh config
-        command: ./.circleci/unstable-ssh-config.sh
-    - run:
-        name: Deploy to unstable
-        command: |
-          DOCKER_HOST=ssh://ec2-user@master.shuttle.internal USE_TLS=enable PROD=false DD_API_KEY=$DD_API_KEY \
-          POSTGRES_PASSWORD=$DEV_POSTGRES_PASSWORD \
-          MONGO_INITDB_ROOT_PASSWORD=$DEV_MONGO_INITDB_ROOT_PASSWORD \
-          TAG=$TAG \
-          make deploy
-    - run:
-        name: Pull new deployer image
-        command: |
-          ssh ec2-user@controller.shuttle.internal "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
+      - checkout
+      - run:
+          name: Set git tag in bash_env
+          command: |
+            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+      - add_ssh_keys:
+          fingerprints:
+            - << parameters.ssh-fingerprint >>
+      - run:
+          name: Generate ssh config
+          command: ./.circleci/<< parameters.ssh-config-script >>
+      - run:
+          name: Deploy images
+          command: |
+            DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> \
+            TAG=$TAG \
+            PROD=<< parameters.production >> \
+            USE_TLS=enable \
+            POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
+            MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
+            DD_API_KEY=$DD_API_KEY \
+            HONEYCOMB_API_KEY=${<< parameters.honeycomb-api-key >>} \
+            DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
+            LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
+            STRIPE_SECRET_KEY=${<< parameters.stripe-secret-key >>} \
+            make deploy
+      - when:
+          condition: << parameters.production >>
+          steps:
+            - run:
+                name: Pull new deployer image on prod
+                command: |
+                  ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
+      - when:
+          condition:
+            not: << parameters.production >>
+          steps:
+            - run:
+                name: Pull new deployer image on dev
+                command: |
+                  ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
       image: << parameters.image >>
     resource_class: << parameters.resource_class >>
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     parameters:
       target:
         description: "Linux target to build for"
@@ -350,24 +476,18 @@ jobs:
       resource_class:
         description: "The resource type to use for the machine"
         type: string
-      protoc_arch:
-        description: "Architecture to use to install protoc"
-        type: string
     steps:
       - checkout
       - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
-      - install-protoc:
-          arch: << parameters.protoc_arch >>
       - run:
           name: Install Rust
-          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.68.0 --target << parameters.target >>
+          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.72.0 --target << parameters.target >>
       - run:
           name: Build
           command: |
             # From https://github.com/briansmith/ring/issues/1414#issuecomment-1055177218
             export CC_aarch64_unknown_linux_musl=clang
-            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
-            cargo build --release --package cargo-shuttle --features vendored-openssl --target << parameters.target >>
+            cargo build --release --package cargo-shuttle --target << parameters.target >>
       - make-artifact:
           target: << parameters.target >>
   build-binaries-windows:
@@ -377,15 +497,14 @@ jobs:
       shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
-      - run: choco install -y strawberryperl protoc
+      - run: choco install -y strawberryperl
       - run:
           name: Install Rust
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
-            C:\rustup-init.exe -y --default-toolchain 1.68.0 --target x86_64-pc-windows-msvc
+            C:\rustup-init.exe -y --default-toolchain 1.72.0 --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - run:
           name: Build
@@ -393,30 +512,26 @@ jobs:
             # From https://github.com/alexcrichton/openssl-src-rs/issues/45
             # Because of https://github.com/openssl/openssl/issues/9048
             $env:OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
-            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
-            ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --features vendored-openssl --target x86_64-pc-windows-msvc
+            ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - make-artifact:
           target: x86_64-pc-windows-msvc
           suffix: ".exe"
   build-binaries-mac:
     macos:
-      xcode: 12.5.1
-    resource_class: medium
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
+      xcode: 14.2.0
+    resource_class: macos.m1.medium.gen1
     steps:
       - checkout
-      - install-protoc:
-          arch: osx-x86_64
+      # Necessary to build for Intel targets on m1.
+      - macos/install-rosetta
       - run:
           name: Install Rust
-          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.68.0 --target x86_64-apple-darwin
+          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.72.0 --target x86_64-apple-darwin
       - run:
           name: Build
           command: |
-            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
-            cargo build --release --package cargo-shuttle --features vendored-openssl --target x86_64-apple-darwin
+            cargo build --release --package cargo-shuttle --target x86_64-apple-darwin
       - make-artifact:
           target: x86_64-apple-darwin
   publish-github-release:
@@ -429,8 +544,8 @@ jobs:
           name: "Set tag in environment"
           command: |
             for file in artifacts/*.env; do
-              cat artifacts/${file##*/} >> "$BASH_ENV";
-              rm artifacts/${file##*/};
+              cat artifacts/${file##*/} >> $BASH_ENV
+              rm artifacts/${file##*/}
             done
       - run:
           name: "Publish Release on GitHub"
@@ -452,7 +567,7 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - run:
           name: "Install Shuttle"
-          command:  cargo install cargo-shuttle --path ./cargo-shuttle
+          command: cargo install cargo-shuttle --path ./cargo-shuttle
       - run: cargo shuttle --version
       - run:
           name: Login
@@ -463,7 +578,6 @@ jobs:
           command: ./.circleci/qa.sh linux
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
-      - run: git submodule sync
       - run: git submodule update --init
       - run:
           name: Test WASM
@@ -478,16 +592,12 @@ jobs:
     steps:
       - checkout
       - run:
-          name: "Install Protobuf"
-          command: |
-            brew install protobuf
-      - run:
           name: "Install Rust"
           command: |
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - run:
           name: "Install Shuttle"
-          command:  cargo install cargo-shuttle --path ./cargo-shuttle
+          command: cargo install cargo-shuttle --path ./cargo-shuttle
       - run: cargo shuttle --version
       - run:
           name: Login
@@ -498,7 +608,6 @@ jobs:
           command: ./.circleci/qa.sh mac
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
-      - run: git submodule sync
       - run: git submodule update --init
       - run:
           name: Test WASM
@@ -512,20 +621,74 @@ jobs:
       # - run:
       #     name: Test Docker
       #     command: ./.circleci/qa-docker.sh
-
+  windows-qa:
+    executor:
+      name: win/server-2022
+      size: medium
+      shell: powershell.exe
+    environment:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - checkout
+      - run:
+          name: "Install Protobuf"
+          command: |
+            choco install -y protoc
+      - run:
+          name: Install Rust
+          command: |
+            wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
+            C:\rustup-init.exe -y --default-toolchain 1.72.0 --target x86_64-pc-windows-msvc
+      - run:
+          name: "Install Shuttle"
+          command: ..\.cargo\bin\cargo.exe install cargo-shuttle --path ./cargo-shuttle
+      - run: ..\.cargo\bin\cargo.exe shuttle --version
+      - run:
+          name: Login
+          command: |
+            ..\.cargo\bin\cargo.exe shuttle login --api-key $env:SHUTTLE_API_KEY
+      - run:
+          name: QA
+          command: ./.circleci/qa.ps1
+          environment:
+            SHUTTLE_API: https://api.unstable.shuttle.rs
+      - run: git submodule update --init
+      # - run:
+      #     name: Test WASM
+      #     command: ./.circleci/qa-wasm.ps1
+      # We can't run linux containers on the Windows executor at this time
+      # https://circleci.com/docs/using-windows/#known-issues-and-limitations
+      # - run:
+      #     name: Test Docker
+      #     command: ./.circleci/qa-docker.ps1
+  publish-crates:
+    parameters:
+      path:
+        description: Crate to publish
+        type: string
+    executor: docker-rust
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Crate publishing in order
+          command: |
+            cargo publish --manifest-path << parameters.path >>/Cargo.toml
 workflows:
   ci:
     jobs:
-      - workspace
-      - check-standalone:
+      - workspace-fmt-clippy
+      - cargo-audit
+      - test-standalone:
           name: << matrix.path >>
           matrix:
             parameters:
               path:
                 - resources/aws-rds
+                - resources/metadata
                 - resources/persist
                 - resources/secrets
-                - resources/static-folder
+                - resources/turso
                 - services/shuttle-actix-web
                 - services/shuttle-axum
                 - services/shuttle-next
@@ -538,58 +701,118 @@ workflows:
                 - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
-      - check-standalone:
-        # shuttle-shared-db has mutually exclusive features
-        # so we run checks for each feature separately
+      - test-standalone:
+          # Has mutually exclusive features, so we run checks for each feature separately
           name: "resources/shared-db: << matrix.features >>"
           matrix:
-            alias: check-standalone-shared-db
+            alias: test-standalone-shared-db
             parameters:
-              path: [resources/shared-db]
+              path:
+                - resources/shared-db
               features:
                 - "-F mongodb"
                 - "-F postgres"
                 - "-F postgres-rustls"
-      - platform-test:
+      - test-workspace-member:
           name: << matrix.crate >>
-          requires:
-            - workspace
           matrix:
             parameters:
               crate:
-                [
-                  "shuttle-auth",
-                  "cargo-shuttle",
-                  "shuttle-codegen",
-                  "shuttle-common",
-                  "shuttle-deployer",
-                  "shuttle-proto",
-                  "shuttle-provisioner",
-                  "shuttle-runtime",
-                  "shuttle-service",
-                ]
+                # - shuttle-admin # no tests
+                - shuttle-codegen
+                - shuttle-common
+                # - shuttle-common-tests # no tests
+      - test-workspace-member-with-integration:
+          name: << matrix.crate >>
+          matrix:
+            alias: test-workspace-member-with-integration-medium
+            parameters:
+              resource_class:
+                - medium
+              crate:
+                - shuttle-proto
+                - shuttle-resource-recorder
+      - test-workspace-member-with-integration:
+          name: << matrix.crate >>
+          matrix:
+            alias: test-workspace-member-with-integration-large
+            parameters:
+              resource_class:
+                - large
+              crate:
+                - shuttle-auth
+                - shuttle-runtime
+                - shuttle-service
+      - test-workspace-member-with-integration:
+          name: << matrix.crate >>
+          matrix:
+            alias: test-workspace-member-with-integration-xlarge
+            parameters:
+              resource_class:
+                - xlarge
+              sccache-size:
+                - 1G
+              crate:
+                - cargo-shuttle
+                - shuttle-deployer
+      - test-workspace-member-with-integration-docker:
+          name: << matrix.crate >> with docker
+          matrix:
+            alias: test-workspace-member-with-integration-docker-medium
+            parameters:
+              resource_class:
+                - medium
+              crate:
+                - shuttle-provisioner
+                - shuttle-logger
+      - test-workspace-member-with-integration-docker:
+          name: << matrix.crate >> with docker
+          matrix:
+            alias: test-workspace-member-with-integration-docker-large
+            parameters:
+              resource_class:
+                - large
+              sccache-size:
+                - 750M
+              crate:
+                - cargo-shuttle
       - e2e-test:
           requires:
-            - platform-test
-            - check-standalone
-            - check-standalone-shared-db
+            - test-standalone
+            - test-standalone-shared-db
+            - test-workspace-member
+            - test-workspace-member-with-integration-medium
+            - test-workspace-member-with-integration-large
+            - test-workspace-member-with-integration-xlarge
+            - test-workspace-member-with-integration-docker-medium
+            - test-workspace-member-with-integration-docker-large
           filters:
             branches:
               only: production
+  unstable:
+    jobs:
       - approve-push-unstable:
           type: approval
           filters:
             branches:
               only: main
       - build-and-push:
-          requires: 
-            - approve-push-unstable
-          filters:
-            branches:
-              only: main
-      - deploy-images:
+          name: build-and-push-unstable
+          aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
+          aws-secret-access-key: DEV_AWS_SECRET_ACCESS_KEY
+          production: false
           requires:
-            - build-and-push
+            - approve-push-unstable
+      - deploy-images:
+          name: Deploy images to unstable
+          postgres-password: DEV_POSTGRES_PASSWORD
+          mongodb-password: DEV_MONGO_INITDB_ROOT_PASSWORD
+          honeycomb-api-key: DEV_HONEYCOMB_API_KEY
+          deploys-api-key: DEV_DEPLOYS_API_KEY
+          logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
+          stripe-secret-key: DEV_STRIPE_SECRET_KEY
+          requires:
+            - build-and-push-unstable
   release:
     jobs:
       - linux-qa:
@@ -600,14 +823,15 @@ workflows:
           filters:
             branches:
               only: production
+      - windows-qa:
+          filters:
+            branches:
+              only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-gnu
-          protoc_arch: linux-x86_64
           resource_class: xlarge
-          # requires:
-          #   - linux-qa
           filters:
             branches:
               only: production
@@ -615,10 +839,7 @@ workflows:
           name: build-binaries-x86_64-musl
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-musl
-          protoc_arch: linux-x86_64
           resource_class: xlarge
-          # requires:
-          #   - linux-qa
           filters:
             branches:
               only: production
@@ -627,9 +848,6 @@ workflows:
           image: ubuntu-2004:202101-01
           target: aarch64-unknown-linux-musl
           resource_class: arm.xlarge
-          protoc_arch: linux-aarch_64
-          # requires:
-          #   - linux-qa
           filters:
             branches:
               only: production
@@ -638,8 +856,6 @@ workflows:
             branches:
               only: production
       - build-binaries-mac:
-          # requires:
-          #   - mac-qa
           filters:
             branches:
               only: production
@@ -650,6 +866,94 @@ workflows:
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac
+      - approve-push-production:
+          type: approval
           filters:
             branches:
               only: production
+      - build-and-push:
+          name: build-and-push-production
+          aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
+          aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
+          production: true
+          requires:
+            - approve-push-production
+      - deploy-images:
+          name: deploy-images-to-production
+          postgres-password: PROD_POSTGRES_PASSWORD
+          mongodb-password: PROD_MONGO_INITDB_ROOT_PASSWORD
+          honeycomb-api-key: PROD_HONEYCOMB_API_KEY
+          deploys-api-key: PROD_DEPLOYS_API_KEY
+          logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
+          stripe-secret-key: PROD_STRIPE_SECRET_KEY
+          ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
+          ssh-config-script: production-ssh-config.sh
+          ssh-host: shuttle.prod.internal
+          production: true
+          requires:
+            - build-and-push-production
+      - approve-publish-crates:
+          type: approval
+          filters:
+            branches:
+              only: production
+      - publish-crates:
+          matrix:
+            parameters:
+              path:
+                - codegen
+                - common
+          name: publish-<< matrix.path >>
+          requires:
+            - approve-publish-crates
+      - publish-crates:
+          matrix:
+            parameters:
+              path:
+                - proto
+                - service
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-common
+      - publish-crates:
+          matrix:
+            parameters:
+              path:
+                - resources/aws-rds
+                - resources/metadata
+                - resources/persist
+                - resources/secrets
+                - resources/shared-db
+                - resources/turso
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-service
+      - publish-crates:
+          matrix:
+            parameters:
+              path:
+                - runtime
+                - cargo-shuttle
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-service
+            - publish-proto
+      - publish-crates:
+          matrix:
+            parameters:
+              path:
+                - services/shuttle-actix-web
+                - services/shuttle-axum
+                - services/shuttle-next
+                - services/shuttle-poem
+                - services/shuttle-poise
+                - services/shuttle-rocket
+                - services/shuttle-salvo
+                - services/shuttle-serenity
+                - services/shuttle-thruster
+                - services/shuttle-tide
+                - services/shuttle-tower
+                - services/shuttle-warp
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-runtime

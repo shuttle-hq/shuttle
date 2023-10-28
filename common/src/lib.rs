@@ -2,52 +2,52 @@
 pub mod backends;
 #[cfg(feature = "claims")]
 pub mod claims;
+pub mod constants;
 pub mod database;
 #[cfg(feature = "service")]
 pub mod deployment;
 #[cfg(feature = "service")]
+use uuid::Uuid;
+#[cfg(feature = "service")]
+pub type DeploymentId = Uuid;
+#[cfg(feature = "service")]
 pub mod log;
+#[cfg(feature = "service")]
+pub use log::LogItem;
 #[cfg(feature = "models")]
 pub mod models;
 #[cfg(feature = "service")]
 pub mod project;
 pub mod resource;
-#[cfg(feature = "service")]
-pub mod storage_manager;
+pub mod secrets;
+pub use secrets::{Secret, SecretStore};
 #[cfg(feature = "tracing")]
 pub mod tracing;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::fmt::Display;
 
 use anyhow::bail;
-#[cfg(feature = "service")]
-pub use log::Item as LogItem;
-#[cfg(feature = "service")]
-pub use log::STATE_MESSAGE;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "service")]
-use uuid::Uuid;
-
-#[cfg(debug_assertions)]
-pub const API_URL_DEFAULT: &str = "http://localhost:8001";
-
-#[cfg(not(debug_assertions))]
-pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
+#[cfg(feature = "openapi")]
+use utoipa::openapi::{Object, ObjectBuilder};
+use zeroize::Zeroize;
 
 pub type ApiUrl = String;
 pub type Host = String;
-#[cfg(feature = "service")]
-pub type DeploymentId = Uuid;
 
 #[derive(Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "persist", derive(sqlx::Type, PartialEq, Hash, Eq))]
+#[cfg_attr(feature = "persist", derive(PartialEq, Eq, Hash, sqlx::Type))]
 #[cfg_attr(feature = "persist", serde(transparent))]
 #[cfg_attr(feature = "persist", sqlx(transparent))]
 pub struct ApiKey(String);
+
+impl Zeroize for ApiKey {
+    fn zeroize(&mut self) {
+        self.0.zeroize()
+    }
+}
 
 impl ApiKey {
     pub fn parse(key: &str) -> anyhow::Result<Self> {
@@ -84,32 +84,6 @@ impl AsRef<str> for ApiKey {
     }
 }
 
-// Ensure we can't accidentaly log an ApiKey
-impl Debug for ApiKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ApiKey: REDACTED")
-    }
-}
-
-// Ensure we can't accidentaly log an ApiKey
-impl Display for ApiKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-#[cfg(feature = "error")]
-/// Errors that can occur when changing types. Especially from prost
-#[derive(thiserror::Error, Debug)]
-pub enum ParseError {
-    #[error("failed to parse UUID: {0}")]
-    Uuid(#[from] uuid::Error),
-    #[error("failed to parse timestamp: {0}")]
-    Timestamp(#[from] prost_types::TimestampError),
-    #[error("failed to parse serde: {0}")]
-    Serde(#[from] serde_json::Error),
-}
-
 /// Holds the input for a DB resource
 #[derive(Deserialize, Serialize, Default)]
 pub struct DbInput {
@@ -128,7 +102,7 @@ pub enum DbOutput {
 pub struct DatabaseReadyInfo {
     engine: String,
     role_name: String,
-    role_password: String,
+    role_password: Secret<String>,
     database_name: String,
     port: String,
     address_private: String,
@@ -148,7 +122,7 @@ impl DatabaseReadyInfo {
         Self {
             engine,
             role_name,
-            role_password,
+            role_password: Secret::new(role_password),
             database_name,
             port,
             address_private,
@@ -160,7 +134,7 @@ impl DatabaseReadyInfo {
             "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
-            self.role_password,
+            self.role_password.expose(),
             self.address_private,
             self.port,
             self.database_name
@@ -171,7 +145,7 @@ impl DatabaseReadyInfo {
             "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
-            self.role_password,
+            self.role_password.redacted(),
             self.address_public,
             self.port,
             self.database_name
@@ -179,27 +153,46 @@ impl DatabaseReadyInfo {
     }
 }
 
-/// Store that holds all the secrets available to a deployment
-#[derive(Deserialize, Serialize, Clone)]
-pub struct SecretStore {
-    pub(crate) secrets: BTreeMap<String, String>,
+#[cfg(feature = "openapi")]
+pub fn ulid_type() -> Object {
+    ObjectBuilder::new()
+        .schema_type(utoipa::openapi::SchemaType::String)
+        .format(Some(utoipa::openapi::SchemaFormat::Custom(
+            "ulid".to_string(),
+        )))
+        .description(Some("String represention of an Ulid according to the spec found here: https://github.com/ulid/spec."))
+        .build()
 }
 
-impl SecretStore {
-    pub fn new(secrets: BTreeMap<String, String>) -> Self {
-        Self { secrets }
-    }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VersionInfo {
+    /// Version of gateway
+    pub gateway: semver::Version,
+    /// Latest version of cargo-shuttle compatible with this gateway.
+    pub cargo_shuttle: semver::Version,
+    /// Latest version of shuttle-deployer compatible with this gateway.
+    pub deployer: semver::Version,
+    /// Latest version of shuttle-runtime compatible with the above deployer.
+    pub runtime: semver::Version,
+}
 
-    pub fn get(&self, key: &str) -> Option<String> {
-        self.secrets.get(key).map(ToOwned::to_owned)
+/// Check if two versions are compatible based on the rule used by cargo:
+/// "Versions `a` and `b` are compatible if their left-most nonzero digit is the same."
+pub fn semvers_are_compatible(a: &semver::Version, b: &semver::Version) -> bool {
+    if a.major != 0 || b.major != 0 {
+        a.major == b.major
+    } else if a.minor != 0 || b.minor != 0 {
+        a.minor == b.minor
+    } else {
+        a.patch == b.patch
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use proptest::prelude::*;
-
-    use crate::ApiKey;
+    use std::str::FromStr;
 
     proptest! {
         #[test]
@@ -226,5 +219,23 @@ mod tests {
     #[should_panic(expected = "The API key should consist of only alphanumeric characters.")]
     fn non_alphanumeric_api_key() {
         ApiKey::parse("dh9z58jttoes3qv@").unwrap();
+    }
+
+    #[test]
+    fn semver_compatibility_check_works() {
+        let semver_tests = &[
+            ("1.0.0", "1.0.0", true),
+            ("1.8.0", "1.0.0", true),
+            ("0.1.0", "0.2.1", false),
+            ("0.9.0", "0.2.0", false),
+        ];
+        for (version_a, version_b, are_compatible) in semver_tests {
+            let version_a = semver::Version::from_str(version_a).unwrap();
+            let version_b = semver::Version::from_str(version_b).unwrap();
+            assert_eq!(
+                super::semvers_are_compatible(&version_a, &version_b),
+                *are_compatible
+            );
+        }
     }
 }

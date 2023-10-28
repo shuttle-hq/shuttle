@@ -16,9 +16,10 @@ use sqlx::{
 };
 use tracing::info;
 
-use crate::{api::serve, user::AccountTier};
+use crate::api::serve;
 pub use api::ApiBuilder;
 pub use args::{Args, Commands, InitArgs};
+pub use user::AccountTier;
 
 pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // One day
 
@@ -28,6 +29,7 @@ pub async fn start(pool: SqlitePool, args: StartArgs) -> io::Result<()> {
     let router = api::ApiBuilder::new()
         .with_sqlite_pool(pool)
         .with_sessions()
+        .with_stripe_client(stripe::Client::new(args.stripe_secret_key))
         .into_router();
 
     info!(address=%args.address, "Binding to and listening at address");
@@ -37,7 +39,7 @@ pub async fn start(pool: SqlitePool, args: StartArgs) -> io::Result<()> {
     Ok(())
 }
 
-pub async fn init(pool: SqlitePool, args: InitArgs) -> io::Result<()> {
+pub async fn init(pool: SqlitePool, args: InitArgs, tier: AccountTier) -> io::Result<()> {
     let key = match args.key {
         Some(ref key) => ApiKey::parse(key).unwrap(),
         None => ApiKey::generate(),
@@ -46,14 +48,15 @@ pub async fn init(pool: SqlitePool, args: InitArgs) -> io::Result<()> {
     query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
         .bind(&args.name)
         .bind(&key)
-        .bind(AccountTier::Admin)
+        .bind(tier)
         .execute(&pool)
         .await
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
     println!(
-        "`{}` created as super user with key: {}",
+        "`{}` created as {} with key: {}",
         args.name,
+        tier,
         key.as_ref()
     );
     Ok(())

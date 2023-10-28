@@ -56,6 +56,9 @@ pub struct ContextArgs {
     /// the provisioner service
     #[arg(long, default_value = "provisioner")]
     pub provisioner_host: String,
+    /// The address at which a deployer container will find the builder service
+    #[arg(long, default_value = "builder")]
+    pub builder_host: String,
     /// Address to reach the authentication service at
     #[arg(long, default_value = "http://127.0.0.1:8008")]
     pub auth_uri: Uri,
@@ -68,4 +71,7 @@ pub struct ContextArgs {
     /// The path to the docker daemon socket
     #[arg(long, default_value = "/var/run/docker.sock")]
     pub docker_host: String,
+    /// Api key for the user that has rights to start deploys
+    #[arg(long, default_value = "gateway4deployes")]
+    pub deploys_api_key: String,
 }

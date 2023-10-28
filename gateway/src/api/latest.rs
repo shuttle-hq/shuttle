@@ -657,7 +657,7 @@ async fn request_custom_domain_acme_certificate(
     }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
-    Path((project_name, fqdn)): Path<(ProjectName, String)>,
+    CustomErrorPath((project_name, fqdn)): CustomErrorPath<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<String, Error> {
     let fqdn: FQDN = fqdn
@@ -734,7 +734,7 @@ async fn renew_custom_domain_acme_certificate(
     State(RouterState { service, .. }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
-    Path((project_name, fqdn)): Path<(ProjectName, String)>,
+    CustomErrorPath((project_name, fqdn)): CustomErrorPath<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<String, Error> {
     let fqdn: FQDN = fqdn

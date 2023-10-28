@@ -55,7 +55,7 @@ impl From<axum::Router> for AxumService {
 ///
 /// #[shuttle_runtime::main]
 /// async fn axum() -> shuttle_axum::ShuttleAxum {
-///     let router = Router::new().route("/hello", get(hello_world));
+///     let router = Router::new().route("/", get(hello_world));
 ///
 ///     Ok(router.into())
 /// }

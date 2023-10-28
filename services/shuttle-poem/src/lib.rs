@@ -11,7 +11,7 @@
 //!
 //! #[shuttle_runtime::main]
 //! async fn poem() -> ShuttlePoem<impl poem::Endpoint> {
-//!     let app = Route::new().at("/hello", get(hello_world));
+//!     let app = Route::new().at("/", get(hello_world));
 //!
 //!     Ok(app.into())
 //! }
@@ -59,7 +59,7 @@ where
 ///
 /// #[shuttle_runtime::main]
 /// async fn poem() -> ShuttlePoem<impl poem::Endpoint> {
-///     let app = Route::new().at("/hello", get(hello_world));
+///     let app = Route::new().at("/", get(hello_world));
 ///
 ///     Ok(app.into())
 /// }

@@ -44,7 +44,7 @@
 //!
 //! #[shuttle_runtime::main]
 //! async fn axum() -> shuttle_axum::ShuttleAxum {
-//!     let router = Router::new().route("/hello", get(hello_world));
+//!     let router = Router::new().route("/", get(hello_world));
 //!
 //!     Ok(router.into())
 //! }
@@ -63,7 +63,7 @@
 //! You should see your app build and start on the default port 8000. You can test this using;
 //!
 //! ```bash
-//! $ curl http://localhost:8000/hello
+//! $ curl http://localhost:8000/
 //!
 //! Hello, world!
 //! ```
@@ -96,7 +96,7 @@
 //! Your service will immediately be available at `{crate_name}.shuttleapp.rs`. For example:
 //!
 //! ```bash
-//! $ curl https://my-axum-app.shuttleapp.rs/hello
+//! $ curl https://my-axum-app.shuttleapp.rs/
 //! Hello, world!
 //! ```
 //!
@@ -129,7 +129,7 @@
 //!
 //! struct MyState(PgPool);
 //!
-//! #[get("/hello")]
+//! #[get("/")]
 //! fn hello(state: &State<MyState>) -> &'static str {
 //!     // Do things with `state.0`...
 //!     "Hello, Postgres!"

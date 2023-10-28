@@ -12,7 +12,7 @@
 //!
 //! #[shuttle_runtime::main]
 //! async fn rocket() -> shuttle_rocket::ShuttleRocket {
-//!     let rocket = rocket::build().mount("/hello", routes![index]);
+//!     let rocket = rocket::build().mount("/", routes![index]);
 //!
 //!     Ok(rocket.into())
 //! }
@@ -74,7 +74,7 @@ impl From<rocket::Rocket<rocket::Build>> for RocketService {
 ///
 /// #[shuttle_runtime::main]
 /// async fn rocket() -> ShuttleRocket {
-///     let rocket = rocket::build().mount("/hello", routes![index]);
+///     let rocket = rocket::build().mount("/", routes![index]);
 ///
 ///     Ok(rocket.into())
 /// }

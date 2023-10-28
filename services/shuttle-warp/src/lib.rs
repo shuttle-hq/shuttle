@@ -1,5 +1,7 @@
 //! Shuttle service integration for the Warp web framework.
+//!
 //! ## Example
+//!
 //! ```rust,no_run
 //! use warp::Filter;
 //! use warp::Reply;
@@ -51,7 +53,8 @@ impl<T> Deref for WarpService<T> {
 
 /// The return type of the [shuttle_runtime::main] function for the Warp service.
 ///
-///  # Example
+/// ## Example
+///
 /// ```rust,no_run
 /// use shuttle_warp::ShuttleWarp;
 /// use warp::Filter;
@@ -62,6 +65,5 @@ impl<T> Deref for WarpService<T> {
 ///     let route = warp::any().map(|| "Hello, World");
 ///     Ok(route.boxed().into())
 /// }
-///
 /// ```
 pub type ShuttleWarp<T> = Result<WarpService<warp::filters::BoxedFilter<T>>, Error>;

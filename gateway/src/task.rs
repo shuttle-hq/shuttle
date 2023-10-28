@@ -7,13 +7,13 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
-use tracing::{error, info_span, trace, warn};
+use tracing::{error, trace, trace_span, warn};
 use uuid::Uuid;
 
 use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
 use crate::worker::TaskRouter;
-use crate::{AccountName, EndState, Error, ErrorKind, ProjectName, Refresh, State};
+use crate::{AccountName, Error, ErrorKind, ProjectName, Refresh, State};
 
 // Default maximum _total_ time a task is allowed to run
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
@@ -108,15 +108,6 @@ where
     }
 }
 
-pub fn refresh() -> impl Task<ProjectContext, Output = Project, Error = Error> {
-    run(|ctx: ProjectContext| async move {
-        match ctx.state.refresh(&ctx.gateway).await {
-            Ok(new) => TaskResult::Done(new),
-            Err(err) => TaskResult::Err(err),
-        }
-    })
-}
-
 pub fn destroy() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     run(|ctx| async move {
         match ctx.state.destroy() {
@@ -135,24 +126,26 @@ pub fn start() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     })
 }
 
-pub fn check_health() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     run(|ctx| async move {
-        match ctx.state.refresh(&ctx.gateway).await {
-            Ok(Project::Ready(mut ready)) => {
-                if ready.is_healthy().await {
-                    TaskResult::Done(Project::Ready(ready))
-                } else {
-                    TaskResult::Done(Project::Ready(ready).reboot().unwrap())
-                }
+        match ctx.state {
+            Project::Ready(mut ready) => {
+                ready
+                    .start_last_deploy(ctx.gateway.get_jwt().await, ctx.admin_secret.clone())
+                    .await;
+                TaskResult::Done(Project::Ready(ready))
             }
-            Ok(update) => TaskResult::Done(update),
-            Err(err) => TaskResult::Err(err),
+            other => TaskResult::Done(other),
         }
     })
 }
 
 pub fn run_until_done() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     RunUntilDone
+}
+
+pub fn delete_project() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+    DeleteProject
 }
 
 pub struct TaskBuilder {
@@ -171,9 +164,7 @@ impl TaskBuilder {
             tasks: VecDeque::new(),
         }
     }
-}
 
-impl TaskBuilder {
     pub fn project(mut self, name: ProjectName) -> Self {
         self.project_name = Some(name);
         self
@@ -284,10 +275,59 @@ impl Task<ProjectContext> for RunUntilDone {
     type Error = Error;
 
     async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output, Self::Error> {
-        if !<Project as EndState<GatewayContext>>::is_done(&ctx.state) {
-            TaskResult::Pending(ctx.state.next(&ctx.gateway).await.unwrap())
-        } else {
-            TaskResult::Done(ctx.state)
+        // Make sure the project state has not changed from Docker
+        // Else we will make assumptions when trying to run next which can cause a failure
+        let project = match ctx.state.refresh(&ctx.gateway).await {
+            Ok(project) => project,
+            Err(error) => return TaskResult::Err(error),
+        };
+
+        match project {
+            Project::Errored(_)
+            | Project::Destroyed(_)
+            | Project::Stopped(_)
+            | Project::Deleted => TaskResult::Done(project),
+            Project::Ready(_) => match project.next(&ctx.gateway).await.unwrap() {
+                Project::Ready(ready) => TaskResult::Done(Project::Ready(ready)),
+                other => TaskResult::Pending(other),
+            },
+            Project::Restarting(restarting) if restarting.exhausted() => {
+                trace!("skipping project that restarted too many times");
+                TaskResult::Done(Project::Restarting(restarting))
+            }
+            _ => TaskResult::Pending(project.next(&ctx.gateway).await.unwrap()),
+        }
+    }
+}
+
+pub struct DeleteProject;
+
+#[async_trait]
+impl Task<ProjectContext> for DeleteProject {
+    type Output = Project;
+
+    type Error = Error;
+
+    async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output, Self::Error> {
+        // Make sure the project state has not changed from Docker
+        // Else we will make assumptions when trying to run next which can cause a failure
+        let project = match ctx.state.refresh(&ctx.gateway).await {
+            Ok(project) => project,
+            Err(error) => return TaskResult::Err(error),
+        };
+
+        match project {
+            Project::Errored(_)
+            | Project::Destroyed(_)
+            | Project::Stopped(_)
+            | Project::Ready(_) => match project.delete(&ctx.gateway).await {
+                Ok(()) => TaskResult::Done(Project::Deleted),
+                Err(error) => TaskResult::Err(Error::source(ErrorKind::DeleteProjectFailed, error)),
+            },
+            _ => TaskResult::Err(Error::custom(
+                ErrorKind::InvalidOperation,
+                "project is not in a valid state to be deleted",
+            )),
         }
     }
 }
@@ -423,6 +463,8 @@ pub struct ProjectContext {
     pub gateway: GatewayContext,
     /// The last known state of the project
     pub state: Project,
+    /// The secret needed to communicate with the project
+    pub admin_secret: String,
 }
 
 pub type BoxedTask<Ctx = (), O = ()> = Box<dyn Task<Ctx, Output = O, Error = Error>>;
@@ -456,15 +498,24 @@ where
             Ok(account_name) => account_name,
             Err(err) => return TaskResult::Err(err),
         };
+        let admin_secret = match self
+            .service
+            .control_key_from_project_name(&self.project_name)
+            .await
+        {
+            Ok(account_name) => account_name,
+            Err(err) => return TaskResult::Err(err),
+        };
 
         let project_ctx = ProjectContext {
             project_name: self.project_name.clone(),
             account_name: account_name.clone(),
             gateway: ctx,
-            state: project,
+            state: project.state,
+            admin_secret,
         };
 
-        let span = info_span!(
+        let span = trace_span!(
             "polling project",
             ctx.project = ?project_ctx.project_name,
             ctx.account = ?project_ctx.account_name,

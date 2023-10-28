@@ -10,6 +10,7 @@ use axum_sessions::extractors::{ReadableSession, WritableSession};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use shuttle_common::{claims::Claim, models::user};
+use stripe::CheckoutSession;
 use tracing::instrument;
 
 use super::{
@@ -39,6 +40,31 @@ pub(crate) async fn post_user(
     Ok(Json(user.into()))
 }
 
+#[instrument(skip(user_manager))]
+pub(crate) async fn update_user_tier(
+    _: Admin,
+    State(user_manager): State<UserManagerState>,
+    Path((account_name, account_tier)): Path<(AccountName, AccountTier)>,
+    payload: Option<Json<CheckoutSession>>,
+) -> Result<(), Error> {
+    if account_tier == AccountTier::Pro {
+        match payload {
+            Some(Json(checkout_session)) => {
+                user_manager
+                    .upgrade_to_pro(&account_name, checkout_session)
+                    .await?;
+            }
+            None => return Err(Error::MissingCheckoutSession),
+        }
+    } else {
+        user_manager
+            .update_tier(&account_name, account_tier)
+            .await?;
+    };
+
+    Ok(())
+}
+
 pub(crate) async fn put_user_reset_key(
     session: ReadableSession,
     State(user_manager): State<UserManagerState>,
@@ -46,7 +72,6 @@ pub(crate) async fn put_user_reset_key(
 ) -> Result<(), Error> {
     let account_name = match session.get::<String>("account_name") {
         Some(account_name) => account_name.into(),
-
         None => match key {
             Some(key) => user_manager.get_user_by_key(key.into()).await?.name,
             None => return Err(Error::Unauthorized),
@@ -56,25 +81,13 @@ pub(crate) async fn put_user_reset_key(
     user_manager.reset_key(account_name).await
 }
 
-pub(crate) async fn login(
-    mut session: WritableSession,
-    State(user_manager): State<UserManagerState>,
-    Json(request): Json<LoginRequest>,
-) -> Result<Json<user::Response>, Error> {
-    let user = user_manager.get_user(request.account_name).await?;
-
-    session
-        .insert("account_name", user.name.clone())
-        .expect("to set account name");
-    session
-        .insert("account_tier", user.account_tier)
-        .expect("to set account tier");
-
-    Ok(Json(user.into()))
-}
-
 pub(crate) async fn logout(mut session: WritableSession) {
     session.destroy();
+}
+
+// Dummy health-check returning 200 if the auth server is up.
+pub(crate) async fn health_check() -> Result<(), Error> {
+    Ok(())
 }
 
 pub(crate) async fn convert_cookie(

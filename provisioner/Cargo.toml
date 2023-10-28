@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-provisioner"
-version.workspace = true
+version = "0.30.1"
 edition.workspace = true
 license.workspace = true
 description = "Service responsible for provisioning and managing resources for services"
@@ -14,7 +14,7 @@ fqdn = { workspace = true }
 mongodb = "2.4.0"
 prost = { workspace = true }
 rand = { workspace = true }
-sqlx = { workspace = true, features = ["postgres", "runtime-tokio-native-tls"] }
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tonic = { workspace = true }
@@ -23,7 +23,7 @@ tracing-subscriber = { workspace = true, features = ["default", "fmt"] }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["backend"]
+features = ["backend", "tonic"]
 
 [dependencies.shuttle-proto]
 workspace = true

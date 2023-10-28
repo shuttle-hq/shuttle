@@ -1,5 +1,7 @@
 //! Shuttle service integration for the Axum web framework.
+//!
 //! ## Example
+//!
 //! ```rust,no_run
 //! use axum::{routing::get, Router};
 //!
@@ -18,7 +20,7 @@ use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
 /// A wrapper type for [axum::Router] so we can implement [shuttle_runtime::Service] for it.
-pub struct AxumService<S = ()>(pub axum::Router<S>);
+pub struct AxumService(pub axum::Router);
 
 #[shuttle_runtime::async_trait]
 impl shuttle_runtime::Service for AxumService {
@@ -34,15 +36,15 @@ impl shuttle_runtime::Service for AxumService {
     }
 }
 
-impl<S> From<axum::Router<S>> for AxumService<S> {
-    fn from(router: axum::Router<S>) -> Self {
+impl From<axum::Router> for AxumService {
+    fn from(router: axum::Router) -> Self {
         Self(router)
     }
 }
 
 /// Return type from the `[shuttle_runtime::main]` macro for a Axum-based service.
 ///
-/// # Example
+/// ## Example
 ///
 /// ```rust,no_run
 /// use axum::{routing::get, Router};

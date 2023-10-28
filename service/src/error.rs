@@ -20,8 +20,7 @@ pub enum Error {
     /// An error related to parsing the Secrets.toml file.
     #[error("Failed to interpolate string. Is your Secrets.toml correct?")]
     StringInterpolation(#[from] strfmt::FmtError),
-    /// A custom error case not covered by the other variants.
-    #[error("Custom error: {0}")]
+    #[error(transparent)]
     Custom(#[from] CustomError),
 }
 

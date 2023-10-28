@@ -182,7 +182,7 @@ macro_rules! request_span {
             ""
         };
 
-        tracing::debug_span!(
+        tracing::info_span!(
             "request",
             http.uri = %$request.uri(),
             http.method = %$request.method(),

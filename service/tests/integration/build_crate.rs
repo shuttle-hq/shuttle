@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use shuttle_service::builder::{build_workspace, BuiltService};
 
 #[tokio::test]
-#[should_panic(expected = "1 job failed")]
+#[should_panic(expected = "Build failed. Is the Shuttle runtime missing?")]
 async fn not_shuttle() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-shuttle", env!("CARGO_MANIFEST_DIR"));
-    build_workspace(Path::new(&project_path), false, tx)
+    build_workspace(Path::new(&project_path), false, tx, false)
         .await
         .unwrap();
 }
@@ -17,7 +17,7 @@ async fn not_shuttle() {
 async fn not_bin() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-bin", env!("CARGO_MANIFEST_DIR"));
-    match build_workspace(Path::new(&project_path), false, tx).await {
+    match build_workspace(Path::new(&project_path), false, tx, false).await {
         Ok(_) => {}
         Err(e) => panic!("{}", e.to_string()),
     }
@@ -29,28 +29,28 @@ async fn is_bin() {
     let project_path = format!("{}/tests/resources/is-bin", env!("CARGO_MANIFEST_DIR"));
 
     assert_eq!(
-        build_workspace(Path::new(&project_path), false, tx)
+        build_workspace(Path::new(&project_path), false, tx, false)
             .await
             .unwrap(),
-        vec![BuiltService::new(
-            PathBuf::from(&project_path).join("target/debug/is-bin"),
-            false,
-            "is-bin".to_string(),
-            PathBuf::from(&project_path),
-            PathBuf::from(&project_path).join("Cargo.toml")
-        ),]
+        vec![BuiltService {
+            workspace_path: PathBuf::from(&project_path),
+            manifest_path: PathBuf::from(&project_path).join("Cargo.toml"),
+            package_name: "is-bin".to_string(),
+            executable_path: PathBuf::from(&project_path).join("target/debug/is-bin"),
+            is_wasm: false,
+        }]
     );
 }
 
 #[tokio::test]
-#[should_panic(expected = "failed to read")]
+#[should_panic(expected = "failed to read the Shuttle project manifest")]
 async fn not_found() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!(
         "{}/tests/resources/non-existing",
         env!("CARGO_MANIFEST_DIR")
     );
-    build_workspace(Path::new(&project_path), false, tx)
+    build_workspace(Path::new(&project_path), false, tx, false)
         .await
         .unwrap();
 }
@@ -62,24 +62,25 @@ async fn workspace() {
     let project_path = format!("{}/tests/resources/workspace", env!("CARGO_MANIFEST_DIR"));
 
     assert_eq!(
-        build_workspace(Path::new(&project_path), false, tx)
+        build_workspace(Path::new(&project_path), false, tx, false)
             .await
             .unwrap(),
         vec![
-            BuiltService::new(
-                PathBuf::from(&project_path).join("target/debug/alpha"),
-                false,
-                "alpha".to_string(),
-                PathBuf::from(&project_path).join("alpha"),
-                PathBuf::from(&project_path).join("alpha/Cargo.toml")
-            ),
-            BuiltService::new(
-                PathBuf::from(&project_path).join("target/wasm32-wasi/debug/next.wasm"),
-                true,
-                "next".to_string(),
-                PathBuf::from(&project_path).join("next"),
-                PathBuf::from(&project_path).join("next/Cargo.toml")
-            ),
+            BuiltService {
+                workspace_path: PathBuf::from(&project_path),
+                manifest_path: PathBuf::from(&project_path).join("alpha/Cargo.toml"),
+                package_name: "alpha".to_string(),
+                executable_path: PathBuf::from(&project_path).join("target/debug/alpha"),
+                is_wasm: false,
+            },
+            BuiltService {
+                workspace_path: PathBuf::from(&project_path),
+                manifest_path: PathBuf::from(&project_path).join("next/Cargo.toml"),
+                package_name: "next".to_string(),
+                executable_path: PathBuf::from(&project_path)
+                    .join("target/wasm32-wasi/debug/next.wasm"),
+                is_wasm: true,
+            },
         ]
     );
 }

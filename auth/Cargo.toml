@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-auth"
-version.workspace = true
+version = "0.30.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -20,9 +20,10 @@ serde = { workspace = true, features = ["derive"] }
 sqlx = { workspace = true, features = [
     "sqlite",
     "json",
-    "runtime-tokio-native-tls",
+    "runtime-tokio-rustls",
     "migrate",
 ] }
+async-stripe = { version = "0.25.1", default-features = false, features = ["checkout", "runtime-tokio-hyper-rustls"] }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
@@ -39,3 +40,4 @@ axum-extra = { version = "0.7.1", features = ["cookie"] }
 hyper = { workspace = true }
 serde_json = { workspace = true }
 tower = { workspace = true, features = ["util"] }
+portpicker = { workspace = true }

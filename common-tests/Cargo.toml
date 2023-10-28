@@ -1,0 +1,21 @@
+[package]
+name = "shuttle-common-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+cargo-shuttle = { path = "../cargo-shuttle" }
+hyper = { workspace = true }
+portpicker = { workspace = true }
+reqwest = { workspace = true }
+shuttle-common = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tonic = { workspace = true }
+tower = { workspace = true }
+
+[dependencies.shuttle-proto]
+workspace = true

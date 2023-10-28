@@ -1,9 +1,11 @@
-use crossterm::style::Stylize;
+#[cfg(feature = "openapi")]
+use crate::ulid_type;
+use crossterm::style::{Color, Stylize};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use std::str::FromStr;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 use crate::models::deployment;
 
@@ -11,8 +13,8 @@ use crate::models::deployment;
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::service::Response))]
 pub struct Response {
-    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
-    pub id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(schema_with = ulid_type))]
+    pub id: String,
     pub name: String,
 }
 
@@ -39,10 +41,10 @@ URI:           {}
 "#,
                 self.name.clone().bold(),
                 deployment.id,
-                deployment
-                    .state
-                    .to_string()
-                    .with(deployment.state.get_color()),
+                deployment.state.to_string().with(
+                    // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
+                    Color::from_str(deployment.state.get_color()).unwrap()
+                ),
                 deployment.last_update.format("%Y-%m-%dT%H:%M:%SZ"),
                 self.uri,
             )

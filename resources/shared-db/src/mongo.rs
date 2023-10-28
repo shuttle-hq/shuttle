@@ -29,8 +29,8 @@ impl ResourceBuilder<mongodb::Database> for MongoDb {
     }
 
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, Error> {
-        let info = match factory.get_environment() {
-            shuttle_service::Environment::Production => DbOutput::Info(
+        let info = match factory.get_metadata().env {
+            shuttle_service::Environment::Deployment => DbOutput::Info(
                 factory
                     .get_db_connection(database::Type::Shared(database::SharedEngine::MongoDb))
                     .await

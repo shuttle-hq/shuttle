@@ -1,11 +1,11 @@
 use std::io;
 
 use clap::Parser;
-use shuttle_common::backends::tracing::setup_tracing;
+use shuttle_common::{backends::tracing::setup_tracing, log::Backend};
 use sqlx::migrate::Migrator;
 use tracing::{info, trace};
 
-use shuttle_auth::{init, sqlite_init, start, Args, Commands};
+use shuttle_auth::{init, sqlite_init, start, AccountTier, Args, Commands};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -15,7 +15,7 @@ async fn main() -> io::Result<()> {
 
     trace!(args = ?args, "parsed args");
 
-    setup_tracing(tracing_subscriber::registry(), "auth");
+    setup_tracing(tracing_subscriber::registry(), Backend::Auth, None);
 
     let db_path = args.state.join("authentication.sqlite");
 
@@ -32,6 +32,7 @@ async fn main() -> io::Result<()> {
 
     match args.command {
         Commands::Start(args) => start(pool, args).await,
-        Commands::Init(args) => init(pool, args).await,
+        Commands::InitAdmin(args) => init(pool, args, AccountTier::Admin).await,
+        Commands::InitDeployer(args) => init(pool, args, AccountTier::Deployer).await,
     }
 }

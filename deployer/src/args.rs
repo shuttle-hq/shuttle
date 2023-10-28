@@ -17,7 +17,11 @@ pub struct Args {
 
     /// Address to connect to the provisioning service
     #[clap(long, default_value = "http://provisioner:3000")]
-    pub provisioner_address: Endpoint,
+    pub provisioner_address: Uri,
+
+    /// Address to connect to the logger service
+    #[clap(long, default_value = "http://logger:8000")]
+    pub logger_uri: Endpoint,
 
     /// FQDN where the proxy can be reached at
     #[clap(long)]
@@ -35,17 +39,29 @@ pub struct Args {
     #[clap(long, default_value = "http://gateway:8001")]
     pub gateway_uri: Uri,
 
+    /// Address to reach resource-recorder service at
+    #[clap(long, default_value = "http://resource-recorder:8000")]
+    pub resource_recorder: Uri,
+
     /// Project being served by this deployer
     #[clap(long)]
     pub project: ProjectName,
+
+    /// Project id of the project of this deployer
+    #[clap(long)]
+    pub project_id: String,
 
     /// Secret that will be used to perform admin tasks on this deployer
     #[clap(long)]
     pub admin_secret: String,
 
     /// Address to reach the authentication service at
-    #[clap(long, default_value = "http://127.0.0.1:8008")]
+    #[clap(long, default_value = "http://auth:8000")]
     pub auth_uri: Uri,
+
+    /// Address to reach the builder service at
+    #[clap(long, default_value = "http://builder:8000")]
+    pub builder_uri: Endpoint,
 
     /// Uri to folder to store all artifacts
     #[clap(long, default_value = "/tmp")]

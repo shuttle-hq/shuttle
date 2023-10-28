@@ -27,10 +27,10 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.30.1"
-//! axum = "0.6.10"
+//! axum = "0.6.20"
 //! shuttle-axum = "0.30.1"
-//! tokio = "1.26"
+//! shuttle-runtime = "0.30.1"
+//! tokio = "1.28.2"
 //! ```
 //!
 //! A boilerplate code for your axum project can also be found in `src/main.rs`:
@@ -43,7 +43,7 @@
 //! }
 //!
 //! #[shuttle_runtime::main]
-//! async fn axum() -> shuttle_axum::ShuttleAxum {
+//! async fn main() -> shuttle_axum::ShuttleAxum {
 //!     let router = Router::new().route("/", get(hello_world));
 //!
 //!     Ok(router.into())
@@ -64,7 +64,6 @@
 //!
 //! ```bash
 //! $ curl http://localhost:8000/
-//!
 //! Hello, world!
 //! ```
 //!
@@ -203,9 +202,14 @@
 //! If you have any questions, [join our Discord server](https://discord.gg/shuttle). There's always someone on there that can help!
 //!
 //! You can also [open an issue or a discussion on GitHub](https://github.com/shuttle-hq/shuttle).
-//!
 
+// Public API
 pub use shuttle_codegen::main;
+pub use shuttle_service::{CustomError, Error, Factory, ResourceBuilder, Service};
+
+// Useful re-exports
+pub use async_trait::async_trait;
+pub use tokio;
 
 mod alpha;
 mod args;
@@ -214,26 +218,29 @@ mod next;
 mod provisioner_factory;
 mod resource_tracker;
 
-pub use alpha::{start, Alpha};
-#[cfg(feature = "next")]
-pub use next::{AxumWasm, NextArgs};
-pub use provisioner_factory::ProvisionerFactory;
-pub use resource_tracker::{get_resource, ResourceTracker};
-pub use shuttle_service::{CustomError, Error, Factory, ResourceBuilder, Service};
-
-pub use async_trait::async_trait;
-
-// Dependencies required by the codegen
-pub use anyhow::Context;
-pub use strfmt::strfmt;
-
-#[cfg(feature = "setup-tracing")]
-pub use {colored, tracing_subscriber};
-
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// Print the version of the runtime.
-pub fn print_version() {
-    println!("{NAME} {VERSION}");
+// Not part of public API
+#[doc(hidden)]
+pub mod __internals {
+    // Internals used by the codegen
+    pub use crate::alpha::{start, Alpha};
+    #[cfg(feature = "next")]
+    pub use crate::next::{AxumWasm, NextArgs};
+    pub use crate::provisioner_factory::ProvisionerFactory;
+    pub use crate::resource_tracker::{get_resource, ResourceTracker};
+
+    // Dependencies required by the codegen
+    pub use anyhow::Context;
+    #[cfg(feature = "setup-tracing")]
+    pub use colored;
+    pub use strfmt::strfmt;
+    #[cfg(feature = "setup-tracing")]
+    pub use tracing_subscriber;
+
+    // Print the version of the runtime.
+    pub fn print_version() {
+        println!("{} {}", crate::NAME, crate::VERSION);
+    }
 }

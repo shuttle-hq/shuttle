@@ -40,7 +40,7 @@ use tonic::{
 };
 use tower::ServiceBuilder;
 
-use crate::{print_version, provisioner_factory::ProvisionerFactory, ResourceTracker};
+use crate::__internals::{print_version, ProvisionerFactory, ResourceTracker};
 
 use self::args::Args;
 

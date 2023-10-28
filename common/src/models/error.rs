@@ -221,18 +221,14 @@ pub mod axum {
             match axum::extract::Path::<T>::from_request_parts(parts, state).await {
                 Ok(value) => Ok(Self(value.0)),
                 Err(rejection) => {
-                    match &rejection {
-                        PathRejection::FailedToDeserializePathParams(inner) => match inner.kind() {
-                            ErrorKind::Message(message) => {
-                                return Err(ApiError {
-                                    message: message.clone(),
-                                    status_code: StatusCode::BAD_REQUEST.as_u16(),
-                                })
-                            }
-                            _ => (),
-                        },
-                        _ => (),
-                    };
+                    if let PathRejection::FailedToDeserializePathParams(inner) = &rejection {
+                        if let ErrorKind::Message(message) = inner.kind() {
+                            return Err(ApiError {
+                                message: message.clone(),
+                                status_code: StatusCode::BAD_REQUEST.as_u16(),
+                            });
+                        }
+                    }
 
                     Err(ApiError {
                         message: rejection.body_text(),

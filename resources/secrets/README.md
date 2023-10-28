@@ -12,7 +12,7 @@ Next, pass `#[shuttle_secrets::Secrets] secret_store: SecretStore` as an argumen
 
 ## Example
 
-```rust
+```rust,ignore
 #[shuttle_runtime::main]
 async fn rocket(
     #[shuttle_secrets::Secrets] secret_store: SecretStore,

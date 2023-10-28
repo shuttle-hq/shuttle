@@ -7,9 +7,9 @@ repository.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-axum = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
+http = { workspace = true }
 prost-types = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = [

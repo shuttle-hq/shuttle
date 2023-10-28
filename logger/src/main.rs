@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use axum::error_handling::HandleErrorLayer;
 use clap::Parser;
 use shuttle_common::{
     backends::{
@@ -16,7 +15,7 @@ use shuttle_logger::{
 };
 use shuttle_proto::logger::logger_server::LoggerServer;
 use tonic::transport::Server;
-use tower::BoxError;
+use tower::ServiceBuilder;
 use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 use tracing::trace;
 
@@ -43,14 +42,15 @@ async fn main() {
             args.auth_uri,
         )))
         .layer(ExtractPropagationLayer)
-        // This middleware goes above `GovernorLayer` because it will receive errors returned by
-        // `GovernorLayer`.
-        .layer(HandleErrorLayer::new(|e: BoxError| async move {
-            tonic_error(e)
-        }))
-        .layer(GovernorLayer {
-            config: &governor_config,
-        });
+        .layer(
+            ServiceBuilder::new()
+                // This middleware goes above `GovernorLayer` because it will receive errors returned by
+                // `GovernorLayer`.
+                .map_err(tonic_error)
+                .layer(GovernorLayer {
+                    config: &governor_config,
+                }), // .map_err(tonic_error),
+        );
 
     let postgres = Postgres::new(&args.db_connection_uri).await;
 

@@ -6036,11 +6036,11 @@ name = "shuttle-logger"
 version = "0.30.1"
 dependencies = [
  "async-trait",
- "axum",
  "chrono",
  "clap",
  "ctor",
  "futures",
+ "http",
  "once_cell",
  "portpicker",
  "pretty_assertions",

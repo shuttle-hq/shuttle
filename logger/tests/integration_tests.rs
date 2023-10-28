@@ -36,10 +36,10 @@ fn cleanup() {
 }
 mod needs_docker {
     use super::*;
-    use axum::{error_handling::HandleErrorLayer, BoxError};
     use futures::future::join_all;
     use pretty_assertions::assert_eq;
     use shuttle_logger::rate_limiting::{tonic_error, TonicPeerIpKeyExtractor};
+    use tower::ServiceBuilder;
     use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 
     #[tokio::test]
@@ -305,12 +305,15 @@ mod needs_docker {
             let pg = Postgres::new(&pg_uri).await;
             Server::builder()
                 .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-                .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                    tonic_error(e)
-                }))
-                .layer(GovernorLayer {
-                    config: &governor_config,
-                })
+                .layer(
+                    ServiceBuilder::new()
+                        // This middleware goes above `GovernorLayer` because it will receive errors returned by
+                        // `GovernorLayer`.
+                        .map_err(tonic_error)
+                        .layer(GovernorLayer {
+                            config: &governor_config,
+                        }), // .map_err(tonic_error),
+                )
                 .add_service(LoggerServer::new(Service::new(pg.get_sender(), pg)))
                 .serve(addr)
                 .await

@@ -1,5 +1,7 @@
 //! Shuttle service integration for the Serenity discord bot framework.
+//!
 //! ## Example
+//!
 //! ```rust,no_run
 //! use anyhow::anyhow;
 //! use serenity::async_trait;
@@ -47,8 +49,8 @@
 //!
 //!     Ok(client.into())
 //! }
-//!
 //! ```
+
 use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
@@ -74,7 +76,8 @@ impl From<serenity::Client> for SerenityService {
 
 /// Return type from the `[shuttle_runtime::main]` macro for a Serenity-based service.
 ///
-/// # Example
+/// ## Example
+///
 /// ```rust,no_run
 /// # use anyhow::anyhow;
 /// # use serenity::async_trait;
@@ -119,6 +122,5 @@ impl From<serenity::Client> for SerenityService {
 ///
 ///     Ok(client.into())
 /// }
-///
 /// ```
 pub type ShuttleSerenity = Result<SerenityService, Error>;

@@ -1,6 +1,4 @@
 #![doc = include_str!("../README.md")]
-//! [Shuttle AWS RDS](https://docs.shuttle.rs/resources/shuttle-aws-rds)
-//! Plugin to provision databases using AWS RDS on Shuttle.
 
 macro_rules! aws_engine {
     ($feature:expr, $pool_path:path, $options_path:path, $struct_ident:ident) => {

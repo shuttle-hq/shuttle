@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use shuttle_common::models::error::ApiError;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     constants::{API_URL_DEFAULT, EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
@@ -336,12 +337,11 @@ impl Shuttle {
 
         // 2. Ask for project name
         if project_args.name.is_none() {
-            printdoc!(
-                "
+            printdoc! {"
                 What do you want to name your project?
                 It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
                 "
-            );
+            };
             let client = self.client.as_ref().unwrap();
             loop {
                 // not using validate_with due to being blocking
@@ -357,7 +357,17 @@ impl Shuttle {
                         project_args.name = Some(p);
                         break;
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        // If API error contains message regarding format of error name, print that error and prompt again
+                        if let Ok(api_error) = e.downcast::<ApiError>() {
+                            if api_error.message.contains("project name") {
+                                println!("{}", api_error.message.yellow());
+                                println!("{}", "Try a different name.".yellow());
+                                continue;
+                            }
+                        }
+                        // Else, the API error was about something else.
+                        // Ignore and keep going to not prevent the flow of the init command.
                         project_args.name = Some(p);
                         println!(
                             "{}",

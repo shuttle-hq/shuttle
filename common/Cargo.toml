@@ -51,6 +51,7 @@ zeroize = { workspace = true }
 backend = [
     "async-trait",
     "axum/matched-path",
+    "axum/json",
     "claims",
     "hyper/client",
     "opentelemetry-otlp",

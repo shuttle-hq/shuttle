@@ -22,6 +22,7 @@ use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Scope, EXP_MINUTES};
 use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
+use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
 use shuttle_common::{project::ProjectName, request_span, VersionInfo};
@@ -32,9 +33,8 @@ use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
 use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
-use utoipa::IntoParams;
-
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+use utoipa::IntoParams;
 use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
@@ -142,7 +142,7 @@ async fn get_project(
 )]
 async fn check_project_name(
     State(RouterState { service, .. }): State<RouterState>,
-    Path(project_name): Path<ProjectName>,
+    CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
 ) -> Result<AxumJson<bool>, Error> {
     service
         .project_name_exists(&project_name)
@@ -200,7 +200,7 @@ async fn create_project(
         service, sender, ..
     }): State<RouterState>,
     User { name, claim, .. }: User,
-    Path(project_name): Path<ProjectName>,
+    CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
     let is_admin = claim.scopes.contains(&Scope::Admin);

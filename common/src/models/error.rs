@@ -23,7 +23,7 @@ impl Display for ApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}\nmessage: {}",
+            "{}\nMessage: {}",
             self.status().to_string().bold(),
             self.message.to_string().with(Color::Red)
         )
@@ -130,6 +130,7 @@ impl From<ErrorKind> for ApiError {
     }
 }
 
+// Used as a fallback when an API response did not contain a serialized ApiError
 impl From<StatusCode> for ApiError {
     fn from(code: StatusCode) -> Self {
         let message = match code {
@@ -164,6 +165,84 @@ impl From<StatusCode> for ApiError {
         Self {
             message: message.to_string(),
             status_code: code.as_u16(),
+        }
+    }
+}
+
+#[cfg(feature = "backend")]
+pub mod axum {
+    use super::ApiError;
+    use async_trait::async_trait;
+    use axum::extract::path::ErrorKind;
+    use axum::{
+        extract::{rejection::PathRejection, FromRequestParts},
+        http::request::Parts,
+        response::{IntoResponse, Json, Response},
+    };
+    use http::StatusCode;
+    use serde::de::DeserializeOwned;
+
+    impl IntoResponse for ApiError {
+        fn into_response(self) -> Response {
+            (self.status(), Json(self)).into_response()
+        }
+    }
+
+    /// Custom `Path` extractor that customizes the error from `axum::extract::Path`.
+    ///
+    /// Prints the custom error message if deserialization resulted in a custom de::Error,
+    /// which is what the [`shuttle_common::project::ProjectName`] parser uses.
+    pub struct CustomErrorPath<T>(pub T);
+
+    impl<T> core::ops::Deref for CustomErrorPath<T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl<T> core::ops::DerefMut for CustomErrorPath<T> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
+
+    #[async_trait]
+    impl<S, T> FromRequestParts<S> for CustomErrorPath<T>
+    where
+        T: DeserializeOwned + Send,
+        S: Send + Sync,
+    {
+        type Rejection = ApiError;
+
+        async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+            match axum::extract::Path::<T>::from_request_parts(parts, state).await {
+                Ok(value) => Ok(Self(value.0)),
+                Err(rejection) => {
+                    match &rejection {
+                        PathRejection::FailedToDeserializePathParams(inner) => {
+                            let kind = inner.kind();
+                            dbg!(kind);
+                            match kind {
+                                ErrorKind::Message(message) => {
+                                    return Err(ApiError {
+                                        message: message.clone(),
+                                        status_code: StatusCode::BAD_REQUEST.as_u16(),
+                                    })
+                                }
+                                _ => (),
+                            }
+                        }
+                        _ => (),
+                    };
+
+                    Err(ApiError {
+                        message: rejection.body_text(),
+                        status_code: rejection.status().as_u16(),
+                    })
+                }
+            }
         }
     }
 }

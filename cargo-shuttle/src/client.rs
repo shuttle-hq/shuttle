@@ -62,8 +62,9 @@ impl Client {
         self.client
             .get(url)
             .send()
-            .await?
-            .json()
+            .await
+            .context("failed to check project name availability")?
+            .to_json()
             .await
             .context("parsing name check response")
     }

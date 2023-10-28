@@ -9,8 +9,9 @@ use std::pin::Pin;
 use std::str::FromStr;
 
 use acme::AcmeClientError;
+
 use axum::response::{IntoResponse, Response};
-use axum::Json;
+
 use bollard::Docker;
 use futures::prelude::*;
 use hyper::client::HttpConnector;
@@ -107,7 +108,7 @@ impl IntoResponse for Error {
 
         let error: ApiError = self.kind.into();
 
-        (error.status(), Json(error)).into_response()
+        error.into_response()
     }
 }
 

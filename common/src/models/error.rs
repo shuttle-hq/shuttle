@@ -171,7 +171,6 @@ impl From<StatusCode> for ApiError {
 
 #[cfg(feature = "backend")]
 pub mod axum {
-    use super::ApiError;
     use async_trait::async_trait;
     use axum::extract::path::ErrorKind;
     use axum::{
@@ -181,6 +180,8 @@ pub mod axum {
     };
     use http::StatusCode;
     use serde::de::DeserializeOwned;
+
+    use super::ApiError;
 
     impl IntoResponse for ApiError {
         fn into_response(self) -> Response {
@@ -221,19 +222,15 @@ pub mod axum {
                 Ok(value) => Ok(Self(value.0)),
                 Err(rejection) => {
                     match &rejection {
-                        PathRejection::FailedToDeserializePathParams(inner) => {
-                            let kind = inner.kind();
-                            dbg!(kind);
-                            match kind {
-                                ErrorKind::Message(message) => {
-                                    return Err(ApiError {
-                                        message: message.clone(),
-                                        status_code: StatusCode::BAD_REQUEST.as_u16(),
-                                    })
-                                }
-                                _ => (),
+                        PathRejection::FailedToDeserializePathParams(inner) => match inner.kind() {
+                            ErrorKind::Message(message) => {
+                                return Err(ApiError {
+                                    message: message.clone(),
+                                    status_code: StatusCode::BAD_REQUEST.as_u16(),
+                                })
                             }
-                        }
+                            _ => (),
+                        },
                         _ => (),
                     };
 
@@ -243,6 +240,71 @@ pub mod axum {
                     })
                 }
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::project::ProjectName;
+
+        use super::*;
+        use axum::http::StatusCode;
+        use axum::{body::Body, routing::get, Router};
+        use http::Request;
+        use tower::Service;
+
+        #[tokio::test]
+        async fn project_name_paths() {
+            let mut app = Router::new()
+                .route(
+                    "/:project_name",
+                    get(
+                        |CustomErrorPath(project_name): CustomErrorPath<ProjectName>| async move {
+                            project_name.to_string()
+                        },
+                    ),
+                )
+                .route(
+                    "/:project_name/:num",
+                    get(
+                        |CustomErrorPath((project_name, num)): CustomErrorPath<(
+                            ProjectName,
+                            u8,
+                        )>| async move { format!("{project_name} {num}") },
+                    ),
+                );
+
+            let response = app
+                .call(Request::get("/test123").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            assert_eq!(&body[..], b"test123");
+
+            let response = app
+                .call(Request::get("/__test123").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            assert!(&body[..].starts_with(br#"{"message":"Invalid project name"#));
+
+            let response = app
+                .call(Request::get("/test123/123").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            assert_eq!(&body[..], b"test123 123");
+
+            let response = app
+                .call(Request::get("/test123/asdf").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            assert!(&body[..].starts_with(br#"{"message":"Invalid URL"#));
         }
     }
 }

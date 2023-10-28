@@ -18,4 +18,5 @@ pub enum Error {
     Custom(#[from] CustomError),
 }
 
+/// Type alias for an `anyhow::Error`.
 pub type CustomError = anyhow::Error;

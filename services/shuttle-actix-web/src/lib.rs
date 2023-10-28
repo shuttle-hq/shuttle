@@ -6,7 +6,7 @@
 //! use actix_web::{get, web::ServiceConfig};
 //! use shuttle_actix_web::ShuttleActixWeb;
 //!
-//! #[get("/hello")]
+//! #[get("/")]
 //! async fn hello_world() -> &'static str {
 //!     "Hello World!"
 //! }

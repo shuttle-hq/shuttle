@@ -1,5 +1,7 @@
 //! Shuttle service integration for the Axum web framework.
+//!
 //! ## Example
+//!
 //! ```rust,no_run
 //! use axum::{routing::get, Router};
 //!
@@ -9,7 +11,7 @@
 //!
 //! #[shuttle_runtime::main]
 //! async fn axum() -> shuttle_axum::ShuttleAxum {
-//!     let router = Router::new().route("/hello", get(hello_world));
+//!     let router = Router::new().route("/", get(hello_world));
 //!
 //!     Ok(router.into())
 //! }
@@ -39,5 +41,23 @@ impl From<axum::Router> for AxumService {
         Self(router)
     }
 }
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+
+/// Return type from the `[shuttle_runtime::main]` macro for a Axum-based service.
+///
+/// ## Example
+///
+/// ```rust,no_run
+/// use axum::{routing::get, Router};
+///
+/// async fn hello_world() -> &'static str {
+///     "Hello, world!"
+/// }
+///
+/// #[shuttle_runtime::main]
+/// async fn axum() -> shuttle_axum::ShuttleAxum {
+///     let router = Router::new().route("/", get(hello_world));
+///
+///     Ok(router.into())
+/// }
+/// ```
 pub type ShuttleAxum = Result<AxumService, Error>;

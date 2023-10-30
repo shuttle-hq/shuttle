@@ -18,7 +18,6 @@ pub const NEXT_NAME: &str = "shuttle-next";
 pub const RUNTIME_NAME: &str = "shuttle-runtime";
 
 pub mod limits {
-    // Looser limits in initial release, in case there are struggles with deleting projects
-    pub const MAX_PROJECTS_BASIC: u32 = 10;
-    pub const MAX_PROJECTS_PRO: u32 = 20;
+    pub const MAX_PROJECTS_BASIC: u32 = 3;
+    pub const MAX_PROJECTS_PRO: u32 = 15;
 }

@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"
 homepage = "https://www.shuttle.rs"
+rust-version = "1.70"
 
 [dependencies]
 anyhow = { workspace = true }

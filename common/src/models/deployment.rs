@@ -76,6 +76,7 @@ pub fn get_deployments_table(
     service_name: &str,
     page: u32,
     raw: bool,
+    page_hint: bool,
 ) -> String {
     if deployments.is_empty() {
         // The page starts at 1 in the CLI.
@@ -196,9 +197,12 @@ pub fn get_deployments_table(
             }
         }
 
-        format!(
-            "\nMost recent deployments for {service_name}\n{table}\nMore projects might be available on the next page using --page.\n",
-        )
+        let formatted_table = format!("\nMost recent deployments for {service_name}\n{table}\n");
+        if page_hint {
+            format!("{formatted_table}More projects might be available on the next page using --page.\n")
+        } else {
+            formatted_table
+        }
     }
 }
 

@@ -734,13 +734,20 @@ impl Shuttle {
             println!();
             return Ok(CommandOutcome::Ok);
         }
+        let limit = limit + 1;
 
         let proj_name = self.ctx.project_name();
-        let deployments = client
+        let mut deployments = client
             .get_deployments(proj_name, page, limit)
             .await
             .map_err(suggestions::deployment::get_deployments_list_failure)?;
-        let table = get_deployments_table(&deployments, proj_name.as_str(), page, raw);
+        let page_hint = if deployments.len() == limit as usize {
+            deployments.pop();
+            true
+        } else {
+            false
+        };
+        let table = get_deployments_table(&deployments, proj_name.as_str(), page, raw, page_hint);
 
         println!("{table}");
         println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
@@ -1695,8 +1702,9 @@ impl Shuttle {
             println!();
             return Ok(CommandOutcome::Ok);
         }
+        let limit = limit + 1;
 
-        let projects = client.get_projects_list(page, limit).await.map_err(|err| {
+        let mut projects = client.get_projects_list(page, limit).await.map_err(|err| {
             suggestions::project::project_request_failure(
                 err,
                 "Getting projects list failed",
@@ -1704,7 +1712,13 @@ impl Shuttle {
                 "getting the projects list fails repeteadly",
             )
         })?;
-        let projects_table = project::get_projects_table(&projects, page, raw);
+        let page_hint = if projects.len() == limit as usize {
+            projects.pop();
+            true
+        } else {
+            false
+        };
+        let projects_table = project::get_projects_table(&projects, page, raw, page_hint);
 
         println!("{projects_table}");
 

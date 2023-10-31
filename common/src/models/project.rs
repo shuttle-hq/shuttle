@@ -251,7 +251,10 @@ pub fn get_projects_table(
 
         let formatted_table = format!("\nThese projects are linked to this account\n{table}\n");
         if page_hint {
-            format!("{formatted_table}More projects might be available on the next page using --page.\n")
+            format!(
+                "{formatted_table}More projects are available on the next page using `--page {}`\n",
+                page + 1
+            )
         } else {
             formatted_table
         }

@@ -325,6 +325,15 @@ impl Persistence {
             .map_err(Error::from)
     }
 
+    pub async fn delete_secrets(&self, id: &Ulid) -> Result<u64> {
+        sqlx::query("DELETE FROM secrets WHERE service_id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map(|res| res.rows_affected())
+            .map_err(Error::from)
+    }
+
     pub async fn get_all_services(&self) -> Result<Vec<Service>> {
         sqlx::query_as("SELECT * FROM services")
             .fetch_all(&self.pool)
@@ -549,6 +558,12 @@ impl ResourceManager for Persistence {
                     .await
                     .map_err(error::Error::Provisioner)?;
             };
+        }
+        // Delete the secrets from the local SQLite persistence.
+        else if let Type::Secrets = resource_type {
+            let row_count = self.delete_secrets(service_id).await?;
+
+            info!("deleted {row_count} secrets from deployer persistence");
         }
 
         let mut delete_resource_req = tonic::Request::new(ResourceIds {

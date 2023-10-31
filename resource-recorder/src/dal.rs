@@ -133,7 +133,7 @@ impl Dal for Sqlite {
             .execute(&mut *transaction)
             .await?;
 
-        // Making mutliple DB "connections" is fine since the sqlite is on the same machine
+        // Making multiple DB "connections" is fine since the sqlite is on the same machine
         for resource in resources {
             if let Some(r_project_id) = resource.project_id {
                 if r_project_id != project_id {

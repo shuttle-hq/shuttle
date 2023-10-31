@@ -561,9 +561,9 @@ impl ResourceManager for Persistence {
         }
         // Delete the secrets from the local SQLite persistence.
         else if let Type::Secrets = resource_type {
-            if let Ok(row_count) = self.delete_secrets(service_id).await {
-                info!("deleted {row_count} secrets from deployer persistence")
-            };
+            let row_count = self.delete_secrets(service_id).await?;
+
+            info!("deleted {row_count} secrets from deployer persistence");
         }
 
         let mut delete_resource_req = tonic::Request::new(ResourceIds {

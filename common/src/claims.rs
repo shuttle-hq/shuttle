@@ -53,6 +53,9 @@ pub enum Scope {
     /// Create and delete projects
     ProjectWrite,
 
+    /// Perform Pro tier action
+    ExtraProjects,
+
     /// Get the resources for a project
     Resources,
 
@@ -85,9 +88,6 @@ pub enum Scope {
     /// of DNS-01 challenge completion.
     GatewayCertificateRenew,
 
-    /// Perform Pro tier action
-    Pro,
-
     /// Admin level scope to internals
     Admin,
 }
@@ -116,7 +116,7 @@ impl ScopeBuilder {
 
     /// Extend the current scopes with Pro rights.
     pub fn with_pro(mut self) -> Self {
-        self.0.push(Scope::Pro);
+        self.0.push(Scope::ExtraProjects);
         self
     }
 

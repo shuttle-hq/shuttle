@@ -21,7 +21,7 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
-use shuttle_common::constants::limits::{MAX_PROJECTS_BASIC, MAX_PROJECTS_PRO};
+use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
 use shuttle_common::models::project::State;
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
@@ -569,8 +569,8 @@ impl GatewayService {
             .await?
             .get::<_, usize>(0);
 
-        if (is_pro && proj_count >= MAX_PROJECTS_PRO)
-            || (!is_pro && proj_count >= MAX_PROJECTS_BASIC)
+        if (is_pro && proj_count >= MAX_PROJECTS_EXTRA)
+            || (!is_pro && proj_count >= MAX_PROJECTS_DEFAULT)
         {
             return Err(Error::from_kind(ErrorKind::TooManyProjects));
         }

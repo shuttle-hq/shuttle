@@ -485,7 +485,7 @@ mod tests {
                     Scope::ResourcesWrite,
                     Scope::Secret,
                     Scope::SecretWrite,
-                    Scope::Pro,
+                    Scope::ExtraProjects,
                 ]
             );
         }

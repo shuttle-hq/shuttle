@@ -18,6 +18,6 @@ pub const NEXT_NAME: &str = "shuttle-next";
 pub const RUNTIME_NAME: &str = "shuttle-runtime";
 
 pub mod limits {
-    pub const MAX_PROJECTS_BASIC: u32 = 3;
-    pub const MAX_PROJECTS_PRO: u32 = 15;
+    pub const MAX_PROJECTS_DEFAULT: u32 = 3;
+    pub const MAX_PROJECTS_EXTRA: u32 = 15;
 }

@@ -146,7 +146,10 @@ pub async fn task(
 
 #[instrument(name = "Build failed", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
-    error!("{DEPLOYER_END_MSG_BUILD_ERR}: {error}");
+    error!(
+        error = &error as &dyn std::error::Error,
+        "{DEPLOYER_END_MSG_BUILD_ERR}"
+    );
 }
 
 #[instrument(name = "Waiting for queue slot", skip(queue_client), fields(deployment_id = %id, state = %State::Queued))]
@@ -224,7 +227,6 @@ impl Queued {
 
         tokio::task::spawn(async move {
             while let Some(line) = rx.recv().await {
-                trace!(?line, "received build message");
                 let log = LogItem::new(
                     self.id,
                     shuttle_common::log::Backend::Deployer, // will change to Builder
@@ -411,20 +413,28 @@ async fn run_pre_deploy_tests(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
+    // Spawn the command and make two readers, that read lines from stdout and stderr and send
+    // them to the same receiver. This is only needed when the output of both streams are wanted.
     let mut handle = cmd.spawn().map_err(TestError::Run)?;
     let tx2 = tx.clone();
     let reader = tokio::io::BufReader::new(handle.stdout.take().unwrap());
     tokio::spawn(async move {
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await.unwrap() {
-            let _ = tx.send(line).await.map_err(|e| error!("{e}"));
+            let _ = tx
+                .send(line)
+                .await
+                .map_err(|e| error!(error = %e, "failed to send line"));
         }
     });
     let reader = tokio::io::BufReader::new(handle.stderr.take().unwrap());
     tokio::spawn(async move {
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await.unwrap() {
-            let _ = tx2.send(line).await.map_err(|e| error!("{e}"));
+            let _ = tx2
+                .send(line)
+                .await
+                .map_err(|e| error!(error = %e, "failed to send line"));
         }
     });
     let status = handle.wait().await.map_err(TestError::Run)?;

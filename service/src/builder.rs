@@ -78,6 +78,7 @@ pub async fn build_workspace(
 
     // Cargo's "Downloading ..." lines are quite verbose.
     // Instead, a custom message is printed if the download takes significant time.
+    // Cargo seems to have similar logic, where it prints nothing if this step takes little time.
     let mut command = tokio::process::Command::new("cargo");
     command
         .arg("fetch")
@@ -103,8 +104,8 @@ pub async fn build_workspace(
     notification.abort();
 
     let metadata = {
-        // Modified implementaion of `MetadataCommand::exec` (v0.15.3).
-        // Uses tokio command instead of std
+        // Modified implementaion of `cargo_metadata::MetadataCommand::exec` (from v0.15.3).
+        // Uses tokio Command instead of std, to make this operation non-blocking.
         let mut cmd = tokio::process::Command::from(
             cargo_metadata::MetadataCommand::new()
                 .manifest_path(&manifest_path)

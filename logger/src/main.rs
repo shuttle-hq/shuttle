@@ -30,7 +30,7 @@ async fn main() {
     // The server can receive no more than 6 requests per peer address per second.
     let governor_config = GovernorConfigBuilder::default()
         .per_second(1)
-        .burst_size(3)
+        .burst_size(6)
         .use_headers()
         .key_extractor(TonicPeerIpKeyExtractor)
         .finish()
@@ -49,7 +49,7 @@ async fn main() {
                 .map_err(tonic_error)
                 .layer(GovernorLayer {
                     config: &governor_config,
-                }), // .map_err(tonic_error),
+                }),
         );
 
     let postgres = Postgres::new(&args.db_connection_uri).await;

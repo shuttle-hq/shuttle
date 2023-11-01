@@ -377,7 +377,7 @@ pub mod logger {
         /// Create a batcher around inner. It will send a batch of items to inner if a capacity of 2048 is reached
         /// or if an interval of 1 second is reached.
         pub fn wrap(inner: I) -> Self {
-            Self::new(inner, 128, Duration::from_secs(1))
+            Self::new(inner, 256, Duration::from_secs(1))
         }
 
         /// Send a single item into this batcher

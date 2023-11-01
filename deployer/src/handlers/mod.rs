@@ -658,16 +658,27 @@ pub async fn get_logs(
     logs_request.extensions_mut().insert(claim);
 
     let mut client = deployment_manager.logs_fetcher().clone();
-    if let Ok(logs) = client.get_logs(logs_request).await {
-        Ok(Json(
+
+    match client.get_logs(logs_request).await {
+        Ok(logs) => Ok(Json(
             logs.into_inner()
                 .log_items
                 .into_iter()
                 .map(|l| l.to_log_item_with_id(deployment_id))
                 .collect(),
-        ))
-    } else {
-        Err(Error::NotFound("deployment not found".to_string()))
+        )),
+        Err(error) => {
+            if error.code() == tonic::Code::Unavailable
+                && error.metadata().get("x-ratelimit-after").is_some()
+            {
+                Err(Error::RateLimited(
+                    "your application is producing too many logs, any interaction with the shuttle logger service will be rate limited"
+                        .to_string(),
+                ))
+            } else {
+                Err(anyhow!("failed to retrieve logs for deployment").into())
+            }
+        }
     }
 }
 
@@ -715,9 +726,22 @@ async fn logs_websocket_handler(
                 "failed to get backlog of logs"
             );
 
-            let _ = s
-                .send(ws::Message::Text("failed to get logs".to_string()))
-                .await;
+            if error.code() == tonic::Code::Unavailable
+                && error.metadata().get("x-ratelimit-limit").is_some()
+            {
+                let _ = s
+                    .send(ws::Message::Text(
+                        Error::RateLimited(
+                            "your application is producing too many logs, any interaction with the shuttle logger service will be rate limited"
+                                .to_string(),
+                        ).to_string()
+                    ))
+                    .await;
+            } else {
+                let _ = s
+                    .send(ws::Message::Text("failed to get logs".to_string()))
+                    .await;
+            }
             let _ = s.close().await;
             return;
         }

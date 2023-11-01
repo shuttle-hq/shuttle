@@ -27,6 +27,8 @@ pub enum Error {
     Internal(#[from] anyhow::Error),
     #[error("Missing header: {0}")]
     MissingHeader(String),
+    #[error("{0}. Retry the command in a few minutes")]
+    RateLimited(String),
 }
 
 impl Serialize for Error {
@@ -48,6 +50,7 @@ impl IntoResponse for Error {
 
         let code = match self {
             Error::NotFound(_) => StatusCode::NOT_FOUND,
+            Error::RateLimited(_) => StatusCode::TOO_MANY_REQUESTS,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 

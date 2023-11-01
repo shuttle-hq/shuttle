@@ -91,7 +91,7 @@ pub async fn build_workspace(
         let tx = tx.clone();
         async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-            tx.send("      Fetching crates...".into())
+            tx.send("      Downloading crates...".into())
                 .await
                 .expect("log receiver to exist");
         }

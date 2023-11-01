@@ -342,14 +342,71 @@ pub mod logger {
         type Item = LogItem;
 
         async fn receive(&mut self, items: Vec<Self::Item>) {
+            // A log vector should never be received without any items. We clone the first item
+            // here so we can use IDs to generate a rate limiting logline.
+            let Some(item) = items.first().cloned() else {
+                error!("received log vector without any items");
+
+                return;
+            };
+
             if let Err(error) = self
                 .store_logs(Request::new(StoreLogsRequest { logs: items }))
                 .await
             {
-                error!(
-                    error = &error as &dyn std::error::Error,
-                    "failed to send batch logs to logger"
-                );
+                match error.code() {
+                    tonic::Code::Unavailable => {
+                        if let Some(_) = error.metadata().get("x-ratelimit-limit") {
+                            let LogItem {
+                                deployment_id,
+                                log_line,
+                            } = item;
+
+                            let LogLine { service_name, .. } = log_line.unwrap();
+
+                            let timestamp = Utc::now();
+
+                            let new_item = LogItem {
+                                deployment_id,
+                                log_line: Some(LogLine {
+                                    tx_timestamp: Some(prost_types::Timestamp {
+                                        seconds: timestamp.timestamp(),
+                                        nanos: timestamp.timestamp_subsec_nanos() as i32,
+                                    }),
+                                    service_name: Backend::Runtime(service_name.clone())
+                                        .to_string(),
+                                    data: "your application is producing too many logs, log recording is being rate limited".into(),
+                                }),
+                            };
+
+                            // Give the rate limiter time to refresh.
+                            tokio::time::sleep(Duration::from_millis(1500)).await;
+
+                            if let Err(error) = self
+                                .store_logs(Request::new(StoreLogsRequest {
+                                    logs: vec![new_item],
+                                }))
+                                .await
+                            {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to send rate limiting warning to logger service"
+                                );
+                            };
+                        } else {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to send batch logs to logger"
+                            );
+                        }
+                    }
+                    _ => {
+                        error!(
+                            error = &error as &dyn std::error::Error,
+                            "failed to send batch logs to logger"
+                        );
+                    }
+                };
             }
         }
     }

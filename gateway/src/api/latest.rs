@@ -770,7 +770,7 @@ async fn renew_custom_domain_acme_certificate(
                     .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)
                     .await
                 {
-                    // If successfuly created, save the certificate in memory to be
+                    // If successfully created, save the certificate in memory to be
                     // served in the future.
                     Ok((certs, private_key)) => {
                         service

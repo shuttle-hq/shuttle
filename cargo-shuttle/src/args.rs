@@ -245,7 +245,7 @@ pub struct LogoutArgs {
 }
 #[derive(Parser)]
 pub struct DeployArgs {
-    /// Allow deployment with uncommited files
+    /// Allow deployment with uncommitted files
     #[arg(long, alias = "ad")]
     pub allow_dirty: bool,
     /// Don't run pre-deploy tests

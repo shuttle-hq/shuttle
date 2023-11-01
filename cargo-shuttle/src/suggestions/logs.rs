@@ -13,7 +13,7 @@ pub fn get_logs_failure(err: anyhow::Error, title: &str) -> anyhow::Error {
     println!("2. cargo shuttle deployment list");
     println!();
     println!(
-        "If getting the logs fails repeteadly, please try restarting your project before getting the logs again or contacting the team on the Discord server:"
+        "If getting the logs fails repeatedly, please try restarting your project before getting the logs again or contacting the team on the Discord server:"
     );
     println!();
     println!("cargo shuttle project restart");

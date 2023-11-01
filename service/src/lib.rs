@@ -68,7 +68,7 @@ pub trait ResourceBuilder<T> {
 
     /// Get the internal config state of the builder
     ///
-    /// If the exact same config was returned by a previous deployement that used this resource, then [Self::output()]
+    /// If the exact same config was returned by a previous deployment that used this resource, then [Self::output()]
     /// will not be called to get the builder output again. Rather the output state of the previous deployment
     /// will be passed to [Self::build()].
     fn config(&self) -> &Self::Config;

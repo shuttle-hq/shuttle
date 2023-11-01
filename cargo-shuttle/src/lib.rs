@@ -146,7 +146,7 @@ impl Shuttle {
     ) -> Result<CommandOutcome> {
         if let Some(ref url) = args.api_url {
             if url != API_URL_DEFAULT {
-                println!("INFO: Targetting non-standard API: {url}");
+                println!("INFO: Targeting non-standard API: {url}");
             }
             if url.ends_with('/') {
                 eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");
@@ -650,7 +650,7 @@ impl Shuttle {
                     err,
                     "Project clean failed",
                     true,
-                    "cleaning your project or checking its status fail repeteadly",
+                    "cleaning your project or checking its status fail repeatedly",
                 )
             })?;
 
@@ -1666,7 +1666,7 @@ impl Shuttle {
                 err,
                 "Project creation failed",
                 true,
-                "the project creation or retrieving the status fails repeteadly",
+                "the project creation or retrieving the status fails repeatedly",
             )
         })?;
 
@@ -1709,7 +1709,7 @@ impl Shuttle {
                 err,
                 "Getting projects list failed",
                 false,
-                "getting the projects list fails repeteadly",
+                "getting the projects list fails repeatedly",
             )
         })?;
         let page_hint = if projects.len() == limit as usize {
@@ -1760,7 +1760,7 @@ impl Shuttle {
                         err,
                         "Getting project status failed",
                         false,
-                        "getting project status failed repeteadly",
+                        "getting project status failed repeatedly",
                     )
                 })?;
             println!(
@@ -1809,7 +1809,7 @@ impl Shuttle {
                 err,
                 "Project stop failed",
                 true,
-                "stopping the project or getting project status fails repeteadly",
+                "stopping the project or getting project status fails repeatedly",
             )
         })?;
         println!("Run `cargo shuttle project start` to recreate project environment on Shuttle.");
@@ -1856,7 +1856,7 @@ impl Shuttle {
                     err,
                     "Project delete failed",
                     true,
-                    "deleting the project or getting project status fails repeteadly",
+                    "deleting the project or getting project status fails repeatedly",
                 )
             })?;
 

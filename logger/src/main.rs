@@ -27,9 +27,12 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
-    // The server can receive no more than 6 requests per peer address per second.
     let governor_config = GovernorConfigBuilder::default()
-        .per_second(1)
+        // Regenerate capacity at a rate of 2 requests per second, meaning the maximum capacity
+        // for sustained traffic is 2 RPS per peer address.
+        .per_millisecond(500)
+        // Allow bursts of up to 6 requests, when any burst capacity is used, it will regenerate
+        // one element at a time at the rate set above.
         .burst_size(6)
         .use_headers()
         .key_extractor(TonicPeerIpKeyExtractor)

@@ -21,7 +21,6 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
-use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
 use shuttle_common::models::project::State;
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
@@ -440,7 +439,7 @@ impl GatewayService {
         project_name: ProjectName,
         account_name: AccountName,
         is_admin: bool,
-        is_pro: bool,
+        limit: Option<u32>,
         idle_minutes: u64,
     ) -> Result<FindProjectPayload, Error> {
         if let Some(row) = query(
@@ -543,8 +542,7 @@ impl GatewayService {
                 // Otherwise attempt to create a new one. This will fail
                 // outright if the project already exists (this happens if
                 // it belongs to another account).
-                self.check_project_count(&account_name, is_admin, is_pro)
-                    .await?;
+                self.check_project_count(&account_name, limit).await?;
                 self.insert_project(project_name, Ulid::new(), account_name, idle_minutes)
                     .await
             } else {
@@ -556,12 +554,11 @@ impl GatewayService {
     pub async fn check_project_count(
         &self,
         account_name: &AccountName,
-        is_admin: bool,
-        is_pro: bool,
+        limit: Option<u32>,
     ) -> Result<(), Error> {
-        if is_admin {
+        let Some(limit) = limit else {
             return Ok(());
-        }
+        };
 
         let proj_count: u32 = query("SELECT COUNT(*) FROM projects WHERE account_name = ?1")
             .bind(account_name)
@@ -569,9 +566,7 @@ impl GatewayService {
             .await?
             .get::<_, usize>(0);
 
-        if (is_pro && proj_count >= MAX_PROJECTS_EXTRA)
-            || (!is_pro && proj_count >= MAX_PROJECTS_DEFAULT)
-        {
+        if proj_count >= limit {
             return Err(Error::from_kind(ErrorKind::TooManyProjects));
         }
 
@@ -1006,7 +1001,7 @@ pub mod tests {
         };
 
         let project = svc
-            .create_project(matrix.clone(), neo.clone(), false, false, 0)
+            .create_project(matrix.clone(), neo.clone(), false, Some(3), 0)
             .await
             .unwrap();
 
@@ -1038,18 +1033,18 @@ pub mod tests {
 
         // Test project pagination, first create 20 projects.
         for p in (0..20).map(|p| format!("matrix-{p}")) {
-            svc.create_project(ProjectName(p.clone()), admin.clone(), true, false, 0)
+            svc.create_project(ProjectName(p.clone()), admin.clone(), true, None, 0)
                 .await
                 .unwrap();
         }
 
-        // Creating another one without admin rights should be denied.
+        // Creating another one without admin rights should be denied due to limit
         assert!(svc
             .create_project(
                 ProjectName("final-one".into()),
                 admin.clone(),
                 false,
-                false,
+                Some(3),
                 0
             )
             .await
@@ -1114,7 +1109,7 @@ pub mod tests {
 
         // If recreated by a different user
         assert!(matches!(
-            svc.create_project(matrix.clone(), trinity.clone(), false, false, 0)
+            svc.create_project(matrix.clone(), trinity.clone(), false, Some(3), 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::ProjectAlreadyExists,
@@ -1124,7 +1119,7 @@ pub mod tests {
 
         // If recreated by the same user
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo.clone(), false, false, 0)
+            svc.create_project(matrix.clone(), neo.clone(), false, Some(3), 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1134,7 +1129,7 @@ pub mod tests {
 
         // If recreated by the same user again while it's running
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo, false, false, 0)
+            svc.create_project(matrix.clone(), neo, false, Some(3), 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
@@ -1162,7 +1157,7 @@ pub mod tests {
 
         // If recreated by an admin
         assert!(matches!(
-            svc.create_project(matrix.clone(), admin.clone(), true, false, 0)
+            svc.create_project(matrix.clone(), admin.clone(), true, None, 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1172,7 +1167,7 @@ pub mod tests {
 
         // If recreated by an admin again while it's running
         assert!(matches!(
-            svc.create_project(matrix.clone(), admin, true, false, 0)
+            svc.create_project(matrix.clone(), admin, true, None, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
@@ -1194,7 +1189,7 @@ pub mod tests {
 
         // It can be re-created by anyone, with the same project name
         assert!(matches!(
-            svc.create_project(matrix, trinity, false, false, 0).await,
+            svc.create_project(matrix, trinity, false, Some(3), 0).await,
             Ok(FindProjectPayload {
                 project_id: _,
                 state: Project::Creating(_),
@@ -1211,7 +1206,7 @@ pub mod tests {
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        svc.create_project(matrix.clone(), neo.clone(), false, false, 0)
+        svc.create_project(matrix.clone(), neo.clone(), false, Some(3), 0)
             .await
             .unwrap();
 
@@ -1272,7 +1267,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, false, 0)
+            .create_project(project_name.clone(), account.clone(), false, Some(3), 0)
             .await
             .unwrap();
 
@@ -1326,7 +1321,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, false, 0)
+            .create_project(project_name.clone(), account.clone(), false, Some(3), 0)
             .await
             .unwrap();
 
@@ -1344,7 +1339,7 @@ pub mod tests {
         assert!(matches!(work.poll(()).await, TaskResult::Done(())));
 
         let recreated_project = svc
-            .create_project(project_name.clone(), account.clone(), false, false, 0)
+            .create_project(project_name.clone(), account.clone(), false, Some(3), 0)
             .await
             .unwrap();
 

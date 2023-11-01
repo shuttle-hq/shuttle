@@ -556,6 +556,7 @@ impl GatewayService {
         account_name: &AccountName,
         limit: Option<u32>,
     ) -> Result<(), Error> {
+        // No limit is set for admin users
         let Some(limit) = limit else {
             return Ok(());
         };

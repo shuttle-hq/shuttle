@@ -53,7 +53,7 @@ pub enum Scope {
     /// Create and delete projects
     ProjectWrite,
 
-    /// Perform Pro tier action
+    /// Create more projects than the free tier default
     ExtraProjects,
 
     /// Get the resources for a project

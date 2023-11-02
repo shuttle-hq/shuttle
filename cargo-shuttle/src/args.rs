@@ -49,6 +49,7 @@ pub struct ProjectArgs {
 
 impl ProjectArgs {
     pub fn workspace_path(&self) -> anyhow::Result<PathBuf> {
+        // NOTE: If crates cache is missing this blocks for several seconds during download
         let path = MetadataCommand::new()
             .current_dir(&self.working_directory)
             .exec()
@@ -62,10 +63,11 @@ impl ProjectArgs {
     pub fn project_name(&self) -> anyhow::Result<ProjectName> {
         let workspace_path = self.workspace_path()?;
 
+        // NOTE: If crates cache is missing this blocks for several seconds during download
         let meta = MetadataCommand::new()
             .current_dir(&workspace_path)
             .exec()
-            .unwrap();
+            .context("failed to get cargo metadata")?;
         let package_name = if let Some(root_package) = meta.root_package() {
             root_package.name.clone().parse()?
         } else {

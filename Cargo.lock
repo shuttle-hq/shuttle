@@ -1137,7 +1137,6 @@ dependencies = [
  "chrono",
  "clap",
  "clap_complete",
- "crossbeam-channel",
  "crossterm 0.27.0",
  "dialoguer",
  "dirs 5.0.1",
@@ -4505,15 +4504,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
-name = "pipe"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c7b8f27da217eb966df4c58d4159ea939431950ca03cf782c22bd7c5c1d8d75"
-dependencies = [
- "crossbeam-channel",
-]
-
-[[package]]
 name = "pkcs1"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5842,7 +5832,6 @@ dependencies = [
  "cargo_metadata",
  "chrono",
  "clap",
- "crossbeam-channel",
  "ctor",
  "flate2",
  "fqdn",
@@ -5854,7 +5843,6 @@ dependencies = [
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",
- "pipe",
  "portpicker",
  "prost-types",
  "rand 0.8.5",
@@ -6051,7 +6039,6 @@ dependencies = [
  "cap-std",
  "chrono",
  "colored",
- "crossbeam-channel",
  "futures",
  "hyper",
  "portpicker",
@@ -6083,8 +6070,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "cargo_metadata",
- "crossbeam-channel",
- "os_pipe",
  "serde",
  "shuttle-common",
  "strfmt",

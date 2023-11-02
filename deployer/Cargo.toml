@@ -13,7 +13,6 @@ bytes = { workspace = true }
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-crossbeam-channel = { workspace = true }
 flate2 = { workspace = true }
 fqdn = { workspace = true }
 futures = { workspace = true }
@@ -23,7 +22,6 @@ hyper-reverse-proxy = { workspace = true }
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-http = { workspace = true }
-pipe = { workspace = true }
 prost-types = { workspace = true }
 portpicker = { workspace = true }
 rmp-serde = { workspace = true }

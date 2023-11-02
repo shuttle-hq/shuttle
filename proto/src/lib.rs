@@ -356,7 +356,7 @@ pub mod logger {
             {
                 match error.code() {
                     tonic::Code::Unavailable => {
-                        if let Some(_) = error.metadata().get("x-ratelimit-limit") {
+                        if error.metadata().get("x-ratelimit-limit").is_some() {
                             let LogItem {
                                 deployment_id,
                                 log_line,

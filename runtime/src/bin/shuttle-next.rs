@@ -5,7 +5,7 @@ use std::{
 
 use shuttle_common::backends::tracing::ExtractPropagationLayer;
 use shuttle_proto::runtime::runtime_server::RuntimeServer;
-use shuttle_runtime::{print_version, AxumWasm, NextArgs};
+use shuttle_runtime::__internals::{print_version, AxumWasm, NextArgs};
 use tonic::transport::Server;
 
 #[tokio::main(flavor = "multi_thread")]

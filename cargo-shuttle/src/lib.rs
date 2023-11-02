@@ -146,7 +146,7 @@ impl Shuttle {
     ) -> Result<CommandOutcome> {
         if let Some(ref url) = args.api_url {
             if url != API_URL_DEFAULT {
-                println!("INFO: Targetting non-standard API: {url}");
+                println!("INFO: Targeting non-standard API: {url}");
             }
             if url.ends_with('/') {
                 eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");
@@ -650,7 +650,7 @@ impl Shuttle {
                     err,
                     "Project clean failed",
                     true,
-                    "cleaning your project or checking its status fail repeteadly",
+                    "cleaning your project or checking its status fail repeatedly",
                 )
             })?;
 
@@ -747,13 +747,20 @@ impl Shuttle {
             println!();
             return Ok(CommandOutcome::Ok);
         }
+        let limit = limit + 1;
 
         let proj_name = self.ctx.project_name();
-        let deployments = client
+        let mut deployments = client
             .get_deployments(proj_name, page, limit)
             .await
             .map_err(suggestions::deployment::get_deployments_list_failure)?;
-        let table = get_deployments_table(&deployments, proj_name.as_str(), page, raw);
+        let page_hint = if deployments.len() == limit as usize {
+            deployments.pop();
+            true
+        } else {
+            false
+        };
+        let table = get_deployments_table(&deployments, proj_name.as_str(), page, raw, page_hint);
 
         println!("{table}");
         println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
@@ -1672,7 +1679,7 @@ impl Shuttle {
                 err,
                 "Project creation failed",
                 true,
-                "the project creation or retrieving the status fails repeteadly",
+                "the project creation or retrieving the status fails repeatedly",
             )
         })?;
 
@@ -1708,16 +1715,23 @@ impl Shuttle {
             println!();
             return Ok(CommandOutcome::Ok);
         }
+        let limit = limit + 1;
 
-        let projects = client.get_projects_list(page, limit).await.map_err(|err| {
+        let mut projects = client.get_projects_list(page, limit).await.map_err(|err| {
             suggestions::project::project_request_failure(
                 err,
                 "Getting projects list failed",
                 false,
-                "getting the projects list fails repeteadly",
+                "getting the projects list fails repeatedly",
             )
         })?;
-        let projects_table = project::get_projects_table(&projects, page, raw);
+        let page_hint = if projects.len() == limit as usize {
+            projects.pop();
+            true
+        } else {
+            false
+        };
+        let projects_table = project::get_projects_table(&projects, page, raw, page_hint);
 
         println!("{projects_table}");
 
@@ -1759,7 +1773,7 @@ impl Shuttle {
                         err,
                         "Getting project status failed",
                         false,
-                        "getting project status failed repeteadly",
+                        "getting project status failed repeatedly",
                     )
                 })?;
             println!(
@@ -1808,7 +1822,7 @@ impl Shuttle {
                 err,
                 "Project stop failed",
                 true,
-                "stopping the project or getting project status fails repeteadly",
+                "stopping the project or getting project status fails repeatedly",
             )
         })?;
         println!("Run `cargo shuttle project start` to recreate project environment on Shuttle.");
@@ -1855,7 +1869,7 @@ impl Shuttle {
                     err,
                     "Project delete failed",
                     true,
-                    "deleting the project or getting project status fails repeteadly",
+                    "deleting the project or getting project status fails repeatedly",
                 )
             })?;
 

@@ -1092,7 +1092,7 @@ pub struct ProjectRestarting {
 }
 
 impl ProjectRestarting {
-    /// Has the restart count been exhuasted
+    /// Has the restart count been exhausted
     pub fn exhausted(&self) -> bool {
         Self::reached_max_restarts(self.restart_count)
     }

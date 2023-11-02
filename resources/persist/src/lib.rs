@@ -49,12 +49,12 @@ impl PersistInstance {
     }
 
     /// Save a key-value pair to disk
-    pub fn save<T: Serialize>(&self, key: &str, struc: T) -> Result<(), PersistError> {
+    pub fn save<T: Serialize>(&self, key: &str, value: T) -> Result<(), PersistError> {
         let file_path = self.get_storage_file(key)?;
         let file = File::create(file_path).map_err(PersistError::Open)?;
         let mut writer = BufWriter::new(file);
 
-        serialize_into(&mut writer, &struc).map_err(PersistError::Serialize)
+        serialize_into(&mut writer, &value).map_err(PersistError::Serialize)
     }
 
     fn entries(&self) -> Result<std::fs::ReadDir, PersistError> {

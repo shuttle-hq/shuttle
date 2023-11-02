@@ -446,7 +446,7 @@ impl<B> VerifyClaim for tonic::Request<B> {
             Ok(())
         } else {
             Err(tonic::Status::permission_denied(format!(
-                "don't have permisson to: {}",
+                "don't have permission to: {}",
                 required_scope
                     .get_documentation()
                     .unwrap_or("perform this operation")

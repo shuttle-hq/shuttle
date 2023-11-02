@@ -6,7 +6,7 @@ use serde_json::Value;
 use shuttle_common::resource::{self, Type};
 use shuttle_service::ResourceBuilder;
 
-use crate::ProvisionerFactory;
+use crate::__internals::ProvisionerFactory;
 
 /// Used to keep track of which resources have been provisioned in the past and what is being provisioned for this deployment
 pub struct ResourceTracker {

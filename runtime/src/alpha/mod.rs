@@ -40,7 +40,7 @@ use tonic::{
 };
 use tower::ServiceBuilder;
 
-use crate::{print_version, provisioner_factory::ProvisionerFactory, ResourceTracker};
+use crate::__internals::{print_version, ProvisionerFactory, ResourceTracker};
 
 use self::args::Args;
 
@@ -241,7 +241,7 @@ where
             Ok(res) => match res {
                 Ok(service) => service,
                 Err(error) => {
-                    println!("loading service failed: {error}");
+                    println!("loading service failed: {error:#}");
 
                     let message = LoadResponse {
                         success: false,
@@ -283,7 +283,7 @@ where
                     };
                     return Ok(Response::new(message));
                 } else {
-                    println!("loading service crashed: {error}");
+                    println!("loading service crashed: {error:#}");
                     let message = LoadResponse {
                         success: false,
                         message: error.to_string(),

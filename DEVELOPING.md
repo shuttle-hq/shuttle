@@ -241,7 +241,19 @@ It needs to have the same project name as the one you submitted when starting th
 cargo run -p cargo-shuttle -- --wd <path> --name <name> deploy
 ```
 
-### Using Podman instead of Docker
+### Docker config
+
+#### Docker Desktop
+
+If using Docker Desktop on Linux, you might find adding this to your shell config useful to make `bollard` find the Docker socket:
+
+```sh
+if which docker > /dev/null && [ $(docker context show) = "desktop-linux" ]; then
+  export DOCKER_HOST="unix://$HOME/.docker/desktop/docker.sock"
+fi
+```
+
+#### Using Podman instead of Docker
 
 If you want to use Podman instead of Docker, you can configure the build process with environment variables.
 
@@ -312,6 +324,12 @@ To run the integration tests for a specific crate (if it has any), from the root
 ```bash
 # replace <crate-name> with the name of the crate to test, e.g. `cargo-shuttle`
 cargo test -p <crate-name> --all-features --test '*' -- --nocapture
+# To streamline and customize the integration tests for CI, bash scripts with these commands and
+# any crate-specific commands can be run with:
+./<folder>/integration.sh
+# and/or
+./<folder>/integration_docker.sh
+# Tests that need to start docker containers are separated for CI efficiency, and thus use scripts with `_docker` suffix.
 ```
 
 To run the end-to-end (e2e) tests, from the root of the repository run:

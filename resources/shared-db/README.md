@@ -1,6 +1,7 @@
 # Shuttle Shared Databases
 
-This plugin manages databases that are shared with other services on [shuttle](https://www.shuttle.rs).
+This plugin manages databases that are shared with other services on [Shuttle](https://www.shuttle.rs).
+Your database will be in a cluster shared with other users, but it will not be accessible by other users.
 
 ## Usage
 

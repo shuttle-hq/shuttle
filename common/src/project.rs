@@ -58,6 +58,8 @@ impl ProjectName {
     }
 }
 
+// Note: The string "Invalid project name" is used by cargo-shuttle to determine what type of error was returned.
+// Changing it is breaking.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 #[error(
     "Invalid project name. Project names must:

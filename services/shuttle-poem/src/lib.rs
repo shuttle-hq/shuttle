@@ -11,7 +11,7 @@
 //!
 //! #[shuttle_runtime::main]
 //! async fn poem() -> ShuttlePoem<impl poem::Endpoint> {
-//!     let app = Route::new().at("/hello", get(hello_world));
+//!     let app = Route::new().at("/", get(hello_world));
 //!
 //!     Ok(app.into())
 //! }
@@ -45,5 +45,23 @@ where
     }
 }
 
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+/// Return type from the `[shuttle_runtime::main]` macro for a Poem-based service.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use poem::{get, handler, Route};
+/// use shuttle_poem::ShuttlePoem;
+/// #[handler]
+/// fn hello_world() -> &'static str {
+///     "Hello, world!"
+/// }
+///
+/// #[shuttle_runtime::main]
+/// async fn poem() -> ShuttlePoem<impl poem::Endpoint> {
+///     let app = Route::new().at("/", get(hello_world));
+///
+///     Ok(app.into())
+/// }
+/// ```
 pub type ShuttlePoem<T> = Result<PoemService<T>, shuttle_runtime::Error>;

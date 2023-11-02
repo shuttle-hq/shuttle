@@ -50,6 +50,7 @@ pub enum ErrorKind {
     OwnProjectAlreadyExists(String),
     ProjectNotReady,
     ProjectUnavailable,
+    TooManyProjects,
     ProjectHasResources(Vec<String>),
     ProjectHasRunningDeployment,
     CustomDomainNotFound,
@@ -83,7 +84,12 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 "project not ready. Try running `cargo shuttle project restart`.",
             ),
-            ErrorKind::ProjectUnavailable => (StatusCode::BAD_GATEWAY, "project returned invalid response"),
+            ErrorKind::ProjectUnavailable => {
+                (StatusCode::BAD_GATEWAY, "project returned invalid response")
+            },
+            ErrorKind::TooManyProjects => {
+                (StatusCode::FORBIDDEN, "You cannot create more projects. Delete some projects first.")
+            },
             ErrorKind::ProjectHasRunningDeployment => (
                 StatusCode::FORBIDDEN,
                 "A deployment is running. Stop it with `cargo shuttle stop` first."

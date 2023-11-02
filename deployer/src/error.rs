@@ -40,8 +40,6 @@ pub enum Error {
 pub enum TestError {
     #[error("The deployed application's tests failed")]
     Failed,
-    #[error("Failed to setup tests run: {0}")]
-    Setup(#[from] anyhow::Error),
     #[error("Failed to run tests: {0}")]
     Run(#[from] std::io::Error),
 }

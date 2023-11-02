@@ -38,7 +38,6 @@ use shuttle_service::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use cargo_metadata::Message;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use clap_complete::{generate, Shell};
 use config::RequestContext;
@@ -145,7 +144,7 @@ impl Shuttle {
     ) -> Result<CommandOutcome> {
         if let Some(ref url) = args.api_url {
             if url != API_URL_DEFAULT {
-                println!("INFO: Targetting non-standard API: {url}");
+                println!("INFO: Targeting non-standard API: {url}");
             }
             if url.ends_with('/') {
                 eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");
@@ -649,7 +648,7 @@ impl Shuttle {
                     err,
                     "Project clean failed",
                     true,
-                    "cleaning your project or checking its status fail repeteadly",
+                    "cleaning your project or checking its status fail repeatedly",
                 )
             })?;
 
@@ -733,13 +732,20 @@ impl Shuttle {
             println!();
             return Ok(CommandOutcome::Ok);
         }
+        let limit = limit + 1;
 
         let proj_name = self.ctx.project_name();
-        let deployments = client
+        let mut deployments = client
             .get_deployments(proj_name, page, limit)
             .await
             .map_err(suggestions::deployment::get_deployments_list_failure)?;
-        let table = get_deployments_table(&deployments, proj_name, page, raw);
+        let page_hint = if deployments.len() == limit as usize {
+            deployments.pop();
+            true
+        } else {
+            false
+        };
+        let table = get_deployments_table(&deployments, proj_name, page, raw, page_hint);
 
         println!("{table}");
         println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
@@ -1094,15 +1100,10 @@ impl Shuttle {
     async fn pre_local_run(&self, run_args: &RunArgs) -> Result<Vec<BuiltService>> {
         trace!("starting a local run for a service: {run_args:?}");
 
-        let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
-        tokio::task::spawn_blocking(move || {
-            while let Ok(message) = rx.recv() {
-                match message {
-                    Message::TextLine(line) => println!("{line}"),
-                    message => {
-                        trace!("skipping cargo line: {message:?}")
-                    }
-                }
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
+        tokio::task::spawn(async move {
+            while let Some(line) = rx.recv().await {
+                println!("{line}");
             }
         });
 
@@ -1134,6 +1135,7 @@ impl Shuttle {
 
     #[cfg(target_family = "unix")]
     async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
+        debug!("starting local run");
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
         let mut sigterm_notif =
@@ -1652,7 +1654,7 @@ impl Shuttle {
                 err,
                 "Project creation failed",
                 true,
-                "the project creation or retrieving the status fails repeteadly",
+                "the project creation or retrieving the status fails repeatedly",
             )
         })?;
 
@@ -1688,16 +1690,23 @@ impl Shuttle {
             println!();
             return Ok(CommandOutcome::Ok);
         }
+        let limit = limit + 1;
 
-        let projects = client.get_projects_list(page, limit).await.map_err(|err| {
+        let mut projects = client.get_projects_list(page, limit).await.map_err(|err| {
             suggestions::project::project_request_failure(
                 err,
                 "Getting projects list failed",
                 false,
-                "getting the projects list fails repeteadly",
+                "getting the projects list fails repeatedly",
             )
         })?;
-        let projects_table = project::get_projects_table(&projects, page, raw);
+        let page_hint = if projects.len() == limit as usize {
+            projects.pop();
+            true
+        } else {
+            false
+        };
+        let projects_table = project::get_projects_table(&projects, page, raw, page_hint);
 
         println!("{projects_table}");
 
@@ -1739,7 +1748,7 @@ impl Shuttle {
                         err,
                         "Getting project status failed",
                         false,
-                        "getting project status failed repeteadly",
+                        "getting project status failed repeatedly",
                     )
                 })?;
             println!(
@@ -1788,7 +1797,7 @@ impl Shuttle {
                 err,
                 "Project stop failed",
                 true,
-                "stopping the project or getting project status fails repeteadly",
+                "stopping the project or getting project status fails repeatedly",
             )
         })?;
         println!("Run `cargo shuttle project start` to recreate project environment on Shuttle.");
@@ -1835,7 +1844,7 @@ impl Shuttle {
                     err,
                     "Project delete failed",
                     true,
-                    "deleting the project or getting project status fails repeteadly",
+                    "deleting the project or getting project status fails repeatedly",
                 )
             })?;
 

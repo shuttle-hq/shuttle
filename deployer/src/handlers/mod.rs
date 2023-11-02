@@ -17,6 +17,7 @@ use chrono::{SecondsFormat, Utc};
 use fqdn::FQDN;
 use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
+use shuttle_service::builder::clean_crate;
 use tracing::{error, field, info, info_span, instrument, trace, warn};
 use ulid::Ulid;
 use utoipa::{IntoParams, OpenApi};
@@ -814,7 +815,7 @@ pub async fn clean_project(
     Extension(deployment_manager): Extension<DeploymentManager>,
     CustomErrorPath(project_name): CustomErrorPath<String>,
 ) -> Result<Json<String>> {
-    let lines = clean_crate(
+    clean_crate(
         deployment_manager
             .builds_path()
             .join(project_name)

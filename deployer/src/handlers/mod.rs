@@ -669,7 +669,7 @@ pub async fn get_logs(
         )),
         Err(error) => {
             if error.code() == tonic::Code::Unavailable
-                && error.metadata().get("x-ratelimit-after").is_some()
+                && error.metadata().get("x-ratelimit-limit").is_some()
             {
                 Err(Error::RateLimited(
                     "your application is producing too many logs, any interaction with the shuttle logger service will be rate limited"

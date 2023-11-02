@@ -320,7 +320,7 @@ mod needs_docker {
                         .map_err(tonic_error)
                         .layer(GovernorLayer {
                             config: &governor_config,
-                        }), // .map_err(tonic_error),
+                        }),
                 )
                 .add_service(LoggerServer::new(Service::new(pg.get_sender(), pg)))
                 .serve(addr)

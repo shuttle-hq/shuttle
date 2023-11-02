@@ -343,7 +343,8 @@ pub mod logger {
 
         async fn receive(&mut self, items: Vec<Self::Item>) {
             // A log vector should never be received without any items. We clone the first item
-            // here so we can use IDs to generate a rate limiting logline.
+            // here so we can use IDs to generate a rate limiting logline, which we will send to
+            // the logger as a warning to the user that they are being rate limited.
             let Some(item) = items.first().cloned() else {
                 error!("received log vector without any items");
 

@@ -43,7 +43,7 @@ pub fn tonic_error(e: BoxError) -> tonic::Status {
                 // We can for example add wait time as: https://docs.rs/tonic-types/latest/tonic_types/struct.RetryInfo.html
 
                 let mut response = Status::unavailable(format!(
-                    "received too many requests, wait for {wait_time}s"
+                    "received too many requests, wait for {wait_time}ms"
                 ));
 
                 // Add rate limiting headers: x-ratelimit-remaining, x-ratelimit-after, x-ratelimit-limit.
@@ -60,7 +60,7 @@ pub fn tonic_error(e: BoxError) -> tonic::Status {
                 response
             }
             GovernorError::UnableToExtractKey => {
-                Status::unavailable("unable to extract client address")
+                Status::unavailable("unable to extract peer address")
             }
             GovernorError::Other { headers, .. } => {
                 let mut response = Status::internal("unexpected error in rate limiter");

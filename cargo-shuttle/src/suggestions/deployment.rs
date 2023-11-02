@@ -9,7 +9,7 @@ pub fn get_deployments_list_failure(err: anyhow::Error) -> anyhow::Error {
     println!();
     println!("cargo shuttle project status");
     println!(
-        "If getting the deployment list fails repeteadly, please try restarting your project before getting the deployment list again or contacting the team on the Discord server:"
+        "If getting the deployment list fails repeatedly, please try restarting your project before getting the deployment list again or contacting the team on the Discord server:"
     );
     println!();
     println!("cargo shuttle project restart");
@@ -26,7 +26,7 @@ pub fn get_deployment_status_failure(err: anyhow::Error) -> anyhow::Error {
     println!("cargo shuttle project status");
     println!();
     println!(
-        "If getting the deployment state fails repeteadly, please try restarting your project before getting the deployment status again or contacting the team on the Discord server:"
+        "If getting the deployment state fails repeatedly, please try restarting your project before getting the deployment status again or contacting the team on the Discord server:"
     );
     println!();
     println!("cargo shuttle project restart");
@@ -44,7 +44,7 @@ pub fn stop_deployment_failure(err: anyhow::Error) -> anyhow::Error {
     println!("2. cargo shuttle status");
     println!();
     println!(
-        "If stopping the running deployment repeteadly, please try restarting your project before stopping the deployment again or contacting the team on the Discord server:"
+        "If stopping the running deployment repeatedly, please try restarting your project before stopping the deployment again or contacting the team on the Discord server:"
     );
     println!();
     println!("cargo shuttle project restart");

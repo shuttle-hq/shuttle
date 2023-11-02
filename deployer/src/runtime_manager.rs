@@ -35,7 +35,7 @@ type Runtimes = Arc<
     >,
 >;
 
-/// Manager that can start up mutliple runtimes. This is needed so that two runtimes can be up when a new deployment is made:
+/// Manager that can start up multiple runtimes. This is needed so that two runtimes can be up when a new deployment is made:
 /// One runtime for the new deployment being loaded; another for the currently active deployment
 #[derive(Clone)]
 pub struct RuntimeManager {

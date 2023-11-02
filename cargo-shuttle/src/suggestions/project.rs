@@ -31,6 +31,6 @@ pub fn project_restart_failure(err: anyhow::Error) -> anyhow::Error {
         err,
         "Project restart failed",
         true,
-        "restarting your project or checking its status fail repeteadly",
+        "restarting your project or checking its status fail repeatedly",
     )
 }

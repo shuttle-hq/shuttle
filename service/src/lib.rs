@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
+pub use shuttle_common::secrets::Secret;
 pub use shuttle_common::{
     database,
     deployment::{DeploymentMetadata, Environment},
@@ -31,7 +32,7 @@ pub trait Factory: Send + Sync {
     ) -> Result<DatabaseReadyInfo, crate::Error>;
 
     /// Get all the secrets for a service
-    async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, crate::Error>;
+    async fn get_secrets(&mut self) -> Result<BTreeMap<String, Secret<String>>, crate::Error>;
 
     /// Get the metadata for this deployment
     fn get_metadata(&self) -> DeploymentMetadata;
@@ -67,7 +68,7 @@ pub trait ResourceBuilder<T> {
 
     /// Get the internal config state of the builder
     ///
-    /// If the exact same config was returned by a previous deployement that used this resource, then [Self::output()]
+    /// If the exact same config was returned by a previous deployment that used this resource, then [Self::output()]
     /// will not be called to get the builder output again. Rather the output state of the previous deployment
     /// will be passed to [Self::build()].
     fn config(&self) -> &Self::Config;

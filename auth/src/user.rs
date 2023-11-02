@@ -10,6 +10,7 @@ use axum::{
 use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::{
     claims::{Scope, ScopeBuilder},
+    secrets::Secret,
     ApiKey,
 };
 use sqlx::{query, sqlite::SqliteRow, FromRow, Row, SqlitePool};
@@ -173,7 +174,7 @@ impl UserManagement for UserManager {
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
 pub struct User {
     pub name: AccountName,
-    pub key: ApiKey,
+    pub key: Secret<ApiKey>,
     pub account_tier: AccountTier,
     pub subscription_id: Option<SubscriptionId>,
 }
@@ -191,7 +192,7 @@ impl User {
     ) -> Self {
         Self {
             name,
-            key,
+            key: Secret::new(key),
             account_tier,
             subscription_id,
         }
@@ -237,11 +238,9 @@ impl User {
 
 impl FromRow<'_, SqliteRow> for User {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        let x: &str = row.try_get("subscription_id").unwrap();
-        println!("{:?}", x);
         Ok(User {
             name: row.try_get("account_name").unwrap(),
-            key: row.try_get("key").unwrap(),
+            key: Secret::new(row.try_get("key").unwrap()),
             account_tier: row.try_get("account_tier").unwrap(),
             subscription_id: row
                 .try_get("subscription_id")
@@ -281,7 +280,7 @@ impl From<User> for shuttle_common::models::user::Response {
     fn from(user: User) -> Self {
         Self {
             name: user.name.to_string(),
-            key: user.key.as_ref().to_string(),
+            key: user.key.expose().as_ref().to_owned(),
             account_tier: user.account_tier.to_string(),
             subscription_id: user.subscription_id.map(|inner| inner.to_string()),
         }
@@ -342,14 +341,16 @@ impl From<AccountTier> for Vec<Scope> {
     fn from(tier: AccountTier) -> Self {
         let mut builder = ScopeBuilder::new();
 
-        if tier == AccountTier::Admin {
-            builder = builder.with_admin()
-        }
-
         if tier == AccountTier::Deployer {
             builder = builder.with_deploy_rights();
         } else {
             builder = builder.with_basic();
+
+            if tier == AccountTier::Admin {
+                builder = builder.with_admin();
+            } else if tier == AccountTier::Pro {
+                builder = builder.with_pro();
+            }
         }
 
         builder.build()
@@ -483,6 +484,7 @@ mod tests {
                     Scope::ResourcesWrite,
                     Scope::Secret,
                     Scope::SecretWrite,
+                    Scope::ExtraProjects,
                 ]
             );
         }
@@ -516,13 +518,6 @@ mod tests {
             assert_eq!(
                 scopes,
                 vec![
-                    Scope::User,
-                    Scope::UserCreate,
-                    Scope::AcmeCreate,
-                    Scope::CustomDomainCreate,
-                    Scope::CustomDomainCertificateRenew,
-                    Scope::GatewayCertificateRenew,
-                    Scope::Admin,
                     Scope::Deployment,
                     Scope::DeploymentPush,
                     Scope::Logs,
@@ -534,6 +529,13 @@ mod tests {
                     Scope::ResourcesWrite,
                     Scope::Secret,
                     Scope::SecretWrite,
+                    Scope::User,
+                    Scope::UserCreate,
+                    Scope::AcmeCreate,
+                    Scope::CustomDomainCreate,
+                    Scope::CustomDomainCertificateRenew,
+                    Scope::GatewayCertificateRenew,
+                    Scope::Admin,
                 ]
             );
         }

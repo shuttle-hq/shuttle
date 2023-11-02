@@ -1,16 +1,14 @@
 use std::fs::read_to_string;
-use std::io::BufRead;
 use std::path::{Path, PathBuf};
-use std::process::Output;
+use std::process::Stdio;
 
 use anyhow::{anyhow, bail, Context};
-use cargo_metadata::Message;
 use cargo_metadata::{Package, Target};
-use crossbeam_channel::Sender;
 use shuttle_common::{
     constants::{NEXT_NAME, RUNTIME_NAME},
     project::ProjectName,
 };
+use tokio::io::AsyncBufReadExt;
 use tracing::{debug, error, trace};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -69,22 +67,64 @@ fn extract_shuttle_toml_name(path: PathBuf) -> anyhow::Result<String> {
 pub async fn build_workspace(
     project_path: &Path,
     release_mode: bool,
-    tx: Sender<Message>,
+    tx: tokio::sync::mpsc::Sender<String>,
     deployment: bool,
 ) -> anyhow::Result<Vec<BuiltService>> {
     let project_path = project_path.to_owned();
-
     let manifest_path = project_path.join("Cargo.toml");
-
     if !manifest_path.exists() {
-        bail!(
-            "failed to read the Shuttle project manifest: {}",
-            manifest_path.display()
-        );
+        bail!("Cargo manifest file not found: {}", manifest_path.display());
     }
-    let metadata = cargo_metadata::MetadataCommand::new()
-        .manifest_path(&manifest_path)
-        .exec()?;
+
+    // Cargo's "Downloading ..." lines are quite verbose.
+    // Instead, a custom message is printed if the download takes significant time.
+    // Cargo seems to have similar logic, where it prints nothing if this step takes little time.
+    let mut command = tokio::process::Command::new("cargo");
+    command
+        .arg("fetch")
+        .arg("--manifest-path")
+        .arg(&manifest_path)
+        .arg("--color=always")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let notification = tokio::spawn({
+        let tx = tx.clone();
+        async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            tx.send("      Downloading crates...".into())
+                .await
+                .expect("log receiver to exist");
+        }
+    });
+    if !command.status().await?.success() {
+        tx.send("      Failed to fetch crates".into())
+            .await
+            .expect("log receiver to exist");
+    }
+    notification.abort();
+
+    let metadata = {
+        // Modified implementaion of `cargo_metadata::MetadataCommand::exec` (from v0.15.3).
+        // Uses tokio Command instead of std, to make this operation non-blocking.
+        let mut cmd = tokio::process::Command::from(
+            cargo_metadata::MetadataCommand::new()
+                .manifest_path(&manifest_path)
+                .cargo_command(),
+        );
+
+        let output = cmd.output().await?;
+        if !output.status.success() {
+            return Err(cargo_metadata::Error::CargoMetadata {
+                stderr: String::from_utf8(output.stderr)?,
+            })?;
+        }
+        let json = std::str::from_utf8(&output.stdout)?
+            .lines()
+            .find(|line| line.starts_with('{'))
+            .ok_or(cargo_metadata::Error::NoJson)?;
+        cargo_metadata::MetadataCommand::parse(json)?
+    };
+
     trace!("Cargo metadata parsed");
 
     let mut alpha_packages = Vec::new();
@@ -137,33 +177,25 @@ pub async fn build_workspace(
     Ok(runtimes)
 }
 
-pub async fn clean_crate(project_path: &Path) -> anyhow::Result<Vec<String>> {
+// Only used in deployer
+pub async fn clean_crate(project_path: &Path) -> anyhow::Result<()> {
     let manifest_path = project_path.join("Cargo.toml");
     if !manifest_path.exists() {
-        bail!("failed to read the Shuttle project manifest");
+        bail!("Cargo manifest file not found: {}", manifest_path.display());
     }
-    let Output {
-        status,
-        stdout,
-        stderr,
-    } = tokio::process::Command::new("cargo")
+    if !tokio::process::Command::new("cargo")
         .arg("clean")
         .arg("--manifest-path")
-        .arg(manifest_path.to_str().unwrap())
-        .output()
-        .await
-        .unwrap();
-
-    if status.success() {
-        let lines = vec![String::from_utf8(stderr)?, String::from_utf8(stdout)?];
-        Ok(lines)
-    } else {
-        Err(anyhow!(
-            "cargo clean failed with exit code {} and error {}",
-            status.to_string(),
-            String::from_utf8(stderr)?
-        ))
+        .arg(&manifest_path)
+        .arg("--offline")
+        .status()
+        .await?
+        .success()
+    {
+        bail!("cargo clean failed");
     }
+
+    Ok(())
 }
 
 fn is_next(package: &Package) -> bool {
@@ -209,64 +241,52 @@ async fn compile(
     project_path: PathBuf,
     target_path: impl Into<PathBuf>,
     deployment: bool,
-    tx: Sender<Message>,
+    tx: tokio::sync::mpsc::Sender<String>,
 ) -> anyhow::Result<Vec<BuiltService>> {
     let manifest_path = project_path.join("Cargo.toml");
     if !manifest_path.exists() {
-        bail!("failed to read the Shuttle project manifest");
+        bail!("Cargo manifest file not found: {}", manifest_path.display());
     }
     let target_path = target_path.into();
 
-    let mut cargo = tokio::process::Command::new("cargo");
-    cargo
-        .arg("build")
+    let mut cmd = tokio::process::Command::new("cargo");
+    cmd.arg("build")
         .arg("--manifest-path")
         .arg(manifest_path)
         .arg("--color=always") // piping disables auto color, but we want it
         .current_dir(project_path.as_path());
 
     if deployment {
-        cargo.arg("--jobs=4");
+        cmd.arg("--jobs=4");
     }
 
     for package in &packages {
-        cargo.arg("--package").arg(package.name.as_str());
+        cmd.arg("--package").arg(package.name.as_str());
     }
 
     let profile = if release_mode {
-        cargo.arg("--release");
+        cmd.arg("--release");
         "release"
     } else {
         "debug"
     };
 
     if wasm {
-        cargo.arg("--target").arg("wasm32-wasi");
+        cmd.arg("--target").arg("wasm32-wasi");
     }
 
-    let (reader, writer) = os_pipe::pipe()?;
-    let writer_clone = writer.try_clone()?;
-    cargo.stdout(writer);
-    cargo.stderr(writer_clone);
-
-    let mut handle = cargo.spawn()?;
-
-    tokio::task::spawn_blocking(move || {
-        let reader = std::io::BufReader::new(reader);
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                if let Err(error) = tx.send(Message::TextLine(line)) {
-                    error!("failed to send cargo message on channel: {error}");
-                };
-            } else {
-                error!("Failed to read Cargo log messages");
-            };
+    cmd.stderr(Stdio::piped());
+    cmd.stdout(Stdio::null());
+    let mut handle = cmd.spawn()?;
+    let reader = tokio::io::BufReader::new(handle.stderr.take().unwrap());
+    tokio::spawn(async move {
+        let mut lines = reader.lines();
+        while let Some(line) = lines.next_line().await.unwrap() {
+            let _ = tx.send(line).await.map_err(|e| error!("{e}"));
         }
     });
-
-    let command = handle.wait().await?;
-
-    if !command.success() {
+    let status = handle.wait().await?;
+    if !status.success() {
         bail!("Build failed. Is the Shuttle runtime missing?");
     }
 

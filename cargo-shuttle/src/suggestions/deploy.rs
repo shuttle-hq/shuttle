@@ -12,7 +12,7 @@ pub fn deploy_request_failure(err: anyhow::Error) -> anyhow::Error {
     println!("2. cargo shuttle deployment list");
     println!();
     println!(
-        "If deploying fails repeteadly, please try restarting your project before deploying again or contacting the team on the Discord server:"
+        "If deploying fails repeatedly, please try restarting your project before deploying again or contacting the team on the Discord server:"
     );
     println!();
     println!("cargo shuttle project restart");

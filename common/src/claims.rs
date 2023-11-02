@@ -54,6 +54,9 @@ pub enum Scope {
     #[serde(rename = "project_create")] // compatibility
     ProjectWrite,
 
+    /// Create more projects than the free tier default
+    ExtraProjects,
+
     /// Get the resources for a project
     Resources,
 
@@ -109,6 +112,12 @@ impl ScopeBuilder {
             Scope::GatewayCertificateRenew,
             Scope::Admin,
         ]);
+        self
+    }
+
+    /// Extend the current scopes with Pro rights.
+    pub fn with_pro(mut self) -> Self {
+        self.0.push(Scope::ExtraProjects);
         self
     }
 

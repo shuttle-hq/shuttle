@@ -228,20 +228,28 @@ mod needs_docker {
                     .await
             };
 
-            // Two concurrent requests succeeds.
+            // Six concurrent requests succeeds when rate limiter is fresh.
+            let futures = (0..6).map(|_| store_logs());
+            let result = join_all(futures).await;
+
+            assert!(result.iter().all(|response| response.is_ok()));
+
+            // Allow rate limiter time to regenerate two requests.
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+
             let futures = (0..2).map(|_| store_logs());
             let result = join_all(futures).await;
 
             assert!(result.iter().all(|response| response.is_ok()));
 
-            // Allow rate limiter time to regenerate.
+            // Allow rate limiter time to regenerate two requests.
             tokio::time::sleep(Duration::from_millis(1000)).await;
 
-            // If we send 6 concurrent requests, 5 will succeed.
-            let futures = (0..6).map(|_| store_logs());
+            // Send three requests when the capacity is two.
+            let futures = (0..3).map(|_| store_logs());
             let result = join_all(futures).await;
 
-            assert_eq!(result.iter().filter(|response| response.is_ok()).count(), 5);
+            assert_eq!(result.iter().filter(|response| response.is_ok()).count(), 2);
 
             // Check that the error has the expected status and rate limiting headers.
             result
@@ -263,8 +271,8 @@ mod needs_docker {
                     assert!(expected.into_iter().all(|key| headers.contains_key(key)));
                 });
 
-            // Allow rate limiter to regenerate.
-            tokio::time::sleep(Duration::from_millis(1000)).await;
+            // Allow rate limiter to regenerate a slot for the get_logs request.
+            tokio::time::sleep(Duration::from_millis(500)).await;
 
             // Verify that all the logs that weren't rate limited were persisted in the logger.
             let logs = client
@@ -276,7 +284,7 @@ mod needs_docker {
                 .into_inner()
                 .log_items;
 
-            assert_eq!(logs.len(), 7);
+            assert_eq!(logs.len(), 10);
         });
 
         tokio::select! {
@@ -294,7 +302,7 @@ mod needs_docker {
         exec_psql(&format!(r#"CREATE DATABASE "{}";"#, &db_name));
 
         let governor_config = GovernorConfigBuilder::default()
-            .per_second(1)
+            .per_millisecond(500)
             .burst_size(6)
             .use_headers()
             .key_extractor(TonicPeerIpKeyExtractor)

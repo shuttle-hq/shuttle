@@ -10,12 +10,7 @@ async-trait = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 prost-types = { workspace = true }
-sqlx = { workspace = true, features = [
-    "chrono",
-    "migrate",
-    "runtime-tokio-rustls",
-    "sqlite",
-] }
+sqlx = { workspace = true, features = ["chrono", "migrate", "sqlite"] }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }

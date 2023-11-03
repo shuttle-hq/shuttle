@@ -37,7 +37,7 @@ pub fn get_resources_table(
                 Type::Custom => "Custom",
             };
 
-            let elements = acc.entry(title).or_insert(Vec::new());
+            let elements: &mut Vec<_> = acc.entry(title).or_default();
             elements.push(x);
 
             acc

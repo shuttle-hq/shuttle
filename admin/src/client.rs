@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
-use shuttle_common::{
-    models::{project, stats, ToJson},
-    project::ProjectName,
+use shuttle_common::models::{
+    project::{AdminResponse, ProjectName},
+    stats, ToJson,
 };
 use tracing::trace;
 
@@ -61,7 +61,7 @@ impl Client {
         self.post(&path, Some(credentials)).await
     }
 
-    pub async fn get_projects(&self) -> Result<Vec<project::AdminResponse>> {
+    pub async fn get_projects(&self) -> Result<Vec<AdminResponse>> {
         self.get("/admin/projects").await
     }
 

@@ -141,7 +141,6 @@ impl ResourceBuilder<Client> for Turso {
 mod test {
     use super::*;
     use shuttle_service::Secret;
-    use std::str::FromStr;
 
     struct MockFactory {
         pub environment: Environment,
@@ -172,7 +171,7 @@ mod test {
         fn get_metadata(&self) -> shuttle_service::DeploymentMetadata {
             shuttle_service::DeploymentMetadata {
                 env: self.environment,
-                project_name: shuttle_service::ProjectName::from_str("my-turso-service").unwrap(),
+                project_name: "my-turso-service".to_string(),
                 service_name: "my-turso-service".to_string(),
                 storage_path: std::path::PathBuf::new(),
             }

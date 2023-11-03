@@ -20,9 +20,10 @@ http-body = { version = "0.4.5", optional = true }
 http-serde = { version = "1.1.2", optional = true }
 hyper = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
+once_cell = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
-opentelemetry-otlp = { workspace = true,  optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
 pin-project = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
@@ -31,12 +32,11 @@ rustrict = { version = "0.7.4", optional = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
+sqlx = { workspace = true, optional = true }
 strum = { workspace = true, features = ["derive"] }
-sqlx = { workspace = true, optional = true, features = ["runtime-tokio-rustls"] }
 thiserror = { workspace = true, optional = true }
-tonic = { workspace = true, optional = true }
-once_cell = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
+tonic = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 tracing = { workspace = true, features = ["std"], optional = true }
@@ -51,6 +51,7 @@ zeroize = { workspace = true }
 backend = [
     "async-trait",
     "axum/matched-path",
+    "axum/json",
     "claims",
     "hyper/client",
     "opentelemetry-otlp",
@@ -60,7 +61,9 @@ backend = [
     "tower-http",
     "tracing-subscriber/env-filter",
     "tracing-subscriber/fmt",
-    "ttl_cache"
+    "ttl_cache",
+    "sqlx",
+    "sqlx/postgres",                 # Fix for derive macro error when different backends enable sqlite & postgres (mainly for grouped compilation in clippy CI and Docker build)
 ]
 claims = [
     "bytes",
@@ -78,9 +81,17 @@ claims = [
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
 openapi = ["utoipa/chrono", "utoipa/uuid"]
-models = ["async-trait", "display", "http", "reqwest", "service"]
+models = [
+    "async-trait",
+    "display",
+    "http",
+    "reqwest",
+    "rustrict",
+    "service",
+    "thiserror",
+]
 persist = ["sqlx/sqlite", "rand"]
-service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "tracing", "tracing-subscriber", "uuid"]
+service = ["chrono/serde", "tracing", "tracing-subscriber", "uuid"]
 tracing = ["dep:tracing"]
 wasm = [
     "chrono/clock",

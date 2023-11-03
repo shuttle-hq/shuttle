@@ -14,7 +14,7 @@ fqdn = { workspace = true }
 mongodb = "2.4.0"
 prost = { workspace = true }
 rand = { workspace = true }
-sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls"] }
+sqlx = { workspace = true, features = ["postgres"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tonic = { workspace = true }

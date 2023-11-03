@@ -15,7 +15,6 @@ sqlx = { workspace = true, features = [
     "chrono",
     "json",
     "migrate",
-    "runtime-tokio-rustls",
     "postgres",
 ] }
 thiserror = { workspace = true }

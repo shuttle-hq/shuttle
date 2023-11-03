@@ -78,9 +78,9 @@ impl LocalProvisioner {
                 trace!("found DB container {container_name}");
                 container
             }
-            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
-                if status_code == 404 =>
-            {
+            Err(bollard::errors::Error::DockerResponseServerError {
+                status_code: 404, ..
+            }) => {
                 self.pull_image(&image).await.expect("failed to pull image");
                 trace!("will create DB container {container_name}");
                 let options = Some(CreateContainerOptions {

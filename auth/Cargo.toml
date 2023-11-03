@@ -7,6 +7,7 @@ repository.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+async-stripe = { version = "0.25.1", default-features = false, features = ["checkout", "runtime-tokio-hyper-rustls"] }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["headers"] }
 axum-sessions = { workspace = true }
@@ -17,13 +18,7 @@ opentelemetry = { workspace = true }
 rand = { workspace = true }
 ring = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-sqlx = { workspace = true, features = [
-    "sqlite",
-    "json",
-    "runtime-tokio-rustls",
-    "migrate",
-] }
-async-stripe = { version = "0.25.1", default-features = false, features = ["checkout", "runtime-tokio-hyper-rustls"] }
+sqlx = { workspace = true, features = ["sqlite", "json", "migrate"] }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

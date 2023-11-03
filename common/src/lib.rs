@@ -16,8 +16,6 @@ pub mod log;
 pub use log::LogItem;
 #[cfg(feature = "models")]
 pub mod models;
-#[cfg(feature = "service")]
-pub mod project;
 pub mod resource;
 pub mod secrets;
 pub use secrets::{Secret, SecretStore};
@@ -202,6 +200,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "persist")]
     #[test]
     fn generated_api_key_is_valid() {
         let key = ApiKey::generate();

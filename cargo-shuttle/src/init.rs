@@ -12,7 +12,7 @@ use gix::create::{self, Kind};
 use gix::remote::fetch::Shallow;
 use gix::{open, progress};
 use regex::Regex;
-use shuttle_common::{constants::SHUTTLE_EXAMPLES_README, project::ProjectName};
+use shuttle_common::constants::SHUTTLE_EXAMPLES_README;
 use tempfile::{Builder, TempDir};
 use toml_edit::{value, Document};
 use url::Url;

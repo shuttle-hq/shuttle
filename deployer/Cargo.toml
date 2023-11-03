@@ -6,6 +6,10 @@ license.workspace = true
 description = "Service with instances created per project for handling the compilation, loading, and execution of Shuttle services"
 
 [dependencies]
+shuttle-common = { workspace = true, features = ["backend", "models", "openapi"] }
+shuttle-proto = { workspace = true }
+shuttle-service = { workspace = true, features = ["builder"] }
+
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["headers", "json", "query", "ws"] }
@@ -53,17 +57,6 @@ utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
 ulid = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
-
-[dependencies.shuttle-common]
-workspace = true
-features = ["backend", "models", "openapi"]
-
-[dependencies.shuttle-proto]
-workspace = true
-
-[dependencies.shuttle-service]
-workspace = true
-features = ["builder"]
 
 [dev-dependencies]
 ctor = { workspace = true }

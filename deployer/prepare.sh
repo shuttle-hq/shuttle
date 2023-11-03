@@ -17,22 +17,15 @@ rustup target add wasm32-wasi
 rustup target add wasm32-unknown-unknown
 
 # Install common build tools for external crates
-# The image should already have these: https://github.com/docker-library/buildpack-deps/blob/65d69325ad741cea6dee20781c1faaab2e003d87/debian/buster/Dockerfile
+# The image should already have these: https://github.com/docker-library/buildpack-deps/blob/fdfe65ea0743aa735b4a5f27cac8e281e43508f5/debian/bookworm/Dockerfile
 apt update
-apt install -y curl llvm-dev libclang-dev clang cmake lld mold
-
-# Install protoc since some users may need it
-ARCH="linux-x86_64" && \
-VERSION="22.2" && \
-curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v$VERSION/protoc-$VERSION-$ARCH.zip" && \
-    unzip -o "protoc-$VERSION-$ARCH.zip" bin/protoc "include/*" -d /usr/local && \
-    rm -f "protoc-$VERSION-$ARCH.zip"
+apt install -y llvm-dev libclang-dev clang cmake lld mold protobuf-compiler
 
 # Binstall
 curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
 # Common cargo build tools
-cargo binstall -y --locked trunk@0.17.2
+cargo binstall -y --locked trunk@0.17.5
 
 while getopts "p," o; do
 case $o in

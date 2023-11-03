@@ -11,6 +11,12 @@ homepage = "https://www.shuttle.rs"
 doctest = false
 
 [dependencies]
+shuttle-common = { workspace = true, features = [
+    "service",
+    "tracing",
+    "display",
+] }
+
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 cargo_metadata = { workspace = true, optional = true }
@@ -20,10 +26,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["process", "io-util", "sync", "time"], optional = true }
 toml = { workspace = true, optional = true  }
 tracing = { workspace = true, optional = true }
-
-[dependencies.shuttle-common]
-workspace = true
-features = ["service", "tracing", "display"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

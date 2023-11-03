@@ -219,7 +219,7 @@ pub enum ProjectCommand {
         /// Output table in `raw` format
         raw: bool,
     },
-    /// Delete project. This also deletes associated Secrets and Persist data.
+    /// Delete a project and all linked data
     Delete,
 }
 

@@ -13,41 +13,32 @@ required-features = ["next"]
 doctest = false
 
 [dependencies]
+shuttle-codegen = { workspace = true, features = ["frameworks"] }
+shuttle-common = { workspace = true, features = ["claims"] }
+shuttle-proto = { workspace = true }
+shuttle-service = { workspace = true }
+
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+cap-std = { version = "2.0.0", optional = true }
 chrono = { workspace = true }
 colored = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+hyper = { workspace = true, optional = true }
 prost-types = { workspace = true }
+rmp-serde = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 strfmt = { workspace = true }
 thiserror = { workspace = true }
-tracing-subscriber = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
-cap-std = { workspace = true, optional = true }
-futures = { workspace = true, optional = true }
-hyper = { workspace = true, optional = true }
-rmp-serde = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
 wasi-common = { version = "13.0.0", optional = true }
 wasmtime = { version = "13.0.0", optional = true }
 wasmtime-wasi = { version = "13.0.0", optional = true }
-
-[dependencies.shuttle-codegen]
-workspace = true
-features = ["frameworks"]
-
-[dependencies.shuttle-common]
-workspace = true
-features = ["claims"]
-
-[dependencies.shuttle-proto]
-workspace = true
-
-[dependencies.shuttle-service]
-workspace = true
 
 [dev-dependencies]
 portpicker = "0.1.1"

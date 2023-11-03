@@ -105,7 +105,6 @@ wasm = [
 [dev-dependencies]
 axum = { workspace = true }
 base64 = { workspace = true }
-cap-std = { workspace = true }
 hyper = { workspace = true }
 proptest = "1.1.0"
 ring = { workspace = true }

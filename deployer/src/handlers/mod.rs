@@ -452,7 +452,7 @@ pub async fn create_service(
         git_dirty: deployment_req.git_dirty,
     };
 
-    persistence.insert_deployment(deployment.clone()).await?;
+    persistence.insert_deployment(&deployment).await?;
     let queued = Queued {
         id: deployment.id,
         service_name: service.name,

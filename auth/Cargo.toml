@@ -6,6 +6,12 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+shuttle-common = { workspace = true, features = [
+    "backend",
+    "models",
+    "persist",
+] }
+
 anyhow = { workspace = true }
 async-stripe = { version = "0.25.1", default-features = false, features = ["checkout", "runtime-tokio-hyper-rustls"] }
 async-trait = { workspace = true }
@@ -25,10 +31,6 @@ tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
-
-[dependencies.shuttle-common]
-workspace = true
-features = ["backend", "models", "persist"]
 
 [dev-dependencies]
 axum-extra = { version = "0.7.1", features = ["cookie"] }

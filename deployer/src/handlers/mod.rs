@@ -34,9 +34,9 @@ use shuttle_common::{
     models::{
         deployment::{DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH},
         error::axum::CustomErrorPath,
+        project::ProjectName,
         secret,
     },
-    project::ProjectName,
     request_span, LogItem,
 };
 use shuttle_proto::logger::LogsRequest;

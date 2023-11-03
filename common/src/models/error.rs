@@ -5,7 +5,7 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 
-use crate::project::InvalidProjectName;
+use super::project::InvalidProjectName;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiError {
@@ -241,7 +241,7 @@ pub mod axum {
 
     #[cfg(test)]
     mod tests {
-        use crate::project::ProjectName;
+        use crate::models::project::ProjectName;
 
         use super::*;
         use axum::http::StatusCode;

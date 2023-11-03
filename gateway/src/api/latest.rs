@@ -24,8 +24,11 @@ use shuttle_common::claims::{Scope, EXP_MINUTES};
 use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
 use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
-use shuttle_common::models::{project, stats};
-use shuttle_common::{project::ProjectName, request_span, VersionInfo};
+use shuttle_common::models::{
+    project::{self, ProjectName},
+    stats,
+};
+use shuttle_common::{request_span, VersionInfo};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;

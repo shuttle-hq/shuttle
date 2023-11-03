@@ -81,18 +81,17 @@ claims = [
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
 openapi = ["utoipa/chrono", "utoipa/uuid"]
-models = ["async-trait", "display", "http", "reqwest", "service"]
-persist = ["sqlx/sqlite", "rand"]
-service = [
-    "chrono/serde",
-    "once_cell",
+models = [
+    "async-trait",
+    "display",
+    "http",
+    "reqwest",
     "rustrict",
-    "serde/derive",
+    "service",
     "thiserror",
-    "tracing",
-    "tracing-subscriber",
-    "uuid",
 ]
+persist = ["sqlx/sqlite", "rand"]
+service = ["chrono/serde", "tracing", "tracing-subscriber", "uuid"]
 tracing = ["dep:tracing"]
 wasm = [
     "chrono/clock",

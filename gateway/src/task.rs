@@ -1,10 +1,11 @@
-use futures::Future;
-use shuttle_common::project::ProjectName;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use futures::Future;
+use shuttle_common::models::project::ProjectName;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};

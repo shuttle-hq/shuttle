@@ -20,7 +20,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
-use shuttle_common::project::ProjectName;
+use shuttle_common::models::project::ProjectName;
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
 

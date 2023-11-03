@@ -39,7 +39,6 @@ use shuttle_service::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use cargo_metadata::Message;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use clap_complete::{generate, Shell};
 use config::RequestContext;
@@ -1120,15 +1119,10 @@ impl Shuttle {
     async fn pre_local_run(&self, run_args: &RunArgs) -> Result<Vec<BuiltService>> {
         trace!("starting a local run for a service: {run_args:?}");
 
-        let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
-        tokio::task::spawn_blocking(move || {
-            while let Ok(message) = rx.recv() {
-                match message {
-                    Message::TextLine(line) => println!("{line}"),
-                    message => {
-                        trace!("skipping cargo line: {message:?}")
-                    }
-                }
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
+        tokio::task::spawn(async move {
+            while let Some(line) = rx.recv().await {
+                println!("{line}");
             }
         });
 
@@ -1160,6 +1154,7 @@ impl Shuttle {
 
     #[cfg(target_family = "unix")]
     async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
+        debug!("starting local run");
         let services = self.pre_local_run(&run_args).await?;
         let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
         let mut sigterm_notif =

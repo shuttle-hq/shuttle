@@ -39,7 +39,6 @@ use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{request_span, LogItem};
 use shuttle_proto::logger::LogsRequest;
-use shuttle_service::builder::clean_crate;
 
 use crate::persistence::{Deployment, Persistence, SecretGetter, State};
 use crate::{
@@ -203,7 +202,7 @@ impl RouterBuilder {
 
     pub fn into_router(self) -> Router {
         self.router
-            .route("/projects/:project_name/status", get(get_status))
+            .route("/projects/:project_name/status", get(|| async { "Ok" }))
             .route_layer(from_extractor::<Metrics>())
             .layer(
                 TraceLayer::new(|request| {
@@ -254,7 +253,6 @@ pub async fn get_services(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
-#[instrument(skip_all)]
 #[utoipa::path(
     get,
     path = "/projects/{project_name}/services/{service_name}",
@@ -504,7 +502,7 @@ pub async fn stop_service(
     Ok(Json(response))
 }
 
-#[instrument(skip(persistence))]
+#[instrument(skip_all, fields(%project_name, page, limit))]
 #[utoipa::path(
     get,
     path = "/projects/{project_name}/deployments",
@@ -540,7 +538,6 @@ pub async fn get_deployments(
 }
 
 #[instrument(skip_all, fields(%project_name, %deployment_id))]
-#[instrument(skip(persistence))]
 #[utoipa::path(
     get,
     path = "/projects/{project_name}/deployments/{deployment_id}",
@@ -682,6 +679,8 @@ pub async fn get_logs(
     }
 }
 
+// don't instrument id to prevent it from showing up in deployment log
+#[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(
     get,
     path = "/projects/{project_name}/ws/deployments/{deployment_id}/logs",
@@ -696,7 +695,7 @@ pub async fn get_logs(
 pub async fn get_logs_subscribe(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
-    Path((_project_name, deployment_id)): Path<(String, Uuid)>,
+    Path((project_name, deployment_id)): Path<(String, Uuid)>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
     ws_upgrade
@@ -819,6 +818,7 @@ pub async fn get_secrets(
     }
 }
 
+#[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(
     post,
     path = "/projects/{project_name}/clean",
@@ -833,8 +833,8 @@ pub async fn get_secrets(
 pub async fn clean_project(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(project_name): Path<String>,
-) -> Result<Json<Vec<String>>> {
-    let lines = clean_crate(
+) -> Result<Json<String>> {
+    shuttle_service::builder::clean_crate(
         deployment_manager
             .builds_path()
             .join(project_name)
@@ -842,11 +842,7 @@ pub async fn clean_project(
     )
     .await?;
 
-    Ok(Json(lines))
-}
-
-async fn get_status() -> String {
-    "Ok".to_string()
+    Ok(Json("Cleaning done".into()))
 }
 
 pub struct Rmp<T>(T);

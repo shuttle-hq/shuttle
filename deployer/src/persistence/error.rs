@@ -7,7 +7,9 @@ pub enum Error {
     #[error("Resource recorder error: {0}")]
     ResourceRecorder(tonic::Status),
     #[error("Sending the state event failed: {0}")]
-    CrossbeamChannelSendError(#[from] crossbeam_channel::SendError<DeploymentState>),
+    ChannelSendError(#[from] tokio::sync::mpsc::error::SendError<DeploymentState>),
+    #[error("Sending the state event failed: channel closed")]
+    ChannelSendThreadError,
     #[error("Parsing error: {0}")]
     ParseError(String),
     #[error("Provisioner request failed: {0}")]

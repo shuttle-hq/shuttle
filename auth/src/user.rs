@@ -341,14 +341,16 @@ impl From<AccountTier> for Vec<Scope> {
     fn from(tier: AccountTier) -> Self {
         let mut builder = ScopeBuilder::new();
 
-        if tier == AccountTier::Admin {
-            builder = builder.with_admin()
-        }
-
         if tier == AccountTier::Deployer {
             builder = builder.with_deploy_rights();
         } else {
             builder = builder.with_basic();
+
+            if tier == AccountTier::Admin {
+                builder = builder.with_admin();
+            } else if tier == AccountTier::Pro {
+                builder = builder.with_pro();
+            }
         }
 
         builder.build()
@@ -482,6 +484,7 @@ mod tests {
                     Scope::ResourcesWrite,
                     Scope::Secret,
                     Scope::SecretWrite,
+                    Scope::ExtraProjects,
                 ]
             );
         }
@@ -515,13 +518,6 @@ mod tests {
             assert_eq!(
                 scopes,
                 vec![
-                    Scope::User,
-                    Scope::UserCreate,
-                    Scope::AcmeCreate,
-                    Scope::CustomDomainCreate,
-                    Scope::CustomDomainCertificateRenew,
-                    Scope::GatewayCertificateRenew,
-                    Scope::Admin,
                     Scope::Deployment,
                     Scope::DeploymentPush,
                     Scope::Logs,
@@ -533,6 +529,13 @@ mod tests {
                     Scope::ResourcesWrite,
                     Scope::Secret,
                     Scope::SecretWrite,
+                    Scope::User,
+                    Scope::UserCreate,
+                    Scope::AcmeCreate,
+                    Scope::CustomDomainCreate,
+                    Scope::CustomDomainCertificateRenew,
+                    Scope::GatewayCertificateRenew,
+                    Scope::Admin,
                 ]
             );
         }

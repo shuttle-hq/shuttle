@@ -38,7 +38,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
     let runtime_port = portpicker::pick_unused_port().unwrap();
     let runtime_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), runtime_port);
 
-    let (tx, _) = crossbeam_channel::unbounded();
+    let (tx, _) = tokio::sync::mpsc::channel::<String>(256);
     let runtimes = build_workspace(Path::new(&project_path), false, tx, false).await?;
     let service = runtimes[0].clone();
 

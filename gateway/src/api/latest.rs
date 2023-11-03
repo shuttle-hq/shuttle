@@ -21,6 +21,7 @@ use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, Scop
 use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Scope, EXP_MINUTES};
+use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
 use shuttle_common::{request_span, VersionInfo};
@@ -203,12 +204,20 @@ async fn create_project(
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
     let is_admin = claim.scopes.contains(&Scope::Admin);
+    let project_limit: Option<u32> = if is_admin {
+        None
+    } else if claim.scopes.contains(&Scope::ExtraProjects) {
+        Some(MAX_PROJECTS_EXTRA)
+    } else {
+        Some(MAX_PROJECTS_DEFAULT)
+    };
 
     let project = service
         .create_project(
             project_name.clone(),
             name.clone(),
             is_admin,
+            project_limit,
             config.idle_minutes,
         )
         .await?;

@@ -16,3 +16,8 @@ pub const API_URL_DEFAULT: &str = API_URL_PRODUCTION;
 // Crate names for checking cargo metadata
 pub const NEXT_NAME: &str = "shuttle-next";
 pub const RUNTIME_NAME: &str = "shuttle-runtime";
+
+pub mod limits {
+    pub const MAX_PROJECTS_DEFAULT: u32 = 3;
+    pub const MAX_PROJECTS_EXTRA: u32 = 15;
+}

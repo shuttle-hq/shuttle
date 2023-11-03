@@ -79,7 +79,7 @@ pub async fn task(
                     debug!(response = ?response,  "stop client response: ");
 
                     if let Some(response) = response {
-                        match StopReason::from_i32(response.reason).unwrap_or_default() {
+                        match StopReason::try_from(response.reason).unwrap_or_default() {
                             StopReason::Request => stopped_cleanup(&id),
                             StopReason::End => completed_cleanup(&id),
                             StopReason::Crash => crashed_cleanup(

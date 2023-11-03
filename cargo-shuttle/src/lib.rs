@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use shuttle_common::models::error::ApiError;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     constants::{
@@ -30,7 +31,6 @@ use shuttle_common::{
         resource::get_resources_table,
         secret,
     },
-    project::ProjectName,
     resource, semvers_are_compatible, ApiKey, LogItem, VersionInfo,
 };
 use shuttle_proto::runtime::{
@@ -336,16 +336,15 @@ impl Shuttle {
 
         // 2. Ask for project name
         if project_args.name.is_none() {
-            printdoc!(
-                "
+            printdoc! {"
                 What do you want to name your project?
                 It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
                 "
-            );
+            };
             let client = self.client.as_ref().unwrap();
             loop {
                 // not using validate_with due to being blocking
-                let p: ProjectName = Input::with_theme(&theme)
+                let p: String = Input::with_theme(&theme)
                     .with_prompt("Project name")
                     .interact()?;
                 match client.check_project_name(&p).await {
@@ -357,7 +356,18 @@ impl Shuttle {
                         project_args.name = Some(p);
                         break;
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        // If API error contains message regarding format of error name, print that error and prompt again
+                        if let Ok(api_error) = e.downcast::<ApiError>() {
+                            // If the returned error string changes, this could break
+                            if api_error.message.contains("Invalid project name") {
+                                println!("{}", api_error.message.yellow());
+                                println!("{}", "Try a different name.".yellow());
+                                continue;
+                            }
+                        }
+                        // Else, the API error was about something else.
+                        // Ignore and keep going to not prevent the flow of the init command.
                         project_args.name = Some(p);
                         println!(
                             "{}",
@@ -745,7 +755,7 @@ impl Shuttle {
         } else {
             false
         };
-        let table = get_deployments_table(&deployments, proj_name.as_str(), page, raw, page_hint);
+        let table = get_deployments_table(&deployments, proj_name, page, raw, page_hint);
 
         println!("{table}");
         println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
@@ -771,12 +781,7 @@ impl Shuttle {
             .get_service_resources(self.ctx.project_name())
             .await
             .map_err(suggestions::resources::get_service_resources_failure)?;
-        let table = get_resources_table(
-            &resources,
-            self.ctx.project_name().as_str(),
-            raw,
-            show_secrets,
-        );
+        let table = get_resources_table(&resources, self.ctx.project_name(), raw, show_secrets);
 
         println!("{table}");
 
@@ -1617,8 +1622,7 @@ impl Shuttle {
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await?;
-        let resources =
-            get_resources_table(&resources, self.ctx.project_name().as_str(), false, false);
+        let resources = get_resources_table(&resources, self.ctx.project_name(), false, false);
 
         println!("{resources}{service}");
 
@@ -2100,14 +2104,12 @@ pub enum CommandOutcome {
 #[cfg(test)]
 mod tests {
     use flate2::read::GzDecoder;
-    use shuttle_common::project::ProjectName;
     use tar::Archive;
 
     use crate::args::ProjectArgs;
     use crate::Shuttle;
     use std::fs::{self, canonicalize};
     use std::path::PathBuf;
-    use std::str::FromStr;
 
     pub fn path_from_workspace_root(path: &str) -> PathBuf {
         let path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -2162,7 +2164,7 @@ mod tests {
 
         let project_args = ProjectArgs {
             working_directory,
-            name: Some(ProjectName::from_str("archiving-test").unwrap()),
+            name: Some("archiving-test".to_owned()),
         };
         let mut entries = get_archive_entries(project_args);
         entries.sort();

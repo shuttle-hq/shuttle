@@ -22,8 +22,12 @@ use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Scope, EXP_MINUTES};
 use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
+use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
-use shuttle_common::models::{project, stats};
+use shuttle_common::models::{
+    project::{self, ProjectName},
+    stats,
+};
 use shuttle_common::{request_span, VersionInfo};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
@@ -32,9 +36,8 @@ use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
 use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
-use utoipa::IntoParams;
-
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+use utoipa::IntoParams;
 use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
@@ -50,7 +53,7 @@ use crate::service::GatewayService;
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{Error, ProjectName, AUTH_CLIENT};
+use crate::{Error, AUTH_CLIENT};
 
 use super::auth_layer::ShuttleAuthLayer;
 
@@ -142,7 +145,7 @@ async fn get_project(
 )]
 async fn check_project_name(
     State(RouterState { service, .. }): State<RouterState>,
-    Path(project_name): Path<ProjectName>,
+    CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
 ) -> Result<AxumJson<bool>, Error> {
     service
         .project_name_exists(&project_name)
@@ -200,7 +203,7 @@ async fn create_project(
         service, sender, ..
     }): State<RouterState>,
     User { name, claim, .. }: User,
-    Path(project_name): Path<ProjectName>,
+    CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
     let is_admin = claim.scopes.contains(&Scope::Admin);
@@ -657,7 +660,7 @@ async fn request_custom_domain_acme_certificate(
     }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
-    Path((project_name, fqdn)): Path<(ProjectName, String)>,
+    CustomErrorPath((project_name, fqdn)): CustomErrorPath<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<String, Error> {
     let fqdn: FQDN = fqdn
@@ -734,7 +737,7 @@ async fn renew_custom_domain_acme_certificate(
     State(RouterState { service, .. }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
-    Path((project_name, fqdn)): Path<(ProjectName, String)>,
+    CustomErrorPath((project_name, fqdn)): CustomErrorPath<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<String, Error> {
     let fqdn: FQDN = fqdn

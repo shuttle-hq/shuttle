@@ -24,7 +24,7 @@ use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::headers::{X_SHUTTLE_ACCOUNT_NAME, X_SHUTTLE_ADMIN_SECRET};
-use shuttle_common::models::project::{default_idle_minutes, DEFAULT_IDLE_MINUTES};
+use shuttle_common::models::project::{default_idle_minutes, ProjectName, DEFAULT_IDLE_MINUTES};
 use shuttle_common::models::service;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -32,7 +32,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::service::ContainerSettings;
-use crate::{DockerContext, Error, ErrorKind, IntoTryState, ProjectName, Refresh, State, TryState};
+use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
 
 macro_rules! safe_unwrap {
     {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {

@@ -284,7 +284,7 @@ impl ToTokens for App {
         let mut endpoint_chains = endpoints
             .iter()
             .fold(HashMap::new(), |mut chain, endpoint| {
-                let entry: &mut Vec::<Handler> = chain
+                let entry: &mut Vec<Handler> = chain
                     .entry(&endpoint.route)
                     .or_default();
 

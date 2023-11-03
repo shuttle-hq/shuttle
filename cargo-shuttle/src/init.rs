@@ -19,11 +19,7 @@ use url::Url;
 
 use crate::args::TemplateLocation;
 
-pub fn generate_project(
-    dest: PathBuf,
-    name: &ProjectName,
-    temp_loc: TemplateLocation,
-) -> Result<()> {
+pub fn generate_project(dest: PathBuf, name: &str, temp_loc: TemplateLocation) -> Result<()> {
     println!(r#"Creating project "{name}" in "{}""#, dest.display());
 
     let temp_dir: TempDir = setup_template(&temp_loc.auto_path)
@@ -45,8 +41,7 @@ pub fn generate_project(
     };
 
     // Prepare the template by changing its default contents.
-    set_crate_name(&path, name.as_str())
-        .context("Failed to set crate name. No Cargo.toml in template?")?;
+    set_crate_name(&path, name).context("Failed to set crate name. No Cargo.toml in template?")?;
     edit_shuttle_toml(&path).context("Failed to edit Shuttle.toml")?;
     create_gitignore_file(&path).context("Failed to create .gitignore file")?;
 

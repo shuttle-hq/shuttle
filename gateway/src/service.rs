@@ -21,7 +21,7 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
-use shuttle_common::models::project::State;
+use shuttle_common::models::project::{ProjectName, State};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
@@ -44,9 +44,7 @@ use crate::project::{Project, ProjectCreating, ProjectError, IS_HEALTHY_TIMEOUT}
 use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::TaskRouter;
-use crate::{
-    AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName, AUTH_CLIENT,
-};
+use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, AUTH_CLIENT};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -534,20 +532,12 @@ impl GatewayService {
                 )))
             }
         } else {
-            // Check if project name is valid according to new rules if it
-            // doesn't exist.
-            // TODO: remove this check when we update the project name rules
-            // in shuttle-common
-            if project_name.is_valid() {
-                // Otherwise attempt to create a new one. This will fail
-                // outright if the project already exists (this happens if
-                // it belongs to another account).
-                self.check_project_count(&account_name, limit).await?;
-                self.insert_project(project_name, Ulid::new(), account_name, idle_minutes)
-                    .await
-            } else {
-                Err(Error::from_kind(ErrorKind::InvalidProjectName))
-            }
+            self.check_project_count(&account_name, limit).await?;
+            // Attempt to create a new one. This will fail
+            // outright if the project already exists (this happens if
+            // it belongs to another account).
+            self.insert_project(project_name, Ulid::new(), account_name, idle_minutes)
+                .await
         }
     }
 
@@ -1034,7 +1024,7 @@ pub mod tests {
 
         // Test project pagination, first create 20 projects.
         for p in (0..20).map(|p| format!("matrix-{p}")) {
-            svc.create_project(ProjectName(p.clone()), admin.clone(), true, None, 0)
+            svc.create_project(p.parse().unwrap(), admin.clone(), true, None, 0)
                 .await
                 .unwrap();
         }
@@ -1042,7 +1032,7 @@ pub mod tests {
         // Creating another one without admin rights should be denied due to limit
         assert!(svc
             .create_project(
-                ProjectName("final-one".into()),
+                "final-one".parse().unwrap(),
                 admin.clone(),
                 false,
                 Some(3),

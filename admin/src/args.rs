@@ -1,7 +1,7 @@
 use std::{fs, io, path::PathBuf};
 
 use clap::{Error, Parser, Subcommand};
-use shuttle_common::project::ProjectName;
+use shuttle_common::models::project::ProjectName;
 
 #[derive(Parser, Debug)]
 pub struct Args {

@@ -7,7 +7,6 @@ pub use shuttle_common::secrets::Secret;
 pub use shuttle_common::{
     database,
     deployment::{DeploymentMetadata, Environment},
-    project::ProjectName,
     resource::Type,
     DatabaseReadyInfo, DbInput, DbOutput, SecretStore,
 };

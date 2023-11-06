@@ -165,7 +165,7 @@ pub mod runtime {
             .context("creating runtime client endpoint")?
             .connect_timeout(Duration::from_secs(5));
 
-        // Wait for the spawned process to open the endpoint port.
+        // Wait for the spawned process to open the control port.
         // Connecting instantly does not give it enough time.
         let channel = tokio::time::timeout(Duration::from_millis(7000), async move {
             let mut ms = 5;
@@ -173,14 +173,14 @@ pub mod runtime {
                 if let Ok(channel) = conn.connect().await {
                     break channel;
                 }
-                trace!("waiting for runtime endpoint to open");
+                trace!("waiting for runtime control port to open");
                 // exponential backoff
                 tokio::time::sleep(Duration::from_millis(ms)).await;
                 ms *= 2;
             }
         })
         .await
-        .context("runtime client endpoint did not open in time")?;
+        .context("runtime control port did not open in time")?;
 
         let channel = ServiceBuilder::new()
             .layer(ClaimLayer)

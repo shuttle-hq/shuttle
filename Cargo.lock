@@ -5763,6 +5763,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "ttl_cache",
+ "url",
  "utoipa",
  "uuid",
  "zeroize",

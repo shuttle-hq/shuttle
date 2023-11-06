@@ -127,26 +127,32 @@ impl DatabaseReadyInfo {
             address_public,
         }
     }
+    /// For connecting to the db from inside the Shuttle network
     pub fn connection_string_private(&self) -> String {
         format!(
             "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
             self.role_password.expose(),
-            self.address_private,
+            self.address_public,
             self.port,
-            self.database_name
+            self.database_name,
         )
     }
-    pub fn connection_string_public(&self) -> String {
+    /// For connecting to the db from the Internet
+    pub fn connection_string_public(&self, show_password: bool) -> String {
         format!(
             "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
-            self.role_password.redacted(),
+            if show_password {
+                self.role_password.expose()
+            } else {
+                self.role_password.redacted()
+            },
             self.address_public,
             self.port,
-            self.database_name
+            self.database_name,
         )
     }
 }

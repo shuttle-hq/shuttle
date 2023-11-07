@@ -668,16 +668,15 @@ jobs:
   publish-crates:
     parameters:
       path:
-        description: Crate to publish
+        description: Path to crate to publish
         type: string
     executor: docker-rust
-    resource_class: medium
     steps:
       - checkout
       - run:
-          name: Crate publishing in order
-          command: |
-            cargo publish --manifest-path << parameters.path >>/Cargo.toml
+          name: Publish crate
+          # Don't build the crate, we know that the crate should build based on other workflows
+          command: cargo publish --no-verify --manifest-path << parameters.path >>/Cargo.toml
 workflows:
   ci:
     jobs:

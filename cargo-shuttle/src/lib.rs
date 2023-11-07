@@ -1827,10 +1827,12 @@ impl Shuttle {
                     println!();
                     println!("{}", "Try restarting the project with `cargo shuttle project restart` first.".yellow());
                     println!("{}", "This is needed to check for any resources linked to it.".yellow());
+                    println!("{}", "For more help with deleting projects, visit https://docs.shuttle.rs/support/delete-project".yellow());
                     println!();
                     return err;
                 }
             }
+            println!("{}", "For more help with deleting projects, visit https://docs.shuttle.rs/support/delete-project".yellow());
             suggestions::project::project_request_failure(
                 err,
                 "Project delete failed",

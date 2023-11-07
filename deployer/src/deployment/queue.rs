@@ -33,7 +33,7 @@ use uuid::Uuid;
 use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
-use crate::persistence::{DeploymentUpdater, SecretRecorder};
+use crate::persistence::DeploymentUpdater;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn task(
@@ -41,7 +41,6 @@ pub async fn task(
     run_send: RunSender,
     deployment_updater: impl DeploymentUpdater,
     log_recorder: impl LogRecorder,
-    secret_recorder: impl SecretRecorder,
     queue_client: impl BuildQueueClient,
     builder_client: Option<
         BuilderClient<
@@ -65,7 +64,6 @@ pub async fn task(
                 let deployment_updater = deployment_updater.clone();
                 let run_send_cloned = run_send.clone();
                 let log_recorder = log_recorder.clone();
-                let secret_recorder = secret_recorder.clone();
                 let queue_client = queue_client.clone();
                 let builds_path = builds_path.clone();
                 let builder_client = builder_client.clone();
@@ -114,7 +112,6 @@ pub async fn task(
                             .handle(
                                 deployment_updater,
                                 log_recorder,
-                                secret_recorder,
                                 builds_path.as_path(),
                             )
                             .await
@@ -207,14 +204,13 @@ pub struct Queued {
 impl Queued {
     #[instrument(
         name = "Building project",
-        skip(self, deployment_updater, log_recorder, secret_recorder, builds_path),
+        skip(self, deployment_updater, log_recorder, builds_path),
         fields(deployment_id = %self.id, state = %State::Building)
     )]
     async fn handle(
         self,
         deployment_updater: impl DeploymentUpdater,
         log_recorder: impl LogRecorder,
-        secret_recorder: impl SecretRecorder,
         builds_path: &Path,
     ) -> Result<Built> {
         let project_path = builds_path.join(&self.service_name);
@@ -244,11 +240,6 @@ impl Queued {
 
         // Get the Secrets.toml from the shuttle service in the workspace.
         let secrets = get_secrets(built_service.crate_directory()).await?;
-
-        // Set the secrets from the service, ignoring any Secrets.toml if it is in the root of the workspace.
-        // TODO: refactor this when we support starting multiple services. Do we want to set secrets in the
-        // workspace root?
-        set_secrets(secrets, &self.service_id, secret_recorder).await?;
 
         if self.will_run_tests {
             info!("Running tests before starting up");
@@ -313,24 +304,6 @@ async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
     } else {
         Ok(Default::default())
     }
-}
-
-#[instrument(skip(secrets, service_id, secret_recorder))]
-async fn set_secrets(
-    secrets: BTreeMap<String, String>,
-    service_id: &Ulid,
-    secret_recorder: impl SecretRecorder,
-) -> Result<()> {
-    for (key, value) in secrets.into_iter() {
-        debug!(key, "setting secret");
-
-        secret_recorder
-            .insert_secret(service_id, &key, &value)
-            .await
-            .map_err(|e| Error::SecretsSet(Box::new(e)))?;
-    }
-
-    Ok(())
 }
 
 /// Akin to the command: `tar -xzf --strip-components 1`

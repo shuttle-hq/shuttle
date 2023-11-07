@@ -38,7 +38,7 @@ use uuid::Uuid;
 use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
-    persistence::{resource::ResourceManager, DeploymentUpdater, SecretGetter},
+    persistence::{resource::ResourceManager, DeploymentUpdater},
     RuntimeManager,
 };
 
@@ -49,7 +49,6 @@ pub async fn task(
     runtime_manager: Arc<Mutex<RuntimeManager>>,
     deployment_updater: impl DeploymentUpdater,
     active_deployment_getter: impl ActiveDeploymentsGetter,
-    secret_getter: impl SecretGetter,
     resource_manager: impl ResourceManager,
     builds_path: PathBuf,
 ) {
@@ -64,7 +63,6 @@ pub async fn task(
 
                 info!("Built deployment at the front of run queue: {id}");
                 let deployment_updater = deployment_updater.clone();
-                let secret_getter = secret_getter.clone();
                 let resource_manager = resource_manager.clone();
                 let builds_path = builds_path.clone();
 
@@ -111,7 +109,6 @@ pub async fn task(
                     async move {
                         match built
                             .handle(
-                                secret_getter,
                                 resource_manager,
                                 runtime_manager,
                                 deployment_updater,
@@ -234,13 +231,12 @@ pub struct Built {
 impl Built {
     #[instrument(
         name = "Loading resources",
-        skip(self, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup),
+        skip(self, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup),
         fields(deployment_id = %self.id, state = %State::Loading)
     )]
     #[allow(clippy::too_many_arguments)]
     pub async fn handle(
         self,
-        secret_getter: impl SecretGetter,
         resource_manager: impl ResourceManager,
         runtime_manager: Arc<Mutex<RuntimeManager>>,
         deployment_updater: impl DeploymentUpdater,
@@ -292,7 +288,6 @@ impl Built {
             self.service_name.clone(),
             self.service_id,
             executable_path.clone(),
-            secret_getter,
             resource_manager,
             runtime_client.clone(),
             self.claim,
@@ -316,7 +311,6 @@ async fn load(
     service_name: String,
     service_id: Ulid,
     executable_path: PathBuf,
-    secret_getter: impl SecretGetter,
     mut resource_manager: impl ResourceManager,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Claim,
@@ -343,14 +337,6 @@ async fn load(
         .map(resource::Response::into_bytes)
         .collect();
 
-    let secrets = secret_getter
-        .get_secrets(&service_id)
-        .await
-        .map_err(|e| Error::SecretsGet(Box::new(e)))?
-        .into_iter()
-        .map(|secret| (secret.key, secret.value));
-    let secrets = HashMap::from_iter(secrets);
-
     let mut load_request = tonic::Request::new(LoadRequest {
         path: executable_path
             .into_os_string()
@@ -358,7 +344,7 @@ async fn load(
             .unwrap_or_default(),
         service_name: service_name.clone(),
         resources,
-        secrets,
+        ..Default::default()
     });
 
     load_request.extensions_mut().insert(claim.clone());

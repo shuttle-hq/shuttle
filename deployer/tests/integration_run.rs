@@ -30,7 +30,7 @@ use uuid::Uuid;
 use shuttle_deployer::{
     deployment::Built,
     error,
-    persistence::{resource::ResourceManager, DeploymentUpdater, Secret, SecretGetter},
+    persistence::{resource::ResourceManager, DeploymentUpdater},
     RuntimeManager,
 };
 
@@ -80,18 +80,6 @@ async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
     let logger_client = Batcher::wrap(mocked_logger_client(MockedLogger).await);
 
     RuntimeManager::new(format!("http://{}", provisioner_addr), logger_client, None)
-}
-
-#[derive(Clone)]
-struct StubSecretGetter;
-
-#[async_trait]
-impl SecretGetter for StubSecretGetter {
-    type Err = std::io::Error;
-
-    async fn get_secrets(&self, _service_id: &Ulid) -> Result<Vec<Secret>, Self::Err> {
-        Ok(Default::default())
-    }
 }
 
 #[derive(Clone)]
@@ -188,7 +176,6 @@ async fn can_be_killed() {
 
     built
         .handle(
-            StubSecretGetter,
             StubResourceManager,
             runtime_manager.clone(),
             StubDeploymentUpdater,
@@ -231,7 +218,6 @@ async fn self_stop() {
 
     built
         .handle(
-            StubSecretGetter,
             StubResourceManager,
             runtime_manager.clone(),
             StubDeploymentUpdater,
@@ -273,7 +259,6 @@ async fn panic_in_bind() {
 
     built
         .handle(
-            StubSecretGetter,
             StubResourceManager,
             runtime_manager.clone(),
             StubDeploymentUpdater,
@@ -304,7 +289,6 @@ async fn panic_in_main() {
 
     let x = built
         .handle(
-            StubSecretGetter,
             StubResourceManager,
             runtime_manager.clone(),
             StubDeploymentUpdater,

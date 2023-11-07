@@ -20,9 +20,7 @@ pub mod state_change_layer;
 
 use self::gateway_client::BuildQueueClient;
 use crate::{
-    persistence::{
-        resource::ResourceManager, DeploymentUpdater, SecretGetter, SecretRecorder, State,
-    },
+    persistence::{resource::ResourceManager, DeploymentUpdater, State},
     RuntimeManager,
 };
 pub use queue::Queued;
@@ -31,7 +29,7 @@ pub use run::{ActiveDeploymentsGetter, Built};
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 
-pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
+pub struct DeploymentManagerBuilder<LR, ADG, DU, RM, QC> {
     build_log_recorder: Option<LR>,
     logs_fetcher: Option<
         LoggerClient<
@@ -40,12 +38,10 @@ pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
             >,
         >,
     >,
-    secret_recorder: Option<SR>,
     active_deployment_getter: Option<ADG>,
     artifacts_path: Option<PathBuf>,
     runtime_manager: Option<Arc<Mutex<RuntimeManager>>>,
     deployment_updater: Option<DU>,
-    secret_getter: Option<SG>,
     resource_manager: Option<RM>,
     queue_client: Option<QC>,
     builder_client: Option<
@@ -57,13 +53,11 @@ pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
     >,
 }
 
-impl<LR, SR, ADG, DU, SG, RM, QC> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC>
+impl<LR, ADG, DU, RM, QC> DeploymentManagerBuilder<LR, ADG, DU, RM, QC>
 where
     LR: LogRecorder,
-    SR: SecretRecorder,
     ADG: ActiveDeploymentsGetter,
     DU: DeploymentUpdater,
-    SG: SecretGetter,
     RM: ResourceManager,
     QC: BuildQueueClient,
 {
@@ -101,12 +95,6 @@ where
         self
     }
 
-    pub fn secret_recorder(mut self, secret_recorder: SR) -> Self {
-        self.secret_recorder = Some(secret_recorder);
-
-        self
-    }
-
     pub fn active_deployment_getter(mut self, active_deployment_getter: ADG) -> Self {
         self.active_deployment_getter = Some(active_deployment_getter);
 
@@ -121,12 +109,6 @@ where
 
     pub fn queue_client(mut self, queue_client: QC) -> Self {
         self.queue_client = Some(queue_client);
-
-        self
-    }
-
-    pub fn secret_getter(mut self, secret_getter: SG) -> Self {
-        self.secret_getter = Some(secret_getter);
 
         self
     }
@@ -157,7 +139,6 @@ where
         let build_log_recorder = self
             .build_log_recorder
             .expect("a build log recorder to be set");
-        let secret_recorder = self.secret_recorder.expect("a secret recorder to be set");
         let active_deployment_getter = self
             .active_deployment_getter
             .expect("an active deployment getter to be set");
@@ -167,7 +148,6 @@ where
         let deployment_updater = self
             .deployment_updater
             .expect("a deployment updater to be set");
-        let secret_getter = self.secret_getter.expect("a secret getter to be set");
         let resource_manager = self.resource_manager.expect("a resource manager to be set");
         let logs_fetcher = self.logs_fetcher.expect("a logs fetcher to be set");
 
@@ -185,7 +165,6 @@ where
             run_send_clone,
             deployment_updater.clone(),
             build_log_recorder,
-            secret_recorder,
             queue_client,
             self.builder_client,
             builds_path.clone(),
@@ -196,7 +175,6 @@ where
             runtime_manager.clone(),
             deployment_updater,
             active_deployment_getter,
-            secret_getter,
             resource_manager,
             builds_path.clone(),
         ));
@@ -243,17 +221,14 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<LR, SR, ADG, DU, SG, RM, QC>(
-    ) -> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
+    pub fn builder<LR, ADG, DU, RM, QC>() -> DeploymentManagerBuilder<LR, ADG, DU, RM, QC> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
             logs_fetcher: None,
-            secret_recorder: None,
             active_deployment_getter: None,
             artifacts_path: None,
             runtime_manager: None,
             deployment_updater: None,
-            secret_getter: None,
             resource_manager: None,
             queue_client: None,
             builder_client: None,

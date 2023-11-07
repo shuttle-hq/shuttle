@@ -44,6 +44,9 @@ _install_linux() {
   "arch" | "manjarolinux" | "endeavouros")
     _install_arch_linux
     ;;
+  "alpine")
+    _install_alpine_linux
+    ;;
   "ubuntu" | "ubuntuwsl" | "debian" | "linuxmint" | "parrot" | "kali" | "elementary" | "pop")
     # TODO: distribute .deb packages via `cargo-deb` and install them here
     _install_unsupported
@@ -67,6 +70,38 @@ _install_arch_linux() {
     fi
   else
     echo "Pacman not found"
+    exit 1
+  fi
+}
+
+_install_alpine_linux() {
+  echo "Alpine Linux detected!"
+  if command -v apk &>/dev/null; then
+    if apk search -q cargo-shuttle; then
+      echo "cargo-shuttle is not available in the testing repository. Do you want to enable the testing repository? (y/n)"
+      read -r enable_testing
+      if [ "$enable_testing" = "y" ]; then
+        echo "@testing http://dl-cdn.alpinelinux.org/alpine/edge/testing" | tee -a /etc/apk/repositories
+        apk update
+      else
+        _install_unsupported
+        return 0
+      fi
+    fi
+    if ! apk info cargo-shuttle; then
+      echo "Installing cargo-shuttle"
+      apk add cargo-shuttle@testing
+    else
+      apk_version=$(apk version cargo-shuttle | awk 'NR==2{print $3}')
+      if [[ "${apk_version}" != "${LATEST_VERSION#v}"* ]]; then
+        echo "cargo-shuttle is not updated in the testing repository, ping @orhun!!!"
+        _install_unsupported
+      else
+        echo "cargo-shuttle is already up to date."
+      fi
+    fi
+  else
+    echo "APK (Alpine Package Keeper) not found"
     exit 1
   fi
 }

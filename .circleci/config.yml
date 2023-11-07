@@ -196,7 +196,7 @@ jobs:
     executor: docker-rust
     steps:
       - checkout
-      - run: 
+      - run:
           name: Install cargo-audit
           command: |
             CARGO_AUDIT_VERSION='v0.18.3'
@@ -682,7 +682,6 @@ workflows:
   ci:
     jobs:
       - workspace-fmt-clippy
-      - cargo-audit
       - test-standalone:
           name: << matrix.path >>
           matrix:
@@ -780,6 +779,10 @@ workflows:
                 - 750M
               crate:
                 - cargo-shuttle
+      - cargo-audit:
+          filters:
+            branches:
+              only: main
       - e2e-test:
           requires:
             - test-standalone
@@ -870,18 +873,21 @@ workflows:
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac
-      - approve-push-production:
-          type: approval
-          filters:
-            branches:
-              only: production
+      # time save: build and push without approval since a merge to production should want to deploy.
+      # deploy requires approval.
       - build-and-push:
           name: build-and-push-production
           aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
           aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
           production: true
-          requires:
-            - approve-push-production
+          filters:
+            branches:
+              only: production
+      - approve-deploy-production:
+          type: approval
+          filters:
+            branches:
+              only: production
       - deploy-images:
           name: deploy-images-to-production
           postgres-password: PROD_POSTGRES_PASSWORD
@@ -896,6 +902,7 @@ workflows:
           production: true
           requires:
             - build-and-push-production
+            - approve-deploy-production
       - approve-publish-crates:
           type: approval
           filters:

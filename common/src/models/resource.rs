@@ -13,7 +13,7 @@ use crate::{
     DbOutput,
 };
 
-pub fn get_resources_table(
+pub fn get_resource_tables(
     resources: &Vec<Response>,
     service_name: &str,
     raw: bool,
@@ -106,14 +106,32 @@ fn get_databases_table(
     }
 
     for database in databases {
-        let info = serde_json::from_value::<DbOutput>(database.data.clone()).expect("");
+        let info = serde_json::from_value::<DbOutput>(database.data.clone())
+            .expect("resource data to be a valid database");
         let conn_string = match info {
-            DbOutput::Local(info) => info.clone(),
-            DbOutput::Info(local_uri) => {
-                if show_secrets {
-                    local_uri.connection_string_private()
+            DbOutput::Local(url) => {
+                if let Ok(mut url) = url.parse::<url::Url>() {
+                    // if the local_uri can correctly be parsed as a url,
+                    // hide the password before producing table,
+                    // since it contains an interpolated secret or a hardcoded password
+                    if url.password().is_some() {
+                        // ignore edge cases (if any)
+                        let _ = url.set_password(Some("********"));
+                    }
+                    url.to_string()
                 } else {
-                    local_uri.connection_string_public()
+                    url
+                }
+            }
+            DbOutput::Info(info) => {
+                if info.address_private == "localhost" && info.address_public == "localhost" {
+                    // If both hostnames are localhost, this must be a local container
+                    // from the local provisioner with a default password.
+                    // (DbOutput::Info is always from a provisioner server)
+                    // It is revealed here since it is the only place the local db url is printed.
+                    info.connection_string_public(true)
+                } else {
+                    info.connection_string_public(show_secrets)
                 }
             }
         };
@@ -126,10 +144,7 @@ fn get_databases_table(
         "Hint: you can show the secrets of these resources using --show-secrets\n"
     };
 
-    format!(
-        "These databases are linked to {service_name}\n{table}\n{}",
-        show_secret_hint
-    )
+    format!("These databases are linked to {service_name}\n{table}\n{show_secret_hint}",)
 }
 
 fn get_secrets_table(secrets: &[&Response], service_name: &str, raw: bool) -> String {

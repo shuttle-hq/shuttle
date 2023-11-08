@@ -105,5 +105,6 @@ ttl_cache = "0.5.1"
 utoipa = { version = "4.0.0", features = [ "uuid", "chrono" ] }
 utoipa-swagger-ui = { version = "4.0.0", features = ["axum"] }
 ulid = "1.0.0"
+url = "2.4.0"
 uuid = "1.2.2"
 zeroize = "1.6.0"

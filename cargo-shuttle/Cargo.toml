@@ -63,7 +63,7 @@ tracing-subscriber = { workspace = true, features = [
   "env-filter",
   "fmt",
 ] }
-url = "2.3.1"
+url = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 walkdir = "2.3.3"
 webbrowser = "0.8.2"

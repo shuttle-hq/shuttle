@@ -14,12 +14,11 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use shuttle_common::models::error::ApiError;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     constants::{
         API_URL_DEFAULT, EXECUTABLE_DIRNAME, SHUTTLE_CLI_DOCS_URL, SHUTTLE_GH_ISSUE_URL,
-        SHUTTLE_IDLE_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
+        SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
     },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
@@ -27,8 +26,9 @@ use shuttle_common::{
             get_deployments_table, DeploymentRequest, CREATE_SERVICE_BODY_LIMIT,
             GIT_STRINGS_MAX_LENGTH,
         },
+        error::ApiError,
         project::{self, DEFAULT_IDLE_MINUTES},
-        resource::get_resources_table,
+        resource::get_resource_tables,
         secret,
     },
     resource, semvers_are_compatible, ApiKey, LogItem, VersionInfo,
@@ -781,7 +781,7 @@ impl Shuttle {
             .get_service_resources(self.ctx.project_name())
             .await
             .map_err(suggestions::resources::get_service_resources_failure)?;
-        let table = get_resources_table(&resources, self.ctx.project_name(), raw, show_secrets);
+        let table = get_resource_tables(&resources, self.ctx.project_name(), raw, show_secrets);
 
         println!("{table}");
 
@@ -915,18 +915,24 @@ impl Shuttle {
                     if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
                         // The runtime is newer than cargo-shuttle so we
                         // should help the user to update cargo-shuttle.
-                        println!(
-                            "[HINT]: You should update cargo-shuttle. \
-                            Check out the installation docs for how to update: \
-                            https://docs.shuttle.rs/getting-started/installation"
-                        );
+                        printdoc! {"
+                            Hint: A newer version of cargo-shuttle is available.
+                                  Check out the installation docs for how to update: {SHUTTLE_INSTALL_DOCS_URL}",
+                        };
                     } else {
-                        println!(
-                            "[HINT]: A newer version of shuttle-runtime is available. \
-                            Change its version to {} in this project's Cargo.toml to update it.",
+                        printdoc! {"
+                            Hint: A newer version of shuttle-runtime is available.
+                                  Change its version to {} in Cargo.toml to update it.",
                             mismatch.cargo_shuttle
-                        );
+                        };
                     }
+                } else {
+                    return Err(err.context(
+                        format!(
+                            "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct binary?",
+                            service.executable_path.display()
+                        )
+                    ));
                 }
             }
             service.executable_path.clone()
@@ -1006,7 +1012,7 @@ impl Shuttle {
 
         println!(
             "{}",
-            get_resources_table(&resources, service_name.as_str(), false, false)
+            get_resource_tables(&resources, service_name.as_str(), false, false)
         );
 
         let addr = SocketAddr::new(
@@ -1622,7 +1628,7 @@ impl Shuttle {
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await?;
-        let resources = get_resources_table(&resources, self.ctx.project_name(), false, false);
+        let resources = get_resource_tables(&resources, self.ctx.project_name(), false, false);
 
         println!("{resources}{service}");
 
@@ -2010,6 +2016,11 @@ fn is_dirty(repo: &Repository) -> Result<()> {
 }
 
 fn check_version(runtime_path: &Path) -> Result<()> {
+    debug!(
+        "Checking version of runtime binary at {}",
+        runtime_path.display()
+    );
+
     // should always be a valid semver
     let my_version = semver::Version::from_str(VERSION).unwrap();
 
@@ -2021,16 +2032,16 @@ fn check_version(runtime_path: &Path) -> Result<()> {
     let runtime_version = std::process::Command::new(runtime_path)
         .arg("--version")
         .output()
-        .context("failed to check the shuttle-runtime version")?
+        .context("failed to run the shuttle-runtime binary to check its version")?
         .stdout;
 
     // Parse the version, splitting the version from the name and
     // and pass it to `to_semver()`.
     let runtime_version = semver::Version::from_str(
         std::str::from_utf8(&runtime_version)
-            .expect("shuttle-runtime version should be valid utf8")
+            .context("shuttle-runtime version should be valid utf8")?
             .split_once(' ')
-            .expect("shuttle-runtime version should be in the `name version` format")
+            .context("shuttle-runtime version should be in the `name version` format")?
             .1
             .trim(),
     )

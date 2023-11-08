@@ -82,6 +82,7 @@ impl From<ErrorKind> for ApiError {
             ),
             ErrorKind::ProjectNotReady => (
                 StatusCode::SERVICE_UNAVAILABLE,
+                // "not ready" is matched against in cargo-shuttle for giving further instructions on project deletion
                 "project not ready. Try running `cargo shuttle project restart`.",
             ),
             ErrorKind::ProjectUnavailable => {

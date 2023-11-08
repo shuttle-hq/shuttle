@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fmt;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -220,6 +220,7 @@ impl Queued {
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
         info!("Building deployment");
+        // Listen to build logs
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
         tokio::task::spawn(async move {
             while let Some(line) = rx.recv().await {
@@ -269,6 +270,7 @@ impl Queued {
             tracing_context: Default::default(),
             is_next,
             claim: self.claim,
+            secrets,
         };
 
         Ok(built)
@@ -287,13 +289,13 @@ impl fmt::Debug for Queued {
 }
 
 #[instrument(skip(project_path))]
-async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
+async fn get_secrets(project_path: &Path) -> Result<HashMap<String, String>> {
     let secrets_file = project_path.join("Secrets.toml");
 
     if secrets_file.exists() && secrets_file.is_file() {
         let secrets_str = fs::read_to_string(secrets_file.clone()).await?;
 
-        let secrets: BTreeMap<String, String> = secrets_str.parse::<toml::Value>()?.try_into()?;
+        let secrets = secrets_str.parse::<toml::Value>()?.try_into()?;
 
         fs::remove_file(secrets_file).await?;
 

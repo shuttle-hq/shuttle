@@ -27,7 +27,7 @@ impl ResourceTracker {
 
     /// Get the output of a resource that has been constructed in the past if it exists
     pub fn get_cached_output(&self, r#type: Type, config: &Value) -> Option<Value> {
-        // Secrets are returning unit configs, which deserialised come as a serde_json::Value::Null`.
+        // Secrets are returning unit configs, which deserialised come as a `serde_json::Value::Null`.
         // We always return the cached output for them, even if they change from a previous deployment.
         // We have to always call `output()` on them to get the latest secrets, since we don't track a
         // config for them that can change if secrets changed.
@@ -62,7 +62,7 @@ macro_rules! log {
 
 /// Helper function to get a resource from a builder.
 ///
-/// This function is called by the codegen to create each type of needed resource.
+/// This function is called by the loader (see codegen) to create each type of needed resource.
 pub async fn get_resource<B, T, O>(
     builder: B,
     factory: &mut ProvisionerFactory,

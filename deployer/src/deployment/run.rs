@@ -17,7 +17,6 @@ use shuttle_common::{
     },
     resource,
 };
-
 use shuttle_proto::{
     resource_recorder::record_request,
     runtime::{
@@ -226,6 +225,7 @@ pub struct Built {
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
     pub claim: Claim,
+    pub secrets: HashMap<String, String>,
 }
 
 impl Built {
@@ -291,6 +291,7 @@ impl Built {
             resource_manager,
             runtime_client.clone(),
             self.claim,
+            self.secrets,
         )
         .await?;
 
@@ -314,6 +315,7 @@ async fn load(
     mut resource_manager: impl ResourceManager,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Claim,
+    secrets: HashMap<String, String>,
 ) -> Result<()> {
     info!("Loading resources");
 
@@ -344,7 +346,7 @@ async fn load(
             .unwrap_or_default(),
         service_name: service_name.clone(),
         resources,
-        ..Default::default()
+        secrets,
     });
 
     load_request.extensions_mut().insert(claim.clone());

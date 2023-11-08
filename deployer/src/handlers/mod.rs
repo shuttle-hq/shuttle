@@ -617,6 +617,7 @@ pub async fn start_deployment(
             tracing_context: Default::default(),
             is_next: deployment.is_next,
             claim,
+            secrets: Default::default(),
         };
         deployment_manager.run_push(built).await;
 

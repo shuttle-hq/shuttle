@@ -219,8 +219,8 @@ impl Queued {
         fs::create_dir_all(&project_path).await?;
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
+        info!("Building deployment");
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
-
         tokio::task::spawn(async move {
             while let Some(line) = rx.recv().await {
                 let log = LogItem::new(
@@ -231,10 +231,7 @@ impl Queued {
                 log_recorder.record(log);
             }
         });
-
         let project_path = project_path.canonicalize()?;
-
-        info!("Building deployment");
         // Currently returns the first found shuttle service in a given workspace.
         let built_service = build_deployment(&project_path, tx.clone()).await?;
 

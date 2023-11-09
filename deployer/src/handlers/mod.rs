@@ -6,7 +6,7 @@ use axum::extract::{
     ws::{self, WebSocket},
     FromRequest,
 };
-use axum::extract::{DefaultBodyLimit, Extension, Path, Query};
+use axum::extract::{DefaultBodyLimit, Extension, Query};
 use axum::handler::Handler;
 use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
@@ -17,27 +17,28 @@ use chrono::{SecondsFormat, Utc};
 use fqdn::FQDN;
 use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
+use shuttle_service::builder::clean_crate;
 use tracing::{error, field, info, info_span, instrument, trace, warn};
 use ulid::Ulid;
 use utoipa::{IntoParams, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
-use shuttle_common::backends::{
-    auth::{AdminSecretLayer, ScopedLayer},
-    headers::XShuttleAccountName,
+use shuttle_common::{
+    backends::{
+        auth::{AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
+        headers::XShuttleAccountName,
+        metrics::{Metrics, TraceLayer},
+    },
+    claims::{Claim, Scope},
+    models::{
+        deployment::{DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH},
+        error::axum::CustomErrorPath,
+        project::ProjectName,
+        secret,
+    },
+    request_span, LogItem,
 };
-use shuttle_common::backends::{
-    auth::{AuthPublicKey, JwtAuthenticationLayer},
-    metrics::{Metrics, TraceLayer},
-};
-use shuttle_common::claims::{Claim, Scope};
-use shuttle_common::models::deployment::{
-    DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH,
-};
-use shuttle_common::models::secret;
-use shuttle_common::project::ProjectName;
-use shuttle_common::{request_span, LogItem};
 use shuttle_proto::logger::LogsRequest;
 
 use crate::persistence::{Deployment, Persistence, SecretGetter, State};
@@ -269,7 +270,7 @@ pub async fn get_services(
 pub async fn get_service(
     Extension(persistence): Extension<Persistence>,
     Extension(proxy_fqdn): Extension<FQDN>,
-    Path((project_name, service_name)): Path<(String, String)>,
+    CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Summary>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let deployment = persistence
@@ -306,7 +307,7 @@ pub async fn get_service(
 pub async fn get_service_resources(
     Extension(mut persistence): Extension<Persistence>,
     Extension(claim): Extension<Claim>,
-    Path((project_name, service_name)): Path<(String, String)>,
+    CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
 ) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let resources = persistence
@@ -351,7 +352,11 @@ pub async fn get_service_resources(
 pub async fn delete_service_resource(
     Extension(mut persistence): Extension<Persistence>,
     Extension(claim): Extension<Claim>,
-    Path((project_name, service_name, resource_type)): Path<(String, String, String)>,
+    CustomErrorPath((project_name, service_name, resource_type)): CustomErrorPath<(
+        String,
+        String,
+        String,
+    )>,
 ) -> Result<Json<()>> {
     let service = persistence
         .get_service_by_name(&service_name)
@@ -404,7 +409,7 @@ pub async fn create_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
-    Path((project_name, service_name)): Path<(String, String)>,
+    CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
     Rmp(deployment_req): Rmp<DeploymentRequest>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     let id = Uuid::new_v4();
@@ -447,7 +452,7 @@ pub async fn create_service(
         git_dirty: deployment_req.git_dirty,
     };
 
-    persistence.insert_deployment(deployment.clone()).await?;
+    persistence.insert_deployment(&deployment).await?;
     let queued = Queued {
         id: deployment.id,
         service_name: service.name,
@@ -482,7 +487,7 @@ pub async fn stop_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(proxy_fqdn): Extension<FQDN>,
-    Path((project_name, service_name)): Path<(String, String)>,
+    CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Summary>> {
     let Some(service) = persistence.get_service_by_name(&service_name).await? else {
         return Err(Error::NotFound("service not found".to_string()));
@@ -518,7 +523,7 @@ pub async fn stop_service(
 )]
 pub async fn get_deployments(
     Extension(persistence): Extension<Persistence>,
-    Path(project_name): Path<String>,
+    CustomErrorPath(project_name): CustomErrorPath<String>,
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<Json<Vec<shuttle_common::models::deployment::Response>>> {
     if let Some(service) = persistence.get_service_by_name(&project_name).await? {
@@ -553,7 +558,7 @@ pub async fn get_deployments(
 )]
 pub async fn get_deployment(
     Extension(persistence): Extension<Persistence>,
-    Path((project_name, deployment_id)): Path<(String, Uuid)>,
+    CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         Ok(Json(deployment.into()))
@@ -579,7 +584,7 @@ pub async fn get_deployment(
 pub async fn delete_deployment(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(persistence): Extension<Persistence>,
-    Path((project_name, deployment_id)): Path<(String, Uuid)>,
+    CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         deployment_manager.kill(deployment.id).await;
@@ -609,7 +614,7 @@ pub async fn start_deployment(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     Extension(project_id): Extension<Ulid>,
-    Path((project_name, deployment_id)): Path<(String, Uuid)>,
+    CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
 ) -> Result<()> {
     if let Some(deployment) = persistence.get_runnable_deployment(&deployment_id).await? {
         let built = Built {
@@ -646,7 +651,7 @@ pub async fn start_deployment(
 pub async fn get_logs(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
-    Path((project_name, deployment_id)): Path<(String, Uuid)>,
+    CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
 ) -> Result<Json<Vec<LogItem>>> {
     let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),
@@ -684,7 +689,7 @@ pub async fn get_logs(
 pub async fn get_logs_subscribe(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
-    Path((project_name, deployment_id)): Path<(String, Uuid)>,
+    CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
     ws_upgrade
@@ -778,7 +783,7 @@ async fn logs_websocket_handler(
 )]
 pub async fn get_secrets(
     Extension(persistence): Extension<Persistence>,
-    Path((project_name, service_name)): Path<(String, String)>,
+    CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
 ) -> Result<Json<Vec<secret::Response>>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let keys = persistence
@@ -808,9 +813,9 @@ pub async fn get_secrets(
 )]
 pub async fn clean_project(
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Path(project_name): Path<String>,
+    CustomErrorPath(project_name): CustomErrorPath<String>,
 ) -> Result<Json<String>> {
-    shuttle_service::builder::clean_crate(
+    clean_crate(
         deployment_manager
             .builds_path()
             .join(project_name)

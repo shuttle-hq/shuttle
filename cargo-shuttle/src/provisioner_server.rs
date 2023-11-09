@@ -1,3 +1,5 @@
+use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
+
 use anyhow::Result;
 use async_trait::async_trait;
 use bollard::{
@@ -23,7 +25,6 @@ use shuttle_proto::provisioner::{
     DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
 };
 use shuttle_service::database::Type;
-use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
 use tokio::{task::JoinHandle, time::sleep};
 use tonic::{
     transport::{self, Server},
@@ -78,9 +79,9 @@ impl LocalProvisioner {
                 trace!("found DB container {container_name}");
                 container
             }
-            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
-                if status_code == 404 =>
-            {
+            Err(bollard::errors::Error::DockerResponseServerError {
+                status_code: 404, ..
+            }) => {
                 self.pull_image(&image).await.expect("failed to pull image");
                 trace!("will create DB container {container_name}");
                 let options = Some(CreateContainerOptions {

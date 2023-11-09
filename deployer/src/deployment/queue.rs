@@ -256,7 +256,7 @@ impl Queued {
         }
 
         info!("Moving built executable");
-        move_executable(
+        copy_executable(
             built_service.executable_path.as_path(),
             built_service
                 .workspace_path
@@ -449,13 +449,13 @@ async fn run_pre_deploy_tests(
 /// This will store the path to the executable for each runtime, which will be the users project with
 /// an embedded runtime for alpha, and a .wasm file for shuttle-next.
 #[instrument(skip(executable_path, to_directory, new_filename))]
-async fn move_executable(
+async fn copy_executable(
     executable_path: &Path,
     to_directory: &Path,
     new_filename: &Uuid,
 ) -> Result<()> {
     fs::create_dir_all(to_directory).await?;
-    fs::rename(executable_path, to_directory.join(new_filename.to_string())).await?;
+    fs::copy(executable_path, to_directory.join(new_filename.to_string())).await?;
 
     Ok(())
 }
@@ -599,12 +599,9 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
         fs::write(&executable_path, "barfoo").await.unwrap();
 
-        super::move_executable(executable_path.as_path(), executables_p, &id)
+        super::copy_executable(executable_path.as_path(), executables_p, &id)
             .await
             .unwrap();
-
-        // Old executable file gone?
-        assert!(!executable_path.exists());
 
         assert_eq!(
             fs::read_to_string(executables_p.join(id.to_string()))

@@ -178,7 +178,7 @@ async fn can_be_killed() {
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
         match (
-            StopReason::from_i32(response.reason).unwrap(),
+            StopReason::try_from(response.reason).unwrap(),
             response.message,
         ) {
             (StopReason::Request, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
@@ -221,7 +221,7 @@ async fn self_stop() {
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
         match (
-            StopReason::from_i32(response.reason).unwrap(),
+            StopReason::try_from(response.reason).unwrap(),
             response.message,
         ) {
             (StopReason::End, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
@@ -261,7 +261,7 @@ async fn panic_in_bind() {
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
         match (
-            StopReason::from_i32(response.reason).unwrap(),
+            StopReason::try_from(response.reason).unwrap(),
             response.message,
         ) {
             (StopReason::Crash, mes) if mes.contains("panic in bind") => {

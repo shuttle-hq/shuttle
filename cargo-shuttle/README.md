@@ -68,6 +68,14 @@ cargo install cargo-shuttle
 pacman -S cargo-shuttle
 ```
 
+#### Alpine Linux
+
+`cargo-shuttle` is available for [Alpine Edge](https://pkgs.alpinelinux.org/packages?name=cargo-shuttle&branch=edge). It can be installed via [apk](https://wiki.alpinelinux.org/wiki/Alpine_Package_Keeper) after enabling the [testing repository](https://wiki.alpinelinux.org/wiki/Repositories).
+
+```sh
+apk add cargo-shuttle
+```
+
 ---
 
 <!-- markdownlint-disable-next-line -->
@@ -135,8 +143,8 @@ This should generate the following dependency in `Cargo.toml`:
 
 ```toml
 rocket = "0.5.0-rc.2"
-shuttle-rocket = { version = "0.31.0" }
-shuttle-runtime = { version = "0.31.0" }
+shuttle-rocket = { version = "0.32.0" }
+shuttle-runtime = { version = "0.32.0" }
 tokio = { version = "1.26.0" }
 ```
 

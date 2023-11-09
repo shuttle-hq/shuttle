@@ -28,8 +28,8 @@
 //!
 //! ```toml
 //! axum = "0.6.20"
-//! shuttle-axum = "0.31.0"
-//! shuttle-runtime = "0.31.0"
+//! shuttle-axum = "0.32.0"
+//! shuttle-runtime = "0.32.0"
 //! tokio = "1.28.2"
 //! ```
 //!
@@ -112,8 +112,8 @@
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.31.0", features = ["postgres"] }
-//! sqlx = { version = "0.7.1", features = ["runtime-tokio-native-tls", "postgres"] }
+//! shuttle-shared-db = { version = "0.32.0", features = ["postgres"] }
+//! sqlx = "0.7.1"
 //! ```
 //!
 //! Now update the `#[shuttle_runtime::main]` function to take in a `PgPool`:

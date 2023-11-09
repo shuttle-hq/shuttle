@@ -26,7 +26,7 @@ body = """
 
 {% macro commit(commit) -%}
     - {% if commit.scope %}*({{ commit.scope }})* {% endif %}{% if commit.breaking %}[**breaking**] {% endif %}\
-        {{ commit.message | upper_first | trim }} - ([{{ commit.id | truncate(length=7, end="") }}](<REPO>/commit/{{ commit.id }}))\
+        {{ commit.message | split(pat="\n") | first | upper_first | trim }} - ([{{ commit.id | truncate(length=7, end="") }}](<REPO>/commit/{{ commit.id }}))\
 {% endmacro -%}
 
 {% for group, commits in commits | group_by(attribute="group") %}

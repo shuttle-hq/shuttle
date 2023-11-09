@@ -145,7 +145,7 @@ The simplest way to generate this file is:
 ./scripts/apply-patches
 ```
 
-The see the files [apply-patches.sh](./scripts/apply-patches.sh) and [patches.toml](./scripts/patches.toml) for how it works.
+See the files [apply-patches.sh](./scripts/apply-patches.sh) and [patches.toml](./scripts/patches.toml) for how it works.
 
 > Note: cargo and rust-analyzer will add `[[patch.unused]]` lines at the bottom of Cargo.lock when patches are applied.
 > These should not be included in commits/PRs.

@@ -225,3 +225,7 @@ down: $(DOCKER_COMPOSE_FILES)
 	$(addprefix -f ,$(DOCKER_COMPOSE_FILES)) \
 	-p $(STACK) \
 	down
+
+# make tag=v0.0.0 changelog
+changelog:
+	git cliff -o CHANGELOG.md -t $(tag)

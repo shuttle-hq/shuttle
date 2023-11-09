@@ -2,10 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
-## [unreleased]
+## [0.32.0](https://github.com/shuttle-hq/shuttle/compare/v0.31.0..v0.32.0) - 2023-11-09
 
 ### Features
 
+- *(installer)* Support installing the Alpine Linux package ([#1370](https://github.com/shuttle-hq/shuttle/issues/1370)) - ([d6e0c34](https://github.com/shuttle-hq/shuttle/commit/d6e0c345ea9f7822f9f80ff582adcb2af888a39f))
 - Suggest project restart when trying to delete ([#1366](https://github.com/shuttle-hq/shuttle/issues/1366)) - ([3f14217](https://github.com/shuttle-hq/shuttle/commit/3f1421790639e10c0269730769779a468d1bf9c9))
 - Use proto-gen for generating proto code ([#1364](https://github.com/shuttle-hq/shuttle/issues/1364)) - ([042c736](https://github.com/shuttle-hq/shuttle/commit/042c736af2f8782b00d0930160938008d89a9f6b))
 
@@ -15,12 +16,24 @@ All notable changes to this project will be documented in this file. See [conven
 
 ### Refactor
 
+- Make admin compile, scope project models to backends ([#1371](https://github.com/shuttle-hq/shuttle/issues/1371)) - ([0b35063](https://github.com/shuttle-hq/shuttle/commit/0b35063474e61e4e3fdce174b0106bd909f305ee))
 - Fix ProjectName validation, custom Path extractor for parsing it ([#1354](https://github.com/shuttle-hq/shuttle/issues/1354)) - ([dd6b8fe](https://github.com/shuttle-hq/shuttle/commit/dd6b8feabad9950d0ef88148b5e314d9f7aa11f3))
+
+### Documentation
+
+- *(changelog)* Create CHANGELOG.md ([#1372](https://github.com/shuttle-hq/shuttle/issues/1372)) - ([019336e](https://github.com/shuttle-hq/shuttle/commit/019336e77ff47431b7e2013381ef0f0a85aa15c1))
+- *(readme)* Add instructions for installing on Alpine Linux ([#1365](https://github.com/shuttle-hq/shuttle/issues/1365)) - ([a7b11a5](https://github.com/shuttle-hq/shuttle/commit/a7b11a54001c8c6c85d1e36cdf0fec1f08310b5b))
 
 ### Miscellaneous Tasks
 
+- Update examples after rebase - ([a4181ba](https://github.com/shuttle-hq/shuttle/commit/a4181bafcc3a4546587ac541fdbb36d50e6998d5))
+- V0.32.0 - ([b7f26dd](https://github.com/shuttle-hq/shuttle/commit/b7f26dd11cb3a21257a063f453f3b3603e8e9424))
 - Audit on main, build release stack sooner, release crates faster ([#1369](https://github.com/shuttle-hq/shuttle/issues/1369)) - ([326e30a](https://github.com/shuttle-hq/shuttle/commit/326e30ab826e51bf143e9419b8283ca60d7405d5))
 - Bump and refactor images, code cleanup ([#1313](https://github.com/shuttle-hq/shuttle/issues/1313)) - ([1c003cd](https://github.com/shuttle-hq/shuttle/commit/1c003cd2946c6fbc91f6923cb31d1a0e8e6087fd))
+
+### Miscellaneous
+
+- Merge branch 'main' into chore/v0.32.0 - ([e8513af](https://github.com/shuttle-hq/shuttle/commit/e8513af8562978c943581d2f692e9e637e38dc67))
 
 ## [0.31.0](https://github.com/shuttle-hq/shuttle/compare/v0.30.1..v0.31.0) - 2023-11-02
 

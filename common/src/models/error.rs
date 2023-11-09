@@ -5,8 +5,6 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 
-use super::project::InvalidProjectName;
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiError {
     pub message: String,
@@ -169,6 +167,20 @@ impl From<StatusCode> for ApiError {
         }
     }
 }
+
+// Note: The string "Invalid project name" is used by cargo-shuttle to determine what type of error was returned.
+// Changing it is breaking.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[error(
+    "Invalid project name. Project names must:
+    1. only contain lowercase alphanumeric characters or dashes `-`.
+    2. not start or end with a dash.
+    3. not be empty.
+    4. be shorter than 64 characters.
+    5. not contain any profanities.
+    6. not be a reserved word."
+)]
+pub struct InvalidProjectName;
 
 #[cfg(feature = "backend")]
 pub mod axum {

@@ -160,7 +160,7 @@ pub struct ProjectDetails {
     pub account_name: AccountName,
 }
 
-impl From<ProjectDetails> for shuttle_common::models::project::AdminResponse {
+impl From<ProjectDetails> for shuttle_common::models::admin::ProjectResponse {
     fn from(project: ProjectDetails) -> Self {
         Self {
             project_name: project.project_name.to_string(),

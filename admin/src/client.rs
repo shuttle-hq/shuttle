@@ -1,9 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
-use shuttle_common::models::{
-    project::{AdminResponse, ProjectName},
-    stats, ToJson,
-};
+use shuttle_common::models::{admin::ProjectResponse, stats, ToJson};
 use tracing::trace;
 
 pub struct Client {
@@ -36,7 +33,7 @@ impl Client {
     pub async fn acme_request_certificate(
         &self,
         fqdn: &str,
-        project_name: &ProjectName,
+        project_name: &str,
         credentials: &serde_json::Value,
     ) -> Result<String> {
         let path = format!("/admin/acme/request/{project_name}/{fqdn}");
@@ -46,7 +43,7 @@ impl Client {
     pub async fn acme_renew_custom_domain_certificate(
         &self,
         fqdn: &str,
-        project_name: &ProjectName,
+        project_name: &str,
         credentials: &serde_json::Value,
     ) -> Result<String> {
         let path = format!("/admin/acme/renew/{project_name}/{fqdn}");
@@ -61,7 +58,7 @@ impl Client {
         self.post(&path, Some(credentials)).await
     }
 
-    pub async fn get_projects(&self) -> Result<Vec<AdminResponse>> {
+    pub async fn get_projects(&self) -> Result<Vec<ProjectResponse>> {
         self.get("/admin/projects").await
     }
 

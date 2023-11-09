@@ -17,9 +17,10 @@ use strum::EnumString;
 
 #[cfg(feature = "openapi")]
 use crate::ulid_type;
-
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
+
+use super::error::InvalidProjectName;
 
 /// Timeframe before a project is considered idle
 pub const DEFAULT_IDLE_MINUTES: u64 = 30;
@@ -188,14 +189,6 @@ pub struct Config {
     pub idle_minutes: u64,
 }
 
-#[derive(Deserialize, Serialize)]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::AdminResponse))]
-pub struct AdminResponse {
-    pub project_name: String,
-    pub account_name: String,
-}
-
 pub fn get_projects_table(
     projects: &Vec<Response>,
     page: u32,
@@ -316,20 +309,6 @@ impl ProjectName {
             && is_profanity_free(name)
     }
 }
-
-// Note: The string "Invalid project name" is used by cargo-shuttle to determine what type of error was returned.
-// Changing it is breaking.
-#[derive(Debug, Clone, PartialEq, thiserror::Error)]
-#[error(
-    "Invalid project name. Project names must:
-    1. only contain lowercase alphanumeric characters or dashes `-`.
-    2. not start or end with a dash.
-    3. not be empty.
-    4. be shorter than 64 characters.
-    5. not contain any profanities.
-    6. not be a reserved word."
-)]
-pub struct InvalidProjectName;
 
 impl std::ops::Deref for ProjectName {
     type Target = String;

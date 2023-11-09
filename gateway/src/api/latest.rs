@@ -25,6 +25,7 @@ use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA
 use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{
+    admin::ProjectResponse,
     project::{self, ProjectName},
     stats,
 };
@@ -844,7 +845,7 @@ async fn renew_gateway_acme_certificate(
 )]
 async fn get_projects(
     State(RouterState { service, .. }): State<RouterState>,
-) -> Result<AxumJson<Vec<project::AdminResponse>>, Error> {
+) -> Result<AxumJson<Vec<ProjectResponse>>, Error> {
     let projects = service
         .iter_projects_detailed()
         .await?
@@ -891,7 +892,7 @@ impl Modify for SecurityAddon {
     components(schemas(
         shuttle_common::models::project::Response,
         shuttle_common::models::stats::LoadResponse,
-        shuttle_common::models::project::AdminResponse,
+        shuttle_common::models::admin::ProjectResponse,
         shuttle_common::models::stats::LoadResponse,
         shuttle_common::models::project::State
     ))

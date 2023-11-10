@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use shuttle_common::models::project::ProjectName;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 use crate::task::{BoxedTask, TaskResult};
-use crate::{Error, ProjectName};
+use crate::Error;
 
 pub const WORKER_QUEUE_SIZE: usize = 2048;
 

@@ -5,7 +5,7 @@ use axum::extract::{Extension, FromRequestParts, Path};
 use axum::http::request::Parts;
 use axum::RequestPartsExt;
 use hyper::StatusCode;
-use shuttle_common::project::ProjectName;
+use shuttle_common::models::project::ProjectName;
 use tracing::error;
 
 /// Gaurd to ensure request are for the project served by this deployer

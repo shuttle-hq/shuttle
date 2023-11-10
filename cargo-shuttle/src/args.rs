@@ -12,7 +12,7 @@ use clap::{
     Parser, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::{models::project::DEFAULT_IDLE_MINUTES, project::ProjectName, resource};
+use shuttle_common::{models::project::DEFAULT_IDLE_MINUTES, resource};
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -44,7 +44,7 @@ pub struct ProjectArgs {
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
     #[arg(global = true, long)]
-    pub name: Option<ProjectName>,
+    pub name: Option<String>,
 }
 
 impl ProjectArgs {
@@ -60,7 +60,7 @@ impl ProjectArgs {
         Ok(path)
     }
 
-    pub fn project_name(&self) -> anyhow::Result<ProjectName> {
+    pub fn project_name(&self) -> anyhow::Result<String> {
         let workspace_path = self.workspace_path()?;
 
         // NOTE: If crates cache is missing this blocks for several seconds during download
@@ -69,15 +69,14 @@ impl ProjectArgs {
             .exec()
             .context("failed to get cargo metadata")?;
         let package_name = if let Some(root_package) = meta.root_package() {
-            root_package.name.clone().parse()?
+            root_package.name.clone()
         } else {
             workspace_path
                 .file_name()
                 .context("failed to get project name from workspace path")?
                 .to_os_string()
                 .into_string()
-                .expect("workspace file name should be valid unicode")
-                .parse()?
+                .expect("workspace directory name should be valid unicode")
         };
 
         Ok(package_name)
@@ -220,7 +219,7 @@ pub enum ProjectCommand {
         /// Output table in `raw` format
         raw: bool,
     },
-    /// Delete project. This also deletes associated Secrets and Persist data.
+    /// Delete a project and all linked data
     Delete,
 }
 

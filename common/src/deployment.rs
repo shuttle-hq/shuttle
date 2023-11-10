@@ -5,8 +5,6 @@ use strum::{Display, EnumString};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-use crate::project::ProjectName;
-
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -28,7 +26,7 @@ pub enum State {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploymentMetadata {
     pub env: Environment,
-    pub project_name: ProjectName,
+    pub project_name: String,
     /// Typically your crate name
     pub service_name: String,
     /// Path to a folder that persists between deployments

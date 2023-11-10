@@ -5,6 +5,7 @@
 // retrying common commands or reach out on our Discord server in case failures persist.
 
 use crossterm::style::Stylize;
+use shuttle_common::constants::SHUTTLE_STATUS_URL;
 
 // --------------------------
 // API key related
@@ -14,6 +15,6 @@ pub fn reset_api_key_failed(err: anyhow::Error) -> anyhow::Error {
     println!();
     println!("{}", "Logging out failed".red());
     println!();
-    println!("If trying to log out and reset the API key at the same time fails repeatedly, please check Shuttle status at https://status.shuttle.rs or open a help thread on the Discord server.");
+    println!("If trying to log out and reset the API key at the same time fails repeatedly, please check Shuttle status at {SHUTTLE_STATUS_URL} or open a help thread on the Discord server.");
     err
 }

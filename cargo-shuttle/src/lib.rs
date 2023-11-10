@@ -16,18 +16,21 @@ use std::str::FromStr;
 
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
-    constants::{API_URL_DEFAULT, EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
+    constants::{
+        API_URL_DEFAULT, EXECUTABLE_DIRNAME, SHUTTLE_CLI_DOCS_URL, SHUTTLE_GH_ISSUE_URL,
+        SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
+    },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
         deployment::{
             get_deployments_table, DeploymentRequest, CREATE_SERVICE_BODY_LIMIT,
             GIT_STRINGS_MAX_LENGTH,
         },
+        error::ApiError,
         project::{self, DEFAULT_IDLE_MINUTES},
-        resource::get_resources_table,
+        resource::get_resource_tables,
         secret,
     },
-    project::ProjectName,
     resource, semvers_are_compatible, ApiKey, LogItem, VersionInfo,
 };
 use shuttle_proto::runtime::{
@@ -74,10 +77,6 @@ use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
-const SHUTTLE_LOGIN_URL: &str = "https://console.shuttle.rs/new-project";
-const SHUTTLE_GH_ISSUE_URL: &str = "https://github.com/shuttle-hq/shuttle/issues/new/choose";
-const SHUTTLE_CLI_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/shuttle-commands";
-const SHUTTLE_IDLE_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started/idle-projects";
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -337,16 +336,15 @@ impl Shuttle {
 
         // 2. Ask for project name
         if project_args.name.is_none() {
-            printdoc!(
-                "
+            printdoc! {"
                 What do you want to name your project?
                 It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
                 "
-            );
+            };
             let client = self.client.as_ref().unwrap();
             loop {
                 // not using validate_with due to being blocking
-                let p: ProjectName = Input::with_theme(&theme)
+                let p: String = Input::with_theme(&theme)
                     .with_prompt("Project name")
                     .interact()?;
                 match client.check_project_name(&p).await {
@@ -358,7 +356,18 @@ impl Shuttle {
                         project_args.name = Some(p);
                         break;
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        // If API error contains message regarding format of error name, print that error and prompt again
+                        if let Ok(api_error) = e.downcast::<ApiError>() {
+                            // If the returned error string changes, this could break
+                            if api_error.message.contains("Invalid project name") {
+                                println!("{}", api_error.message.yellow());
+                                println!("{}", "Try a different name.".yellow());
+                                continue;
+                            }
+                        }
+                        // Else, the API error was about something else.
+                        // Ignore and keep going to not prevent the flow of the init command.
                         project_args.name = Some(p);
                         println!(
                             "{}",
@@ -759,7 +768,7 @@ impl Shuttle {
         } else {
             false
         };
-        let table = get_deployments_table(&deployments, proj_name.as_str(), page, raw, page_hint);
+        let table = get_deployments_table(&deployments, proj_name, page, raw, page_hint);
 
         println!("{table}");
         println!("Run `cargo shuttle logs <id>` to get logs for a given deployment.");
@@ -785,12 +794,7 @@ impl Shuttle {
             .get_service_resources(self.ctx.project_name())
             .await
             .map_err(suggestions::resources::get_service_resources_failure)?;
-        let table = get_resources_table(
-            &resources,
-            self.ctx.project_name().as_str(),
-            raw,
-            show_secrets,
-        );
+        let table = get_resource_tables(&resources, self.ctx.project_name(), raw, show_secrets);
 
         println!("{table}");
 
@@ -924,18 +928,24 @@ impl Shuttle {
                     if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
                         // The runtime is newer than cargo-shuttle so we
                         // should help the user to update cargo-shuttle.
-                        println!(
-                            "[HINT]: You should update cargo-shuttle. \
-                            Check out the installation docs for how to update: \
-                            https://docs.shuttle.rs/getting-started/installation"
-                        );
+                        printdoc! {"
+                            Hint: A newer version of cargo-shuttle is available.
+                                  Check out the installation docs for how to update: {SHUTTLE_INSTALL_DOCS_URL}",
+                        };
                     } else {
-                        println!(
-                            "[HINT]: A newer version of shuttle-runtime is available. \
-                            Change its version to {} in this project's Cargo.toml to update it.",
+                        printdoc! {"
+                            Hint: A newer version of shuttle-runtime is available.
+                                  Change its version to {} in Cargo.toml to update it.",
                             mismatch.cargo_shuttle
-                        );
+                        };
                     }
+                } else {
+                    return Err(err.context(
+                        format!(
+                            "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct binary?",
+                            service.executable_path.display()
+                        )
+                    ));
                 }
             }
             service.executable_path.clone()
@@ -1015,7 +1025,7 @@ impl Shuttle {
 
         println!(
             "{}",
-            get_resources_table(&resources, service_name.as_str(), false, false)
+            get_resource_tables(&resources, service_name.as_str(), false, false)
         );
 
         let addr = SocketAddr::new(
@@ -1475,7 +1485,7 @@ impl Shuttle {
             if let Some(Ok(msg)) = message {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
                     let log_item: shuttle_common::LogItem =
-                        serde_json::from_str(&line).expect("to parse log line");
+                        serde_json::from_str(&line).context("parsing log line")?;
 
                     println!("{log_item}");
 
@@ -1631,8 +1641,7 @@ impl Shuttle {
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await?;
-        let resources =
-            get_resources_table(&resources, self.ctx.project_name().as_str(), false, false);
+        let resources = get_resource_tables(&resources, self.ctx.project_name(), false, false);
 
         println!("{resources}{service}");
 
@@ -1829,7 +1838,27 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
 
         // If a check fails, print the returned error
-        client.delete_project(self.ctx.project_name(), true).await?;
+        client.delete_project(self.ctx.project_name(), true).await.map_err(|err| {
+            if let Some(api_error) = err.downcast_ref::<ApiError>() {
+                // If the returned error string changes, this could break
+                if api_error.message.contains("not ready") {
+                    println!("{}", "Project delete failed".red());
+                    println!();
+                    println!("{}", "Try restarting the project with `cargo shuttle project restart` first.".yellow());
+                    println!("{}", "This is needed to check for any resources linked to it.".yellow());
+                    println!("{}", "For more help with deleting projects, visit https://docs.shuttle.rs/support/delete-project".yellow());
+                    println!();
+                    return err;
+                }
+            }
+            println!("{}", "For more help with deleting projects, visit https://docs.shuttle.rs/support/delete-project".yellow());
+            suggestions::project::project_request_failure(
+                err,
+                "Project delete failed",
+                true,
+                "deleting the project or getting project status fails repeatedly",
+            )
+        })?;
 
         println!(
             "{}",
@@ -2000,6 +2029,11 @@ fn is_dirty(repo: &Repository) -> Result<()> {
 }
 
 fn check_version(runtime_path: &Path) -> Result<()> {
+    debug!(
+        "Checking version of runtime binary at {}",
+        runtime_path.display()
+    );
+
     // should always be a valid semver
     let my_version = semver::Version::from_str(VERSION).unwrap();
 
@@ -2011,16 +2045,16 @@ fn check_version(runtime_path: &Path) -> Result<()> {
     let runtime_version = std::process::Command::new(runtime_path)
         .arg("--version")
         .output()
-        .context("failed to check the shuttle-runtime version")?
+        .context("failed to run the shuttle-runtime binary to check its version")?
         .stdout;
 
     // Parse the version, splitting the version from the name and
     // and pass it to `to_semver()`.
     let runtime_version = semver::Version::from_str(
         std::str::from_utf8(&runtime_version)
-            .expect("shuttle-runtime version should be valid utf8")
+            .context("shuttle-runtime version should be valid utf8")?
             .split_once(' ')
-            .expect("shuttle-runtime version should be in the `name version` format")
+            .context("shuttle-runtime version should be in the `name version` format")?
             .1
             .trim(),
     )
@@ -2114,14 +2148,12 @@ pub enum CommandOutcome {
 #[cfg(test)]
 mod tests {
     use flate2::read::GzDecoder;
-    use shuttle_common::project::ProjectName;
     use tar::Archive;
 
     use crate::args::ProjectArgs;
     use crate::Shuttle;
     use std::fs::{self, canonicalize};
     use std::path::PathBuf;
-    use std::str::FromStr;
 
     pub fn path_from_workspace_root(path: &str) -> PathBuf {
         let path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -2176,7 +2208,7 @@ mod tests {
 
         let project_args = ProjectArgs {
             working_directory,
-            name: Some(ProjectName::from_str("archiving-test").unwrap()),
+            name: Some("archiving-test".to_owned()),
         };
         let mut entries = get_archive_entries(project_args);
         entries.sort();

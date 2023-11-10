@@ -1,21 +1,19 @@
 [package]
 name = "shuttle-resource-recorder"
-version = "0.31.0"
+version = "0.32.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [dependencies]
+shuttle-common = { workspace = true, features = ["backend", "tonic"] }
+shuttle-proto = { workspace = true }
+
 async-trait = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 prost-types = { workspace = true }
-sqlx = { workspace = true, features = [
-    "chrono",
-    "migrate",
-    "runtime-tokio-rustls",
-    "sqlite",
-] }
+sqlx = { workspace = true, features = ["chrono", "migrate", "sqlite"] }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
@@ -23,13 +21,6 @@ tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default"] }
 ulid = { workspace = true }
-
-[dependencies.shuttle-common]
-workspace = true
-features = ["backend", "tonic"]
-
-[dependencies.shuttle-proto]
-workspace = true
 
 [dev-dependencies]
 portpicker = { workspace = true }

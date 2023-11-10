@@ -21,7 +21,7 @@ impl Display for ApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}\nmessage: {}",
+            "{}\nMessage: {}",
             self.status().to_string().bold(),
             self.message.to_string().with(Color::Red)
         )
@@ -30,7 +30,7 @@ impl Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
-#[derive(Debug, Clone, PartialEq, Eq, strum::Display)]
+#[derive(Debug, Clone, PartialEq, strum::Display)]
 pub enum ErrorKind {
     KeyMissing,
     BadHost,
@@ -40,7 +40,7 @@ pub enum ErrorKind {
     UserNotFound,
     UserAlreadyExists,
     ProjectNotFound,
-    InvalidProjectName,
+    InvalidProjectName(InvalidProjectName),
     ProjectAlreadyExists,
     /// Contains a message describing a running state of the project.
     /// Used if the project already exists but is owned
@@ -80,6 +80,7 @@ impl From<ErrorKind> for ApiError {
             ),
             ErrorKind::ProjectNotReady => (
                 StatusCode::SERVICE_UNAVAILABLE,
+                // "not ready" is matched against in cargo-shuttle for giving further instructions on project deletion
                 "project not ready. Try running `cargo shuttle project restart`.",
             ),
             ErrorKind::ProjectUnavailable => {
@@ -99,18 +100,12 @@ impl From<ErrorKind> for ApiError {
                     status_code: StatusCode::FORBIDDEN.as_u16(),
                 }
             }
-            ErrorKind::InvalidProjectName => (
-                StatusCode::BAD_REQUEST,
-                r#"
-            Invalid project name. Project name must:
-            1. start and end with alphanumeric characters.
-            2. only contain lowercase characters.
-            3. only contain characters inside of the alphanumeric range, except for `-`.
-            4. not be empty.
-            5. be shorter than 63 characters.
-            6. not contain profanity.
-            7. not be a reserved word."#,
-            ),
+            ErrorKind::InvalidProjectName(err) => {
+                return Self {
+                    message: err.to_string(),
+                    status_code: StatusCode::BAD_REQUEST.as_u16(),
+                }
+            }
             ErrorKind::InvalidOperation => (StatusCode::BAD_REQUEST, "the requested operation is invalid"),
             ErrorKind::ProjectAlreadyExists => (StatusCode::BAD_REQUEST, "a project with the same name already exists"),
             ErrorKind::OwnProjectAlreadyExists(message) => {
@@ -134,6 +129,7 @@ impl From<ErrorKind> for ApiError {
     }
 }
 
+// Used as a fallback when an API response did not contain a serialized ApiError
 impl From<StatusCode> for ApiError {
     fn from(code: StatusCode) -> Self {
         let message = match code {
@@ -168,6 +164,156 @@ impl From<StatusCode> for ApiError {
         Self {
             message: message.to_string(),
             status_code: code.as_u16(),
+        }
+    }
+}
+
+// Note: The string "Invalid project name" is used by cargo-shuttle to determine what type of error was returned.
+// Changing it is breaking.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[error(
+    "Invalid project name. Project names must:
+    1. only contain lowercase alphanumeric characters or dashes `-`.
+    2. not start or end with a dash.
+    3. not be empty.
+    4. be shorter than 64 characters.
+    5. not contain any profanities.
+    6. not be a reserved word."
+)]
+pub struct InvalidProjectName;
+
+#[cfg(feature = "backend")]
+pub mod axum {
+    use async_trait::async_trait;
+    use axum::extract::path::ErrorKind;
+    use axum::{
+        extract::{rejection::PathRejection, FromRequestParts},
+        http::request::Parts,
+        response::{IntoResponse, Json, Response},
+    };
+    use http::StatusCode;
+    use serde::de::DeserializeOwned;
+
+    use super::ApiError;
+
+    impl IntoResponse for ApiError {
+        fn into_response(self) -> Response {
+            (self.status(), Json(self)).into_response()
+        }
+    }
+
+    /// Custom `Path` extractor that customizes the error from `axum::extract::Path`.
+    ///
+    /// Prints the custom error message if deserialization resulted in a custom de::Error,
+    /// which is what the [`shuttle_common::project::ProjectName`] parser uses.
+    pub struct CustomErrorPath<T>(pub T);
+
+    impl<T> core::ops::Deref for CustomErrorPath<T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl<T> core::ops::DerefMut for CustomErrorPath<T> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
+
+    #[async_trait]
+    impl<S, T> FromRequestParts<S> for CustomErrorPath<T>
+    where
+        T: DeserializeOwned + Send,
+        S: Send + Sync,
+    {
+        type Rejection = ApiError;
+
+        async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+            match axum::extract::Path::<T>::from_request_parts(parts, state).await {
+                Ok(value) => Ok(Self(value.0)),
+                Err(rejection) => {
+                    if let PathRejection::FailedToDeserializePathParams(inner) = &rejection {
+                        if let ErrorKind::Message(message) = inner.kind() {
+                            return Err(ApiError {
+                                message: message.clone(),
+                                status_code: StatusCode::BAD_REQUEST.as_u16(),
+                            });
+                        }
+                    }
+
+                    Err(ApiError {
+                        message: rejection.body_text(),
+                        status_code: rejection.status().as_u16(),
+                    })
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::models::project::ProjectName;
+
+        use super::*;
+        use axum::http::StatusCode;
+        use axum::{body::Body, routing::get, Router};
+        use http::Request;
+        use tower::Service;
+
+        #[tokio::test]
+        async fn project_name_paths() {
+            let mut app = Router::new()
+                .route(
+                    "/:project_name",
+                    get(
+                        |CustomErrorPath(project_name): CustomErrorPath<ProjectName>| async move {
+                            project_name.to_string()
+                        },
+                    ),
+                )
+                .route(
+                    "/:project_name/:num",
+                    get(
+                        |CustomErrorPath((project_name, num)): CustomErrorPath<(
+                            ProjectName,
+                            u8,
+                        )>| async move { format!("{project_name} {num}") },
+                    ),
+                );
+
+            let response = app
+                .call(Request::get("/test123").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            assert_eq!(&body[..], b"test123");
+
+            let response = app
+                .call(Request::get("/__test123").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            assert!(&body[..].starts_with(br#"{"message":"Invalid project name"#));
+
+            let response = app
+                .call(Request::get("/test123/123").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            assert_eq!(&body[..], b"test123 123");
+
+            let response = app
+                .call(Request::get("/test123/asdf").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            assert!(&body[..].starts_with(br#"{"message":"Invalid URL"#));
         }
     }
 }

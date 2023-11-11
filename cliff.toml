@@ -8,11 +8,15 @@
 [changelog]
 # changelog header
 header = """
-# Changelog\n
-This is an auto-generated changelog based on commits on the main branch, made with [git-cliff](https://github.com/orhun/git-cliff).\n
-See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.\n
-\n
-For more details about each release such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).\n
+# Changelog
+
+<!-- Install git-cliff and use `make tag=TAG changelog` to update this file -->
+
+This is an auto-generated changelog based on commits on the main branch, made with [git-cliff](https://github.com/orhun/git-cliff).
+See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
+
+**For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
+
 """
 # template for the changelog body
 # https://tera.netlify.app/docs/

@@ -107,7 +107,7 @@ Commands:
   help        Print this message or the help of the given subcommand(s)
 
 Options:
-      --working-directory <WORKING_DIRECTORY>  Specify the working directory [default: .]
+      --working-directory <WORKING_DIRECTORY>  Specify the working directory [default: .] [aliases: wd]
       --name <NAME>                            Specify the name of the project (overrides crate name)
       --api-url <API_URL>                      Run this command against the API at the supplied URL (allows targeting a custom deployed instance for this command only, mainly
                                                for development) [env: SHUTTLE_API=]

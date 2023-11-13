@@ -208,7 +208,14 @@ async fn create_project(
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
     // Check that the user is within their project limits.
-    let can_create_project = claim.can_create_project(service.get_project_count(&name).await?);
+    let temporary_increase = project_name.starts_with("cch23-") as u32;
+    let can_create_project = claim.can_create_project(
+        service
+            .get_project_count(&name)
+            .await?
+            .checked_sub(temporary_increase)
+            .unwrap_or(0),
+    );
 
     let project = service
         .create_project(

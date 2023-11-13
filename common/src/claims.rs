@@ -273,12 +273,7 @@ impl ClaimExt for Claim {
 
 impl Claim {
     /// Create a new claim for a user with the given scopes and limits.
-    pub fn new(
-        sub: String,
-        scopes: Vec<Scope>,
-        limits: Option<Limits>,
-        tier: Option<AccountTier>,
-    ) -> Self {
+    pub fn new(sub: String, scopes: Vec<Scope>, tier: AccountTier) -> Self {
         let iat = Utc::now();
         let exp = iat.add(Duration::minutes(EXP_MINUTES));
 
@@ -290,8 +285,8 @@ impl Claim {
             sub,
             scopes,
             token: None,
-            limits: limits.unwrap_or_default(),
-            tier: tier.unwrap_or_default(),
+            limits: tier.into(),
+            tier,
         }
     }
 

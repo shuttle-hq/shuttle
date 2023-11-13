@@ -675,7 +675,7 @@ pub mod tests {
                         let state = state.lock().unwrap();
 
                         if let Some(scopes) = state.users.get(bearer.token()) {
-                            let claim = Claim::new(bearer.token().to_string(), scopes.clone(), None, None);
+                            let claim = Claim::new(bearer.token().to_string(), scopes.clone(), Default::default());
                             let token = claim.into_token(&state.encoding_key)?;
                             Ok(serde_json::to_vec(&ConvertResponse { token }).unwrap())
                         } else {

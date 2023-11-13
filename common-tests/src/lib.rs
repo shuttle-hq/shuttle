@@ -57,8 +57,7 @@ where
         req.extensions_mut().insert(Claim::new(
             "test".to_string(),
             self.scopes.clone(),
-            None,
-            None,
+            Default::default(),
         ));
         self.inner.call(req)
     }

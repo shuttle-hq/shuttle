@@ -20,7 +20,7 @@ use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::constants::limits::MAX_PROJECTS_DEFAULT;
+use crate::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
 
 /// Minutes before a claim expires
 ///
@@ -169,6 +169,55 @@ impl Default for ScopeBuilder {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "backend", derive(strum::Display))]
+#[cfg_attr(feature = "backend", derive(sqlx::Type))]
+#[cfg_attr(feature = "backend", sqlx(rename_all = "lowercase"))]
+#[cfg_attr(feature = "backend", strum(serialize_all = "lowercase"))]
+pub enum AccountTier {
+    #[default]
+    Basic,
+    // A basic user that is pending a payment on the backend.
+    PendingPaymentPro,
+    Pro,
+    Team,
+    Admin,
+    Deployer,
+}
+
+impl From<AccountTier> for Limits {
+    fn from(value: AccountTier) -> Self {
+        match value {
+            AccountTier::Basic | AccountTier::PendingPaymentPro | AccountTier::Deployer => {
+                Self::default()
+            }
+            AccountTier::Pro | AccountTier::Team => Self::new(MAX_PROJECTS_EXTRA),
+            AccountTier::Admin => Self::new(100),
+        }
+    }
+}
+
+impl From<AccountTier> for Vec<Scope> {
+    fn from(tier: AccountTier) -> Self {
+        let mut builder = ScopeBuilder::new();
+
+        if tier == AccountTier::Deployer {
+            builder = builder.with_deploy_rights();
+        } else {
+            builder = builder.with_basic();
+
+            if tier == AccountTier::Admin {
+                builder = builder.with_admin();
+            } else if tier == AccountTier::Pro {
+                builder = builder.with_pro();
+            }
+        }
+
+        builder.build()
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).
@@ -187,6 +236,8 @@ pub struct Claim {
     pub(crate) token: Option<String>,
     /// A struct that holds the account limits.
     pub limits: Limits,
+    /// The account tier of the subject.
+    pub tier: AccountTier,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -222,7 +273,12 @@ impl ClaimExt for Claim {
 
 impl Claim {
     /// Create a new claim for a user with the given scopes and limits.
-    pub fn new(sub: String, scopes: Vec<Scope>, limits: Option<Limits>) -> Self {
+    pub fn new(
+        sub: String,
+        scopes: Vec<Scope>,
+        limits: Option<Limits>,
+        tier: Option<AccountTier>,
+    ) -> Self {
         let iat = Utc::now();
         let exp = iat.add(Duration::minutes(EXP_MINUTES));
 
@@ -235,6 +291,7 @@ impl Claim {
             scopes,
             token: None,
             limits: limits.unwrap_or_default(),
+            tier: tier.unwrap_or_default(),
         }
     }
 

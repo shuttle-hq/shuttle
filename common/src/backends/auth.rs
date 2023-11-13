@@ -478,6 +478,7 @@ mod tests {
             "ferries".to_string(),
             vec![Scope::Deployment, Scope::Project],
             None,
+            None,
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -500,6 +501,7 @@ mod tests {
         let claim = Claim::new(
             "ferries".to_string(),
             vec![Scope::Deployment, Scope::Project],
+            None,
             None,
         );
 
@@ -600,6 +602,7 @@ mod tests {
             "hacker-hs256".to_string(),
             vec![Scope::Deployment, Scope::Project],
             None,
+            None,
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -641,6 +644,7 @@ mod tests {
             "hacker-no-alg".to_string(),
             vec![Scope::Deployment, Scope::Project],
             None,
+            None,
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -674,6 +678,7 @@ mod tests {
             "hacker-no-sig".to_string(),
             vec![Scope::Deployment, Scope::Project],
             None,
+            None,
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -697,6 +702,7 @@ mod tests {
         let claim = Claim::new(
             "hacker-iss".to_string(),
             vec![Scope::Deployment, Scope::Project],
+            None,
             None,
         );
 

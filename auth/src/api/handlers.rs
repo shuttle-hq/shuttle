@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    user::{AccountName, AccountTier, Admin, Key, User},
+    user::{AccountName, Admin, Key, User},
 };
 use axum::{
     extract::{Path, State},
@@ -9,7 +9,10 @@ use axum::{
 use axum_sessions::extractors::{ReadableSession, WritableSession};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
-use shuttle_common::{claims::Claim, models::user};
+use shuttle_common::{
+    claims::{AccountTier, Claim},
+    models::user,
+};
 use stripe::CheckoutSession;
 use tracing::instrument;
 
@@ -102,7 +105,12 @@ pub(crate) async fn convert_cookie(
         .get::<AccountTier>("account_tier")
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let claim = Claim::new(account_name, account_tier.into(), Some(account_tier.into()));
+    let claim = Claim::new(
+        account_name,
+        account_tier.into(),
+        Some(account_tier.into()),
+        Some(account_tier),
+    );
 
     let token = claim.into_token(key_manager.private_key())?;
 
@@ -130,6 +138,7 @@ pub(crate) async fn convert_key(
         name.to_string(),
         account_tier.into(),
         Some(account_tier.into()),
+        Some(account_tier),
     );
 
     let token = claim.into_token(key_manager.private_key())?;

@@ -8,12 +8,7 @@ use axum::{
     TypedHeader,
 };
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::{
-    claims::{Limits, Scope, ScopeBuilder},
-    constants::limits::MAX_PROJECTS_EXTRA,
-    secrets::Secret,
-    ApiKey,
-};
+use shuttle_common::{claims::AccountTier, secrets::Secret, ApiKey};
 use sqlx::{query, sqlite::SqliteRow, FromRow, Row, SqlitePool};
 use tracing::{debug, error, trace, Span};
 
@@ -319,54 +314,6 @@ where
         trace!("got bearer key");
 
         Ok(Key(key))
-    }
-}
-
-#[derive(Clone, Copy, Deserialize, PartialEq, Eq, Serialize, Debug, sqlx::Type, strum::Display)]
-#[sqlx(rename_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
-#[derive(Default)]
-pub enum AccountTier {
-    #[default]
-    Basic,
-    // A basic user that is pending a payment on the backend.
-    PendingPaymentPro,
-    Pro,
-    Team,
-    Admin,
-    Deployer,
-}
-
-impl From<AccountTier> for Vec<Scope> {
-    fn from(tier: AccountTier) -> Self {
-        let mut builder = ScopeBuilder::new();
-
-        if tier == AccountTier::Deployer {
-            builder = builder.with_deploy_rights();
-        } else {
-            builder = builder.with_basic();
-
-            if tier == AccountTier::Admin {
-                builder = builder.with_admin();
-            } else if tier == AccountTier::Pro {
-                builder = builder.with_pro();
-            }
-        }
-
-        builder.build()
-    }
-}
-
-impl From<AccountTier> for Limits {
-    fn from(value: AccountTier) -> Self {
-        match value {
-            AccountTier::Basic | AccountTier::PendingPaymentPro | AccountTier::Deployer => {
-                Self::default()
-            }
-            AccountTier::Pro | AccountTier::Team => Self::new(MAX_PROJECTS_EXTRA),
-            AccountTier::Admin => Self::new(100),
-        }
     }
 }
 

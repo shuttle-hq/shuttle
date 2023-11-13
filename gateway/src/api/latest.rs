@@ -186,7 +186,7 @@ async fn get_projects_list(
     Ok(AxumJson(projects))
 }
 
-#[instrument(skip_all, fields(%project_name, %claim.tier))]
+#[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(
     post,
     path = "/projects/{project_name}",

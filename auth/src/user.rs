@@ -9,7 +9,8 @@ use axum::{
 };
 use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::{
-    claims::{Scope, ScopeBuilder},
+    claims::{Limits, Scope, ScopeBuilder},
+    constants::limits::MAX_PROJECTS_EXTRA,
     secrets::Secret,
     ApiKey,
 };
@@ -354,6 +355,18 @@ impl From<AccountTier> for Vec<Scope> {
         }
 
         builder.build()
+    }
+}
+
+impl From<AccountTier> for Limits {
+    fn from(value: AccountTier) -> Self {
+        match value {
+            AccountTier::Basic | AccountTier::PendingPaymentPro | AccountTier::Deployer => {
+                Self::default()
+            }
+            AccountTier::Pro | AccountTier::Team => Self::new(MAX_PROJECTS_EXTRA),
+            AccountTier::Admin => Self::new(100),
+        }
     }
 }
 

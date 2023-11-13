@@ -55,7 +55,7 @@ where
 
     fn call(&mut self, mut req: hyper::Request<hyper::Body>) -> Self::Future {
         req.extensions_mut()
-            .insert(Claim::new("test".to_string(), self.scopes.clone()));
+            .insert(Claim::new("test".to_string(), self.scopes.clone(), None));
         self.inner.call(req)
     }
 }

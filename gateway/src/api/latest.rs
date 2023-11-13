@@ -20,8 +20,7 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
 use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
-use shuttle_common::claims::{Scope, EXP_MINUTES};
-use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
+use shuttle_common::claims::{ClaimExt, Scope, EXP_MINUTES};
 use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{
@@ -210,10 +209,8 @@ async fn create_project(
     let is_admin = claim.scopes.contains(&Scope::Admin);
     let project_limit: Option<u32> = if is_admin {
         None
-    } else if claim.scopes.contains(&Scope::ExtraProjects) {
-        Some(MAX_PROJECTS_EXTRA)
     } else {
-        Some(MAX_PROJECTS_DEFAULT)
+        Some(claim.project_limit())
     };
 
     let project = service

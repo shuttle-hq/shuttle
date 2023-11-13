@@ -20,6 +20,8 @@ use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
+use crate::constants::limits::MAX_PROJECTS_DEFAULT;
+
 /// Minutes before a claim expires
 ///
 /// We don't use the convention of 5 minutes because builds can take longer than 5 minutes. When this happens, requests
@@ -55,6 +57,7 @@ pub enum Scope {
     ProjectWrite,
 
     /// Create more projects than the free tier default
+    // NOTE: this is no longer used, but removing it is a breaking change for the time being.
     ExtraProjects,
 
     /// Get the resources for a project
@@ -182,11 +185,44 @@ pub struct Claim {
     pub scopes: Vec<Scope>,
     /// The original token that was parsed
     pub(crate) token: Option<String>,
+    /// A struct that holds the account limits.
+    pub limits: Limits,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+pub struct Limits {
+    /// The amount of projects this user can create.
+    project_limit: u32,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            project_limit: MAX_PROJECTS_DEFAULT,
+        }
+    }
+}
+
+// TODO: this will be expanded and the limits set will vary, use builder pattern?
+impl Limits {
+    pub fn new(project_limit: u32) -> Self {
+        Self { project_limit }
+    }
+}
+
+pub trait ClaimExt {
+    fn project_limit(&self) -> u32;
+}
+
+impl ClaimExt for Claim {
+    fn project_limit(&self) -> u32 {
+        self.limits.project_limit
+    }
 }
 
 impl Claim {
-    /// Create a new claim for a user with the given scopes
-    pub fn new(sub: String, scopes: Vec<Scope>) -> Self {
+    /// Create a new claim for a user with the given scopes and limits.
+    pub fn new(sub: String, scopes: Vec<Scope>, limits: Option<Limits>) -> Self {
         let iat = Utc::now();
         let exp = iat.add(Duration::minutes(EXP_MINUTES));
 
@@ -198,6 +234,7 @@ impl Claim {
             sub,
             scopes,
             token: None,
+            limits: limits.unwrap_or_default(),
         }
     }
 

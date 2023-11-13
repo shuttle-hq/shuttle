@@ -2,9 +2,9 @@ use http::header::AUTHORIZATION;
 use http::{Request, StatusCode};
 use hyper::Body;
 use serde_json::Value;
-use shuttle_common::claims::{AccountTier, Claim};
+use shuttle_common::claims::{AccountTier, ClaimExt};
 
-use crate::helpers::app;
+use crate::helpers::{app, ADMIN_KEY};
 
 #[tokio::test]
 async fn convert_api_key_to_jwt() {
@@ -52,24 +52,28 @@ async fn convert_api_key_to_jwt() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-    let convert: Value = serde_json::from_slice(&body).unwrap();
-    let token = convert["token"].as_str().unwrap();
-
-    let request = Request::builder()
-        .uri("/public-key")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    let response = app.send_request(request).await;
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let public_key = hyper::body::to_bytes(response.into_body()).await.unwrap();
-
-    let claim = Claim::from_token(token, &public_key).unwrap();
+    let claim = app.claim_from_response(response).await;
 
     // Verify the claim subject and tier matches the test user we created.
     assert_eq!(claim.sub, "test-user");
     assert_eq!(claim.tier, AccountTier::Basic);
+    assert_eq!(claim.project_limit(), 3);
+
+    // GET /auth/key with an admin user bearer token.
+    let request = Request::builder()
+        .uri("/auth/key")
+        .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.send_request(request).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let claim = app.claim_from_response(response).await;
+
+    // Verify the claim subject and tier matches the admin user.
+    assert_eq!(claim.sub, "admin");
+    assert_eq!(claim.tier, AccountTier::Admin);
+    assert_eq!(claim.project_limit(), 100);
 }

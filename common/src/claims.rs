@@ -254,7 +254,6 @@ impl Default for Limits {
     }
 }
 
-// TODO: this will be expanded and the limits set will vary, use builder pattern?
 impl Limits {
     pub fn new(project_limit: u32) -> Self {
         Self { project_limit }

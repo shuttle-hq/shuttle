@@ -1,6 +1,21 @@
 # Changelog
 
-All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
+<!-- Install git-cliff and use `make tag=TAG changelog` to update this file -->
+
+This is an auto-generated changelog based on commits on the main branch, made with [git-cliff](https://github.com/orhun/git-cliff).
+See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
+
+**For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
+
+## [Unreleased](https://github.com/shuttle-hq/shuttle/compare/v0.32.0..Unreleased) - 2023-11-11
+
+### Bug Fixes
+
+- *(cargo-shuttle)* Revert shuttle-common-tests to path dep ([#1375](https://github.com/shuttle-hq/shuttle/issues/1375)) - ([70ba489](https://github.com/shuttle-hq/shuttle/commit/70ba489978aa506050317447e3704dffa4a011b3))
+
+### Miscellaneous
+
+- *(changelog)* Add link to releases page - ([8d09faf](https://github.com/shuttle-hq/shuttle/commit/8d09fafe7a1c0e6ca37f9117dd3e10b29526a48d))
 
 ## [0.32.0](https://github.com/shuttle-hq/shuttle/compare/v0.31.0..v0.32.0) - 2023-11-09
 
@@ -26,14 +41,9 @@ All notable changes to this project will be documented in this file. See [conven
 
 ### Miscellaneous Tasks
 
-- Update examples after rebase - ([a4181ba](https://github.com/shuttle-hq/shuttle/commit/a4181bafcc3a4546587ac541fdbb36d50e6998d5))
-- V0.32.0 - ([b7f26dd](https://github.com/shuttle-hq/shuttle/commit/b7f26dd11cb3a21257a063f453f3b3603e8e9424))
+- V0.32.0 ([#1373](https://github.com/shuttle-hq/shuttle/issues/1373)) - ([6943e21](https://github.com/shuttle-hq/shuttle/commit/6943e21341145e5335c140b93fb2b493ac6f2cf2))
 - Audit on main, build release stack sooner, release crates faster ([#1369](https://github.com/shuttle-hq/shuttle/issues/1369)) - ([326e30a](https://github.com/shuttle-hq/shuttle/commit/326e30ab826e51bf143e9419b8283ca60d7405d5))
 - Bump and refactor images, code cleanup ([#1313](https://github.com/shuttle-hq/shuttle/issues/1313)) - ([1c003cd](https://github.com/shuttle-hq/shuttle/commit/1c003cd2946c6fbc91f6923cb31d1a0e8e6087fd))
-
-### Miscellaneous
-
-- Merge branch 'main' into chore/v0.32.0 - ([e8513af](https://github.com/shuttle-hq/shuttle/commit/e8513af8562978c943581d2f692e9e637e38dc67))
 
 ## [0.31.0](https://github.com/shuttle-hq/shuttle/compare/v0.30.1..v0.31.0) - 2023-11-02
 

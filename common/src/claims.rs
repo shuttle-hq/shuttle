@@ -189,11 +189,11 @@ pub enum AccountTier {
 impl From<AccountTier> for Limits {
     fn from(value: AccountTier) -> Self {
         match value {
-            AccountTier::Basic | AccountTier::PendingPaymentPro | AccountTier::Deployer => {
-                Self::default()
-            }
+            AccountTier::Admin
+            | AccountTier::Basic
+            | AccountTier::PendingPaymentPro
+            | AccountTier::Deployer => Self::default(),
             AccountTier::Pro | AccountTier::Team => Self::new(MAX_PROJECTS_EXTRA),
-            AccountTier::Admin => Self::new(100),
         }
     }
 }

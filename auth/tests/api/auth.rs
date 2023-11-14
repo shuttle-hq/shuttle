@@ -62,5 +62,5 @@ async fn convert_api_key_to_jwt() {
     // Verify the claim subject and tier matches the admin user.
     assert_eq!(claim.sub, "admin");
     assert_eq!(claim.tier, AccountTier::Admin);
-    assert_eq!(claim.project_limit(), 100);
+    assert_eq!(claim.project_limit(), 3);
 }

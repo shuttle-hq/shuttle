@@ -96,6 +96,15 @@ impl TestApp {
         self.send_request(request).await
     }
 
+    pub async fn get_jwt_from_api_key(&self, api_key: &str) -> Response {
+        let request = Request::builder()
+            .uri("/auth/key")
+            .header(AUTHORIZATION, format!("Bearer {api_key}"))
+            .body(Body::empty())
+            .unwrap();
+        self.send_request(request).await
+    }
+
     pub async fn claim_from_response(&self, res: Response) -> Claim {
         let body = hyper::body::to_bytes(res.into_body()).await.unwrap();
         let convert: Value = serde_json::from_slice(&body).unwrap();

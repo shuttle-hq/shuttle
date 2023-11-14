@@ -6,6 +6,8 @@ pub enum Error {
     Database(#[from] sqlx::Error),
     #[error("Resource recorder error: {0}")]
     ResourceRecorder(tonic::Status),
+    #[error("Resource recorder sync error")]
+    ResourceRecorderSync,
     #[error("Sending the state event failed: {0}")]
     ChannelSendError(#[from] tokio::sync::mpsc::error::SendError<DeploymentState>),
     #[error("Sending the state event failed: channel closed")]

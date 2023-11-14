@@ -41,7 +41,10 @@ pub use self::service::Service;
 pub use self::state::DeploymentState;
 pub use self::state::{State, StateRecorder};
 pub use self::user::User;
-use self::{deployment::DeploymentRunnable, resource::ResourceManager};
+use self::{
+    deployment::DeploymentRunnable,
+    resource::{Resource, ResourceManager},
+};
 use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 
@@ -431,13 +434,76 @@ impl ResourceManager for Persistence {
 
         service_resources_req.extensions_mut().insert(claim.clone());
 
-        self.resource_recorder_client
+        let res = self
+            .resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
             .get_service_resources(service_resources_req)
             .await
             .map_err(PersistenceError::ResourceRecorder)
-            .map(|res| res.into_inner())
+            .map(|res| res.into_inner())?;
+
+        // If the resources list is empty
+        if res.resources.is_empty() {
+            // Check if there are cached resources on the local persistence.
+            let resources: std::result::Result<Vec<Resource>, sqlx::Error> =
+                sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
+                    .bind(service_id.to_string())
+                    .fetch_all(&self.pool)
+                    .await;
+
+            // If there are cached resources
+            if let Ok(inner) = resources {
+                // Return early if the local persistence is empty.
+                if inner.is_empty() {
+                    return Ok(res);
+                }
+
+                // Insert local resources in the resource-recorder.
+                let local_resources = inner
+                    .into_iter()
+                    .map(|res| record_request::Resource {
+                        r#type: res.r#type.to_string(),
+                        config: res.config.to_string().into_bytes(),
+                        data: res.data.to_string().into_bytes(),
+                    })
+                    .collect();
+
+                self.insert_resources(local_resources, service_id, claim.clone())
+                    .await?;
+
+                let mut service_resources_req = tonic::Request::new(ServiceResourcesRequest {
+                    service_id: service_id.to_string(),
+                });
+
+                service_resources_req.extensions_mut().insert(claim);
+
+                let res = self
+                    .resource_recorder_client
+                    .as_mut()
+                    .expect("to have the resource recorder set up")
+                    .get_service_resources(service_resources_req)
+                    .await
+                    .map_err(PersistenceError::ResourceRecorder)
+                    .map(|res| res.into_inner())?;
+
+                if res.resources.is_empty() {
+                    // Something went wrong since it was empty before the upload, and is still empty now.
+                    return Err(Error::ResourceRecorderSync);
+                }
+
+                // Now that we know that the resources are in resource-recorder,
+                // we can safely delete them from here to prevent de-sync issues and to not hinder project deletion
+                sqlx::query("DELETE FROM resources WHERE service_id = ?")
+                    .bind(service_id.to_string())
+                    .execute(&self.pool)
+                    .await?;
+
+                return Ok(res);
+            }
+        }
+
+        Ok(res)
     }
 
     async fn get_resource(

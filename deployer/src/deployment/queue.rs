@@ -434,7 +434,7 @@ async fn copy_executable(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
+    use std::{collections::HashMap, fs::File, io::Write, path::Path};
 
     use tempfile::Builder;
     use tokio::fs;
@@ -593,7 +593,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         secret_file.write_all(b"KEY = 'value'").unwrap();
 
         let actual = super::get_secrets(temp_p).await.unwrap();
-        let expected = BTreeMap::from([("KEY".to_string(), "value".to_string())]);
+        let expected = HashMap::from([("KEY".to_string(), "value".to_string())]);
 
         assert_eq!(actual, expected);
 

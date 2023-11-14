@@ -738,6 +738,7 @@ mod tests {
                 tracing_context: Default::default(),
                 is_next: false,
                 claim: Default::default(),
+                secrets: Default::default(),
             })
             .await;
 

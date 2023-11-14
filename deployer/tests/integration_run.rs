@@ -336,6 +336,7 @@ async fn make_and_built(crate_name: &str) -> (Built, PathBuf) {
             tracing_context: Default::default(),
             is_next: false,
             claim: Default::default(),
+            secrets: Default::default(),
         },
         RESOURCES_PATH.into(), // is later joined with `service_name` to arrive at `crate_name`
     )

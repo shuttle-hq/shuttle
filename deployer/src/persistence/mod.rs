@@ -414,6 +414,7 @@ impl ResourceManager for Persistence {
 
         record_req.extensions_mut().insert(claim);
 
+        info!("Uploading resources to resource-recorder");
         self.resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
@@ -434,6 +435,7 @@ impl ResourceManager for Persistence {
 
         service_resources_req.extensions_mut().insert(claim.clone());
 
+        info!(%service_id, "Getting resources from resource-recorder");
         let res = self
             .resource_recorder_client
             .as_mut()
@@ -445,13 +447,15 @@ impl ResourceManager for Persistence {
 
         // If the resources list is empty
         if res.resources.is_empty() {
+            info!("Got no resources from resource-recorder");
             // Check if there are cached resources on the local persistence.
             let resources: std::result::Result<Vec<Resource>, sqlx::Error> =
-                sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
+                sqlx::query_as("SELECT * FROM resources WHERE service_id = ?")
                     .bind(service_id.to_string())
                     .fetch_all(&self.pool)
                     .await;
 
+            info!(?resources, "Local resources");
             // If there are cached resources
             if let Ok(inner) = resources {
                 // Return early if the local persistence is empty.
@@ -478,6 +482,7 @@ impl ResourceManager for Persistence {
 
                 service_resources_req.extensions_mut().insert(claim);
 
+                info!("Getting resources from resource-recorder again");
                 let res = self
                     .resource_recorder_client
                     .as_mut()
@@ -492,6 +497,7 @@ impl ResourceManager for Persistence {
                     return Err(Error::ResourceRecorderSync);
                 }
 
+                info!("Deleting local resources");
                 // Now that we know that the resources are in resource-recorder,
                 // we can safely delete them from here to prevent de-sync issues and to not hinder project deletion
                 sqlx::query("DELETE FROM resources WHERE service_id = ?")

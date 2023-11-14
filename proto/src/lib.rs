@@ -382,10 +382,17 @@ pub mod logger {
                                 }),
                             };
 
-                            // Give the rate limiter time to refresh.
+                            // Give the rate limiter time to refresh, the duration we need to sleep
+                            // for here is determined by the refresh rate of the rate limiter in
+                            // the logger server. It is currently set to refresh one slot per 500ms,
+                            // so we could get away with a duration of 500ms here, but we give it
+                            // some extra time in case this rate limiting was caused by a short
+                            // burst of activity.
                             tokio::time::sleep(Duration::from_millis(1500)).await;
 
                             if let Err(error) = self
+                                // NOTE: the request to send this rate limiting log to the logger will
+                                // also expend a slot in the logger rate limiter.
                                 .store_logs(Request::new(StoreLogsRequest {
                                     logs: vec![new_item],
                                 }))
@@ -434,7 +441,7 @@ pub mod logger {
             Self { tx }
         }
 
-        /// Create a batcher around inner. It will send a batch of items to inner if a capacity of 2048 is reached
+        /// Create a batcher around inner. It will send a batch of items to inner if a capacity of 256 is reached
         /// or if an interval of 1 second is reached.
         pub fn wrap(inner: I) -> Self {
             Self::new(inner, 256, Duration::from_secs(1))

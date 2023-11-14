@@ -38,7 +38,9 @@ mod needs_docker {
     use super::*;
     use futures::future::join_all;
     use pretty_assertions::assert_eq;
-    use shuttle_logger::rate_limiting::{tonic_error, TonicPeerIpKeyExtractor};
+    use shuttle_logger::rate_limiting::{
+        tonic_error, TonicPeerIpKeyExtractor, BURST_SIZE, REFRESH_INTERVAL,
+    };
     use tower::ServiceBuilder;
     use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 
@@ -302,8 +304,8 @@ mod needs_docker {
         exec_psql(&format!(r#"CREATE DATABASE "{}";"#, &db_name));
 
         let governor_config = GovernorConfigBuilder::default()
-            .per_millisecond(500)
-            .burst_size(6)
+            .per_millisecond(REFRESH_INTERVAL)
+            .burst_size(BURST_SIZE)
             .use_headers()
             .key_extractor(TonicPeerIpKeyExtractor)
             .finish()

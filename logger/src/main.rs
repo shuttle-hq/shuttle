@@ -10,7 +10,7 @@ use shuttle_common::{
 };
 use shuttle_logger::{
     args::Args,
-    rate_limiting::{tonic_error, TonicPeerIpKeyExtractor},
+    rate_limiting::{tonic_error, TonicPeerIpKeyExtractor, BURST_SIZE, REFRESH_INTERVAL},
     Postgres, Service,
 };
 use shuttle_proto::logger::logger_server::LoggerServer;
@@ -30,10 +30,10 @@ async fn main() {
     let governor_config = GovernorConfigBuilder::default()
         // Regenerate capacity at a rate of 2 requests per second, meaning the maximum capacity
         // for sustained traffic is 2 RPS per peer address.
-        .per_millisecond(500)
+        .per_millisecond(REFRESH_INTERVAL)
         // Allow bursts of up to 6 requests, when any burst capacity is used, it will regenerate
         // one element at a time at the rate set above.
-        .burst_size(6)
+        .burst_size(BURST_SIZE)
         .use_headers()
         .key_extractor(TonicPeerIpKeyExtractor)
         .finish()

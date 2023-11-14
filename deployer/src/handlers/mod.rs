@@ -674,7 +674,7 @@ pub async fn get_logs(
                 && error.metadata().get("x-ratelimit-limit").is_some()
             {
                 Err(Error::RateLimited(
-                    "your application is producing too many logs, any interaction with the shuttle logger service will be rate limited"
+                    "your application is producing too many logs. Interactions with the shuttle logger service will be rate limited for a while"
                         .to_string(),
                 ))
             } else {
@@ -736,7 +736,7 @@ async fn logs_websocket_handler(
                 let _ = s
                     .send(ws::Message::Text(
                         Error::RateLimited(
-                            "your application is producing too many logs, any interaction with the shuttle logger service will be rate limited"
+                            "your application is producing too many logs. Interactions with the shuttle logger service will be rate limited for a while"
                                 .to_string(),
                         ).to_string()
                     ))

@@ -8,6 +8,11 @@ use tonic::{
 use tower::BoxError;
 use tower_governor::{key_extractor::KeyExtractor, GovernorError};
 
+/// The interval at which the rate limiter refreshes one slot in milliseconds.
+pub const REFRESH_INTERVAL: u64 = 500;
+/// The quota of requests that can be received before rate limiting is applied.
+pub const BURST_SIZE: u32 = 6;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TonicPeerIpKeyExtractor;
 

@@ -26,7 +26,7 @@ pub enum Error {
     Internal(#[from] anyhow::Error),
     #[error("Missing header: {0}")]
     MissingHeader(String),
-    #[error("{0}. Retry the command in a few minutes")]
+    #[error("{0}. Retry the request in a few minutes")]
     RateLimited(String),
 }
 

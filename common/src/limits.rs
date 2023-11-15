@@ -57,4 +57,3 @@ impl ClaimExt for Claim {
         self.is_admin() || self.limits.project_limit() > current_count
     }
 }
-// TODO: limits.rs, move limits in here too

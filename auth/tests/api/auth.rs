@@ -2,7 +2,7 @@ use http::header::AUTHORIZATION;
 use http::{Request, StatusCode};
 use hyper::Body;
 use serde_json::Value;
-use shuttle_common::claims::{AccountTier, ClaimExt};
+use shuttle_common::claims::AccountTier;
 
 use crate::helpers::{app, ADMIN_KEY};
 
@@ -51,7 +51,7 @@ async fn convert_api_key_to_jwt() {
     // Verify the claim subject and tier matches the test user we created at the start of the test.
     assert_eq!(claim.sub, "test-user");
     assert_eq!(claim.tier, AccountTier::Basic);
-    assert_eq!(claim.project_limit(), 3);
+    assert_eq!(claim.limits.project_limit(), 3);
 
     // GET /auth/key with an admin user bearer token.
     let response = app.get_jwt_from_api_key(ADMIN_KEY).await;
@@ -62,5 +62,5 @@ async fn convert_api_key_to_jwt() {
     // Verify the claim subject and tier matches the admin user.
     assert_eq!(claim.sub, "admin");
     assert_eq!(claim.tier, AccountTier::Admin);
-    assert_eq!(claim.project_limit(), 3);
+    assert_eq!(claim.limits.project_limit(), 3);
 }

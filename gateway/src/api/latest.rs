@@ -20,7 +20,8 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
 use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
-use shuttle_common::claims::{ClaimExt, Scope, EXP_MINUTES};
+use shuttle_common::claims::{Scope, EXP_MINUTES};
+use shuttle_common::limits::ClaimExt;
 use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{
@@ -206,19 +207,15 @@ async fn create_project(
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let is_admin = claim.scopes.contains(&Scope::Admin);
-    let project_limit: Option<u32> = if is_admin {
-        None
-    } else {
-        Some(claim.project_limit())
-    };
+    // Check that the user is within their project limits.
+    let can_create_project = claim.can_create_project(service.get_project_count(&name).await?);
 
     let project = service
         .create_project(
             project_name.clone(),
             name.clone(),
-            is_admin,
-            project_limit,
+            claim.is_admin(),
+            can_create_project,
             config.idle_minutes,
         )
         .await?;

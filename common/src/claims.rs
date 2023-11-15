@@ -20,7 +20,7 @@ use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
+use crate::limits::Limits;
 
 /// Minutes before a claim expires
 ///
@@ -186,18 +186,6 @@ pub enum AccountTier {
     Deployer,
 }
 
-impl From<AccountTier> for Limits {
-    fn from(value: AccountTier) -> Self {
-        match value {
-            AccountTier::Admin
-            | AccountTier::Basic
-            | AccountTier::PendingPaymentPro
-            | AccountTier::Deployer => Self::default(),
-            AccountTier::Pro | AccountTier::Team => Self::new(MAX_PROJECTS_EXTRA),
-        }
-    }
-}
-
 impl From<AccountTier> for Vec<Scope> {
     fn from(tier: AccountTier) -> Self {
         let mut builder = ScopeBuilder::new();
@@ -238,36 +226,6 @@ pub struct Claim {
     pub limits: Limits,
     /// The account tier of the subject.
     pub tier: AccountTier,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
-pub struct Limits {
-    /// The amount of projects this user can create.
-    project_limit: u32,
-}
-
-impl Default for Limits {
-    fn default() -> Self {
-        Self {
-            project_limit: MAX_PROJECTS_DEFAULT,
-        }
-    }
-}
-
-impl Limits {
-    pub fn new(project_limit: u32) -> Self {
-        Self { project_limit }
-    }
-}
-
-pub trait ClaimExt {
-    fn project_limit(&self) -> u32;
-}
-
-impl ClaimExt for Claim {
-    fn project_limit(&self) -> u32 {
-        self.limits.project_limit
-    }
 }
 
 impl Claim {

@@ -579,7 +579,8 @@ impl GatewayService {
             ),
         ));
 
-        query("INSERT INTO projects (project_id, project_name, account_name, initial_key, project_state) VALUES (ulid(), ?1, ?2, ?3, ?4)")
+        query("INSERT INTO projects (project_id, project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4, ?5)")
+            .bind(&project_id.to_string())
             .bind(&project_name)
             .bind(&account_name)
             .bind(project.initial_key().unwrap())

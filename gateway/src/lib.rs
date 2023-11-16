@@ -275,7 +275,7 @@ pub mod tests {
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
     use shuttle_common::backends::auth::ConvertResponse;
-    use shuttle_common::claims::{Claim, Scope};
+    use shuttle_common::claims::{AccountTier, Claim, Scope};
     use shuttle_common::models::project;
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::SqlitePool;
@@ -675,7 +675,7 @@ pub mod tests {
                         let state = state.lock().unwrap();
 
                         if let Some(scopes) = state.users.get(bearer.token()) {
-                            let claim = Claim::new(bearer.token().to_string(), scopes.clone(), Default::default());
+                            let claim = Claim::new(bearer.token().to_string(), scopes.clone(), AccountTier::default(), AccountTier::default());
                             let token = claim.into_token(&state.encoding_key)?;
                             Ok(serde_json::to_vec(&ConvertResponse { token }).unwrap())
                         } else {

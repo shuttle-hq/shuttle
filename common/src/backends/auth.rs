@@ -468,7 +468,7 @@ mod tests {
     use serde_json::json;
     use tower::{ServiceBuilder, ServiceExt};
 
-    use crate::claims::{Claim, Scope};
+    use crate::claims::{AccountTier, Claim, Scope};
 
     use super::{JwtAuthenticationLayer, ScopedLayer};
 
@@ -478,6 +478,7 @@ mod tests {
             "ferries".to_string(),
             vec![Scope::Deployment, Scope::Project],
             Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -501,6 +502,7 @@ mod tests {
             "ferries".to_string(),
             vec![Scope::Deployment, Scope::Project],
             Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -600,6 +602,7 @@ mod tests {
             "hacker-hs256".to_string(),
             vec![Scope::Deployment, Scope::Project],
             Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -641,6 +644,7 @@ mod tests {
             "hacker-no-alg".to_string(),
             vec![Scope::Deployment, Scope::Project],
             Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -674,6 +678,7 @@ mod tests {
             "hacker-no-sig".to_string(),
             vec![Scope::Deployment, Scope::Project],
             Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -698,6 +703,7 @@ mod tests {
             "hacker-iss".to_string(),
             vec![Scope::Deployment, Scope::Project],
             Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();

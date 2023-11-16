@@ -105,7 +105,12 @@ pub(crate) async fn convert_cookie(
         .get::<AccountTier>("account_tier")
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let claim = Claim::new(account_name, account_tier.into(), account_tier);
+    let claim = Claim::new(
+        account_name,
+        account_tier.into(),
+        account_tier,
+        account_tier,
+    );
 
     let token = claim.into_token(key_manager.private_key())?;
 
@@ -129,7 +134,12 @@ pub(crate) async fn convert_key(
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-    let claim = Claim::new(name.to_string(), account_tier.into(), account_tier);
+    let claim = Claim::new(
+        name.to_string(),
+        account_tier.into(),
+        account_tier,
+        account_tier,
+    );
 
     let token = claim.into_token(key_manager.private_key())?;
 

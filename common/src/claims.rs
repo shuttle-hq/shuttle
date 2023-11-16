@@ -230,7 +230,12 @@ pub struct Claim {
 
 impl Claim {
     /// Create a new claim for a user with the given scopes and limits.
-    pub fn new(sub: String, scopes: Vec<Scope>, tier: AccountTier) -> Self {
+    pub fn new(
+        sub: String,
+        scopes: Vec<Scope>,
+        tier: AccountTier,
+        limits: impl Into<Limits>,
+    ) -> Self {
         let iat = Utc::now();
         let exp = iat.add(Duration::minutes(EXP_MINUTES));
 
@@ -242,7 +247,7 @@ impl Claim {
             sub,
             scopes,
             token: None,
-            limits: tier.into(),
+            limits: limits.into(),
             tier,
         }
     }

@@ -7,7 +7,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [Unreleased](https://github.com/shuttle-hq/shuttle/compare/v0.32.0..Unreleased) - 2023-11-11
+## [Unreleased](https://github.com/shuttle-hq/shuttle/compare/v0.33.0..Unreleased) - 2023-11-11
 
 ### Bug Fixes
 
@@ -17,7 +17,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 - *(changelog)* Add link to releases page - ([8d09faf](https://github.com/shuttle-hq/shuttle/commit/8d09fafe7a1c0e6ca37f9117dd3e10b29526a48d))
 
-## [0.32.0](https://github.com/shuttle-hq/shuttle/compare/v0.31.0..v0.32.0) - 2023-11-09
+## [0.33.0](https://github.com/shuttle-hq/shuttle/compare/v0.31.0..v0.33.0) - 2023-11-09
 
 ### Features
 
@@ -41,7 +41,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous Tasks
 
-- V0.32.0 ([#1373](https://github.com/shuttle-hq/shuttle/issues/1373)) - ([6943e21](https://github.com/shuttle-hq/shuttle/commit/6943e21341145e5335c140b93fb2b493ac6f2cf2))
+- V0.33.0 ([#1373](https://github.com/shuttle-hq/shuttle/issues/1373)) - ([6943e21](https://github.com/shuttle-hq/shuttle/commit/6943e21341145e5335c140b93fb2b493ac6f2cf2))
 - Audit on main, build release stack sooner, release crates faster ([#1369](https://github.com/shuttle-hq/shuttle/issues/1369)) - ([326e30a](https://github.com/shuttle-hq/shuttle/commit/326e30ab826e51bf143e9419b8283ca60d7405d5))
 - Bump and refactor images, code cleanup ([#1313](https://github.com/shuttle-hq/shuttle/issues/1313)) - ([1c003cd](https://github.com/shuttle-hq/shuttle/commit/1c003cd2946c6fbc91f6923cb31d1a0e8e6087fd))
 
@@ -119,7 +119,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 ### Miscellaneous Tasks
 
 - *(runtime)* Update to wasmtime 13.0 ([#1330](https://github.com/shuttle-hq/shuttle/issues/1330)) - ([b7c757c](https://github.com/shuttle-hq/shuttle/commit/b7c757ca4ae834d486ceff9267b253e9df182ed1))
-- *(shuttle-turso)* Unpin libsql-client, bump to v0.32.0 ([#1329](https://github.com/shuttle-hq/shuttle/issues/1329)) - ([c84bd26](https://github.com/shuttle-hq/shuttle/commit/c84bd266dc22769a46b193cebad181cc2d9ab828))
+- *(shuttle-turso)* Unpin libsql-client, bump to v0.33.0 ([#1329](https://github.com/shuttle-hq/shuttle/issues/1329)) - ([c84bd26](https://github.com/shuttle-hq/shuttle/commit/c84bd266dc22769a46b193cebad181cc2d9ab828))
 - V0.30.0 ([#1339](https://github.com/shuttle-hq/shuttle/issues/1339)) - ([84ece38](https://github.com/shuttle-hq/shuttle/commit/84ece38a65df80b0e505d3ae30c5cbe357f95511))
 - Update dependencies ([#1325](https://github.com/shuttle-hq/shuttle/issues/1325)) - ([186f1cd](https://github.com/shuttle-hq/shuttle/commit/186f1cd622238f85f8b6a48f1e3fd2cc94530fcd))
 - Fix release ordering ([#1312](https://github.com/shuttle-hq/shuttle/issues/1312)) - ([793a3a4](https://github.com/shuttle-hq/shuttle/commit/793a3a46d94109c28e92e4055ad6dc157bf35ed0))

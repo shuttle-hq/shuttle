@@ -1121,7 +1121,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -5619,7 +5619,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-admin"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -5636,7 +5636,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-auth"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-stripe",
@@ -5667,7 +5667,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-builder"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "async-trait",
  "clap",
@@ -5693,7 +5693,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -5710,7 +5710,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5761,7 +5761,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common-tests"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "cargo-shuttle",
  "hyper",
@@ -5777,7 +5777,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5829,7 +5829,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5887,7 +5887,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-logger"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5913,11 +5913,11 @@ dependencies = [
 
 [[package]]
 name = "shuttle-orchestrator"
-version = "0.32.0"
+version = "0.33.0"
 
 [[package]]
 name = "shuttle-proto"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5936,7 +5936,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -5961,7 +5961,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-resource-recorder"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5985,7 +5985,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-runtime"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6018,7 +6018,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-trait",

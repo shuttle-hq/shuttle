@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::claims::{Claim, Scope};
 use shuttle_common::models::error::InvalidProjectName;
 use shuttle_common::models::project::ProjectName;
-use tracing::{trace, warn, Span};
+use tracing::{trace, Span};
 
 use crate::api::latest::RouterState;
 use crate::{AccountName, Error, ErrorKind};

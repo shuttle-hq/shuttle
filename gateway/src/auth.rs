@@ -5,8 +5,9 @@ use axum::extract::{FromRef, FromRequestParts, Path};
 use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
 use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::models::error::InvalidProjectName;
 use shuttle_common::models::project::ProjectName;
-use tracing::{trace, Span};
+use tracing::{trace, warn, Span};
 
 use crate::api::latest::RouterState;
 use crate::{AccountName, Error, ErrorKind};
@@ -80,7 +81,10 @@ where
             Err(_) => Path::<(ProjectName, String)>::from_request_parts(parts, state)
                 .await
                 .map(|Path((p, _))| p)
-                .unwrap(),
+                .map_err(|e| {
+                    warn!(error = ?e, "failed to extract project name for scoped user");
+                    Error::from(ErrorKind::InvalidProjectName(InvalidProjectName))
+                })?,
         };
 
         if user.projects.contains(&scope) || user.claim.scopes.contains(&Scope::Admin) {

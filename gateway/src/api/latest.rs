@@ -21,7 +21,7 @@ use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, Scop
 use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Scope, EXP_MINUTES};
-use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
+use shuttle_common::limits::ClaimExt;
 use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{
@@ -207,21 +207,15 @@ async fn create_project(
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let is_admin = claim.scopes.contains(&Scope::Admin);
-    let project_limit: Option<u32> = if is_admin {
-        None
-    } else if claim.scopes.contains(&Scope::ExtraProjects) {
-        Some(MAX_PROJECTS_EXTRA)
-    } else {
-        Some(MAX_PROJECTS_DEFAULT)
-    };
+    // Check that the user is within their project limits.
+    let can_create_project = claim.can_create_project(service.get_project_count(&name).await?);
 
     let project = service
         .create_project(
             project_name.clone(),
             name.clone(),
-            is_admin,
-            project_limit,
+            claim.is_admin(),
+            can_create_project,
             config.idle_minutes,
         )
         .await?;
@@ -1101,6 +1095,7 @@ pub mod tests {
     use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
+    use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
     use tokio::sync::mpsc::channel;
     use tokio::sync::oneshot;
     use tower::Service;
@@ -1287,6 +1282,78 @@ pub mod tests {
         //     })
         //     .await
         //     .unwrap();
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn api_create_project_limits() -> anyhow::Result<()> {
+        let world = World::new().await;
+        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+
+        let (sender, mut receiver) = channel::<BoxedTask>(256);
+        tokio::spawn(async move {
+            while receiver.recv().await.is_some() {
+                // do not do any work with inbound requests
+            }
+        });
+
+        let mut router = ApiBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_sender(sender)
+            .with_default_routes()
+            .with_auth_service(world.context().auth_uri)
+            .into_router();
+
+        let neo_key = world.create_user("neo");
+
+        let create_project = |project: &str| {
+            Request::builder()
+                .method("POST")
+                .uri(format!("/projects/{project}"))
+                .header("Content-Type", "application/json")
+                .body("{\"idle_minutes\": 3}".into())
+                .unwrap()
+        };
+
+        let authorization = Authorization::bearer(&neo_key).unwrap();
+
+        // Creating three projects for a basic user succeeds.
+        for i in 0..MAX_PROJECTS_DEFAULT {
+            router
+                .call(create_project(format!("matrix-{i}").as_str()).with_header(&authorization))
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+        }
+
+        // Creating one more project hits the project limit.
+        router
+            .call(create_project("resurrections").with_header(&authorization))
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+            })
+            .await
+            .unwrap();
+
+        // Create a new admin user. We can't simply make the previous user an admin, since their token
+        // will live in the auth cache without the admin scope.
+        let trinity_key = world.create_user("trinity");
+        world.set_super_user("trinity");
+        let authorization = Authorization::bearer(&trinity_key).unwrap();
+
+        // Creating more than the basic and pro limit of projects for an admin user succeeds.
+        for i in 0..MAX_PROJECTS_EXTRA + 1 {
+            router
+                .call(create_project(format!("reloaded-{i}").as_str()).with_header(&authorization))
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+        }
 
         Ok(())
     }

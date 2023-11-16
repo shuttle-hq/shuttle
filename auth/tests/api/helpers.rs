@@ -1,13 +1,14 @@
 use std::{net::SocketAddr, str::FromStr};
 
 use axum::{body::Body, extract::Path, response::Response, routing::get, Router};
-use http::header::CONTENT_TYPE;
+use http::{header::CONTENT_TYPE, StatusCode};
 use hyper::{
     http::{header::AUTHORIZATION, Request},
     Server,
 };
 use serde_json::Value;
 use shuttle_auth::{sqlite_init, ApiBuilder};
+use shuttle_common::claims::Claim;
 use sqlx::query;
 use tower::ServiceExt;
 
@@ -93,6 +94,35 @@ impl TestApp {
             .unwrap();
 
         self.send_request(request).await
+    }
+
+    pub async fn get_jwt_from_api_key(&self, api_key: &str) -> Response {
+        let request = Request::builder()
+            .uri("/auth/key")
+            .header(AUTHORIZATION, format!("Bearer {api_key}"))
+            .body(Body::empty())
+            .unwrap();
+        self.send_request(request).await
+    }
+
+    pub async fn claim_from_response(&self, res: Response) -> Claim {
+        let body = hyper::body::to_bytes(res.into_body()).await.unwrap();
+        let convert: Value = serde_json::from_slice(&body).unwrap();
+        let token = convert["token"].as_str().unwrap();
+
+        let request = Request::builder()
+            .uri("/public-key")
+            .method("GET")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = self.send_request(request).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let public_key = hyper::body::to_bytes(response.into_body()).await.unwrap();
+
+        Claim::from_token(token, &public_key).unwrap()
     }
 }
 

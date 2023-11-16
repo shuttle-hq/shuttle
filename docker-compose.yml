@@ -55,8 +55,8 @@ services:
       - "--stripe-secret-key=${STRIPE_SECRET_KEY}"
     healthcheck:
       test: curl --fail http://localhost:8000/ || exit 1
-      interval: 1m
-      timeout: 15s
+      interval: 15s
+      timeout: 10s
       retries: 15
   builder:
     image: "${CONTAINER_REGISTRY}/builder:${BUILDER_TAG}"

@@ -81,10 +81,7 @@ where
             Err(_) => Path::<(ProjectName, String)>::from_request_parts(parts, state)
                 .await
                 .map(|Path((p, _))| p)
-                .map_err(|e| {
-                    warn!(error = ?e, "failed to extract project name for scoped user");
-                    Error::from(ErrorKind::InvalidProjectName(InvalidProjectName))
-                })?,
+                .map_err(|_| Error::from(ErrorKind::InvalidProjectName(InvalidProjectName)))?,
         };
 
         if user.projects.contains(&scope) || user.claim.scopes.contains(&Scope::Admin) {

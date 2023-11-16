@@ -49,12 +49,10 @@ pub async fn start(
     // when _set is dropped once axum exits, the deployment tasks will be aborted.
     let deployment_manager = DeploymentManager::builder()
         .build_log_recorder(log_recorder)
-        .secret_recorder(persistence.clone())
         .active_deployment_getter(persistence.clone())
         .artifacts_path(args.artifacts_path)
         .runtime(runtime_manager)
         .deployment_updater(persistence.clone())
-        .secret_getter(persistence.clone())
         .resource_manager(persistence.clone())
         .builder_client(builder_client)
         .queue_client(GatewayClient::new(args.gateway_uri))

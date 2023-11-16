@@ -1,6 +1,44 @@
 # Changelog
 
-All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
+<!-- Install git-cliff and use `make tag=TAG changelog` to update this file -->
+
+This is an auto-generated changelog based on commits on the main branch, made with [git-cliff](https://github.com/orhun/git-cliff).
+See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
+
+**For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
+
+## [0.33.0](https://github.com/shuttle-hq/shuttle/compare/v0.32.0..v0.33.0) - 2023-11-16
+
+### Features
+
+- *(cargo-shuttle)* Make command-line aliases visible ([#1384](https://github.com/shuttle-hq/shuttle/issues/1384)) - ([434ddbf](https://github.com/shuttle-hq/shuttle/commit/434ddbf64b6b7311a84752c64b8b5d7ca7210773))
+- *(gateway)* Temporary conditional project limit increase ([#1383](https://github.com/shuttle-hq/shuttle/issues/1383)) - ([4311907](https://github.com/shuttle-hq/shuttle/commit/4311907b5ba6fe5bbb1f422ecc3c2dca1564a6dc))
+- Add limits and tier to jwt claim ([#1382](https://github.com/shuttle-hq/shuttle/issues/1382)) - ([6a55b14](https://github.com/shuttle-hq/shuttle/commit/6a55b144f5ddd457ca5518bdef2ba6fa5097184c))
+
+### Bug Fixes
+
+- *(cargo-shuttle)* Revert shuttle-common-tests to path dep ([#1375](https://github.com/shuttle-hq/shuttle/issues/1375)) - ([70ba489](https://github.com/shuttle-hq/shuttle/commit/70ba489978aa506050317447e3704dffa4a011b3))
+- *(gateway)* Use project_id argument when inserting project ([#1387](https://github.com/shuttle-hq/shuttle/issues/1387)) - ([96105b4](https://github.com/shuttle-hq/shuttle/commit/96105b4c8fd14642d4c70fcfdb231e1e5b8a0d65))
+- Revert changelog edits - ([17f8c73](https://github.com/shuttle-hq/shuttle/commit/17f8c73db260a6a6adf9f7f548904c2287abbe6c))
+
+### Refactor
+
+- Clean up deployer db resources, delete after sync to r-r, delete secrets command ([#1376](https://github.com/shuttle-hq/shuttle/issues/1376)) - ([03e7017](https://github.com/shuttle-hq/shuttle/commit/03e7017f7a6179b68dcecaf7355aa52686325c50))
+
+### Documentation
+
+- *(readme)* Add note about CCH to README.md ([#1389](https://github.com/shuttle-hq/shuttle/issues/1389)) - ([015717a](https://github.com/shuttle-hq/shuttle/commit/015717a2944064218ca2152c13e425280176ec99))
+
+### Miscellaneous Tasks
+
+- V0.33.0 - ([c4e7872](https://github.com/shuttle-hq/shuttle/commit/c4e7872453ea575adf47862b75052091b39cbca6))
+
+### Miscellaneous
+
+- *(changelog)* Add link to releases page ([#1378](https://github.com/shuttle-hq/shuttle/issues/1378)) - ([0526233](https://github.com/shuttle-hq/shuttle/commit/0526233bb6770a8d749266b52b119b9e326b706b))
+- Merge remote-tracking branch 'upstream/main' into chore/v0.33.0 - ([5c6f427](https://github.com/shuttle-hq/shuttle/commit/5c6f42787b88c77e67b35be36cc27c3f58ea7660))
+- Bump axum minimum version, bump otel crates ([#1386](https://github.com/shuttle-hq/shuttle/issues/1386)) - ([3f4dc82](https://github.com/shuttle-hq/shuttle/commit/3f4dc822138b784ee23b42748830575be2ef0ec4))
+- Rocket 0.5.0-rc.4 ([#1379](https://github.com/shuttle-hq/shuttle/issues/1379)) - ([22f512e](https://github.com/shuttle-hq/shuttle/commit/22f512e5553b9ab34d48b3f0222a00d94c4699f6))
 
 ## [0.32.0](https://github.com/shuttle-hq/shuttle/compare/v0.31.0..v0.32.0) - 2023-11-09
 
@@ -26,14 +64,9 @@ All notable changes to this project will be documented in this file. See [conven
 
 ### Miscellaneous Tasks
 
-- Update examples after rebase - ([a4181ba](https://github.com/shuttle-hq/shuttle/commit/a4181bafcc3a4546587ac541fdbb36d50e6998d5))
-- V0.32.0 - ([b7f26dd](https://github.com/shuttle-hq/shuttle/commit/b7f26dd11cb3a21257a063f453f3b3603e8e9424))
+- V0.32.0 ([#1373](https://github.com/shuttle-hq/shuttle/issues/1373)) - ([6943e21](https://github.com/shuttle-hq/shuttle/commit/6943e21341145e5335c140b93fb2b493ac6f2cf2))
 - Audit on main, build release stack sooner, release crates faster ([#1369](https://github.com/shuttle-hq/shuttle/issues/1369)) - ([326e30a](https://github.com/shuttle-hq/shuttle/commit/326e30ab826e51bf143e9419b8283ca60d7405d5))
 - Bump and refactor images, code cleanup ([#1313](https://github.com/shuttle-hq/shuttle/issues/1313)) - ([1c003cd](https://github.com/shuttle-hq/shuttle/commit/1c003cd2946c6fbc91f6923cb31d1a0e8e6087fd))
-
-### Miscellaneous
-
-- Merge branch 'main' into chore/v0.32.0 - ([e8513af](https://github.com/shuttle-hq/shuttle/commit/e8513af8562978c943581d2f692e9e637e38dc67))
 
 ## [0.31.0](https://github.com/shuttle-hq/shuttle/compare/v0.30.1..v0.31.0) - 2023-11-02
 

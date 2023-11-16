@@ -20,6 +20,8 @@ use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
+use crate::limits::Limits;
+
 /// Minutes before a claim expires
 ///
 /// We don't use the convention of 5 minutes because builds can take longer than 5 minutes. When this happens, requests
@@ -55,6 +57,7 @@ pub enum Scope {
     ProjectWrite,
 
     /// Create more projects than the free tier default
+    // NOTE: this is no longer used, but removing it is a breaking change for the time being.
     ExtraProjects,
 
     /// Get the resources for a project
@@ -166,6 +169,43 @@ impl Default for ScopeBuilder {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "backend", derive(strum::Display))]
+#[cfg_attr(feature = "backend", derive(sqlx::Type))]
+#[cfg_attr(feature = "backend", sqlx(rename_all = "lowercase"))]
+#[cfg_attr(feature = "backend", strum(serialize_all = "lowercase"))]
+pub enum AccountTier {
+    #[default]
+    Basic,
+    // A basic user that is pending a payment on the backend.
+    PendingPaymentPro,
+    Pro,
+    Team,
+    Admin,
+    Deployer,
+}
+
+impl From<AccountTier> for Vec<Scope> {
+    fn from(tier: AccountTier) -> Self {
+        let mut builder = ScopeBuilder::new();
+
+        if tier == AccountTier::Deployer {
+            builder = builder.with_deploy_rights();
+        } else {
+            builder = builder.with_basic();
+
+            if tier == AccountTier::Admin {
+                builder = builder.with_admin();
+            } else if tier == AccountTier::Pro {
+                builder = builder.with_pro();
+            }
+        }
+
+        builder.build()
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).
@@ -182,11 +222,20 @@ pub struct Claim {
     pub scopes: Vec<Scope>,
     /// The original token that was parsed
     pub(crate) token: Option<String>,
+    /// A struct that holds the account limits.
+    pub limits: Limits,
+    /// The account tier of the subject.
+    pub tier: AccountTier,
 }
 
 impl Claim {
-    /// Create a new claim for a user with the given scopes
-    pub fn new(sub: String, scopes: Vec<Scope>) -> Self {
+    /// Create a new claim for a user with the given scopes and limits.
+    pub fn new(
+        sub: String,
+        scopes: Vec<Scope>,
+        tier: AccountTier,
+        limits: impl Into<Limits>,
+    ) -> Self {
         let iat = Utc::now();
         let exp = iat.add(Duration::minutes(EXP_MINUTES));
 
@@ -198,6 +247,8 @@ impl Claim {
             sub,
             scopes,
             token: None,
+            limits: limits.into(),
+            tier,
         }
     }
 

@@ -29,7 +29,6 @@ use shuttle_common::{
         error::ApiError,
         project::{self, DEFAULT_IDLE_MINUTES},
         resource::get_resource_tables,
-        secret,
     },
     resource, semvers_are_compatible, ApiKey, LogItem, VersionInfo,
 };
@@ -168,7 +167,6 @@ impl Shuttle {
                 )
                 | Command::Stop
                 | Command::Clean
-                | Command::Secrets { .. }
                 | Command::Status
                 | Command::Logs { .. }
                 | Command::Run(..)
@@ -188,7 +186,6 @@ impl Shuttle {
                 | Command::Resource(..)
                 | Command::Stop
                 | Command::Clean
-                | Command::Secrets { .. }
                 | Command::Project(..)
         ) {
             let mut client = Client::new(self.ctx.api_url());
@@ -222,7 +219,6 @@ impl Shuttle {
             }
             Command::Stop => self.stop().await,
             Command::Clean => self.clean().await,
-            Command::Secrets { raw } => self.secrets(raw).await,
             Command::Resource(ResourceCommand::Delete { resource_type }) => {
                 self.resource_delete(&resource_type).await
             }
@@ -631,19 +627,6 @@ impl Shuttle {
         let summary = client.get_service(self.ctx.project_name()).await?;
 
         println!("{summary}");
-
-        Ok(CommandOutcome::Ok)
-    }
-
-    async fn secrets(&self, raw: bool) -> Result<CommandOutcome> {
-        let client = self.client.as_ref().unwrap();
-        let secrets = client
-            .get_secrets(self.ctx.project_name())
-            .await
-            .map_err(suggestions::resources::get_secrets_failure)?;
-        let table = secret::get_secrets_table(&secrets, raw);
-
-        println!("{table}");
 
         Ok(CommandOutcome::Ok)
     }

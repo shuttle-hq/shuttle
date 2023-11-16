@@ -131,7 +131,7 @@ pub enum Command {
     Login(LoginArgs),
     /// Log out of the Shuttle platform
     Logout(LogoutArgs),
-    /// Generate shell completions
+    /// Generate shell completions and manpage
     Generate {
         /// Which shell
         #[arg(short, long, env, default_value_t = Shell::Bash)]
@@ -139,6 +139,10 @@ pub enum Command {
         /// Output to a file (stdout by default)
         #[arg(short, long, env)]
         output: Option<PathBuf>,
+        /// Generate manpage in the directory specified by the `OUT_DIR`
+        /// environment variable (current working directory by default)
+        #[arg(short, long)]
+        manpage: bool,
     },
     /// Open an issue on GitHub and provide feedback
     Feedback,

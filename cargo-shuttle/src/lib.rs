@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use clap_mangen::Man;
+
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     constants::{
@@ -205,7 +207,11 @@ impl Shuttle {
                 self.init(init_args, args.project_args, provided_path_to_init)
                     .await
             }
-            Command::Generate { shell, output } => self.complete(shell, output),
+            Command::Generate {
+                shell,
+                output,
+                manpage,
+            } => self.complete(shell, output, manpage),
             Command::Login(login_args) => self.login(login_args).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback(),
@@ -615,13 +621,24 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    fn complete(&self, shell: Shell, output: Option<PathBuf>) -> Result<CommandOutcome> {
+    fn complete(
+        &self,
+        shell: Shell,
+        output: Option<PathBuf>,
+        manpage: bool,
+    ) -> Result<CommandOutcome> {
         let name = env!("CARGO_PKG_NAME");
         let mut app = Command::command();
         match output {
             Some(v) => generate(shell, &mut app, name, &mut File::create(v)?),
             None => generate(shell, &mut app, name, &mut stdout()),
         };
+        if manpage {
+            let outdir =
+                std::env::var_os("OUT_DIR").unwrap_or(std::env::current_dir()?.into_os_string());
+            let out_path = PathBuf::from(outdir);
+            generate_manpage(&out_path)?;
+        }
 
         Ok(CommandOutcome::Ok)
     }
@@ -1979,6 +1996,16 @@ impl Shuttle {
 
         Ok(bytes)
     }
+}
+
+fn generate_manpage(outdir: &Path) -> Result<()> {
+    let app = ShuttleArgs::command();
+    let file = Path::new(outdir).join("cargo-shuttle.1");
+    let mut file = File::create(file)?;
+
+    Man::new(app).render(&mut file)?;
+
+    Ok(())
 }
 
 fn is_dirty(repo: &Repository) -> Result<()> {

@@ -213,8 +213,7 @@ async fn create_project(
         service
             .get_project_count(&name)
             .await?
-            .checked_sub(temporary_increase)
-            .unwrap_or(0),
+            .saturating_sub(temporary_increase),
     );
 
     let project = service

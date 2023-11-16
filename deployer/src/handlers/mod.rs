@@ -35,13 +35,12 @@ use shuttle_common::{
         deployment::{DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH},
         error::axum::CustomErrorPath,
         project::ProjectName,
-        secret,
     },
     request_span, LogItem,
 };
 use shuttle_proto::logger::LogsRequest;
 
-use crate::persistence::{Deployment, Persistence, SecretGetter, State};
+use crate::persistence::{Deployment, Persistence, State};
 use crate::{
     deployment::{Built, DeploymentManager, Queued},
     persistence::resource::ResourceManager,
@@ -66,7 +65,6 @@ mod project;
         delete_deployment,
         get_logs_subscribe,
         get_logs,
-        get_secrets,
         clean_project,
     ),
     components(schemas(
@@ -77,10 +75,8 @@ mod project;
         shuttle_common::database::AwsRdsEngine,
         shuttle_common::database::SharedEngine,
         shuttle_common::models::service::Response,
-        shuttle_common::models::secret::Response,
         shuttle_common::models::deployment::Response,
         shuttle_common::log::LogItem,
-        shuttle_common::models::secret::Response,
         shuttle_common::deployment::State,
     ))
 )]
@@ -161,10 +157,6 @@ impl RouterBuilder {
             .route(
                 "/projects/:project_name/deployments/:deployment_id/logs",
                 get(get_logs.layer(ScopedLayer::new(vec![Scope::Logs]))),
-            )
-            .route(
-                "/projects/:project_name/secrets/:service_name",
-                get(get_secrets.layer(ScopedLayer::new(vec![Scope::Secret]))),
             )
             .route(
                 "/projects/:project_name/clean",
@@ -625,6 +617,7 @@ pub async fn start_deployment(
             tracing_context: Default::default(),
             is_next: deployment.is_next,
             claim,
+            secrets: Default::default(),
         };
         deployment_manager.run_push(built).await;
 
@@ -765,38 +758,6 @@ async fn logs_websocket_handler(
     }
 
     let _ = s.close().await;
-}
-
-#[instrument(skip_all, fields(%project_name, %service_name))]
-#[utoipa::path(
-    get,
-    path = "/projects/{project_name}/secrets/{service_name}",
-    responses(
-        (status = 200, description = "Gets the secrets a specific service.", body = [shuttle_common::models::secret::Response]),
-        (status = 500, description = "Database or streaming error.", body = String),
-        (status = 404, description = "Record could not be found.", body = String),
-    ),
-    params(
-        ("project_name" = String, Path, description = "Name of the project that owns the service."),
-        ("service_name" = String, Path, description = "Name of the service.")
-    )
-)]
-pub async fn get_secrets(
-    Extension(persistence): Extension<Persistence>,
-    CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
-) -> Result<Json<Vec<secret::Response>>> {
-    if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let keys = persistence
-            .get_secrets(&service.id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-
-        Ok(Json(keys))
-    } else {
-        Err(Error::NotFound("service not found".to_string()))
-    }
 }
 
 #[instrument(skip_all, fields(%project_name))]

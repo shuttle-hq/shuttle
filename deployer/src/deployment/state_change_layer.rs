@@ -172,7 +172,7 @@ mod tests {
             gateway_client::BuildQueueClient, ActiveDeploymentsGetter, Built, DeploymentManager,
             Queued,
         },
-        persistence::{Secret, SecretGetter, SecretRecorder, State},
+        persistence::State,
     };
 
     use super::{LogItem, StateChangeLayer};
@@ -372,20 +372,6 @@ mod tests {
         RuntimeManager::new(format!("http://{}", provisioner_addr), logger_client, None)
     }
 
-    #[async_trait::async_trait]
-    impl SecretRecorder for RecorderMock {
-        type Err = std::io::Error;
-
-        async fn insert_secret(
-            &self,
-            _service_id: &Ulid,
-            _key: &str,
-            _value: &str,
-        ) -> Result<(), Self::Err> {
-            panic!("no tests should set secrets")
-        }
-    }
-
     #[derive(Clone)]
     struct StubDeploymentUpdater;
 
@@ -434,18 +420,6 @@ mod tests {
             _id: Uuid,
         ) -> Result<(), crate::deployment::gateway_client::Error> {
             Ok(())
-        }
-    }
-
-    #[derive(Clone)]
-    struct StubSecretGetter;
-
-    #[async_trait::async_trait]
-    impl SecretGetter for StubSecretGetter {
-        type Err = std::io::Error;
-
-        async fn get_secrets(&self, _service_id: &Ulid) -> Result<Vec<Secret>, Self::Err> {
-            Ok(Default::default())
         }
     }
 
@@ -764,6 +738,7 @@ mod tests {
                 tracing_context: Default::default(),
                 is_next: false,
                 claim: Default::default(),
+                secrets: Default::default(),
             })
             .await;
 
@@ -828,10 +803,8 @@ mod tests {
         let builder_client = mocked_builder_client(RecorderMock::new()).await;
         DeploymentManager::builder()
             .build_log_recorder(RECORDER.clone())
-            .secret_recorder(RECORDER.clone())
             .active_deployment_getter(StubActiveDeploymentGetter)
             .artifacts_path(PathBuf::from("/tmp"))
-            .secret_getter(StubSecretGetter)
             .resource_manager(StubResourceManager)
             .log_fetcher(logger_client.clone())
             .builder_client(Some(builder_client))

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fmt;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -33,7 +33,7 @@ use uuid::Uuid;
 use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
-use crate::persistence::{DeploymentUpdater, SecretRecorder};
+use crate::persistence::DeploymentUpdater;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn task(
@@ -41,7 +41,6 @@ pub async fn task(
     run_send: RunSender,
     deployment_updater: impl DeploymentUpdater,
     log_recorder: impl LogRecorder,
-    secret_recorder: impl SecretRecorder,
     queue_client: impl BuildQueueClient,
     builder_client: Option<
         BuilderClient<
@@ -65,7 +64,6 @@ pub async fn task(
                 let deployment_updater = deployment_updater.clone();
                 let run_send_cloned = run_send.clone();
                 let log_recorder = log_recorder.clone();
-                let secret_recorder = secret_recorder.clone();
                 let queue_client = queue_client.clone();
                 let builds_path = builds_path.clone();
                 let builder_client = builder_client.clone();
@@ -114,7 +112,6 @@ pub async fn task(
                             .handle(
                                 deployment_updater,
                                 log_recorder,
-                                secret_recorder,
                                 builds_path.as_path(),
                             )
                             .await
@@ -207,14 +204,13 @@ pub struct Queued {
 impl Queued {
     #[instrument(
         name = "Building project",
-        skip(self, deployment_updater, log_recorder, secret_recorder, builds_path),
+        skip(self, deployment_updater, log_recorder, builds_path),
         fields(deployment_id = %self.id, state = %State::Building)
     )]
     async fn handle(
         self,
         deployment_updater: impl DeploymentUpdater,
         log_recorder: impl LogRecorder,
-        secret_recorder: impl SecretRecorder,
         builds_path: &Path,
     ) -> Result<Built> {
         let project_path = builds_path.join(&self.service_name);
@@ -223,8 +219,9 @@ impl Queued {
         fs::create_dir_all(&project_path).await?;
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
+        info!("Building deployment");
+        // Listen to build logs
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
-
         tokio::task::spawn(async move {
             while let Some(line) = rx.recv().await {
                 let log = LogItem::new(
@@ -235,20 +232,12 @@ impl Queued {
                 log_recorder.record(log);
             }
         });
-
         let project_path = project_path.canonicalize()?;
-
-        info!("Building deployment");
         // Currently returns the first found shuttle service in a given workspace.
         let built_service = build_deployment(&project_path, tx.clone()).await?;
 
         // Get the Secrets.toml from the shuttle service in the workspace.
         let secrets = get_secrets(built_service.crate_directory()).await?;
-
-        // Set the secrets from the service, ignoring any Secrets.toml if it is in the root of the workspace.
-        // TODO: refactor this when we support starting multiple services. Do we want to set secrets in the
-        // workspace root?
-        set_secrets(secrets, &self.service_id, secret_recorder).await?;
 
         if self.will_run_tests {
             info!("Running tests before starting up");
@@ -281,6 +270,7 @@ impl Queued {
             tracing_context: Default::default(),
             is_next,
             claim: self.claim,
+            secrets,
         };
 
         Ok(built)
@@ -299,13 +289,13 @@ impl fmt::Debug for Queued {
 }
 
 #[instrument(skip(project_path))]
-async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
+async fn get_secrets(project_path: &Path) -> Result<HashMap<String, String>> {
     let secrets_file = project_path.join("Secrets.toml");
 
     if secrets_file.exists() && secrets_file.is_file() {
         let secrets_str = fs::read_to_string(secrets_file.clone()).await?;
 
-        let secrets: BTreeMap<String, String> = secrets_str.parse::<toml::Value>()?.try_into()?;
+        let secrets = secrets_str.parse::<toml::Value>()?.try_into()?;
 
         fs::remove_file(secrets_file).await?;
 
@@ -313,24 +303,6 @@ async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
     } else {
         Ok(Default::default())
     }
-}
-
-#[instrument(skip(secrets, service_id, secret_recorder))]
-async fn set_secrets(
-    secrets: BTreeMap<String, String>,
-    service_id: &Ulid,
-    secret_recorder: impl SecretRecorder,
-) -> Result<()> {
-    for (key, value) in secrets.into_iter() {
-        debug!(key, "setting secret");
-
-        secret_recorder
-            .insert_secret(service_id, &key, &value)
-            .await
-            .map_err(|e| Error::SecretsSet(Box::new(e)))?;
-    }
-
-    Ok(())
 }
 
 /// Akin to the command: `tar -xzf --strip-components 1`
@@ -462,7 +434,7 @@ async fn copy_executable(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
+    use std::{collections::HashMap, fs::File, io::Write, path::Path};
 
     use tempfile::Builder;
     use tokio::fs;
@@ -621,7 +593,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         secret_file.write_all(b"KEY = 'value'").unwrap();
 
         let actual = super::get_secrets(temp_p).await.unwrap();
-        let expected = BTreeMap::from([("KEY".to_string(), "value".to_string())]);
+        let expected = HashMap::from([("KEY".to_string(), "value".to_string())]);
 
         assert_eq!(actual, expected);
 

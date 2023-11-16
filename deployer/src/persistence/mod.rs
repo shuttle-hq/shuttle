@@ -31,14 +31,12 @@ use uuid::Uuid;
 pub mod deployment;
 mod error;
 pub mod resource;
-mod secret;
 pub mod service;
 mod state;
 mod user;
 
 pub use self::deployment::{Deployment, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
-pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
 pub use self::state::DeploymentState;
 pub use self::state::{State, StateRecorder};
@@ -328,15 +326,6 @@ impl Persistence {
             .map_err(Error::from)
     }
 
-    pub async fn delete_secrets(&self, id: &Ulid) -> Result<u64> {
-        sqlx::query("DELETE FROM secrets WHERE service_id = ?")
-            .bind(id.to_string())
-            .execute(&self.pool)
-            .await
-            .map(|res| res.rows_affected())
-            .map_err(Error::from)
-    }
-
     pub async fn get_all_services(&self) -> Result<Vec<Service>> {
         sqlx::query_as("SELECT * FROM services")
             .fetch_all(&self.pool)
@@ -425,6 +414,7 @@ impl ResourceManager for Persistence {
 
         record_req.extensions_mut().insert(claim);
 
+        info!("Uploading resources to resource-recorder");
         self.resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
@@ -445,6 +435,7 @@ impl ResourceManager for Persistence {
 
         service_resources_req.extensions_mut().insert(claim.clone());
 
+        info!(%service_id, "Getting resources from resource-recorder");
         let res = self
             .resource_recorder_client
             .as_mut()
@@ -456,13 +447,15 @@ impl ResourceManager for Persistence {
 
         // If the resources list is empty
         if res.resources.is_empty() {
+            info!("Got no resources from resource-recorder");
             // Check if there are cached resources on the local persistence.
             let resources: std::result::Result<Vec<Resource>, sqlx::Error> =
-                sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
+                sqlx::query_as("SELECT * FROM resources WHERE service_id = ?")
                     .bind(service_id.to_string())
                     .fetch_all(&self.pool)
                     .await;
 
+            info!(?resources, "Local resources");
             // If there are cached resources
             if let Ok(inner) = resources {
                 // Return early if the local persistence is empty.
@@ -483,33 +476,36 @@ impl ResourceManager for Persistence {
                 self.insert_resources(local_resources, service_id, claim.clone())
                     .await?;
 
-                // Get the resources the second time. This should happen only once. Ideally,
-                // we would remove the local persisted resources cache too. We don't do this
-                // because:
-                // 1) It is not fail proof logic. Deleting the resources from the local persistence
-                //   can fail (even with retry logic), which means that the resources can live
-                //   both in resource-recorder and local persistence.
-                // 2) The first point will cause problems only if we'll remove the resources of a
-                //   service from the resource-recorder, which will trigger again the synchronization
-                //   with local persistence, which isn't necessarily what we want.
-                // 3) Our assumption is that 2) shouldn't happen to soon. It is pending project removal.
-                //   We should make sure that if we'll ever need to manually delete the resources (e.g for
-                //   account deletion) from the resource-recorder, we will first remove the rows of
-                //   resources table and then remove the resource-recorder's resources.
                 let mut service_resources_req = tonic::Request::new(ServiceResourcesRequest {
                     service_id: service_id.to_string(),
                 });
 
                 service_resources_req.extensions_mut().insert(claim);
 
-                return self
+                info!("Getting resources from resource-recorder again");
+                let res = self
                     .resource_recorder_client
                     .as_mut()
                     .expect("to have the resource recorder set up")
                     .get_service_resources(service_resources_req)
                     .await
                     .map_err(PersistenceError::ResourceRecorder)
-                    .map(|res| res.into_inner());
+                    .map(|res| res.into_inner())?;
+
+                if res.resources.is_empty() {
+                    // Something went wrong since it was empty before the upload, and is still empty now.
+                    return Err(Error::ResourceRecorderSync);
+                }
+
+                info!("Deleting local resources");
+                // Now that we know that the resources are in resource-recorder,
+                // we can safely delete them from here to prevent de-sync issues and to not hinder project deletion
+                sqlx::query("DELETE FROM resources WHERE service_id = ?")
+                    .bind(service_id.to_string())
+                    .execute(&self.pool)
+                    .await?;
+
+                return Ok(res);
             }
         }
 
@@ -562,12 +558,6 @@ impl ResourceManager for Persistence {
                     .map_err(error::Error::Provisioner)?;
             };
         }
-        // Delete the secrets from the local SQLite persistence.
-        else if let Type::Secrets = resource_type {
-            let row_count = self.delete_secrets(service_id).await?;
-
-            info!("deleted {row_count} secrets from deployer persistence");
-        }
 
         let mut delete_resource_req = tonic::Request::new(ResourceIds {
             project_id: self.project_id.to_string(),
@@ -585,38 +575,6 @@ impl ResourceManager for Persistence {
             .await
             .map(|res| res.into_inner())
             .map_err(PersistenceError::ResourceRecorder);
-    }
-}
-
-#[async_trait::async_trait]
-impl SecretRecorder for Persistence {
-    type Err = Error;
-
-    async fn insert_secret(&self, service_id: &Ulid, key: &str, value: &str) -> Result<()> {
-        sqlx::query(
-            "INSERT OR REPLACE INTO secrets (service_id, key, value, last_update) VALUES (?, ?, ?, ?)",
-        )
-        .bind(service_id.to_string())
-        .bind(key)
-        .bind(value)
-        .bind(Utc::now())
-        .execute(&self.pool)
-        .await
-        .map(|_| ())
-        .map_err(Error::from)
-    }
-}
-
-#[async_trait::async_trait]
-impl SecretGetter for Persistence {
-    type Err = Error;
-
-    async fn get_secrets(&self, service_id: &Ulid) -> Result<Vec<Secret>> {
-        sqlx::query_as("SELECT * FROM secrets WHERE service_id = ? ORDER BY key")
-            .bind(service_id.to_string())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Error::from)
     }
 }
 
@@ -1138,55 +1096,6 @@ mod tests {
                 },
             ]
         );
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn secrets() {
-        let (p, _) = Persistence::new_in_memory().await;
-
-        let service_id = add_service(&p.pool).await.unwrap();
-        let service_id2 = add_service(&p.pool).await.unwrap();
-
-        p.insert_secret(&service_id, "key1", "value1")
-            .await
-            .unwrap();
-        p.insert_secret(&service_id2, "key2", "value2")
-            .await
-            .unwrap();
-        p.insert_secret(&service_id, "key3", "value3")
-            .await
-            .unwrap();
-        p.insert_secret(&service_id, "key1", "value1_updated")
-            .await
-            .unwrap();
-
-        let actual: Vec<_> = p
-            .get_secrets(&service_id)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|mut i| {
-                // Reset dates for test
-                i.last_update = Default::default();
-                i
-            })
-            .collect();
-        let expected = vec![
-            Secret {
-                service_id,
-                key: "key1".to_string(),
-                value: "value1_updated".to_string(),
-                last_update: Default::default(),
-            },
-            Secret {
-                service_id,
-                key: "key3".to_string(),
-                value: "value3".to_string(),
-                last_update: Default::default(),
-            },
-        ];
-
-        assert_eq!(actual, expected);
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -15,7 +15,10 @@ use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::claims::{Claim, Scope};
+use crate::{
+    claims::{Claim, Scope},
+    limits::ClaimExt,
+};
 
 use super::{
     cache::{CacheManagement, CacheManager},
@@ -428,6 +431,8 @@ pub trait VerifyClaim {
     type Error;
 
     fn verify(&self, required_scope: Scope) -> Result<(), Self::Error>;
+
+    fn verify_rds_access(&self) -> Result<(), Self::Error>;
 }
 
 #[cfg(feature = "tonic")]
@@ -451,6 +456,21 @@ impl<B> VerifyClaim for tonic::Request<B> {
                     .get_documentation()
                     .unwrap_or("perform this operation")
             )))
+        }
+    }
+
+    fn verify_rds_access(&self) -> Result<(), Self::Error> {
+        let claim = self
+            .extensions()
+            .get::<Claim>()
+            .ok_or_else(|| tonic::Status::internal("could not get claim"))?;
+
+        if claim.can_provision_rds() {
+            Ok(())
+        } else {
+            Err(tonic::Status::permission_denied(
+                "don't have permission to provision rds instances",
+            ))
         }
     }
 }

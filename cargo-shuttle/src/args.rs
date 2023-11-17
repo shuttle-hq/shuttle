@@ -139,8 +139,7 @@ pub enum Command {
         /// Output to a file (stdout by default)
         #[arg(short, long, env)]
         output: Option<PathBuf>,
-        /// Generate manpage in the directory specified by the `OUT_DIR`
-        /// environment variable (current working directory by default)
+        /// Generate manpage to the standard output
         #[arg(short, long)]
         manpage: bool,
     },

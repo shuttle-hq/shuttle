@@ -134,8 +134,8 @@ pub enum Command {
     /// Generate shell completions and manpage
     Generate {
         /// Which shell
-        #[arg(short, long, env, default_value_t = Shell::Bash)]
-        shell: Shell,
+        #[arg(short, long)]
+        shell: Option<Shell>,
         /// Output to a file (stdout by default)
         #[arg(short, long, env)]
         output: Option<PathBuf>,

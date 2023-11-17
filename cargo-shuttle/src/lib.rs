@@ -623,21 +623,21 @@ impl Shuttle {
 
     fn complete(
         &self,
-        shell: Shell,
+        shell: Option<Shell>,
         output: Option<PathBuf>,
         manpage: bool,
     ) -> Result<CommandOutcome> {
         let name = env!("CARGO_PKG_NAME");
         let mut app = Command::command();
-        match output {
-            Some(v) => generate(shell, &mut app, name, &mut File::create(v)?),
-            None => generate(shell, &mut app, name, &mut stdout()),
+        match (shell, output) {
+            (Some(shell), Some(output)) => {
+                generate(shell, &mut app, name, &mut File::create(output)?)
+            }
+            (Some(shell), None) => generate(shell, &mut app, name, &mut stdout()),
+            (None, _) => {}
         };
         if manpage {
-            let outdir =
-                std::env::var_os("OUT_DIR").unwrap_or(std::env::current_dir()?.into_os_string());
-            let out_path = PathBuf::from(outdir);
-            generate_manpage(&out_path)?;
+            generate_manpage()?;
         }
 
         Ok(CommandOutcome::Ok)
@@ -1998,12 +1998,11 @@ impl Shuttle {
     }
 }
 
-fn generate_manpage(outdir: &Path) -> Result<()> {
+fn generate_manpage() -> Result<(), std::io::Error> {
     let app = ShuttleArgs::command();
-    let file = Path::new(outdir).join("cargo-shuttle.1");
-    let mut file = File::create(file)?;
-
-    Man::new(app).render(&mut file)?;
+    let output = std::io::stdout();
+    let mut output_handle = output.lock();
+    Man::new(app).render(&mut output_handle)?;
 
     Ok(())
 }

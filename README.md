@@ -168,7 +168,7 @@ Sign up to the [Algora Console](https://console.algora.io/org/shuttle/bounties?s
 ## Community and Support
 
 - [GitHub Issues](https://github.com/shuttle-hq/shuttle/issues). Best for: bugs and errors you encounter using Shuttle.
-- [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements, releases, collaborations and other events.
+- [X (Twitter)](https://twitter.com/shuttle_dev). Best for: keeping up with announcements, releases, collaborations and other events.
 - [Discord](https://discord.gg/shuttle). Best for: *ALL OF THE ABOVE* + help, support, sharing your applications and hanging out with the community.
 
 ## Project Status

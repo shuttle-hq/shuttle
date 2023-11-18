@@ -54,6 +54,7 @@ pub struct ApiBuilder {
     pool: Option<SqlitePool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
     stripe_client: Option<stripe::Client>,
+    jwt_signing_private_key: Option<String>,
 }
 
 impl Default for ApiBuilder {
@@ -95,6 +96,7 @@ impl ApiBuilder {
             pool: None,
             session_layer: None,
             stripe_client: None,
+            jwt_signing_private_key: None,
         }
     }
 
@@ -122,15 +124,23 @@ impl ApiBuilder {
         self
     }
 
+    pub fn with_jwt_signing_private_key(mut self, private_key: String) -> Self {
+        self.jwt_signing_private_key = Some(private_key);
+        self
+    }
+
     pub fn into_router(self) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
         let session_layer = self.session_layer.expect("a session layer is required");
         let stripe_client = self.stripe_client.expect("a stripe client is required");
+        let jwt_signing_private_key = self
+            .jwt_signing_private_key
+            .expect("a jwt signing private key");
         let user_manager = UserManager {
             pool,
             stripe_client,
         };
-        let key_manager = EdDsaManager::new();
+        let key_manager = EdDsaManager::new(jwt_signing_private_key);
 
         let state = RouterState {
             user_manager: Arc::new(Box::new(user_manager)),

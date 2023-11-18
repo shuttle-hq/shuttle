@@ -29,6 +29,7 @@ pub async fn start(pool: SqlitePool, args: StartArgs) -> io::Result<()> {
         .with_sqlite_pool(pool)
         .with_sessions()
         .with_stripe_client(stripe::Client::new(args.stripe_secret_key))
+        .with_jwt_signing_private_key(args.jwt_signing_private_key)
         .into_router();
 
     info!(address=%args.address, "Binding to and listening at address");

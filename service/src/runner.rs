@@ -10,8 +10,8 @@ use shuttle_common::{
     deployment::Environment,
 };
 use shuttle_proto::runtime::runtime_client;
+use shuttle_proto::tonic::transport::{Channel, Endpoint};
 use tokio::process;
-use tonic::transport::{Channel, Endpoint};
 use tower::ServiceBuilder;
 use tracing::{info, trace};
 

@@ -6033,7 +6033,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "toml 0.8.8",
- "tonic 0.10.2",
  "tower",
  "tracing",
 ]

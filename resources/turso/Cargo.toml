@@ -9,7 +9,7 @@ keywords = ["shuttle-service", "turso"]
 [dependencies]
 async-trait = "0.1.56"
 dunce = "1.0.4"
-libsql-client = { version = "0.31.0" }
+libsql-client = "0.31.0"
 serde = { version = "1.0.148", features = ["derive"] }
 shuttle-service = { path = "../../service", version = "0.33.0", default-features = false }
 url = { version = "2.3.1", features = ["serde"] }

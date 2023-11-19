@@ -5926,16 +5926,13 @@ version = "0.33.0"
 dependencies = [
  "anyhow",
  "chrono",
- "dunce",
  "futures-core",
- "home",
  "prost 0.12.2",
  "prost-types",
  "serde_json",
  "shuttle-common",
  "tokio",
  "tonic 0.10.2",
- "tower",
  "tracing",
 ]
 
@@ -6028,12 +6025,16 @@ dependencies = [
  "anyhow",
  "async-trait",
  "cargo_metadata 0.18.1",
+ "dunce",
  "serde",
  "shuttle-common",
+ "shuttle-proto",
  "strfmt",
  "thiserror",
  "tokio",
  "toml 0.8.8",
+ "tonic 0.10.2",
+ "tower",
  "tracing",
 ]
 

@@ -7,8 +7,8 @@ description = "Service responsible for provisioning and managing resources for s
 publish = false
 
 [dependencies]
-shuttle-common = { workspace = true, features = ["backend", "tonic"] }
-shuttle-proto = { workspace = true }
+shuttle-common = { workspace = true, features = ["backend", "models", "service", "tonic"] }
+shuttle-proto = { workspace = true, features = ["provisioner"] }
 
 aws-config = "0.56.1"
 aws-sdk-rds = "0.33.1"

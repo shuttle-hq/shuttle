@@ -12,7 +12,8 @@ use clap::{
     Parser, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::{models::project::DEFAULT_IDLE_MINUTES, resource};
+use shuttle_common::constants::DEFAULT_IDLE_MINUTES;
+use shuttle_common::resource;
 use uuid::Uuid;
 
 #[derive(Parser)]

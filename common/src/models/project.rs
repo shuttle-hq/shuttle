@@ -22,14 +22,6 @@ use utoipa::ToSchema;
 
 use super::error::InvalidProjectName;
 
-/// Timeframe before a project is considered idle
-pub const DEFAULT_IDLE_MINUTES: u64 = 30;
-
-/// Function to set [DEFAULT_IDLE_MINUTES] as a serde default
-pub const fn default_idle_minutes() -> u64 {
-    DEFAULT_IDLE_MINUTES
-}
-
 #[derive(Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::Response))]
@@ -265,8 +257,9 @@ pub fn get_projects_table(
 /// Additionaly, while host segments are technically case-insensitive, the filesystem isn't,
 /// so we restrict project names to be lower case. We also restrict the use of profanity,
 /// as well as a list of reserved words.
-#[derive(Clone, Serialize, Debug, Eq, Hash, PartialEq, sqlx::Type)]
-#[sqlx(transparent)]
+#[derive(Clone, Serialize, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "persist", derive(sqlx::Type))]
+#[cfg_attr(feature = "persist", sqlx(transparent))]
 pub struct ProjectName(String);
 
 impl ProjectName {

@@ -84,27 +84,9 @@ claims = [
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
 openapi = ["utoipa/chrono", "utoipa/uuid"]
-models = [
-    "async-trait",
-    "http",
-    "reqwest",
-    "service",
-    "thiserror",
-]
-persist = [
-    "sqlx",
-    # These features fix a derive macro error when different backends enable sqlite & postgres (mainly in grouped compilation in clippy CI and Docker build)
-    "sqlx/postgres",
-    "sqlx/sqlite",
-    "rand"
-]
-service = [
-    "chrono/serde",
-    "display",
-    "tracing",
-    "tracing-subscriber",
-    "uuid",
-]
+models = ["async-trait", "http", "reqwest", "service", "thiserror"]
+persist = ["sqlx", "rand"]
+service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
 tracing = ["dep:tracing"]
 wasm = [
     "chrono/clock",

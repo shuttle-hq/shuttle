@@ -33,7 +33,7 @@ use shuttle_common::{
     claims::{Claim, Scope},
     models::{
         deployment::{DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH},
-        error::axum::CustomErrorPath,
+        error::{axum::CustomErrorPath, ApiError, ErrorKind},
         project::ProjectName,
         secret,
     },
@@ -733,14 +733,10 @@ async fn logs_websocket_handler(
             if error.code() == tonic::Code::Unavailable
                 && error.metadata().get("x-ratelimit-limit").is_some()
             {
-                let _ = s
-                    .send(ws::Message::Text(
-                        Error::RateLimited(
-                            "your application is producing too many logs. Interactions with the shuttle logger service will be rate limited for a while"
-                                .to_string(),
-                        ).to_string()
-                    ))
-                    .await;
+                let message = serde_json::to_string(&ApiError::from(ErrorKind::ServiceUnavailable))
+                    .expect("to convert error to json");
+
+                let _ = s.send(ws::Message::Text(message)).await;
             } else {
                 let _ = s
                     .send(ws::Message::Text("failed to get logs".to_string()))

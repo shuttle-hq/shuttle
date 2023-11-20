@@ -720,12 +720,12 @@ impl Shuttle {
                             println!("{log_item}")
                         }
                         Err(err) => {
-                            debug!(error = %err, "failed to parse logs");
+                            debug!(error = %err, "failed to parse message into log item");
 
-                            let message = if line.contains("rate limit") {
-                                line
+                            let message = if let Ok(err) = serde_json::from_str::<ApiError>(&line) {
+                                err.to_string()
                             } else {
-                                "failed parsing logs, is your cargo-shuttle outdated?".to_string()
+                                "failed to parse logs, is your cargo-shuttle outdated?".to_string()
                             };
 
                             bail!(message);

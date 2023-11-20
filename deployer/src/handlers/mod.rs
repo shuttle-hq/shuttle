@@ -674,7 +674,7 @@ pub async fn get_logs(
                 && error.metadata().get("x-ratelimit-limit").is_some()
             {
                 Err(Error::RateLimited(
-                    "your application is producing too many logs. Interactions with the shuttle logger service will be rate limited for a while"
+                    "your application is producing too many logs. Interactions with the shuttle logger service will be rate limited"
                         .to_string(),
                 ))
             } else {
@@ -733,7 +733,13 @@ async fn logs_websocket_handler(
             if error.code() == tonic::Code::Unavailable
                 && error.metadata().get("x-ratelimit-limit").is_some()
             {
-                let message = serde_json::to_string(&ApiError::from(ErrorKind::ServiceUnavailable))
+                let message = serde_json::to_string(
+                    &ApiError::from(
+                        ErrorKind::RateLimited(
+                            "your application is producing too many logs. Interactions with the shuttle logger service will be rate limited"
+                            .to_string()
+                        )
+                    ))
                     .expect("to convert error to json");
 
                 let _ = s.send(ws::Message::Text(message)).await;

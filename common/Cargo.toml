@@ -59,6 +59,7 @@ backend = [
     "hyper/client",
     "opentelemetry_sdk",
     "opentelemetry-otlp",
+    "rustrict", # only ProjectName model uses it
     "thiserror",
     "tokio",
     "tonic",
@@ -91,7 +92,6 @@ models = [
     "display",
     "http",
     "reqwest",
-    "rustrict",
     "service",
     "thiserror",
 ]

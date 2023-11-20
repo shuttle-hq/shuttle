@@ -40,7 +40,7 @@ pub struct ShuttleArgs {
 #[derive(Parser, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
-    #[arg(global = true, long, alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
+    #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
     #[arg(global = true, long)]
@@ -119,12 +119,6 @@ pub enum Command {
     /// Manage resources of a Shuttle project
     #[command(subcommand)]
     Resource(ResourceCommand),
-    /// Manage secrets for this Shuttle service
-    Secrets {
-        #[arg(long, default_value_t = false)]
-        /// Output table in `raw` format
-        raw: bool,
-    },
     /// Remove cargo build artifacts in the Shuttle environment
     Clean,
     /// Login to the Shuttle platform
@@ -247,10 +241,10 @@ pub struct LogoutArgs {
 #[derive(Parser)]
 pub struct DeployArgs {
     /// Allow deployment with uncommitted files
-    #[arg(long, alias = "ad")]
+    #[arg(long, visible_alias = "ad")]
     pub allow_dirty: bool,
     /// Don't run pre-deploy tests
-    #[arg(long, alias = "nt")]
+    #[arg(long, visible_alias = "nt")]
     pub no_test: bool,
 }
 

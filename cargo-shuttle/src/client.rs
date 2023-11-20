@@ -7,7 +7,7 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::deployment::DeploymentRequest;
-use shuttle_common::models::{deployment, project, secret, service, ToJson};
+use shuttle_common::models::{deployment, project, service, ToJson};
 use shuttle_common::secrets::Secret;
 use shuttle_common::{resource, ApiKey, ApiUrl, LogItem, VersionInfo};
 use tokio::net::TcpStream;
@@ -175,12 +175,6 @@ impl Client {
         );
 
         self.delete(path).await
-    }
-
-    pub async fn get_secrets(&self, project: &str) -> Result<Vec<secret::Response>> {
-        let path = format!("/projects/{project}/secrets/{project}");
-
-        self.get(path).await
     }
 
     pub async fn get_logs(&self, project: &str, deployment_id: &Uuid) -> Result<Vec<LogItem>> {

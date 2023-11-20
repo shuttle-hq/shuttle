@@ -7,7 +7,7 @@ mod user;
 use std::{io, str::FromStr, time::Duration};
 
 use args::StartArgs;
-use shuttle_common::ApiKey;
+use shuttle_common::{claims::AccountTier, ApiKey};
 use sqlx::{
     migrate::Migrator,
     query,
@@ -19,7 +19,6 @@ use tracing::info;
 use crate::api::serve;
 pub use api::ApiBuilder;
 pub use args::{Args, Commands, InitArgs};
-pub use user::AccountTier;
 
 pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // One day
 

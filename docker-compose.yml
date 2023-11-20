@@ -53,6 +53,13 @@ services:
       - "start"
       - "--address=0.0.0.0:8000"
       - "--stripe-secret-key=${STRIPE_SECRET_KEY}"
+    healthcheck:
+      test: curl --fail http://localhost:8000/ || exit 1
+      interval: 1m
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+      start_interval: 2s
   builder:
     image: "${CONTAINER_REGISTRY}/builder:${BUILDER_TAG}"
     depends_on:

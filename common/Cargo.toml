@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-common"
-version = "0.32.0"
+version = "0.33.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -22,6 +22,7 @@ hyper = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
 pin-project = { workspace = true, optional = true }
@@ -55,6 +56,7 @@ backend = [
     "axum/json",
     "claims",
     "hyper/client",
+    "opentelemetry_sdk",
     "opentelemetry-otlp",
     "thiserror",
     "tokio",
@@ -64,7 +66,8 @@ backend = [
     "tracing-subscriber/fmt",
     "ttl_cache",
     "sqlx",
-    "sqlx/postgres",                 # Fix for derive macro error when different backends enable sqlite & postgres (mainly for grouped compilation in clippy CI and Docker build)
+    "sqlx/postgres",            # Fix for derive macro error when different backends enable sqlite & postgres (mainly for grouped compilation in clippy CI and Docker build)
+    "sqlx/sqlite",
 ]
 claims = [
     "bytes",

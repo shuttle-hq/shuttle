@@ -2,7 +2,7 @@ pub mod builder;
 pub mod cargo_shuttle;
 pub mod logger;
 
-use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::claims::{AccountTier, Claim, Scope};
 
 /// Layer to set JwtScopes on a request.
 /// For use in other tests
@@ -54,8 +54,12 @@ where
     }
 
     fn call(&mut self, mut req: hyper::Request<hyper::Body>) -> Self::Future {
-        req.extensions_mut()
-            .insert(Claim::new("test".to_string(), self.scopes.clone()));
+        req.extensions_mut().insert(Claim::new(
+            "test".to_string(),
+            self.scopes.clone(),
+            Default::default(),
+            AccountTier::default(),
+        ));
         self.inner.call(req)
     }
 }

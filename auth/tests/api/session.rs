@@ -6,6 +6,7 @@ use shuttle_common::claims::Claim;
 
 use crate::helpers::app;
 
+// This test is ignored because we are not currently using the session flow.
 #[ignore]
 #[tokio::test]
 async fn session_flow() {

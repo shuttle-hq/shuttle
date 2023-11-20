@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crossterm::style::{Color, Stylize};
+use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
@@ -23,7 +23,7 @@ impl Display for ApiError {
             f,
             "{}\nMessage: {}",
             self.status().to_string().bold(),
-            self.message.to_string().with(Color::Red)
+            self.message.to_string().red()
         )
     }
 }

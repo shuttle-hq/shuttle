@@ -41,6 +41,7 @@ pub(crate) async fn app() -> TestApp {
             mocked_stripe_server.uri.to_string().as_str(),
             "",
         ))
+        .with_jwt_signing_private_key("LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUR5V0ZFYzhKYm05NnA0ZGNLTEwvQWNvVUVsbUF0MVVKSTU4WTc4d1FpWk4KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=".to_string())
         .into_router();
 
     TestApp {

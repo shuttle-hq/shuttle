@@ -280,6 +280,8 @@ pub mod tests {
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
+    use tokio::time::sleep;
+    use tower::Service;
 
     use crate::acme::AcmeClient;
     use crate::api::latest::ApiBuilder;
@@ -747,6 +749,95 @@ pub mod tests {
                     .await
                     .unwrap();
             });
+
+            this
+        }
+    }
+
+    #[async_trait]
+    pub trait RouterExt {
+        /// Create a project and put it in the ready state
+        async fn create_project(
+            &mut self,
+            authorization: &Authorization<Bearer>,
+            project_name: &str,
+        ) -> TestProject;
+    }
+
+    /// Helper struct to wrap a bunch of commands to run against a test project
+    pub struct TestProject<'a> {
+        router: &'a mut Router,
+        authorization: Authorization<Bearer>,
+        project_name: String,
+    }
+
+    impl<'a> TestProject<'a> {
+        /// Wait a few seconds for the project to enter the desired state
+        pub async fn wait_for_state(&mut self, state: project::State) {
+            let mut tries = 0;
+            let project_name = &self.project_name;
+
+            loop {
+                let resp = self
+                    .router
+                    .call(
+                        Request::get(format!("/projects/{project_name}"))
+                            .with_header(&self.authorization)
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+
+                assert_eq!(resp.status(), StatusCode::OK);
+                let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
+                let project: project::Response = serde_json::from_slice(&body).unwrap();
+
+                if project.state == state {
+                    break;
+                }
+
+                tries += 1;
+                if tries > 12 {
+                    panic!("timed out waiting for state {state}");
+                }
+
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+    }
+
+    #[async_trait]
+    impl RouterExt for Router {
+        async fn create_project(
+            &mut self,
+            authorization: &Authorization<Bearer>,
+            project_name: &str,
+        ) -> TestProject {
+            let authorization = authorization.clone();
+
+            self.call(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/projects/{project_name}"))
+                    .header("Content-Type", "application/json")
+                    .body("{\"idle_minutes\": 3}".into())
+                    .unwrap()
+                    .with_header(&authorization),
+            )
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::OK);
+            })
+            .await
+            .unwrap();
+
+            let mut this = TestProject {
+                authorization,
+                project_name: project_name.to_string(),
+                router: self,
+            };
+
+            this.wait_for_state(project::State::Ready).await;
 
             this
         }

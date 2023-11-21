@@ -1108,7 +1108,7 @@ pub mod tests {
 
     use super::*;
     use crate::service::GatewayService;
-    use crate::tests::{RequestBuilderExt, World};
+    use crate::tests::{RequestBuilderExt, RouterExt, World};
 
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
@@ -1364,22 +1364,6 @@ pub mod tests {
         Ok(())
     }
 
-    macro_rules! timed_loop {
-        (wait: $wait:literal$(, max: $max:literal)?, $block:block) => {{
-            #[allow(unused_mut)]
-            #[allow(unused_variables)]
-            let mut tries = 0;
-            loop {
-                $block
-                    tries += 1;
-                $(if tries > $max {
-                    panic!("timed out in the loop");
-                })?
-                    ::tokio::time::sleep(::std::time::Duration::from_secs($wait)).await;
-            }
-        }};
-    }
-
     #[tokio::test]
     async fn api_delete_project_that_is_ready() -> anyhow::Result<()> {
         let world = World::new().await;
@@ -1388,42 +1372,7 @@ pub mod tests {
         let authorization = world.create_authorization_bearer("neo");
 
         // Create a project and put it in the ready state
-        router
-            .call(
-                Request::builder()
-                    .method("POST")
-                    .uri(format!("/projects/matrix"))
-                    .header("Content-Type", "application/json")
-                    .body("{\"idle_minutes\": 3}".into())
-                    .unwrap()
-                    .with_header(&authorization),
-            )
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK);
-            })
-            .await
-            .unwrap();
-
-        timed_loop!(wait: 1, max: 12, {
-            let resp = router
-                .call(
-                    Request::get("/projects/matrix")
-                        .with_header(&authorization)
-                        .body(Body::empty())
-                        .unwrap(),
-                )
-                .await.unwrap();
-
-            assert_eq!(resp.status(), StatusCode::OK);
-            let body = to_bytes(resp.into_body()).await.unwrap();
-            let project: project::Response = serde_json::from_slice(&body).unwrap();
-
-            if project.state == project::State::Ready {
-                break;
-            }
-
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        });
+        let _project = router.create_project(&authorization, "matrix").await;
 
         router
             .call(

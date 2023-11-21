@@ -207,10 +207,34 @@
 pub use shuttle_codegen::main;
 pub use shuttle_service::{CustomError, Error, Factory, ResourceBuilder, Service};
 
-// Useful re-exports
-pub use async_trait::async_trait;
-pub use tokio;
+#[cfg(feature = "tracing-subscriber")]
+use tracing_subscriber::{
+    fmt::{
+        format::{DefaultFields, Format, Full},
+        layer, Layer,
+    },
+    layer::{Layered, SubscriberExt},
+    EnvFilter, Registry,
+};
+/// Default tracing subscriber. Is initialized if feature "setup-tracing" is enabled.
+#[cfg(feature = "tracing-subscriber")]
+pub fn default_tracing_subscriber(
+) -> Layered<EnvFilter, Layered<Layer<Registry, DefaultFields, Format<Full, ()>>, Registry>> {
+    tracing_subscriber::registry()
+        .with(layer().without_time())
+        .with(
+            // let user override RUST_LOG in local run if they want to
+            EnvFilter::try_from_default_env()
+                // otherwise use our default
+                .unwrap_or_else(|_| EnvFilter::try_new("info,shuttle=trace").unwrap()),
+        )
+}
 
+// Useful re-exports
+pub use async_trait::async_trait; // used by services
+pub use tokio; // used in codegen
+
+// Internals
 mod alpha;
 mod args;
 #[cfg(feature = "next")]
@@ -233,11 +257,7 @@ pub mod __internals {
 
     // Dependencies required by the codegen
     pub use anyhow::Context;
-    #[cfg(feature = "setup-tracing")]
-    pub use colored;
     pub use strfmt::strfmt;
-    #[cfg(feature = "setup-tracing")]
-    pub use tracing_subscriber;
 
     // Print the version of the runtime.
     pub fn print_version() {

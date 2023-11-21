@@ -72,21 +72,12 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     // this is handled after arg parsing to not interfere with --version above
     #[cfg(feature = "setup-tracing")]
     {
+        // Initialize our default subscriber
+        use tracing_subscriber::util::SubscriberInitExt;
+        crate::default_tracing_subscriber().init();
+
         use colored::Colorize;
-        use tracing_subscriber::prelude::*;
-
         colored::control::set_override(true); // always apply color
-
-        tracing_subscriber::registry()
-            .with(tracing_subscriber::fmt::layer().without_time())
-            .with(
-                // let user override RUST_LOG in local run if they want to
-                tracing_subscriber::EnvFilter::try_from_default_env()
-                    // otherwise use our default
-                    .or_else(|_| tracing_subscriber::EnvFilter::try_new("info,shuttle=trace"))
-                    .unwrap(),
-            )
-            .init();
 
         println!(
             "{}\n\

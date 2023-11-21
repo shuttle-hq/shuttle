@@ -35,7 +35,7 @@ tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
-tracing-subscriber = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"], optional = true }
 wasi-common = { version = "13.0.0", optional = true }
 wasmtime = { version = "13.0.0", optional = true }
 wasmtime-wasi = { version = "13.0.0", optional = true }
@@ -48,6 +48,8 @@ uuid = { workspace = true }
 
 [features]
 default = ["setup-tracing"]
+
+# shuttle-next framework
 next = [
     "cap-std",
     "futures",
@@ -59,8 +61,12 @@ next = [
     "wasmtime-wasi",
     "shuttle-common/wasm",
 ]
+
+# export the default tracing layer
+tracing-subscriber = ["dep:tracing-subscriber"]
+
+# initialze the default tracing layer on startup
 setup-tracing = [
-    "tracing-subscriber/default",
-    "tracing-subscriber/env-filter",
+    "tracing-subscriber",
     "colored",
 ]

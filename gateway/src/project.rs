@@ -792,6 +792,7 @@ impl ProjectCreating {
             builder_host,
             auth_uri,
             fqdn: public,
+            extra_hosts,
             ..
         } = ctx.container_settings();
 
@@ -863,7 +864,8 @@ impl ProjectCreating {
             "MemoryReservation": 4295000000i64, // 4 GiB soft limit, applied if host is low on memory
             // https://docs.docker.com/config/containers/resource_constraints/#cpu
             "CpuPeriod": 100000i64,
-            "CpuQuota": 400000i64
+            "CpuQuota": 400000i64,
+            "ExtraHosts": extra_hosts,
         });
 
         debug!(

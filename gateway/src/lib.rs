@@ -506,11 +506,11 @@ pub mod tests {
             let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
             let user = control + 1;
             let bouncer = user + 1;
-            let auth = bouncer + 1;
+            let auth_port = bouncer + 1;
             let control = format!("127.0.0.1:{control}").parse().unwrap();
             let user = format!("127.0.0.1:{user}").parse().unwrap();
             let bouncer = format!("127.0.0.1:{bouncer}").parse().unwrap();
-            let auth: SocketAddr = format!("127.0.0.1:{auth}").parse().unwrap();
+            let auth: SocketAddr = format!("0.0.0.0:{auth_port}").parse().unwrap();
             let auth_uri: Uri = format!("http://{auth}").parse().unwrap();
 
             let auth_service = AuthService::new(auth);
@@ -547,10 +547,26 @@ pub mod tests {
                     prefix,
                     provisioner_host,
                     builder_host,
-                    auth_uri: auth_uri.clone(),
+                    // The started containers need to reach auth on the host.
+                    // For this to work, the firewall should not be blocking traffic on the `SHUTTLE_TEST_NETWORK` interface.
+                    // The following command can be used on NixOs to allow traffic on the interface.
+                    // ```
+                    // sudo iptables -I nixos-fw -i <interface> -j nixos-fw-accept
+                    // ```
+                    //
+                    // Something like this should work on other systems.
+                    // ```
+                    // sudo iptables -I INPUT -i <interface> -j ACCEPT
+                    // ```
+                    auth_uri: format!("http://host.docker.internal:{auth_port}")
+                        .parse()
+                        .unwrap(),
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
                     deploys_api_key: "gateway".to_string(),
+
+                    // Allow access to the auth on the host
+                    extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],
                 },
             };
 
@@ -609,7 +625,7 @@ pub mod tests {
                 .lock()
                 .unwrap()
                 .users
-                .insert(user.to_string(), vec![Scope::Project, Scope::ProjectWrite]);
+                .insert(user.to_string(), AccountTier::Basic.into());
 
             user.to_string()
         }

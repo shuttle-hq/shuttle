@@ -1109,6 +1109,7 @@ pub mod tests {
     use super::*;
     use crate::service::GatewayService;
     use crate::tests::{RequestBuilderExt, World};
+    use crate::worker::Worker;
 
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
@@ -1360,6 +1361,117 @@ pub mod tests {
                 .await
                 .unwrap();
         }
+
+        Ok(())
+    }
+
+    macro_rules! timed_loop {
+        (wait: $wait:literal$(, max: $max:literal)?, $block:block) => {{
+            #[allow(unused_mut)]
+            #[allow(unused_variables)]
+            let mut tries = 0;
+            loop {
+                $block
+                    tries += 1;
+                $(if tries > $max {
+                    panic!("timed out in the loop");
+                })?
+                    ::tokio::time::sleep(::std::time::Duration::from_secs($wait)).await;
+            }
+        }};
+    }
+
+    #[tokio::test]
+    async fn api_delete_project_that_is_ready() -> anyhow::Result<()> {
+        let world = World::new().await;
+        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let worker = Worker::new();
+
+        let (sender, mut receiver) = channel(256);
+        tokio::spawn({
+            let worker_sender = worker.sender();
+            async move {
+                while let Some(work) = receiver.recv().await {
+                    // Forward tasks to an actual worker
+                    worker_sender
+                        .send(work)
+                        .await
+                        .map_err(|_| "could not send work")
+                        .unwrap();
+                }
+            }
+        });
+
+        let _worker = tokio::spawn(async move {
+            worker.start().await.unwrap();
+        });
+
+        // Allow the spawns to start
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        let mut router = ApiBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_sender(sender)
+            .with_default_routes()
+            .with_auth_service(world.context().auth_uri)
+            .into_router();
+
+        let neo_key = world.create_user("neo");
+
+        let authorization = Authorization::bearer(&neo_key).unwrap();
+
+        // Create a project and put it in the ready state
+        router
+            .call(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/projects/matrix"))
+                    .header("Content-Type", "application/json")
+                    .body("{\"idle_minutes\": 3}".into())
+                    .unwrap()
+                    .with_header(&authorization),
+            )
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::OK);
+            })
+            .await
+            .unwrap();
+
+        timed_loop!(wait: 1, max: 12, {
+            let resp = router
+                .call(
+                    Request::get("/projects/matrix")
+                        .with_header(&authorization)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await.unwrap();
+
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = to_bytes(resp.into_body()).await.unwrap();
+            let project: project::Response = serde_json::from_slice(&body).unwrap();
+
+            if project.state == project::State::Ready {
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        });
+
+        router
+            .call(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/projects/matrix/delete"))
+                    .body(Body::empty())
+                    .unwrap()
+                    .with_header(&authorization),
+            )
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::OK);
+            })
+            .await
+            .unwrap();
 
         Ok(())
     }

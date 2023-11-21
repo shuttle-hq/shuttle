@@ -489,7 +489,6 @@ pub mod tests {
     pub struct WorldContext {
         pub docker: Docker,
         pub container_settings: ContainerSettings,
-        pub hyper: HyperClient<HttpConnector, Body>,
         pub auth_uri: Uri,
     }
 
@@ -642,7 +641,6 @@ pub mod tests {
             WorldContext {
                 docker: self.docker.clone(),
                 container_settings: self.settings.clone(),
-                hyper: self.hyper.clone(),
                 auth_uri: self.auth_uri.clone(),
             }
         }

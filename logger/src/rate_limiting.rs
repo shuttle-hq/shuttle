@@ -41,10 +41,6 @@ pub fn tonic_error(e: BoxError) -> tonic::Status {
     if let Some(error) = e.downcast_ref::<GovernorError>() {
         match error.to_owned() {
             GovernorError::TooManyRequests { wait_time, headers } => {
-                // TODO: after upgrading tonic, use tonic types trait extensions to enrich status,
-                // see example: https://github.com/hyperium/tonic/blob/master/examples/src/richer-error/server.rs.
-                // We can for example add wait time as: https://docs.rs/tonic-types/latest/tonic_types/struct.RetryInfo.html
-
                 let mut response = Status::unavailable(format!(
                     "received too many requests, wait for {wait_time}ms"
                 ));

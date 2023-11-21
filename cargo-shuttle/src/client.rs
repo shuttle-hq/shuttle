@@ -140,7 +140,7 @@ impl Client {
             .await
     }
 
-    pub async fn clean_project(&self, project: &str) -> Result<Vec<String>> {
+    pub async fn clean_project(&self, project: &str) -> Result<String> {
         let path = format!("/projects/{project}/clean");
 
         self.post(path, Option::<String>::None)

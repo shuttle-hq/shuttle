@@ -635,7 +635,7 @@ impl Shuttle {
 
     async fn clean(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        let lines = client
+        let message = client
             .clean_project(self.ctx.project_name())
             .await
             .map_err(|err| {
@@ -646,12 +646,7 @@ impl Shuttle {
                     "cleaning your project or checking its status fail repeatedly",
                 )
             })?;
-
-        for line in lines {
-            println!("{line}");
-        }
-
-        println!("Cleaning done!");
+        println!("{message}");
 
         Ok(CommandOutcome::Ok)
     }

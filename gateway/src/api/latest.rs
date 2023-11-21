@@ -1140,7 +1140,7 @@ pub mod tests {
                 .unwrap()
         };
 
-        let delete_project = |project: &str| {
+        let stop_project = |project: &str| {
             Request::builder()
                 .method("DELETE")
                 .uri(format!("/projects/{project}"))
@@ -1197,7 +1197,7 @@ pub mod tests {
             .unwrap();
 
         router
-            .call(delete_project("matrix").with_header(&authorization))
+            .call(stop_project("matrix").with_header(&authorization))
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::OK);
             })
@@ -1223,7 +1223,7 @@ pub mod tests {
             .unwrap();
 
         router
-            .call(delete_project("reloaded").with_header(&authorization))
+            .call(stop_project("reloaded").with_header(&authorization))
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             })

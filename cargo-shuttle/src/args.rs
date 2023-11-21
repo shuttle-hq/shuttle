@@ -277,6 +277,9 @@ pub struct InitArgs {
     #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub path: PathBuf,
 
+    /// Don't check the project name's validity or availability and use it anyways
+    #[arg(long)]
+    pub force_name: bool,
     /// Whether to start the container for this project on Shuttle, and claim the project name
     #[arg(long)]
     pub create_env: bool,
@@ -399,6 +402,7 @@ mod tests {
             from: None,
             subfolder: None,
             create_env: false,
+            force_name: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
@@ -416,6 +420,7 @@ mod tests {
             from: None,
             subfolder: None,
             create_env: false,
+            force_name: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
@@ -433,6 +438,7 @@ mod tests {
             from: None,
             subfolder: None,
             create_env: false,
+            force_name: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
@@ -450,6 +456,7 @@ mod tests {
             from: Some("https://github.com/some/repo".into()),
             subfolder: Some("some/path".into()),
             create_env: false,
+            force_name: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
@@ -467,6 +474,7 @@ mod tests {
             from: None,
             subfolder: None,
             create_env: false,
+            force_name: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };

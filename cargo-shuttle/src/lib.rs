@@ -337,42 +337,53 @@ impl Shuttle {
                 It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
                 "
             };
-            let client = self.client.as_ref().unwrap();
-            loop {
-                // not using validate_with due to being blocking
-                let p: String = Input::with_theme(&theme)
+        }
+        let mut prev_name: Option<String> = None;
+        loop {
+            // prompt if interactive
+            let name: String = if let Some(name) = project_args.name.clone() {
+                name
+            } else {
+                // not using `validate_with` due to being blocking. we also need to handle --force
+                Input::with_theme(&theme)
                     .with_prompt("Project name")
-                    .interact()?;
-                match client.check_project_name(&p).await {
-                    Ok(true) => {
-                        println!("{} {}", "Project name already taken:".red(), p);
-                        println!("{}", "Try a different name.".yellow());
-                    }
-                    Ok(false) => {
-                        project_args.name = Some(p);
-                        break;
-                    }
-                    Err(e) => {
-                        // If API error contains message regarding format of error name, print that error and prompt again
-                        if let Ok(api_error) = e.downcast::<ApiError>() {
-                            // If the returned error string changes, this could break
-                            if api_error.message.contains("Invalid project name") {
-                                println!("{}", api_error.message.yellow());
-                                println!("{}", "Try a different name.".yellow());
-                                continue;
-                            }
-                        }
-                        // Else, the API error was about something else.
-                        // Ignore and keep going to not prevent the flow of the init command.
-                        project_args.name = Some(p);
-                        println!(
-                            "{}",
-                            "Failed to check if project name is available.".yellow()
-                        );
-                        break;
-                    }
+                    .interact()?
+            };
+            // handle --force on retires
+            let name: String = if let Some(prev_name) = prev_name {
+                if project_args.name.is_none() && name == "--force" {
+                    project_args.name = Some(prev_name);
+                    break;
+                } else {
+                    name
                 }
+            } else {
+                name
+            };
+            // skip validation if forced
+            if args.force_name {
+                project_args.name = Some(name);
+                break;
             }
+            // validate and take action based on result
+            if self
+                .check_project_name(&mut project_args, name.clone())
+                .await
+            {
+                // success
+                break;
+            } else if project_args.name.is_none() {
+                // try again
+                println!(r#"Type `--force` to use "{}" anyways"#, name);
+                prev_name = Some(name);
+            } else {
+                // don't continue if non-interactive
+                bail!(
+                    "Invalid or taken project name. Use `--force-name` to use this name anyways."
+                );
+            }
+        }
+        if project_args.name.is_none() {
             println!();
         }
 
@@ -509,6 +520,41 @@ impl Shuttle {
         }
 
         Ok(CommandOutcome::Ok)
+    }
+
+    /// true -> success/neutral. false -> try again.
+    async fn check_project_name(&self, project_args: &mut ProjectArgs, name: String) -> bool {
+        let client = self.client.as_ref().unwrap();
+        match client.check_project_name(&name).await {
+            Ok(true) => {
+                println!("{} {}", "Project name already taken:".red(), name);
+                println!("{}", "Try a different name.".yellow());
+                return false;
+            }
+            Ok(false) => {
+                project_args.name = Some(name);
+                return true;
+            }
+            Err(e) => {
+                // If API error contains message regarding format of error name, print that error and prompt again
+                if let Ok(api_error) = e.downcast::<ApiError>() {
+                    // If the returned error string changes, this could break
+                    if api_error.message.contains("Invalid project name") {
+                        println!("{}", api_error.message.yellow());
+                        println!("{}", "Try a different name.".yellow());
+                        return false;
+                    }
+                }
+                // Else, the API error was about something else.
+                // Ignore and keep going to not prevent the flow of the init command.
+                project_args.name = Some(name);
+                println!(
+                    "{}",
+                    "Failed to check if project name is available.".yellow()
+                );
+                return true;
+            }
+        }
     }
 
     pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {

@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crossterm::style::{Color, Stylize};
+use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
@@ -23,7 +23,7 @@ impl Display for ApiError {
             f,
             "{}\nMessage: {}",
             self.status().to_string().bold(),
-            self.message.to_string().with(Color::Red)
+            self.message.to_string().red()
         )
     }
 }
@@ -59,6 +59,7 @@ pub enum ErrorKind {
     NotReady,
     ServiceUnavailable,
     DeleteProjectFailed,
+    RateLimited(String),
 }
 
 impl From<ErrorKind> for ApiError {
@@ -121,6 +122,12 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),
             ErrorKind::DeleteProjectFailed => (StatusCode::INTERNAL_SERVER_ERROR, "deleting project failed"),
+            ErrorKind::RateLimited(message) => {
+                return Self {
+                    message,
+                    status_code: StatusCode::TOO_MANY_REQUESTS.as_u16(),
+                }
+            },
         };
         Self {
             message: error_message.to_string(),

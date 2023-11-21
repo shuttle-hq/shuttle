@@ -344,14 +344,79 @@ pub mod logger {
         type Item = LogItem;
 
         async fn receive(&mut self, items: Vec<Self::Item>) {
+            // A log vector should never be received without any items. We clone the first item
+            // here so we can use IDs to generate a rate limiting logline, which we will send to
+            // the logger as a warning to the user that they are being rate limited.
+            let Some(item) = items.first().cloned() else {
+                error!("received log vector without any items");
+
+                return;
+            };
+
             if let Err(error) = self
                 .store_logs(Request::new(StoreLogsRequest { logs: items }))
                 .await
             {
-                error!(
-                    error = &error as &dyn std::error::Error,
-                    "failed to send batch logs to logger"
-                );
+                match error.code() {
+                    tonic::Code::Unavailable => {
+                        if error.metadata().get("x-ratelimit-limit").is_some() {
+                            let LogItem {
+                                deployment_id,
+                                log_line,
+                            } = item;
+
+                            let LogLine { service_name, .. } = log_line.unwrap();
+
+                            let timestamp = Utc::now();
+
+                            let new_item = LogItem {
+                                deployment_id,
+                                log_line: Some(LogLine {
+                                    tx_timestamp: Some(prost_types::Timestamp {
+                                        seconds: timestamp.timestamp(),
+                                        nanos: timestamp.timestamp_subsec_nanos() as i32,
+                                    }),
+                                    service_name: Backend::Runtime(service_name.clone())
+                                        .to_string(),
+                                    data: "your application is producing too many logs, log recording is being rate limited".into(),
+                                }),
+                            };
+
+                            // Give the rate limiter time to refresh, the duration we need to sleep
+                            // for here is determined by the refresh rate of the rate limiter in
+                            // the logger server. It is currently set to refresh one slot per 500ms,
+                            // so we could get away with a duration of 500ms here, but we give it
+                            // some extra time in case this rate limiting was caused by a short
+                            // burst of activity.
+                            tokio::time::sleep(Duration::from_millis(1500)).await;
+
+                            if let Err(error) = self
+                                // NOTE: the request to send this rate limiting log to the logger will
+                                // also expend a slot in the logger rate limiter.
+                                .store_logs(Request::new(StoreLogsRequest {
+                                    logs: vec![new_item],
+                                }))
+                                .await
+                            {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to send rate limiting warning to logger service"
+                                );
+                            };
+                        } else {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to send batch logs to logger"
+                            );
+                        }
+                    }
+                    _ => {
+                        error!(
+                            error = &error as &dyn std::error::Error,
+                            "failed to send batch logs to logger"
+                        );
+                    }
+                };
             }
         }
     }
@@ -376,10 +441,10 @@ pub mod logger {
             Self { tx }
         }
 
-        /// Create a batcher around inner. It will send a batch of items to inner if a capacity of 2048 is reached
+        /// Create a batcher around inner. It will send a batch of items to inner if a capacity of 256 is reached
         /// or if an interval of 1 second is reached.
         pub fn wrap(inner: I) -> Self {
-            Self::new(inner, 2048, Duration::from_secs(1))
+            Self::new(inner, 256, Duration::from_secs(1))
         }
 
         /// Send a single item into this batcher

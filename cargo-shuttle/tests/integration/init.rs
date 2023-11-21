@@ -19,11 +19,10 @@ async fn non_interactive_basic_init() {
 
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
-        "--api-url",
-        "http://shuttle.invalid:80",
         "init",
         "--api-key",
         "dh9z58jttoes3qvt",
+        "--force-name",
         "--name",
         "my-project",
         "--template",
@@ -48,11 +47,10 @@ async fn non_interactive_rocket_init() {
 
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
-        "--api-url",
-        "http://shuttle.invalid:80",
         "init",
         "--api-key",
         "dh9z58jttoes3qvt",
+        "--force-name",
         "--name",
         "my-project",
         "--template",
@@ -75,11 +73,10 @@ async fn non_interactive_init_with_from_url() {
 
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
-        "--api-url",
-        "http://shuttle.invalid:80",
         "init",
         "--api-key",
         "dh9z58jttoes3qvt",
+        "--force-name",
         "--name",
         "my-project",
         "--from",
@@ -106,11 +103,10 @@ async fn non_interactive_init_with_from_gh() {
 
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
-        "--api-url",
-        "http://shuttle.invalid:80",
         "init",
         "--api-key",
         "dh9z58jttoes3qvt",
+        "--force-name",
         "--name",
         "my-project",
         "--from",
@@ -137,11 +133,10 @@ async fn non_interactive_init_with_from_repo_name() {
 
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
-        "--api-url",
-        "http://shuttle.invalid:80",
         "init",
         "--api-key",
         "dh9z58jttoes3qvt",
+        "--force-name",
         "--name",
         "my-project",
         "--from",
@@ -168,11 +163,10 @@ async fn non_interactive_init_with_from_local_path() {
 
     let args = ShuttleArgs::parse_from([
         "cargo-shuttle",
-        "--api-url",
-        "http://shuttle.invalid:80",
         "init",
         "--api-key",
         "dh9z58jttoes3qvt",
+        "--force-name",
         "--name",
         "my-project",
         "--from",
@@ -199,13 +193,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
 
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
     let mut command = Command::new(bin_path);
-    command.args([
-        "--api-url",
-        "http://shuttle.invalid:80",
-        "init",
-        "--api-key",
-        "dh9z58jttoes3qvt",
-    ]);
+    command.args(["init", "--force-name", "--api-key", "dh9z58jttoes3qvt"]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string("What do you want to name your project?")?;
@@ -240,13 +228,7 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
 
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
     let mut command = Command::new(bin_path);
-    command.args([
-        "--api-url",
-        "http://shuttle.invalid:80",
-        "init",
-        "--api-key",
-        "dh9z58jttoes3qvt",
-    ]);
+    command.args(["init", "--force-name", "--api-key", "dh9z58jttoes3qvt"]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string("What do you want to name your project?")?;
@@ -282,9 +264,8 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
     let mut command = Command::new(bin_path);
     command.args([
-        "--api-url",
-        "http://shuttle.invalid:80",
         "init",
+        "--force-name",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--template",
@@ -319,9 +300,8 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
     let mut command = Command::new(bin_path);
     command.args([
-        "--api-url",
-        "http://shuttle.invalid:80",
         "init",
+        "--force-name",
         "--api-key",
         "dh9z58jttoes3qvt",
         "--name",
@@ -361,11 +341,10 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
     let mut command = Command::new(bin_path);
     command.args([
-        "--api-url",
-        "http://shuttle.invalid:80",
         "init",
         "--api-key",
         "dh9z58jttoes3qvt",
+        "--force-name",
         "--name",
         "my-project",
         "-t",

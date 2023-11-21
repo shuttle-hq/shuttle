@@ -621,6 +621,17 @@ pub mod tests {
             user.to_string()
         }
 
+        pub fn create_authorization_bearer(&self, user: &str) -> Authorization<Bearer> {
+            self.auth_service
+                .lock()
+                .unwrap()
+                .users
+                .insert(user.to_string(), AccountTier::Basic.into());
+
+            let user_key = user.to_string();
+            Authorization::bearer(&user_key).unwrap()
+        }
+
         pub fn set_super_user(&self, user: &str) {
             if let Some(scopes) = self.auth_service.lock().unwrap().users.get_mut(user) {
                 scopes.push(Scope::Admin)

@@ -1385,9 +1385,7 @@ pub mod tests {
         let world = World::new().await;
 
         let mut router = world.router().await;
-        let neo_key = world.create_user("neo");
-
-        let authorization = Authorization::bearer(&neo_key).unwrap();
+        let authorization = world.create_authorization_bearer("neo");
 
         // Create a project and put it in the ready state
         router

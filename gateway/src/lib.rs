@@ -627,6 +627,40 @@ pub mod tests {
             }
         }
 
+        pub async fn router(&self) -> Router {
+            let service = Arc::new(GatewayService::init(self.args(), self.pool(), "".into()).await);
+            let worker = Worker::new();
+
+            let (sender, mut receiver) = channel(256);
+            tokio::spawn({
+                let worker_sender = worker.sender();
+                async move {
+                    while let Some(work) = receiver.recv().await {
+                        // Forward tasks to an actual worker
+                        worker_sender
+                            .send(work)
+                            .await
+                            .map_err(|_| "could not send work")
+                            .unwrap();
+                    }
+                }
+            });
+
+            let _worker = tokio::spawn(async move {
+                worker.start().await.unwrap();
+            });
+
+            // Allow the spawns to start
+            tokio::time::sleep(Duration::from_secs(1)).await;
+
+            ApiBuilder::new()
+                .with_service(Arc::clone(&service))
+                .with_sender(sender)
+                .with_default_routes()
+                .with_auth_service(self.context().auth_uri)
+                .into_router()
+        }
+
         pub fn client<A: Into<SocketAddr>>(addr: A) -> Client {
             let hyper = HyperClient::builder().build(HttpConnector::new());
             Client::new(addr).with_hyper_client(hyper)

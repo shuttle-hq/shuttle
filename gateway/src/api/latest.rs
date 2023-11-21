@@ -1109,7 +1109,6 @@ pub mod tests {
     use super::*;
     use crate::service::GatewayService;
     use crate::tests::{RequestBuilderExt, World};
-    use crate::worker::Worker;
 
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
@@ -1384,38 +1383,8 @@ pub mod tests {
     #[tokio::test]
     async fn api_delete_project_that_is_ready() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
-        let worker = Worker::new();
 
-        let (sender, mut receiver) = channel(256);
-        tokio::spawn({
-            let worker_sender = worker.sender();
-            async move {
-                while let Some(work) = receiver.recv().await {
-                    // Forward tasks to an actual worker
-                    worker_sender
-                        .send(work)
-                        .await
-                        .map_err(|_| "could not send work")
-                        .unwrap();
-                }
-            }
-        });
-
-        let _worker = tokio::spawn(async move {
-            worker.start().await.unwrap();
-        });
-
-        // Allow the spawns to start
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        let mut router = ApiBuilder::new()
-            .with_service(Arc::clone(&service))
-            .with_sender(sender)
-            .with_default_routes()
-            .with_auth_service(world.context().auth_uri)
-            .into_router();
-
+        let mut router = world.router().await;
         let neo_key = world.create_user("neo");
 
         let authorization = Authorization::bearer(&neo_key).unwrap();

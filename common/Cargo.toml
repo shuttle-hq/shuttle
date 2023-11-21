@@ -67,9 +67,6 @@ backend = [
     "tracing-subscriber/env-filter",
     "tracing-subscriber/fmt",
     "ttl_cache",
-    "sqlx",
-    "sqlx/postgres",            # Fix for derive macro error when different backends enable sqlite & postgres (mainly for grouped compilation in clippy CI and Docker build)
-    "sqlx/sqlite",
 ]
 claims = [
     "bytes",
@@ -87,16 +84,9 @@ claims = [
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
 openapi = ["utoipa/chrono", "utoipa/uuid"]
-models = [
-    "async-trait",
-    "display",
-    "http",
-    "reqwest",
-    "service",
-    "thiserror",
-]
-persist = ["sqlx/sqlite", "rand"]
-service = ["chrono/serde", "tracing", "tracing-subscriber", "uuid"]
+models = ["async-trait", "http", "reqwest", "service", "thiserror"]
+persist = ["sqlx", "rand"]
+service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
 tracing = ["dep:tracing"]
 wasm = [
     "chrono/clock",

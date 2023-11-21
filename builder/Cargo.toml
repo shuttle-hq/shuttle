@@ -7,7 +7,7 @@ repository.workspace = true
 
 [dependencies]
 shuttle-common = { workspace = true, features = ["backend", "tonic"] }
-shuttle-proto = { workspace = true }
+shuttle-proto = { workspace = true, features = ["builder"] }
 
 async-trait = { workspace = true }
 clap = { workspace = true }

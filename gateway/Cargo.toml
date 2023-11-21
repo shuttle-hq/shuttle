@@ -10,8 +10,9 @@ shuttle-common = { workspace = true, features = [
     "backend",
     "models",
     "openapi",
+    "persist",
 ] }
-shuttle-proto = { workspace = true }
+shuttle-proto = { workspace = true, features = ["provisioner"] }
 shuttle-orchestrator = { workspace = true }
 
 async-trait = { workspace = true }

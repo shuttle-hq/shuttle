@@ -11,11 +11,13 @@ pub use shuttle_common::{
     DatabaseReadyInfo, DbInput, DbOutput, SecretStore,
 };
 
-pub mod error;
-pub use error::{CustomError, Error};
+pub use crate::error::{CustomError, Error};
 
 #[cfg(feature = "builder")]
 pub mod builder;
+pub mod error;
+#[cfg(feature = "runner")]
+pub mod runner;
 
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///

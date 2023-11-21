@@ -374,7 +374,7 @@ impl Shuttle {
                 break;
             } else if project_args.name.is_none() {
                 // try again
-                println!(r#"Type `--force` to use "{}" anyways"#, name);
+                println!(r#"Type `--force` to use "{}" anyways."#, name);
                 prev_name = Some(name);
             } else {
                 // don't continue if non-interactive

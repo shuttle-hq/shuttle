@@ -478,7 +478,6 @@ pub mod tests {
         docker: Docker,
         settings: ContainerSettings,
         args: StartArgs,
-        hyper: HyperClient<HttpConnector, Body>,
         pool: SqlitePool,
         acme_client: AcmeClient,
         auth_service: Arc<Mutex<AuthService>>,
@@ -571,8 +570,6 @@ pub mod tests {
 
             let settings = ContainerSettings::builder().from_args(&args.context).await;
 
-            let hyper = HyperClient::builder().build(HttpConnector::new());
-
             let pool = SqlitePool::connect_with(
                 SqliteConnectOptions::from_str("sqlite::memory:")
                     .unwrap()
@@ -591,7 +588,6 @@ pub mod tests {
                 docker,
                 settings,
                 args,
-                hyper,
                 pool,
                 acme_client,
                 auth_service,
@@ -605,10 +601,6 @@ pub mod tests {
 
         pub fn pool(&self) -> SqlitePool {
             self.pool.clone()
-        }
-
-        pub fn client<A: Into<SocketAddr>>(&self, addr: A) -> Client {
-            Client::new(addr).with_hyper_client(self.hyper.clone())
         }
 
         pub fn fqdn(&self) -> FQDN {
@@ -633,6 +625,11 @@ pub mod tests {
             if let Some(scopes) = self.auth_service.lock().unwrap().users.get_mut(user) {
                 scopes.push(Scope::Admin)
             }
+        }
+
+        pub fn client<A: Into<SocketAddr>>(addr: A) -> Client {
+            let hyper = HyperClient::builder().build(HttpConnector::new());
+            Client::new(addr).with_hyper_client(hyper)
         }
     }
 
@@ -730,7 +727,7 @@ pub mod tests {
             }
         });
 
-        let api_client = world.client(world.args.control);
+        let api_client = World::client(world.args.control);
         let api = ApiBuilder::new()
             .with_service(Arc::clone(&service))
             .with_sender(log_out.clone())

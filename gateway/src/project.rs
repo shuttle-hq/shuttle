@@ -1988,7 +1988,7 @@ pub mod tests {
             .unwrap()
             .unwrap();
 
-        let client = world.client(target_addr);
+        let client = World::client(target_addr);
 
         client
             .request(

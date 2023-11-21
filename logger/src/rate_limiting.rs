@@ -38,10 +38,8 @@ impl KeyExtractor for TonicPeerIpKeyExtractor {
 
 /// Convert errors from the Governor rate limiter layer to tonic statuses.
 pub fn tonic_error(e: BoxError) -> tonic::Status {
-    if e.is::<GovernorError>() {
-        // It shouldn't be possible for this to panic, since we already know it's a GovernorError
-        let error = e.downcast_ref::<GovernorError>().unwrap().to_owned();
-        match error {
+    if let Some(error) = e.downcast_ref::<GovernorError>() {
+        match error.to_owned() {
             GovernorError::TooManyRequests { wait_time, headers } => {
                 // TODO: after upgrading tonic, use tonic types trait extensions to enrich status,
                 // see example: https://github.com/hyperium/tonic/blob/master/examples/src/richer-error/server.rs.

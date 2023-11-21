@@ -529,11 +529,13 @@ impl Shuttle {
             Ok(true) => {
                 println!("{} {}", "Project name already taken:".red(), name);
                 println!("{}", "Try a different name.".yellow());
-                return false;
+
+                false
             }
             Ok(false) => {
                 project_args.name = Some(name);
-                return true;
+
+                true
             }
             Err(e) => {
                 // If API error contains message regarding format of error name, print that error and prompt again
@@ -552,7 +554,8 @@ impl Shuttle {
                     "{}",
                     "Failed to check if project name is available.".yellow()
                 );
-                return true;
+
+                true
             }
         }
     }

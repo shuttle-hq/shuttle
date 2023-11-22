@@ -304,14 +304,15 @@ impl Shuttle {
         provided_path_to_init: bool,
     ) -> Result<CommandOutcome> {
         // Turns the template or git args (if present) to a repo+folder.
-        let git_templates = args.git_template()?;
+        let git_template = args.git_template()?;
 
         let unauthorized = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
 
-        let interactive = project_args.name.is_none()
-            || git_templates.is_none()
-            || !provided_path_to_init
-            || unauthorized;
+        let needs_name = project_args.name.is_none();
+        let needs_template = git_template.is_none();
+        let needs_path = !provided_path_to_init;
+        let needs_login = unauthorized;
+        let interactive = needs_name || needs_template || needs_path || needs_login;
 
         let theme = ColorfulTheme::default();
 
@@ -320,9 +321,9 @@ impl Shuttle {
             let login_args = LoginArgs {
                 api_key: Some(api_key.as_ref().to_string()),
             };
-
+            // TODO: this re-applies an already loaded API key
             self.login(login_args).await?;
-        } else if interactive {
+        } else if needs_login {
             println!("First, let's log in to your Shuttle account.");
             self.login(args.login_args.clone()).await?;
             println!();
@@ -332,54 +333,55 @@ impl Shuttle {
             bail!("Tried to login to create a Shuttle environment, but no API key was set.")
         }
 
-        // 2. Ask for project name
-        if project_args.name.is_none() {
+        // 2. Ask for project name or validate the given one
+        if needs_name {
             printdoc! {"
                 What do you want to name your project?
                 It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
                 "
             };
-            let client = self.client.as_ref().unwrap();
-            loop {
-                // not using validate_with due to being blocking
-                let p: String = Input::with_theme(&theme)
+        }
+        let mut prev_name: Option<String> = None;
+        loop {
+            // prompt if interactive
+            let name: String = if let Some(name) = project_args.name.clone() {
+                name
+            } else {
+                // not using `validate_with` due to being blocking.
+                Input::with_theme(&theme)
                     .with_prompt("Project name")
-                    .interact()?;
-                match client.check_project_name(&p).await {
-                    Ok(true) => {
-                        println!("{} {}", "Project name already taken:".red(), p);
-                        println!("{}", "Try a different name.".yellow());
-                    }
-                    Ok(false) => {
-                        project_args.name = Some(p);
-                        break;
-                    }
-                    Err(e) => {
-                        // If API error contains message regarding format of error name, print that error and prompt again
-                        if let Ok(api_error) = e.downcast::<ApiError>() {
-                            // If the returned error string changes, this could break
-                            if api_error.message.contains("Invalid project name") {
-                                println!("{}", api_error.message.yellow());
-                                println!("{}", "Try a different name.".yellow());
-                                continue;
-                            }
-                        }
-                        // Else, the API error was about something else.
-                        // Ignore and keep going to not prevent the flow of the init command.
-                        project_args.name = Some(p);
-                        println!(
-                            "{}",
-                            "Failed to check if project name is available.".yellow()
-                        );
-                        break;
-                    }
-                }
+                    .interact()?
+            };
+            let force_name = args.force_name
+                || (needs_name && prev_name.as_ref().is_some_and(|prev| prev == &name));
+            if force_name {
+                project_args.name = Some(name);
+                break;
             }
+            // validate and take action based on result
+            if self
+                .check_project_name(&mut project_args, name.clone())
+                .await
+            {
+                // success
+                break;
+            } else if needs_name {
+                // try again
+                println!(r#"Type the same name again to use "{}" anyways."#, name);
+                prev_name = Some(name);
+            } else {
+                // don't continue if non-interactive
+                bail!(
+                    "Invalid or unavailable project name. Use `--force-name` to use this project name anyways."
+                );
+            }
+        }
+        if needs_name {
             println!();
         }
 
         // 3. Confirm the project directory
-        let path = if interactive {
+        let path = if needs_path {
             let path = args
                 .path
                 .to_str()
@@ -412,8 +414,8 @@ impl Shuttle {
         };
 
         // 4. Ask for the framework
-        let template = match git_templates {
-            Some(git_templates) => git_templates,
+        let template = match git_template {
+            Some(git_template) => git_template,
             None => {
                 println!(
                     "Shuttle works with a range of web frameworks. Which one do you want to use?"
@@ -429,11 +431,10 @@ impl Shuttle {
             }
         };
 
-        let serenity_idle_hint = if let Some(s) = template.subfolder.as_ref() {
-            s.contains("serenity") || s.contains("poise")
-        } else {
-            false
-        };
+        let serenity_idle_hint = template
+            .subfolder
+            .as_ref()
+            .is_some_and(|s| s.contains("serenity") || s.contains("poise"));
 
         // 5. Initialize locally
         init::generate_project(
@@ -511,6 +512,44 @@ impl Shuttle {
         }
 
         Ok(CommandOutcome::Ok)
+    }
+
+    /// true -> success/neutral. false -> try again.
+    async fn check_project_name(&self, project_args: &mut ProjectArgs, name: String) -> bool {
+        let client = self.client.as_ref().unwrap();
+        match client.check_project_name(&name).await {
+            Ok(true) => {
+                println!("{} {}", "Project name already taken:".red(), name);
+                println!("{}", "Try a different name.".yellow());
+
+                false
+            }
+            Ok(false) => {
+                project_args.name = Some(name);
+
+                true
+            }
+            Err(e) => {
+                // If API error contains message regarding format of error name, print that error and prompt again
+                if let Ok(api_error) = e.downcast::<ApiError>() {
+                    // If the returned error string changes, this could break
+                    if api_error.message.contains("Invalid project name") {
+                        println!("{}", api_error.message.yellow());
+                        println!("{}", "Try a different name.".yellow());
+                        return false;
+                    }
+                }
+                // Else, the API error was about something else.
+                // Ignore and keep going to not prevent the flow of the init command.
+                project_args.name = Some(name);
+                println!(
+                    "{}",
+                    "Failed to check if project name is available.".yellow()
+                );
+
+                true
+            }
+        }
     }
 
     pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {

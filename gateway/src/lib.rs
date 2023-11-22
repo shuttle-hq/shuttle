@@ -765,13 +765,13 @@ pub mod tests {
     }
 
     /// Helper struct to wrap a bunch of commands to run against a test project
-    pub struct TestProject<'a> {
-        router: &'a mut Router,
+    pub struct TestProject {
+        router: Router,
         authorization: Authorization<Bearer>,
         project_name: String,
     }
 
-    impl<'a> TestProject<'a> {
+    impl TestProject {
         /// Wait a few seconds for the project to enter the desired state
         pub async fn wait_for_state(&mut self, state: project::State) {
             let mut tries = 0;
@@ -805,6 +805,48 @@ pub mod tests {
                 sleep(Duration::from_secs(1)).await;
             }
         }
+
+        pub async fn is_missing(&mut self) -> bool {
+            let project_name = &self.project_name;
+
+            let resp = self
+                .router
+                .call(
+                    Request::get(format!("/projects/{project_name}"))
+                        .with_header(&self.authorization)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            resp.status() == StatusCode::NOT_FOUND
+        }
+
+        pub async fn destroy_project(&mut self) {
+            let TestProject {
+                router,
+                authorization,
+                project_name,
+            } = self;
+
+            router
+                .call(
+                    Request::builder()
+                        .method("DELETE")
+                        .uri(format!("/projects/{project_name}"))
+                        .body(Body::empty())
+                        .unwrap()
+                        .with_header(authorization),
+                )
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+
+            self.wait_for_state(project::State::Destroyed).await;
+        }
     }
 
     #[async_trait]
@@ -834,7 +876,7 @@ pub mod tests {
             let mut this = TestProject {
                 authorization,
                 project_name: project_name.to_string(),
-                router: self,
+                router: self.clone(),
             };
 
             this.wait_for_state(project::State::Ready).await;

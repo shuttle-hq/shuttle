@@ -372,7 +372,10 @@ impl Project {
             | Self::Stopping(ProjectStopping { container, .. })
             | Self::Stopped(ProjectStopped { container, .. })
             | Self::Rebooting(ProjectRebooting { container, .. })
-            | Self::Destroying(ProjectDestroying { container }) => Some(container.clone()),
+            | Self::Destroying(ProjectDestroying { container })
+            | Self::Destroyed(ProjectDestroyed {
+                destroyed: Some(container),
+            }) => Some(container.clone()),
             Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container(),
             Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) | Self::Deleted => None,
         }

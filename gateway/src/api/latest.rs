@@ -37,6 +37,7 @@ use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
 use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
+use ulid::Ulid;
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 use utoipa::IntoParams;
 use utoipa::{Modify, OpenApi};
@@ -319,6 +320,24 @@ async fn delete_project(
     req: Request<Body>,
 ) -> Result<AxumJson<String>, Error> {
     let project_name = scoped_user.scope.clone();
+    let project = state.service.find_project(&project_name).await?;
+    let project_id =
+        Ulid::from_string(&project.project_id).expect("stored project id to be a valid ULID");
+
+    // Try to startup a destroyed project first
+    if project.state.is_destroyed() {
+        let handle = state
+            .service
+            .new_task()
+            .project(project_name.clone())
+            .and_then(task::restart(project_id))
+            .send(&state.sender)
+            .await?;
+
+        // Wait for the project to be ready
+        handle.await;
+    }
+
     let service = state.service.clone();
     let sender = state.sender.clone();
 
@@ -1371,8 +1390,7 @@ pub mod tests {
         let mut router = world.router().await;
         let authorization = world.create_authorization_bearer("neo");
 
-        // Create a project and put it in the ready state
-        let _project = router.create_project(&authorization, "matrix").await;
+        let mut project = router.create_project(&authorization, "matrix").await;
 
         router
             .call(
@@ -1388,6 +1406,38 @@ pub mod tests {
             })
             .await
             .unwrap();
+
+        assert!(project.is_missing().await);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn api_delete_project_that_is_destroyed() -> anyhow::Result<()> {
+        let world = World::new().await;
+
+        let mut router = world.router().await;
+        let authorization = world.create_authorization_bearer("neo");
+
+        let mut project = router.create_project(&authorization, "matrix").await;
+        project.destroy_project().await;
+
+        router
+            .call(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/projects/matrix/delete"))
+                    .body(Body::empty())
+                    .unwrap()
+                    .with_header(&authorization),
+            )
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::OK);
+            })
+            .await
+            .unwrap();
+
+        assert!(project.is_missing().await);
 
         Ok(())
     }

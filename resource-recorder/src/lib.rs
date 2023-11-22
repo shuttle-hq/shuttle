@@ -6,7 +6,7 @@ use shuttle_proto::resource_recorder::{
     self, resource_recorder_server::ResourceRecorder, ProjectResourcesRequest, RecordRequest,
     ResourceIds, ResourceResponse, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
 };
-use std::{convert::TryInto, str::FromStr};
+use std::convert::TryInto;
 use thiserror::Error;
 use tonic::{Request, Response, Status};
 
@@ -134,25 +134,7 @@ where
     ) -> Result<Response<ResultResponse>, Status> {
         request.verify(Scope::ResourcesWrite)?;
 
-        let can_provision_rds = request.verify_rds_access();
-
         let request = request.into_inner();
-
-        if let Err(error) = can_provision_rds {
-            if request.resources.iter().any(|resource| {
-                let Ok(r#type) = shuttle_common::database::Type::from_str(resource.r#type.as_str())
-                else {
-                    return false;
-                };
-
-                matches!(r#type, shuttle_common::database::Type::AwsRds(_))
-            }) {
-                return Ok(Response::new(ResultResponse {
-                    success: false,
-                    message: error.message().to_string(),
-                }));
-            }
-        };
 
         let result = match self.add(request).await {
             Ok(()) => ResultResponse {

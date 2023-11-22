@@ -65,27 +65,27 @@ pub enum ErrorKind {
 impl From<ErrorKind> for ApiError {
     fn from(kind: ErrorKind) -> Self {
         let (status, error_message) = match kind {
-            ErrorKind::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
-            ErrorKind::KeyMissing => (StatusCode::UNAUTHORIZED, "request is missing a key"),
+            ErrorKind::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
+            ErrorKind::KeyMissing => (StatusCode::UNAUTHORIZED, "Request is missing a key"),
             ErrorKind::ServiceUnavailable => (
                 StatusCode::SERVICE_UNAVAILABLE,
-                "we're experiencing a high workload right now, please try again in a little bit",
+                "We're experiencing a high workload right now, please try again in a little bit",
             ),
-            ErrorKind::KeyMalformed => (StatusCode::BAD_REQUEST, "request has an invalid key"),
-            ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
-            ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
-            ErrorKind::UserAlreadyExists => (StatusCode::BAD_REQUEST, "user already exists"),
+            ErrorKind::KeyMalformed => (StatusCode::BAD_REQUEST, "Request has an invalid key"),
+            ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "The 'Host' header is invalid"),
+            ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "User not found"),
+            ErrorKind::UserAlreadyExists => (StatusCode::BAD_REQUEST, "User already exists"),
             ErrorKind::ProjectNotFound => (
                 StatusCode::NOT_FOUND,
-                "project not found. Make sure you are the owner of this project name. Run `cargo shuttle project start` to create a new project.",
+                "Project not found. Make sure you are the owner of this project name. Run `cargo shuttle project start` to create a new project.",
             ),
             ErrorKind::ProjectNotReady => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 // "not ready" is matched against in cargo-shuttle for giving further instructions on project deletion
-                "project not ready. Try running `cargo shuttle project restart`.",
+                "Project not ready. Try running `cargo shuttle project restart`.",
             ),
             ErrorKind::ProjectUnavailable => {
-                (StatusCode::BAD_GATEWAY, "project returned invalid response")
+                (StatusCode::BAD_GATEWAY, "Project returned invalid response")
             },
             ErrorKind::TooManyProjects => {
                 (StatusCode::FORBIDDEN, "You cannot create more projects. Delete some projects first.")
@@ -107,21 +107,21 @@ impl From<ErrorKind> for ApiError {
                     status_code: StatusCode::BAD_REQUEST.as_u16(),
                 }
             }
-            ErrorKind::InvalidOperation => (StatusCode::BAD_REQUEST, "the requested operation is invalid"),
-            ErrorKind::ProjectAlreadyExists => (StatusCode::BAD_REQUEST, "a project with the same name already exists"),
+            ErrorKind::InvalidOperation => (StatusCode::BAD_REQUEST, "The requested operation is invalid"),
+            ErrorKind::ProjectAlreadyExists => (StatusCode::BAD_REQUEST, "A project with the same name already exists"),
             ErrorKind::OwnProjectAlreadyExists(message) => {
                 return Self {
                     message,
                     status_code: StatusCode::BAD_REQUEST.as_u16(),
                 }
             }
-            ErrorKind::InvalidCustomDomain => (StatusCode::BAD_REQUEST, "invalid custom domain"),
-            ErrorKind::CustomDomainNotFound => (StatusCode::NOT_FOUND, "custom domain not found"),
-            ErrorKind::CustomDomainAlreadyExists => (StatusCode::BAD_REQUEST, "custom domain already in use"),
-            ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
-            ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
-            ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),
-            ErrorKind::DeleteProjectFailed => (StatusCode::INTERNAL_SERVER_ERROR, "deleting project failed"),
+            ErrorKind::InvalidCustomDomain => (StatusCode::BAD_REQUEST, "Invalid custom domain"),
+            ErrorKind::CustomDomainNotFound => (StatusCode::NOT_FOUND, "Custom domain not found"),
+            ErrorKind::CustomDomainAlreadyExists => (StatusCode::BAD_REQUEST, "Custom domain already in use"),
+            ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
+            ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
+            ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "Service not ready"),
+            ErrorKind::DeleteProjectFailed => (StatusCode::INTERNAL_SERVER_ERROR, "Deleting project failed"),
             ErrorKind::RateLimited(message) => {
                 return Self {
                     message,
@@ -143,28 +143,28 @@ impl From<StatusCode> for ApiError {
             StatusCode::OK | StatusCode::ACCEPTED | StatusCode::FOUND | StatusCode::SWITCHING_PROTOCOLS => {
                 unreachable!("we should not have an API error with a successful status code")
             }
-            StatusCode::FORBIDDEN => "this request is not allowed",
+            StatusCode::FORBIDDEN => "This request is not allowed",
             StatusCode::UNAUTHORIZED => {
-                "we were unable to authorize your request. Is your key still valid?"
+                "we were unable to authorize your request. Check that your API key is set correctly. Use `cargo shuttle login` to set it."
             },
-            StatusCode::INTERNAL_SERVER_ERROR => "our server was unable to handle your request. A ticket should be created for us to fix this.",
-            StatusCode::SERVICE_UNAVAILABLE => "we're experiencing a high workload right now, please try again in a little bit",
+            StatusCode::INTERNAL_SERVER_ERROR => "Our server was unable to handle your request. A ticket should be created for us to fix this.",
+            StatusCode::SERVICE_UNAVAILABLE => "We're experiencing a high workload right now, please try again in a little bit",
             StatusCode::BAD_REQUEST => {
                 warn!("responding to a BAD_REQUEST request with an unhelpful message. Use ErrorKind instead");
-                "this request is invalid"
+                "This request is invalid"
             },
             StatusCode::NOT_FOUND => {
                 warn!("responding to a NOT_FOUND request with an unhelpful message. Use ErrorKind instead");
-                "we don't serve this resource"
+                "We don't serve this resource"
             },
             StatusCode::BAD_GATEWAY => {
                 warn!("got a bad response from the gateway");
                 // Gateway's default response when a request handler panicks is a 502 with some HTML.
-                "response from gateway is invalid. Please create a ticket to report this"
+                "Response from gateway is invalid. Please create a ticket to report this"
             },
             _ => {
                 error!(%code, "got an unexpected status code");
-                "an unexpected error occurred. Please create a ticket to report this"
+                "An unexpected error occurred. Please create a ticket to report this"
             },
         };
 

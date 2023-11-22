@@ -1,2 +1,3 @@
 proto/src/generated/* linguist-generated=true
 proto/src/generated.rs linguist-generated=true
+CHANGELOG.md linguist-generated=true

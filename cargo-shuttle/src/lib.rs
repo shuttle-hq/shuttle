@@ -225,10 +225,10 @@ impl Shuttle {
                 self.resource_delete(&resource_type).await
             }
             Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
-                self.project_create(idle_minutes).await
+                self.project_start(idle_minutes).await
             }
             Command::Project(ProjectCommand::Restart(ProjectStartArgs { idle_minutes })) => {
-                self.project_recreate(idle_minutes).await
+                self.project_restart(idle_minutes).await
             }
             Command::Project(ProjectCommand::Status { follow }) => {
                 self.project_status(follow).await
@@ -489,7 +489,7 @@ impl Shuttle {
             project_args.working_directory = path.clone();
 
             self.load_project(&project_args)?;
-            self.project_create(DEFAULT_IDLE_MINUTES).await?;
+            self.project_start(DEFAULT_IDLE_MINUTES).await?;
         }
 
         if std::env::current_dir().is_ok_and(|d| d != path) {
@@ -1628,7 +1628,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_create(&self, idle_minutes: u64) -> Result<CommandOutcome> {
+    async fn project_start(&self, idle_minutes: u64) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let config = &project::Config { idle_minutes };
 
@@ -1682,11 +1682,11 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_recreate(&self, idle_minutes: u64) -> Result<CommandOutcome> {
+    async fn project_restart(&self, idle_minutes: u64) -> Result<CommandOutcome> {
         self.project_stop()
             .await
             .map_err(suggestions::project::project_restart_failure)?;
-        self.project_create(idle_minutes)
+        self.project_start(idle_minutes)
             .await
             .map_err(suggestions::project::project_restart_failure)?;
 
@@ -2000,7 +2000,7 @@ fn is_dirty(repo: &Repository) -> Result<()> {
         }
 
         writeln!(error).expect("to append error");
-        writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
+        writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` or `--ad` flag").expect("to append error");
 
         bail!(error);
     }

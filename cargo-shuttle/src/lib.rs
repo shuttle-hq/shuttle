@@ -344,14 +344,14 @@ impl Shuttle {
             let name: String = if let Some(name) = project_args.name.clone() {
                 name
             } else {
-                // not using `validate_with` due to being blocking. we also need to handle --force
+                // not using `validate_with` due to being blocking.
                 Input::with_theme(&theme)
                     .with_prompt("Project name")
                     .interact()?
             };
-            // handle --force on retires
+            // handle forced name on retires
             let name: String = if let Some(prev_name) = prev_name {
-                if project_args.name.is_none() && name == "--force" {
+                if project_args.name.is_none() && name == prev_name {
                     project_args.name = Some(prev_name);
                     break;
                 } else {
@@ -374,7 +374,7 @@ impl Shuttle {
                 break;
             } else if project_args.name.is_none() {
                 // try again
-                println!(r#"Type `--force` to use "{}" anyways."#, name);
+                println!(r#"Type the same name again to use "{}" anyways."#, name);
                 prev_name = Some(name);
             } else {
                 // don't continue if non-interactive

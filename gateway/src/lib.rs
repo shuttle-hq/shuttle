@@ -623,14 +623,9 @@ pub mod tests {
             user.to_string()
         }
 
+        /// Create with the given name and return the authorization bearer for the user
         pub fn create_authorization_bearer(&self, user: &str) -> Authorization<Bearer> {
-            self.auth_service
-                .lock()
-                .unwrap()
-                .users
-                .insert(user.to_string(), AccountTier::Basic.into());
-
-            let user_key = user.to_string();
+            let user_key = self.create_user(user);
             Authorization::bearer(&user_key).unwrap()
         }
 
@@ -640,6 +635,7 @@ pub mod tests {
             }
         }
 
+        /// Create a router to make API calls against. Also starts up a worker to create actual Docker containers for all requests
         pub async fn router(&self) -> Router {
             let service = Arc::new(GatewayService::init(self.args(), self.pool(), "".into()).await);
             let worker = Worker::new();
@@ -754,6 +750,7 @@ pub mod tests {
         }
     }
 
+    /// Make it easy to perform common requests against the router for testing purposes
     #[async_trait]
     pub trait RouterExt {
         /// Create a project and put it in the ready state
@@ -806,6 +803,7 @@ pub mod tests {
             }
         }
 
+        /// Is this project still available - aka has it been deleted
         pub async fn is_missing(&mut self) -> bool {
             let project_name = &self.project_name;
 
@@ -823,6 +821,7 @@ pub mod tests {
             resp.status() == StatusCode::NOT_FOUND
         }
 
+        /// Destroy / stop a project. Like `cargo shuttle project stop`
         pub async fn destroy_project(&mut self) {
             let TestProject {
                 router,

@@ -350,10 +350,9 @@ impl Shuttle {
                     .with_prompt("Project name")
                     .interact()?
             };
-            // skip validation if forced, handle forced name on retires
-            if args.force_name
-                || (needs_name && prev_name.as_ref().is_some_and(|prev| prev == &name))
-            {
+            let force_name = args.force_name
+                || (needs_name && prev_name.as_ref().is_some_and(|prev| prev == &name));
+            if force_name {
                 project_args.name = Some(name);
                 break;
             }
@@ -371,7 +370,7 @@ impl Shuttle {
             } else {
                 // don't continue if non-interactive
                 bail!(
-                    "Invalid or taken project name. Use `--force-name` to use this name anyways."
+                    "Invalid or unavailable project name. Use `--force-name` to use this project name anyways."
                 );
             }
         }

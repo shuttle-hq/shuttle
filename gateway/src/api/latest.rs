@@ -1396,7 +1396,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method("DELETE")
-                    .uri(format!("/projects/matrix/delete"))
+                    .uri("/projects/matrix/delete")
                     .body(Body::empty())
                     .unwrap()
                     .with_header(&authorization),
@@ -1426,7 +1426,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method("DELETE")
-                    .uri(format!("/projects/matrix/delete"))
+                    .uri("/projects/matrix/delete")
                     .body(Body::empty())
                     .unwrap()
                     .with_header(&authorization),

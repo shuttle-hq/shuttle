@@ -147,7 +147,7 @@ impl ContainerSettingsBuilder {
         self
     }
 
-    pub fn extra_hosts<S: ToString>(mut self, extra_hosts: &Vec<S>) -> Self {
+    pub fn extra_hosts<S: ToString>(mut self, extra_hosts: &[S]) -> Self {
         self.extra_hosts = Some(extra_hosts.iter().map(ToString::to_string).collect());
         self
     }

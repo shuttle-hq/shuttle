@@ -6,7 +6,6 @@ use sqlx::migrate::Migrator;
 use tracing::{info, trace};
 
 use shuttle_auth::{init, sqlite_init, start, Args, Commands};
-
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[tokio::main]

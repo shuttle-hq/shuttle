@@ -1,6 +1,8 @@
 use jsonwebtoken::EncodingKey;
 use ring::signature::{Ed25519KeyPair, KeyPair};
 
+pub const AUTH_JWTSIGNING_PRIVATE_KEY: &str = "AUTH_JWTSIGNING_PRIVATE_KEY";
+
 pub trait KeyManager: Send + Sync {
     /// Get a private key for signing secrets
     fn private_key(&self) -> &EncodingKey;

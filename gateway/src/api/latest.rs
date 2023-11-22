@@ -1117,17 +1117,19 @@ pub mod tests {
     use axum::headers::Authorization;
     use axum::http::Request;
     use futures::TryFutureExt;
+    use http::Method;
     use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
     use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
+    use test_context::test_context;
     use tokio::sync::mpsc::channel;
     use tokio::sync::oneshot;
     use tower::Service;
 
     use super::*;
     use crate::service::GatewayService;
-    use crate::tests::{RequestBuilderExt, RouterExt, World};
+    use crate::tests::{RequestBuilderExt, TestProject, World};
 
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
@@ -1383,61 +1385,19 @@ pub mod tests {
         Ok(())
     }
 
+    #[test_context(TestProject)]
     #[tokio::test]
-    async fn api_delete_project_that_is_ready() -> anyhow::Result<()> {
-        let world = World::new().await;
-
-        let mut router = world.router().await;
-        let authorization = world.create_authorization_bearer("neo");
-
-        let mut project = router.create_project(&authorization, "matrix").await;
-
-        router
-            .call(
-                Request::builder()
-                    .method("DELETE")
-                    .uri("/projects/matrix/delete")
-                    .body(Body::empty())
-                    .unwrap()
-                    .with_header(&authorization),
-            )
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK);
-            })
-            .await
-            .unwrap();
-
-        assert!(project.is_missing().await);
+    async fn api_delete_project_that_is_ready(project: &mut TestProject) -> anyhow::Result<()> {
+        project.router_call(Method::DELETE, "/delete").await;
 
         Ok(())
     }
 
+    #[test_context(TestProject)]
     #[tokio::test]
-    async fn api_delete_project_that_is_destroyed() -> anyhow::Result<()> {
-        let world = World::new().await;
-
-        let mut router = world.router().await;
-        let authorization = world.create_authorization_bearer("neo");
-
-        let mut project = router.create_project(&authorization, "matrix").await;
+    async fn api_delete_project_that_is_destroyed(project: &mut TestProject) -> anyhow::Result<()> {
         project.destroy_project().await;
-
-        router
-            .call(
-                Request::builder()
-                    .method("DELETE")
-                    .uri("/projects/matrix/delete")
-                    .body(Body::empty())
-                    .unwrap()
-                    .with_header(&authorization),
-            )
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK);
-            })
-            .await
-            .unwrap();
-
-        assert!(project.is_missing().await);
+        project.router_call(Method::DELETE, "/delete").await;
 
         Ok(())
     }

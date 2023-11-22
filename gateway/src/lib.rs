@@ -267,6 +267,7 @@ pub mod tests {
     use bollard::Docker;
     use fqdn::FQDN;
     use futures::prelude::*;
+    use http::Method;
     use hyper::client::HttpConnector;
     use hyper::http::uri::Scheme;
     use hyper::http::Uri;
@@ -279,6 +280,7 @@ pub mod tests {
     use shuttle_common::models::project;
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::SqlitePool;
+    use test_context::AsyncTestContext;
     use tokio::sync::mpsc::channel;
     use tokio::time::sleep;
     use tower::Service;
@@ -674,9 +676,7 @@ pub mod tests {
             let hyper = HyperClient::builder().build(HttpConnector::new());
             Client::new(addr).with_hyper_client(hyper)
         }
-    }
 
-    impl World {
         pub fn context(&self) -> WorldContext {
             WorldContext {
                 docker: self.docker.clone(),
@@ -845,6 +845,42 @@ pub mod tests {
                 .unwrap();
 
             self.wait_for_state(project::State::Destroyed).await;
+        }
+
+        /// Send a request to the router for this project
+        pub async fn router_call(&mut self, method: Method, sub_path: &str) {
+            let project_name = &self.project_name;
+
+            self.router
+                .call(
+                    Request::builder()
+                        .method(method)
+                        .uri(format!("/projects/{project_name}{sub_path}"))
+                        .body(Body::empty())
+                        .unwrap()
+                        .with_header(&self.authorization),
+                )
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+        }
+    }
+
+    #[async_trait]
+    impl AsyncTestContext for TestProject {
+        async fn setup() -> Self {
+            let world = World::new().await;
+
+            let mut router = world.router().await;
+            let authorization = world.create_authorization_bearer("neo");
+
+            router.create_project(&authorization, "matrix").await
+        }
+
+        async fn teardown(mut self) {
+            assert!(self.is_missing().await, "test left a dangling project");
         }
     }
 

@@ -17,8 +17,9 @@ use std::str::FromStr;
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     constants::{
-        API_URL_DEFAULT, EXECUTABLE_DIRNAME, SHUTTLE_CLI_DOCS_URL, SHUTTLE_GH_ISSUE_URL,
-        SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
+        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXECUTABLE_DIRNAME, SHUTTLE_CLI_DOCS_URL,
+        SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL,
+        STORAGE_DIRNAME,
     },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
@@ -27,14 +28,15 @@ use shuttle_common::{
             GIT_STRINGS_MAX_LENGTH,
         },
         error::ApiError,
-        project::{self, DEFAULT_IDLE_MINUTES},
+        project,
         resource::get_resource_tables,
     },
     resource, semvers_are_compatible, ApiKey, LogItem, VersionInfo,
 };
 use shuttle_proto::runtime::{
-    self, runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest,
+    runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest,
 };
+use shuttle_service::runner;
 use shuttle_service::{
     builder::{build_workspace, BuiltService},
     Environment,
@@ -633,7 +635,7 @@ impl Shuttle {
 
     async fn clean(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        let lines = client
+        let message = client
             .clean_project(self.ctx.project_name())
             .await
             .map_err(|err| {
@@ -644,12 +646,7 @@ impl Shuttle {
                     "cleaning your project or checking its status fail repeatedly",
                 )
             })?;
-
-        for line in lines {
-            println!("{line}");
-        }
-
-        println!("Cleaning done!");
+        println!("{message}");
 
         Ok(CommandOutcome::Ok)
     }
@@ -698,9 +695,22 @@ impl Shuttle {
 
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                    let log_item: shuttle_common::LogItem = serde_json::from_str(&line)
-                        .context("Failed parsing logs. Is your cargo-shuttle outdated?")?;
-                    println!("{log_item}")
+                    match serde_json::from_str::<shuttle_common::LogItem>(&line) {
+                        Ok(log_item) => {
+                            println!("{log_item}")
+                        }
+                        Err(err) => {
+                            debug!(error = %err, "failed to parse message into log item");
+
+                            let message = if let Ok(err) = serde_json::from_str::<ApiError>(&line) {
+                                err.to_string()
+                            } else {
+                                "failed to parse logs, is your cargo-shuttle outdated?".to_string()
+                            };
+
+                            bail!(message);
+                        }
+                    }
                 }
             }
         } else {
@@ -922,7 +932,7 @@ impl Shuttle {
         };
 
         // Child process and gRPC client for sending requests to it
-        let (mut runtime, mut runtime_client) = runtime::start(
+        let (mut runtime, mut runtime_client) = runner::start(
             service.is_wasm,
             Environment::Local,
             &format!("http://localhost:{provisioner_port}"),

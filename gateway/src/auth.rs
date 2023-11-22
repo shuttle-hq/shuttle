@@ -5,6 +5,7 @@ use axum::extract::{FromRef, FromRequestParts, Path};
 use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
 use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::models::error::InvalidProjectName;
 use shuttle_common::models::project::ProjectName;
 use tracing::{trace, Span};
 
@@ -80,7 +81,7 @@ where
             Err(_) => Path::<(ProjectName, String)>::from_request_parts(parts, state)
                 .await
                 .map(|Path((p, _))| p)
-                .unwrap(),
+                .map_err(|_| Error::from(ErrorKind::InvalidProjectName(InvalidProjectName)))?,
         };
 
         if user.projects.contains(&scope) || user.claim.scopes.contains(&Scope::Admin) {

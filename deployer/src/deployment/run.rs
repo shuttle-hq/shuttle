@@ -15,7 +15,7 @@ use shuttle_common::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
-    resource,
+    resource, SecretStore,
 };
 use shuttle_proto::{
     resource_recorder::record_request,
@@ -315,7 +315,7 @@ async fn load(
     mut resource_manager: impl ResourceManager,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Claim,
-    secrets: HashMap<String, String>,
+    mut secrets: HashMap<String, String>,
 ) -> Result<()> {
     info!("Loading resources");
 
@@ -335,6 +335,19 @@ async fn load(
                     error!(error = ?err, "failed to parse resource data");
                 })
                 .ok()
+        })
+        // inject old secrets into the secrets added in this deployment
+        .inspect(|r| {
+            if r.r#type == shuttle_common::resource::Type::Secrets {
+                match serde_json::from_value::<SecretStore>(r.data.clone()) {
+                    Ok(ss) => {
+                        secrets.extend(ss.into_iter());
+                    }
+                    Err(err) => {
+                        error!(error = ?err, "failed to parse old secrets data");
+                    }
+                }
+            }
         })
         .map(resource::Response::into_bytes)
         .collect();

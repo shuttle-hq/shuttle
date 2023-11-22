@@ -313,7 +313,7 @@ impl GatewayService {
                     .try_get::<SqlxJson<Project>, _>("project_state")
                     .map(|p| p.0)
                     .unwrap_or_else(|e| {
-                        error!("Failed to deser `project_state`: {:?}", e);
+                        error!(error = ?e, "Failed to deser `project_state`");
                         Project::Errored(ProjectError::internal(
                             "Error when trying to deserialize state of project.",
                         ))
@@ -364,7 +364,7 @@ impl GatewayService {
                     row.try_get::<SqlxJson<Project>, _>("project_state")
                         .map(|p| p.0)
                         .unwrap_or_else(|e| {
-                            error!("Failed to deser `project_state`: {:?}", e);
+                            error!(error = ?e, "Failed to deser `project_state`");
                             Project::Errored(ProjectError::internal(
                                 "Error when trying to deserialize state of project.",
                             ))
@@ -459,7 +459,7 @@ impl GatewayService {
                 .try_get::<SqlxJson<Project>, _>("project_state")
                 .map(|p| p.0)
                 .unwrap_or_else(|e| {
-                    error!("Failed to deser `project_state`: {:?}", e);
+                    error!(error = ?e, "Failed to deser `project_state`");
                     Project::Errored(ProjectError::internal(
                         "Error when trying to deserialize state of project.",
                     ))

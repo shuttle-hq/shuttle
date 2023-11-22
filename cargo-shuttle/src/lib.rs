@@ -350,13 +350,10 @@ impl Shuttle {
                     .with_prompt("Project name")
                     .interact()?
             };
-            // handle forced name on retires
-            if needs_name && prev_name.as_ref().is_some_and(|prev| prev == &name) {
-                project_args.name = Some(prev_name.unwrap());
-                break;
-            }
-            // skip validation if forced
-            if args.force_name {
+            // skip validation if forced, handle forced name on retires
+            if args.force_name
+                || (needs_name && prev_name.as_ref().is_some_and(|prev| prev == &name))
+            {
                 project_args.name = Some(name);
                 break;
             }

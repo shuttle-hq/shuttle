@@ -331,8 +331,7 @@ pub mod name {
         where
             D: Deserializer<'de>,
         {
-            let s: String = String::deserialize(deserializer)?;
-            s.parse().map_err(DeError::custom)
+            ProjectName::new(str::deserialize(deserializer)?).map_err(DeError::custom)
         }
     }
 

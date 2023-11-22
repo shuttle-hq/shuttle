@@ -302,14 +302,15 @@ impl Shuttle {
         provided_path_to_init: bool,
     ) -> Result<CommandOutcome> {
         // Turns the template or git args (if present) to a repo+folder.
-        let git_templates = args.git_template()?;
+        let git_template = args.git_template()?;
 
         let unauthorized = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
 
-        let interactive = project_args.name.is_none()
-            || git_templates.is_none()
-            || !provided_path_to_init
-            || unauthorized;
+        let needs_name = project_args.name.is_none();
+        let needs_template = git_template.is_none();
+        let needs_path = !provided_path_to_init;
+        let needs_login = unauthorized;
+        let interactive = needs_name || needs_template || needs_path || needs_login;
 
         let theme = ColorfulTheme::default();
 
@@ -318,9 +319,9 @@ impl Shuttle {
             let login_args = LoginArgs {
                 api_key: Some(api_key.as_ref().to_string()),
             };
-
+            // TODO: this re-applies an already loaded API key
             self.login(login_args).await?;
-        } else if interactive {
+        } else if needs_login {
             println!("First, let's log in to your Shuttle account.");
             self.login(args.login_args.clone()).await?;
             println!();
@@ -330,8 +331,8 @@ impl Shuttle {
             bail!("Tried to login to create a Shuttle environment, but no API key was set.")
         }
 
-        // 2. Ask for project name
-        if project_args.name.is_none() {
+        // 2. Ask for project name or validate the given one
+        if needs_name {
             printdoc! {"
                 What do you want to name your project?
                 It will be hosted at ${{project_name}}.shuttleapp.rs, so choose something unique!
@@ -350,16 +351,10 @@ impl Shuttle {
                     .interact()?
             };
             // handle forced name on retires
-            let name: String = if let Some(prev_name) = prev_name {
-                if project_args.name.is_none() && name == prev_name {
-                    project_args.name = Some(prev_name);
-                    break;
-                } else {
-                    name
-                }
-            } else {
-                name
-            };
+            if needs_name && prev_name.as_ref().is_some_and(|prev| prev == &name) {
+                project_args.name = Some(prev_name.unwrap());
+                break;
+            }
             // skip validation if forced
             if args.force_name {
                 project_args.name = Some(name);
@@ -372,7 +367,7 @@ impl Shuttle {
             {
                 // success
                 break;
-            } else if project_args.name.is_none() {
+            } else if needs_name {
                 // try again
                 println!(r#"Type the same name again to use "{}" anyways."#, name);
                 prev_name = Some(name);
@@ -383,12 +378,12 @@ impl Shuttle {
                 );
             }
         }
-        if project_args.name.is_none() {
+        if needs_name {
             println!();
         }
 
         // 3. Confirm the project directory
-        let path = if interactive {
+        let path = if needs_path {
             let path = args
                 .path
                 .to_str()
@@ -421,8 +416,8 @@ impl Shuttle {
         };
 
         // 4. Ask for the framework
-        let template = match git_templates {
-            Some(git_templates) => git_templates,
+        let template = match git_template {
+            Some(git_template) => git_template,
             None => {
                 println!(
                     "Shuttle works with a range of web frameworks. Which one do you want to use?"
@@ -438,11 +433,10 @@ impl Shuttle {
             }
         };
 
-        let serenity_idle_hint = if let Some(s) = template.subfolder.as_ref() {
-            s.contains("serenity") || s.contains("poise")
-        } else {
-            false
-        };
+        let serenity_idle_hint = template
+            .subfolder
+            .as_ref()
+            .is_some_and(|s| s.contains("serenity") || s.contains("poise"));
 
         // 5. Initialize locally
         init::generate_project(

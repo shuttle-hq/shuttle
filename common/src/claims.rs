@@ -174,7 +174,10 @@ impl Default for ScopeBuilder {
 #[cfg_attr(feature = "display", derive(strum::Display))]
 #[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
 #[cfg_attr(feature = "persist", derive(sqlx::Type))]
-#[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
+#[cfg_attr(
+    feature = "persist",
+    sqlx(type_name = "tier", rename_all = "lowercase")
+)]
 pub enum AccountTier {
     #[default]
     Basic,

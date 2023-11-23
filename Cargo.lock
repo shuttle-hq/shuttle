@@ -5777,9 +5777,11 @@ dependencies = [
  "axum-sessions",
  "base64 0.21.5",
  "clap",
+ "ctor",
  "http",
  "hyper",
  "jsonwebtoken",
+ "once_cell",
  "opentelemetry 0.21.0",
  "pem 2.0.1",
  "portpicker",
@@ -5790,12 +5792,14 @@ dependencies = [
  "shuttle-common",
  "sqlx",
  "strum 0.25.0",
+ "test-utils",
  "thiserror",
  "tokio",
  "tower",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

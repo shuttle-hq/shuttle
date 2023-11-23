@@ -48,12 +48,12 @@ services:
       - auth-vol:/var/lib/shuttle-auth
     environment:
       - RUST_LOG=${RUST_LOG}
-      - AUTH_JWTSIGNING_PRIVATE_KEY=${AUTH_JWTSIGNING_PRIVATE_KEY}
     command:
       - "--state=/var/lib/shuttle-auth"
       - "start"
       - "--address=0.0.0.0:8000"
       - "--stripe-secret-key=${STRIPE_SECRET_KEY}"
+      - "--jwt-signing-private-key=${AUTH_JWTSIGNING_PRIVATE_KEY}"
     healthcheck:
       test: curl --fail http://localhost:8000/ || exit 1
       interval: 1m

@@ -16,7 +16,7 @@ use sqlx::{
 };
 use tracing::info;
 
-use crate::{api::serve, secrets::AUTH_JWTSIGNING_PRIVATE_KEY};
+use crate::api::serve;
 pub use api::ApiBuilder;
 pub use args::{Args, Commands, InitArgs};
 
@@ -25,18 +25,11 @@ pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // On
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 pub async fn start(pool: SqlitePool, args: StartArgs) -> io::Result<()> {
-    // Check whether the expected environment is set.
-    // TODO: consume auth environment in a more standard way (e.g. use dotenvy).
-    // Auth JWT signing private key, as a base64 encoding of
-    // a PEM encoded PKCS#8 v1 formatted unencrypted private key.
-    let jwt_signing_private_key = std::env::var(AUTH_JWTSIGNING_PRIVATE_KEY)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
     let router = api::ApiBuilder::new()
         .with_sqlite_pool(pool)
         .with_sessions()
         .with_stripe_client(stripe::Client::new(args.stripe_secret_key))
-        .with_jwt_signing_private_key(jwt_signing_private_key)
+        .with_jwt_signing_private_key(args.jwt_signing_private_key)
         .into_router();
 
     info!(address=%args.address, "Binding to and listening at address");

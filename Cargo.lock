@@ -4507,6 +4507,16 @@ dependencies = [
 
 [[package]]
 name = "pem"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b13fe415cdf3c8e44518e18a7c95a13431d9bdf6d15367d82b23c377fdd441a"
+dependencies = [
+ "base64 0.21.5",
+ "serde",
+]
+
+[[package]]
+name = "pem"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3163d2912b7c3b52d651a055f2c7eec9ba5cd22d26ef75b8dd3a59980b185923"
@@ -5748,11 +5758,13 @@ dependencies = [
  "axum",
  "axum-extra",
  "axum-sessions",
+ "base64 0.21.5",
  "clap",
  "http",
  "hyper",
  "jsonwebtoken",
  "opentelemetry",
+ "pem 2.0.1",
  "portpicker",
  "rand 0.8.5",
  "ring 0.17.5",

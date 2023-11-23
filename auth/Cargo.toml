@@ -17,10 +17,12 @@ async-stripe = { version = "0.25.1", default-features = false, features = ["chec
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["headers"] }
 axum-sessions = { workspace = true }
+base64 = { workspace = true }
 clap = { workspace = true }
 http = { workspace = true }
 jsonwebtoken = { workspace = true }
 opentelemetry = { workspace = true }
+pem = "2"
 rand = { workspace = true }
 ring = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

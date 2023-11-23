@@ -131,7 +131,7 @@ pub enum Command {
     Login(LoginArgs),
     /// Log out of the Shuttle platform
     Logout(LogoutArgs),
-    /// Generate shell completions
+    /// Generate shell completions and man page
     #[command(subcommand)]
     Generate(GenerateCommand),
     /// Open an issue on GitHub and provide feedback

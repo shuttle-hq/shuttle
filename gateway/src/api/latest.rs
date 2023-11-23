@@ -14,7 +14,7 @@ use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::{StatusCode, Uri};
+use http::{Method, StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
@@ -370,7 +370,7 @@ async fn delete_project(
     }
 
     // check if database in resources
-    let mut rb = hyper::Request::builder();
+    let mut rb = Request::builder();
     rb.headers_mut().unwrap().clone_from(req.headers());
     let resource_req = rb
         .uri(
@@ -381,7 +381,7 @@ async fn delete_project(
         .method("GET")
         .body(hyper::Body::empty())
         .unwrap();
-    let res = route_project(State(state.clone()), scoped_user, resource_req).await?;
+    let res = route_project(State(state.clone()), scoped_user.clone(), resource_req).await?;
     // 404 == no service == no resources
     if res.status() != StatusCode::NOT_FOUND {
         if res.status() != StatusCode::OK {
@@ -394,20 +394,31 @@ async fn delete_project(
             serde_json::from_slice(&body_bytes)
                 .map_err(|e| Error::source(ErrorKind::Internal, e))?;
 
-        let resources = resources
-            .into_iter()
-            .filter(|resource| {
-                matches!(
-                    resource.r#type,
-                    shuttle_common::resource::Type::Database(_)
-                        | shuttle_common::resource::Type::Secrets
-                )
-            })
-            .map(|resource| resource.r#type.to_string())
-            .collect::<Vec<_>>();
+        let mut delete_fails = Vec::new();
 
-        if !resources.is_empty() {
-            return Err(Error::from_kind(ErrorKind::ProjectHasResources(resources)));
+        for resource in resources {
+            let resource_type = resource.r#type.to_string();
+            let mut rb = Request::builder();
+            rb.headers_mut().unwrap().clone_from(req.headers());
+            let resource_req = rb
+                .uri(
+                    format!("/projects/{project_name}/services/{project_name}/resources/{resource_type}")
+                        .parse::<Uri>()
+                        .unwrap(),
+                )
+                .method(Method::DELETE)
+                .body(hyper::Body::empty())
+                .unwrap();
+            let res =
+                route_project(State(state.clone()), scoped_user.clone(), resource_req).await?;
+
+            if res.status() != StatusCode::OK {
+                delete_fails.push(resource_type)
+            }
+        }
+
+        if !delete_fails.is_empty() {
+            println!("failed to remove some resources");
         }
     }
 
@@ -1408,6 +1419,7 @@ pub mod tests {
         project: &mut TestProject,
     ) -> anyhow::Result<()> {
         project.deploy("../examples/rocket/secrets").await;
+        project.stop_service().await;
         project.router_call(Method::DELETE, "/delete").await;
 
         Ok(())

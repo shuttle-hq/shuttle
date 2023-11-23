@@ -22,6 +22,7 @@ impl ResourceRecorder for MockedResourceRecorder {
         request: Request<RecordRequest>,
     ) -> Result<Response<ResultResponse>, Status> {
         println!("recording resources");
+
         let RecordRequest {
             project_id,
             service_id,
@@ -83,17 +84,51 @@ impl ResourceRecorder for MockedResourceRecorder {
 
     async fn get_resource(
         &self,
-        _request: tonic::Request<ResourceIds>,
+        request: tonic::Request<ResourceIds>,
     ) -> Result<Response<ResourceResponse>, Status> {
-        println!("getting resources");
-        Ok(Response::new(Default::default()))
+        println!("getting resource");
+
+        let ResourceIds {
+            project_id,
+            service_id,
+            r#type,
+        } = request.into_inner();
+        let resource = self
+            .resources
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|r| {
+                r.project_id == project_id && r.service_id == service_id && r.r#type == r#type
+            })
+            .cloned();
+
+        Ok(Response::new(ResourceResponse {
+            success: resource.is_some(),
+            message: Default::default(),
+            resource,
+        }))
     }
 
     async fn delete_resource(
         &self,
-        _request: tonic::Request<ResourceIds>,
+        request: tonic::Request<ResourceIds>,
     ) -> Result<Response<ResultResponse>, Status> {
-        Ok(Response::new(Default::default()))
+        println!("delete resource");
+
+        let ResourceIds {
+            project_id,
+            service_id,
+            r#type,
+        } = request.into_inner();
+        self.resources.lock().unwrap().retain(|r| {
+            !(r.project_id == project_id && r.service_id == service_id && r.r#type == r#type)
+        });
+
+        Ok(Response::new(ResultResponse {
+            success: true,
+            message: Default::default(),
+        }))
     }
 }
 

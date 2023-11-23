@@ -958,6 +958,30 @@ pub mod tests {
                 sleep(Duration::from_secs(1)).await;
             }
         }
+
+        /// Stop a service running in a project
+        pub async fn stop_service(&mut self) {
+            let TestProject {
+                router,
+                authorization,
+                project_name,
+            } = self;
+
+            router
+                .call(
+                    Request::builder()
+                        .method("DELETE")
+                        .uri(format!("/projects/{project_name}/services/{project_name}"))
+                        .body(Body::empty())
+                        .unwrap()
+                        .with_header(authorization),
+                )
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+        }
     }
 
     #[async_trait]

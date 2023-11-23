@@ -98,7 +98,6 @@ Commands:
   logs        View the logs of a deployment in this shuttle service
   project     List or manage projects on shuttle
   resource    Manage resources of a shuttle project
-  secrets     Manage secrets for this shuttle service
   clean       Remove cargo build artifacts in the shuttle environment
   login       Login to the shuttle platform
   logout      Log out of the shuttle platform
@@ -142,10 +141,10 @@ cargo shuttle init --template rocket my-rocket-app
 This should generate the following dependency in `Cargo.toml`:
 
 ```toml
-rocket = "0.5.0-rc.2"
-shuttle-rocket = { version = "0.32.0" }
-shuttle-runtime = { version = "0.32.0" }
-tokio = { version = "1.26.0" }
+rocket = "0.5.0"
+shuttle-rocket = "0.34.0"
+shuttle-runtime = "0.34.0"
+tokio = "1.26.0"
 ```
 
 The following boilerplate code should be generated into `src/lib.rs`:

@@ -15,6 +15,7 @@ use tracing::{debug, error, field, Span};
 
 pub mod args;
 mod dal;
+pub mod rate_limiting;
 
 pub use dal::Postgres;
 

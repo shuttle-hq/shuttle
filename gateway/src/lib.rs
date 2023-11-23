@@ -267,6 +267,7 @@ pub mod tests {
     use bollard::Docker;
     use fqdn::FQDN;
     use futures::prelude::*;
+    use http::Method;
     use hyper::client::HttpConnector;
     use hyper::http::uri::Scheme;
     use hyper::http::Uri;
@@ -275,11 +276,14 @@ pub mod tests {
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
     use shuttle_common::backends::auth::ConvertResponse;
-    use shuttle_common::claims::{Claim, Scope};
+    use shuttle_common::claims::{AccountTier, Claim, Scope};
     use shuttle_common::models::project;
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::SqlitePool;
+    use test_context::AsyncTestContext;
     use tokio::sync::mpsc::channel;
+    use tokio::time::sleep;
+    use tower::Service;
 
     use crate::acme::AcmeClient;
     use crate::api::latest::ApiBuilder;
@@ -478,7 +482,6 @@ pub mod tests {
         docker: Docker,
         settings: ContainerSettings,
         args: StartArgs,
-        hyper: HyperClient<HttpConnector, Body>,
         pool: SqlitePool,
         acme_client: AcmeClient,
         auth_service: Arc<Mutex<AuthService>>,
@@ -489,7 +492,6 @@ pub mod tests {
     pub struct WorldContext {
         pub docker: Docker,
         pub container_settings: ContainerSettings,
-        pub hyper: HyperClient<HttpConnector, Body>,
         pub auth_uri: Uri,
     }
 
@@ -506,11 +508,11 @@ pub mod tests {
             let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
             let user = control + 1;
             let bouncer = user + 1;
-            let auth = bouncer + 1;
+            let auth_port = bouncer + 1;
             let control = format!("127.0.0.1:{control}").parse().unwrap();
             let user = format!("127.0.0.1:{user}").parse().unwrap();
             let bouncer = format!("127.0.0.1:{bouncer}").parse().unwrap();
-            let auth: SocketAddr = format!("127.0.0.1:{auth}").parse().unwrap();
+            let auth: SocketAddr = format!("0.0.0.0:{auth_port}").parse().unwrap();
             let auth_uri: Uri = format!("http://{auth}").parse().unwrap();
 
             let auth_service = AuthService::new(auth);
@@ -547,16 +549,30 @@ pub mod tests {
                     prefix,
                     provisioner_host,
                     builder_host,
-                    auth_uri: auth_uri.clone(),
+                    // The started containers need to reach auth on the host.
+                    // For this to work, the firewall should not be blocking traffic on the `SHUTTLE_TEST_NETWORK` interface.
+                    // The following command can be used on NixOs to allow traffic on the interface.
+                    // ```
+                    // sudo iptables -I nixos-fw -i <interface> -j nixos-fw-accept
+                    // ```
+                    //
+                    // Something like this should work on other systems.
+                    // ```
+                    // sudo iptables -I INPUT -i <interface> -j ACCEPT
+                    // ```
+                    auth_uri: format!("http://host.docker.internal:{auth_port}")
+                        .parse()
+                        .unwrap(),
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
                     deploys_api_key: "gateway".to_string(),
+
+                    // Allow access to the auth on the host
+                    extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],
                 },
             };
 
             let settings = ContainerSettings::builder().from_args(&args.context).await;
-
-            let hyper = HyperClient::builder().build(HttpConnector::new());
 
             let pool = SqlitePool::connect_with(
                 SqliteConnectOptions::from_str("sqlite::memory:")
@@ -576,7 +592,6 @@ pub mod tests {
                 docker,
                 settings,
                 args,
-                hyper,
                 pool,
                 acme_client,
                 auth_service,
@@ -592,10 +607,6 @@ pub mod tests {
             self.pool.clone()
         }
 
-        pub fn client<A: Into<SocketAddr>>(&self, addr: A) -> Client {
-            Client::new(addr).with_hyper_client(self.hyper.clone())
-        }
-
         pub fn fqdn(&self) -> FQDN {
             self.args().proxy_fqdn
         }
@@ -609,9 +620,15 @@ pub mod tests {
                 .lock()
                 .unwrap()
                 .users
-                .insert(user.to_string(), vec![Scope::Project, Scope::ProjectWrite]);
+                .insert(user.to_string(), AccountTier::Basic.into());
 
             user.to_string()
+        }
+
+        /// Create with the given name and return the authorization bearer for the user
+        pub fn create_authorization_bearer(&self, user: &str) -> Authorization<Bearer> {
+            let user_key = self.create_user(user);
+            Authorization::bearer(&user_key).unwrap()
         }
 
         pub fn set_super_user(&self, user: &str) {
@@ -619,14 +636,51 @@ pub mod tests {
                 scopes.push(Scope::Admin)
             }
         }
-    }
 
-    impl World {
+        /// Create a router to make API calls against. Also starts up a worker to create actual Docker containers for all requests
+        pub async fn router(&self) -> Router {
+            let service = Arc::new(GatewayService::init(self.args(), self.pool(), "".into()).await);
+            let worker = Worker::new();
+
+            let (sender, mut receiver) = channel(256);
+            tokio::spawn({
+                let worker_sender = worker.sender();
+                async move {
+                    while let Some(work) = receiver.recv().await {
+                        // Forward tasks to an actual worker
+                        worker_sender
+                            .send(work)
+                            .await
+                            .map_err(|_| "could not send work")
+                            .unwrap();
+                    }
+                }
+            });
+
+            let _worker = tokio::spawn(async move {
+                worker.start().await.unwrap();
+            });
+
+            // Allow the spawns to start
+            tokio::time::sleep(Duration::from_secs(1)).await;
+
+            ApiBuilder::new()
+                .with_service(Arc::clone(&service))
+                .with_sender(sender)
+                .with_default_routes()
+                .with_auth_service(self.context().auth_uri)
+                .into_router()
+        }
+
+        pub fn client<A: Into<SocketAddr>>(addr: A) -> Client {
+            let hyper = HyperClient::builder().build(HttpConnector::new());
+            Client::new(addr).with_hyper_client(hyper)
+        }
+
         pub fn context(&self) -> WorldContext {
             WorldContext {
                 docker: self.docker.clone(),
                 container_settings: self.settings.clone(),
-                hyper: self.hyper.clone(),
                 auth_uri: self.auth_uri.clone(),
             }
         }
@@ -675,7 +729,7 @@ pub mod tests {
                         let state = state.lock().unwrap();
 
                         if let Some(scopes) = state.users.get(bearer.token()) {
-                            let claim = Claim::new(bearer.token().to_string(), scopes.clone());
+                            let claim = Claim::new(bearer.token().to_string(), scopes.clone(), AccountTier::default(), AccountTier::default());
                             let token = claim.into_token(&state.encoding_key)?;
                             Ok(serde_json::to_vec(&ConvertResponse { token }).unwrap())
                         } else {
@@ -691,6 +745,176 @@ pub mod tests {
                     .await
                     .unwrap();
             });
+
+            this
+        }
+    }
+
+    /// Make it easy to perform common requests against the router for testing purposes
+    #[async_trait]
+    pub trait RouterExt {
+        /// Create a project and put it in the ready state
+        async fn create_project(
+            &mut self,
+            authorization: &Authorization<Bearer>,
+            project_name: &str,
+        ) -> TestProject;
+    }
+
+    /// Helper struct to wrap a bunch of commands to run against a test project
+    pub struct TestProject {
+        router: Router,
+        authorization: Authorization<Bearer>,
+        project_name: String,
+    }
+
+    impl TestProject {
+        /// Wait a few seconds for the project to enter the desired state
+        pub async fn wait_for_state(&mut self, state: project::State) {
+            let mut tries = 0;
+            let project_name = &self.project_name;
+
+            loop {
+                let resp = self
+                    .router
+                    .call(
+                        Request::get(format!("/projects/{project_name}"))
+                            .with_header(&self.authorization)
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+
+                assert_eq!(resp.status(), StatusCode::OK);
+                let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
+                let project: project::Response = serde_json::from_slice(&body).unwrap();
+
+                if project.state == state {
+                    break;
+                }
+
+                tries += 1;
+                if tries > 12 {
+                    panic!("timed out waiting for state {state}");
+                }
+
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+
+        /// Is this project still available - aka has it been deleted
+        pub async fn is_missing(&mut self) -> bool {
+            let project_name = &self.project_name;
+
+            let resp = self
+                .router
+                .call(
+                    Request::get(format!("/projects/{project_name}"))
+                        .with_header(&self.authorization)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            resp.status() == StatusCode::NOT_FOUND
+        }
+
+        /// Destroy / stop a project. Like `cargo shuttle project stop`
+        pub async fn destroy_project(&mut self) {
+            let TestProject {
+                router,
+                authorization,
+                project_name,
+            } = self;
+
+            router
+                .call(
+                    Request::builder()
+                        .method("DELETE")
+                        .uri(format!("/projects/{project_name}"))
+                        .body(Body::empty())
+                        .unwrap()
+                        .with_header(authorization),
+                )
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+
+            self.wait_for_state(project::State::Destroyed).await;
+        }
+
+        /// Send a request to the router for this project
+        pub async fn router_call(&mut self, method: Method, sub_path: &str) {
+            let project_name = &self.project_name;
+
+            self.router
+                .call(
+                    Request::builder()
+                        .method(method)
+                        .uri(format!("/projects/{project_name}{sub_path}"))
+                        .body(Body::empty())
+                        .unwrap()
+                        .with_header(&self.authorization),
+                )
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+        }
+    }
+
+    #[async_trait]
+    impl AsyncTestContext for TestProject {
+        async fn setup() -> Self {
+            let world = World::new().await;
+
+            let mut router = world.router().await;
+            let authorization = world.create_authorization_bearer("neo");
+
+            router.create_project(&authorization, "matrix").await
+        }
+
+        async fn teardown(mut self) {
+            assert!(self.is_missing().await, "test left a dangling project");
+        }
+    }
+
+    #[async_trait]
+    impl RouterExt for Router {
+        async fn create_project(
+            &mut self,
+            authorization: &Authorization<Bearer>,
+            project_name: &str,
+        ) -> TestProject {
+            let authorization = authorization.clone();
+
+            self.call(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/projects/{project_name}"))
+                    .header("Content-Type", "application/json")
+                    .body("{\"idle_minutes\": 3}".into())
+                    .unwrap()
+                    .with_header(&authorization),
+            )
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::OK);
+            })
+            .await
+            .unwrap();
+
+            let mut this = TestProject {
+                authorization,
+                project_name: project_name.to_string(),
+                router: self.clone(),
+            };
+
+            this.wait_for_state(project::State::Ready).await;
 
             this
         }
@@ -716,7 +940,7 @@ pub mod tests {
             }
         });
 
-        let api_client = world.client(world.args.control);
+        let api_client = World::client(world.args.control);
         let api = ApiBuilder::new()
             .with_service(Arc::clone(&service))
             .with_sender(log_out.clone())

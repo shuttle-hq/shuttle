@@ -1,10 +1,8 @@
 pub mod admin;
 pub mod deployment;
 pub mod error;
-#[cfg(feature = "backend")]
 pub mod project;
 pub mod resource;
-pub mod secret;
 pub mod service;
 pub mod stats;
 pub mod user;

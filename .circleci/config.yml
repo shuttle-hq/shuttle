@@ -420,6 +420,9 @@ jobs:
       stripe-secret-key:
         description: "Stripe secret key used to connect a client to Stripe backend"
         type: string
+      jwt-signing-private-key:
+        description: "Auth private key used for JWT signing"
+        type: string
       production:
         description: "Push and deploy to production"
         type: boolean
@@ -450,6 +453,7 @@ jobs:
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
             STRIPE_SECRET_KEY=${<< parameters.stripe-secret-key >>} \
+            AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
             make deploy
       - when:
           condition: << parameters.production >>
@@ -817,6 +821,7 @@ workflows:
           deploys-api-key: DEV_DEPLOYS_API_KEY
           logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
           stripe-secret-key: DEV_STRIPE_SECRET_KEY
+          jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
           requires:
             - build-and-push-unstable
   release:
@@ -895,6 +900,7 @@ workflows:
           deploys-api-key: PROD_DEPLOYS_API_KEY
           logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
           stripe-secret-key: PROD_STRIPE_SECRET_KEY
+          jwt-signing-private-key: PROD_AUTH_JWTSIGNING_PRIVATE_KEY
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
           ssh-config-script: production-ssh-config.sh
           ssh-host: shuttle.prod.internal

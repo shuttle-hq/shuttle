@@ -189,7 +189,7 @@ pub async fn clean_crate(project_path: &Path) -> anyhow::Result<()> {
         .await?
         .success()
     {
-        bail!("cargo clean failed");
+        bail!("`cargo clean` failed. Did you build anything yet?");
     }
 
     Ok(())

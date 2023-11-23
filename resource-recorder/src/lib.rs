@@ -135,6 +135,7 @@ where
         request.verify(Scope::ResourcesWrite)?;
 
         let request = request.into_inner();
+
         let result = match self.add(request).await {
             Ok(()) => ResultResponse {
                 success: true,

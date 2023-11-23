@@ -171,10 +171,10 @@ impl Default for ScopeBuilder {
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(feature = "backend", derive(strum::Display))]
-#[cfg_attr(feature = "backend", derive(sqlx::Type))]
-#[cfg_attr(feature = "backend", sqlx(rename_all = "lowercase"))]
-#[cfg_attr(feature = "backend", strum(serialize_all = "lowercase"))]
+#[cfg_attr(feature = "display", derive(strum::Display))]
+#[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
+#[cfg_attr(feature = "persist", derive(sqlx::Type))]
+#[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
 pub enum AccountTier {
     #[default]
     Basic,

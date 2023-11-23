@@ -37,6 +37,7 @@ use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
 use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
+use ulid::Ulid;
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 use utoipa::IntoParams;
 use utoipa::{Modify, OpenApi};
@@ -319,6 +320,24 @@ async fn delete_project(
     req: Request<Body>,
 ) -> Result<AxumJson<String>, Error> {
     let project_name = scoped_user.scope.clone();
+    let project = state.service.find_project(&project_name).await?;
+    let project_id =
+        Ulid::from_string(&project.project_id).expect("stored project id to be a valid ULID");
+
+    // Try to startup a destroyed project first
+    if project.state.is_destroyed() {
+        let handle = state
+            .service
+            .new_task()
+            .project(project_name.clone())
+            .and_then(task::restart(project_id))
+            .send(&state.sender)
+            .await?;
+
+        // Wait for the project to be ready
+        handle.await;
+    }
+
     let service = state.service.clone();
     let sender = state.sender.clone();
 
@@ -1098,17 +1117,19 @@ pub mod tests {
     use axum::headers::Authorization;
     use axum::http::Request;
     use futures::TryFutureExt;
+    use http::Method;
     use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
     use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
+    use test_context::test_context;
     use tokio::sync::mpsc::channel;
     use tokio::sync::oneshot;
     use tower::Service;
 
     use super::*;
     use crate::service::GatewayService;
-    use crate::tests::{RequestBuilderExt, World};
+    use crate::tests::{RequestBuilderExt, TestProject, World};
 
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
@@ -1140,7 +1161,7 @@ pub mod tests {
                 .unwrap()
         };
 
-        let delete_project = |project: &str| {
+        let stop_project = |project: &str| {
             Request::builder()
                 .method("DELETE")
                 .uri(format!("/projects/{project}"))
@@ -1197,7 +1218,7 @@ pub mod tests {
             .unwrap();
 
         router
-            .call(delete_project("matrix").with_header(&authorization))
+            .call(stop_project("matrix").with_header(&authorization))
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::OK);
             })
@@ -1223,7 +1244,7 @@ pub mod tests {
             .unwrap();
 
         router
-            .call(delete_project("reloaded").with_header(&authorization))
+            .call(stop_project("reloaded").with_header(&authorization))
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             })
@@ -1360,6 +1381,23 @@ pub mod tests {
                 .await
                 .unwrap();
         }
+
+        Ok(())
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_is_ready(project: &mut TestProject) -> anyhow::Result<()> {
+        project.router_call(Method::DELETE, "/delete").await;
+
+        Ok(())
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_is_destroyed(project: &mut TestProject) -> anyhow::Result<()> {
+        project.destroy_project().await;
+        project.router_call(Method::DELETE, "/delete").await;
 
         Ok(())
     }

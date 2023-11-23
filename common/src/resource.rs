@@ -56,6 +56,7 @@ impl FromStr for Type {
                 "metadata" => Ok(Self::Metadata),
                 "persist" => Ok(Self::Persist),
                 "turso" => Ok(Self::Turso),
+                "custom" => Ok(Self::Custom),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }

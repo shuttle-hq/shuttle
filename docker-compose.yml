@@ -53,6 +53,16 @@ services:
       - "start"
       - "--address=0.0.0.0:8000"
       - "--stripe-secret-key=${STRIPE_SECRET_KEY}"
+      - "--jwt-signing-private-key=${AUTH_JWTSIGNING_PRIVATE_KEY}"
+    healthcheck:
+      test: curl --fail http://localhost:8000/ || exit 1
+      interval: 1m
+      timeout: 10s
+      retries: 5
+      # These options are pending on an upgrade to Docker Engine version 25.0.
+      # Using them will result in error because they are not handled gracefully.
+      # start_period: 10s
+      # start_interval: 2s
   builder:
     image: "${CONTAINER_REGISTRY}/builder:${BUILDER_TAG}"
     depends_on:

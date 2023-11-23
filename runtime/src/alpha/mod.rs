@@ -218,6 +218,8 @@ where
 
         let provisioner_client = ProvisionerClient::new(channel);
 
+        // TODO: merge new & old secrets
+
         let past_resources = resources
             .into_iter()
             .map(resource::Response::from_bytes)

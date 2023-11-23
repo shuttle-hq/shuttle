@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-gateway"
-version = "0.33.0"
+version = "0.34.0"
 edition.workspace = true
 license.workspace = true
 publish = false
@@ -10,8 +10,9 @@ shuttle-common = { workspace = true, features = [
     "backend",
     "models",
     "openapi",
+    "persist",
 ] }
-shuttle-proto = { workspace = true }
+shuttle-proto = { workspace = true, features = ["provisioner"] }
 shuttle-orchestrator = { workspace = true }
 
 async-trait = { workspace = true }
@@ -65,3 +66,4 @@ portpicker = { workspace = true }
 ring = { workspace = true }
 snailquote = "0.3.1"
 tempfile = { workspace = true }
+test-context = "0.1.4"

@@ -12,7 +12,8 @@ use clap::{
     Parser, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::{models::project::DEFAULT_IDLE_MINUTES, resource};
+use shuttle_common::constants::DEFAULT_IDLE_MINUTES;
+use shuttle_common::resource;
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -225,7 +226,7 @@ pub struct ProjectStartArgs {
     pub idle_minutes: u64,
 }
 
-#[derive(Parser, Clone, Debug)]
+#[derive(Parser, Clone, Debug, Default)]
 pub struct LoginArgs {
     /// API key for the Shuttle platform
     #[arg(long)]
@@ -261,7 +262,7 @@ pub struct RunArgs {
     pub release: bool,
 }
 
-#[derive(Parser, Clone, Debug)]
+#[derive(Parser, Clone, Debug, Default)]
 pub struct InitArgs {
     /// Clone a starter template from Shuttle's official examples
     #[arg(long, short, value_enum, conflicts_with_all = &["from", "subfolder"])]
@@ -277,6 +278,9 @@ pub struct InitArgs {
     #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub path: PathBuf,
 
+    /// Don't check the project name's validity or availability and use it anyways
+    #[arg(long)]
+    pub force_name: bool,
     /// Whether to start the container for this project on Shuttle, and claim the project name
     #[arg(long)]
     pub create_env: bool,
@@ -398,9 +402,7 @@ mod tests {
             template: Some(InitTemplateArg::Tower),
             from: None,
             subfolder: None,
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
+            ..Default::default()
         };
         assert_eq!(
             init_args.git_template().unwrap(),
@@ -415,9 +417,7 @@ mod tests {
             template: Some(InitTemplateArg::Axum),
             from: None,
             subfolder: None,
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
+            ..Default::default()
         };
         assert_eq!(
             init_args.git_template().unwrap(),
@@ -432,9 +432,7 @@ mod tests {
             template: Some(InitTemplateArg::None),
             from: None,
             subfolder: None,
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
+            ..Default::default()
         };
         assert_eq!(
             init_args.git_template().unwrap(),
@@ -449,9 +447,7 @@ mod tests {
             template: None,
             from: Some("https://github.com/some/repo".into()),
             subfolder: Some("some/path".into()),
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
+            ..Default::default()
         };
         assert_eq!(
             init_args.git_template().unwrap(),
@@ -466,9 +462,7 @@ mod tests {
             template: None,
             from: None,
             subfolder: None,
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
+            ..Default::default()
         };
         assert_eq!(init_args.git_template().unwrap(), None);
     }

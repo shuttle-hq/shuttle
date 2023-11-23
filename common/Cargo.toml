@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-common"
-version = "0.33.0"
+version = "0.34.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -29,7 +29,8 @@ pin-project = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }
-rustrict = { version = "0.7.4", optional = true }
+# keep locked to not accidentally invalidate someone's project name
+rustrict = { version = "=0.7.12", optional = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
@@ -58,6 +59,7 @@ backend = [
     "hyper/client",
     "opentelemetry_sdk",
     "opentelemetry-otlp",
+    "rustrict", # only ProjectName model uses it
     "thiserror",
     "tokio",
     "tonic",
@@ -65,9 +67,6 @@ backend = [
     "tracing-subscriber/env-filter",
     "tracing-subscriber/fmt",
     "ttl_cache",
-    "sqlx",
-    "sqlx/postgres",            # Fix for derive macro error when different backends enable sqlite & postgres (mainly for grouped compilation in clippy CI and Docker build)
-    "sqlx/sqlite",
 ]
 claims = [
     "bytes",
@@ -85,17 +84,9 @@ claims = [
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
 openapi = ["utoipa/chrono", "utoipa/uuid"]
-models = [
-    "async-trait",
-    "display",
-    "http",
-    "reqwest",
-    "rustrict",
-    "service",
-    "thiserror",
-]
-persist = ["sqlx/sqlite", "rand"]
-service = ["chrono/serde", "tracing", "tracing-subscriber", "uuid"]
+models = ["async-trait", "http", "reqwest", "service", "thiserror"]
+persist = ["sqlx", "rand"]
+service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
 tracing = ["dep:tracing"]
 wasm = [
     "chrono/clock",

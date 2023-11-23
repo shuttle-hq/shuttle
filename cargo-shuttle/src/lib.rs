@@ -147,7 +147,7 @@ impl Shuttle {
     ) -> Result<CommandOutcome> {
         if let Some(ref url) = args.api_url {
             if url != API_URL_DEFAULT {
-                println!("INFO: Targeting non-standard API: {url}");
+                eprintln!("INFO: Targeting non-standard API: {url}");
             }
             if url.ends_with('/') {
                 eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");
@@ -621,17 +621,11 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    fn complete(
-        &self,
-        shell: Shell,
-        output: Option<PathBuf>,
-    ) -> Result<CommandOutcome> {
+    fn complete(&self, shell: Shell, output: Option<PathBuf>) -> Result<CommandOutcome> {
         let name = env!("CARGO_PKG_NAME");
         let mut app = Command::command();
         match output {
-            Some(path) => {
-                generate(shell, &mut app, name, &mut File::create(path)?)
-            }
+            Some(path) => generate(shell, &mut app, name, &mut File::create(path)?),
             None => generate(shell, &mut app, name, &mut stdout()),
         };
         Ok(CommandOutcome::Ok)
@@ -2000,8 +1994,6 @@ impl Shuttle {
         Ok(bytes)
     }
 }
-
-
 
 fn is_dirty(repo: &Repository) -> Result<()> {
     let mut status_options = StatusOptions::new();

@@ -97,8 +97,8 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::ProjectHasResources(resources) => {
                 let resources = resources.join(", ");
                 return Self {
-                    message: format!("Project has resources: {}. Use `cargo shuttle resource list` and `cargo shuttle resource delete <type>` to delete them.", resources),
-                    status_code: StatusCode::FORBIDDEN.as_u16(),
+                    message: format!("Could not automatically delete the following resources: {}. Reach out to our support and ask them for a helping hand.", resources),
+                    status_code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
                 }
             }
             ErrorKind::InvalidProjectName(err) => {

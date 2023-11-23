@@ -418,7 +418,9 @@ async fn delete_project(
         }
 
         if !delete_fails.is_empty() {
-            println!("failed to remove some resources");
+            return Err(Error::from_kind(ErrorKind::ProjectHasResources(
+                delete_fails,
+            )));
         }
     }
 

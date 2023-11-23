@@ -65,6 +65,7 @@ pub struct ContainerSettingsBuilder {
     auth_uri: Option<String>,
     network_name: Option<String>,
     fqdn: Option<String>,
+    extra_hosts: Option<Vec<String>>,
 }
 
 impl Default for ContainerSettingsBuilder {
@@ -83,6 +84,7 @@ impl ContainerSettingsBuilder {
             auth_uri: None,
             network_name: None,
             fqdn: None,
+            extra_hosts: None,
         }
     }
 
@@ -95,6 +97,7 @@ impl ContainerSettingsBuilder {
             auth_uri,
             image,
             proxy_fqdn,
+            extra_hosts,
             ..
         } = args;
         self.prefix(prefix)
@@ -104,6 +107,7 @@ impl ContainerSettingsBuilder {
             .auth_uri(auth_uri)
             .network_name(network_name)
             .fqdn(proxy_fqdn)
+            .extra_hosts(extra_hosts)
             .build()
             .await
     }
@@ -143,12 +147,18 @@ impl ContainerSettingsBuilder {
         self
     }
 
+    pub fn extra_hosts<S: ToString>(mut self, extra_hosts: &[S]) -> Self {
+        self.extra_hosts = Some(extra_hosts.iter().map(ToString::to_string).collect());
+        self
+    }
+
     pub async fn build(mut self) -> ContainerSettings {
         let prefix = self.prefix.take().unwrap();
         let image = self.image.take().unwrap();
         let provisioner_host = self.provisioner.take().unwrap();
         let builder_host = self.builder.take().unwrap();
         let auth_uri = self.auth_uri.take().unwrap();
+        let extra_hosts = self.extra_hosts.take().unwrap();
 
         let network_name = self.network_name.take().unwrap();
         let fqdn = self.fqdn.take().unwrap();
@@ -161,6 +171,7 @@ impl ContainerSettingsBuilder {
             auth_uri,
             network_name,
             fqdn,
+            extra_hosts,
         }
     }
 }
@@ -174,6 +185,7 @@ pub struct ContainerSettings {
     pub auth_uri: String,
     pub network_name: String,
     pub fqdn: String,
+    pub extra_hosts: Vec<String>,
 }
 
 impl ContainerSettings {

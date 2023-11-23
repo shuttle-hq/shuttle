@@ -66,3 +66,4 @@ portpicker = { workspace = true }
 ring = { workspace = true }
 snailquote = "0.3.1"
 tempfile = { workspace = true }
+test-context = "0.1.4"

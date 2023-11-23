@@ -373,7 +373,10 @@ impl Project {
             | Self::Stopping(ProjectStopping { container, .. })
             | Self::Stopped(ProjectStopped { container, .. })
             | Self::Rebooting(ProjectRebooting { container, .. })
-            | Self::Destroying(ProjectDestroying { container }) => Some(container.clone()),
+            | Self::Destroying(ProjectDestroying { container })
+            | Self::Destroyed(ProjectDestroyed {
+                destroyed: Some(container),
+            }) => Some(container.clone()),
             Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container(),
             Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) | Self::Deleted => None,
         }
@@ -793,6 +796,7 @@ impl ProjectCreating {
             builder_host,
             auth_uri,
             fqdn: public,
+            extra_hosts,
             ..
         } = ctx.container_settings();
 
@@ -864,7 +868,8 @@ impl ProjectCreating {
             "MemoryReservation": 4295000000i64, // 4 GiB soft limit, applied if host is low on memory
             // https://docs.docker.com/config/containers/resource_constraints/#cpu
             "CpuPeriod": 100000i64,
-            "CpuQuota": 400000i64
+            "CpuQuota": 400000i64,
+            "ExtraHosts": extra_hosts,
         });
 
         debug!(
@@ -1987,7 +1992,7 @@ pub mod tests {
             .unwrap()
             .unwrap();
 
-        let client = world.client(target_addr);
+        let client = World::client(target_addr);
 
         client
             .request(

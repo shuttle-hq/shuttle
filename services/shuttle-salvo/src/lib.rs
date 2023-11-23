@@ -41,5 +41,25 @@ impl From<salvo::Router> for SalvoService {
         Self(router)
     }
 }
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+
+/// Return type from the `[shuttle_runtime::main]` macro for a Salvo-based service.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use salvo::prelude::*;
+/// use shuttle_salvo::ShuttleSalvo;
+///
+/// #[handler]
+/// async fn hello_world(res: &mut Response) {
+///     res.render(Text::Plain("Hello, world!"));
+/// }
+///
+/// #[shuttle_runtime::main]
+/// async fn salvo() -> ShuttleSalvo {
+///     let router = Router::with_path("hello").get(hello_world);
+///
+///     Ok(router.into())
+/// }
+/// ```
 pub type ShuttleSalvo = Result<SalvoService, Error>;

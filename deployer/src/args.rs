@@ -3,7 +3,7 @@ use std::{net::SocketAddr, path::PathBuf};
 use clap::Parser;
 use fqdn::FQDN;
 use hyper::Uri;
-use shuttle_common::project::ProjectName;
+use shuttle_common::models::project::ProjectName;
 use tonic::transport::Endpoint;
 
 /// Program to handle the deploys for a single project
@@ -17,7 +17,7 @@ pub struct Args {
 
     /// Address to connect to the provisioning service
     #[clap(long, default_value = "http://provisioner:3000")]
-    pub provisioner_address: Endpoint,
+    pub provisioner_address: Uri,
 
     /// Address to connect to the logger service
     #[clap(long, default_value = "http://logger:8000")]

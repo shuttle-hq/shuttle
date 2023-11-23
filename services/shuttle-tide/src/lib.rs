@@ -1,12 +1,14 @@
 //! Shuttle service integration for the Tide web framework.
+//!
 //! ## Example
+//!
 //! ```rust,no_run
 //! #[shuttle_runtime::main]
 //! async fn tide() -> shuttle_tide::ShuttleTide<()> {
 //!     let mut app = tide::new();
 //!     app.with(tide::log::LogMiddleware::new());
 //!
-//!     app.at("/hello").get(|_| async { Ok("Hello, world!") });
+//!     app.at("/").get(|_| async { Ok("Hello, world!") });
 //!
 //!     Ok(app.into())
 //! }
@@ -36,5 +38,21 @@ impl<T> From<tide::Server<T>> for TideService<T> {
         Self(router)
     }
 }
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+
+/// Return type from the `[shuttle_runtime::main]` macro for a Tide-based service.
+///
+/// ## Example
+///
+/// ```rust,no_run
+/// # use shuttle_tide::ShuttleTide;
+///
+/// #[shuttle_runtime::main]
+/// async fn tide() -> ShuttleTide<()> {
+///     let mut app = tide::new();
+///     app.with(tide::log::LogMiddleware::new());
+///     app.at("/").get(|_| async { Ok("Hello, world!") });
+///
+///     Ok(app.into())
+/// }
+/// ```
 pub type ShuttleTide<T> = Result<TideService<T>, Error>;

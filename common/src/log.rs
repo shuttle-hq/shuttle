@@ -75,7 +75,7 @@ impl LogItem {
         // Check if it can be over the limit (assuming ascii only), no iteration
         if line.len() > LOGLINE_MAX_CHARS {
             // Then, check if it actually is over the limit.
-            // Find the char boundrary of the last char, but iterate no more than
+            // Find the char boundary of the last char, but iterate no more than
             // the max number of chars allowed.
             let x = line
                 .char_indices()
@@ -83,7 +83,7 @@ impl LogItem {
                 .find(|(i, _)| *i == LOGLINE_MAX_CHARS);
             // If char iterator reached max iteration count
             if let Some((_, (ci, _))) = x {
-                // Truncate to the char boundrary found
+                // Truncate to the char boundary found
                 line.truncate(ci);
                 // New allocation unlikely since it keeps its capacity
                 write!(line, "{}", TRUNC_MSG).expect("write to string");

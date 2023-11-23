@@ -15,21 +15,22 @@ executors:
     machine:
       image: ubuntu-2204:2023.07.2
       docker_layer_caching: true
-    resource_class: xlarge
+    resource_class: large
 
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
 commands:
-  restore-cargo-cache:
+  restore-cargo-and-sccache:
+    parameters:
+      sccache-size:
+        description: Max size for the cache
+        type: string
+        # 500 MB is the recommended soft cap for a cache on circleci.
+        # Large integration tests override this default.
+        default: 500M
     steps:
-      - restore_cache:
-          name: Restore cargo registry cache
-          key: cargo-{{ checksum "Cargo.lock" }}
-          # Don't use fallback key to prevent registry cache from growing indefinitely.
       - run:
           name: Install sccache
-          # 500 MB is the recommended soft cap for a cache on circleci.
-          # Large integration tests override this default.
           command: |
             SCCACHE_VERSION='v0.5.4'
             ls ~/.cargo/bin/sccache \
@@ -38,13 +39,21 @@ commands:
                 > ~/.cargo/bin/sccache \
               && chmod +x ~/.cargo/bin/sccache
             echo 'export RUSTC_WRAPPER=~/.cargo/bin/sccache' >> $BASH_ENV
-            echo 'export SCCACHE_CACHE_SIZE=500M' >> $BASH_ENV
+            echo 'export SCCACHE_CACHE_SIZE=<< parameters.sccache-size >>' >> $BASH_ENV
+      - run:
+          name: Start sccache
+          command: ~/.cargo/bin/sccache --start-server
       - restore_cache:
           name: Restore sccache cache
-          keys: # This can use fallback due to size limit.
+          keys: # Find latest cache for this job on same branch, else fall back to older cache.
             - sccache-cache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
             - sccache-cache-{{ .Environment.CIRCLE_JOB }}-
-  save-cargo-cache:
+      - restore_cache:
+          name: Restore cargo registry cache
+          keys: # This is saved once per lockfile update. If new lockfile, get an older cache.
+            - cargo-{{ checksum "Cargo.lock" }}
+            - cargo-
+  save-sccache:
     steps:
       - run:
           name: Sccache stats
@@ -55,13 +64,23 @@ commands:
           # If a new commit is built, it will fall back on the most recent cache from the same branch.
           key: sccache-cache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
           paths:
-            - "~/.cache/sccache"
+            - ~/.cache/sccache
+  # This is only performed by the workspace clippy job, since it does the largest cargo fetch.
+  # Other jobs might restore a slightly older copy of this cache.
+  save-cargo-cache:
+    steps:
+      # Discard crates.io patches so that it produces a re-usable cache key checksum.
+      - run:
+          name: Restore Cargo.lock
+          command: git restore Cargo.lock
       - save_cache:
           name: Save cargo cache
+          # This is saved once per lockfile update.
           key: cargo-{{ checksum "Cargo.lock" }}
           paths:
-            - ~/.cargo/registry
-            - ~/.cargo/git
+            - ~/.cargo/registry/cache
+            - ~/.cargo/registry/index
+            - ~/.cargo/git/db
   restore-buildx-cache:
     steps:
       - docker-buildx/install:
@@ -88,37 +107,8 @@ commands:
   apply-patches:
     steps:
       - run:
-          name: Patch service
-          command: |
-            cat\<< EOF > ~/.cargo/config.toml
-            [patch.crates-io]
-            shuttle-codegen = { path = "$PWD/codegen" }
-            shuttle-common = { path = "$PWD/common" }
-            shuttle-proto = { path = "$PWD/proto" }
-            shuttle-runtime = { path = "$PWD/runtime" }
-            shuttle-service = { path = "$PWD/service" }
-
-            shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
-            shuttle-metadata = { path = "$PWD/resources/metadata" }
-            shuttle-persist = { path = "$PWD/resources/persist" }
-            shuttle-secrets = { path = "$PWD/resources/secrets" }
-            shuttle-shared-db = { path = "$PWD/resources/shared-db" }
-            shuttle-static-folder = { path = "$PWD/resources/static-folder" }
-            shuttle-turso = { path = "$PWD/resources/turso" }
-
-            shuttle-actix-web = { path = "$PWD/services/shuttle-actix-web" }
-            shuttle-axum = { path = "$PWD/services/shuttle-axum" }
-            shuttle-next = { path = "$PWD/services/shuttle-next" }
-            shuttle-poem = { path = "$PWD/services/shuttle-poem" }
-            shuttle-poise = { path = "$PWD/services/shuttle-poise" }
-            shuttle-rocket = { path = "$PWD/services/shuttle-rocket" }
-            shuttle-salvo = { path = "$PWD/services/shuttle-salvo" }
-            shuttle-serenity = { path = "$PWD/services/shuttle-serenity" }
-            shuttle-thruster = { path = "$PWD/services/shuttle-thruster" }
-            shuttle-tide = { path = "$PWD/services/shuttle-tide" }
-            shuttle-tower = { path = "$PWD/services/shuttle-tower" }
-            shuttle-warp = { path = "$PWD/services/shuttle-warp" }
-            EOF
+          name: Patch crates
+          command: ./scripts/apply-patches.sh
   install-rust:
     steps:
       - run:
@@ -129,7 +119,7 @@ commands:
   install-protoc:
     steps:
       - run:
-          name: Install protoc
+          name: Install protoc and proto-gen
           environment:
             ARCH: "linux-x86_64"
             VERSION: "22.2"
@@ -137,6 +127,10 @@ commands:
             curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v$VERSION/protoc-$VERSION-$ARCH.zip" && \
                 sudo unzip -o "protoc-$VERSION-$ARCH.zip" bin/protoc "include/*" -d /usr/local && \
                 rm -f "protoc-$VERSION-$ARCH.zip"
+            curl -L https://github.com/EmbarkStudios/proto-gen/releases/download/v0.1.2/proto-gen-v0.1.2-x86_64-unknown-linux-musl.tar.gz \
+              | tar -xOz proto-gen-v0.1.2-x86_64-unknown-linux-musl/proto-gen \
+              > ~/.cargo/bin/proto-gen
+            chmod +x ~/.cargo/bin/proto-gen
   make-artifact:
     parameters:
       target:
@@ -180,7 +174,7 @@ jobs:
     resource_class: xlarge
     steps:
       - checkout
-      - restore-cargo-cache
+      - restore-cargo-and-sccache
       # Check this to make sure we do not include patched dependencies in the Cargo.lock
       - run: |
           [ -z "$(grep "\[\[patch.unused\]\]" Cargo.lock)" ] || \
@@ -192,11 +186,27 @@ jobs:
                        --all-features \
                        --no-deps -- \
                        --D warnings
-      - save-cargo-cache
       # An out of date lockfile will be modified after the clippy command has run
       - run: |
           git diff --exit-code Cargo.lock || \
             ( echo "Please commit an up to date Cargo.lock"; exit 1 )
+      - save-sccache
+      - save-cargo-cache
+  cargo-audit:
+    executor: docker-rust
+    steps:
+      - checkout
+      - run:
+          name: Install cargo-audit
+          command: |
+            CARGO_AUDIT_VERSION='v0.18.3'
+            ls ~/.cargo/bin/cargo-audit \
+              || curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$CARGO_AUDIT_VERSION/cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION.tgz \
+              | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION/cargo-audit \
+              > ~/.cargo/bin/cargo-audit \
+              && chmod +x ~/.cargo/bin/cargo-audit
+      - run: |
+          cargo audit -D warnings
   test-standalone:
     parameters:
       path:
@@ -209,7 +219,7 @@ jobs:
     executor: docker-rust
     steps:
       - checkout
-      - restore-cargo-cache
+      - restore-cargo-and-sccache
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
       - run: |
@@ -224,27 +234,30 @@ jobs:
                      --manifest-path << parameters.path >>/Cargo.toml \
                      -- \
                      --nocapture
-      - save-cargo-cache
+      - save-sccache
   test-workspace-member:
     parameters:
       crate:
-        description: "Crate in workspace to test"
+        description: Crate in workspace to test
         type: string
     executor: docker-rust
     steps:
       - install-rust
       - checkout
-      - restore-cargo-cache
+      - restore-cargo-and-sccache
       - run: cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
-      - save-cargo-cache
+      - save-sccache
   test-workspace-member-with-integration:
     parameters:
       crate:
-        description: "Crate in workspace to test"
+        description: Crate in workspace to test
         type: string
       resource_class:
-        description: "The resource type to use for the machine"
+        description: The resource type to use for the machine
         type: string
+      sccache-size:
+        type: string
+        default: 500M
     executor: docker-rust
     resource_class: << parameters.resource_class >>
     steps:
@@ -252,7 +265,8 @@ jobs:
       - install-protoc
       - checkout
       - run: git submodule update --init
-      - restore-cargo-cache
+      - restore-cargo-and-sccache:
+          sccache-size: << parameters.sccache-size >>
       - apply-patches
       - run:
           name: Run unit tests
@@ -268,25 +282,32 @@ jobs:
               echo "nothing to test here, adjust CI file or add an integration script"
               exit 1
             fi
-      - save-cargo-cache
+      - save-sccache
   test-workspace-member-with-integration-docker:
     parameters:
       crate:
         description: "Crate in workspace to test"
         type: string
+      resource_class:
+        description: The resource type to use for the machine
+        type: string
+      sccache-size:
+        type: string
+        default: 500M
     # Using a machine image since tests will start a docker container
     executor: machine-ubuntu
+    resource_class: << parameters.resource_class >>
     steps:
       - install-rust
       - install-protoc
       - checkout
       - run: git submodule update --init
-      - restore-cargo-cache
+      - restore-cargo-and-sccache:
+          sccache-size: << parameters.sccache-size >>
       - apply-patches
       - run:
           name: Run integration tests that need docker
           command: |
-            SCCACHE_CACHE_SIZE=2G
             set +o pipefail
             path=$(echo "<< parameters.crate >>" | sed "s/shuttle-\(.*\)/\1/")
             if [ -f "$path/integration_docker.sh" ]; then
@@ -295,9 +316,10 @@ jobs:
               echo "nothing to test here, adjust CI file or add an integration script"
               exit 1
             fi
-      - save-cargo-cache
+      - save-sccache
   e2e-test:
     executor: machine-ubuntu
+    resource_class: medium
     steps:
       - install-rust
       - checkout
@@ -325,7 +347,7 @@ jobs:
       - save_cache:
           name: Save buildx cache
           paths:
-            - "/tmp/cache/buildx"
+            - /tmp/cache/buildx
           key: docker-buildx-{{ .Branch }}-{{ .Revision }}
           when: always
   build-and-push:
@@ -395,6 +417,9 @@ jobs:
       logger-postgres-uri:
         description: "URI used to connect to the logger RDS postgres database."
         type: string
+      stripe-secret-key:
+        description: "Stripe secret key used to connect a client to Stripe backend"
+        type: string
       production:
         description: "Push and deploy to production"
         type: boolean
@@ -424,6 +449,7 @@ jobs:
             HONEYCOMB_API_KEY=${<< parameters.honeycomb-api-key >>} \
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
+            STRIPE_SECRET_KEY=${<< parameters.stripe-secret-key >>} \
             make deploy
       - when:
           condition: << parameters.production >>
@@ -465,8 +491,7 @@ jobs:
           command: |
             # From https://github.com/briansmith/ring/issues/1414#issuecomment-1055177218
             export CC_aarch64_unknown_linux_musl=clang
-            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
-            cargo build --release --package cargo-shuttle --features vendored-openssl --target << parameters.target >>
+            cargo build --release --package cargo-shuttle --target << parameters.target >>
       - make-artifact:
           target: << parameters.target >>
   build-binaries-windows:
@@ -491,8 +516,7 @@ jobs:
             # From https://github.com/alexcrichton/openssl-src-rs/issues/45
             # Because of https://github.com/openssl/openssl/issues/9048
             $env:OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
-            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
-            ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --features vendored-openssl --target x86_64-pc-windows-msvc
+            ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - make-artifact:
           target: x86_64-pc-windows-msvc
@@ -511,8 +535,7 @@ jobs:
       - run:
           name: Build
           command: |
-            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
-            cargo build --release --package cargo-shuttle --features vendored-openssl --target x86_64-apple-darwin
+            cargo build --release --package cargo-shuttle --target x86_64-apple-darwin
       - make-artifact:
           target: x86_64-apple-darwin
   publish-github-release:
@@ -645,16 +668,15 @@ jobs:
   publish-crates:
     parameters:
       path:
-        description: Crate to publish
+        description: Path to crate to publish
         type: string
     executor: docker-rust
-    resource_class: medium
     steps:
       - checkout
       - run:
-          name: Crate publishing in order
-          command: |
-            cargo publish --manifest-path << parameters.path >>/Cargo.toml
+          name: Publish crate
+          # Don't build the crate, we know that the crate should build based on other workflows
+          command: cargo publish --no-verify --manifest-path << parameters.path >>/Cargo.toml
 workflows:
   ci:
     jobs:
@@ -710,8 +732,8 @@ workflows:
               resource_class:
                 - medium
               crate:
-                - shuttle-auth
                 - shuttle-proto
+                - shuttle-resource-recorder
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
           matrix:
@@ -720,7 +742,7 @@ workflows:
               resource_class:
                 - large
               crate:
-                - shuttle-resource-recorder
+                - shuttle-auth
                 - shuttle-runtime
                 - shuttle-service
       - test-workspace-member-with-integration:
@@ -730,18 +752,36 @@ workflows:
             parameters:
               resource_class:
                 - xlarge
+              sccache-size:
+                - 1G
               crate:
                 - cargo-shuttle
                 - shuttle-deployer
       - test-workspace-member-with-integration-docker:
           name: << matrix.crate >> with docker
           matrix:
+            alias: test-workspace-member-with-integration-docker-medium
             parameters:
+              resource_class:
+                - medium
               crate:
-                # need to spawn docker containers, therefore in a machine
-                - cargo-shuttle
                 - shuttle-provisioner
                 - shuttle-logger
+      - test-workspace-member-with-integration-docker:
+          name: << matrix.crate >> with docker
+          matrix:
+            alias: test-workspace-member-with-integration-docker-large
+            parameters:
+              resource_class:
+                - large
+              sccache-size:
+                - 750M
+              crate:
+                - cargo-shuttle
+      - cargo-audit:
+          filters:
+            branches:
+              only: main
       - e2e-test:
           requires:
             - test-standalone
@@ -750,10 +790,13 @@ workflows:
             - test-workspace-member-with-integration-medium
             - test-workspace-member-with-integration-large
             - test-workspace-member-with-integration-xlarge
-            - test-workspace-member-with-integration-docker
+            - test-workspace-member-with-integration-docker-medium
+            - test-workspace-member-with-integration-docker-large
           filters:
             branches:
               only: production
+  unstable:
+    jobs:
       - approve-push-unstable:
           type: approval
           filters:
@@ -766,9 +809,6 @@ workflows:
           production: false
           requires:
             - approve-push-unstable
-          filters:
-            branches:
-              only: main
       - deploy-images:
           name: Deploy images to unstable
           postgres-password: DEV_POSTGRES_PASSWORD
@@ -776,6 +816,7 @@ workflows:
           honeycomb-api-key: DEV_HONEYCOMB_API_KEY
           deploys-api-key: DEV_DEPLOYS_API_KEY
           logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
+          stripe-secret-key: DEV_STRIPE_SECRET_KEY
           requires:
             - build-and-push-unstable
   release:
@@ -831,21 +872,18 @@ workflows:
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac
-          filters:
-            branches:
-              only: production
-      - approve-push-production:
-          type: approval
-          filters:
-            branches:
-              only: production
+      # time save: build and push without approval since a merge to production should want to deploy.
+      # deploy requires approval.
       - build-and-push:
           name: build-and-push-production
           aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
           aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
           production: true
-          requires:
-            - approve-push-production
+          filters:
+            branches:
+              only: production
+      - approve-deploy-production:
+          type: approval
           filters:
             branches:
               only: production
@@ -856,15 +894,14 @@ workflows:
           honeycomb-api-key: PROD_HONEYCOMB_API_KEY
           deploys-api-key: PROD_DEPLOYS_API_KEY
           logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
+          stripe-secret-key: PROD_STRIPE_SECRET_KEY
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
           ssh-config-script: production-ssh-config.sh
           ssh-host: shuttle.prod.internal
           production: true
           requires:
             - build-and-push-production
-          filters:
-            branches:
-              only: production
+            - approve-deploy-production
       - approve-publish-crates:
           type: approval
           filters:
@@ -879,9 +916,6 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - approve-publish-crates
-          filters:
-            branches:
-              only: production
       - publish-crates:
           matrix:
             parameters:
@@ -891,15 +925,10 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-common
-          filters:
-            branches:
-              only: production
       - publish-crates:
           matrix:
             parameters:
               path:
-                - runtime
-                - cargo-shuttle
                 - resources/aws-rds
                 - resources/metadata
                 - resources/persist
@@ -909,9 +938,16 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-service
-          filters:
-            branches:
-              only: production
+      - publish-crates:
+          matrix:
+            parameters:
+              path:
+                - runtime
+                - cargo-shuttle
+          name: publish-<< matrix.path >>
+          requires:
+            - publish-service
+            - publish-proto
       - publish-crates:
           matrix:
             parameters:
@@ -931,6 +967,3 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-runtime
-          filters:
-            branches:
-              only: production

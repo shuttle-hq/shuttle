@@ -18,6 +18,7 @@ use shuttle_common::{
     },
     claims::{Claim, ClaimLayer, InjectPropagationLayer},
     resource,
+    secrets::Secret,
 };
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
@@ -27,7 +28,7 @@ use shuttle_proto::{
         StopResponse, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
-use shuttle_service::{Environment, Factory, ProjectName, Service};
+use shuttle_service::{Environment, Factory, Service};
 use tokio::sync::{
     broadcast::{self, Sender},
     mpsc, oneshot,
@@ -39,7 +40,7 @@ use tonic::{
 };
 use tower::ServiceBuilder;
 
-use crate::{print_version, provisioner_factory::ProvisionerFactory, ResourceTracker};
+use crate::__internals::{print_version, ProvisionerFactory, ResourceTracker};
 
 use self::args::Args;
 
@@ -193,7 +194,7 @@ where
     S: Service + Send + 'static,
 {
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
-        let claim = request.extensions().get::<Claim>().map(Clone::clone);
+        let claim = request.extensions().get::<Claim>().cloned();
 
         let LoadRequest {
             path,
@@ -217,8 +218,7 @@ where
 
         let provisioner_client = ProvisionerClient::new(channel);
 
-        let service_name = ProjectName::from_str(service_name.as_str())
-            .map_err(|err| Status::from_error(Box::new(err)))?;
+        // TODO: merge new & old secrets
 
         let past_resources = resources
             .into_iter()
@@ -228,7 +228,7 @@ where
         let resource_tracker = ResourceTracker::new(past_resources, new_resources.clone());
 
         // Sorts secrets by key
-        let secrets = BTreeMap::from_iter(secrets);
+        let secrets = BTreeMap::from_iter(secrets.into_iter().map(|(k, v)| (k, Secret::new(v))));
 
         let factory =
             ProvisionerFactory::new(provisioner_client, service_name, secrets, self.env, claim);
@@ -240,14 +240,14 @@ where
             Ok(res) => match res {
                 Ok(service) => service,
                 Err(error) => {
-                    println!("loading service failed: {error}");
+                    println!("loading service failed: {error:#}");
 
                     let message = LoadResponse {
                         success: false,
                         message: error.to_string(),
                         resources: new_resources
                             .lock()
-                            .expect("to get lock no new resources")
+                            .expect("to get lock on new resources")
                             .iter()
                             .map(resource::Response::to_bytes)
                             .collect(),
@@ -258,7 +258,7 @@ where
             Err(error) => {
                 let resources = new_resources
                     .lock()
-                    .expect("to get lock no new resources")
+                    .expect("to get lock on new resources")
                     .iter()
                     .map(resource::Response::to_bytes)
                     .collect();
@@ -282,7 +282,7 @@ where
                     };
                     return Ok(Response::new(message));
                 } else {
-                    println!("loading service crashed: {error}");
+                    println!("loading service crashed: {error:#}");
                     let message = LoadResponse {
                         success: false,
                         message: error.to_string(),
@@ -300,7 +300,7 @@ where
             message: String::new(),
             resources: new_resources
                 .lock()
-                .expect("to get lock no new resources")
+                .expect("to get lock on new resources")
                 .iter()
                 .map(resource::Response::to_bytes)
                 .collect(),

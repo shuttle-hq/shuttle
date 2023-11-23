@@ -1,11 +1,11 @@
 use std::io;
 
 use clap::Parser;
-use shuttle_common::{backends::tracing::setup_tracing, log::Backend};
+use shuttle_common::{backends::tracing::setup_tracing, claims::AccountTier, log::Backend};
 use sqlx::migrate::Migrator;
 use tracing::{info, trace};
 
-use shuttle_auth::{init, sqlite_init, start, AccountTier, Args, Commands};
+use shuttle_auth::{init, sqlite_init, start, Args, Commands};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 

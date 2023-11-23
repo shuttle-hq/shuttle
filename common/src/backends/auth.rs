@@ -15,7 +15,10 @@ use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::claims::{Claim, Scope};
+use crate::{
+    claims::{Claim, Scope},
+    limits::ClaimExt,
+};
 
 use super::{
     cache::{CacheManagement, CacheManager},
@@ -428,6 +431,8 @@ pub trait VerifyClaim {
     type Error;
 
     fn verify(&self, required_scope: Scope) -> Result<(), Self::Error>;
+
+    fn verify_rds_access(&self) -> Result<(), Self::Error>;
 }
 
 #[cfg(feature = "tonic")]
@@ -446,11 +451,26 @@ impl<B> VerifyClaim for tonic::Request<B> {
             Ok(())
         } else {
             Err(tonic::Status::permission_denied(format!(
-                "don't have permisson to: {}",
+                "don't have permission to: {}",
                 required_scope
                     .get_documentation()
                     .unwrap_or("perform this operation")
             )))
+        }
+    }
+
+    fn verify_rds_access(&self) -> Result<(), Self::Error> {
+        let claim = self
+            .extensions()
+            .get::<Claim>()
+            .ok_or_else(|| tonic::Status::internal("could not get claim"))?;
+
+        if claim.can_provision_rds() {
+            Ok(())
+        } else {
+            Err(tonic::Status::permission_denied(
+                "don't have permission to provision rds instances",
+            ))
         }
     }
 }
@@ -458,6 +478,7 @@ impl<B> VerifyClaim for tonic::Request<B> {
 #[cfg(test)]
 mod tests {
     use axum::{routing::get, Extension, Router};
+    use base64::Engine;
     use http::{Request, StatusCode};
     use hyper::{body, Body};
     use jsonwebtoken::EncodingKey;
@@ -468,15 +489,23 @@ mod tests {
     use serde_json::json;
     use tower::{ServiceBuilder, ServiceExt};
 
-    use crate::claims::{Claim, Scope};
+    use crate::claims::{AccountTier, Claim, Scope};
 
     use super::{JwtAuthenticationLayer, ScopedLayer};
+
+    const BASE64_URL_SAFE_ENGINE: base64::engine::GeneralPurpose =
+        base64::engine::GeneralPurpose::new(
+            &base64::alphabet::URL_SAFE,
+            base64::engine::general_purpose::NO_PAD,
+        );
 
     #[test]
     fn to_token_and_back() {
         let mut claim = Claim::new(
             "ferries".to_string(),
             vec![Scope::Deployment, Scope::Project],
+            Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -499,6 +528,8 @@ mod tests {
         let claim = Claim::new(
             "ferries".to_string(),
             vec![Scope::Deployment, Scope::Project],
+            Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -597,6 +628,8 @@ mod tests {
         let claim = Claim::new(
             "hacker-hs256".to_string(),
             vec![Scope::Deployment, Scope::Project],
+            Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -604,14 +637,14 @@ mod tests {
         let token = claim.into_token(&encoding_key).unwrap();
 
         let (header, rest) = token.split_once('.').unwrap();
-        let header = base64::decode_config(header, base64::URL_SAFE_NO_PAD).unwrap();
+        let header = BASE64_URL_SAFE_ENGINE.decode(header).unwrap();
         let mut header: serde_json::Map<String, serde_json::Value> =
             serde_json::from_slice(&header).unwrap();
 
         header["alg"] = json!("HS256");
 
         let header = serde_json::to_vec(&header).unwrap();
-        let header = base64::encode_config(header, base64::URL_SAFE_NO_PAD);
+        let header = BASE64_URL_SAFE_ENGINE.encode(header);
 
         let (claim, _sig) = rest.split_once('.').unwrap();
 
@@ -624,7 +657,7 @@ mod tests {
             &hmac::Key::new(hmac::HMAC_SHA256, pair.public_key().as_ref()),
             msg.as_bytes(),
         );
-        let sig = base64::encode_config(sig, base64::URL_SAFE_NO_PAD);
+        let sig = BASE64_URL_SAFE_ENGINE.encode(sig);
         let token = format!("{msg}.{sig}");
 
         Claim::from_token(&token, public_key).unwrap();
@@ -637,6 +670,8 @@ mod tests {
         let claim = Claim::new(
             "hacker-no-alg".to_string(),
             vec![Scope::Deployment, Scope::Project],
+            Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -644,7 +679,7 @@ mod tests {
         let token = claim.into_token(&encoding_key).unwrap();
 
         let (header, rest) = token.split_once('.').unwrap();
-        let header = base64::decode_config(header, base64::URL_SAFE_NO_PAD).unwrap();
+        let header = BASE64_URL_SAFE_ENGINE.decode(header).unwrap();
         let (claim, _sig) = rest.split_once('.').unwrap();
         let mut header: serde_json::Map<String, serde_json::Value> =
             serde_json::from_slice(&header).unwrap();
@@ -652,7 +687,7 @@ mod tests {
         header["alg"] = json!("none");
 
         let header = serde_json::to_vec(&header).unwrap();
-        let header = base64::encode_config(header, base64::URL_SAFE_NO_PAD);
+        let header = BASE64_URL_SAFE_ENGINE.encode(header);
 
         let token = format!("{header}.{claim}.");
 
@@ -669,6 +704,8 @@ mod tests {
         let claim = Claim::new(
             "hacker-no-sig".to_string(),
             vec![Scope::Deployment, Scope::Project],
+            Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -692,6 +729,8 @@ mod tests {
         let claim = Claim::new(
             "hacker-iss".to_string(),
             vec![Scope::Deployment, Scope::Project],
+            Default::default(),
+            AccountTier::default(),
         );
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
@@ -700,14 +739,14 @@ mod tests {
 
         let (header, rest) = token.split_once('.').unwrap();
         let (claim, _sig) = rest.split_once('.').unwrap();
-        let claim = base64::decode_config(claim, base64::URL_SAFE_NO_PAD).unwrap();
+        let claim = BASE64_URL_SAFE_ENGINE.decode(claim).unwrap();
         let mut claim: serde_json::Map<String, serde_json::Value> =
             serde_json::from_slice(&claim).unwrap();
 
         claim["iss"] = json!("clone");
 
         let claim = serde_json::to_vec(&claim).unwrap();
-        let claim = base64::encode_config(claim, base64::URL_SAFE_NO_PAD);
+        let claim = BASE64_URL_SAFE_ENGINE.encode(claim);
 
         let msg = format!("{header}.{claim}");
 
@@ -715,7 +754,7 @@ mod tests {
         let public_key = pair.public_key().as_ref();
 
         let sig = pair.sign(msg.as_bytes());
-        let sig = base64::encode_config(sig, base64::URL_SAFE_NO_PAD);
+        let sig = BASE64_URL_SAFE_ENGINE.encode(sig);
         let token = format!("{msg}.{sig}");
 
         Claim::from_token(&token, public_key).unwrap();

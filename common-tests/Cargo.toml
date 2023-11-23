@@ -8,6 +8,8 @@ publish = false
 
 [dependencies]
 cargo-shuttle = { path = "../cargo-shuttle" }
+shuttle-proto = { workspace = true, features = ["builder", "logger"] }
+
 hyper = { workspace = true }
 portpicker = { workspace = true }
 reqwest = { workspace = true }
@@ -16,6 +18,3 @@ tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
-
-[dependencies.shuttle-proto]
-workspace = true

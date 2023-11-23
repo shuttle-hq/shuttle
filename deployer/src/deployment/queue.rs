@@ -1,12 +1,10 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fmt;
-use std::io::{BufRead, BufReader, Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::Duration;
 
-use cargo_metadata::Message;
-use crossbeam_channel::Sender;
 use flate2::read::GzDecoder;
 use opentelemetry::global;
 use shuttle_common::{
@@ -22,6 +20,7 @@ use shuttle_service::builder::{build_workspace, BuiltService};
 use tar::Archive;
 use tokio::{
     fs,
+    io::AsyncBufReadExt,
     task::JoinSet,
     time::{sleep, timeout},
 };
@@ -34,7 +33,7 @@ use uuid::Uuid;
 use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
-use crate::persistence::{DeploymentUpdater, SecretRecorder};
+use crate::persistence::DeploymentUpdater;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn task(
@@ -42,7 +41,6 @@ pub async fn task(
     run_send: RunSender,
     deployment_updater: impl DeploymentUpdater,
     log_recorder: impl LogRecorder,
-    secret_recorder: impl SecretRecorder,
     queue_client: impl BuildQueueClient,
     builder_client: Option<
         BuilderClient<
@@ -66,7 +64,6 @@ pub async fn task(
                 let deployment_updater = deployment_updater.clone();
                 let run_send_cloned = run_send.clone();
                 let log_recorder = log_recorder.clone();
-                let secret_recorder = secret_recorder.clone();
                 let queue_client = queue_client.clone();
                 let builds_path = builds_path.clone();
                 let builder_client = builder_client.clone();
@@ -81,14 +78,13 @@ pub async fn task(
                     async move {
                         // Timeout after 3 minutes if the build queue hangs or it takes
                         // too long for a slot to become available
-                        match timeout(
+                        if let Err(err) = timeout(
                             Duration::from_secs(60 * 3),
                             wait_for_queue(queue_client.clone(), id),
                         )
                         .await
                         {
-                            Ok(_) => {}
-                            Err(err) => return build_failed(&id, err),
+                            return build_failed(&id, err);
                         }
 
                         if let Some(mut inner) = builder_client {
@@ -116,7 +112,6 @@ pub async fn task(
                             .handle(
                                 deployment_updater,
                                 log_recorder,
-                                secret_recorder,
                                 builds_path.as_path(),
                             )
                             .await
@@ -150,7 +145,7 @@ pub async fn task(
 fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
-        "{}", DEPLOYER_END_MSG_BUILD_ERR,
+        "{DEPLOYER_END_MSG_BUILD_ERR}"
     );
 }
 
@@ -209,14 +204,13 @@ pub struct Queued {
 impl Queued {
     #[instrument(
         name = "Building project",
-        skip(self, deployment_updater, log_recorder, secret_recorder, builds_path),
+        skip(self, deployment_updater, log_recorder, builds_path),
         fields(deployment_id = %self.id, state = %State::Building)
     )]
     async fn handle(
         self,
         deployment_updater: impl DeploymentUpdater,
         log_recorder: impl LogRecorder,
-        secret_recorder: impl SecretRecorder,
         builds_path: &Path,
     ) -> Result<Built> {
         let project_path = builds_path.join(&self.service_name);
@@ -225,36 +219,25 @@ impl Queued {
         fs::create_dir_all(&project_path).await?;
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
-        let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
-
-        tokio::task::spawn_blocking(move || {
-            while let Ok(message) = rx.recv() {
-                trace!(?message, "received cargo message");
+        info!("Building deployment");
+        // Listen to build logs
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
+        tokio::task::spawn(async move {
+            while let Some(line) = rx.recv().await {
                 let log = LogItem::new(
                     self.id,
                     shuttle_common::log::Backend::Deployer, // will change to Builder
-                    match message {
-                        Message::TextLine(line) => line,
-                        message => serde_json::to_string(&message).unwrap(),
-                    },
+                    line,
                 );
                 log_recorder.record(log);
             }
         });
-
         let project_path = project_path.canonicalize()?;
-
-        info!("Building deployment");
         // Currently returns the first found shuttle service in a given workspace.
         let built_service = build_deployment(&project_path, tx.clone()).await?;
 
         // Get the Secrets.toml from the shuttle service in the workspace.
         let secrets = get_secrets(built_service.crate_directory()).await?;
-
-        // Set the secrets from the service, ignoring any Secrets.toml if it is in the root of the workspace.
-        // TODO: refactor this when we support starting multiple services. Do we want to set secrets in the
-        // workspace root?
-        set_secrets(secrets, &self.service_id, secret_recorder).await?;
 
         if self.will_run_tests {
             info!("Running tests before starting up");
@@ -262,7 +245,7 @@ impl Queued {
         }
 
         info!("Moving built executable");
-        move_executable(
+        copy_executable(
             built_service.executable_path.as_path(),
             built_service
                 .workspace_path
@@ -287,6 +270,7 @@ impl Queued {
             tracing_context: Default::default(),
             is_next,
             claim: self.claim,
+            secrets,
         };
 
         Ok(built)
@@ -305,13 +289,13 @@ impl fmt::Debug for Queued {
 }
 
 #[instrument(skip(project_path))]
-async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
+async fn get_secrets(project_path: &Path) -> Result<HashMap<String, String>> {
     let secrets_file = project_path.join("Secrets.toml");
 
     if secrets_file.exists() && secrets_file.is_file() {
         let secrets_str = fs::read_to_string(secrets_file.clone()).await?;
 
-        let secrets: BTreeMap<String, String> = secrets_str.parse::<toml::Value>()?.try_into()?;
+        let secrets = secrets_str.parse::<toml::Value>()?.try_into()?;
 
         fs::remove_file(secrets_file).await?;
 
@@ -321,32 +305,9 @@ async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
     }
 }
 
-#[instrument(skip(secrets, service_id, secret_recorder))]
-async fn set_secrets(
-    secrets: BTreeMap<String, String>,
-    service_id: &Ulid,
-    secret_recorder: impl SecretRecorder,
-) -> Result<()> {
-    for (key, value) in secrets.into_iter() {
-        debug!(key, "setting secret");
-
-        secret_recorder
-            .insert_secret(service_id, &key, &value)
-            .await
-            .map_err(|e| Error::SecretsSet(Box::new(e)))?;
-    }
-
-    Ok(())
-}
-
 /// Akin to the command: `tar -xzf --strip-components 1`
 #[instrument(skip(data, dest))]
 async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
-    debug!("Unpacking archive into {:?}", dest.as_ref());
-    let tar = GzDecoder::new(data);
-    let mut archive = Archive::new(tar);
-    archive.set_overwrite(true);
-
     // Clear directory first
     trace!("Clearing old files");
     let mut entries = fs::read_dir(&dest).await?;
@@ -366,6 +327,10 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
         }
     }
 
+    debug!("Unpacking archive into {:?}", dest.as_ref());
+    let tar = GzDecoder::new(data);
+    let mut archive = Archive::new(tar);
+    archive.set_overwrite(true);
     for entry in archive.entries()? {
         let mut entry = entry?;
         let name = entry.path()?;
@@ -390,12 +355,10 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 #[instrument(skip(project_path, tx))]
 async fn build_deployment(
     project_path: &Path,
-    tx: crossbeam_channel::Sender<Message>,
+    tx: tokio::sync::mpsc::Sender<String>,
 ) -> Result<BuiltService> {
-    // Investigate if this can be optimized for local run / CI.
-    // Remember the same flag for cargo test as well.
-    // let release = std::env::var("CI").is_ok_and(|s| s == "true") || std::env::var("PROD").is_ok_and(|s| s == "true");
-    let runtimes = build_workspace(project_path, true, tx, true)
+    // Build in release mode, except for when testing, such as in CI
+    let runtimes = build_workspace(project_path, cfg!(not(test)), tx, true)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 
@@ -405,48 +368,50 @@ async fn build_deployment(
 #[instrument(skip(project_path, tx))]
 async fn run_pre_deploy_tests(
     project_path: &Path,
-    tx: Sender<Message>,
+    tx: tokio::sync::mpsc::Sender<String>,
 ) -> std::result::Result<(), TestError> {
-    let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
-    tokio::task::spawn_blocking(move || {
-        for line in read.lines() {
-            match line {
-                Ok(line) => {
-                    if let Err(error) = tx.send(Message::TextLine(line)) {
-                        error!("failed to send cargo message on channel: {error}");
-                    }
-                }
-                Err(error) => {
-                    error!("failed to read cargo output line: {error}");
-                }
-            }
-        }
-    });
-
-    let mut cmd = Command::new("cargo")
-        .arg("test")
+    let mut cmd = tokio::process::Command::new("cargo");
+    cmd.arg("test")
         // We set the tests to build with the release profile since deployments compile
         // with the release profile by default. This means crates don't need to be
         // recompiled in debug mode for the tests, reducing memory usage during deployment.
-        .arg("--release")
+        // When running unit tests, it can compile in debug mode.
+        .arg(if cfg!(not(test)) { "--release" } else { "" })
         .arg("--jobs=4")
         .arg("--color=always")
         .current_dir(project_path)
         .stdout(Stdio::piped())
-        .spawn()
-        .map_err(TestError::Run)?;
+        .stderr(Stdio::piped());
 
-    let stdout = cmd.stdout.take().unwrap();
-    let stdout_reader = BufReader::new(stdout);
-    for line in stdout_reader.lines().flatten() {
-        if let Err(error) = write.send(format!("{}\n", line.trim_end_matches('\n'))) {
-            error!("failed to send to pipe: {error}");
+    // Spawn the command and make two readers, that read lines from stdout and stderr and send
+    // them to the same receiver. This is only needed when the output of both streams are wanted.
+    let mut handle = cmd.spawn().map_err(TestError::Run)?;
+    let tx2 = tx.clone();
+    let reader = tokio::io::BufReader::new(handle.stdout.take().unwrap());
+    tokio::spawn(async move {
+        let mut lines = reader.lines();
+        while let Some(line) = lines.next_line().await.unwrap() {
+            let _ = tx
+                .send(line)
+                .await
+                .map_err(|e| error!(error = %e, "failed to send line"));
         }
-    }
+    });
+    let reader = tokio::io::BufReader::new(handle.stderr.take().unwrap());
+    tokio::spawn(async move {
+        let mut lines = reader.lines();
+        while let Some(line) = lines.next_line().await.unwrap() {
+            let _ = tx2
+                .send(line)
+                .await
+                .map_err(|e| error!(error = %e, "failed to send line"));
+        }
+    });
+    let status = handle.wait().await.map_err(TestError::Run)?;
 
-    if cmd.wait().map_err(TestError::Run)?.success() {
+    if status.success() {
         Ok(())
     } else {
         Err(TestError::Failed)
@@ -456,20 +421,20 @@ async fn run_pre_deploy_tests(
 /// This will store the path to the executable for each runtime, which will be the users project with
 /// an embedded runtime for alpha, and a .wasm file for shuttle-next.
 #[instrument(skip(executable_path, to_directory, new_filename))]
-async fn move_executable(
+async fn copy_executable(
     executable_path: &Path,
     to_directory: &Path,
     new_filename: &Uuid,
 ) -> Result<()> {
     fs::create_dir_all(to_directory).await?;
-    fs::rename(executable_path, to_directory.join(new_filename.to_string())).await?;
+    fs::copy(executable_path, to_directory.join(new_filename.to_string())).await?;
 
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
+    use std::{collections::HashMap, fs::File, io::Write, path::Path};
 
     use tempfile::Builder;
     use tokio::fs;
@@ -583,9 +548,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     #[tokio::test(flavor = "multi_thread")]
     async fn run_pre_deploy_tests() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let (tx, rx) = crossbeam_channel::unbounded();
-
-        tokio::task::spawn_blocking(move || while rx.recv().is_ok() {});
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(256);
 
         let failure_project_path = root.join("tests/resources/tests-fail");
         assert!(matches!(
@@ -608,12 +571,9 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
         fs::write(&executable_path, "barfoo").await.unwrap();
 
-        super::move_executable(executable_path.as_path(), executables_p, &id)
+        super::copy_executable(executable_path.as_path(), executables_p, &id)
             .await
             .unwrap();
-
-        // Old executable file gone?
-        assert!(!executable_path.exists());
 
         assert_eq!(
             fs::read_to_string(executables_p.join(id.to_string()))
@@ -633,7 +593,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         secret_file.write_all(b"KEY = 'value'").unwrap();
 
         let actual = super::get_secrets(temp_p).await.unwrap();
-        let expected = BTreeMap::from([("KEY".to_string(), "value".to_string())]);
+        let expected = HashMap::from([("KEY".to_string(), "value".to_string())]);
 
         assert_eq!(actual, expected);
 

@@ -105,6 +105,8 @@ git submodule update
 
 You should now be ready to setup a local environment to test code changes to core `shuttle` packages as follows:
 
+### Building images
+
 From the root of the Shuttle repo, build the required images with:
 
 ```bash
@@ -132,44 +134,31 @@ USE_PANAMAX=disable make up
 
 The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run -p cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls.
 
-In order to test local changes to the library crates, you may want to add the below to a `.cargo/config.toml` file. (See [Overriding Dependencies](https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html) for more)
+### Apply patches
 
-```toml
-[patch.crates-io]
-shuttle-codegen = { path = "[base]/codegen" }
-shuttle-common = { path = "[base]/common" }
-shuttle-proto = { path = "[base]/proto" }
-shuttle-runtime = { path = "[base]/runtime" }
-shuttle-service = { path = "[base]/service" }
+In order to test local changes to the library crates, you may want to add patches to a `.cargo/config.toml` file.
+(See [Overriding Dependencies](https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html) for more)
 
-shuttle-aws-rds = { path = "[base]/resources/aws-rds" }
-shuttle-metadata = { path = "[base]/resources/metadata" }
-shuttle-persist = { path = "[base]/resources/persist" }
-shuttle-secrets = { path = "[base]/resources/secrets" }
-shuttle-shared-db = { path = "[base]/resources/shared-db" }
-shuttle-static-folder = { path = "[base]/resources/static-folder" }
-shuttle-turso = { path = "[base]/resources/turso" }
+The simplest way to generate this file is:
 
-shuttle-actix-web = { path = "[base]/services/shuttle-actix-web" }
-shuttle-axum = { path = "[base]/services/shuttle-axum" }
-shuttle-next = { path = "[base]/services/shuttle-next" }
-shuttle-poem = { path = "[base]/services/shuttle-poem" }
-shuttle-poise = { path = "[base]/services/shuttle-poise" }
-shuttle-rocket = { path = "[base]/services/shuttle-rocket" }
-shuttle-salvo = { path = "[base]/services/shuttle-salvo" }
-shuttle-serenity = { path = "[base]/services/shuttle-serenity" }
-shuttle-thruster = { path = "[base]/services/shuttle-thruster" }
-shuttle-tide = { path = "[base]/services/shuttle-tide" }
-shuttle-tower = { path = "[base]/services/shuttle-tower" }
-shuttle-warp = { path = "[base]/services/shuttle-warp" }
+```bash
+./scripts/apply-patches
 ```
+
+See the files [apply-patches.sh](./scripts/apply-patches.sh) and [patches.toml](./scripts/patches.toml) for how it works.
+
+> Note: cargo and rust-analyzer will add `[[patch.unused]]` lines at the bottom of Cargo.lock when patches are applied.
+> These should not be included in commits/PRs.
+> The easiest way to get rid of them is to comment out all the patch lines in `.cargo/config.toml`, and refresh cargo/r-a.
+
+### Create an admin user
 
 Before we can login to our local instance of Shuttle, we need to create a user.
 The following command inserts a user into the `auth` state with admin privileges:
 
 ```bash
 # the --key needs to be 16 alphanumeric characters
-docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init-admin --name admin --key dh9z58jttoes3qvt
+docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/shuttle-auth --state=/var/lib/shuttle-auth init-admin --name admin --key dh9z58jttoes3qvt
 ```
 
 > Note: if you have done this already for this container you will get a "UNIQUE constraint failed"
@@ -189,8 +178,10 @@ Finally, before gateway will be able to work with some projects, we need to crea
 The following command inserts a gateway user into the `auth` state with deployer privileges:
 
 ```bash
-docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init-deployer --name gateway --key gateway4deployes
+docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/shuttle-auth --state=/var/lib/shuttle-auth init-deployer --name gateway --key gateway4deployes
 ```
+
+### Deploying locally
 
 Create a new project based on one of the examples.
 This will prompt your local gateway to start a deployer container.
@@ -250,7 +241,19 @@ It needs to have the same project name as the one you submitted when starting th
 cargo run -p cargo-shuttle -- --wd <path> --name <name> deploy
 ```
 
-### Using Podman instead of Docker
+### Docker config
+
+#### Docker Desktop
+
+If using Docker Desktop on Linux, you might find adding this to your shell config useful to make `bollard` find the Docker socket:
+
+```sh
+if which docker > /dev/null && [ $(docker context show) = "desktop-linux" ]; then
+  export DOCKER_HOST="unix://$HOME/.docker/desktop/docker.sock"
+fi
+```
+
+#### Using Podman instead of Docker
 
 If you want to use Podman instead of Docker, you can configure the build process with environment variables.
 
@@ -296,6 +299,13 @@ Finally, configure Docker Compose. You can either
 
 If you are using `nftables`, even with `iptables-nft`, it may be necessary to install and configure the [nftables CNI plugins](https://github.com/greenpau/cni-plugins)
 
+## Testing the Pro tier
+
+We use Stripe to start Pro subscriptions and verify them with a Stripe client that needs a secret key. The `STRIPE_SECRET_KEY` environment variable
+should be set to test upgrading a user to Pro tier, or to use a Pro tier feature with cargo-shuttle CLI. On a local environment, that requires
+setting up a Stripe account and generating a test API key. Auth can still be initialised and used without a Stripe secret key, but it will fail
+when retrieving a user, and when we'll verify the subscription validity.
+
 ## Running Tests
 
 Shuttle has reasonable test coverage - and we are working on improving this
@@ -314,6 +324,12 @@ To run the integration tests for a specific crate (if it has any), from the root
 ```bash
 # replace <crate-name> with the name of the crate to test, e.g. `cargo-shuttle`
 cargo test -p <crate-name> --all-features --test '*' -- --nocapture
+# To streamline and customize the integration tests for CI, bash scripts with these commands and
+# any crate-specific commands can be run with:
+./<folder>/integration.sh
+# and/or
+./<folder>/integration_docker.sh
+# Tests that need to start docker containers are separated for CI efficiency, and thus use scripts with `_docker` suffix.
 ```
 
 To run the end-to-end (e2e) tests, from the root of the repository run:
@@ -344,4 +360,4 @@ git config --global core.autocrlf true
 
 After you run this command, you should be able to checkout projects that are maintained using CRLF (Windows) again.
 
-[^1]: https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration#_core_autocrlf
+[^1]: <https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration#_core_autocrlf>

@@ -1,38 +1,31 @@
 [package]
 name = "shuttle-provisioner"
-version.workspace = true
+version = "0.34.0"
 edition.workspace = true
 license.workspace = true
 description = "Service responsible for provisioning and managing resources for services"
 publish = false
 
 [dependencies]
-aws-config = "0.55.2"
-aws-sdk-rds = "0.27.0"
+shuttle-common = { workspace = true, features = ["backend", "models", "service", "tonic"] }
+shuttle-proto = { workspace = true, features = ["provisioner"] }
+
+aws-config = "0.56.1"
+aws-sdk-rds = "0.33.1"
 clap = { workspace = true, features = ["env"] }
 fqdn = { workspace = true }
 mongodb = "2.4.0"
 prost = { workspace = true }
 rand = { workspace = true }
-sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls"] }
+sqlx = { workspace = true, features = ["postgres"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tonic = { workspace = true }
 tracing = { workspace = true, features = ["default"] }
 tracing-subscriber = { workspace = true, features = ["default", "fmt"] }
 
-[dependencies.shuttle-common]
-workspace = true
-features = ["backend", "tonic"]
-
-[dependencies.shuttle-proto]
-workspace = true
-
 [dev-dependencies]
 ctor = { workspace = true }
 once_cell = { workspace = true }
 portpicker = { workspace = true }
 serde_json = { workspace = true }
-
-[build-dependencies]
-tonic-build = { workspace = true }

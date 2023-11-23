@@ -21,7 +21,7 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
-use shuttle_common::models::project::State;
+use shuttle_common::models::project::{ProjectName, State};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
@@ -44,9 +44,7 @@ use crate::project::{Project, ProjectCreating, ProjectError, IS_HEALTHY_TIMEOUT}
 use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::TaskRouter;
-use crate::{
-    AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName, AUTH_CLIENT,
-};
+use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, AUTH_CLIENT};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -305,7 +303,7 @@ impl GatewayService {
         &self,
         project_name: &ProjectName,
     ) -> Result<FindProjectPayload, Error> {
-        query("SELECT project_id, project_state FROM projects WHERE project_name=?1")
+        query("SELECT project_id, project_state FROM projects WHERE project_name = ?1")
             .bind(project_name)
             .fetch_optional(&self.db)
             .await?
@@ -313,10 +311,25 @@ impl GatewayService {
                 project_id: r.get("project_id"),
                 state: r
                     .try_get::<SqlxJson<Project>, _>("project_state")
-                    .unwrap()
-                    .0,
+                    .map(|p| p.0)
+                    .unwrap_or_else(|e| {
+                        error!(error = ?e, "Failed to deser `project_state`");
+                        Project::Errored(ProjectError::internal(
+                            "Error when trying to deserialize state of project.",
+                        ))
+                    }),
             })
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
+    }
+
+    pub async fn project_name_exists(&self, project_name: &ProjectName) -> Result<bool, Error> {
+        Ok(
+            query("SELECT project_name FROM projects WHERE project_name=?1")
+                .bind(project_name)
+                .fetch_optional(&self.db)
+                .await?
+                .is_some(),
+        )
     }
 
     pub async fn iter_user_projects_detailed(
@@ -351,34 +364,13 @@ impl GatewayService {
                     row.try_get::<SqlxJson<Project>, _>("project_state")
                         .map(|p| p.0)
                         .unwrap_or_else(|e| {
-                            error!("Failed to deser `project_state`: {:?}", e);
+                            error!(error = ?e, "Failed to deser `project_state`");
                             Project::Errored(ProjectError::internal(
                                 "Error when trying to deserialize state of project.",
                             ))
                         }),
                 )
             });
-        Ok(iter)
-    }
-
-    pub async fn iter_user_projects_detailed_filtered(
-        &self,
-        account_name: AccountName,
-        filter: String,
-    ) -> Result<impl Iterator<Item = (ProjectName, Project)>, Error> {
-        let iter =
-            query("SELECT project_name, project_state FROM projects WHERE account_name = ?1 AND project_state = ?2")
-                .bind(account_name)
-                .bind(filter)
-                .fetch_all(&self.db)
-                .await?
-                .into_iter()
-                .map(|row| {
-                    (
-                        row.get("project_name"),
-                        row.get::<SqlxJson<Project>, _>("project_state").0,
-                    )
-                });
         Ok(iter)
     }
 
@@ -445,6 +437,7 @@ impl GatewayService {
         project_name: ProjectName,
         account_name: AccountName,
         is_admin: bool,
+        can_create_project: bool,
         idle_minutes: u64,
     ) -> Result<FindProjectPayload, Error> {
         if let Some(row) = query(
@@ -462,7 +455,15 @@ impl GatewayService {
         .await?
         {
             // If the project already exists and belongs to this account
-            let project = row.get::<SqlxJson<Project>, _>("project_state").0;
+            let project = row
+                .try_get::<SqlxJson<Project>, _>("project_state")
+                .map(|p| p.0)
+                .unwrap_or_else(|e| {
+                    error!(error = ?e, "Failed to deser `project_state`");
+                    Project::Errored(ProjectError::internal(
+                        "Error when trying to deserialize state of project.",
+                    ))
+                });
             let project_id = row.get::<String, _>("project_id");
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
@@ -522,26 +523,34 @@ impl GatewayService {
                     State::Errored { message } => {
                         format!("project '{project_name}' is in an errored state.\nproject message: {message}")
                     }
+                    State::Deleted => unreachable!(
+                        "deleted project should not never remain in gateway. please report this."
+                    ),
                 };
                 Err(Error::from_kind(ErrorKind::OwnProjectAlreadyExists(
                     message,
                 )))
             }
+        } else if can_create_project {
+            // Attempt to create a new one. This will fail
+            // outright if the project already exists (this happens if
+            // it belongs to another account).
+            self.insert_project(project_name, Ulid::new(), account_name, idle_minutes)
+                .await
         } else {
-            // Check if project name is valid according to new rules if it
-            // doesn't exist.
-            // TODO: remove this check when we update the project name rules
-            // in shuttle-common
-            if project_name.is_valid() {
-                // Otherwise attempt to create a new one. This will fail
-                // outright if the project already exists (this happens if
-                // it belongs to another account).
-                self.insert_project(project_name, Ulid::new(), account_name, idle_minutes)
-                    .await
-            } else {
-                Err(Error::from_kind(ErrorKind::InvalidProjectName))
-            }
+            Err(Error::from_kind(ErrorKind::TooManyProjects))
         }
+    }
+
+    pub async fn get_project_count(&self, account_name: &AccountName) -> Result<u32, Error> {
+        let proj_count: u32 =
+            query("SELECT COUNT(project_name) FROM projects WHERE account_name = ?1")
+                .bind(account_name)
+                .fetch_one(&self.db)
+                .await?
+                .get::<_, usize>(0);
+
+        Ok(proj_count)
     }
 
     pub async fn insert_project(
@@ -559,7 +568,8 @@ impl GatewayService {
             ),
         ));
 
-        query("INSERT INTO projects (project_id, project_name, account_name, initial_key, project_state) VALUES (ulid(), ?1, ?2, ?3, ?4)")
+        query("INSERT INTO projects (project_id, project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4, ?5)")
+            .bind(&project_id.to_string())
             .bind(&project_name)
             .bind(&account_name)
             .bind(project.initial_key().unwrap())
@@ -584,6 +594,30 @@ impl GatewayService {
             project_id: project_id.to_string(),
             state: project,
         })
+    }
+
+    pub async fn delete_project(&self, project_name: &ProjectName) -> Result<(), Error> {
+        let project_id = query("SELECT project_id FROM projects WHERE project_name = ?1")
+            .bind(project_name)
+            .fetch_one(&self.db)
+            .await?
+            .get::<String, _>("project_id");
+
+        let mut transaction = self.db.begin().await?;
+
+        query("DELETE FROM custom_domains WHERE project_id = ?1")
+            .bind(project_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        query("DELETE FROM projects WHERE project_name = ?1")
+            .bind(project_name)
+            .execute(&mut *transaction)
+            .await?;
+
+        transaction.commit().await?;
+
+        Ok(())
     }
 
     pub async fn create_custom_domain(
@@ -930,13 +964,15 @@ pub mod tests {
     use crate::{Error, ErrorKind};
 
     #[tokio::test]
-    async fn service_create_find_delete_project() -> anyhow::Result<()> {
+    async fn service_create_find_stop_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
         let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
 
         let neo: AccountName = "neo".parse().unwrap();
         let trinity: AccountName = "trinity".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
+
+        let admin: AccountName = "admin".parse().unwrap();
 
         let creating_same_project_name = |project: &Project, project_name: &ProjectName| {
             matches!(
@@ -946,7 +982,7 @@ pub mod tests {
         };
 
         let project = svc
-            .create_project(matrix.clone(), neo.clone(), false, 0)
+            .create_project(matrix.clone(), neo.clone(), false, true, 0)
             .await
             .unwrap();
 
@@ -976,17 +1012,27 @@ pub mod tests {
             vec![matrix.clone()]
         );
 
-        // Test project pagination, first create 20 test projects (including the one from above).
-        for p in (1..20).map(|p| format!("matrix-{p}")) {
-            svc.create_project(ProjectName(p.clone()), neo.clone(), false, 0)
+        // Test project pagination, first create 20 projects.
+        for p in (0..20).map(|p| format!("matrix-{p}")) {
+            svc.create_project(p.parse().unwrap(), admin.clone(), true, true, 0)
                 .await
                 .unwrap();
         }
 
+        // Creating a project with can_create_project set to false should fail.
+        assert_eq!(
+            svc.create_project("final-one".parse().unwrap(), admin.clone(), false, false, 0)
+                .await
+                .err()
+                .unwrap()
+                .kind(),
+            ErrorKind::TooManyProjects
+        );
+
         // We need to fetch all of them from the DB since they are ordered by created_at (in the id) and project_name,
         // and created_at will be the same for some of them.
         let all_projects = svc
-            .iter_user_projects_detailed(&neo, 0, u32::MAX)
+            .iter_user_projects_detailed(&admin, 0, u32::MAX)
             .await
             .unwrap()
             .map(|item| item.0)
@@ -996,7 +1042,7 @@ pub mod tests {
 
         // Get first 5 projects.
         let paginated = svc
-            .iter_user_projects_detailed(&neo, 0, 5)
+            .iter_user_projects_detailed(&admin, 0, 5)
             .await
             .unwrap()
             .map(|item| item.0)
@@ -1006,7 +1052,7 @@ pub mod tests {
 
         // Get 10 projects starting at an offset of 10.
         let paginated = svc
-            .iter_user_projects_detailed(&neo, 10, 10)
+            .iter_user_projects_detailed(&admin, 10, 10)
             .await
             .unwrap()
             .map(|item| item.0)
@@ -1015,7 +1061,7 @@ pub mod tests {
 
         // Get 20 projects starting at an offset of 200.
         let paginated = svc
-            .iter_user_projects_detailed(&neo, 200, 20)
+            .iter_user_projects_detailed(&admin, 200, 20)
             .await
             .unwrap()
             .collect::<Vec<_>>();
@@ -1042,7 +1088,7 @@ pub mod tests {
 
         // If recreated by a different user
         assert!(matches!(
-            svc.create_project(matrix.clone(), trinity.clone(), false, 0)
+            svc.create_project(matrix.clone(), trinity.clone(), false, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::ProjectAlreadyExists,
@@ -1052,7 +1098,7 @@ pub mod tests {
 
         // If recreated by the same user
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo.clone(), false, 0)
+            svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1062,7 +1108,8 @@ pub mod tests {
 
         // If recreated by the same user again while it's running
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo, false, 0).await,
+            svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
+                .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
                 ..
@@ -1089,7 +1136,7 @@ pub mod tests {
 
         // If recreated by an admin
         assert!(matches!(
-            svc.create_project(matrix.clone(), trinity.clone(), true, 0)
+            svc.create_project(matrix.clone(), admin.clone(), true, true, 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1097,15 +1144,37 @@ pub mod tests {
             })
         ));
 
-        // If recreated by an adamin again while it's running
+        // If recreated by an admin again while it's running
         assert!(matches!(
-            svc.create_project(matrix, trinity, true, 0).await,
+            svc.create_project(matrix.clone(), admin.clone(), true, true, 0)
+                .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
                 ..
             })
         ));
 
+        // We can delete a project
+        assert!(matches!(svc.delete_project(&matrix).await, Ok(())));
+
+        // Project is gone
+        assert!(matches!(
+            svc.find_project(&matrix).await,
+            Err(Error {
+                kind: ErrorKind::ProjectNotFound,
+                ..
+            })
+        ));
+
+        // It can be re-created by anyone, with the same project name
+        assert!(matches!(
+            svc.create_project(matrix, trinity.clone(), false, true, 0)
+                .await,
+            Ok(FindProjectPayload {
+                project_id: _,
+                state: Project::Creating(_),
+            })
+        ));
         Ok(())
     }
 
@@ -1117,7 +1186,7 @@ pub mod tests {
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        svc.create_project(matrix.clone(), neo.clone(), false, 0)
+        svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
             .await
             .unwrap();
 
@@ -1178,7 +1247,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, 0)
+            .create_project(project_name.clone(), account.clone(), false, true, 0)
             .await
             .unwrap();
 
@@ -1232,7 +1301,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, 0)
+            .create_project(project_name.clone(), account.clone(), false, true, 0)
             .await
             .unwrap();
 
@@ -1250,7 +1319,7 @@ pub mod tests {
         assert!(matches!(work.poll(()).await, TaskResult::Done(())));
 
         let recreated_project = svc
-            .create_project(project_name.clone(), account.clone(), false, 0)
+            .create_project(project_name.clone(), account.clone(), false, true, 0)
             .await
             .unwrap();
 

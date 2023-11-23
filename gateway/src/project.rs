@@ -10,7 +10,9 @@ use bollard::container::{
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
 use bollard::network::{ConnectNetworkOptions, DisconnectNetworkOptions};
+use bollard::service::MountTypeEnum;
 use bollard::system::EventsOptions;
+use bollard::volume::RemoveVolumeOptions;
 use fqdn::FQDN;
 use futures::prelude::*;
 use http::header::AUTHORIZATION;
@@ -22,7 +24,8 @@ use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::headers::{X_SHUTTLE_ACCOUNT_NAME, X_SHUTTLE_ADMIN_SECRET};
-use shuttle_common::models::project::{default_idle_minutes, DEFAULT_IDLE_MINUTES};
+use shuttle_common::constants::{default_idle_minutes, DEFAULT_IDLE_MINUTES};
+use shuttle_common::models::project::ProjectName;
 use shuttle_common::models::service;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -30,7 +33,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::service::ContainerSettings;
-use crate::{DockerContext, Error, ErrorKind, IntoTryState, ProjectName, Refresh, State, TryState};
+use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
 
 macro_rules! safe_unwrap {
     {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
@@ -184,6 +187,7 @@ pub enum Project {
     Destroying(ProjectDestroying),
     Destroyed(ProjectDestroyed),
     Errored(ProjectError),
+    Deleted,
 }
 
 impl_from_variant!(Project:
@@ -230,6 +234,52 @@ impl Project {
         } else {
             Ok(Self::Destroyed(ProjectDestroyed { destroyed: None }))
         }
+    }
+
+    pub async fn delete<Ctx>(self, ctx: &Ctx) -> Result<(), Error>
+    where
+        Ctx: DockerContext,
+    {
+        let Some(ref id) = self.container_id() else {
+            error!("No container id found for deleting");
+            return Err(Error::custom(
+                ErrorKind::ProjectUnavailable,
+                "container id not found",
+            ));
+        };
+        ctx.docker()
+            .remove_container(
+                id,
+                Some(RemoveContainerOptions {
+                    v: true, // This only deletes anonymous volumes (there should be none)
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await?;
+
+        let Some(mounts) = self
+            .container()
+            .and_then(|c| c.host_config)
+            .and_then(|hc| hc.mounts)
+        else {
+            warn!("No mounts found when deleting container {}", id);
+            return Ok(());
+        };
+        // Delete the volume linked to this container.
+        // This, along with the DB row removal is what separates a
+        // project stop (destroy) from a project delete.
+        for mount in mounts {
+            if mount.typ.is_some_and(|t| t == MountTypeEnum::VOLUME) && mount.source.is_some() {
+                let name = mount.source.unwrap();
+                ctx.docker()
+                    .remove_volume(name.as_str(), Some(RemoveVolumeOptions { force: true }))
+                    .await?;
+                info!("deleted volume {name}");
+            }
+        }
+
+        Ok(())
     }
 
     pub fn start(self) -> Result<Self, Error> {
@@ -308,6 +358,7 @@ impl Project {
             Self::Destroying(_) => "destroying".to_string(),
             Self::Destroyed(_) => "destroyed".to_string(),
             Self::Errored(_) => "error".to_string(),
+            Self::Deleted => "deleted".to_string(),
         }
     }
 
@@ -324,7 +375,7 @@ impl Project {
             | Self::Rebooting(ProjectRebooting { container, .. })
             | Self::Destroying(ProjectDestroying { container }) => Some(container.clone()),
             Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container(),
-            Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) => None,
+            Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) | Self::Deleted => None,
         }
     }
 
@@ -371,6 +422,7 @@ impl From<Project> for shuttle_common::models::project::State {
             Project::Destroying(_) => Self::Destroying,
             Project::Destroyed(_) => Self::Destroyed,
             Project::Errored(ProjectError { message, .. }) => Self::Errored { message },
+            Project::Deleted => Self::Deleted,
         }
     }
 }
@@ -435,6 +487,7 @@ where
             Self::Destroying(destroying) => destroying.next(ctx).await.into_try_state(),
             Self::Destroyed(destroyed) => destroyed.next(ctx).await.into_try_state(),
             Self::Errored(errored) => Ok(Self::Errored(errored)),
+            Self::Deleted => Ok(Self::Deleted),
         };
 
         if let Ok(Self::Errored(errored)) = &mut new {
@@ -609,6 +662,7 @@ where
                 },
                 None => Self::Errored(err),
             },
+            Self::Deleted => Self::Deleted,
         };
         Ok(refreshed)
     }
@@ -720,6 +774,14 @@ impl ProjectCreating {
         format!("{prefix}{project_name}_run")
     }
 
+    fn volume_name<C: DockerContext>(&self, ctx: &C) -> String {
+        let prefix = &ctx.container_settings().prefix;
+
+        let Self { project_name, .. } = &self;
+
+        format!("{prefix}{project_name}_vol")
+    }
+
     fn generate_container_config<C: DockerContext>(
         &self,
         ctx: &C,
@@ -794,7 +856,7 @@ impl ProjectCreating {
         config.host_config = deserialize_json!({
             "Mounts": [{
                 "Target": "/opt/shuttle",
-                "Source": format!("{prefix}{project_name}_vol"),
+                "Source": self.volume_name(ctx),
                 "Type": "volume"
             }],
             // https://docs.docker.com/config/containers/resource_constraints/#memory
@@ -1031,7 +1093,7 @@ pub struct ProjectRestarting {
 }
 
 impl ProjectRestarting {
-    /// Has the restart count been exhuasted
+    /// Has the restart count been exhausted
     pub fn exhausted(&self) -> bool {
         Self::reached_max_restarts(self.restart_count)
     }
@@ -1207,84 +1269,83 @@ where
             mut stats,
         } = self;
 
-        if service.is_healthy().await {
-            let idle_minutes = container.idle_minutes();
-
-            // Idle minutes of `0` means it is disabled and the project will always stay up
-            if idle_minutes < 1 {
-                Ok(Self::Next::Ready(ProjectReady {
-                    container,
-                    service,
-                    stats,
-                }))
-            } else {
-                let new_stat = ctx
-                    .docker()
-                    .stats(
-                        safe_unwrap!(container.id),
-                        Some(StatsOptions {
-                            one_shot: true,
-                            stream: false,
-                        }),
-                    )
-                    .next()
-                    .await
-                    .unwrap()?;
-
-                stats.push_back(new_stat.clone());
-
-                let mut last = None;
-
-                while stats.len() > (idle_minutes as usize) {
-                    last = stats.pop_front();
-                }
-
-                if let Some(last) = last {
-                    let cpu_per_minute = (new_stat.cpu_stats.cpu_usage.total_usage
-                        - last.cpu_stats.cpu_usage.total_usage)
-                        / idle_minutes;
-
-                    debug!(
-                        "{} has {} CPU usage per minute",
-                        service.name, cpu_per_minute
-                    );
-
-                    // From analysis we know the following kind of CPU usage for different kinds of idle projects
-                    // Web framework uses 6_200_000 CPU per minute
-                    // Serenity uses 20_000_000 CPU per minute
-                    //
-                    // We want to make sure we are able to stop these kinds of projects
-                    //
-                    // Now, the following kind of CPU usage has been observed for different kinds of projects having
-                    // 2 web requests / processing 2 discord messages per minute
-                    // Web framework uses 100_000_000 CPU per minute
-                    // Serenity uses 30_000_000 CPU per minute
-                    //
-                    // And projects at these levels we will want to keep active. However, the 30_000_000
-                    // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
-                    // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
-                    // active framework for now
-                    if cpu_per_minute < 100_000_000 {
-                        Ok(Self::Next::Idle(ProjectStopping { container }))
-                    } else {
-                        Ok(Self::Next::Ready(ProjectReady {
-                            container,
-                            service,
-                            stats,
-                        }))
-                    }
-                } else {
-                    Ok(Self::Next::Ready(ProjectReady {
-                        container,
-                        service,
-                        stats,
-                    }))
-                }
-            }
-        } else {
+        if !service.is_healthy().await {
             return Err(ProjectError::internal(
                 "running project is no longer healthy",
             ));
+        }
+        let idle_minutes = container.idle_minutes();
+
+        // Idle minutes of `0` means it is disabled and the project will always stay up
+        if idle_minutes < 1 {
+            return Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+            }));
+        }
+
+        let new_stat = ctx
+            .docker()
+            .stats(
+                safe_unwrap!(container.id),
+                Some(StatsOptions {
+                    one_shot: true,
+                    stream: false,
+                }),
+            )
+            .next()
+            .await
+            .unwrap()?;
+
+        stats.push_back(new_stat.clone());
+
+        let mut last = None;
+
+        while stats.len() > idle_minutes as usize {
+            last = stats.pop_front();
+        }
+
+        let Some(last) = last else {
+            return Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+            }));
+        };
+
+        let cpu_per_minute = (new_stat.cpu_stats.cpu_usage.total_usage
+            - last.cpu_stats.cpu_usage.total_usage)
+            / idle_minutes;
+
+        debug!(
+            "{} has {} CPU usage per minute",
+            service.name, cpu_per_minute
+        );
+
+        // From analysis we know the following kind of CPU usage for different kinds of idle projects
+        // Web framework uses 6_200_000 CPU per minute
+        // Serenity uses 20_000_000 CPU per minute
+        //
+        // We want to make sure we are able to stop these kinds of projects
+        //
+        // Now, the following kind of CPU usage has been observed for different kinds of projects having
+        // 2 web requests / processing 2 discord messages per minute
+        // Web framework uses 100_000_000 CPU per minute
+        // Serenity uses 30_000_000 CPU per minute
+        //
+        // And projects at these levels we will want to keep active. However, the 30_000_000
+        // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
+        // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
+        // active framework for now
+        if cpu_per_minute < 100_000_000 {
+            Ok(Self::Next::Idle(ProjectStopping { container }))
+        } else {
+            Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+            }))
         }
     }
 }

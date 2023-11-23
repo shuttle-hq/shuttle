@@ -9,8 +9,9 @@ use std::pin::Pin;
 use std::str::FromStr;
 
 use acme::AcmeClientError;
+
 use axum::response::{IntoResponse, Response};
-use axum::Json;
+
 use bollard::Docker;
 use futures::prelude::*;
 use hyper::client::HttpConnector;
@@ -19,6 +20,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
+use shuttle_common::models::project::ProjectName;
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
 
@@ -106,7 +108,7 @@ impl IntoResponse for Error {
 
         let error: ApiError = self.kind.into();
 
-        (error.status(), Json(error)).into_response()
+        error.into_response()
     }
 }
 
@@ -122,60 +124,6 @@ impl std::fmt::Display for Error {
 }
 
 impl StdError for Error {}
-
-#[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq, Hash)]
-#[sqlx(transparent)]
-pub struct ProjectName(String);
-
-impl ProjectName {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-
-    pub fn is_valid(&self) -> bool {
-        let name = self.0.clone();
-
-        fn is_valid_char(byte: u8) -> bool {
-            matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-')
-        }
-
-        // each label in a hostname can be between 1 and 63 chars
-        let is_invalid_length = name.len() > 63;
-
-        !(name.bytes().any(|byte| !is_valid_char(byte))
-            || name.ends_with('-')
-            || name.starts_with('-')
-            || name.is_empty()
-            || is_invalid_length)
-    }
-}
-
-impl<'de> Deserialize<'de> for ProjectName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(<D::Error as serde::de::Error>::custom)
-    }
-}
-
-impl FromStr for ProjectName {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse::<shuttle_common::project::ProjectName>()
-            .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName))
-            .map(|pn| Self(pn.to_string()))
-    }
-}
-
-impl std::fmt::Display for ProjectName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
 #[sqlx(transparent)]
@@ -212,7 +160,7 @@ pub struct ProjectDetails {
     pub account_name: AccountName,
 }
 
-impl From<ProjectDetails> for shuttle_common::models::project::AdminResponse {
+impl From<ProjectDetails> for shuttle_common::models::admin::ProjectResponse {
     fn from(project: ProjectDetails) -> Self {
         Self {
             project_name: project.project_name.to_string(),
@@ -327,7 +275,7 @@ pub mod tests {
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
     use shuttle_common::backends::auth::ConvertResponse;
-    use shuttle_common::claims::{Claim, Scope};
+    use shuttle_common::claims::{AccountTier, Claim, Scope};
     use shuttle_common::models::project;
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::SqlitePool;
@@ -661,7 +609,7 @@ pub mod tests {
                 .lock()
                 .unwrap()
                 .users
-                .insert(user.to_string(), vec![Scope::Project, Scope::ProjectCreate]);
+                .insert(user.to_string(), vec![Scope::Project, Scope::ProjectWrite]);
 
             user.to_string()
         }
@@ -727,7 +675,7 @@ pub mod tests {
                         let state = state.lock().unwrap();
 
                         if let Some(scopes) = state.users.get(bearer.token()) {
-                            let claim = Claim::new(bearer.token().to_string(), scopes.clone());
+                            let claim = Claim::new(bearer.token().to_string(), scopes.clone(), AccountTier::default(), AccountTier::default());
                             let token = claim.into_token(&state.encoding_key)?;
                             Ok(serde_json::to_vec(&ConvertResponse { token }).unwrap())
                         } else {

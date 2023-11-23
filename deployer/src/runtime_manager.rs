@@ -13,12 +13,12 @@ use shuttle_common::{
 };
 use shuttle_proto::{
     logger::{logger_client::LoggerClient, Batcher, LogItem, LogLine},
-    runtime::{self, runtime_client::RuntimeClient, StopRequest},
+    runtime::{runtime_client::RuntimeClient, StopRequest},
 };
-use shuttle_service::Environment;
+use shuttle_service::{runner, Environment};
 use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
 use tonic::transport::Channel;
-use tracing::{debug, info, trace};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
@@ -35,7 +35,7 @@ type Runtimes = Arc<
     >,
 >;
 
-/// Manager that can start up mutliple runtimes. This is needed so that two runtimes can be up when a new deployment is made:
+/// Manager that can start up multiple runtimes. This is needed so that two runtimes can be up when a new deployment is made:
 /// One runtime for the new deployment being loaded; another for the currently active deployment
 #[derive(Clone)]
 pub struct RuntimeManager {
@@ -71,7 +71,7 @@ impl RuntimeManager {
         }))
     }
 
-    pub async fn get_runtime_client(
+    pub async fn create_runtime_client(
         &mut self,
         id: Uuid,
         project_path: &Path,
@@ -125,7 +125,7 @@ impl RuntimeManager {
                 .join("bin/shuttle-next")
         };
 
-        let (mut process, runtime_client) = runtime::start(
+        let (mut process, runtime_client) = runner::start(
             is_next,
             Environment::Deployment,
             &self.provisioner_address,
@@ -177,26 +177,38 @@ impl RuntimeManager {
         Ok(runtime_client)
     }
 
+    pub fn kill_process(&mut self, id: Uuid) {
+        if let Some((mut process, _)) = self.runtimes.lock().unwrap().remove(&id) {
+            match process.start_kill() {
+                Ok(_) => info!(deployment_id = %id, "initiated runtime process killing"),
+                Err(err) => error!(
+                    deployment_id = %id, "failed to start the killing of the runtime: {}",
+                    err
+                ),
+            }
+        }
+    }
+
     /// Send a kill / stop signal for a deployment to its running runtime
     pub async fn kill(&mut self, id: &Uuid) -> bool {
         let value = self.runtimes.lock().unwrap().remove(id);
 
-        if let Some((mut process, mut runtime_client)) = value {
-            trace!(%id, "sending stop signal for deployment");
-
-            let stop_request = tonic::Request::new(StopRequest {});
-            let response = runtime_client.stop(stop_request).await.unwrap();
-
-            trace!(?response, "stop deployment response");
-
-            let result = response.into_inner().success;
-            let _ = process.start_kill();
-
-            result
-        } else {
+        let Some((mut process, mut runtime_client)) = value else {
             trace!("no client running");
-            true
-        }
+            return true;
+        };
+
+        trace!(%id, "sending stop signal for deployment");
+        let stop_request = tonic::Request::new(StopRequest {});
+        let Ok(response) = runtime_client.stop(stop_request).await else {
+            warn!(%id, "stop request failed");
+            return false;
+        };
+        trace!(?response, "stop deployment response");
+
+        let _ = process.start_kill();
+
+        response.into_inner().success
     }
 }
 

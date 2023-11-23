@@ -5,10 +5,16 @@ use std::str::FromStr;
 use chrono::Utc;
 use error::{Error, Result};
 use hyper::Uri;
-use shuttle_common::claims::{Claim, ClaimLayer, InjectPropagationLayer};
-use shuttle_proto::resource_recorder::{
-    record_request, resource_recorder_client::ResourceRecorderClient, RecordRequest,
-    ResourcesResponse, ResultResponse, ServiceResourcesRequest,
+use shuttle_common::{
+    claims::{Claim, ClaimLayer, InjectPropagationLayer},
+    resource::Type,
+};
+use shuttle_proto::{
+    provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest},
+    resource_recorder::{
+        record_request, resource_recorder_client::ResourceRecorderClient, RecordRequest,
+        ResourceIds, ResourceResponse, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
+    },
 };
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
@@ -16,7 +22,7 @@ use sqlx::{
     QueryBuilder,
 };
 use tokio::task::JoinHandle;
-use tonic::transport::Endpoint;
+use tonic::{transport::Endpoint, Request};
 use tower::ServiceBuilder;
 use tracing::{error, info, instrument, trace};
 use ulid::Ulid;
@@ -24,22 +30,21 @@ use uuid::Uuid;
 
 pub mod deployment;
 mod error;
-mod resource;
-mod secret;
+pub mod resource;
 pub mod service;
 mod state;
 mod user;
 
-use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
-use self::resource::Resource;
-pub use self::resource::{ResourceManager, Type as ResourceType};
-pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
 pub use self::state::DeploymentState;
 pub use self::state::{State, StateRecorder};
 pub use self::user::User;
+use self::{
+    deployment::DeploymentRunnable,
+    resource::{Resource, ResourceManager},
+};
 use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 
@@ -48,9 +53,16 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 #[derive(Clone)]
 pub struct Persistence {
     pool: SqlitePool,
-    state_send: crossbeam_channel::Sender<DeploymentState>,
+    state_send: tokio::sync::mpsc::UnboundedSender<DeploymentState>,
     resource_recorder_client: Option<
         ResourceRecorderClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >,
+    >,
+    provisioner_client: Option<
+        ProvisionerClient<
             shuttle_common::claims::ClaimService<
                 shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
             >,
@@ -67,6 +79,7 @@ impl Persistence {
     pub async fn new(
         path: &str,
         resource_recorder_uri: &Uri,
+        provisioner_address: &Uri,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
         if !Path::new(path).exists() {
@@ -96,7 +109,13 @@ impl Persistence {
 
         let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
 
-        Self::configure(pool, resource_recorder_uri.to_string(), project_id).await
+        Self::configure(
+            pool,
+            resource_recorder_uri.to_string(),
+            provisioner_address.to_string(),
+            project_id,
+        )
+        .await
     }
 
     #[cfg(test)]
@@ -116,6 +135,7 @@ impl Persistence {
             pool,
             state_send,
             resource_recorder_client: None,
+            provisioner_client: None,
             project_id: Ulid::new(),
         };
 
@@ -125,19 +145,33 @@ impl Persistence {
     async fn configure(
         pool: SqlitePool,
         resource_recorder_uri: String,
+        provisioner_address: String,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
-        let channel = Endpoint::from_shared(resource_recorder_uri.to_string())
-            .expect("failed to convert resource recorder uri to a string")
+        let channel = Endpoint::from_shared(resource_recorder_uri)
+            .expect("to have a valid string endpoint for the resource recorder")
             .connect()
             .await
             .expect("failed to connect to resource recorder");
 
-        let channel = ServiceBuilder::new()
+        let resource_recorder_service = ServiceBuilder::new()
             .layer(ClaimLayer)
             .layer(InjectPropagationLayer)
             .service(channel);
-        let resource_recorder_client = ResourceRecorderClient::new(channel);
+
+        let channel = Endpoint::from_shared(provisioner_address)
+            .expect("to have a valid string endpoint for the provisioner")
+            .connect()
+            .await
+            .expect("failed to connect to provisioner");
+
+        let provisioner_service = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
+
+        let resource_recorder_client = ResourceRecorderClient::new(resource_recorder_service);
+        let provisioner_client = ProvisionerClient::new(provisioner_service);
 
         let (state_send, handle) = Self::from_pool(pool.clone()).await;
 
@@ -145,6 +179,7 @@ impl Persistence {
             pool,
             state_send,
             resource_recorder_client: Some(resource_recorder_client),
+            provisioner_client: Some(provisioner_client),
             project_id,
         };
 
@@ -153,15 +188,18 @@ impl Persistence {
 
     async fn from_pool(
         pool: SqlitePool,
-    ) -> (crossbeam_channel::Sender<DeploymentState>, JoinHandle<()>) {
+    ) -> (
+        tokio::sync::mpsc::UnboundedSender<DeploymentState>,
+        JoinHandle<()>,
+    ) {
         MIGRATIONS.run(&pool).await.unwrap();
 
-        let (state_send, state_recv): (crossbeam_channel::Sender<DeploymentState>, _) =
-            crossbeam_channel::bounded(0);
+        // Unbounded channel so that sync code (tracing layer) can send to async listener (here)
+        let (state_send, mut state_recv) =
+            tokio::sync::mpsc::unbounded_channel::<DeploymentState>();
 
         let handle = tokio::spawn(async move {
-            // State change logs are received on this non-async channel.
-            while let Ok(state) = state_recv.recv() {
+            while let Some(state) = state_recv.recv().await {
                 trace!(?state, "persistence received state change");
                 update_deployment(&pool, state)
                     .await
@@ -181,8 +219,8 @@ impl Persistence {
         self.project_id
     }
 
-    pub async fn insert_deployment(&self, deployment: impl Into<Deployment>) -> Result<()> {
-        let deployment: Deployment = deployment.into();
+    pub async fn insert_deployment(&self, deployment: impl Into<&Deployment>) -> Result<()> {
+        let deployment: &Deployment = deployment.into();
 
         sqlx::query("INSERT INTO deployments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(deployment.id)
@@ -191,14 +229,14 @@ impl Persistence {
             .bind(deployment.last_update)
             .bind(deployment.address.map(|socket| socket.to_string()))
             .bind(deployment.is_next)
-            .bind(deployment.git_commit_id)
-            .bind(deployment.git_commit_msg)
-            .bind(deployment.git_branch)
+            .bind(deployment.git_commit_id.as_ref())
+            .bind(deployment.git_commit_msg.as_ref())
+            .bind(deployment.git_branch.as_ref())
             .bind(deployment.git_dirty)
             .execute(&self.pool)
             .await
             .map(|_| ())
-            .map_err(Error::from)
+            .map_err(PersistenceError::from)
     }
 
     pub async fn get_deployment(&self, id: &Uuid) -> Result<Option<Deployment>> {
@@ -376,12 +414,13 @@ impl ResourceManager for Persistence {
 
         record_req.extensions_mut().insert(claim);
 
+        info!("Uploading resources to resource-recorder");
         self.resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
             .record_resources(record_req)
             .await
-            .map_err(Error::from)
+            .map_err(PersistenceError::ResourceRecorder)
             .map(|res| res.into_inner())
     }
 
@@ -396,24 +435,27 @@ impl ResourceManager for Persistence {
 
         service_resources_req.extensions_mut().insert(claim.clone());
 
+        info!(%service_id, "Getting resources from resource-recorder");
         let res = self
             .resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
             .get_service_resources(service_resources_req)
             .await
-            .map_err(Error::from)
+            .map_err(PersistenceError::ResourceRecorder)
             .map(|res| res.into_inner())?;
 
         // If the resources list is empty
         if res.resources.is_empty() {
+            info!("Got no resources from resource-recorder");
             // Check if there are cached resources on the local persistence.
             let resources: std::result::Result<Vec<Resource>, sqlx::Error> =
-                sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
+                sqlx::query_as("SELECT * FROM resources WHERE service_id = ?")
                     .bind(service_id.to_string())
                     .fetch_all(&self.pool)
                     .await;
 
+            info!(?resources, "Local resources");
             // If there are cached resources
             if let Ok(inner) = resources {
                 // Return early if the local persistence is empty.
@@ -434,69 +476,105 @@ impl ResourceManager for Persistence {
                 self.insert_resources(local_resources, service_id, claim.clone())
                     .await?;
 
-                // Get the resources the second time. This should happen only once. Ideally,
-                // we would remove the local persisted resources cache too. We don't do this
-                // because:
-                // 1) It is not fail proof logic. Deleting the resources from the local persistence
-                //   can fail (even with retry logic), which means that the resources can live
-                //   both in resource-recorder and local persistence.
-                // 2) The first point will cause problems only if we'll remove the resources of a
-                //   service from the resource-recorder, which will trigger again the synchronization
-                //   with local persistence, which isn't necessarily what we want.
-                // 3) Our assumption is that 2) shouldn't happen to soon. It is pending project removal.
-                //   We should make sure that if we'll ever need to manually delete the resources (e.g for
-                //   account deletion) from the resource-recorder, we will first remove the rows of
-                //   resources table and then remove the resource-recorder's resources.
                 let mut service_resources_req = tonic::Request::new(ServiceResourcesRequest {
                     service_id: service_id.to_string(),
                 });
 
                 service_resources_req.extensions_mut().insert(claim);
 
-                return self
+                info!("Getting resources from resource-recorder again");
+                let res = self
                     .resource_recorder_client
                     .as_mut()
                     .expect("to have the resource recorder set up")
                     .get_service_resources(service_resources_req)
                     .await
-                    .map_err(Error::from)
-                    .map(|res| res.into_inner());
+                    .map_err(PersistenceError::ResourceRecorder)
+                    .map(|res| res.into_inner())?;
+
+                if res.resources.is_empty() {
+                    // Something went wrong since it was empty before the upload, and is still empty now.
+                    return Err(Error::ResourceRecorderSync);
+                }
+
+                info!("Deleting local resources");
+                // Now that we know that the resources are in resource-recorder,
+                // we can safely delete them from here to prevent de-sync issues and to not hinder project deletion
+                sqlx::query("DELETE FROM resources WHERE service_id = ?")
+                    .bind(service_id.to_string())
+                    .execute(&self.pool)
+                    .await?;
+
+                return Ok(res);
             }
         }
 
         Ok(res)
     }
-}
 
-#[async_trait::async_trait]
-impl SecretRecorder for Persistence {
-    type Err = Error;
+    async fn get_resource(
+        &mut self,
+        service_id: &Ulid,
+        r#type: shuttle_common::resource::Type,
+        claim: Claim,
+    ) -> Result<ResourceResponse> {
+        let mut get_resource_req = tonic::Request::new(ResourceIds {
+            project_id: self.project_id.to_string(),
+            service_id: service_id.to_string(),
+            r#type: r#type.to_string(),
+        });
 
-    async fn insert_secret(&self, service_id: &Ulid, key: &str, value: &str) -> Result<()> {
-        sqlx::query(
-            "INSERT OR REPLACE INTO secrets (service_id, key, value, last_update) VALUES (?, ?, ?, ?)",
-        )
-        .bind(service_id.to_string())
-        .bind(key)
-        .bind(value)
-        .bind(Utc::now())
-        .execute(&self.pool)
-        .await
-        .map(|_| ())
-        .map_err(Error::from)
-    }
-}
+        get_resource_req.extensions_mut().insert(claim);
 
-#[async_trait::async_trait]
-impl SecretGetter for Persistence {
-    type Err = Error;
-
-    async fn get_secrets(&self, service_id: &Ulid) -> Result<Vec<Secret>> {
-        sqlx::query_as("SELECT * FROM secrets WHERE service_id = ? ORDER BY key")
-            .bind(service_id.to_string())
-            .fetch_all(&self.pool)
+        return self
+            .resource_recorder_client
+            .as_mut()
+            .expect("to have the resource recorder set up")
+            .get_resource(get_resource_req)
             .await
-            .map_err(Error::from)
+            .map_err(PersistenceError::ResourceRecorder)
+            .map(|res| res.into_inner());
+    }
+
+    async fn delete_resource(
+        &mut self,
+        project_name: String,
+        service_id: &Ulid,
+        resource_type: shuttle_common::resource::Type,
+        claim: Claim,
+    ) -> Result<ResultResponse> {
+        if let Type::Database(db_type) = resource_type {
+            let proto_db_type: shuttle_proto::provisioner::database_request::DbType =
+                db_type.into();
+            if let Some(inner) = &mut self.provisioner_client {
+                let mut db_request = Request::new(DatabaseRequest {
+                    project_name,
+                    db_type: Some(proto_db_type),
+                });
+                db_request.extensions_mut().insert(claim.clone());
+                inner
+                    .delete_database(db_request)
+                    .await
+                    .map_err(error::Error::Provisioner)?;
+            };
+        }
+
+        let mut delete_resource_req = tonic::Request::new(ResourceIds {
+            project_id: self.project_id.to_string(),
+            service_id: service_id.to_string(),
+            r#type: resource_type.to_string(),
+        });
+
+        delete_resource_req.extensions_mut().insert(claim);
+
+        return self
+            .resource_recorder_client
+            .as_mut()
+            .expect("to have the resource recorder set up")
+            .delete_resource(delete_resource_req)
+            .await
+            .map(|res| res.into_inner())
+            .map_err(PersistenceError::ResourceRecorder);
     }
 }
 
@@ -589,7 +667,9 @@ impl StateRecorder for Persistence {
     type Err = Error;
 
     fn record_state(&self, state: DeploymentState) -> Result<()> {
-        self.state_send.send(state).map_err(Error::from)
+        self.state_send
+            .send(state)
+            .map_err(|_| Error::ChannelSendThreadError)
     }
 }
 
@@ -621,7 +701,7 @@ mod tests {
         };
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 12345);
 
-        p.insert_deployment(deployment.clone()).await.unwrap();
+        p.insert_deployment(&deployment).await.unwrap();
         assert_eq!(p.get_deployment(&id).await.unwrap().unwrap(), deployment);
 
         update_deployment(
@@ -668,7 +748,7 @@ mod tests {
             .collect();
 
         for deployment in &deployments {
-            p.insert_deployment(deployment.clone()).await.unwrap();
+            p.insert_deployment(deployment).await.unwrap();
         }
 
         // Reverse to match last_updated desc order
@@ -734,7 +814,7 @@ mod tests {
             &deployment_other,
             &deployment_running,
         ] {
-            p.insert_deployment(deployment.clone()).await.unwrap();
+            p.insert_deployment(deployment).await.unwrap();
         }
 
         assert_eq!(
@@ -793,7 +873,7 @@ mod tests {
             &deployment_stopped,
             &deployment_running,
         ] {
-            p.insert_deployment(deployment.clone()).await.unwrap();
+            p.insert_deployment(deployment).await.unwrap();
         }
 
         let actual = p.get_deployments(&service_id, 0, u32::MAX).await.unwrap();
@@ -887,7 +967,7 @@ mod tests {
             &deployment_building,
             &deployment_loading,
         ] {
-            p.insert_deployment(deployment.clone()).await.unwrap();
+            p.insert_deployment(deployment).await.unwrap();
         }
 
         p.cleanup_invalid_states().await.unwrap();
@@ -928,7 +1008,7 @@ mod tests {
         let id_3 = Uuid::new_v4();
         let id_crashed = Uuid::new_v4();
 
-        for deployment in [
+        for deployment in &[
             Deployment {
                 id: Uuid::new_v4(),
                 service_id,
@@ -1019,55 +1099,6 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn secrets() {
-        let (p, _) = Persistence::new_in_memory().await;
-
-        let service_id = add_service(&p.pool).await.unwrap();
-        let service_id2 = add_service(&p.pool).await.unwrap();
-
-        p.insert_secret(&service_id, "key1", "value1")
-            .await
-            .unwrap();
-        p.insert_secret(&service_id2, "key2", "value2")
-            .await
-            .unwrap();
-        p.insert_secret(&service_id, "key3", "value3")
-            .await
-            .unwrap();
-        p.insert_secret(&service_id, "key1", "value1_updated")
-            .await
-            .unwrap();
-
-        let actual: Vec<_> = p
-            .get_secrets(&service_id)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|mut i| {
-                // Reset dates for test
-                i.last_update = Default::default();
-                i
-            })
-            .collect();
-        let expected = vec![
-            Secret {
-                service_id,
-                key: "key1".to_string(),
-                value: "value1_updated".to_string(),
-                last_update: Default::default(),
-            },
-            Secret {
-                service_id,
-                key: "key3".to_string(),
-                value: "value3".to_string(),
-                last_update: Default::default(),
-            },
-        ];
-
-        assert_eq!(actual, expected);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
     async fn service() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -1138,7 +1169,7 @@ mod tests {
         let id_1 = Uuid::new_v4();
         let id_2 = Uuid::new_v4();
 
-        for deployment in [
+        for deployment in &[
             Deployment {
                 id: Uuid::new_v4(),
                 service_id,

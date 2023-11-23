@@ -15,7 +15,7 @@ use shuttle_proto::{
         provisioner_server::{Provisioner, ProvisionerServer},
         DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
     },
-    resource_recorder::{ResourcesResponse, ResultResponse},
+    resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     runtime::{StopReason, SubscribeStopResponse},
 };
 use tokio::{
@@ -30,7 +30,7 @@ use uuid::Uuid;
 use shuttle_deployer::{
     deployment::Built,
     error,
-    persistence::{DeploymentUpdater, ResourceManager, Secret, SecretGetter},
+    persistence::{resource::ResourceManager, DeploymentUpdater},
     RuntimeManager,
 };
 
@@ -83,18 +83,6 @@ async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
 }
 
 #[derive(Clone)]
-struct StubSecretGetter;
-
-#[async_trait]
-impl SecretGetter for StubSecretGetter {
-    type Err = std::io::Error;
-
-    async fn get_secrets(&self, _service_id: &Ulid) -> Result<Vec<Secret>, Self::Err> {
-        Ok(Default::default())
-    }
-}
-
-#[derive(Clone)]
 struct StubResourceManager;
 
 #[async_trait]
@@ -121,6 +109,32 @@ impl ResourceManager for StubResourceManager {
             success: true,
             message: "dummy impl".to_string(),
             resources: Vec::new(),
+        })
+    }
+
+    async fn delete_resource(
+        &mut self,
+        _project_name: String,
+        _service_id: &Ulid,
+        _resource_type: shuttle_common::resource::Type,
+        _claim: Claim,
+    ) -> Result<ResultResponse, Self::Err> {
+        Ok(ResultResponse {
+            success: true,
+            message: "dummy impl".to_string(),
+        })
+    }
+
+    async fn get_resource(
+        &mut self,
+        _service_id: &ulid::Ulid,
+        _resource_type: shuttle_common::resource::Type,
+        _claim: Claim,
+    ) -> Result<ResourceResponse, Self::Err> {
+        Ok(ResourceResponse {
+            success: true,
+            message: "dummy impl".to_string(),
+            resource: None,
         })
     }
 }
@@ -152,7 +166,7 @@ async fn can_be_killed() {
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
         match (
-            StopReason::from_i32(response.reason).unwrap(),
+            StopReason::try_from(response.reason).unwrap(),
             response.message,
         ) {
             (StopReason::Request, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
@@ -162,7 +176,6 @@ async fn can_be_killed() {
 
     built
         .handle(
-            StubSecretGetter,
             StubResourceManager,
             runtime_manager.clone(),
             StubDeploymentUpdater,
@@ -195,7 +208,7 @@ async fn self_stop() {
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
         match (
-            StopReason::from_i32(response.reason).unwrap(),
+            StopReason::try_from(response.reason).unwrap(),
             response.message,
         ) {
             (StopReason::End, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
@@ -205,7 +218,6 @@ async fn self_stop() {
 
     built
         .handle(
-            StubSecretGetter,
             StubResourceManager,
             runtime_manager.clone(),
             StubDeploymentUpdater,
@@ -235,7 +247,7 @@ async fn panic_in_bind() {
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
         match (
-            StopReason::from_i32(response.reason).unwrap(),
+            StopReason::try_from(response.reason).unwrap(),
             response.message,
         ) {
             (StopReason::Crash, mes) if mes.contains("panic in bind") => {
@@ -247,7 +259,6 @@ async fn panic_in_bind() {
 
     built
         .handle(
-            StubSecretGetter,
             StubResourceManager,
             runtime_manager.clone(),
             StubDeploymentUpdater,
@@ -278,7 +289,6 @@ async fn panic_in_main() {
 
     let x = built
         .handle(
-            StubSecretGetter,
             StubResourceManager,
             runtime_manager.clone(),
             StubDeploymentUpdater,
@@ -326,6 +336,7 @@ async fn make_and_built(crate_name: &str) -> (Built, PathBuf) {
             tracing_context: Default::default(),
             is_next: false,
             claim: Default::default(),
+            secrets: Default::default(),
         },
         RESOURCES_PATH.into(), // is later joined with `service_name` to arrive at `crate_name`
     )

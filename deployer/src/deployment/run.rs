@@ -15,9 +15,8 @@ use shuttle_common::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
-    resource,
+    resource, SecretStore,
 };
-
 use shuttle_proto::{
     resource_recorder::record_request,
     runtime::{
@@ -38,7 +37,7 @@ use uuid::Uuid;
 use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
-    persistence::{DeploymentUpdater, ResourceManager, SecretGetter},
+    persistence::{resource::ResourceManager, DeploymentUpdater},
     RuntimeManager,
 };
 
@@ -49,7 +48,6 @@ pub async fn task(
     runtime_manager: Arc<Mutex<RuntimeManager>>,
     deployment_updater: impl DeploymentUpdater,
     active_deployment_getter: impl ActiveDeploymentsGetter,
-    secret_getter: impl SecretGetter,
     resource_manager: impl ResourceManager,
     builds_path: PathBuf,
 ) {
@@ -64,7 +62,6 @@ pub async fn task(
 
                 info!("Built deployment at the front of run queue: {id}");
                 let deployment_updater = deployment_updater.clone();
-                let secret_getter = secret_getter.clone();
                 let resource_manager = resource_manager.clone();
                 let builds_path = builds_path.clone();
 
@@ -74,29 +71,33 @@ pub async fn task(
                     active_deployment_getter.clone(),
                     runtime_manager.clone(),
                 );
+                let runtime_manager_clone = runtime_manager.clone();
                 let cleanup = move |response: Option<SubscribeStopResponse>| {
                     debug!(response = ?response,  "stop client response: ");
 
                     if let Some(response) = response {
-                        match StopReason::from_i32(response.reason).unwrap_or_default() {
+                        match StopReason::try_from(response.reason).unwrap_or_default() {
                             StopReason::Request => stopped_cleanup(&id),
                             StopReason::End => completed_cleanup(&id),
                             StopReason::Crash => crashed_cleanup(
                                 &id,
+                                runtime_manager_clone,
                                 Error::Run(anyhow::Error::msg(response.message).into()),
-                            ),
+                            )
                         }
                     } else {
                         crashed_cleanup(
                             &id,
+                            runtime_manager_clone,
                             Error::Runtime(anyhow::anyhow!(
                                 "stop subscribe channel stopped unexpectedly"
                             )),
-                        )
+                        );
                     }
-                };
-                let runtime_manager = runtime_manager.clone();
 
+                };
+
+                let runtime_manager = runtime_manager.clone();
                 set.spawn(async move {
                     let parent_cx = global::get_text_map_propagator(|propagator| {
                         propagator.extract(&built.tracing_context)
@@ -107,7 +108,6 @@ pub async fn task(
                     async move {
                         match built
                             .handle(
-                                secret_getter,
                                 resource_manager,
                                 runtime_manager,
                                 deployment_updater,
@@ -180,12 +180,22 @@ fn stopped_cleanup(_id: &Uuid) {
     info!("{}", DEPLOYER_END_MSG_STOPPED);
 }
 
-#[instrument(name = "Cleaning up crashed deployment", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
-fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
+#[instrument(name = "Cleaning up crashed deployment", skip(id, runtime_manager), fields(deployment_id = %id, state = %State::Crashed))]
+fn crashed_cleanup(
+    id: &Uuid,
+    runtime_manager: Arc<Mutex<RuntimeManager>>,
+    error: impl std::error::Error + 'static,
+) {
     error!(
         error = &error as &dyn std::error::Error,
         "{}", DEPLOYER_END_MSG_CRASHED
     );
+
+    // Fire a task which we'll not wait for. This initializes the runtime process killing.
+    let id = *id;
+    tokio::spawn(async move {
+        runtime_manager.lock().await.kill_process(id);
+    });
 }
 
 #[instrument(name = "Cleaning up startup crashed deployment", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
@@ -215,18 +225,18 @@ pub struct Built {
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
     pub claim: Claim,
+    pub secrets: HashMap<String, String>,
 }
 
 impl Built {
     #[instrument(
         name = "Loading resources",
-        skip(self, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup),
+        skip(self, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup),
         fields(deployment_id = %self.id, state = %State::Loading)
     )]
     #[allow(clippy::too_many_arguments)]
     pub async fn handle(
         self,
-        secret_getter: impl SecretGetter,
         resource_manager: impl ResourceManager,
         runtime_manager: Arc<Mutex<RuntimeManager>>,
         deployment_updater: impl DeploymentUpdater,
@@ -263,7 +273,7 @@ impl Built {
         let runtime_client = runtime_manager
             .lock()
             .await
-            .get_runtime_client(
+            .create_runtime_client(
                 self.id,
                 project_path.as_path(),
                 self.service_name.clone(),
@@ -278,10 +288,10 @@ impl Built {
             self.service_name.clone(),
             self.service_id,
             executable_path.clone(),
-            secret_getter,
             resource_manager,
             runtime_client.clone(),
             self.claim,
+            self.secrets,
         )
         .await?;
 
@@ -302,10 +312,10 @@ async fn load(
     service_name: String,
     service_id: Ulid,
     executable_path: PathBuf,
-    secret_getter: impl SecretGetter,
     mut resource_manager: impl ResourceManager,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Claim,
+    mut secrets: HashMap<String, String>,
 ) -> Result<()> {
     info!("Loading resources");
 
@@ -326,16 +336,21 @@ async fn load(
                 })
                 .ok()
         })
+        // inject old secrets into the secrets added in this deployment
+        .inspect(|r| {
+            if r.r#type == shuttle_common::resource::Type::Secrets {
+                match serde_json::from_value::<SecretStore>(r.data.clone()) {
+                    Ok(ss) => {
+                        secrets.extend(ss.into_iter());
+                    }
+                    Err(err) => {
+                        error!(error = ?err, "failed to parse old secrets data");
+                    }
+                }
+            }
+        })
         .map(resource::Response::into_bytes)
         .collect();
-
-    let secrets = secret_getter
-        .get_secrets(&service_id)
-        .await
-        .map_err(|e| Error::SecretsGet(Box::new(e)))?
-        .into_iter()
-        .map(|secret| (secret.key, secret.value));
-    let secrets = HashMap::from_iter(secrets);
 
     let mut load_request = tonic::Request::new(LoadRequest {
         path: executable_path
@@ -401,21 +416,34 @@ async fn run(
     deployment_updater: impl DeploymentUpdater,
     cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
 ) {
-    deployment_updater
-        .set_address(&id, &address)
-        .await
-        .expect("to set deployment address");
+    if let Err(err) = deployment_updater.set_address(&id, &address).await {
+        // Clean up based on a stop response built outside the runtime
+        cleanup(Some(SubscribeStopResponse {
+            reason: StopReason::Crash as i32,
+            message: format!("errored while setting the new deployer address: {}", err),
+        }));
+        return;
+    }
 
     let start_request = tonic::Request::new(StartRequest {
         ip: address.to_string(),
     });
 
     // Subscribe to stop before starting to catch immediate errors
-    let mut stream = runtime_client
+    let mut stream = match runtime_client
         .subscribe_stop(tonic::Request::new(SubscribeStopRequest {}))
         .await
-        .unwrap()
-        .into_inner();
+    {
+        Ok(stream) => stream.into_inner(),
+        Err(err) => {
+            // Clean up based on a stop response built outside the runtime
+            cleanup(Some(SubscribeStopResponse {
+                reason: StopReason::Crash as i32,
+                message: format!("errored while opening the StopSubscribe channel: {}", err),
+            }));
+            return;
+        }
+    };
 
     let response = runtime_client.start(start_request).await;
 
@@ -426,9 +454,14 @@ async fn run(
             }
 
             // Wait for stop reason
-            let reason = stream.message().await.expect("message from tonic stream");
-
-            cleanup(reason);
+            match stream.message().await {
+                Ok(reason) => cleanup(reason),
+                // Stream closed abruptly, most probably runtime crashed.
+                Err(err) => cleanup(Some(SubscribeStopResponse {
+                    reason: StopReason::Crash as i32,
+                    message: format!("runtime StopSubscribe channel errored: {}", err),
+                })),
+            }
         }
         Err(ref status) if status.code() == Code::InvalidArgument => {
             cleanup(Some(SubscribeStopResponse {

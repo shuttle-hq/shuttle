@@ -8,8 +8,15 @@
 [changelog]
 # changelog header
 header = """
-# Changelog\n
-All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.\n
+# Changelog
+
+<!-- Install git-cliff and use `make tag=TAG changelog` to update this file -->
+
+This is an auto-generated changelog based on commits on the main branch, made with [git-cliff](https://github.com/orhun/git-cliff).
+See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
+
+**For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
+
 """
 # template for the changelog body
 # https://tera.netlify.app/docs/
@@ -26,7 +33,7 @@ body = """
 
 {% macro commit(commit) -%}
     - {% if commit.scope %}*({{ commit.scope }})* {% endif %}{% if commit.breaking %}[**breaking**] {% endif %}\
-        {{ commit.message | upper_first | trim }} - ([{{ commit.id | truncate(length=7, end="") }}](<REPO>/commit/{{ commit.id }}))\
+        {{ commit.message | split(pat="\n") | first | upper_first | trim }} - ([{{ commit.id | truncate(length=7, end="") }}](<REPO>/commit/{{ commit.id }}))\
 {% endmacro -%}
 
 {% for group, commits in commits | group_by(attribute="group") %}

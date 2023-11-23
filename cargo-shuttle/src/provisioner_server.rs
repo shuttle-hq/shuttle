@@ -1,3 +1,5 @@
+use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
+
 use anyhow::Result;
 use async_trait::async_trait;
 use bollard::{
@@ -14,13 +16,15 @@ use crossterm::{
 };
 use futures::StreamExt;
 use portpicker::pick_unused_port;
-use shuttle_common::database::{AwsRdsEngine, SharedEngine};
+use shuttle_common::{
+    database::{AwsRdsEngine, SharedEngine},
+    secrets::Secret,
+};
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
     DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
 };
 use shuttle_service::database::Type;
-use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
 use tokio::{task::JoinHandle, time::sleep};
 use tonic::{
     transport::{self, Server},
@@ -75,9 +79,9 @@ impl LocalProvisioner {
                 trace!("found DB container {container_name}");
                 container
             }
-            Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
-                if status_code == 404 =>
-            {
+            Err(bollard::errors::Error::DockerResponseServerError {
+                status_code: 404, ..
+            }) => {
                 self.pull_image(&image).await.expect("failed to pull image");
                 trace!("will create DB container {container_name}");
                 let options = Some(CreateContainerOptions {
@@ -155,12 +159,18 @@ impl LocalProvisioner {
                 .expect("failed to start none running container");
         }
 
+        self.wait_for_ready(&container_name, is_ready_cmd.clone())
+            .await?;
+
+        // The container enters the ready state, runs an init script and then reboots, so we sleep
+        // a little and then check if it's ready again afterwards.
+        sleep(Duration::from_millis(450)).await;
         self.wait_for_ready(&container_name, is_ready_cmd).await?;
 
         let res = DatabaseResponse {
             engine,
             username,
-            password,
+            password: password.expose().to_owned(),
             database_name,
             port,
             address_private: "localhost".to_string(),
@@ -327,7 +337,7 @@ struct EngineConfig {
     image: String,
     engine: String,
     username: String,
-    password: String,
+    password: Secret<String>,
     database_name: String,
     port: String,
     env: Option<Vec<String>>,
@@ -341,7 +351,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             image: "docker.io/library/postgres:14".to_string(),
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
-            password: "postgres".to_string(),
+            password: "postgres".to_string().into(),
             database_name: "postgres".to_string(),
             port: "5432/tcp".to_string(),
             env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
@@ -356,7 +366,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             image: "docker.io/library/mongo:5.0.10".to_string(),
             engine: "mongodb".to_string(),
             username: "mongodb".to_string(),
-            password: "password".to_string(),
+            password: "password".to_string().into(),
             database_name: "admin".to_string(),
             port: "27017/tcp".to_string(),
             env: Some(vec![
@@ -375,7 +385,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             image: "docker.io/library/postgres:13.4".to_string(),
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
-            password: "postgres".to_string(),
+            password: "postgres".to_string().into(),
             database_name: "postgres".to_string(),
             port: "5432/tcp".to_string(),
             env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
@@ -390,7 +400,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             image: "docker.io/library/mariadb:10.6.7".to_string(),
             engine: "mariadb".to_string(),
             username: "root".to_string(),
-            password: "mariadb".to_string(),
+            password: "mariadb".to_string().into(),
             database_name: "mysql".to_string(),
             port: "3306/tcp".to_string(),
             env: Some(vec!["MARIADB_ROOT_PASSWORD=mariadb".to_string()]),
@@ -407,7 +417,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             image: "docker.io/library/mysql:8.0.28".to_string(),
             engine: "mysql".to_string(),
             username: "root".to_string(),
-            password: "mysql".to_string(),
+            password: "mysql".to_string().into(),
             database_name: "mysql".to_string(),
             port: "3306/tcp".to_string(),
             env: Some(vec!["MYSQL_ROOT_PASSWORD=mysql".to_string()]),

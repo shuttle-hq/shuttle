@@ -12,7 +12,8 @@ use clap::{
     Parser, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::{models::project::DEFAULT_IDLE_MINUTES, project::ProjectName};
+use shuttle_common::constants::DEFAULT_IDLE_MINUTES;
+use shuttle_common::resource;
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -40,15 +41,16 @@ pub struct ShuttleArgs {
 #[derive(Parser, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
-    #[arg(global = true, long, alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
+    #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
     #[arg(global = true, long)]
-    pub name: Option<ProjectName>,
+    pub name: Option<String>,
 }
 
 impl ProjectArgs {
     pub fn workspace_path(&self) -> anyhow::Result<PathBuf> {
+        // NOTE: If crates cache is missing this blocks for several seconds during download
         let path = MetadataCommand::new()
             .current_dir(&self.working_directory)
             .exec()
@@ -59,23 +61,23 @@ impl ProjectArgs {
         Ok(path)
     }
 
-    pub fn project_name(&self) -> anyhow::Result<ProjectName> {
+    pub fn project_name(&self) -> anyhow::Result<String> {
         let workspace_path = self.workspace_path()?;
 
+        // NOTE: If crates cache is missing this blocks for several seconds during download
         let meta = MetadataCommand::new()
             .current_dir(&workspace_path)
             .exec()
-            .unwrap();
+            .context("failed to get cargo metadata")?;
         let package_name = if let Some(root_package) = meta.root_package() {
-            root_package.name.clone().parse()?
+            root_package.name.clone()
         } else {
             workspace_path
                 .file_name()
                 .context("failed to get project name from workspace path")?
                 .to_os_string()
                 .into_string()
-                .expect("workspace file name should be valid unicode")
-                .parse()?
+                .expect("workspace directory name should be valid unicode")
         };
 
         Ok(package_name)
@@ -118,8 +120,6 @@ pub enum Command {
     /// Manage resources of a Shuttle project
     #[command(subcommand)]
     Resource(ResourceCommand),
-    /// Manage secrets for this Shuttle service
-    Secrets,
     /// Remove cargo build artifacts in the Shuttle environment
     Clean,
     /// Login to the Shuttle platform
@@ -150,6 +150,10 @@ pub enum DeploymentCommand {
         #[arg(long, default_value = "10")]
         /// How many projects per page to display
         limit: u32,
+
+        #[arg(long, default_value_t = false)]
+        /// Output table in `raw` format
+        raw: bool,
     },
     /// View status of a deployment
     Status {
@@ -161,7 +165,25 @@ pub enum DeploymentCommand {
 #[derive(Parser)]
 pub enum ResourceCommand {
     /// List all the resources for a project
-    List,
+    List {
+        #[arg(long, default_value_t = false)]
+        /// Output table in `raw` format
+        raw: bool,
+
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Show secrets from resources (e.g. a password in a connection string)"
+        )]
+        show_secrets: bool,
+    },
+    /// Delete a resource
+    Delete {
+        /// Type of the resource to delete.
+        /// Use the string in the 'Type' column as displayed in the `resource list` command.
+        /// For example, 'database::shared::postgres'.
+        resource_type: resource::Type,
+    },
 }
 
 #[derive(Parser)]
@@ -187,7 +209,13 @@ pub enum ProjectCommand {
         #[arg(long, default_value = "10")]
         /// How many projects per page to display
         limit: u32,
+
+        #[arg(long, default_value_t = false)]
+        /// Output table in `raw` format
+        raw: bool,
     },
+    /// Delete a project and all linked data
+    Delete,
 }
 
 #[derive(Parser, Debug)]
@@ -198,7 +226,7 @@ pub struct ProjectStartArgs {
     pub idle_minutes: u64,
 }
 
-#[derive(Parser, Clone, Debug)]
+#[derive(Parser, Clone, Debug, Default)]
 pub struct LoginArgs {
     /// API key for the Shuttle platform
     #[arg(long)]
@@ -213,11 +241,11 @@ pub struct LogoutArgs {
 }
 #[derive(Parser)]
 pub struct DeployArgs {
-    /// Allow deployment with uncommited files
-    #[arg(long, alias = "ad")]
+    /// Allow deployment with uncommitted files
+    #[arg(long, visible_alias = "ad")]
     pub allow_dirty: bool,
     /// Don't run pre-deploy tests
-    #[arg(long, alias = "nt")]
+    #[arg(long, visible_alias = "nt")]
     pub no_test: bool,
 }
 
@@ -234,7 +262,7 @@ pub struct RunArgs {
     pub release: bool,
 }
 
-#[derive(Parser, Clone, Debug)]
+#[derive(Parser, Clone, Debug, Default)]
 pub struct InitArgs {
     /// Clone a starter template from Shuttle's official examples
     #[arg(long, short, value_enum, conflicts_with_all = &["from", "subfolder"])]
@@ -250,7 +278,10 @@ pub struct InitArgs {
     #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub path: PathBuf,
 
-    /// Whether to create the environment for this project on Shuttle
+    /// Don't check the project name's validity or availability and use it anyways
+    #[arg(long)]
+    pub force_name: bool,
+    /// Whether to start the container for this project on Shuttle, and claim the project name
     #[arg(long)]
     pub create_env: bool,
     #[command(flatten)]
@@ -355,9 +386,14 @@ pub(crate) fn parse_init_path(path: OsString) -> Result<PathBuf, io::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::path_from_workspace_root;
-
     use super::*;
+    use crate::tests::path_from_workspace_root;
+    use clap::CommandFactory;
+
+    #[test]
+    fn test_shuttle_args() {
+        ShuttleArgs::command().debug_assert();
+    }
 
     #[test]
     fn test_init_args_framework() {
@@ -366,9 +402,7 @@ mod tests {
             template: Some(InitTemplateArg::Tower),
             from: None,
             subfolder: None,
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
+            ..Default::default()
         };
         assert_eq!(
             init_args.git_template().unwrap(),
@@ -383,9 +417,7 @@ mod tests {
             template: Some(InitTemplateArg::Axum),
             from: None,
             subfolder: None,
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
+            ..Default::default()
         };
         assert_eq!(
             init_args.git_template().unwrap(),
@@ -400,9 +432,7 @@ mod tests {
             template: Some(InitTemplateArg::None),
             from: None,
             subfolder: None,
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
+            ..Default::default()
         };
         assert_eq!(
             init_args.git_template().unwrap(),
@@ -417,9 +447,7 @@ mod tests {
             template: None,
             from: Some("https://github.com/some/repo".into()),
             subfolder: Some("some/path".into()),
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
+            ..Default::default()
         };
         assert_eq!(
             init_args.git_template().unwrap(),
@@ -434,9 +462,7 @@ mod tests {
             template: None,
             from: None,
             subfolder: None,
-            create_env: false,
-            login_args: LoginArgs { api_key: None },
-            path: PathBuf::new(),
+            ..Default::default()
         };
         assert_eq!(init_args.git_template().unwrap(), None);
     }

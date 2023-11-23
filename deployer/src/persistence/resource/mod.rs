@@ -1,7 +1,9 @@
 pub mod database;
 
-use shuttle_common::claims::Claim;
-use shuttle_proto::resource_recorder::{record_request, ResourcesResponse, ResultResponse};
+use shuttle_common::{claims::Claim, resource::Type as CommonResourceType};
+use shuttle_proto::resource_recorder::{
+    record_request, ResourceResponse, ResourcesResponse, ResultResponse,
+};
 use sqlx::{
     sqlite::{SqliteArgumentValue, SqliteRow, SqliteValueRef},
     Database, FromRow, Row, Sqlite,
@@ -11,7 +13,6 @@ use ulid::Ulid;
 
 pub use self::database::Type as DatabaseType;
 
-/// Types that can record and retrieve resource allocations
 #[async_trait::async_trait]
 pub trait ResourceManager: Clone + Send + Sync + 'static {
     type Err: std::error::Error;
@@ -27,6 +28,19 @@ pub trait ResourceManager: Clone + Send + Sync + 'static {
         service_id: &ulid::Ulid,
         claim: Claim,
     ) -> Result<ResourcesResponse, Self::Err>;
+    async fn get_resource(
+        &mut self,
+        service_id: &ulid::Ulid,
+        r#type: CommonResourceType,
+        claim: Claim,
+    ) -> Result<ResourceResponse, Self::Err>;
+    async fn delete_resource(
+        &mut self,
+        project_name: String,
+        service_id: &ulid::Ulid,
+        r#type: CommonResourceType,
+        claim: Claim,
+    ) -> Result<ResultResponse, Self::Err>;
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -70,7 +84,7 @@ pub enum Type {
     Custom,
 }
 
-impl From<Type> for shuttle_common::resource::Type {
+impl From<Type> for CommonResourceType {
     fn from(r#type: Type) -> Self {
         match r#type {
             Type::Database(r#type) => Self::Database(r#type.into()),
@@ -84,16 +98,16 @@ impl From<Type> for shuttle_common::resource::Type {
     }
 }
 
-impl From<shuttle_common::resource::Type> for Type {
-    fn from(r#type: shuttle_common::resource::Type) -> Self {
+impl From<CommonResourceType> for Type {
+    fn from(r#type: CommonResourceType) -> Self {
         match r#type {
-            shuttle_common::resource::Type::Database(r#type) => Self::Database(r#type.into()),
-            shuttle_common::resource::Type::Secrets => Self::Secrets,
-            shuttle_common::resource::Type::StaticFolder => Self::StaticFolder,
-            shuttle_common::resource::Type::Persist => Self::Persist,
-            shuttle_common::resource::Type::Turso => Self::Turso,
-            shuttle_common::resource::Type::Metadata => Self::Metadata,
-            shuttle_common::resource::Type::Custom => Self::Custom,
+            CommonResourceType::Database(r#type) => Self::Database(r#type.into()),
+            CommonResourceType::Secrets => Self::Secrets,
+            CommonResourceType::StaticFolder => Self::StaticFolder,
+            CommonResourceType::Persist => Self::Persist,
+            CommonResourceType::Turso => Self::Turso,
+            CommonResourceType::Metadata => Self::Metadata,
+            CommonResourceType::Custom => Self::Custom,
         }
     }
 }

@@ -19,7 +19,7 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 
 # the rust version used by our containers, and as an override for our deployers
 # ensuring all user crates are compiled with the same rustc toolchain
-RUSTUP_TOOLCHAIN=1.72.0
+RUSTUP_TOOLCHAIN=1.74.0
 
 TAG?=$(shell git describe --tags --abbrev=0)
 AUTH_TAG?=$(TAG)
@@ -45,6 +45,7 @@ DOCKER_SOCK?=/var/run/docker.sock
 POSTGRES_PASSWORD?=postgres
 MONGO_INITDB_ROOT_USERNAME?=mongodb
 MONGO_INITDB_ROOT_PASSWORD?=password
+STRIPE_SECRET_KEY?=""
 
 
 ifeq ($(PROD),true)
@@ -135,6 +136,7 @@ DOCKER_COMPOSE_ENV=\
 	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY)\
 	MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME)\
 	MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD)\
+	STRIPE_SECRET_KEY=$(STRIPE_SECRET_KEY)\
 	DD_ENV=$(DD_ENV)\
 	USE_TLS=$(USE_TLS)\
 	COMPOSE_PROFILES=$(COMPOSE_PROFILES)\
@@ -199,7 +201,9 @@ deploy: docker-compose.yml
 	$(DOCKER_COMPOSE_ENV) docker stack deploy -c $< $(STACK)
 
 test:
-	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test $(CARGO_TEST_FLAGS) -- --nocapture
+	POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) \
+	APPS_FQDN=$(APPS_FQDN) \
+	cargo test --manifest-path=e2e/Cargo.toml $(CARGO_TEST_FLAGS) -- --nocapture
 
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@
@@ -221,3 +225,7 @@ down: $(DOCKER_COMPOSE_FILES)
 	$(addprefix -f ,$(DOCKER_COMPOSE_FILES)) \
 	-p $(STACK) \
 	down
+
+# make tag=v0.0.0 changelog
+changelog:
+	git cliff -o CHANGELOG.md -t $(tag)

@@ -13,8 +13,11 @@ service ResourceRecorder {
   // Get the resources belonging to a service
   rpc GetServiceResources(ServiceResourcesRequest) returns (ResourcesResponse);
 
+  // Get a resource
+  rpc GetResource(ResourceIds) returns (ResourceResponse);
+
   // Delete a resource
-  rpc DeleteResource(Resource) returns (ResultResponse);
+  rpc DeleteResource(ResourceIds) returns (ResultResponse);
 }
 
 message RecordRequest {
@@ -46,8 +49,21 @@ message ResourcesResponse {
   repeated Resource resources = 3;
 }
 
+message ResourceResponse {
+  bool success = 1;
+  string message = 2;
+
+  Resource resource = 3;
+}
+
 message ServiceResourcesRequest {
   string service_id = 1;
+}
+
+message ResourceIds {
+  string project_id = 1;
+  string service_id = 2;
+  string type = 3;
 }
 
 

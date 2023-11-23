@@ -39,6 +39,9 @@
     <img alt="rewarded bounties" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fshuttle%2Fbounties%3Fstatus%3Dcompleted"/>
   </a>
 </p>
+<p align="center">
+  🎄 <b>Shuttle Christmas Code Hunt</b> is here! Take on 16 days of Rust challenges and win prizes! <a href="https://www.shuttle.rs/cch">Click here to sign up!</a> 🎁
+</p>
 <!-- markdownlint-restore -->
 
 ---
@@ -78,15 +81,19 @@ The `cargo-shuttle` CLI can be installed with a pre-built binary or from source 
 Shuttle provides pre-built binaries of the `cargo-shuttle` CLI with every release
 for most platforms, they can be found on [our GitHub](https://github.com/shuttle-hq/shuttle/releases/latest).
 
-Our binaries can also be installed using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
-which will automatically install the correct target for your system.
+On Linux and macOS, you can use this install script, which will automatically install the correct target for your OS and distro:
+
+```sh
+curl -sSfL https://www.shuttle.rs/install | bash
+```
+
+Our binaries can also be installed using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall).
 To install with `cargo-binstall`, run:
 
 ```sh
 # cargo-binstall can also be installed directly as a binary to skip the compilation time: https://github.com/cargo-bins/cargo-binstall#installation
 cargo install cargo-binstall
 cargo binstall cargo-shuttle
-# If installing binstall or cargo-shuttle fails, try adding `--locked` to the install command
 ```
 
 Although a bit slower, you can also install directly with cargo:
@@ -94,6 +101,8 @@ Although a bit slower, you can also install directly with cargo:
 ```sh
 cargo install cargo-shuttle
 ```
+
+> If installing binstall or cargo-shuttle fails, try adding `--locked` to the install command
 
 After installing, log in with:
 
@@ -159,7 +168,7 @@ Sign up to the [Algora Console](https://console.algora.io/org/shuttle/bounties?s
 ## Community and Support
 
 - [GitHub Issues](https://github.com/shuttle-hq/shuttle/issues). Best for: bugs and errors you encounter using Shuttle.
-- [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements, releases, collaborations and other events.
+- [X (Twitter)](https://twitter.com/shuttle_dev). Best for: keeping up with announcements, releases, collaborations and other events.
 - [Discord](https://discord.gg/shuttle). Best for: *ALL OF THE ABOVE* + help, support, sharing your applications and hanging out with the community.
 
 ## Project Status

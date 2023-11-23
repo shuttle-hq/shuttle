@@ -1,7 +1,11 @@
-// This clippy is disabled as per this prost comment
-// https://github.com/tokio-rs/prost/issues/661#issuecomment-1156606409
-#![allow(clippy::derive_partial_eq_without_eq)]
+mod generated;
 
+// useful re-exports if types are needed in other crates
+pub use prost;
+pub use prost_types;
+pub use tonic;
+
+#[cfg(feature = "provisioner")]
 pub mod provisioner {
     use std::fmt::Display;
 
@@ -10,7 +14,7 @@ pub mod provisioner {
         DatabaseReadyInfo,
     };
 
-    include!("generated/provisioner.rs");
+    pub use super::generated::provisioner::*;
 
     impl From<DatabaseResponse> for DatabaseReadyInfo {
         fn from(response: DatabaseResponse) -> Self {
@@ -94,111 +98,17 @@ pub mod provisioner {
     }
 }
 
+#[cfg(feature = "runtime")]
 pub mod runtime {
-    use std::{
-        path::{Path, PathBuf},
-        process::Stdio,
-        time::Duration,
-    };
-
-    use anyhow::Context;
-    use shuttle_common::{
-        claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer},
-        deployment::Environment,
-    };
-    use tokio::process;
-    use tonic::transport::{Channel, Endpoint};
-    use tower::ServiceBuilder;
-    use tracing::{info, trace};
-
-    include!("generated/runtime.rs");
-
-    pub async fn start(
-        wasm: bool,
-        environment: Environment,
-        provisioner_address: &str,
-        auth_uri: Option<&String>,
-        port: u16,
-        runtime_executable: PathBuf,
-        project_path: &Path,
-    ) -> anyhow::Result<(
-        process::Child,
-        runtime_client::RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
-    )> {
-        let port = &port.to_string();
-        let environment = &environment.to_string();
-
-        let args = if wasm {
-            vec!["--port", port]
-        } else {
-            let mut args = vec![
-                "--port",
-                port,
-                "--provisioner-address",
-                provisioner_address,
-                "--env",
-                environment,
-            ];
-
-            if let Some(auth_uri) = auth_uri {
-                args.append(&mut vec!["--auth-uri", auth_uri]);
-            }
-
-            args
-        };
-
-        info!(
-            "Spawning runtime process: {} {}",
-            runtime_executable.display(),
-            args.join(" ")
-        );
-        let runtime = process::Command::new(
-            dunce::canonicalize(runtime_executable).context("canonicalize path of executable")?,
-        )
-        .current_dir(project_path)
-        .args(&args)
-        .stdout(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .context("spawning runtime process")?;
-
-        info!("connecting runtime client");
-        let conn = Endpoint::new(format!("http://127.0.0.1:{port}"))
-            .context("creating runtime client endpoint")?
-            .connect_timeout(Duration::from_secs(5));
-
-        // Wait for the spawned process to open the endpoint port.
-        // Connecting instantly does not give it enough time.
-        let channel = tokio::time::timeout(Duration::from_millis(7000), async move {
-            let mut ms = 5;
-            loop {
-                if let Ok(channel) = conn.connect().await {
-                    break channel;
-                }
-                trace!("waiting for runtime endpoint to open");
-                // exponential backoff
-                tokio::time::sleep(Duration::from_millis(ms)).await;
-                ms *= 2;
-            }
-        })
-        .await
-        .context("runtime client endpoint did not open in time")?;
-
-        let channel = ServiceBuilder::new()
-            .layer(ClaimLayer)
-            .layer(InjectPropagationLayer)
-            .service(channel);
-        let runtime_client = runtime_client::RuntimeClient::new(channel);
-
-        Ok((runtime, runtime_client))
-    }
+    pub use super::generated::runtime::*;
 }
 
+#[cfg(feature = "resource-recorder")]
 pub mod resource_recorder {
     use anyhow::Context;
     use std::str::FromStr;
 
-    include!("generated/resource_recorder.rs");
+    pub use super::generated::resource_recorder::*;
 
     impl TryFrom<record_request::Resource> for shuttle_common::resource::Response {
         type Error = anyhow::Error;
@@ -240,6 +150,12 @@ pub mod resource_recorder {
     }
 }
 
+#[cfg(feature = "builder")]
+pub mod builder {
+    pub use super::generated::builder::*;
+}
+
+#[cfg(feature = "logger")]
 pub mod logger {
     use std::str::FromStr;
     use std::time::Duration;
@@ -259,9 +175,7 @@ pub mod logger {
         DeploymentId,
     };
 
-    use self::logger_client::LoggerClient;
-
-    include!("generated/logger.rs");
+    pub use super::generated::logger::*;
 
     impl From<LogItemCommon> for LogItem {
         fn from(value: LogItemCommon) -> Self {
@@ -331,7 +245,7 @@ pub mod logger {
     }
 
     #[async_trait]
-    impl<T> VecReceiver for LoggerClient<T>
+    impl<T> VecReceiver for logger_client::LoggerClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::BoxBody> + Send + Sync + Clone,
         T::Error: Into<StdError>,
@@ -342,14 +256,79 @@ pub mod logger {
         type Item = LogItem;
 
         async fn receive(&mut self, items: Vec<Self::Item>) {
+            // A log vector should never be received without any items. We clone the first item
+            // here so we can use IDs to generate a rate limiting logline, which we will send to
+            // the logger as a warning to the user that they are being rate limited.
+            let Some(item) = items.first().cloned() else {
+                error!("received log vector without any items");
+
+                return;
+            };
+
             if let Err(error) = self
                 .store_logs(Request::new(StoreLogsRequest { logs: items }))
                 .await
             {
-                error!(
-                    error = &error as &dyn std::error::Error,
-                    "failed to send batch logs to logger"
-                );
+                match error.code() {
+                    tonic::Code::Unavailable => {
+                        if error.metadata().get("x-ratelimit-limit").is_some() {
+                            let LogItem {
+                                deployment_id,
+                                log_line,
+                            } = item;
+
+                            let LogLine { service_name, .. } = log_line.unwrap();
+
+                            let timestamp = Utc::now();
+
+                            let new_item = LogItem {
+                                deployment_id,
+                                log_line: Some(LogLine {
+                                    tx_timestamp: Some(prost_types::Timestamp {
+                                        seconds: timestamp.timestamp(),
+                                        nanos: timestamp.timestamp_subsec_nanos() as i32,
+                                    }),
+                                    service_name: Backend::Runtime(service_name.clone())
+                                        .to_string(),
+                                    data: "your application is producing too many logs, log recording is being rate limited".into(),
+                                }),
+                            };
+
+                            // Give the rate limiter time to refresh, the duration we need to sleep
+                            // for here is determined by the refresh rate of the rate limiter in
+                            // the logger server. It is currently set to refresh one slot per 500ms,
+                            // so we could get away with a duration of 500ms here, but we give it
+                            // some extra time in case this rate limiting was caused by a short
+                            // burst of activity.
+                            tokio::time::sleep(Duration::from_millis(1500)).await;
+
+                            if let Err(error) = self
+                                // NOTE: the request to send this rate limiting log to the logger will
+                                // also expend a slot in the logger rate limiter.
+                                .store_logs(Request::new(StoreLogsRequest {
+                                    logs: vec![new_item],
+                                }))
+                                .await
+                            {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to send rate limiting warning to logger service"
+                                );
+                            };
+                        } else {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to send batch logs to logger"
+                            );
+                        }
+                    }
+                    _ => {
+                        error!(
+                            error = &error as &dyn std::error::Error,
+                            "failed to send batch logs to logger"
+                        );
+                    }
+                };
             }
         }
     }
@@ -374,10 +353,10 @@ pub mod logger {
             Self { tx }
         }
 
-        /// Create a batcher around inner. It will send a batch of items to inner if a capacity of 2048 is reached
+        /// Create a batcher around inner. It will send a batch of items to inner if a capacity of 256 is reached
         /// or if an interval of 1 second is reached.
         pub fn wrap(inner: I) -> Self {
-            Self::new(inner, 2048, Duration::from_secs(1))
+            Self::new(inner, 256, Duration::from_secs(1))
         }
 
         /// Send a single item into this batcher
@@ -387,7 +366,7 @@ pub mod logger {
             }
         }
 
-        /// Background task to forward the items ones the batch capacity has been reached
+        /// Background task to forward the items once the batch capacity has been reached
         async fn batch(
             mut inner: I,
             mut rx: mpsc::UnboundedReceiver<I::Item>,
@@ -459,7 +438,7 @@ pub mod logger {
             }
         }
 
-        #[tokio::test(flavor = "multi_thread")]
+        #[tokio::test]
         async fn capacity_reached() {
             let mock = MockGroupReceiver::default();
             let batcher = Batcher::new(mock.clone(), 2, Duration::from_secs(120));
@@ -481,7 +460,7 @@ pub mod logger {
             assert_eq!(*mock.0.lock().unwrap(), Some(vec![3, 4]));
         }
 
-        #[tokio::test(flavor = "multi_thread")]
+        #[tokio::test]
         async fn interval_reached() {
             let mock = MockGroupReceiver::default();
             let batcher = Batcher::new(mock.clone(), 2, Duration::from_millis(300));
@@ -501,8 +480,4 @@ pub mod logger {
             assert_eq!(*mock.0.lock().unwrap(), Some(vec![1]));
         }
     }
-}
-
-pub mod builder {
-    include!("generated/builder.rs");
 }

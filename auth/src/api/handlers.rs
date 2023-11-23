@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    user::{AccountName, AccountTier, Admin, Key, User},
+    user::{AccountName, Admin, Key, User},
 };
 use axum::{
     extract::{Path, State},
@@ -9,7 +9,11 @@ use axum::{
 use axum_sessions::extractors::{ReadableSession, WritableSession};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
-use shuttle_common::{claims::Claim, models::user};
+use shuttle_common::{
+    claims::{AccountTier, Claim},
+    models::user,
+};
+use stripe::CheckoutSession;
 use tracing::instrument;
 
 use super::{
@@ -39,6 +43,31 @@ pub(crate) async fn post_user(
     Ok(Json(user.into()))
 }
 
+#[instrument(skip(user_manager))]
+pub(crate) async fn update_user_tier(
+    _: Admin,
+    State(user_manager): State<UserManagerState>,
+    Path((account_name, account_tier)): Path<(AccountName, AccountTier)>,
+    payload: Option<Json<CheckoutSession>>,
+) -> Result<(), Error> {
+    if account_tier == AccountTier::Pro {
+        match payload {
+            Some(Json(checkout_session)) => {
+                user_manager
+                    .upgrade_to_pro(&account_name, checkout_session)
+                    .await?;
+            }
+            None => return Err(Error::MissingCheckoutSession),
+        }
+    } else {
+        user_manager
+            .update_tier(&account_name, account_tier)
+            .await?;
+    };
+
+    Ok(())
+}
+
 pub(crate) async fn put_user_reset_key(
     session: ReadableSession,
     State(user_manager): State<UserManagerState>,
@@ -46,7 +75,6 @@ pub(crate) async fn put_user_reset_key(
 ) -> Result<(), Error> {
     let account_name = match session.get::<String>("account_name") {
         Some(account_name) => account_name.into(),
-
         None => match key {
             Some(key) => user_manager.get_user_by_key(key.into()).await?.name,
             None => return Err(Error::Unauthorized),
@@ -77,7 +105,12 @@ pub(crate) async fn convert_cookie(
         .get::<AccountTier>("account_tier")
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let claim = Claim::new(account_name, account_tier.into());
+    let claim = Claim::new(
+        account_name,
+        account_tier.into(),
+        account_tier,
+        account_tier,
+    );
 
     let token = claim.into_token(key_manager.private_key())?;
 
@@ -101,7 +134,12 @@ pub(crate) async fn convert_key(
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-    let claim = Claim::new(name.to_string(), account_tier.into());
+    let claim = Claim::new(
+        name.to_string(),
+        account_tier.into(),
+        account_tier,
+        account_tier,
+    );
 
     let token = claim.into_token(key_manager.private_key())?;
 

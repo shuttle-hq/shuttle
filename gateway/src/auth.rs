@@ -5,10 +5,12 @@ use axum::extract::{FromRef, FromRequestParts, Path};
 use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
 use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::models::error::InvalidProjectName;
+use shuttle_common::models::project::ProjectName;
 use tracing::{trace, Span};
 
 use crate::api::latest::RouterState;
-use crate::{AccountName, Error, ErrorKind, ProjectName};
+use crate::{AccountName, Error, ErrorKind};
 
 /// A wrapper to enrich a token with user details
 ///
@@ -57,6 +59,7 @@ where
 ///
 /// It is guaranteed that [`ScopedUser::scope`] exists and is owned
 /// by [`ScopedUser::name`].
+#[derive(Clone)]
 pub struct ScopedUser {
     pub user: User,
     pub scope: ProjectName,
@@ -78,7 +81,7 @@ where
             Err(_) => Path::<(ProjectName, String)>::from_request_parts(parts, state)
                 .await
                 .map(|Path((p, _))| p)
-                .unwrap(),
+                .map_err(|_| Error::from(ErrorKind::InvalidProjectName(InvalidProjectName)))?,
         };
 
         if user.projects.contains(&scope) || user.claim.scopes.contains(&Scope::Admin) {

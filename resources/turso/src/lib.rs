@@ -140,7 +140,7 @@ impl ResourceBuilder<Client> for Turso {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::str::FromStr;
+    use shuttle_service::Secret;
 
     struct MockFactory {
         pub environment: Environment,
@@ -163,14 +163,15 @@ mod test {
 
         async fn get_secrets(
             &mut self,
-        ) -> Result<std::collections::BTreeMap<String, String>, shuttle_service::Error> {
+        ) -> Result<std::collections::BTreeMap<String, Secret<String>>, shuttle_service::Error>
+        {
             panic!("no turso test should try to get secrets")
         }
 
         fn get_metadata(&self) -> shuttle_service::DeploymentMetadata {
             shuttle_service::DeploymentMetadata {
                 env: self.environment,
-                project_name: shuttle_service::ProjectName::from_str("my-turso-service").unwrap(),
+                project_name: "my-turso-service".to_string(),
                 service_name: "my-turso-service".to_string(),
                 storage_path: std::path::PathBuf::new(),
             }

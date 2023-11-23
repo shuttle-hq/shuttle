@@ -1,9 +1,11 @@
-use futures::Future;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use futures::Future;
+use shuttle_common::models::project::ProjectName;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
@@ -13,7 +15,7 @@ use uuid::Uuid;
 use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
 use crate::worker::TaskRouter;
-use crate::{AccountName, Error, ErrorKind, ProjectName, Refresh, State};
+use crate::{AccountName, Error, ErrorKind, Refresh, State};
 
 // Default maximum _total_ time a task is allowed to run
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
@@ -144,6 +146,10 @@ pub fn run_until_done() -> impl Task<ProjectContext, Output = Project, Error = E
     RunUntilDone
 }
 
+pub fn delete_project() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+    DeleteProject
+}
+
 pub struct TaskBuilder {
     project_name: Option<ProjectName>,
     service: Arc<GatewayService>,
@@ -160,9 +166,7 @@ impl TaskBuilder {
             tasks: VecDeque::new(),
         }
     }
-}
 
-impl TaskBuilder {
     pub fn project(mut self, name: ProjectName) -> Self {
         self.project_name = Some(name);
         self
@@ -281,9 +285,10 @@ impl Task<ProjectContext> for RunUntilDone {
         };
 
         match project {
-            Project::Errored(_) | Project::Destroyed(_) | Project::Stopped(_) => {
-                TaskResult::Done(project)
-            }
+            Project::Errored(_)
+            | Project::Destroyed(_)
+            | Project::Stopped(_)
+            | Project::Deleted => TaskResult::Done(project),
             Project::Ready(_) => match project.next(&ctx.gateway).await.unwrap() {
                 Project::Ready(ready) => TaskResult::Done(Project::Ready(ready)),
                 other => TaskResult::Pending(other),
@@ -293,6 +298,38 @@ impl Task<ProjectContext> for RunUntilDone {
                 TaskResult::Done(Project::Restarting(restarting))
             }
             _ => TaskResult::Pending(project.next(&ctx.gateway).await.unwrap()),
+        }
+    }
+}
+
+pub struct DeleteProject;
+
+#[async_trait]
+impl Task<ProjectContext> for DeleteProject {
+    type Output = Project;
+
+    type Error = Error;
+
+    async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output, Self::Error> {
+        // Make sure the project state has not changed from Docker
+        // Else we will make assumptions when trying to run next which can cause a failure
+        let project = match ctx.state.refresh(&ctx.gateway).await {
+            Ok(project) => project,
+            Err(error) => return TaskResult::Err(error),
+        };
+
+        match project {
+            Project::Errored(_)
+            | Project::Destroyed(_)
+            | Project::Stopped(_)
+            | Project::Ready(_) => match project.delete(&ctx.gateway).await {
+                Ok(()) => TaskResult::Done(Project::Deleted),
+                Err(error) => TaskResult::Err(Error::source(ErrorKind::DeleteProjectFailed, error)),
+            },
+            _ => TaskResult::Err(Error::custom(
+                ErrorKind::InvalidOperation,
+                "project is not in a valid state to be deleted",
+            )),
         }
     }
 }

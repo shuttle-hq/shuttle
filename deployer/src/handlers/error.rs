@@ -1,8 +1,7 @@
 use std::error::Error as StdError;
 
-use axum::http::{header, HeaderValue, StatusCode};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 
 use serde::{ser::SerializeMap, Serialize};
 use shuttle_common::models::error::ApiError;
@@ -27,6 +26,8 @@ pub enum Error {
     Internal(#[from] anyhow::Error),
     #[error("Missing header: {0}")]
     MissingHeader(String),
+    #[error("{0}. Retry the request in a few minutes")]
+    RateLimited(String),
 }
 
 impl Serialize for Error {
@@ -48,21 +49,15 @@ impl IntoResponse for Error {
 
         let code = match self {
             Error::NotFound(_) => StatusCode::NOT_FOUND,
+            Error::RateLimited(_) => StatusCode::TOO_MANY_REQUESTS,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
-        (
-            code,
-            [(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("application/json"),
-            )],
-            Json(ApiError {
-                message: self.to_string(),
-                status_code: code.as_u16(),
-            }),
-        )
-            .into_response()
+        ApiError {
+            message: self.to_string(),
+            status_code: code.as_u16(),
+        }
+        .into_response()
     }
 }
 

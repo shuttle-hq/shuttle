@@ -10,20 +10,26 @@ use axum::handler::Handler;
 use axum::http::Request;
 use axum::middleware::from_extractor;
 use axum::response::Response;
-use axum::routing::{any, get, post};
+use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::Uri;
+use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
 use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Scope, EXP_MINUTES};
+use shuttle_common::limits::ClaimExt;
+use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
-use shuttle_common::models::{project, stats};
-use shuttle_common::request_span;
+use shuttle_common::models::{
+    admin::ProjectResponse,
+    project::{self, ProjectName},
+    stats,
+};
+use shuttle_common::{request_span, VersionInfo};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
@@ -31,9 +37,8 @@ use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
 use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
-use utoipa::IntoParams;
-
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+use utoipa::IntoParams;
 use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
@@ -49,7 +54,7 @@ use crate::service::GatewayService;
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{Error, ProjectName, AUTH_CLIENT};
+use crate::{Error, AUTH_CLIENT};
 
 use super::auth_layer::ShuttleAuthLayer;
 
@@ -126,6 +131,29 @@ async fn get_project(
     Ok(AxumJson(response))
 }
 
+#[instrument(skip(service))]
+#[utoipa::path(
+    get,
+    path = "/projects/name/{project_name}",
+    responses(
+        (status = 200, description = "True if project name is taken. False if free.", body = bool),
+        (status = 400, description = "Invalid project name.", body = String),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The project name to check."),
+    )
+)]
+async fn check_project_name(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
+) -> Result<AxumJson<bool>, Error> {
+    service
+        .project_name_exists(&project_name)
+        .await
+        .map(AxumJson)
+}
+
 #[utoipa::path(
     get,
     path = "/projects",
@@ -176,16 +204,24 @@ async fn create_project(
         service, sender, ..
     }): State<RouterState>,
     User { name, claim, .. }: User,
-    Path(project_name): Path<ProjectName>,
+    CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let is_admin = claim.scopes.contains(&Scope::Admin);
+    // Check that the user is within their project limits.
+    let temporary_increase = project_name.starts_with("cch23-") as u32;
+    let can_create_project = claim.can_create_project(
+        service
+            .get_project_count(&name)
+            .await?
+            .saturating_sub(temporary_increase),
+    );
 
     let project = service
         .create_project(
             project_name.clone(),
             name.clone(),
-            is_admin,
+            claim.is_admin(),
+            can_create_project,
             config.idle_minutes,
         )
         .await?;
@@ -255,6 +291,122 @@ async fn destroy_project(
     response.state = shuttle_common::models::project::State::Destroying;
 
     Ok(AxumJson(response))
+}
+
+#[derive(Deserialize, IntoParams)]
+struct DeleteProjectParams {
+    dry_run: Option<bool>,
+}
+
+#[instrument(skip_all, fields(project_name = %scoped_user.scope))]
+#[utoipa::path(
+    delete,
+    path = "/projects/{project_name}/delete",
+    responses(
+        (status = 200, description = "Successfully deleted a project, unless dry run.", body = shuttle_common::models::project::Response),
+        (status = 403, description = "Project cannot be deleted now."),
+        (status = 500, description = "Server internal error."),
+    ),
+    params(
+        ("project_name" = String, Path, description = "The name of the project."),
+        DeleteProjectParams,
+    )
+)]
+async fn delete_project(
+    State(state): State<RouterState>,
+    scoped_user: ScopedUser,
+    Query(DeleteProjectParams { dry_run }): Query<DeleteProjectParams>,
+    req: Request<Body>,
+) -> Result<AxumJson<String>, Error> {
+    let project_name = scoped_user.scope.clone();
+    let service = state.service.clone();
+    let sender = state.sender.clone();
+
+    // check that deployment is not running
+    let mut rb = Request::builder();
+    rb.headers_mut().unwrap().clone_from(req.headers());
+    let service_req = rb
+        .uri(
+            format!("/projects/{project_name}/services/{project_name}")
+                .parse::<Uri>()
+                .unwrap(),
+        )
+        .method("GET")
+        .body(hyper::Body::empty())
+        .unwrap();
+    let res = route_project(State(state.clone()), scoped_user.clone(), service_req).await?;
+    // 404 == no service == no deployments
+    if res.status() != StatusCode::NOT_FOUND {
+        if res.status() != StatusCode::OK {
+            return Err(Error::from_kind(ErrorKind::Internal));
+        }
+        let body_bytes = hyper::body::to_bytes(res.into_body())
+            .await
+            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+        let summary: shuttle_common::models::service::Summary = serde_json::from_slice(&body_bytes)
+            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+        if summary.deployment.is_some() {
+            return Err(Error::from_kind(ErrorKind::ProjectHasRunningDeployment));
+        }
+    }
+
+    // check if database in resources
+    let mut rb = hyper::Request::builder();
+    rb.headers_mut().unwrap().clone_from(req.headers());
+    let resource_req = rb
+        .uri(
+            format!("/projects/{project_name}/services/{project_name}/resources")
+                .parse::<Uri>()
+                .unwrap(),
+        )
+        .method("GET")
+        .body(hyper::Body::empty())
+        .unwrap();
+    let res = route_project(State(state.clone()), scoped_user, resource_req).await?;
+    // 404 == no service == no resources
+    if res.status() != StatusCode::NOT_FOUND {
+        if res.status() != StatusCode::OK {
+            return Err(Error::from_kind(ErrorKind::Internal));
+        }
+        let body_bytes = hyper::body::to_bytes(res.into_body())
+            .await
+            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+        let resources: Vec<shuttle_common::resource::Response> =
+            serde_json::from_slice(&body_bytes)
+                .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+
+        let resources = resources
+            .into_iter()
+            .filter(|resource| {
+                matches!(
+                    resource.r#type,
+                    shuttle_common::resource::Type::Database(_)
+                        | shuttle_common::resource::Type::Secrets
+                )
+            })
+            .map(|resource| resource.r#type.to_string())
+            .collect::<Vec<_>>();
+
+        if !resources.is_empty() {
+            return Err(Error::from_kind(ErrorKind::ProjectHasResources(resources)));
+        }
+    }
+
+    if dry_run.is_some_and(|d| d) {
+        return Ok(AxumJson("project not deleted due to dry run".to_owned()));
+    }
+
+    let task = service
+        .new_task()
+        .project(project_name.clone())
+        .and_then(task::delete_project())
+        .send(&sender)
+        .await?;
+    task.await;
+
+    service.delete_project(&project_name).await?;
+
+    Ok(AxumJson("project successfully deleted".to_owned()))
 }
 
 #[instrument(skip_all, fields(scope = %scoped_user.scope))]
@@ -509,7 +661,7 @@ async fn request_custom_domain_acme_certificate(
     }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
-    Path((project_name, fqdn)): Path<(ProjectName, String)>,
+    CustomErrorPath((project_name, fqdn)): CustomErrorPath<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<String, Error> {
     let fqdn: FQDN = fqdn
@@ -586,7 +738,7 @@ async fn renew_custom_domain_acme_certificate(
     State(RouterState { service, .. }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
-    Path((project_name, fqdn)): Path<(ProjectName, String)>,
+    CustomErrorPath((project_name, fqdn)): CustomErrorPath<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<String, Error> {
     let fqdn: FQDN = fqdn
@@ -631,9 +783,13 @@ async fn renew_custom_domain_acme_certificate(
                     .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)
                     .await
                 {
-                    // If successfuly created, save the certificate in memory to be
+                    // If successfully created, save the certificate in memory to be
                     // served in the future.
                     Ok((certs, private_key)) => {
+                        service
+                            .create_custom_domain(&project_name, &fqdn, &certs, &private_key)
+                            .await?;
+
                         let mut buf = Vec::new();
                         buf.extend(certs.as_bytes());
                         buf.extend(private_key.as_bytes());
@@ -689,7 +845,7 @@ async fn renew_gateway_acme_certificate(
 )]
 async fn get_projects(
     State(RouterState { service, .. }): State<RouterState>,
-) -> Result<AxumJson<Vec<project::AdminResponse>>, Error> {
+) -> Result<AxumJson<Vec<ProjectResponse>>, Error> {
     let projects = service
         .iter_projects_detailed()
         .await?
@@ -736,7 +892,7 @@ impl Modify for SecurityAddon {
     components(schemas(
         shuttle_common::models::project::Response,
         shuttle_common::models::stats::LoadResponse,
-        shuttle_common::models::project::AdminResponse,
+        shuttle_common::models::admin::ProjectResponse,
         shuttle_common::models::stats::LoadResponse,
         shuttle_common::models::project::State
     ))
@@ -848,9 +1004,28 @@ impl ApiBuilder {
             .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
             .layer(ScopedLayer::new(vec![Scope::Admin]));
 
+        const CARGO_SHUTTLE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
         self.router = self
             .router
             .route("/", get(get_status))
+            .route(
+                "/versions",
+                get(|| async {
+                    axum::Json(VersionInfo {
+                        gateway: env!("CARGO_PKG_VERSION").parse().unwrap(),
+                        // For now, these use the same version as gateway (we release versions in lockstep).
+                        // Only one version is officially compatible, but more are in reality.
+                        cargo_shuttle: env!("CARGO_PKG_VERSION").parse().unwrap(),
+                        deployer: env!("CARGO_PKG_VERSION").parse().unwrap(),
+                        runtime: CARGO_SHUTTLE_VERSION.parse().unwrap(),
+                    })
+                }),
+            )
+            .route(
+                "/version/cargo-shuttle",
+                get(|| async { CARGO_SHUTTLE_VERSION }),
+            )
             .route(
                 "/projects",
                 get(get_projects_list.layer(ScopedLayer::new(vec![Scope::Project]))),
@@ -858,9 +1033,14 @@ impl ApiBuilder {
             .route(
                 "/projects/:project_name",
                 get(get_project.layer(ScopedLayer::new(vec![Scope::Project])))
-                    .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate])))
-                    .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate]))),
+                    .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite])))
+                    .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
             )
+            .route(
+                "/projects/:project_name/delete",
+                delete(delete_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
+            )
+            .route("/projects/name/:project_name", get(check_project_name))
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
             .nest("/admin", admin_routes);
@@ -921,6 +1101,7 @@ pub mod tests {
     use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
+    use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
     use tokio::sync::mpsc::channel;
     use tokio::sync::oneshot;
     use tower::Service;
@@ -1107,6 +1288,78 @@ pub mod tests {
         //     })
         //     .await
         //     .unwrap();
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn api_create_project_limits() -> anyhow::Result<()> {
+        let world = World::new().await;
+        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+
+        let (sender, mut receiver) = channel::<BoxedTask>(256);
+        tokio::spawn(async move {
+            while receiver.recv().await.is_some() {
+                // do not do any work with inbound requests
+            }
+        });
+
+        let mut router = ApiBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_sender(sender)
+            .with_default_routes()
+            .with_auth_service(world.context().auth_uri)
+            .into_router();
+
+        let neo_key = world.create_user("neo");
+
+        let create_project = |project: &str| {
+            Request::builder()
+                .method("POST")
+                .uri(format!("/projects/{project}"))
+                .header("Content-Type", "application/json")
+                .body("{\"idle_minutes\": 3}".into())
+                .unwrap()
+        };
+
+        let authorization = Authorization::bearer(&neo_key).unwrap();
+
+        // Creating three projects for a basic user succeeds.
+        for i in 0..MAX_PROJECTS_DEFAULT {
+            router
+                .call(create_project(format!("matrix-{i}").as_str()).with_header(&authorization))
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+        }
+
+        // Creating one more project hits the project limit.
+        router
+            .call(create_project("resurrections").with_header(&authorization))
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+            })
+            .await
+            .unwrap();
+
+        // Create a new admin user. We can't simply make the previous user an admin, since their token
+        // will live in the auth cache without the admin scope.
+        let trinity_key = world.create_user("trinity");
+        world.set_super_user("trinity");
+        let authorization = Authorization::bearer(&trinity_key).unwrap();
+
+        // Creating more than the basic and pro limit of projects for an admin user succeeds.
+        for i in 0..MAX_PROJECTS_EXTRA + 1 {
+            router
+                .call(create_project(format!("reloaded-{i}").as_str()).with_header(&authorization))
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+        }
 
         Ok(())
     }

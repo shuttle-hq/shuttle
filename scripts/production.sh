@@ -5,3 +5,5 @@
 #     source scripts/production.sh
 
 export SHUTTLE_API="https://api.shuttle.rs"
+unset SHUTTLE_API_KEY
+export PS1="(shuttle: production) $(echo $PS1 | sed -e "s/(shuttle: .*) //")"

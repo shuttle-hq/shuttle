@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose, Engine};
 use jsonwebtoken::EncodingKey;
 use ring::signature::{Ed25519KeyPair, KeyPair};
 
@@ -26,7 +27,8 @@ impl EdDsaManager {
     // serving it for JWT validation.
     pub fn new(jwt_signing_private_key: String) -> Self {
         // Decode the base64 encoding.
-        let pk_bytes = base64::decode(jwt_signing_private_key)
+        let pk_bytes = general_purpose::STANDARD
+            .decode(jwt_signing_private_key)
             .expect("to decode base64 pem encoded private key");
 
         // Parse the pem file and the ed25519 private key contained.

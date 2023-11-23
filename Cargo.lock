@@ -5758,7 +5758,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "axum-sessions",
- "base64 0.13.1",
+ "base64 0.21.5",
  "clap",
  "http",
  "hyper",

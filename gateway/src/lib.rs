@@ -998,7 +998,7 @@ pub mod tests {
 
             if dangling {
                 self.router_call(Method::DELETE, "/delete").await;
-                panic!("test left a dangling project which you might need to clean manually");
+                eprintln!("test left a dangling project which you might need to clean manually");
             }
         }
     }

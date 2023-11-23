@@ -16,13 +16,11 @@ pub struct EdDsaManager {
 }
 
 impl EdDsaManager {
-    // It is the base64 enconding of a PEM encoded private key. The private key was generated
-    // previously using `OpenSSL 3.1.2 1 Aug 2023 (Library: OpenSSL 3.1.2 1 Aug 2023)`, by using
-    // `openssl genpkey -algorithm ED25519`. This generates a PEM encoded PKCS#8 v1 formatted
-    // unencrypted key. We want to first parse the PEM encoded key and get the PKCS#8 v1 formatted
-    // key to parse it with `ring::signature::Ed25519KeyPair`. This is needed because the public key
-    // is not contained within the openssl generated private key, and should be computed/stored before
-    // serving it for JWT validation.
+    /// Create a new manager from a base64 PEM encoded private key. This key can be generated using:
+    /// ```bash
+    /// openssl genpkey -algorithm ED25519 -out auth_jwtsigning_private_key.pem
+    /// base64 < auth_jwtsigning_private_key.pem
+    /// ```
     pub fn new(jwt_signing_private_key: String) -> Self {
         // Decode the base64 encoding.
         let pk_bytes = general_purpose::STANDARD

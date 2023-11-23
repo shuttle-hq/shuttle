@@ -1400,55 +1400,48 @@ pub mod tests {
 
     #[test_context(TestProject)]
     #[tokio::test]
-    async fn api_delete_project_that_is_ready(project: &mut TestProject) -> anyhow::Result<()> {
+    async fn api_delete_project_that_is_ready(project: &mut TestProject) {
         assert_eq!(
             project.router_call(Method::DELETE, "/delete").await,
             StatusCode::OK
         );
-
-        Ok(())
     }
 
     #[test_context(TestProject)]
     #[tokio::test]
-    async fn api_delete_project_that_is_destroyed(project: &mut TestProject) -> anyhow::Result<()> {
+    async fn api_delete_project_that_is_destroyed(project: &mut TestProject) {
         project.destroy_project().await;
+
         assert_eq!(
             project.router_call(Method::DELETE, "/delete").await,
             StatusCode::OK
         );
-
-        Ok(())
     }
 
     #[test_context(TestProject)]
     #[tokio::test]
-    async fn api_delete_project_that_has_resources(
-        project: &mut TestProject,
-    ) -> anyhow::Result<()> {
+    async fn api_delete_project_that_has_resources(project: &mut TestProject) {
         project.deploy("../examples/rocket/secrets").await;
         project.stop_service().await;
+
         assert_eq!(
             project.router_call(Method::DELETE, "/delete").await,
             StatusCode::OK
         );
-
-        Ok(())
     }
 
     #[test_context(TestProject)]
     #[tokio::test]
     async fn api_delete_project_that_has_resources_but_fails_to_remove_them(
         project: &mut TestProject,
-    ) -> anyhow::Result<()> {
+    ) {
         project.deploy("../examples/axum/metadata").await;
         project.stop_service().await;
+
         assert_eq!(
             project.router_call(Method::DELETE, "/delete").await,
             StatusCode::INTERNAL_SERVER_ERROR
         );
-
-        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]

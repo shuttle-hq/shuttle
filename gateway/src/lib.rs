@@ -859,7 +859,7 @@ pub mod tests {
         }
 
         /// Send a request to the router for this project
-        pub async fn router_call(&mut self, method: Method, sub_path: &str) {
+        pub async fn router_call(&mut self, method: Method, sub_path: &str) -> StatusCode {
             let project_name = &self.project_name;
 
             self.router
@@ -871,11 +871,9 @@ pub mod tests {
                         .unwrap()
                         .with_header(&self.authorization),
                 )
-                .map_ok(|resp| {
-                    assert_eq!(resp.status(), StatusCode::OK);
-                })
+                .map_ok(|resp| resp.status())
                 .await
-                .unwrap();
+                .unwrap()
         }
 
         /// Deploy the code at the path to the project

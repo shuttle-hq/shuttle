@@ -121,6 +121,15 @@ impl ResourceRecorder for MockedResourceRecorder {
             service_id,
             r#type,
         } = request.into_inner();
+
+        // Fail to delete a metadata resource if requested
+        if r#type == "metadata" {
+            return Ok(Response::new(ResultResponse {
+                success: false,
+                message: Default::default(),
+            }));
+        }
+
         self.resources.lock().unwrap().retain(|r| {
             !(r.project_id == project_id && r.service_id == service_id && r.r#type == r#type)
         });
@@ -133,6 +142,8 @@ impl ResourceRecorder for MockedResourceRecorder {
 }
 
 /// Start a mocked resource recorder and return the address it started on
+/// This mock will function like a normal resource recorder. However, it will always fail to delete metadata resources
+/// if any tests need to simulate a failure.
 pub async fn start_mocked_resource_recorder() -> u16 {
     let resource_recorder = MockedResourceRecorder {
         resources: Mutex::new(Vec::new()),

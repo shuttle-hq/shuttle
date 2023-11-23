@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use args::GenerateCommand;
 use clap_mangen::Man;
 
 use shuttle_common::{
@@ -207,11 +208,10 @@ impl Shuttle {
                 self.init(init_args, args.project_args, provided_path_to_init)
                     .await
             }
-            Command::Generate {
-                shell,
-                output,
-                manpage,
-            } => self.complete(shell, output, manpage),
+            Command::Generate(GenerateCommand::Manpage) => self.generate_manpage(),
+            Command::Generate(GenerateCommand::Shell { shell, output }) => {
+                self.complete(shell, output)
+            }
             Command::Login(login_args) => self.login(login_args).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback(),
@@ -623,22 +623,25 @@ impl Shuttle {
 
     fn complete(
         &self,
-        shell: Option<Shell>,
+        shell: Shell,
         output: Option<PathBuf>,
-        manpage: bool,
     ) -> Result<CommandOutcome> {
         let name = env!("CARGO_PKG_NAME");
         let mut app = Command::command();
-        match (shell, output) {
-            (Some(shell), Some(output)) => {
-                generate(shell, &mut app, name, &mut File::create(output)?)
+        match output {
+            Some(path) => {
+                generate(shell, &mut app, name, &mut File::create(path)?)
             }
-            (Some(shell), None) => generate(shell, &mut app, name, &mut stdout()),
-            (None, _) => {}
+            None => generate(shell, &mut app, name, &mut stdout()),
         };
-        if manpage {
-            generate_manpage()?;
-        }
+        Ok(CommandOutcome::Ok)
+    }
+
+    fn generate_manpage(&self) -> Result<CommandOutcome> {
+        let app = ShuttleArgs::command();
+        let output = std::io::stdout();
+        let mut output_handle = output.lock();
+        Man::new(app).render(&mut output_handle)?;
 
         Ok(CommandOutcome::Ok)
     }
@@ -1998,14 +2001,7 @@ impl Shuttle {
     }
 }
 
-fn generate_manpage() -> Result<(), std::io::Error> {
-    let app = ShuttleArgs::command();
-    let output = std::io::stdout();
-    let mut output_handle = output.lock();
-    Man::new(app).render(&mut output_handle)?;
 
-    Ok(())
-}
 
 fn is_dirty(repo: &Repository) -> Result<()> {
     let mut status_options = StatusOptions::new();

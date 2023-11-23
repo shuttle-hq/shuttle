@@ -17,12 +17,14 @@ members = [
   "resource-recorder",
   "runtime",
   "service",
+  "test-utils",
 ]
 exclude = [
   "e2e",
   "examples",
   "resources",
   "services",
+  "test-utils",
 ]
 
 [workspace.package]
@@ -39,6 +41,7 @@ shuttle-common-tests = { path = "common-tests", version = "0.35.0" }
 shuttle-orchestrator = { path = "orchestrator", version = "0.35.0" }
 shuttle-proto = { path = "proto", version = "0.35.0" }
 shuttle-service = { path = "service", version = "0.35.0" }
+test-utils = { path = "test-utils", version = "0.1.0" }
 
 anyhow = "1.0.66"
 async-trait = "0.1.58"

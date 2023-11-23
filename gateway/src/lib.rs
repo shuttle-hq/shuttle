@@ -949,6 +949,7 @@ pub mod tests {
                 }
 
                 tries += 1;
+                // We should consider making a mock deployer image to be able to "deploy" (aka fake deploy) things instantly for tests
                 if tries > 240 {
                     panic!("timed out waiting for deployment");
                 }

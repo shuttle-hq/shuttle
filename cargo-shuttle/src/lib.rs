@@ -7,6 +7,7 @@ mod suggestions;
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
+use std::fmt::Write as FmtWrite;
 use std::fs::{read_to_string, File};
 use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -57,12 +58,12 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
-use std::fmt::Write as FmtWrite;
 use strum::IntoEnumIterator;
 use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::task::JoinHandle;
+use tokio::time::{sleep, Duration};
 use tonic::transport::Channel;
 use tonic::Status;
 use tracing::{debug, error, trace, warn};
@@ -907,7 +908,7 @@ impl Shuttle {
                 let path = dunce::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
                     .expect("path to shuttle-runtime does not exist or is invalid");
 
-                std::process::Command::new("cargo")
+                tokio::process::Command::new("cargo")
                     .arg("install")
                     .arg("shuttle-runtime")
                     .arg("--path")
@@ -917,15 +918,16 @@ impl Shuttle {
                     .arg("--features")
                     .arg("next")
                     .output()
+                    .await
                     .expect("failed to install the shuttle runtime");
             } else {
                 // If the version of cargo-shuttle is different from shuttle-runtime,
                 // or it isn't installed, try to install shuttle-runtime from crates.io.
-                if let Err(err) = check_version(&runtime_path) {
+                if let Err(err) = check_version(&runtime_path).await {
                     warn!("{}", err);
 
                     trace!("installing shuttle-runtime");
-                    std::process::Command::new("cargo")
+                    tokio::process::Command::new("cargo")
                         .arg("install")
                         .arg("shuttle-runtime")
                         .arg("--bin")
@@ -933,6 +935,7 @@ impl Shuttle {
                         .arg("--features")
                         .arg("next")
                         .output()
+                        .await
                         .expect("failed to install the shuttle runtime");
                 };
             };
@@ -940,7 +943,7 @@ impl Shuttle {
             runtime_path
         } else {
             trace!(path = ?service.executable_path, "using alpha runtime");
-            if let Err(err) = check_version(&service.executable_path) {
+            if let Err(err) = check_version(&service.executable_path).await {
                 warn!("{}", err);
                 if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
                     println!("Warning: {}.", mismatch);
@@ -961,7 +964,7 @@ impl Shuttle {
                 } else {
                     return Err(err.context(
                         format!(
-                            "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct binary?",
+                            "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct executable?",
                             service.executable_path.display()
                         )
                     ));
@@ -1591,7 +1594,7 @@ impl Shuttle {
                 eprintln!("--- Reconnecting websockets logging ---");
                 // A wait time short enough for not much state to have changed, long enough that
                 // the terminal isn't completely spammed
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                sleep(Duration::from_millis(100)).await;
                 stream = client
                     .get_logs_ws(self.ctx.project_name(), &deployment.id)
                     .await
@@ -1607,7 +1610,7 @@ impl Shuttle {
         // Temporary fix.
         // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
         // Note: Will otherwise be possible when health checks are supported
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        sleep(Duration::from_millis(500)).await;
 
         let deployment = client
             .get_deployment_details(self.ctx.project_name(), &deployment.id)
@@ -2047,7 +2050,7 @@ fn is_dirty(repo: &Repository) -> Result<()> {
     Ok(())
 }
 
-fn check_version(runtime_path: &Path) -> Result<()> {
+async fn check_version(runtime_path: &Path) -> Result<()> {
     debug!(
         "Checking version of runtime binary at {}",
         runtime_path.display()
@@ -2057,20 +2060,27 @@ fn check_version(runtime_path: &Path) -> Result<()> {
     let my_version = semver::Version::from_str(VERSION).unwrap();
 
     if !runtime_path.try_exists()? {
-        bail!("shuttle-runtime is not installed");
+        bail!("shuttle-runtime binary not found");
     }
 
     // Get runtime version from shuttle-runtime cli
-    let runtime_version = std::process::Command::new(runtime_path)
-        .arg("--version")
-        .output()
-        .context("failed to run the shuttle-runtime binary to check its version")?
-        .stdout;
+    // It should print the version and exit immediately, so a timeout is used to not launch servers with non-Shuttle setups
+    let stdout = tokio::time::timeout(Duration::from_millis(500), async move {
+        tokio::process::Command::new(runtime_path)
+            .arg("--version")
+            .kill_on_drop(true) // if the binary does not halt on its own, not killing it will leak child processes
+            .output()
+            .await
+            .context("Failed to run the shuttle-runtime binary to check its version")
+            .map(|o| o.stdout)
+    })
+    .await
+    .context("Checking the version of shuttle-runtime timed out. Make sure the executable is using #[shuttle-runtime::main].")??;
 
     // Parse the version, splitting the version from the name and
     // and pass it to `to_semver()`.
     let runtime_version = semver::Version::from_str(
-        std::str::from_utf8(&runtime_version)
+        std::str::from_utf8(&stdout)
             .context("shuttle-runtime version should be valid utf8")?
             .split_once(' ')
             .context("shuttle-runtime version should be in the `name version` format")?
@@ -2127,7 +2137,7 @@ where
             break cleanup;
         }
         count += 1;
-        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+        sleep(Duration::from_millis(300)).await;
     };
     progress_bar.finish_and_clear();
 

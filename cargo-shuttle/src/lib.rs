@@ -635,7 +635,18 @@ impl Shuttle {
         let app = ShuttleArgs::command();
         let output = std::io::stdout();
         let mut output_handle = output.lock();
-        Man::new(app).render(&mut output_handle)?;
+
+        Man::new(app.clone()).render(&mut output_handle)?;
+
+        for subcommand in app.get_subcommands() {
+            Man::new(subcommand.clone()).render(&mut output_handle)?;
+            // For example, `generate` has sub-commands `shell` and `manpage`
+            if subcommand.has_subcommands() {
+                for sb in subcommand.get_subcommands().cloned() {
+                    Man::new(sb).render(&mut output_handle)?;
+                }
+            }
+        }
 
         Ok(CommandOutcome::Ok)
     }

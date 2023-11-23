@@ -20,15 +20,14 @@ use tonic::{
     Request,
 };
 
-mod helpers;
-use helpers::{exec_psql, DockerInstance};
+use test_utils::PostgresDockerInstance;
 
 use prost_types::Timestamp;
 use uuid::Uuid;
 
 const SHUTTLE_SERVICE: &str = "test";
 
-static PG: Lazy<DockerInstance> = Lazy::new(DockerInstance::default);
+static PG: Lazy<PostgresDockerInstance> = Lazy::new(PostgresDockerInstance::default);
 
 #[dtor]
 fn cleanup() {
@@ -194,10 +193,7 @@ mod needs_docker {
     fn spawn_server(port: u16, db_name: String) -> JoinHandle<()> {
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
-        // Get the PG uri first so the static PG is initialized.
-        let pg_uri = Uri::try_from(format!("{}/{}", PG.uri, db_name)).unwrap();
-
-        exec_psql(&format!(r#"CREATE DATABASE "{}";"#, &db_name));
+        let pg_uri = Uri::try_from(PG.get_unique_uri(&db_name)).unwrap();
 
         tokio::task::spawn(async move {
             let pg = Postgres::new(&pg_uri).await;

@@ -1402,6 +1402,17 @@ pub mod tests {
         Ok(())
     }
 
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_has_resources(
+        project: &mut TestProject,
+    ) -> anyhow::Result<()> {
+        project.deploy("../examples/rocket/secrets").await;
+        project.router_call(Method::DELETE, "/delete").await;
+
+        Ok(())
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn status() {
         let world = World::new().await;

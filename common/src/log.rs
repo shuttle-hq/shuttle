@@ -90,6 +90,10 @@ impl LogItem {
             }
         }
     }
+
+    pub fn get_raw_line(&self) -> &str {
+        &self.line
+    }
 }
 
 #[cfg(feature = "display")]

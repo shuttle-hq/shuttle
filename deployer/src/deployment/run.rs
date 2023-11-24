@@ -342,10 +342,7 @@ async fn load(
                 match serde_json::from_value::<SecretStore>(r.data.clone()) {
                     Ok(ss) => {
                         // Combine old and new, but insert old first so that new ones override.
-                        let mut combined = HashMap::new();
-                        for (k, v) in ss.into_iter() {
-                            combined.insert(k, v);
-                        }
+                        let mut combined = HashMap::from_iter(ss.into_iter());
                         combined.extend(secrets.clone().into_iter());
                         secrets = combined;
                     }

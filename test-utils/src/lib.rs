@@ -24,7 +24,7 @@ use std::{
 /// async fn test_case() {
 ///     // Create a unique database name so we have a new database for each test.
 ///     let db_name = Uuid::new_v4().to_string();
-///     let db_uri = format!("{}/{}", PG.uri, db_name);
+///     let db_uri = PG.get_unique_uri(db_name.as_str());
 ///     
 ///     // Test logic below, which can use `db_uri` to connect to the postgres instance.
 /// }
@@ -125,7 +125,7 @@ impl PostgresDockerInstance {
 
     /// This endpoint should be used to get a unique connection string from
     /// the docker instance, so that the instance can be used by multiple
-    /// clients in parallel, accessing different
+    /// clients in parallel, accessing different databases.
     pub fn get_unique_uri(&self, db_name: &str) -> String {
         // Get the PG uri first so the static PG is initialized.
         self.exec_psql(&format!(r#"CREATE DATABASE "{}";"#, &db_name));

@@ -639,11 +639,20 @@ impl Shuttle {
         Man::new(app.clone()).render(&mut output_handle)?;
 
         for subcommand in app.get_subcommands() {
-            Man::new(subcommand.clone()).render(&mut output_handle)?;
+            let primary = Man::new(subcommand.clone());
+            primary.render_name_section(&mut output_handle)?;
+            primary.render_synopsis_section(&mut output_handle)?;
+            primary.render_description_section(&mut output_handle)?;
+            primary.render_options_section(&mut output_handle)?;
             // For example, `generate` has sub-commands `shell` and `manpage`
             if subcommand.has_subcommands() {
-                for sb in subcommand.get_subcommands().cloned() {
-                    Man::new(sb).render(&mut output_handle)?;
+                primary.render_subcommands_section(&mut output_handle)?;
+                for sb in subcommand.get_subcommands() {
+                    let secondary = Man::new(sb.clone());
+                    secondary.render_name_section(&mut output_handle)?;
+                    secondary.render_synopsis_section(&mut output_handle)?;
+                    secondary.render_description_section(&mut output_handle)?;
+                    secondary.render_options_section(&mut output_handle)?;
                 }
             }
         }

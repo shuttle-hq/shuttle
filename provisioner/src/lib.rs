@@ -456,6 +456,8 @@ impl Provisioner for MyProvisioner {
     ) -> Result<Response<DatabaseResponse>, Status> {
         request.verify(Scope::ResourcesWrite)?;
 
+        let can_provision_rds = request.verify_rds_access();
+
         let request = request.into_inner();
         if !ProjectName::is_valid(&request.project_name) {
             return Err(Status::invalid_argument("invalid project name"));
@@ -468,6 +470,7 @@ impl Provisioner for MyProvisioner {
                     .await?
             }
             DbType::AwsRds(AwsRds { engine }) => {
+                can_provision_rds?;
                 self.request_aws_rds(&request.project_name, engine.expect("engine to be set"))
                     .await?
             }

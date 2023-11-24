@@ -194,7 +194,7 @@ where
     S: Service + Send + 'static,
 {
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
-        let claim = request.extensions().get::<Claim>().map(Clone::clone);
+        let claim = request.extensions().get::<Claim>().cloned();
 
         let LoadRequest {
             path,
@@ -217,6 +217,8 @@ where
             .service(channel);
 
         let provisioner_client = ProvisionerClient::new(channel);
+
+        // TODO: merge new & old secrets
 
         let past_resources = resources
             .into_iter()
@@ -245,7 +247,7 @@ where
                         message: error.to_string(),
                         resources: new_resources
                             .lock()
-                            .expect("to get lock no new resources")
+                            .expect("to get lock on new resources")
                             .iter()
                             .map(resource::Response::to_bytes)
                             .collect(),
@@ -256,7 +258,7 @@ where
             Err(error) => {
                 let resources = new_resources
                     .lock()
-                    .expect("to get lock no new resources")
+                    .expect("to get lock on new resources")
                     .iter()
                     .map(resource::Response::to_bytes)
                     .collect();
@@ -298,7 +300,7 @@ where
             message: String::new(),
             resources: new_resources
                 .lock()
-                .expect("to get lock no new resources")
+                .expect("to get lock on new resources")
                 .iter()
                 .map(resource::Response::to_bytes)
                 .collect(),

@@ -10,6 +10,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
 use tracing::{error, trace, trace_span, warn};
+use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::project::*;
@@ -125,6 +126,21 @@ pub fn start() -> impl Task<ProjectContext, Output = Project, Error = Error> {
             Ok(state) => TaskResult::Done(state),
             Err(err) => TaskResult::Err(err),
         }
+    })
+}
+
+/// Will force restart a project no matter the state it is in
+pub fn restart(project_id: Ulid) -> impl Task<ProjectContext, Output = Project, Error = Error> {
+    run(move |ctx| async move {
+        let state = ctx
+            .state
+            .container()
+            .and_then(|container| ProjectCreating::from_container(container, 0).ok())
+            .unwrap_or_else(|| {
+                ProjectCreating::new_with_random_initial_key(ctx.project_name, project_id, 1)
+            });
+
+        TaskResult::Done(Project::Creating(state))
     })
 }
 

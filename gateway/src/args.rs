@@ -74,4 +74,7 @@ pub struct ContextArgs {
     /// Api key for the user that has rights to start deploys
     #[arg(long, default_value = "gateway4deployes")]
     pub deploys_api_key: String,
+
+    /// Allow tests to set some extra /etc/hosts
+    pub extra_hosts: Vec<String>,
 }

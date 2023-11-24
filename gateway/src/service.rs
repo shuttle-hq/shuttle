@@ -65,6 +65,7 @@ pub struct ContainerSettingsBuilder {
     auth_uri: Option<String>,
     network_name: Option<String>,
     fqdn: Option<String>,
+    extra_hosts: Option<Vec<String>>,
 }
 
 impl Default for ContainerSettingsBuilder {
@@ -83,6 +84,7 @@ impl ContainerSettingsBuilder {
             auth_uri: None,
             network_name: None,
             fqdn: None,
+            extra_hosts: None,
         }
     }
 
@@ -95,6 +97,7 @@ impl ContainerSettingsBuilder {
             auth_uri,
             image,
             proxy_fqdn,
+            extra_hosts,
             ..
         } = args;
         self.prefix(prefix)
@@ -104,6 +107,7 @@ impl ContainerSettingsBuilder {
             .auth_uri(auth_uri)
             .network_name(network_name)
             .fqdn(proxy_fqdn)
+            .extra_hosts(extra_hosts)
             .build()
             .await
     }
@@ -143,12 +147,18 @@ impl ContainerSettingsBuilder {
         self
     }
 
+    pub fn extra_hosts<S: ToString>(mut self, extra_hosts: &[S]) -> Self {
+        self.extra_hosts = Some(extra_hosts.iter().map(ToString::to_string).collect());
+        self
+    }
+
     pub async fn build(mut self) -> ContainerSettings {
         let prefix = self.prefix.take().unwrap();
         let image = self.image.take().unwrap();
         let provisioner_host = self.provisioner.take().unwrap();
         let builder_host = self.builder.take().unwrap();
         let auth_uri = self.auth_uri.take().unwrap();
+        let extra_hosts = self.extra_hosts.take().unwrap();
 
         let network_name = self.network_name.take().unwrap();
         let fqdn = self.fqdn.take().unwrap();
@@ -161,6 +171,7 @@ impl ContainerSettingsBuilder {
             auth_uri,
             network_name,
             fqdn,
+            extra_hosts,
         }
     }
 }
@@ -174,6 +185,7 @@ pub struct ContainerSettings {
     pub auth_uri: String,
     pub network_name: String,
     pub fqdn: String,
+    pub extra_hosts: Vec<String>,
 }
 
 impl ContainerSettings {
@@ -313,7 +325,7 @@ impl GatewayService {
                     .try_get::<SqlxJson<Project>, _>("project_state")
                     .map(|p| p.0)
                     .unwrap_or_else(|e| {
-                        error!("Failed to deser `project_state`: {:?}", e);
+                        error!(error = ?e, "Failed to deser `project_state`");
                         Project::Errored(ProjectError::internal(
                             "Error when trying to deserialize state of project.",
                         ))
@@ -364,7 +376,7 @@ impl GatewayService {
                     row.try_get::<SqlxJson<Project>, _>("project_state")
                         .map(|p| p.0)
                         .unwrap_or_else(|e| {
-                            error!("Failed to deser `project_state`: {:?}", e);
+                            error!(error = ?e, "Failed to deser `project_state`");
                             Project::Errored(ProjectError::internal(
                                 "Error when trying to deserialize state of project.",
                             ))
@@ -437,7 +449,7 @@ impl GatewayService {
         project_name: ProjectName,
         account_name: AccountName,
         is_admin: bool,
-        limit: Option<u32>,
+        can_create_project: bool,
         idle_minutes: u64,
     ) -> Result<FindProjectPayload, Error> {
         if let Some(row) = query(
@@ -459,7 +471,7 @@ impl GatewayService {
                 .try_get::<SqlxJson<Project>, _>("project_state")
                 .map(|p| p.0)
                 .unwrap_or_else(|e| {
-                    error!("Failed to deser `project_state`: {:?}", e);
+                    error!(error = ?e, "Failed to deser `project_state`");
                     Project::Errored(ProjectError::internal(
                         "Error when trying to deserialize state of project.",
                     ))
@@ -531,37 +543,26 @@ impl GatewayService {
                     message,
                 )))
             }
-        } else {
-            self.check_project_count(&account_name, limit).await?;
+        } else if can_create_project {
             // Attempt to create a new one. This will fail
             // outright if the project already exists (this happens if
             // it belongs to another account).
             self.insert_project(project_name, Ulid::new(), account_name, idle_minutes)
                 .await
+        } else {
+            Err(Error::from_kind(ErrorKind::TooManyProjects))
         }
     }
 
-    pub async fn check_project_count(
-        &self,
-        account_name: &AccountName,
-        limit: Option<u32>,
-    ) -> Result<(), Error> {
-        // No limit is set for admin users
-        let Some(limit) = limit else {
-            return Ok(());
-        };
+    pub async fn get_project_count(&self, account_name: &AccountName) -> Result<u32, Error> {
+        let proj_count: u32 =
+            query("SELECT COUNT(project_name) FROM projects WHERE account_name = ?1")
+                .bind(account_name)
+                .fetch_one(&self.db)
+                .await?
+                .get::<_, usize>(0);
 
-        let proj_count: u32 = query("SELECT COUNT(*) FROM projects WHERE account_name = ?1")
-            .bind(account_name)
-            .fetch_one(&self.db)
-            .await?
-            .get::<_, usize>(0);
-
-        if proj_count >= limit {
-            return Err(Error::from_kind(ErrorKind::TooManyProjects));
-        }
-
-        Ok(())
+        Ok(proj_count)
     }
 
     pub async fn insert_project(
@@ -579,7 +580,8 @@ impl GatewayService {
             ),
         ));
 
-        query("INSERT INTO projects (project_id, project_name, account_name, initial_key, project_state) VALUES (ulid(), ?1, ?2, ?3, ?4)")
+        query("INSERT INTO projects (project_id, project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4, ?5)")
+            .bind(&project_id.to_string())
             .bind(&project_name)
             .bind(&account_name)
             .bind(project.initial_key().unwrap())
@@ -992,7 +994,7 @@ pub mod tests {
         };
 
         let project = svc
-            .create_project(matrix.clone(), neo.clone(), false, Some(3), 0)
+            .create_project(matrix.clone(), neo.clone(), false, true, 0)
             .await
             .unwrap();
 
@@ -1024,22 +1026,20 @@ pub mod tests {
 
         // Test project pagination, first create 20 projects.
         for p in (0..20).map(|p| format!("matrix-{p}")) {
-            svc.create_project(p.parse().unwrap(), admin.clone(), true, None, 0)
+            svc.create_project(p.parse().unwrap(), admin.clone(), true, true, 0)
                 .await
                 .unwrap();
         }
 
-        // Creating another one without admin rights should be denied due to limit
-        assert!(svc
-            .create_project(
-                "final-one".parse().unwrap(),
-                admin.clone(),
-                false,
-                Some(3),
-                0
-            )
-            .await
-            .is_err());
+        // Creating a project with can_create_project set to false should fail.
+        assert_eq!(
+            svc.create_project("final-one".parse().unwrap(), admin.clone(), false, false, 0)
+                .await
+                .err()
+                .unwrap()
+                .kind(),
+            ErrorKind::TooManyProjects
+        );
 
         // We need to fetch all of them from the DB since they are ordered by created_at (in the id) and project_name,
         // and created_at will be the same for some of them.
@@ -1100,7 +1100,7 @@ pub mod tests {
 
         // If recreated by a different user
         assert!(matches!(
-            svc.create_project(matrix.clone(), trinity.clone(), false, Some(3), 0)
+            svc.create_project(matrix.clone(), trinity.clone(), false, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::ProjectAlreadyExists,
@@ -1110,7 +1110,7 @@ pub mod tests {
 
         // If recreated by the same user
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo.clone(), false, Some(3), 0)
+            svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1120,7 +1120,7 @@ pub mod tests {
 
         // If recreated by the same user again while it's running
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo, false, Some(3), 0)
+            svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
@@ -1148,7 +1148,7 @@ pub mod tests {
 
         // If recreated by an admin
         assert!(matches!(
-            svc.create_project(matrix.clone(), admin.clone(), true, None, 0)
+            svc.create_project(matrix.clone(), admin.clone(), true, true, 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1158,7 +1158,7 @@ pub mod tests {
 
         // If recreated by an admin again while it's running
         assert!(matches!(
-            svc.create_project(matrix.clone(), admin, true, None, 0)
+            svc.create_project(matrix.clone(), admin.clone(), true, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
@@ -1180,7 +1180,8 @@ pub mod tests {
 
         // It can be re-created by anyone, with the same project name
         assert!(matches!(
-            svc.create_project(matrix, trinity, false, Some(3), 0).await,
+            svc.create_project(matrix, trinity.clone(), false, true, 0)
+                .await,
             Ok(FindProjectPayload {
                 project_id: _,
                 state: Project::Creating(_),
@@ -1197,7 +1198,7 @@ pub mod tests {
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        svc.create_project(matrix.clone(), neo.clone(), false, Some(3), 0)
+        svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
             .await
             .unwrap();
 
@@ -1258,7 +1259,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, Some(3), 0)
+            .create_project(project_name.clone(), account.clone(), false, true, 0)
             .await
             .unwrap();
 
@@ -1312,7 +1313,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, Some(3), 0)
+            .create_project(project_name.clone(), account.clone(), false, true, 0)
             .await
             .unwrap();
 
@@ -1330,7 +1331,7 @@ pub mod tests {
         assert!(matches!(work.poll(()).await, TaskResult::Done(())));
 
         let recreated_project = svc
-            .create_project(project_name.clone(), account.clone(), false, Some(3), 0)
+            .create_project(project_name.clone(), account.clone(), false, true, 0)
             .await
             .unwrap();
 

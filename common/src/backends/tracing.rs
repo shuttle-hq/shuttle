@@ -5,14 +5,10 @@ use std::{
 };
 
 use http::{Request, Response};
-use opentelemetry::{
-    global,
-    runtime::Tokio,
-    sdk::{propagation::TraceContextPropagator, trace, Resource},
-    KeyValue,
-};
+use opentelemetry::{global, KeyValue};
 use opentelemetry_http::HeaderExtractor;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{propagation::TraceContextPropagator, runtime::Tokio, trace, Resource};
 use pin_project::pin_project;
 use tower::{Layer, Service};
 use tracing::{debug_span, instrument::Instrumented, Instrument, Span, Subscriber};

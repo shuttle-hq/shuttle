@@ -33,15 +33,14 @@ use shuttle_common::{
     claims::{Claim, Scope},
     models::{
         deployment::{DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH},
-        error::axum::CustomErrorPath,
+        error::{axum::CustomErrorPath, ApiError, ErrorKind},
         project::ProjectName,
-        secret,
     },
     request_span, LogItem,
 };
 use shuttle_proto::logger::LogsRequest;
 
-use crate::persistence::{Deployment, Persistence, SecretGetter, State};
+use crate::persistence::{Deployment, Persistence, State};
 use crate::{
     deployment::{Built, DeploymentManager, Queued},
     persistence::resource::ResourceManager,
@@ -66,7 +65,6 @@ mod project;
         delete_deployment,
         get_logs_subscribe,
         get_logs,
-        get_secrets,
         clean_project,
     ),
     components(schemas(
@@ -77,10 +75,8 @@ mod project;
         shuttle_common::database::AwsRdsEngine,
         shuttle_common::database::SharedEngine,
         shuttle_common::models::service::Response,
-        shuttle_common::models::secret::Response,
         shuttle_common::models::deployment::Response,
         shuttle_common::log::LogItem,
-        shuttle_common::models::secret::Response,
         shuttle_common::deployment::State,
     ))
 )]
@@ -161,10 +157,6 @@ impl RouterBuilder {
             .route(
                 "/projects/:project_name/deployments/:deployment_id/logs",
                 get(get_logs.layer(ScopedLayer::new(vec![Scope::Logs]))),
-            )
-            .route(
-                "/projects/:project_name/secrets/:service_name",
-                get(get_secrets.layer(ScopedLayer::new(vec![Scope::Secret]))),
             )
             .route(
                 "/projects/:project_name/clean",
@@ -625,6 +617,7 @@ pub async fn start_deployment(
             tracing_context: Default::default(),
             is_next: deployment.is_next,
             claim,
+            secrets: Default::default(),
         };
         deployment_manager.run_push(built).await;
 
@@ -660,16 +653,27 @@ pub async fn get_logs(
     logs_request.extensions_mut().insert(claim);
 
     let mut client = deployment_manager.logs_fetcher().clone();
-    if let Ok(logs) = client.get_logs(logs_request).await {
-        Ok(Json(
+
+    match client.get_logs(logs_request).await {
+        Ok(logs) => Ok(Json(
             logs.into_inner()
                 .log_items
                 .into_iter()
                 .map(|l| l.to_log_item_with_id(deployment_id))
                 .collect(),
-        ))
-    } else {
-        Err(Error::NotFound("deployment not found".to_string()))
+        )),
+        Err(error) => {
+            if error.code() == tonic::Code::Unavailable
+                && error.metadata().get("x-ratelimit-limit").is_some()
+            {
+                Err(Error::RateLimited(
+                    "your application is producing too many logs. Interactions with the shuttle logger service will be rate limited"
+                        .to_string(),
+                ))
+            } else {
+                Err(anyhow!("failed to retrieve logs for deployment").into())
+            }
+        }
     }
 }
 
@@ -719,9 +723,24 @@ async fn logs_websocket_handler(
                 "failed to get backlog of logs"
             );
 
-            let _ = s
-                .send(ws::Message::Text("failed to get logs".to_string()))
-                .await;
+            if error.code() == tonic::Code::Unavailable
+                && error.metadata().get("x-ratelimit-limit").is_some()
+            {
+                let message = serde_json::to_string(
+                    &ApiError::from(
+                        ErrorKind::RateLimited(
+                            "your application is producing too many logs. Interactions with the shuttle logger service will be rate limited"
+                            .to_string()
+                        )
+                    ))
+                    .expect("to convert error to json");
+
+                let _ = s.send(ws::Message::Text(message)).await;
+            } else {
+                let _ = s
+                    .send(ws::Message::Text("failed to get logs".to_string()))
+                    .await;
+            }
             let _ = s.close().await;
             return;
         }
@@ -765,38 +784,6 @@ async fn logs_websocket_handler(
     }
 
     let _ = s.close().await;
-}
-
-#[instrument(skip_all, fields(%project_name, %service_name))]
-#[utoipa::path(
-    get,
-    path = "/projects/{project_name}/secrets/{service_name}",
-    responses(
-        (status = 200, description = "Gets the secrets a specific service.", body = [shuttle_common::models::secret::Response]),
-        (status = 500, description = "Database or streaming error.", body = String),
-        (status = 404, description = "Record could not be found.", body = String),
-    ),
-    params(
-        ("project_name" = String, Path, description = "Name of the project that owns the service."),
-        ("service_name" = String, Path, description = "Name of the service.")
-    )
-)]
-pub async fn get_secrets(
-    Extension(persistence): Extension<Persistence>,
-    CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
-) -> Result<Json<Vec<secret::Response>>> {
-    if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let keys = persistence
-            .get_secrets(&service.id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-
-        Ok(Json(keys))
-    } else {
-        Err(Error::NotFound("service not found".to_string()))
-    }
 }
 
 #[instrument(skip_all, fields(%project_name))]

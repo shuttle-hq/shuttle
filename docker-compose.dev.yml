@@ -61,6 +61,13 @@ services:
         >&2 echo "The control DB is available - starting shuttle-auth"
 
         exec /usr/local/bin/shuttle-auth "$${@:0}"
+    command:
+      - "--state=/var/lib/shuttle-auth"
+      - "start"
+      - "--address=0.0.0.0:8000"
+      - "--stripe-secret-key=${STRIPE_SECRET_KEY}"
+      # used only for local development
+      - "--jwt-signing-private-key=LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUR5V0ZFYzhKYm05NnA0ZGNLTEwvQWNvVUVsbUF0MVVKSTU4WTc4d1FpWk4KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo="
   otel-collector:
     ports:
       - 4317:4317

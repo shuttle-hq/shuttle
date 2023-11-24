@@ -341,7 +341,13 @@ async fn load(
             if r.r#type == shuttle_common::resource::Type::Secrets {
                 match serde_json::from_value::<SecretStore>(r.data.clone()) {
                     Ok(ss) => {
-                        secrets.extend(ss.into_iter());
+                        // Combine old and new, but insert old first so that new ones override.
+                        let mut combined = HashMap::new();
+                        for (k, v) in ss.into_iter() {
+                            combined.insert(k, v);
+                        }
+                        combined.extend(secrets.clone().into_iter());
+                        secrets = combined;
                     }
                     Err(err) => {
                         error!(error = ?err, "failed to parse old secrets data");

@@ -5799,7 +5799,6 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
@@ -6038,7 +6037,6 @@ dependencies = [
  "chrono",
  "clap",
  "ctor",
- "futures",
  "once_cell",
  "portpicker",
  "pretty_assertions",
@@ -6053,10 +6051,8 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tonic 0.10.2",
- "tower",
  "tracing",
  "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
@@ -6817,6 +6813,7 @@ dependencies = [
  "bollard",
  "portpicker",
  "rand 0.8.5",
+ "uuid",
 ]
 
 [[package]]

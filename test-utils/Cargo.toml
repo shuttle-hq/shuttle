@@ -11,3 +11,4 @@ repository.workspace = true
 portpicker = { workspace = true }
 bollard = { workspace = true }
 rand = { workspace = true }
+uuid = { workspace = true }

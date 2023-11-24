@@ -5,6 +5,7 @@ use std::{
     thread::sleep,
     time::{Duration, SystemTime},
 };
+use uuid::Uuid;
 
 /// A docker instance for a postgres database. It should be used
 /// by tests as a singleton (e.g. once_cell::sync::Lazy), and any
@@ -126,9 +127,10 @@ impl PostgresDockerInstance {
     /// This endpoint should be used to get a unique connection string from
     /// the docker instance, so that the instance can be used by multiple
     /// clients in parallel, accessing different databases.
-    pub fn get_unique_uri(&self, db_name: &str) -> String {
+    pub fn get_unique_uri(&self) -> String {
         // Get the PG uri first so the static PG is initialized.
-        self.exec_psql(&format!(r#"CREATE DATABASE "{}";"#, &db_name));
+        let db_name = Uuid::new_v4().to_string();
+        self.exec_psql(&format!(r#"CREATE DATABASE "{}";"#, db_name));
         format!("{}/{}", &self.base_uri, db_name)
     }
 

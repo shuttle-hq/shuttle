@@ -43,4 +43,3 @@ portpicker = { workspace = true }
 serde_json = { workspace = true }
 test-utils = { workspace = true }
 tower = { workspace = true, features = ["util"] }
-uuid = { workspace = true }

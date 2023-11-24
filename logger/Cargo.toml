@@ -33,8 +33,5 @@ portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
 shuttle-common-tests = { workspace = true }
-uuid = { workspace = true }
 ctor = { workspace = true }
-futures = { workspace = true }
-tower = { workspace = true, features = ["util"] }
 test-utils = { workspace = true }

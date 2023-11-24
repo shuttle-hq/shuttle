@@ -33,12 +33,7 @@ pub(crate) struct TestApp {
 
 /// Initialize a router with an in-memory sqlite database for each test.
 pub(crate) async fn app() -> TestApp {
-    let pg_pool = pgpool_init(
-        PG.get_unique_uri(uuid::Uuid::new_v4().to_string().as_str())
-            .as_str(),
-    )
-    .await
-    .unwrap();
+    let pg_pool = pgpool_init(PG.get_unique_uri().as_str()).await.unwrap();
 
     let mocked_stripe_server = MockedStripeServer::default();
     // Insert an admin user for the tests.

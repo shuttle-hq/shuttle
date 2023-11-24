@@ -45,7 +45,7 @@ pub(crate) async fn app() -> TestApp {
     query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
         .bind("admin")
         .bind(ADMIN_KEY)
-        .bind(AccountTier::Admin)
+        .bind(AccountTier::Admin.to_string())
         .execute(&pg_pool)
         .await
         .unwrap();

@@ -1,4 +1,4 @@
-use std::{fmt::Formatter, str::FromStr};
+use std::{fmt::Formatter, io::ErrorKind, str::FromStr};
 
 use async_trait::async_trait;
 use axum::{
@@ -45,7 +45,7 @@ impl UserManagement for UserManager {
         query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
             .bind(&name)
             .bind(&key)
-            .bind(tier)
+            .bind(tier.to_string())
             .execute(&self.pool)
             .await?;
 
@@ -79,7 +79,7 @@ impl UserManagement for UserManager {
             let rows_affected = query(
                 "UPDATE users SET account_tier = $1, subscription_id = $2 WHERE account_name = $3",
             )
-            .bind(AccountTier::Pro)
+            .bind(AccountTier::Pro.to_string())
             .bind(subscription_id)
             .bind(name)
             .execute(&self.pool)
@@ -100,7 +100,7 @@ impl UserManagement for UserManager {
     // Update tier leaving the subscription_id untouched.
     async fn update_tier(&self, name: &AccountName, tier: AccountTier) -> Result<(), Error> {
         let rows_affected = query("UPDATE users SET account_tier = $1 WHERE account_name = $2")
-            .bind(tier)
+            .bind(tier.to_string())
             .bind(name)
             .execute(&self.pool)
             .await?
@@ -253,7 +253,12 @@ impl FromRow<'_, PgRow> for User {
         Ok(User {
             name: row.try_get("account_name").unwrap(),
             key: Secret::new(row.try_get("key").unwrap()),
-            account_tier: row.try_get("account_tier").unwrap(),
+            account_tier: AccountTier::from_str(row.try_get("account_tier").unwrap()).map_err(
+                |err| sqlx::Error::ColumnDecode {
+                    index: "account_tier".to_string(),
+                    source: Box::new(std::io::Error::new(ErrorKind::Other, err.to_string())),
+                },
+            )?,
             subscription_id: row
                 .try_get("subscription_id")
                 .ok()

@@ -14,7 +14,7 @@ use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::{Method, StatusCode, Uri};
+use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
@@ -58,6 +58,7 @@ use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{Error, AUTH_CLIENT};
 
 use super::auth_layer::ShuttleAuthLayer;
+use super::project_caller::ProjectCaller;
 
 pub const SVC_DEGRADED_THRESHOLD: usize = 128;
 pub const SHUTTLE_GATEWAY_VARIANT: &str = "shuttle-gateway";
@@ -341,103 +342,36 @@ async fn delete_project(
     let service = state.service.clone();
     let sender = state.sender.clone();
 
+    let project_caller =
+        ProjectCaller::new(state.clone(), scoped_user.clone(), req.headers()).await?;
+
     // check that deployment is not running
-    let mut rb = Request::builder();
-    rb.headers_mut().unwrap().clone_from(req.headers());
-    let service_req = rb
-        .uri(
-            format!("/projects/{project_name}/services/{project_name}")
-                .parse::<Uri>()
-                .unwrap(),
-        )
-        .method("GET")
-        .body(hyper::Body::empty())
-        .unwrap();
-    let res = route_project(State(state.clone()), scoped_user.clone(), service_req).await?;
-    // 404 == no service == no deployments
-    if res.status() != StatusCode::NOT_FOUND {
+    let summary = project_caller.get_service_summary().await?;
+    if summary.deployment.is_some() {
+        let res = project_caller.stop_active_deployment().await?;
+
         if res.status() != StatusCode::OK {
-            return Err(Error::from_kind(ErrorKind::Internal));
-        }
-        let body_bytes = hyper::body::to_bytes(res.into_body())
-            .await
-            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-        let summary: shuttle_common::models::service::Summary = serde_json::from_slice(&body_bytes)
-            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-
-        if summary.deployment.is_some() {
-            let mut rb = Request::builder();
-            rb.headers_mut().unwrap().clone_from(req.headers());
-            let service_req = rb
-                .uri(
-                    format!("/projects/{project_name}/services/{project_name}")
-                        .parse::<Uri>()
-                        .unwrap(),
-                )
-                .method("DELETE")
-                .body(hyper::Body::empty())
-                .unwrap();
-            let res = route_project(State(state.clone()), scoped_user.clone(), service_req).await?;
-
-            if res.status() != StatusCode::OK {
-                return Err(Error::from_kind(ErrorKind::ProjectHasRunningDeployment));
-            }
+            return Err(Error::from_kind(ErrorKind::ProjectHasRunningDeployment));
         }
     }
 
-    // check if database in resources
-    let mut rb = Request::builder();
-    rb.headers_mut().unwrap().clone_from(req.headers());
-    let resource_req = rb
-        .uri(
-            format!("/projects/{project_name}/services/{project_name}/resources")
-                .parse::<Uri>()
-                .unwrap(),
-        )
-        .method("GET")
-        .body(hyper::Body::empty())
-        .unwrap();
-    let res = route_project(State(state.clone()), scoped_user.clone(), resource_req).await?;
-    // 404 == no service == no resources
-    if res.status() != StatusCode::NOT_FOUND {
+    // check if any resources exist
+    let resources = project_caller.get_resources().await?;
+    let mut delete_fails = Vec::new();
+
+    for resource in resources {
+        let resource_type = resource.r#type.to_string();
+        let res = project_caller.delete_resource(&resource_type).await?;
+
         if res.status() != StatusCode::OK {
-            return Err(Error::from_kind(ErrorKind::Internal));
+            delete_fails.push(resource_type)
         }
-        let body_bytes = hyper::body::to_bytes(res.into_body())
-            .await
-            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-        let resources: Vec<shuttle_common::resource::Response> =
-            serde_json::from_slice(&body_bytes)
-                .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+    }
 
-        let mut delete_fails = Vec::new();
-
-        for resource in resources {
-            let resource_type = resource.r#type.to_string();
-            let mut rb = Request::builder();
-            rb.headers_mut().unwrap().clone_from(req.headers());
-            let resource_req = rb
-                .uri(
-                    format!("/projects/{project_name}/services/{project_name}/resources/{resource_type}")
-                        .parse::<Uri>()
-                        .unwrap(),
-                )
-                .method(Method::DELETE)
-                .body(hyper::Body::empty())
-                .unwrap();
-            let res =
-                route_project(State(state.clone()), scoped_user.clone(), resource_req).await?;
-
-            if res.status() != StatusCode::OK {
-                delete_fails.push(resource_type)
-            }
-        }
-
-        if !delete_fails.is_empty() {
-            return Err(Error::from_kind(ErrorKind::ProjectHasResources(
-                delete_fails,
-            )));
-        }
+    if !delete_fails.is_empty() {
+        return Err(Error::from_kind(ErrorKind::ProjectHasResources(
+            delete_fails,
+        )));
     }
 
     if dry_run.is_some_and(|d| d) {

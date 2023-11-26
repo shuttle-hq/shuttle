@@ -364,8 +364,24 @@ async fn delete_project(
             .map_err(|e| Error::source(ErrorKind::Internal, e))?;
         let summary: shuttle_common::models::service::Summary = serde_json::from_slice(&body_bytes)
             .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+
         if summary.deployment.is_some() {
-            return Err(Error::from_kind(ErrorKind::ProjectHasRunningDeployment));
+            let mut rb = Request::builder();
+            rb.headers_mut().unwrap().clone_from(req.headers());
+            let service_req = rb
+                .uri(
+                    format!("/projects/{project_name}/services/{project_name}")
+                        .parse::<Uri>()
+                        .unwrap(),
+                )
+                .method("DELETE")
+                .body(hyper::Body::empty())
+                .unwrap();
+            let res = route_project(State(state.clone()), scoped_user.clone(), service_req).await?;
+
+            if res.status() != StatusCode::OK {
+                return Err(Error::from_kind(ErrorKind::ProjectHasRunningDeployment));
+            }
         }
     }
 

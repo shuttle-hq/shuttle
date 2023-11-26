@@ -91,8 +91,8 @@ impl From<ErrorKind> for ApiError {
                 (StatusCode::FORBIDDEN, "You cannot create more projects. Delete some projects first.")
             },
             ErrorKind::ProjectHasRunningDeployment => (
-                StatusCode::FORBIDDEN,
-                "A deployment is running. Stop it with `cargo shuttle stop` first."
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Could not automatically stop the running deployment for the project. Reach out to our support and ask them for a helping hand."
             ),
             ErrorKind::ProjectHasResources(resources) => {
                 let resources = resources.join(", ");

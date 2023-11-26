@@ -1444,6 +1444,17 @@ pub mod tests {
         );
     }
 
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_has_running_deployment(project: &mut TestProject) {
+        project.deploy("../examples/axum/hello-world").await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::OK
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn status() {
         let world = World::new().await;

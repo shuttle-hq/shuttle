@@ -212,6 +212,14 @@ impl User {
             .subscription_is_valid(&user_manager.stripe_client)
             .await?;
 
+        if self.account_tier == AccountTier::CancelledPro && !subscription_is_valid {
+            self.account_tier = AccountTier::Basic;
+            user_manager
+                .update_tier(&self.name, self.account_tier)
+                .await?;
+            return Ok(true);
+        }
+
         if self.account_tier == AccountTier::Pro && !subscription_is_valid {
             self.account_tier = AccountTier::PendingPaymentPro;
             user_manager

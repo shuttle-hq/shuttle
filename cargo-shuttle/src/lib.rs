@@ -735,22 +735,9 @@ impl Shuttle {
 
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                    match serde_json::from_str::<shuttle_common::LogItem>(&line) {
-                        Ok(log_item) => {
-                            println!("{log_item}")
-                        }
-                        Err(err) => {
-                            debug!(error = %err, "failed to parse message into log item");
-
-                            let message = if let Ok(err) = serde_json::from_str::<ApiError>(&line) {
-                                err.to_string()
-                            } else {
-                                "failed to parse logs, is your cargo-shuttle outdated?".to_string()
-                            };
-
-                            bail!(message);
-                        }
-                    }
+                    let log_item: shuttle_common::LogItem = serde_json::from_str(&line)
+                        .context("Failed parsing logs. Is your cargo-shuttle outdated?")?;
+                    println!("{log_item}")
                 }
             }
         } else {

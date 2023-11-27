@@ -69,19 +69,18 @@ impl ProjectCaller {
     ) -> Result<Option<T>, Error> {
         let res = self.call(uri, method).await?;
 
-        if res.status() != StatusCode::NOT_FOUND {
-            if res.status() != StatusCode::OK {
-                return Err(Error::from_kind(ErrorKind::Internal));
-            }
-            let body_bytes = hyper::body::to_bytes(res.into_body())
-                .await
-                .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-            let body = serde_json::from_slice(&body_bytes)
-                .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+        match res.status() {
+            StatusCode::NOT_FOUND => Ok(None),
+            StatusCode::OK => {
+                let body_bytes = hyper::body::to_bytes(res.into_body())
+                    .await
+                    .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+                let body = serde_json::from_slice(&body_bytes)
+                    .map_err(|e| Error::source(ErrorKind::Internal, e))?;
 
-            Ok(Some(body))
-        } else {
-            return Ok(None);
+                Ok(Some(body))
+            }
+            _ => Err(Error::from_kind(ErrorKind::Internal)),
         }
     }
 

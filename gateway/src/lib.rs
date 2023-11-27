@@ -254,6 +254,7 @@ pub trait Refresh<Ctx>: Sized {
 pub mod tests {
     use std::collections::HashMap;
     use std::env;
+    use std::fs::{canonicalize, read_dir};
     use std::net::SocketAddr;
     use std::str::FromStr;
     use std::sync::{Arc, Mutex};
@@ -265,6 +266,8 @@ pub mod tests {
     use axum::routing::get;
     use axum::{extract, Router, TypedHeader};
     use bollard::Docker;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
     use fqdn::FQDN;
     use futures::prelude::*;
     use http::Method;
@@ -277,7 +280,9 @@ pub mod tests {
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
     use shuttle_common::backends::auth::ConvertResponse;
     use shuttle_common::claims::{AccountTier, Claim, Scope};
-    use shuttle_common::models::project;
+    use shuttle_common::models::deployment::DeploymentRequest;
+    use shuttle_common::models::{project, service};
+    use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::SqlitePool;
     use test_context::AsyncTestContext;
@@ -514,6 +519,7 @@ pub mod tests {
             let bouncer = format!("127.0.0.1:{bouncer}").parse().unwrap();
             let auth: SocketAddr = format!("0.0.0.0:{auth_port}").parse().unwrap();
             let auth_uri: Uri = format!("http://{auth}").parse().unwrap();
+            let resource_recorder_port = start_mocked_resource_recorder().await;
 
             let auth_service = AuthService::new(auth);
             auth_service
@@ -528,7 +534,7 @@ pub mod tests {
             );
 
             let image = env::var("SHUTTLE_TESTS_RUNTIME_IMAGE")
-                .unwrap_or_else(|_| "public.ecr.aws/shuttle/deployer:latest".to_string());
+                .unwrap_or_else(|_| "public.ecr.aws/shuttle-dev/deployer:latest".to_string());
 
             let network_name =
                 env::var("SHUTTLE_TESTS_NETWORK").unwrap_or_else(|_| "shuttle_default".to_string());
@@ -563,6 +569,11 @@ pub mod tests {
                     auth_uri: format!("http://host.docker.internal:{auth_port}")
                         .parse()
                         .unwrap(),
+                    resource_recorder_uri: format!(
+                        "http://host.docker.internal:{resource_recorder_port}"
+                    )
+                    .parse()
+                    .unwrap(),
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
                     deploys_api_key: "gateway".to_string(),
@@ -848,7 +859,7 @@ pub mod tests {
         }
 
         /// Send a request to the router for this project
-        pub async fn router_call(&mut self, method: Method, sub_path: &str) {
+        pub async fn router_call(&mut self, method: Method, sub_path: &str) -> StatusCode {
             let project_name = &self.project_name;
 
             self.router
@@ -859,6 +870,117 @@ pub mod tests {
                         .body(Body::empty())
                         .unwrap()
                         .with_header(&self.authorization),
+                )
+                .map_ok(|resp| resp.status())
+                .await
+                .unwrap()
+        }
+
+        /// Just deploy the code at the path and don't wait for it to finish
+        pub async fn just_deploy(&mut self, path: &str) {
+            let path = canonicalize(path).expect("deploy path to be valid");
+            let name = path.file_name().unwrap().to_str().unwrap();
+            let enc = GzEncoder::new(Vec::new(), Compression::fast());
+            let mut tar = tar::Builder::new(enc);
+
+            for dir_entry in read_dir(&path).unwrap() {
+                let dir_entry = dir_entry.unwrap();
+                if dir_entry.file_name() != "target" {
+                    let path = format!("{name}/{}", dir_entry.file_name().to_str().unwrap());
+
+                    if dir_entry.file_type().unwrap().is_dir() {
+                        tar.append_dir_all(path, dir_entry.path()).unwrap();
+                    } else {
+                        tar.append_path_with_name(dir_entry.path(), path).unwrap();
+                    }
+                }
+            }
+
+            let enc = tar.into_inner().unwrap();
+            let bytes = enc.finish().unwrap();
+
+            println!("{name}: finished getting archive for test");
+
+            let project_name = &self.project_name;
+            let deployment_req = rmp_serde::to_vec(&DeploymentRequest {
+                data: bytes,
+                no_test: true,
+                ..Default::default()
+            })
+            .expect("to serialize DeploymentRequest as a MessagePack byte vector");
+
+            self.router
+                .call(
+                    Request::builder()
+                        .method(Method::POST)
+                        .header("Transfer-Encoding", "chunked")
+                        .uri(format!("/projects/{project_name}/services/{project_name}"))
+                        .body(deployment_req.into())
+                        .unwrap()
+                        .with_header(&self.authorization),
+                )
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+        }
+
+        /// Deploy the code at the path to the project and wait for it to finish
+        pub async fn deploy(&mut self, path: &str) {
+            self.just_deploy(path).await;
+
+            let project_name = &self.project_name;
+
+            // Wait for deployment to be up
+            let mut tries = 0;
+
+            loop {
+                let resp = self
+                    .router
+                    .call(
+                        Request::get(format!("/projects/{project_name}/services/{project_name}"))
+                            .with_header(&self.authorization)
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+
+                assert_eq!(resp.status(), StatusCode::OK);
+                let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
+                let service: service::Summary = serde_json::from_slice(&body).unwrap();
+
+                if service.deployment.is_some() {
+                    break;
+                }
+
+                tries += 1;
+                // We should consider making a mock deployer image to be able to "deploy" (aka fake deploy) things instantly for tests
+                if tries > 240 {
+                    panic!("timed out waiting for deployment");
+                }
+
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+
+        /// Stop a service running in a project
+        pub async fn stop_service(&mut self) {
+            let TestProject {
+                router,
+                authorization,
+                project_name,
+            } = self;
+
+            router
+                .call(
+                    Request::builder()
+                        .method("DELETE")
+                        .uri(format!("/projects/{project_name}/services/{project_name}"))
+                        .body(Body::empty())
+                        .unwrap()
+                        .with_header(authorization),
                 )
                 .map_ok(|resp| {
                     assert_eq!(resp.status(), StatusCode::OK);
@@ -880,7 +1002,12 @@ pub mod tests {
         }
 
         async fn teardown(mut self) {
-            assert!(self.is_missing().await, "test left a dangling project");
+            let dangling = !self.is_missing().await;
+
+            if dangling {
+                self.router_call(Method::DELETE, "/delete").await;
+                eprintln!("test left a dangling project which you might need to clean manually");
+            }
         }
     }
 

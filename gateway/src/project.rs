@@ -795,6 +795,7 @@ impl ProjectCreating {
             provisioner_host,
             builder_host,
             auth_uri,
+            resource_recorder_uri,
             fqdn: public,
             extra_hosts,
             ..
@@ -849,6 +850,8 @@ impl ProjectCreating {
                         auth_uri,
                         "--builder-uri",
                         format!("http://{builder_host}:8000"),
+                        "--resource-recorder",
+                        resource_recorder_uri,
                         "--project-id",
                         self.project_id.to_string()
                     ],

@@ -1859,29 +1859,6 @@ impl Shuttle {
     async fn project_delete(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
 
-        // If a check fails, print the returned error
-        client.delete_project(self.ctx.project_name(), true).await.map_err(|err| {
-            if let Some(api_error) = err.downcast_ref::<ApiError>() {
-                // If the returned error string changes, this could break
-                if api_error.message.contains("not ready") {
-                    println!("{}", "Project delete failed".red());
-                    println!();
-                    println!("{}", "Try restarting the project with `cargo shuttle project restart` first.".yellow());
-                    println!("{}", "This is needed to check for any resources linked to it.".yellow());
-                    println!("{}", "For more help with deleting projects, visit https://docs.shuttle.rs/support/delete-project".yellow());
-                    println!();
-                    return err;
-                }
-            }
-            println!("{}", "For more help with deleting projects, visit https://docs.shuttle.rs/support/delete-project".yellow());
-            suggestions::project::project_request_failure(
-                err,
-                "Project delete failed",
-                true,
-                "deleting the project or getting project status fails repeatedly",
-            )
-        })?;
-
         println!(
             "{}",
             formatdoc!(
@@ -1908,7 +1885,7 @@ impl Shuttle {
         }
 
         client
-            .delete_project(self.ctx.project_name(), false)
+            .delete_project(self.ctx.project_name())
             .await
             .map_err(|err| {
                 suggestions::project::project_request_failure(

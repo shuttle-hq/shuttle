@@ -1113,6 +1113,7 @@ pub mod tests {
     use tower::Service;
 
     use super::*;
+    use crate::project::ProjectError;
     use crate::service::GatewayService;
     use crate::tests::{RequestBuilderExt, TestProject, World};
 
@@ -1438,6 +1439,21 @@ pub mod tests {
         assert_eq!(
             project.router_call(Method::DELETE, "/delete").await,
             StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_is_errored(project: &mut TestProject) {
+        project
+            .update_state(Project::Errored(ProjectError::internal(
+                "Mr. Anderson is here",
+            )))
+            .await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::OK
         );
     }
 

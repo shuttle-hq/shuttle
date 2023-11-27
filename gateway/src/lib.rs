@@ -284,7 +284,7 @@ pub mod tests {
     use shuttle_common::models::{project, service};
     use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
     use sqlx::sqlite::SqliteConnectOptions;
-    use sqlx::SqlitePool;
+    use sqlx::{query, SqlitePool};
     use test_context::AsyncTestContext;
     use tokio::sync::mpsc::channel;
     use tokio::time::sleep;
@@ -293,6 +293,7 @@ pub mod tests {
     use crate::acme::AcmeClient;
     use crate::api::latest::ApiBuilder;
     use crate::args::{ContextArgs, StartArgs, UseTls};
+    use crate::project::Project;
     use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::worker::Worker;
@@ -766,6 +767,7 @@ pub mod tests {
         router: Router,
         authorization: Authorization<Bearer>,
         project_name: String,
+        world: World,
     }
 
     impl TestProject {
@@ -827,6 +829,7 @@ pub mod tests {
                 router,
                 authorization,
                 project_name,
+                ..
             } = self;
 
             router
@@ -960,6 +963,7 @@ pub mod tests {
                 router,
                 authorization,
                 project_name,
+                ..
             } = self;
 
             router
@@ -976,6 +980,24 @@ pub mod tests {
                 })
                 .await
                 .unwrap();
+        }
+
+        /// Puts the project in a new state
+        pub async fn update_state(&self, state: Project) {
+            let TestProject {
+                project_name,
+                world,
+                ..
+            } = self;
+
+            let state = sqlx::types::Json(state);
+
+            query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+                .bind(&state)
+                .bind(&project_name)
+                .execute(&world.pool)
+                .await
+                .expect("test to update project state");
         }
     }
 
@@ -1008,6 +1030,7 @@ pub mod tests {
                 authorization,
                 project_name: project_name.to_string(),
                 router,
+                world,
             };
 
             this.wait_for_state(project::State::Ready).await;

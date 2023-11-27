@@ -994,7 +994,7 @@ pub mod tests {
 
             query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
                 .bind(&state)
-                .bind(&project_name)
+                .bind(project_name)
                 .execute(&world.pool)
                 .await
                 .expect("test to update project state");

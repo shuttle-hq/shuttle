@@ -95,11 +95,7 @@ impl ProjectCaller {
             )
             .await?;
 
-        if let Some(deployments) = deployments {
-            Ok(deployments)
-        } else {
-            Ok(Vec::new())
-        }
+        Ok(deployments.unwrap_or_default())
     }
 
     /// Stop a deployment of the project
@@ -124,11 +120,7 @@ impl ProjectCaller {
             )
             .await?;
 
-        if let Some(resources) = resources {
-            Ok(resources)
-        } else {
-            Ok(Vec::new())
-        }
+        Ok(resources.unwrap_or_default())
     }
 
     /// Delete a resource used by the project

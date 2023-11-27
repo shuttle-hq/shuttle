@@ -340,6 +340,12 @@ async fn delete_project(
 
         // Wait for the project to be ready
         handle.await;
+
+        let new_state = state.service.find_project(&project_name).await?;
+
+        if !new_state.state.is_ready() {
+            return Err(Error::from_kind(ErrorKind::ProjectCorrupted));
+        }
     }
 
     let service = state.service.clone();

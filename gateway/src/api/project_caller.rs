@@ -15,7 +15,7 @@ use crate::{auth::ScopedUser, project::Project, service::GatewayService, Account
 use super::latest::RouterState;
 
 /// Helper to easily make requests to a project
-pub struct ProjectCaller {
+pub(crate) struct ProjectCaller {
     project: Project,
     project_name: ProjectName,
     account_name: AccountName,

@@ -92,12 +92,12 @@ impl From<ErrorKind> for ApiError {
             },
             ErrorKind::ProjectHasRunningDeployment => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Could not automatically stop the running deployment for the project. Reach out to our support and ask them for a helping hand."
+                "Could not automatically stop the running deployment for the project. Please reach out to Shuttle support for help."
             ),
             ErrorKind::ProjectHasResources(resources) => {
                 let resources = resources.join(", ");
                 return Self {
-                    message: format!("Could not automatically delete the following resources: {}. Reach out to our support and ask them for a helping hand.", resources),
+                    message: format!("Could not automatically delete the following resources: {}. Please reach out to Shuttle support for help.", resources),
                     status_code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
                 }
             }

@@ -1860,7 +1860,7 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
 
         // If a check fails, print the returned error
-        client.delete_project(self.ctx.project_name(), true).await.map_err(|err| {
+        client.delete_project(self.ctx.project_name()).await.map_err(|err| {
             if let Some(api_error) = err.downcast_ref::<ApiError>() {
                 // If the returned error string changes, this could break
                 if api_error.message.contains("not ready") {
@@ -1908,7 +1908,7 @@ impl Shuttle {
         }
 
         client
-            .delete_project(self.ctx.project_name(), false)
+            .delete_project(self.ctx.project_name())
             .await
             .map_err(|err| {
                 suggestions::project::project_request_failure(

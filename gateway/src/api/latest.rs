@@ -297,6 +297,10 @@ async fn destroy_project(
 
 #[derive(Deserialize, IntoParams)]
 struct DeleteProjectParams {
+    // Was added in v0.30.0
+    // We have not needed it since 0.35.0, but have to keep in for any old CLI users
+    #[deprecated(since = "0.35.0", note = "was added in 0.30.0")]
+    #[allow(dead_code)]
     dry_run: Option<bool>,
 }
 
@@ -311,13 +315,11 @@ struct DeleteProjectParams {
     ),
     params(
         ("project_name" = String, Path, description = "The name of the project."),
-        DeleteProjectParams,
     )
 )]
 async fn delete_project(
     State(state): State<RouterState>,
     scoped_user: ScopedUser,
-    Query(DeleteProjectParams { dry_run }): Query<DeleteProjectParams>,
     req: Request<Body>,
 ) -> Result<AxumJson<String>, Error> {
     let project_name = scoped_user.scope.clone();
@@ -372,10 +374,6 @@ async fn delete_project(
         return Err(Error::from_kind(ErrorKind::ProjectHasResources(
             delete_fails,
         )));
-    }
-
-    if dry_run.is_some_and(|d| d) {
-        return Ok(AxumJson("project not deleted due to dry run".to_owned()));
     }
 
     let task = service

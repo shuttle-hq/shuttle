@@ -61,9 +61,13 @@ ulid = { workspace = true, features = ["serde"] }
 [dev-dependencies]
 anyhow = { workspace = true }
 colored = { workspace = true }
+flate2 = { workspace = true }
 jsonwebtoken = { workspace = true }
 portpicker = { workspace = true }
 ring = { workspace = true }
+rmp-serde = { workspace = true }
+shuttle-common-tests = { workspace = true }
 snailquote = "0.3.1"
+tar = { workspace = true }
 tempfile = { workspace = true }
 test-context = "0.1.4"

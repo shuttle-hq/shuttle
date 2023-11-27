@@ -168,11 +168,8 @@ impl Client {
         self.delete(path).await
     }
 
-    pub async fn delete_project(&self, project: &str, dry_run: bool) -> Result<String> {
-        let path = format!(
-            "/projects/{project}/delete{}",
-            if dry_run { "?dry_run=true" } else { "" }
-        );
+    pub async fn delete_project(&self, project: &str) -> Result<String> {
+        let path = format!("/projects/{project}/delete");
 
         self.delete(path).await
     }

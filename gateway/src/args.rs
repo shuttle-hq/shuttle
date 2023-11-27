@@ -62,6 +62,9 @@ pub struct ContextArgs {
     /// Address to reach the authentication service at
     #[arg(long, default_value = "http://127.0.0.1:8008")]
     pub auth_uri: Uri,
+    /// Address to reach the resource recorder service at
+    #[arg(long, default_value = "http://resource-recorder:8000")]
+    pub resource_recorder_uri: Uri,
     /// The Docker Network name in which to deploy user runtimes
     #[arg(long, default_value = "shuttle_default")]
     pub network_name: String,

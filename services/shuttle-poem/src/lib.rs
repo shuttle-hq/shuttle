@@ -1,23 +1,4 @@
-//! Shuttle service integration for the Poem web framework.
-//! ## Example
-//! ```rust,no_run
-//! use poem::{get, handler, Route};
-//! use shuttle_poem::ShuttlePoem;
-//!
-//! #[handler]
-//! fn hello_world() -> &'static str {
-//!     "Hello, world!"
-//! }
-//!
-//! #[shuttle_runtime::main]
-//! async fn poem() -> ShuttlePoem<impl poem::Endpoint> {
-//!     let app = Route::new().at("/", get(hello_world));
-//!
-//!     Ok(app.into())
-//! }
-//!
-//! ```
-
+#![doc = include_str!("../README.md")]
 /// A wrapper type for [poem::Endpoint] so we can implement [shuttle_runtime::Service] for it.
 pub struct PoemService<T>(pub T);
 
@@ -45,23 +26,5 @@ where
     }
 }
 
-/// Return type from the `[shuttle_runtime::main]` macro for a Poem-based service.
-///
-/// # Example
-///
-/// ```rust,no_run
-/// use poem::{get, handler, Route};
-/// use shuttle_poem::ShuttlePoem;
-/// #[handler]
-/// fn hello_world() -> &'static str {
-///     "Hello, world!"
-/// }
-///
-/// #[shuttle_runtime::main]
-/// async fn poem() -> ShuttlePoem<impl poem::Endpoint> {
-///     let app = Route::new().at("/", get(hello_world));
-///
-///     Ok(app.into())
-/// }
-/// ```
+#[doc = include_str!("../README.md")]
 pub type ShuttlePoem<T> = Result<PoemService<T>, shuttle_runtime::Error>;

@@ -36,6 +36,5 @@ where
     }
 }
 
-
 #[doc = include_str!("../README.md")]
 pub type ShuttleActixWeb<F> = Result<ActixWebService<F>, shuttle_runtime::Error>;

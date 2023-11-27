@@ -352,18 +352,15 @@ async fn delete_project(
     deployments.sort_by_key(|d| d.last_update);
 
     // Make sure no deployment is in the building pipeline
-    let has_bad_state = deployments
-        .iter()
-        .find(|d| {
-            !matches!(
-                d.state,
-                deployment::State::Running
-                    | deployment::State::Completed
-                    | deployment::State::Crashed
-                    | deployment::State::Stopped
-            )
-        })
-        .is_some();
+    let has_bad_state = deployments.iter().any(|d| {
+        !matches!(
+            d.state,
+            deployment::State::Running
+                | deployment::State::Completed
+                | deployment::State::Crashed
+                | deployment::State::Stopped
+        )
+    });
 
     if has_bad_state {
         return Err(Error::from_kind(ErrorKind::ProjectHasBuildingDeployment));

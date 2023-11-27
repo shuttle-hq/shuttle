@@ -51,6 +51,7 @@ pub enum ErrorKind {
     TooManyProjects,
     ProjectHasResources(Vec<String>),
     ProjectHasRunningDeployment,
+    ProjectHasBuildingDeployment,
     CustomDomainNotFound,
     InvalidCustomDomain,
     CustomDomainAlreadyExists,
@@ -93,6 +94,10 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::ProjectHasRunningDeployment => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Could not automatically stop the running deployment for the project. Please reach out to Shuttle support for help."
+            ),
+            ErrorKind::ProjectHasBuildingDeployment => (
+                StatusCode::BAD_REQUEST,
+                "Project currently has a deployment that is busy building. Use `cargo shuttle deployment list` to see it and wait for it to finish"
             ),
             ErrorKind::ProjectHasResources(resources) => {
                 let resources = resources.join(", ");

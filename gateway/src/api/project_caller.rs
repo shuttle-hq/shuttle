@@ -5,9 +5,10 @@ use http::{HeaderMap, Method, Request, StatusCode, Uri};
 use hyper::Body;
 use serde::de::DeserializeOwned;
 use shuttle_common::{
-    models::{error::ErrorKind, project::ProjectName, service},
+    models::{deployment, error::ErrorKind, project::ProjectName},
     resource,
 };
+use uuid::Uuid;
 
 use crate::{auth::ScopedUser, project::Project, service::GatewayService, AccountName, Error};
 
@@ -60,11 +61,12 @@ impl ProjectCaller {
     }
 
     /// Make a request call and deserialize the body to the generic type
-    async fn call_deserialize<T: DeserializeOwned + Default>(
+    /// Returns `None` when the request was successful but found nothing
+    async fn call_deserialize<T: DeserializeOwned>(
         &self,
         uri: &str,
         method: Method,
-    ) -> Result<T, Error> {
+    ) -> Result<Option<T>, Error> {
         let res = self.call(uri, method).await?;
 
         if res.status() != StatusCode::NOT_FOUND {
@@ -77,29 +79,36 @@ impl ProjectCaller {
             let body = serde_json::from_slice(&body_bytes)
                 .map_err(|e| Error::source(ErrorKind::Internal, e))?;
 
-            Ok(body)
+            Ok(Some(body))
         } else {
-            Ok(Default::default())
+            return Ok(None);
         }
     }
 
-    /// Get the service summary for the project
-    pub async fn get_service_summary(&self) -> Result<service::Summary, Error> {
+    /// Get the deployments for the project
+    pub async fn get_deployment_list(&self) -> Result<Vec<deployment::Response>, Error> {
         let project_name = &self.project_name;
 
-        self.call_deserialize(
-            &format!("/projects/{project_name}/services/{project_name}"),
-            Method::GET,
-        )
-        .await
+        let deployments = self
+            .call_deserialize(
+                &format!("/projects/{project_name}/deployments"),
+                Method::GET,
+            )
+            .await?;
+
+        if let Some(deployments) = deployments {
+            Ok(deployments)
+        } else {
+            Ok(Vec::new())
+        }
     }
 
-    /// Stop the active deployment of the project
-    pub async fn stop_active_deployment(&self) -> Result<Response<Body>, Error> {
+    /// Stop a deployment of the project
+    pub async fn stop_deployment(&self, deployment_id: &Uuid) -> Result<Response<Body>, Error> {
         let project_name = &self.project_name;
 
         self.call(
-            &format!("/projects/{project_name}/services/{project_name}"),
+            &format!("/projects/{project_name}/deployments/{deployment_id}"),
             Method::DELETE,
         )
         .await
@@ -109,11 +118,18 @@ impl ProjectCaller {
     pub async fn get_resources(&self) -> Result<Vec<resource::Response>, Error> {
         let project_name = &self.project_name;
 
-        self.call_deserialize(
-            &format!("/projects/{project_name}/services/{project_name}/resources"),
-            Method::GET,
-        )
-        .await
+        let resources = self
+            .call_deserialize(
+                &format!("/projects/{project_name}/services/{project_name}/resources"),
+                Method::GET,
+            )
+            .await?;
+
+        if let Some(resources) = resources {
+            Ok(resources)
+        } else {
+            Ok(Vec::new())
+        }
     }
 
     /// Delete a resource used by the project

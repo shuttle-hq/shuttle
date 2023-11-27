@@ -29,7 +29,7 @@ use shuttle_common::models::{
     project::{self, ProjectName},
     stats,
 };
-use shuttle_common::{request_span, VersionInfo};
+use shuttle_common::{deployment, request_span, VersionInfo};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
@@ -347,10 +347,36 @@ async fn delete_project(
     let project_caller =
         ProjectCaller::new(state.clone(), scoped_user.clone(), req.headers()).await?;
 
-    // check that deployment is not running
-    let summary = project_caller.get_service_summary().await?;
-    if summary.deployment.is_some() {
-        let res = project_caller.stop_active_deployment().await?;
+    // check that a deployment is not running
+    let mut deployments = project_caller.get_deployment_list().await?;
+    deployments.sort_by_key(|d| d.last_update);
+
+    // Make sure no deployment is in the building pipeline
+    let has_bad_state = deployments
+        .iter()
+        .find(|d| {
+            !matches!(
+                d.state,
+                deployment::State::Running
+                    | deployment::State::Completed
+                    | deployment::State::Crashed
+                    | deployment::State::Stopped
+            )
+        })
+        .is_some();
+
+    if has_bad_state {
+        return Err(Error::from_kind(ErrorKind::ProjectHasBuildingDeployment));
+    }
+
+    let running_deployments = deployments
+        .into_iter()
+        .filter(|d| d.state == deployment::State::Running);
+
+    for running_deployment in running_deployments {
+        let res = project_caller
+            .stop_deployment(&running_deployment.id)
+            .await?;
 
         if res.status() != StatusCode::OK {
             return Err(Error::from_kind(ErrorKind::ProjectHasRunningDeployment));
@@ -1086,6 +1112,7 @@ pub mod tests {
     use test_context::test_context;
     use tokio::sync::mpsc::channel;
     use tokio::sync::oneshot;
+    use tokio::time::sleep;
     use tower::Service;
 
     use super::*;
@@ -1400,6 +1427,20 @@ pub mod tests {
         assert_eq!(
             project.router_call(Method::DELETE, "/delete").await,
             StatusCode::OK
+        );
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_is_building(project: &mut TestProject) {
+        project.just_deploy("../examples/axum/hello-world").await;
+
+        // Wait a bit to it to progress in the queue
+        sleep(Duration::from_secs(2)).await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::BAD_REQUEST
         );
     }
 

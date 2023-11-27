@@ -876,8 +876,8 @@ pub mod tests {
                 .unwrap()
         }
 
-        /// Deploy the code at the path to the project
-        pub async fn deploy(&mut self, path: &str) {
+        /// Just deploy the code at the path and don't wait for it to finish
+        pub async fn just_deploy(&mut self, path: &str) {
             let path = canonicalize(path).expect("deploy path to be valid");
             let name = path.file_name().unwrap().to_str().unwrap();
             let enc = GzEncoder::new(Vec::new(), Compression::fast());
@@ -924,6 +924,13 @@ pub mod tests {
                 })
                 .await
                 .unwrap();
+        }
+
+        /// Deploy the code at the path to the project and wait for it to finish
+        pub async fn deploy(&mut self, path: &str) {
+            self.just_deploy(path).await;
+
+            let project_name = &self.project_name;
 
             // Wait for deployment to be up
             let mut tries = 0;

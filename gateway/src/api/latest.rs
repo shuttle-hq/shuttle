@@ -327,8 +327,9 @@ async fn delete_project(
     let project_id =
         Ulid::from_string(&project.project_id).expect("stored project id to be a valid ULID");
 
-    // Try to startup a destroyed project first
-    if project.state.is_destroyed() {
+    // Try to startup destroyed or errored projects
+    let project_deletable = project.state.is_ready() || project.state.is_stopped();
+    if !(project_deletable) {
         let handle = state
             .service
             .new_task()

@@ -1084,11 +1084,8 @@ impl ApiBuilder {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
 
-        // Allow about 4 cores per build
-        let mut concurrent_builds = num_cpus::get() / 4;
-        if concurrent_builds < 1 {
-            concurrent_builds = 1;
-        }
+        // Allow about 4 cores per build, but use at most 75% (* 3 / 4) of all cores and at least 1 core
+        let concurrent_builds: usize = (num_cpus::get() * 3 / 4 / 4).max(1);
 
         let running_builds = Arc::new(Mutex::new(TtlCache::new(concurrent_builds)));
 

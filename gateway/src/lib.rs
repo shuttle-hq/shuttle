@@ -286,7 +286,7 @@ pub mod tests {
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::{query, SqlitePool};
     use test_context::AsyncTestContext;
-    use tokio::sync::mpsc::channel;
+    use tokio::sync::mpsc::{channel, Sender};
     use tokio::time::sleep;
     use tower::Service;
 
@@ -296,6 +296,7 @@ pub mod tests {
     use crate::project::Project;
     use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
+    use crate::task::BoxedTask;
     use crate::worker::Worker;
     use crate::DockerContext;
 
@@ -649,8 +650,8 @@ pub mod tests {
             }
         }
 
-        /// Create a router to make API calls against. Also starts up a worker to create actual Docker containers for all requests
-        pub async fn router(&self) -> Router {
+        /// Create a service and sender to handle tasks. Also starts up a worker to create actual Docker containers for all requests
+        pub async fn service(&self) -> (Arc<GatewayService>, Sender<BoxedTask>) {
             let service = Arc::new(GatewayService::init(self.args(), self.pool(), "".into()).await);
             let worker = Worker::new();
 
@@ -676,6 +677,11 @@ pub mod tests {
             // Allow the spawns to start
             tokio::time::sleep(Duration::from_secs(1)).await;
 
+            (service, sender)
+        }
+
+        /// Create a router to make API calls against
+        pub fn router(&self, service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Router {
             ApiBuilder::new()
                 .with_service(Arc::clone(&service))
                 .with_sender(sender)
@@ -768,6 +774,8 @@ pub mod tests {
         authorization: Authorization<Bearer>,
         project_name: String,
         world: World,
+        service: Arc<GatewayService>,
+        sender: Sender<BoxedTask>,
     }
 
     impl TestProject {
@@ -999,6 +1007,20 @@ pub mod tests {
                 .await
                 .expect("test to update project state");
         }
+
+        /// Run one iteration of health checks for this project
+        pub async fn run_health_check(&self) {
+            let handle = self
+                .service
+                .new_task()
+                .project(self.project_name.parse().unwrap())
+                .send(&self.sender)
+                .await
+                .expect("to send one ambulance task");
+
+            // We wait for the check to be done before moving on
+            handle.await
+        }
     }
 
     #[async_trait]
@@ -1006,7 +1028,9 @@ pub mod tests {
         async fn setup() -> Self {
             let world = World::new().await;
 
-            let mut router = world.router().await;
+            let (service, sender) = world.service().await;
+
+            let mut router = world.router(service.clone(), sender.clone());
             let authorization = world.create_authorization_bearer("neo");
             let project_name = "matrix";
 
@@ -1031,6 +1055,8 @@ pub mod tests {
                 project_name: project_name.to_string(),
                 router,
                 world,
+                service,
+                sender,
             };
 
             this.wait_for_state(project::State::Ready).await;

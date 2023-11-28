@@ -209,13 +209,14 @@ async fn create_project(
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
+    let cch_modifier = project_name.starts_with("cch23-");
+
     // Check that the user is within their project limits.
-    let temporary_increase = project_name.starts_with("cch23-") as u32;
     let can_create_project = claim.can_create_project(
         service
             .get_project_count(&name)
             .await?
-            .saturating_sub(temporary_increase),
+            .saturating_sub(cch_modifier as u32),
     );
 
     let project = service
@@ -224,7 +225,7 @@ async fn create_project(
             name.clone(),
             claim.is_admin(),
             can_create_project,
-            config.idle_minutes,
+            if cch_modifier { 5 } else { config.idle_minutes },
         )
         .await?;
     let idle_minutes = project.state.idle_minutes();

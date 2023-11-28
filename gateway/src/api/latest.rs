@@ -1197,6 +1197,7 @@ impl ApiBuilder {
         let posthog_client = self.posthog_client.expect("a task Sender is required");
 
         // Allow about 4 cores per build, but use at most 75% (* 3 / 4) of all cores and at least 1 core
+        // Assumes each builder (deployer) is assigned 4 cores
         let concurrent_builds: usize = (num_cpus::get() * 3 / 4 / 4).max(1);
 
         let running_builds = Arc::new(Mutex::new(TtlCache::new(concurrent_builds)));

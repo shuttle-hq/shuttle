@@ -141,10 +141,10 @@ fn get_databases_table(
     let show_secret_hint = if databases.is_empty() || show_secrets {
         ""
     } else {
-        "Hint: you can show the secrets of these resources using --show-secrets\n"
+        "Hint: you can show the secrets of these resources using `cargo shuttle resource list --show-secrets`\n"
     };
 
-    format!("These databases are linked to {service_name}\n{table}\n{show_secret_hint}",)
+    format!("These databases are linked to {service_name}\n{table}\n{show_secret_hint}")
 }
 
 fn get_secrets_table(secrets: &[&Response], service_name: &str, raw: bool) -> String {

@@ -1392,6 +1392,21 @@ pub mod tests {
 
     #[test_context(TestProject)]
     #[tokio::test]
+    async fn api_delete_project_that_is_stopped(project: &mut TestProject) {
+        // Run two health checks to get the project to go into idle mode
+        project.run_health_check().await;
+        project.run_health_check().await;
+
+        project.wait_for_state(project::State::Stopped).await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::OK
+        );
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
     async fn api_delete_project_that_is_destroyed(project: &mut TestProject) {
         project.destroy_project().await;
 

@@ -286,7 +286,7 @@ pub mod tests {
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::{query, SqlitePool};
     use test_context::AsyncTestContext;
-    use tokio::sync::mpsc::channel;
+    use tokio::sync::mpsc::{channel, Sender};
     use tokio::time::sleep;
     use tower::Service;
 
@@ -296,6 +296,7 @@ pub mod tests {
     use crate::project::Project;
     use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
+    use crate::task::BoxedTask;
     use crate::worker::Worker;
     use crate::DockerContext;
 
@@ -649,8 +650,8 @@ pub mod tests {
             }
         }
 
-        /// Create a router to make API calls against. Also starts up a worker to create actual Docker containers for all requests
-        pub async fn router(&self) -> Router {
+        /// Create a service and sender to handle tasks. Also starts up a worker to create actual Docker containers for all requests
+        pub async fn service(&self) -> (Arc<GatewayService>, Sender<BoxedTask>) {
             let service = Arc::new(GatewayService::init(self.args(), self.pool(), "".into()).await);
             let worker = Worker::new();
 
@@ -676,6 +677,11 @@ pub mod tests {
             // Allow the spawns to start
             tokio::time::sleep(Duration::from_secs(1)).await;
 
+            (service, sender)
+        }
+
+        /// Create a router to make API calls against
+        pub fn router(&self, service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Router {
             ApiBuilder::new()
                 .with_service(Arc::clone(&service))
                 .with_sender(sender)
@@ -767,7 +773,9 @@ pub mod tests {
         router: Router,
         authorization: Authorization<Bearer>,
         project_name: String,
-        world: World,
+        pool: SqlitePool,
+        service: Arc<GatewayService>,
+        sender: Sender<BoxedTask>,
     }
 
     impl TestProject {
@@ -985,9 +993,7 @@ pub mod tests {
         /// Puts the project in a new state
         pub async fn update_state(&self, state: Project) {
             let TestProject {
-                project_name,
-                world,
-                ..
+                project_name, pool, ..
             } = self;
 
             let state = sqlx::types::Json(state);
@@ -995,9 +1001,23 @@ pub mod tests {
             query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
                 .bind(&state)
                 .bind(project_name)
-                .execute(&world.pool)
+                .execute(pool)
                 .await
                 .expect("test to update project state");
+        }
+
+        /// Run one iteration of health checks for this project
+        pub async fn run_health_check(&self) {
+            let handle = self
+                .service
+                .new_task()
+                .project(self.project_name.parse().unwrap())
+                .send(&self.sender)
+                .await
+                .expect("to send one ambulance task");
+
+            // We wait for the check to be done before moving on
+            handle.await
         }
     }
 
@@ -1006,7 +1026,9 @@ pub mod tests {
         async fn setup() -> Self {
             let world = World::new().await;
 
-            let mut router = world.router().await;
+            let (service, sender) = world.service().await;
+
+            let mut router = world.router(service.clone(), sender.clone());
             let authorization = world.create_authorization_bearer("neo");
             let project_name = "matrix";
 
@@ -1030,7 +1052,9 @@ pub mod tests {
                 authorization,
                 project_name: project_name.to_string(),
                 router,
-                world,
+                pool: world.pool(),
+                service,
+                sender,
             };
 
             this.wait_for_state(project::State::Ready).await;

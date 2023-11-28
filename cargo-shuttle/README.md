@@ -142,8 +142,8 @@ This should generate the following dependency in `Cargo.toml`:
 
 ```toml
 rocket = "0.5.0"
-shuttle-rocket = "0.34.0"
-shuttle-runtime = "0.34.0"
+shuttle-rocket = "0.34.1"
+shuttle-runtime = "0.34.1"
 tokio = "1.26.0"
 ```
 

@@ -773,7 +773,7 @@ pub mod tests {
         router: Router,
         authorization: Authorization<Bearer>,
         project_name: String,
-        world: World,
+        pool: SqlitePool,
         service: Arc<GatewayService>,
         sender: Sender<BoxedTask>,
     }
@@ -993,9 +993,7 @@ pub mod tests {
         /// Puts the project in a new state
         pub async fn update_state(&self, state: Project) {
             let TestProject {
-                project_name,
-                world,
-                ..
+                project_name, pool, ..
             } = self;
 
             let state = sqlx::types::Json(state);
@@ -1003,7 +1001,7 @@ pub mod tests {
             query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
                 .bind(&state)
                 .bind(project_name)
-                .execute(&world.pool)
+                .execute(pool)
                 .await
                 .expect("test to update project state");
         }
@@ -1054,7 +1052,7 @@ pub mod tests {
                 authorization,
                 project_name: project_name.to_string(),
                 router,
-                world,
+                pool: world.pool(),
                 service,
                 sender,
             };

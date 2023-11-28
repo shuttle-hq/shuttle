@@ -212,7 +212,12 @@ impl Shuttle {
             Command::Run(run_args) => self.local_run(run_args).await,
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
-            Command::Logs { id, latest, follow } => self.logs(id, latest, follow).await,
+            Command::Logs {
+                id,
+                latest,
+                follow,
+                raw,
+            } => self.logs(id, latest, follow, raw).await,
             Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
                 self.deployments_list(page, limit, raw).await
             }
@@ -691,7 +696,13 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn logs(&self, id: Option<Uuid>, latest: bool, follow: bool) -> Result<CommandOutcome> {
+    async fn logs(
+        &self,
+        id: Option<Uuid>,
+        latest: bool,
+        follow: bool,
+        raw: bool,
+    ) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let id = if let Some(id) = id {
             id
@@ -736,8 +747,12 @@ impl Shuttle {
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
                     match serde_json::from_str::<shuttle_common::LogItem>(&line) {
-                        Ok(log_item) => {
-                            println!("{log_item}")
+                        Ok(log) => {
+                            if raw {
+                                println!("{}", log.get_raw_line());
+                            } else {
+                                println!("{log}");
+                            }
                         }
                         Err(err) => {
                             debug!(error = %err, "failed to parse message into log item");
@@ -762,7 +777,11 @@ impl Shuttle {
                 })?;
 
             for log in logs.into_iter() {
-                println!("{log}");
+                if raw {
+                    println!("{}", log.get_raw_line());
+                } else {
+                    println!("{log}");
+                }
             }
         }
 

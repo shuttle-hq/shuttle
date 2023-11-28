@@ -1503,11 +1503,22 @@ impl Shuttle {
         let mut deployer_version_checked = false;
         let mut runtime_version_checked = false;
         loop {
-            let message = stream.next().await;
-            if let Some(Ok(msg)) = message {
+            if let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                    let log_item: shuttle_common::LogItem =
-                        serde_json::from_str(&line).context("parsing log line")?;
+                    let log_item = match serde_json::from_str::<shuttle_common::LogItem>(&line) {
+                        Ok(log_item) => log_item,
+                        Err(err) => {
+                            debug!(error = %err, "failed to parse message into log item");
+
+                            let message = if let Ok(err) = serde_json::from_str::<ApiError>(&line) {
+                                err.to_string()
+                            } else {
+                                "failed to parse logs, is your cargo-shuttle outdated?".to_string()
+                            };
+
+                            bail!(message);
+                        }
+                    };
 
                     println!("{log_item}");
 

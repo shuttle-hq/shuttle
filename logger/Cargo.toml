@@ -12,7 +12,6 @@ shuttle-proto = { workspace = true, features = ["logger"] }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-http = { workspace = true }
 prost-types = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = [
@@ -25,8 +24,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
-tower = { workspace = true }
-tower_governor = { version= "0.1.0", features = ["tracing"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default"] }
 
@@ -38,5 +35,3 @@ serde_json = { workspace = true }
 shuttle-common-tests = { workspace = true }
 uuid = { workspace = true }
 ctor = { workspace = true }
-futures = { workspace = true }
-tower = { workspace = true, features = ["util"] }

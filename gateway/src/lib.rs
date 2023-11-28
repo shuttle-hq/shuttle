@@ -284,7 +284,7 @@ pub mod tests {
     use shuttle_common::models::{project, service};
     use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
     use sqlx::sqlite::SqliteConnectOptions;
-    use sqlx::SqlitePool;
+    use sqlx::{query, SqlitePool};
     use test_context::AsyncTestContext;
     use tokio::sync::mpsc::channel;
     use tokio::time::sleep;
@@ -293,6 +293,7 @@ pub mod tests {
     use crate::acme::AcmeClient;
     use crate::api::latest::ApiBuilder;
     use crate::args::{ContextArgs, StartArgs, UseTls};
+    use crate::project::Project;
     use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::worker::Worker;
@@ -761,22 +762,12 @@ pub mod tests {
         }
     }
 
-    /// Make it easy to perform common requests against the router for testing purposes
-    #[async_trait]
-    pub trait RouterExt {
-        /// Create a project and put it in the ready state
-        async fn create_project(
-            &mut self,
-            authorization: &Authorization<Bearer>,
-            project_name: &str,
-        ) -> TestProject;
-    }
-
     /// Helper struct to wrap a bunch of commands to run against a test project
     pub struct TestProject {
         router: Router,
         authorization: Authorization<Bearer>,
         project_name: String,
+        world: World,
     }
 
     impl TestProject {
@@ -838,6 +829,7 @@ pub mod tests {
                 router,
                 authorization,
                 project_name,
+                ..
             } = self;
 
             router
@@ -971,6 +963,7 @@ pub mod tests {
                 router,
                 authorization,
                 project_name,
+                ..
             } = self;
 
             router
@@ -988,6 +981,24 @@ pub mod tests {
                 .await
                 .unwrap();
         }
+
+        /// Puts the project in a new state
+        pub async fn update_state(&self, state: Project) {
+            let TestProject {
+                project_name,
+                world,
+                ..
+            } = self;
+
+            let state = sqlx::types::Json(state);
+
+            query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+                .bind(&state)
+                .bind(project_name)
+                .execute(&world.pool)
+                .await
+                .expect("test to update project state");
+        }
     }
 
     #[async_trait]
@@ -997,8 +1008,34 @@ pub mod tests {
 
             let mut router = world.router().await;
             let authorization = world.create_authorization_bearer("neo");
+            let project_name = "matrix";
 
-            router.create_project(&authorization, "matrix").await
+            router
+                .call(
+                    Request::builder()
+                        .method("POST")
+                        .uri(format!("/projects/{project_name}"))
+                        .header("Content-Type", "application/json")
+                        .body("{\"idle_minutes\": 3}".into())
+                        .unwrap()
+                        .with_header(&authorization),
+                )
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+
+            let mut this = TestProject {
+                authorization,
+                project_name: project_name.to_string(),
+                router,
+                world,
+            };
+
+            this.wait_for_state(project::State::Ready).await;
+
+            this
         }
 
         async fn teardown(mut self) {
@@ -1008,42 +1045,6 @@ pub mod tests {
                 self.router_call(Method::DELETE, "/delete").await;
                 eprintln!("test left a dangling project which you might need to clean manually");
             }
-        }
-    }
-
-    #[async_trait]
-    impl RouterExt for Router {
-        async fn create_project(
-            &mut self,
-            authorization: &Authorization<Bearer>,
-            project_name: &str,
-        ) -> TestProject {
-            let authorization = authorization.clone();
-
-            self.call(
-                Request::builder()
-                    .method("POST")
-                    .uri(format!("/projects/{project_name}"))
-                    .header("Content-Type", "application/json")
-                    .body("{\"idle_minutes\": 3}".into())
-                    .unwrap()
-                    .with_header(&authorization),
-            )
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK);
-            })
-            .await
-            .unwrap();
-
-            let mut this = TestProject {
-                authorization,
-                project_name: project_name.to_string(),
-                router: self.clone(),
-            };
-
-            this.wait_for_state(project::State::Ready).await;
-
-            this
         }
     }
 

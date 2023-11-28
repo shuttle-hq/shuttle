@@ -52,6 +52,7 @@ pub enum ErrorKind {
     ProjectHasResources(Vec<String>),
     ProjectHasRunningDeployment,
     ProjectHasBuildingDeployment,
+    ProjectCorrupted,
     CustomDomainNotFound,
     InvalidCustomDomain,
     CustomDomainAlreadyExists,
@@ -98,6 +99,10 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::ProjectHasBuildingDeployment => (
                 StatusCode::BAD_REQUEST,
                 "Project currently has a deployment that is busy building. Use `cargo shuttle deployment list` to see it and wait for it to finish"
+            ),
+            ErrorKind::ProjectCorrupted => (
+                StatusCode::BAD_REQUEST,
+                "Tried to get project into a ready state for deletion but failed. Please reach out to Shuttle support for help."
             ),
             ErrorKind::ProjectHasResources(resources) => {
                 let resources = resources.join(", ");

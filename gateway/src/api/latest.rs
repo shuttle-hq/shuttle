@@ -327,8 +327,9 @@ async fn delete_project(
     let project_id =
         Ulid::from_string(&project.project_id).expect("stored project id to be a valid ULID");
 
-    // Try to startup a destroyed project first
-    if project.state.is_destroyed() {
+    // Try to startup destroyed or errored projects
+    let project_deletable = project.state.is_ready() || project.state.is_stopped();
+    if !(project_deletable) {
         let handle = state
             .service
             .new_task()
@@ -339,6 +340,12 @@ async fn delete_project(
 
         // Wait for the project to be ready
         handle.await;
+
+        let new_state = state.service.find_project(&project_name).await?;
+
+        if !new_state.state.is_ready() {
+            return Err(Error::from_kind(ErrorKind::ProjectCorrupted));
+        }
     }
 
     let service = state.service.clone();
@@ -1113,6 +1120,7 @@ pub mod tests {
     use tower::Service;
 
     use super::*;
+    use crate::project::ProjectError;
     use crate::service::GatewayService;
     use crate::tests::{RequestBuilderExt, TestProject, World};
 
@@ -1438,6 +1446,21 @@ pub mod tests {
         assert_eq!(
             project.router_call(Method::DELETE, "/delete").await,
             StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_is_errored(project: &mut TestProject) {
+        project
+            .update_state(Project::Errored(ProjectError::internal(
+                "Mr. Anderson is here",
+            )))
+            .await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::OK
         );
     }
 

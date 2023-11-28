@@ -1,5 +1,4 @@
-use std::{net::SocketAddr, str::FromStr};
-
+use crate::stripe::MOCKED_SUBSCRIPTIONS;
 use axum::{body::Body, extract::Path, response::Response, routing::get, Router};
 use http::{header::CONTENT_TYPE, StatusCode};
 use hyper::{
@@ -10,9 +9,8 @@ use serde_json::Value;
 use shuttle_auth::{sqlite_init, ApiBuilder};
 use shuttle_common::claims::Claim;
 use sqlx::query;
+use std::{net::SocketAddr, str::FromStr, sync::Mutex};
 use tower::ServiceExt;
-
-use crate::stripe::MOCKED_SUBSCRIPTIONS;
 
 pub(crate) const ADMIN_KEY: &str = "ndh9z58jttoes3qv";
 
@@ -137,6 +135,20 @@ impl MockedStripeServer {
     async fn subscription_retrieve_handler(
         Path(subscription_id): Path<String>,
     ) -> axum::response::Response<String> {
+        static TOGGLE: Mutex<bool> = Mutex::new(false);
+
+        if subscription_id == "sub_123" {
+            let toggle_is_true = *TOGGLE.lock().unwrap();
+
+            if toggle_is_true {
+                return Response::new(MOCKED_SUBSCRIPTIONS[3].to_string());
+            } else {
+                let mut toggle = TOGGLE.lock().unwrap();
+                *toggle = true;
+                return Response::new(MOCKED_SUBSCRIPTIONS[2].to_string());
+            }
+        }
+
         let sessions = MOCKED_SUBSCRIPTIONS
             .iter()
             .filter(|sub| sub.contains(format!("\"id\": \"{}\"", subscription_id).as_str()))

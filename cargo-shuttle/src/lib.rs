@@ -2072,7 +2072,7 @@ async fn check_version(runtime_path: &Path) -> Result<()> {
 
     // Get runtime version from shuttle-runtime cli
     // It should print the version and exit immediately, so a timeout is used to not launch servers with non-Shuttle setups
-    let stdout = tokio::time::timeout(Duration::from_millis(500), async move {
+    let stdout = tokio::time::timeout(Duration::from_millis(1000), async move {
         tokio::process::Command::new(runtime_path)
             .arg("--version")
             .kill_on_drop(true) // if the binary does not halt on its own, not killing it will leak child processes

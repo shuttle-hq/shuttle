@@ -9,7 +9,7 @@ orbs:
 executors:
   docker-rust:
     docker:
-      - image: cimg/rust:1.72.0
+      - image: cimg/rust:1.74.0
     resource_class: small
   machine-ubuntu:
     machine:

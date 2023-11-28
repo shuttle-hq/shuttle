@@ -299,7 +299,6 @@ async fn destroy_project(
 struct DeleteProjectParams {
     // Was added in v0.30.0
     // We have not needed it since 0.35.0, but have to keep in for any old CLI users
-    #[deprecated(since = "0.35.0", note = "was added in 0.30.0")]
     #[allow(dead_code)]
     dry_run: Option<bool>,
 }
@@ -320,8 +319,14 @@ struct DeleteProjectParams {
 async fn delete_project(
     State(state): State<RouterState>,
     scoped_user: ScopedUser,
+    Query(DeleteProjectParams { dry_run }): Query<DeleteProjectParams>,
     req: Request<Body>,
 ) -> Result<AxumJson<String>, Error> {
+    // Don't do the dry run that might come from older CLIs
+    if dry_run.is_some_and(|d| d) {
+        return Ok(AxumJson("dry run is no longer supported".to_owned()));
+    }
+
     let project_name = scoped_user.scope.clone();
     let project = state.service.find_project(&project_name).await?;
     let project_id =

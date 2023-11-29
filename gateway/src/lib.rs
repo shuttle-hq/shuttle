@@ -284,17 +284,19 @@ pub mod tests {
     use shuttle_common::models::{project, service};
     use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
     use sqlx::sqlite::SqliteConnectOptions;
-    use sqlx::SqlitePool;
+    use sqlx::{query, SqlitePool};
     use test_context::AsyncTestContext;
-    use tokio::sync::mpsc::channel;
+    use tokio::sync::mpsc::{channel, Sender};
     use tokio::time::sleep;
     use tower::Service;
 
     use crate::acme::AcmeClient;
     use crate::api::latest::ApiBuilder;
     use crate::args::{ContextArgs, StartArgs, UseTls};
+    use crate::project::Project;
     use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
+    use crate::task::BoxedTask;
     use crate::worker::Worker;
     use crate::DockerContext;
 
@@ -648,8 +650,8 @@ pub mod tests {
             }
         }
 
-        /// Create a router to make API calls against. Also starts up a worker to create actual Docker containers for all requests
-        pub async fn router(&self) -> Router {
+        /// Create a service and sender to handle tasks. Also starts up a worker to create actual Docker containers for all requests
+        pub async fn service(&self) -> (Arc<GatewayService>, Sender<BoxedTask>) {
             let service = Arc::new(GatewayService::init(self.args(), self.pool(), "".into()).await);
             let worker = Worker::new();
 
@@ -675,6 +677,11 @@ pub mod tests {
             // Allow the spawns to start
             tokio::time::sleep(Duration::from_secs(1)).await;
 
+            (service, sender)
+        }
+
+        /// Create a router to make API calls against
+        pub fn router(&self, service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Router {
             ApiBuilder::new()
                 .with_service(Arc::clone(&service))
                 .with_sender(sender)
@@ -761,22 +768,14 @@ pub mod tests {
         }
     }
 
-    /// Make it easy to perform common requests against the router for testing purposes
-    #[async_trait]
-    pub trait RouterExt {
-        /// Create a project and put it in the ready state
-        async fn create_project(
-            &mut self,
-            authorization: &Authorization<Bearer>,
-            project_name: &str,
-        ) -> TestProject;
-    }
-
     /// Helper struct to wrap a bunch of commands to run against a test project
     pub struct TestProject {
         router: Router,
         authorization: Authorization<Bearer>,
         project_name: String,
+        pool: SqlitePool,
+        service: Arc<GatewayService>,
+        sender: Sender<BoxedTask>,
     }
 
     impl TestProject {
@@ -838,6 +837,7 @@ pub mod tests {
                 router,
                 authorization,
                 project_name,
+                ..
             } = self;
 
             router
@@ -971,6 +971,7 @@ pub mod tests {
                 router,
                 authorization,
                 project_name,
+                ..
             } = self;
 
             router
@@ -988,6 +989,36 @@ pub mod tests {
                 .await
                 .unwrap();
         }
+
+        /// Puts the project in a new state
+        pub async fn update_state(&self, state: Project) {
+            let TestProject {
+                project_name, pool, ..
+            } = self;
+
+            let state = sqlx::types::Json(state);
+
+            query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+                .bind(&state)
+                .bind(project_name)
+                .execute(pool)
+                .await
+                .expect("test to update project state");
+        }
+
+        /// Run one iteration of health checks for this project
+        pub async fn run_health_check(&self) {
+            let handle = self
+                .service
+                .new_task()
+                .project(self.project_name.parse().unwrap())
+                .send(&self.sender)
+                .await
+                .expect("to send one ambulance task");
+
+            // We wait for the check to be done before moving on
+            handle.await
+        }
     }
 
     #[async_trait]
@@ -995,10 +1026,40 @@ pub mod tests {
         async fn setup() -> Self {
             let world = World::new().await;
 
-            let mut router = world.router().await;
-            let authorization = world.create_authorization_bearer("neo");
+            let (service, sender) = world.service().await;
 
-            router.create_project(&authorization, "matrix").await
+            let mut router = world.router(service.clone(), sender.clone());
+            let authorization = world.create_authorization_bearer("neo");
+            let project_name = "matrix";
+
+            router
+                .call(
+                    Request::builder()
+                        .method("POST")
+                        .uri(format!("/projects/{project_name}"))
+                        .header("Content-Type", "application/json")
+                        .body("{\"idle_minutes\": 3}".into())
+                        .unwrap()
+                        .with_header(&authorization),
+                )
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+
+            let mut this = TestProject {
+                authorization,
+                project_name: project_name.to_string(),
+                router,
+                pool: world.pool(),
+                service,
+                sender,
+            };
+
+            this.wait_for_state(project::State::Ready).await;
+
+            this
         }
 
         async fn teardown(mut self) {
@@ -1008,42 +1069,6 @@ pub mod tests {
                 self.router_call(Method::DELETE, "/delete").await;
                 eprintln!("test left a dangling project which you might need to clean manually");
             }
-        }
-    }
-
-    #[async_trait]
-    impl RouterExt for Router {
-        async fn create_project(
-            &mut self,
-            authorization: &Authorization<Bearer>,
-            project_name: &str,
-        ) -> TestProject {
-            let authorization = authorization.clone();
-
-            self.call(
-                Request::builder()
-                    .method("POST")
-                    .uri(format!("/projects/{project_name}"))
-                    .header("Content-Type", "application/json")
-                    .body("{\"idle_minutes\": 3}".into())
-                    .unwrap()
-                    .with_header(&authorization),
-            )
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK);
-            })
-            .await
-            .unwrap();
-
-            let mut this = TestProject {
-                authorization,
-                project_name: project_name.to_string(),
-                router: self.clone(),
-            };
-
-            this.wait_for_state(project::State::Ready).await;
-
-            this
         }
     }
 

@@ -52,6 +52,7 @@ pub enum ErrorKind {
     ProjectHasResources(Vec<String>),
     ProjectHasRunningDeployment,
     ProjectHasBuildingDeployment,
+    ProjectCorrupted,
     CustomDomainNotFound,
     InvalidCustomDomain,
     CustomDomainAlreadyExists,
@@ -60,7 +61,6 @@ pub enum ErrorKind {
     NotReady,
     ServiceUnavailable,
     DeleteProjectFailed,
-    RateLimited(String),
 }
 
 impl From<ErrorKind> for ApiError {
@@ -99,6 +99,10 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::BAD_REQUEST,
                 "Project currently has a deployment that is busy building. Use `cargo shuttle deployment list` to see it and wait for it to finish"
             ),
+            ErrorKind::ProjectCorrupted => (
+                StatusCode::BAD_REQUEST,
+                "Tried to get project into a ready state for deletion but failed. Please reach out to Shuttle support for help."
+            ),
             ErrorKind::ProjectHasResources(resources) => {
                 let resources = resources.join(", ");
                 return Self {
@@ -127,12 +131,6 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "Service not ready"),
             ErrorKind::DeleteProjectFailed => (StatusCode::INTERNAL_SERVER_ERROR, "Deleting project failed"),
-            ErrorKind::RateLimited(message) => {
-                return Self {
-                    message,
-                    status_code: StatusCode::TOO_MANY_REQUESTS.as_u16(),
-                }
-            },
         };
         Self {
             message: error_message.to_string(),

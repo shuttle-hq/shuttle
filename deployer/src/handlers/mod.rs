@@ -33,7 +33,7 @@ use shuttle_common::{
     claims::{Claim, Scope},
     models::{
         deployment::{DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH},
-        error::{axum::CustomErrorPath, ApiError, ErrorKind},
+        error::axum::CustomErrorPath,
         project::ProjectName,
     },
     request_span, LogItem,
@@ -663,16 +663,8 @@ pub async fn get_logs(
                 .collect(),
         )),
         Err(error) => {
-            if error.code() == tonic::Code::Unavailable
-                && error.metadata().get("x-ratelimit-limit").is_some()
-            {
-                Err(Error::RateLimited(
-                    "your application is producing too many logs. Interactions with the shuttle logger service will be rate limited"
-                        .to_string(),
-                ))
-            } else {
-                Err(anyhow!("failed to retrieve logs for deployment").into())
-            }
+            error!(error = %error, "failed to retrieve logs for deployment");
+            Err(anyhow!("failed to retrieve logs for deployment").into())
         }
     }
 }
@@ -723,24 +715,10 @@ async fn logs_websocket_handler(
                 "failed to get backlog of logs"
             );
 
-            if error.code() == tonic::Code::Unavailable
-                && error.metadata().get("x-ratelimit-limit").is_some()
-            {
-                let message = serde_json::to_string(
-                    &ApiError::from(
-                        ErrorKind::RateLimited(
-                            "your application is producing too many logs. Interactions with the shuttle logger service will be rate limited"
-                            .to_string()
-                        )
-                    ))
-                    .expect("to convert error to json");
+            let _ = s
+                .send(ws::Message::Text("failed to get logs".to_string()))
+                .await;
 
-                let _ = s.send(ws::Message::Text(message)).await;
-            } else {
-                let _ = s
-                    .send(ws::Message::Text("failed to get logs".to_string()))
-                    .await;
-            }
             let _ = s.close().await;
             return;
         }

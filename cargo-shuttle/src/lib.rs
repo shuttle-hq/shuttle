@@ -212,7 +212,12 @@ impl Shuttle {
             Command::Run(run_args) => self.local_run(run_args).await,
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
-            Command::Logs { id, latest, follow } => self.logs(id, latest, follow).await,
+            Command::Logs {
+                id,
+                latest,
+                follow,
+                raw,
+            } => self.logs(id, latest, follow, raw).await,
             Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
                 self.deployments_list(page, limit, raw).await
             }
@@ -691,7 +696,13 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn logs(&self, id: Option<Uuid>, latest: bool, follow: bool) -> Result<CommandOutcome> {
+    async fn logs(
+        &self,
+        id: Option<Uuid>,
+        latest: bool,
+        follow: bool,
+        raw: bool,
+    ) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let id = if let Some(id) = id {
             id
@@ -736,8 +747,12 @@ impl Shuttle {
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
                     match serde_json::from_str::<shuttle_common::LogItem>(&line) {
-                        Ok(log_item) => {
-                            println!("{log_item}")
+                        Ok(log) => {
+                            if raw {
+                                println!("{}", log.get_raw_line());
+                            } else {
+                                println!("{log}");
+                            }
                         }
                         Err(err) => {
                             debug!(error = %err, "failed to parse message into log item");
@@ -762,7 +777,11 @@ impl Shuttle {
                 })?;
 
             for log in logs.into_iter() {
-                println!("{log}");
+                if raw {
+                    println!("{}", log.get_raw_line());
+                } else {
+                    println!("{log}");
+                }
             }
         }
 
@@ -1503,11 +1522,22 @@ impl Shuttle {
         let mut deployer_version_checked = false;
         let mut runtime_version_checked = false;
         loop {
-            let message = stream.next().await;
-            if let Some(Ok(msg)) = message {
+            if let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                    let log_item: shuttle_common::LogItem =
-                        serde_json::from_str(&line).context("parsing log line")?;
+                    let log_item = match serde_json::from_str::<shuttle_common::LogItem>(&line) {
+                        Ok(log_item) => log_item,
+                        Err(err) => {
+                            debug!(error = %err, "failed to parse message into log item");
+
+                            let message = if let Ok(err) = serde_json::from_str::<ApiError>(&line) {
+                                err.to_string()
+                            } else {
+                                "failed to parse logs, is your cargo-shuttle outdated?".to_string()
+                            };
+
+                            bail!(message);
+                        }
+                    };
 
                     println!("{log_item}");
 
@@ -1859,29 +1889,6 @@ impl Shuttle {
     async fn project_delete(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
 
-        // If a check fails, print the returned error
-        client.delete_project(self.ctx.project_name(), true).await.map_err(|err| {
-            if let Some(api_error) = err.downcast_ref::<ApiError>() {
-                // If the returned error string changes, this could break
-                if api_error.message.contains("not ready") {
-                    println!("{}", "Project delete failed".red());
-                    println!();
-                    println!("{}", "Try restarting the project with `cargo shuttle project restart` first.".yellow());
-                    println!("{}", "This is needed to check for any resources linked to it.".yellow());
-                    println!("{}", "For more help with deleting projects, visit https://docs.shuttle.rs/support/delete-project".yellow());
-                    println!();
-                    return err;
-                }
-            }
-            println!("{}", "For more help with deleting projects, visit https://docs.shuttle.rs/support/delete-project".yellow());
-            suggestions::project::project_request_failure(
-                err,
-                "Project delete failed",
-                true,
-                "deleting the project or getting project status fails repeatedly",
-            )
-        })?;
-
         println!(
             "{}",
             formatdoc!(
@@ -1889,7 +1896,7 @@ impl Shuttle {
                 WARNING:
                     Are you sure you want to delete "{}"?
                     This will...
-                    - Delete any shuttle-persist data in this project.
+                    - Delete any databases, secrets, and shuttle-persist data in this project.
                     - Delete any custom domains linked to this project.
                     - Release the project name from your account.
                     This action is permanent."#,
@@ -1908,7 +1915,7 @@ impl Shuttle {
         }
 
         client
-            .delete_project(self.ctx.project_name(), false)
+            .delete_project(self.ctx.project_name())
             .await
             .map_err(|err| {
                 suggestions::project::project_request_failure(
@@ -2065,7 +2072,7 @@ async fn check_version(runtime_path: &Path) -> Result<()> {
 
     // Get runtime version from shuttle-runtime cli
     // It should print the version and exit immediately, so a timeout is used to not launch servers with non-Shuttle setups
-    let stdout = tokio::time::timeout(Duration::from_millis(500), async move {
+    let stdout = tokio::time::timeout(Duration::from_millis(3000), async move {
         tokio::process::Command::new(runtime_path)
             .arg("--version")
             .kill_on_drop(true) // if the binary does not halt on its own, not killing it will leak child processes

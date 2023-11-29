@@ -29,7 +29,7 @@ use shuttle_common::models::{
     project::{self, ProjectName},
     stats,
 };
-use shuttle_common::{request_span, VersionInfo};
+use shuttle_common::{deployment, request_span, VersionInfo};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
@@ -58,6 +58,7 @@ use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{Error, AUTH_CLIENT};
 
 use super::auth_layer::ShuttleAuthLayer;
+use super::project_caller::ProjectCaller;
 
 pub const SVC_DEGRADED_THRESHOLD: usize = 128;
 pub const SHUTTLE_GATEWAY_VARIANT: &str = "shuttle-gateway";
@@ -208,13 +209,14 @@ async fn create_project(
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
+    let cch_modifier = project_name.starts_with("cch23-");
+
     // Check that the user is within their project limits.
-    let temporary_increase = project_name.starts_with("cch23-") as u32;
     let can_create_project = claim.can_create_project(
         service
             .get_project_count(&name)
             .await?
-            .saturating_sub(temporary_increase),
+            .saturating_sub(cch_modifier as u32),
     );
 
     let project = service
@@ -223,7 +225,7 @@ async fn create_project(
             name.clone(),
             claim.is_admin(),
             can_create_project,
-            config.idle_minutes,
+            if cch_modifier { 5 } else { config.idle_minutes },
         )
         .await?;
     let idle_minutes = project.state.idle_minutes();
@@ -296,6 +298,9 @@ async fn destroy_project(
 
 #[derive(Deserialize, IntoParams)]
 struct DeleteProjectParams {
+    // Was added in v0.30.0
+    // We have not needed it since 0.35.0, but have to keep in for any old CLI users
+    #[allow(dead_code)]
     dry_run: Option<bool>,
 }
 
@@ -310,7 +315,6 @@ struct DeleteProjectParams {
     ),
     params(
         ("project_name" = String, Path, description = "The name of the project."),
-        DeleteProjectParams,
     )
 )]
 async fn delete_project(
@@ -319,13 +323,19 @@ async fn delete_project(
     Query(DeleteProjectParams { dry_run }): Query<DeleteProjectParams>,
     req: Request<Body>,
 ) -> Result<AxumJson<String>, Error> {
+    // Don't do the dry run that might come from older CLIs
+    if dry_run.is_some_and(|d| d) {
+        return Ok(AxumJson("dry run is no longer supported".to_owned()));
+    }
+
     let project_name = scoped_user.scope.clone();
     let project = state.service.find_project(&project_name).await?;
     let project_id =
         Ulid::from_string(&project.project_id).expect("stored project id to be a valid ULID");
 
-    // Try to startup a destroyed project first
-    if project.state.is_destroyed() {
+    // Try to startup destroyed or errored projects
+    let project_deletable = project.state.is_ready() || project.state.is_stopped();
+    if !(project_deletable) {
         let handle = state
             .service
             .new_task()
@@ -336,83 +346,70 @@ async fn delete_project(
 
         // Wait for the project to be ready
         handle.await;
+
+        let new_state = state.service.find_project(&project_name).await?;
+
+        if !new_state.state.is_ready() {
+            return Err(Error::from_kind(ErrorKind::ProjectCorrupted));
+        }
     }
 
     let service = state.service.clone();
     let sender = state.sender.clone();
 
-    // check that deployment is not running
-    let mut rb = Request::builder();
-    rb.headers_mut().unwrap().clone_from(req.headers());
-    let service_req = rb
-        .uri(
-            format!("/projects/{project_name}/services/{project_name}")
-                .parse::<Uri>()
-                .unwrap(),
+    let project_caller =
+        ProjectCaller::new(state.clone(), scoped_user.clone(), req.headers()).await?;
+
+    // check that a deployment is not running
+    let mut deployments = project_caller.get_deployment_list().await?;
+    deployments.sort_by_key(|d| d.last_update);
+
+    // Make sure no deployment is in the building pipeline
+    let has_bad_state = deployments.iter().any(|d| {
+        !matches!(
+            d.state,
+            deployment::State::Running
+                | deployment::State::Completed
+                | deployment::State::Crashed
+                | deployment::State::Stopped
         )
-        .method("GET")
-        .body(hyper::Body::empty())
-        .unwrap();
-    let res = route_project(State(state.clone()), scoped_user.clone(), service_req).await?;
-    // 404 == no service == no deployments
-    if res.status() != StatusCode::NOT_FOUND {
+    });
+
+    if has_bad_state {
+        return Err(Error::from_kind(ErrorKind::ProjectHasBuildingDeployment));
+    }
+
+    let running_deployments = deployments
+        .into_iter()
+        .filter(|d| d.state == deployment::State::Running);
+
+    for running_deployment in running_deployments {
+        let res = project_caller
+            .stop_deployment(&running_deployment.id)
+            .await?;
+
         if res.status() != StatusCode::OK {
-            return Err(Error::from_kind(ErrorKind::Internal));
-        }
-        let body_bytes = hyper::body::to_bytes(res.into_body())
-            .await
-            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-        let summary: shuttle_common::models::service::Summary = serde_json::from_slice(&body_bytes)
-            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-        if summary.deployment.is_some() {
             return Err(Error::from_kind(ErrorKind::ProjectHasRunningDeployment));
         }
     }
 
-    // check if database in resources
-    let mut rb = hyper::Request::builder();
-    rb.headers_mut().unwrap().clone_from(req.headers());
-    let resource_req = rb
-        .uri(
-            format!("/projects/{project_name}/services/{project_name}/resources")
-                .parse::<Uri>()
-                .unwrap(),
-        )
-        .method("GET")
-        .body(hyper::Body::empty())
-        .unwrap();
-    let res = route_project(State(state.clone()), scoped_user, resource_req).await?;
-    // 404 == no service == no resources
-    if res.status() != StatusCode::NOT_FOUND {
+    // check if any resources exist
+    let resources = project_caller.get_resources().await?;
+    let mut delete_fails = Vec::new();
+
+    for resource in resources {
+        let resource_type = resource.r#type.to_string();
+        let res = project_caller.delete_resource(&resource_type).await?;
+
         if res.status() != StatusCode::OK {
-            return Err(Error::from_kind(ErrorKind::Internal));
-        }
-        let body_bytes = hyper::body::to_bytes(res.into_body())
-            .await
-            .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-        let resources: Vec<shuttle_common::resource::Response> =
-            serde_json::from_slice(&body_bytes)
-                .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-
-        let resources = resources
-            .into_iter()
-            .filter(|resource| {
-                matches!(
-                    resource.r#type,
-                    shuttle_common::resource::Type::Database(_)
-                        | shuttle_common::resource::Type::Secrets
-                )
-            })
-            .map(|resource| resource.r#type.to_string())
-            .collect::<Vec<_>>();
-
-        if !resources.is_empty() {
-            return Err(Error::from_kind(ErrorKind::ProjectHasResources(resources)));
+            delete_fails.push(resource_type)
         }
     }
 
-    if dry_run.is_some_and(|d| d) {
-        return Ok(AxumJson("project not deleted due to dry run".to_owned()));
+    if !delete_fails.is_empty() {
+        return Err(Error::from_kind(ErrorKind::ProjectHasResources(
+            delete_fails,
+        )));
     }
 
     let task = service
@@ -1087,11 +1084,8 @@ impl ApiBuilder {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
 
-        // Allow about 4 cores per build
-        let mut concurrent_builds = num_cpus::get() / 4;
-        if concurrent_builds < 1 {
-            concurrent_builds = 1;
-        }
+        // Allow about 4 cores per build, but use at most 75% (* 3 / 4) of all cores and at least 1 core
+        let concurrent_builds: usize = (num_cpus::get() * 3 / 4 / 4).max(1);
 
         let running_builds = Arc::new(Mutex::new(TtlCache::new(concurrent_builds)));
 
@@ -1125,9 +1119,11 @@ pub mod tests {
     use test_context::test_context;
     use tokio::sync::mpsc::channel;
     use tokio::sync::oneshot;
+    use tokio::time::sleep;
     use tower::Service;
 
     use super::*;
+    use crate::project::ProjectError;
     use crate::service::GatewayService;
     use crate::tests::{RequestBuilderExt, TestProject, World};
 
@@ -1387,19 +1383,103 @@ pub mod tests {
 
     #[test_context(TestProject)]
     #[tokio::test]
-    async fn api_delete_project_that_is_ready(project: &mut TestProject) -> anyhow::Result<()> {
-        project.router_call(Method::DELETE, "/delete").await;
-
-        Ok(())
+    async fn api_delete_project_that_is_ready(project: &mut TestProject) {
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::OK
+        );
     }
 
     #[test_context(TestProject)]
     #[tokio::test]
-    async fn api_delete_project_that_is_destroyed(project: &mut TestProject) -> anyhow::Result<()> {
-        project.destroy_project().await;
-        project.router_call(Method::DELETE, "/delete").await;
+    async fn api_delete_project_that_is_stopped(project: &mut TestProject) {
+        // Run two health checks to get the project to go into idle mode
+        project.run_health_check().await;
+        project.run_health_check().await;
 
-        Ok(())
+        project.wait_for_state(project::State::Stopped).await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::OK
+        );
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_is_destroyed(project: &mut TestProject) {
+        project.destroy_project().await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::OK
+        );
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_has_resources(project: &mut TestProject) {
+        project.deploy("../examples/rocket/secrets").await;
+        project.stop_service().await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::OK
+        );
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_has_resources_but_fails_to_remove_them(
+        project: &mut TestProject,
+    ) {
+        project.deploy("../examples/axum/metadata").await;
+        project.stop_service().await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_has_running_deployment(project: &mut TestProject) {
+        project.deploy("../examples/axum/hello-world").await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::OK
+        );
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_is_building(project: &mut TestProject) {
+        project.just_deploy("../examples/axum/hello-world").await;
+
+        // Wait a bit to it to progress in the queue
+        sleep(Duration::from_secs(2)).await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test_context(TestProject)]
+    #[tokio::test]
+    async fn api_delete_project_that_is_errored(project: &mut TestProject) {
+        project
+            .update_state(Project::Errored(ProjectError::internal(
+                "Mr. Anderson is here",
+            )))
+            .await;
+
+        assert_eq!(
+            project.router_call(Method::DELETE, "/delete").await,
+            StatusCode::OK
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

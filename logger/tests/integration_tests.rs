@@ -36,13 +36,7 @@ fn cleanup() {
 }
 mod needs_docker {
     use super::*;
-    use futures::future::join_all;
     use pretty_assertions::assert_eq;
-    use shuttle_logger::rate_limiting::{
-        tonic_error, TonicPeerIpKeyExtractor, BURST_SIZE, REFRESH_INTERVAL,
-    };
-    use tower::ServiceBuilder;
-    use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 
     #[tokio::test]
     async fn store_and_get_logs() {
@@ -197,104 +191,6 @@ mod needs_docker {
         }
     }
 
-    #[tokio::test]
-    async fn store_and_get_logs_rate_limited() {
-        let logger_port = pick_unused_port().unwrap();
-        let deployment_id = "runtime-fetch-logs-deployment-id";
-
-        // Create a unique database name so we have a new database for each test.
-        let db_name = Uuid::new_v4().to_string();
-
-        let server = spawn_server(logger_port, db_name);
-
-        let test_future = tokio::spawn(async move {
-            // Ensure the DB has been created and server has started.
-            tokio::time::sleep(Duration::from_millis(300)).await;
-
-            let dst = format!("http://localhost:{logger_port}");
-            let mut client = LoggerClient::connect(dst).await.unwrap();
-
-            let store_logs = || async {
-                client
-                    .clone()
-                    .store_logs(Request::new(StoreLogsRequest {
-                        logs: vec![LogItem {
-                            deployment_id: deployment_id.to_string(),
-                            log_line: Some(LogLine {
-                                service_name: SHUTTLE_SERVICE.to_string(),
-                                tx_timestamp: Some(Timestamp::from(SystemTime::UNIX_EPOCH)),
-                                data: ("log example").as_bytes().to_vec(),
-                            }),
-                        }],
-                    }))
-                    .await
-            };
-
-            // Six concurrent requests succeeds when rate limiter is fresh.
-            let futures = (0..6).map(|_| store_logs());
-            let result = join_all(futures).await;
-
-            assert!(result.iter().all(|response| response.is_ok()));
-
-            // Allow rate limiter time to regenerate two requests.
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-
-            let futures = (0..2).map(|_| store_logs());
-            let result = join_all(futures).await;
-
-            assert!(result.iter().all(|response| response.is_ok()));
-
-            // Allow rate limiter time to regenerate two requests.
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-
-            // Send three requests when the capacity is two.
-            let futures = (0..3).map(|_| store_logs());
-            let result = join_all(futures).await;
-
-            assert_eq!(result.iter().filter(|response| response.is_ok()).count(), 2);
-
-            // Check that the error has the expected status and rate limiting headers.
-            result
-                .iter()
-                .filter(|response| response.is_err())
-                .for_each(|err| {
-                    let err = err.as_ref().unwrap_err();
-
-                    assert_eq!(err.code(), tonic::Code::Unavailable);
-                    assert!(err.message().contains("too many requests"));
-
-                    let expected = [
-                        "x-ratelimit-remaining",
-                        "x-ratelimit-after",
-                        "x-ratelimit-limit",
-                    ];
-
-                    let headers = err.metadata();
-                    assert!(expected.into_iter().all(|key| headers.contains_key(key)));
-                });
-
-            // Allow rate limiter to regenerate a slot for the get_logs request.
-            tokio::time::sleep(Duration::from_millis(500)).await;
-
-            // Verify that all the logs that weren't rate limited were persisted in the logger.
-            let logs = client
-                .get_logs(Request::new(LogsRequest {
-                    deployment_id: deployment_id.into(),
-                }))
-                .await
-                .unwrap()
-                .into_inner()
-                .log_items;
-
-            assert_eq!(logs.len(), 10);
-        });
-
-        tokio::select! {
-            _ = server => panic!("server stopped first"),
-            result = test_future => result.expect("test should succeed")
-        }
-    }
-
     fn spawn_server(port: u16, db_name: String) -> JoinHandle<()> {
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
@@ -303,27 +199,10 @@ mod needs_docker {
 
         exec_psql(&format!(r#"CREATE DATABASE "{}";"#, &db_name));
 
-        let governor_config = GovernorConfigBuilder::default()
-            .per_millisecond(REFRESH_INTERVAL)
-            .burst_size(BURST_SIZE)
-            .use_headers()
-            .key_extractor(TonicPeerIpKeyExtractor)
-            .finish()
-            .unwrap();
-
         tokio::task::spawn(async move {
             let pg = Postgres::new(&pg_uri).await;
             Server::builder()
                 .layer(JwtScopesLayer::new(vec![Scope::Logs]))
-                .layer(
-                    ServiceBuilder::new()
-                        // This middleware goes above `GovernorLayer` because it will receive errors returned by
-                        // `GovernorLayer`.
-                        .map_err(tonic_error)
-                        .layer(GovernorLayer {
-                            config: &governor_config,
-                        }),
-                )
                 .add_service(LoggerServer::new(Service::new(pg.get_sender(), pg)))
                 .serve(addr)
                 .await

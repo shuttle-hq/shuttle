@@ -113,6 +113,9 @@ pub enum Command {
         #[arg(short, long)]
         /// Follow log output
         follow: bool,
+        #[arg(long)]
+        /// Don't display timestamps and log origin tags
+        raw: bool,
     },
     /// List or manage projects on Shuttle
     #[command(subcommand)]

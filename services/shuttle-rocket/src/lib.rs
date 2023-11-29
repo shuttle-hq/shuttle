@@ -1,23 +1,4 @@
-//! Shuttle service integration for the Rocket web framework.
-//! ## Example
-//! ```rust,no_run
-//! #[macro_use]
-//! extern crate rocket;
-//!
-//! # fn main() {
-//! #[get("/")]
-//! fn index() -> &'static str {
-//!     "Hello, world!"
-//! }
-//!
-//! #[shuttle_runtime::main]
-//! async fn rocket() -> shuttle_rocket::ShuttleRocket {
-//!     let rocket = rocket::build().mount("/", routes![index]);
-//!
-//!     Ok(rocket.into())
-//! }
-//! # }
-//! ```
+#![doc = include_str!("../README.md")]
 use std::net::SocketAddr;
 
 /// A wrapper type for [rocket::Rocket<rocket::Build>] so we can implement [shuttle_runtime::Service] for it.
@@ -59,24 +40,5 @@ impl From<rocket::Rocket<rocket::Build>> for RocketService {
     }
 }
 
-/// Return type from the `[shuttle_runtime::main]` macro for a Rocket-based service.
-///
-/// # Example
-///
-/// ```rust,no_run
-/// use rocket::{routes, get};
-/// use shuttle_rocket::ShuttleRocket;
-///
-/// #[get("/")]
-/// fn index() -> &'static str {
-///     "Hello, world!"
-/// }
-///
-/// #[shuttle_runtime::main]
-/// async fn rocket() -> ShuttleRocket {
-///     let rocket = rocket::build().mount("/", routes![index]);
-///
-///     Ok(rocket.into())
-/// }
-/// ```
+#[doc = include_str!("../README.md")]
 pub type ShuttleRocket = Result<RocketService, shuttle_runtime::Error>;

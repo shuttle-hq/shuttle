@@ -1125,7 +1125,7 @@ pub mod tests {
     use super::*;
     use crate::project::ProjectError;
     use crate::service::GatewayService;
-    use crate::tests::{RequestBuilderExt, TestProject, World};
+    use crate::tests::{RequestBuilderExt, TestGateway, TestProject, World};
 
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
@@ -1379,6 +1379,15 @@ pub mod tests {
         }
 
         Ok(())
+    }
+
+    #[test_context(TestGateway)]
+    #[tokio::test]
+    async fn api_create_project_above_node_limits(gateway: &mut TestGateway) {
+        let _ = gateway.create_project("cch23-first").await;
+        let code = gateway.try_create_project("cch23-second").await;
+
+        assert_eq!(code, StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     #[test_context(TestProject)]

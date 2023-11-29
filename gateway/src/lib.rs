@@ -768,6 +768,76 @@ pub mod tests {
         }
     }
 
+    /// Helper struct to wrap a bunch of commands to run against gateway's API
+    pub struct TestGateway {
+        router: Router,
+        authorization: Authorization<Bearer>,
+        service: Arc<GatewayService>,
+        sender: Sender<BoxedTask>,
+        world: World,
+    }
+
+    impl TestGateway {
+        /// Try to create a project and return the request response
+        pub async fn try_create_project(&mut self, project_name: &str) -> StatusCode {
+            self.router
+                .call(
+                    Request::builder()
+                        .method("POST")
+                        .uri(format!("/projects/{project_name}"))
+                        .header("Content-Type", "application/json")
+                        .body("{\"idle_minutes\": 3}".into())
+                        .unwrap()
+                        .with_header(&self.authorization),
+                )
+                .await
+                .unwrap()
+                .status()
+        }
+
+        /// Create a new project in the test world and return its helping wrapper
+        pub async fn create_project(&mut self, project_name: &str) -> TestProject {
+            let status_code = self.try_create_project(project_name).await;
+
+            assert_eq!(status_code, StatusCode::OK);
+
+            let mut this = TestProject {
+                authorization: self.authorization.clone(),
+                project_name: project_name.to_string(),
+                router: self.router.clone(),
+                pool: self.world.pool(),
+                service: self.service.clone(),
+                sender: self.sender.clone(),
+            };
+
+            this.wait_for_state(project::State::Ready).await;
+
+            this
+        }
+    }
+
+    #[async_trait]
+    impl AsyncTestContext for TestGateway {
+        async fn setup() -> Self {
+            let world = World::new().await;
+
+            let (service, sender) = world.service().await;
+
+            let router = world.router(service.clone(), sender.clone());
+            let authorization = world.create_authorization_bearer("neo");
+
+            Self {
+                router,
+                authorization,
+                service,
+                sender,
+                world,
+            }
+        }
+
+        async fn teardown(mut self) {}
+    }
+
     /// Helper struct to wrap a bunch of commands to run against a test project
     pub struct TestProject {
         router: Router,
@@ -1024,42 +1094,9 @@ pub mod tests {
     #[async_trait]
     impl AsyncTestContext for TestProject {
         async fn setup() -> Self {
-            let world = World::new().await;
+            let mut world = TestGateway::setup().await;
 
-            let (service, sender) = world.service().await;
-
-            let mut router = world.router(service.clone(), sender.clone());
-            let authorization = world.create_authorization_bearer("neo");
-            let project_name = "matrix";
-
-            router
-                .call(
-                    Request::builder()
-                        .method("POST")
-                        .uri(format!("/projects/{project_name}"))
-                        .header("Content-Type", "application/json")
-                        .body("{\"idle_minutes\": 3}".into())
-                        .unwrap()
-                        .with_header(&authorization),
-                )
-                .map_ok(|resp| {
-                    assert_eq!(resp.status(), StatusCode::OK);
-                })
-                .await
-                .unwrap();
-
-            let mut this = TestProject {
-                authorization,
-                project_name: project_name.to_string(),
-                router,
-                pool: world.pool(),
-                service,
-                sender,
-            };
-
-            this.wait_for_state(project::State::Ready).await;
-
-            this
+            world.create_project("matrix").await
         }
 
         async fn teardown(mut self) {

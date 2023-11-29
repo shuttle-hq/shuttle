@@ -50,7 +50,7 @@ services:
       - RUST_LOG=${RUST_LOG}
       - SHUTTLE_ENV=${SHUTTLE_ENV}
     command:
-      - "--db-connection-uri=${CONTROL_DB_POSTGRES_URI}"
+      - "${CONTROL_DB_POSTGRES_URI}"
       - "start"
       - "--address=0.0.0.0:8000"
       - "--stripe-secret-key=${STRIPE_SECRET_KEY}"

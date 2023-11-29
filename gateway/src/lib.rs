@@ -579,6 +579,7 @@ pub mod tests {
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
                     deploys_api_key: "gateway".to_string(),
+                    container_limit: 1,
 
                     // Allow access to the auth on the host
                     extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],

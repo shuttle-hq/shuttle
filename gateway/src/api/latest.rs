@@ -219,6 +219,14 @@ async fn create_project(
             .saturating_sub(cch_modifier as u32),
     );
 
+    if cch_modifier {
+        let current_container_count = service.count_ready_projects().await?;
+
+        if current_container_count >= service.container_limit() {
+            return Err(Error::from_kind(ErrorKind::ContainerLimit));
+        }
+    }
+
     let project = service
         .create_project(
             project_name.clone(),

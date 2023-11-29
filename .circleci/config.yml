@@ -552,7 +552,7 @@ jobs:
             cargo build --release --package cargo-shuttle --target x86_64-apple-darwin
       - make-artifact:
           target: x86_64-apple-darwin
-  publish-github-release:
+  publish-github-release-draft:
     docker:
       - image: cimg/go:1.19.3
     steps:
@@ -921,7 +921,7 @@ workflows:
           filters:
             branches:
               only: production
-      - publish-github-release:
+      - publish-github-release-draft:
           requires:
             - build-binaries-x86_64-gnu
             - build-binaries-x86_64-musl

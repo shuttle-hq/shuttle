@@ -208,6 +208,14 @@ impl User {
 
     // Synchronize the tiers with the subscription validity.
     async fn sync_tier(&mut self, user_manager: &UserManager) -> Result<bool, Error> {
+        let has_pro_access = self.account_tier == AccountTier::Pro
+            || self.account_tier == AccountTier::CancelledPro
+            || self.account_tier == AccountTier::PendingPaymentPro;
+
+        if !has_pro_access {
+            return Ok(false);
+        }
+
         let subscription_is_valid = self
             .subscription_is_valid(&user_manager.stripe_client)
             .await?;

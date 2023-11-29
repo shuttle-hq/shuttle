@@ -1,5 +1,5 @@
 use crate::stripe::MOCKED_SUBSCRIPTIONS;
-use axum::{body::Body, extract::Path, response::Response, routing::get, Router};
+use axum::{body::Body, extract::Path, extract::State, response::Response, routing::get, Router};
 use http::{header::CONTENT_TYPE, StatusCode};
 use hyper::{
     http::{header::AUTHORIZATION, Request},
@@ -9,7 +9,11 @@ use serde_json::Value;
 use shuttle_auth::{sqlite_init, ApiBuilder};
 use shuttle_common::claims::Claim;
 use sqlx::query;
-use std::{net::SocketAddr, str::FromStr, sync::Mutex};
+use std::{
+    net::SocketAddr,
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
 use tower::ServiceExt;
 
 pub(crate) const ADMIN_KEY: &str = "ndh9z58jttoes3qv";
@@ -131,19 +135,27 @@ pub(crate) struct MockedStripeServer {
     router: Router,
 }
 
+#[derive(Clone)]
+pub(crate) struct RouterState {
+    subscription_cancel_side_effect_toggle: Arc<Mutex<bool>>,
+}
+
 impl MockedStripeServer {
     async fn subscription_retrieve_handler(
         Path(subscription_id): Path<String>,
+        State(state): State<RouterState>,
     ) -> axum::response::Response<String> {
-        static TOGGLE: Mutex<bool> = Mutex::new(false);
+        let is_sub_cancelled = state
+            .subscription_cancel_side_effect_toggle
+            .lock()
+            .unwrap()
+            .to_owned();
 
         if subscription_id == "sub_123" {
-            let toggle_is_true = *TOGGLE.lock().unwrap();
-
-            if toggle_is_true {
+            if is_sub_cancelled {
                 return Response::new(MOCKED_SUBSCRIPTIONS[3].to_string());
             } else {
-                let mut toggle = TOGGLE.lock().unwrap();
+                let mut toggle = state.subscription_cancel_side_effect_toggle.lock().unwrap();
                 *toggle = true;
                 return Response::new(MOCKED_SUBSCRIPTIONS[2].to_string());
             }
@@ -179,10 +191,17 @@ impl MockedStripeServer {
 
 impl Default for MockedStripeServer {
     fn default() -> MockedStripeServer {
-        let router = Router::new().route(
-            "/v1/subscriptions/:subscription_id",
-            get(MockedStripeServer::subscription_retrieve_handler),
-        );
+        let router_state = RouterState {
+            subscription_cancel_side_effect_toggle: Arc::new(Mutex::new(false)),
+        };
+
+        let router = Router::new()
+            .route(
+                "/v1/subscriptions/:subscription_id",
+                get(MockedStripeServer::subscription_retrieve_handler),
+            )
+            .with_state(router_state);
+
         MockedStripeServer {
             uri: http::Uri::from_str(
                 format!(

@@ -195,6 +195,13 @@ async fn downgrade_from_cancelledpro() {
     let response = app.get_user("test-user").await;
     assert_eq!(response.status(), StatusCode::OK);
 
+    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let user: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        user.as_object().unwrap().get("account_tier").unwrap(),
+        "cancelledpro"
+    );
+
     // Check if user is downgraded to basic
     let response = app.get_user("test-user").await;
     assert_eq!(response.status(), StatusCode::OK);

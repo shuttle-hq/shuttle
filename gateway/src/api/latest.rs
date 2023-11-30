@@ -1419,6 +1419,14 @@ pub mod tests {
             StatusCode::OK,
             "it should be possible to still create normal projects"
         );
+
+        let normal_code = gateway.try_create_project("project-normal-2").await;
+
+        assert_eq!(
+            normal_code,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "more normal projects should not go over soft limit"
+        );
     }
 
     #[test_context(TestGateway)]

@@ -244,8 +244,10 @@ pub struct GatewayService {
     task_router: TaskRouter<BoxedTask>,
     state_location: PathBuf,
 
-    /// Maximum number of containers the gateway can start
-    container_limit: u32,
+    /// Maximum number of containers the gateway can start before blocking cch projects
+    cch_container_limit: u32,
+    /// Maximum number of containers the gateway can start before blocking non-pro projects
+    soft_container_limit: u32,
 
     // We store these because we'll need them for the health checks
     provisioner_host: Endpoint,
@@ -278,7 +280,8 @@ impl GatewayService {
             provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
                 .expect("to have a valid provisioner endpoint"),
             auth_host: args.auth_uri,
-            container_limit: args.container_limit,
+            cch_container_limit: args.cch_container_limit,
+            soft_container_limit: args.soft_container_limit,
         }
     }
 
@@ -940,9 +943,14 @@ impl GatewayService {
         &self.auth_host
     }
 
-    /// Maximum number of containers that can be started by gateway
-    pub fn container_limit(&self) -> u32 {
-        self.container_limit
+    /// Maximum number of containers that can be started by gateway before blocking cch projects
+    pub fn cch_container_limit(&self) -> u32 {
+        self.cch_container_limit
+    }
+
+    /// Maximum number of containers that can be started by gateway before blocking non-pro projects
+    pub fn soft_container_limit(&self) -> u32 {
+        self.soft_container_limit
     }
 }
 

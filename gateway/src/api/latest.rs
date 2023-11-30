@@ -219,12 +219,20 @@ async fn create_project(
             .saturating_sub(is_cch_project as u32),
     );
 
-    if is_cch_project {
-        let current_container_count = service.count_ready_projects().await?;
+    let current_container_count = service.count_ready_projects().await?;
+    let cch_container_limit = service.cch_container_limit();
+    let soft_container_limit = service.soft_container_limit();
 
-        if current_container_count >= service.container_limit() {
-            return Err(Error::from_kind(ErrorKind::ContainerLimit));
-        }
+    let has_capacity = if current_container_count < cch_container_limit {
+        true
+    } else if current_container_count < soft_container_limit {
+        !is_cch_project
+    } else {
+        false
+    };
+
+    if !has_capacity {
+        return Err(Error::from_kind(ErrorKind::ContainerLimit));
     }
 
     let project = service
@@ -452,7 +460,7 @@ async fn route_project(
     if is_cch_project {
         let current_container_count = service.count_ready_projects().await?;
 
-        if current_container_count >= service.container_limit() {
+        if current_container_count >= service.cch_container_limit() {
             return Err(Error::from_kind(ErrorKind::ContainerLimit));
         }
     }
@@ -1412,18 +1420,13 @@ pub mod tests {
 
         assert_eq!(cch_code, StatusCode::SERVICE_UNAVAILABLE);
 
-        let normal_code = gateway.try_create_project("project").await;
+        // It should be possible to still create a normal project
+        let _normal_project = gateway.create_project("project").await;
+
+        let more_code = gateway.try_create_project("project-normal-2").await;
 
         assert_eq!(
-            normal_code,
-            StatusCode::OK,
-            "it should be possible to still create normal projects"
-        );
-
-        let normal_code = gateway.try_create_project("project-normal-2").await;
-
-        assert_eq!(
-            normal_code,
+            more_code,
             StatusCode::SERVICE_UNAVAILABLE,
             "more normal projects should not go over soft limit"
         );

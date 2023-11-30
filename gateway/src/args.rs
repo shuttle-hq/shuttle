@@ -78,7 +78,7 @@ pub struct ContextArgs {
     #[arg(long, default_value = "gateway4deployes")]
     pub deploys_api_key: String,
     /// Maximum number of containers to start on this node
-    #[arg(long, default_value = "1000")]
+    #[arg(long, default_value = "900")]
     pub container_limit: u32,
 
     /// Allow tests to set some extra /etc/hosts

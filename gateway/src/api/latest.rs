@@ -1410,7 +1410,7 @@ pub mod tests {
         let _ = gateway.create_project("matrix").await;
         let cch_code = gateway.try_create_project("cch23-project").await;
 
-        assert_eq!(cch_code, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(cch_code, StatusCode::SERVICE_UNAVAILABLE);
 
         let normal_code = gateway.try_create_project("project").await;
 
@@ -1455,7 +1455,7 @@ pub mod tests {
             .router_call(Method::GET, "/services/cch23-project")
             .await;
 
-        assert_eq!(cch_code, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(cch_code, StatusCode::SERVICE_UNAVAILABLE);
 
         let normal_code = normal_idle_project
             .router_call(Method::GET, "/services/project")

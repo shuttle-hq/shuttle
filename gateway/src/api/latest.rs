@@ -219,7 +219,7 @@ async fn create_project(
             .saturating_sub(is_cch_project as u32),
     );
 
-    service.has_capacity(is_cch_project).await?;
+    service.has_capacity(is_cch_project, &claim.tier).await?;
 
     let project = service
         .create_project(
@@ -442,7 +442,9 @@ async fn route_project(
     let project_name = scoped_user.scope;
     let is_cch_project = project_name.is_cch_project();
 
-    service.has_capacity(is_cch_project).await?;
+    service
+        .has_capacity(is_cch_project, &scoped_user.user.claim.tier)
+        .await?;
 
     let project = service.find_or_start_project(&project_name, sender).await?;
     service
@@ -1413,7 +1415,9 @@ pub mod tests {
 
         // A pro user can go over the soft limits
         let pro_user = gateway.new_authorization_bearer("trinity", AccountTier::Pro);
-        let _long_running = gateway.user_create_project("matrix", &pro_user).await;
+        let _long_running = gateway
+            .user_create_project("training-simulation", &pro_user)
+            .await;
     }
 
     #[test_context(TestGateway)]

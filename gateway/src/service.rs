@@ -21,6 +21,7 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
+use shuttle_common::claims::AccountTier;
 use shuttle_common::models::project::{ProjectName, State};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
@@ -944,7 +945,11 @@ impl GatewayService {
     }
 
     /// Is there enough capacity to start this project
-    pub async fn has_capacity(&self, is_cch_project: bool) -> Result<(), Error> {
+    pub async fn has_capacity(
+        &self,
+        is_cch_project: bool,
+        account_tier: &AccountTier,
+    ) -> Result<(), Error> {
         let current_container_count = self.count_ready_projects().await?;
 
         let has_capacity = if current_container_count < self.cch_container_limit {
@@ -952,7 +957,7 @@ impl GatewayService {
         } else if current_container_count < self.soft_container_limit {
             !is_cch_project
         } else {
-            false
+            matches!(account_tier, AccountTier::Pro)
         };
 
         if has_capacity {

@@ -581,6 +581,7 @@ pub mod tests {
                     deploys_api_key: "gateway".to_string(),
                     cch_container_limit: 1,
                     soft_container_limit: 2,
+                    hard_container_limit: 3,
 
                     // Allow access to the auth on the host
                     extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],

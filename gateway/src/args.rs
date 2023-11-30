@@ -83,6 +83,9 @@ pub struct ContextArgs {
     /// Maximum number of containers to start on this node before blocking non-pro projects
     #[arg(long, default_value = "970")]
     pub soft_container_limit: u32,
+    /// Maximum number of containers to start on this node before blocking any project
+    #[arg(long, default_value = "990")]
+    pub hard_container_limit: u32,
 
     /// Allow tests to set some extra /etc/hosts
     pub extra_hosts: Vec<String>,

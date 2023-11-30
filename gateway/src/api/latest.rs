@@ -209,15 +209,23 @@ async fn create_project(
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let cch_modifier = project_name.starts_with("cch23-");
+    let is_cch_project = project_name.is_cch_project();
 
     // Check that the user is within their project limits.
     let can_create_project = claim.can_create_project(
         service
             .get_project_count(&name)
             .await?
-            .saturating_sub(cch_modifier as u32),
+            .saturating_sub(is_cch_project as u32),
     );
+
+    if is_cch_project {
+        let current_container_count = service.count_ready_projects().await?;
+
+        if current_container_count >= service.container_limit() {
+            return Err(Error::from_kind(ErrorKind::ContainerLimit));
+        }
+    }
 
     let project = service
         .create_project(
@@ -225,7 +233,11 @@ async fn create_project(
             name.clone(),
             claim.is_admin(),
             can_create_project,
-            if cch_modifier { 5 } else { config.idle_minutes },
+            if is_cch_project {
+                5
+            } else {
+                config.idle_minutes
+            },
         )
         .await?;
     let idle_minutes = project.state.idle_minutes();
@@ -434,6 +446,17 @@ async fn route_project(
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
     let project_name = scoped_user.scope;
+    let is_cch_project = project_name.is_cch_project();
+
+    // Don't start cch projects if we will be going over the container limit
+    if is_cch_project {
+        let current_container_count = service.count_ready_projects().await?;
+
+        if current_container_count >= service.container_limit() {
+            return Err(Error::from_kind(ErrorKind::ContainerLimit));
+        }
+    }
+
     let project = service.find_or_start_project(&project_name, sender).await?;
     service
         .route(&project.state, &project_name, &scoped_user.user.name, req)
@@ -1125,7 +1148,7 @@ pub mod tests {
     use super::*;
     use crate::project::ProjectError;
     use crate::service::GatewayService;
-    use crate::tests::{RequestBuilderExt, TestProject, World};
+    use crate::tests::{RequestBuilderExt, TestGateway, TestProject, World};
 
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
@@ -1379,6 +1402,70 @@ pub mod tests {
         }
 
         Ok(())
+    }
+
+    #[test_context(TestGateway)]
+    #[tokio::test]
+    async fn api_create_project_above_container_limit(gateway: &mut TestGateway) {
+        let _ = gateway.create_project("matrix").await;
+        let cch_code = gateway.try_create_project("cch23-project").await;
+
+        assert_eq!(cch_code, StatusCode::SERVICE_UNAVAILABLE);
+
+        let normal_code = gateway.try_create_project("project").await;
+
+        assert_eq!(
+            normal_code,
+            StatusCode::OK,
+            "it should be possible to still create normal projects"
+        );
+    }
+
+    #[test_context(TestGateway)]
+    #[tokio::test]
+    async fn start_idle_project_when_above_container_limit(gateway: &mut TestGateway) {
+        let mut cch_idle_project = gateway.create_project("cch23-project").await;
+
+        // Run four health checks to get the project to go into idle mode (cch projects always default to 5 min of idle time)
+        cch_idle_project.run_health_check().await;
+        cch_idle_project.run_health_check().await;
+        cch_idle_project.run_health_check().await;
+        cch_idle_project.run_health_check().await;
+
+        cch_idle_project
+            .wait_for_state(project::State::Stopped)
+            .await;
+
+        let mut normal_idle_project = gateway.create_project("project").await;
+
+        // Run two health checks to get the project to go into idle mode
+        normal_idle_project.run_health_check().await;
+        normal_idle_project.run_health_check().await;
+        normal_idle_project.run_health_check().await;
+        normal_idle_project.run_health_check().await;
+
+        normal_idle_project
+            .wait_for_state(project::State::Stopped)
+            .await;
+
+        let _project_two = gateway.create_project("matrix").await;
+
+        // Now try to start the idle projects
+        let cch_code = cch_idle_project
+            .router_call(Method::GET, "/services/cch23-project")
+            .await;
+
+        assert_eq!(cch_code, StatusCode::SERVICE_UNAVAILABLE);
+
+        let normal_code = normal_idle_project
+            .router_call(Method::GET, "/services/project")
+            .await;
+
+        assert_eq!(
+            normal_code,
+            StatusCode::NOT_FOUND,
+            "should not be able to find a service since nothing was deployed"
+        );
     }
 
     #[test_context(TestProject)]

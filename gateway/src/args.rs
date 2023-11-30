@@ -77,6 +77,9 @@ pub struct ContextArgs {
     /// Api key for the user that has rights to start deploys
     #[arg(long, default_value = "gateway4deployes")]
     pub deploys_api_key: String,
+    /// Maximum number of containers to start on this node
+    #[arg(long, default_value = "900")]
+    pub container_limit: u32,
 
     /// Allow tests to set some extra /etc/hosts
     pub extra_hosts: Vec<String>,

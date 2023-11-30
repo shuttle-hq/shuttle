@@ -244,6 +244,9 @@ pub struct GatewayService {
     task_router: TaskRouter<BoxedTask>,
     state_location: PathBuf,
 
+    /// Maximum number of containers the gateway can start
+    container_limit: u32,
+
     // We store these because we'll need them for the health checks
     provisioner_host: Endpoint,
     auth_host: Uri,
@@ -275,6 +278,7 @@ impl GatewayService {
             provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
                 .expect("to have a valid provisioner endpoint"),
             auth_host: args.auth_uri,
+            container_limit: args.container_limit,
         }
     }
 
@@ -321,6 +325,17 @@ impl GatewayService {
             .into_iter()
             .map(|row| (row.get("project_name"), row.get("account_name")));
         Ok(iter)
+    }
+
+    /// The number of projects that are currently in the ready state
+    pub async fn count_ready_projects(&self) -> Result<u32, Error> {
+        let ready_count: u32 =
+            query("SELECT COUNT(*) FROM projects, JSON_EACH(project_state) WHERE key = 'ready'")
+                .fetch_one(&self.db)
+                .await?
+                .get::<_, usize>(0);
+
+        Ok(ready_count)
     }
 
     pub async fn find_project(
@@ -923,6 +938,11 @@ impl GatewayService {
     }
     pub fn auth_uri(&self) -> &Uri {
         &self.auth_host
+    }
+
+    /// Maximum number of containers that can be started by gateway
+    pub fn container_limit(&self) -> u32 {
+        self.container_limit
     }
 }
 

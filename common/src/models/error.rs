@@ -61,6 +61,7 @@ pub enum ErrorKind {
     NotReady,
     ServiceUnavailable,
     DeleteProjectFailed,
+    ContainerLimit,
 }
 
 impl From<ErrorKind> for ApiError {
@@ -131,6 +132,7 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "Service not ready"),
             ErrorKind::DeleteProjectFailed => (StatusCode::INTERNAL_SERVER_ERROR, "Deleting project failed"),
+            ErrorKind::ContainerLimit => (StatusCode::SERVICE_UNAVAILABLE, "Our server is full and cannot create / start projects at this time"),
         };
         Self {
             message: error_message.to_string(),

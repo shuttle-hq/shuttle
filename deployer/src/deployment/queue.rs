@@ -76,15 +76,15 @@ pub async fn task(
                     span.set_parent(parent_cx);
 
                     async move {
-                        // Timeout after 3 minutes if the build queue hangs or it takes
+                        // Timeout after 5 minutes if the build queue hangs or it takes
                         // too long for a slot to become available
                         if let Err(err) = timeout(
-                            Duration::from_secs(60 * 3),
+                            Duration::from_secs(60 * 5),
                             wait_for_queue(queue_client.clone(), id),
                         )
                         .await
                         {
-                            return build_failed(&id, err);
+                            return build_failed_to_get_slot(&id, err);
                         }
 
                         if let Some(mut inner) = builder_client {
@@ -142,6 +142,15 @@ pub async fn task(
 }
 
 #[instrument(name = "Build failed", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
+fn build_failed_to_get_slot(_id: &Uuid, error: impl std::error::Error + 'static) {
+    error!("Failed to get a build slot. Giving up. Try to deploy again in 10 minutes");
+    error!(
+        error = &error as &dyn std::error::Error,
+        "{DEPLOYER_END_MSG_BUILD_ERR}"
+    );
+}
+
+#[instrument(name = "Build failed", skip(_id), fields(deployment_id = %_id, state = %State::Crashed))]
 fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
         error = &error as &dyn std::error::Error,
@@ -158,9 +167,9 @@ async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result
             break;
         }
 
-        info!("The build queue is currently full...");
+        info!("The build queue is currently full. Waiting for a slot..");
 
-        sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_secs(10)).await;
     }
 
     Ok(())

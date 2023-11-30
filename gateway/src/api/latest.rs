@@ -209,17 +209,17 @@ async fn create_project(
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let cch_modifier = project_name.starts_with("cch23-");
+    let is_cch_project = project_name.is_cch_project();
 
     // Check that the user is within their project limits.
     let can_create_project = claim.can_create_project(
         service
             .get_project_count(&name)
             .await?
-            .saturating_sub(cch_modifier as u32),
+            .saturating_sub(is_cch_project as u32),
     );
 
-    if cch_modifier {
+    if is_cch_project {
         let current_container_count = service.count_ready_projects().await?;
 
         if current_container_count >= service.container_limit() {
@@ -233,7 +233,11 @@ async fn create_project(
             name.clone(),
             claim.is_admin(),
             can_create_project,
-            if cch_modifier { 5 } else { config.idle_minutes },
+            if is_cch_project {
+                5
+            } else {
+                config.idle_minutes
+            },
         )
         .await?;
     let idle_minutes = project.state.idle_minutes();
@@ -442,9 +446,10 @@ async fn route_project(
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
     let project_name = scoped_user.scope;
-    let cch_modifier = project_name.starts_with("cch23-");
+    let is_cch_project = project_name.is_cch_project();
 
-    if cch_modifier {
+    // Don't start cch projects if we will be going over the container limit
+    if is_cch_project {
         let current_container_count = service.count_ready_projects().await?;
 
         if current_container_count >= service.container_limit() {

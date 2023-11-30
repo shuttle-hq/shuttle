@@ -1146,6 +1146,7 @@ pub mod tests {
     use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
+    use shuttle_common::claims::AccountTier;
     use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
     use test_context::test_context;
     use tokio::sync::mpsc::channel;
@@ -1177,7 +1178,7 @@ pub mod tests {
             .with_auth_service(world.context().auth_uri)
             .into_router();
 
-        let neo_key = world.create_user("neo");
+        let neo_key = world.create_user("neo", AccountTier::Basic);
 
         let create_project = |project: &str| {
             Request::builder()
@@ -1260,7 +1261,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let trinity_key = world.create_user("trinity");
+        let trinity_key = world.create_user("trinity", AccountTier::Basic);
 
         let authorization = Authorization::bearer(&trinity_key).unwrap();
 
@@ -1296,7 +1297,7 @@ pub mod tests {
             .unwrap();
 
         // Create new admin user
-        let admin_neo_key = world.create_user("admin-neo");
+        let admin_neo_key = world.create_user("admin-neo", AccountTier::Basic);
         world.set_super_user("admin-neo");
 
         let authorization = Authorization::bearer(&admin_neo_key).unwrap();
@@ -1359,7 +1360,7 @@ pub mod tests {
             .with_auth_service(world.context().auth_uri)
             .into_router();
 
-        let neo_key = world.create_user("neo");
+        let neo_key = world.create_user("neo", AccountTier::Basic);
 
         let create_project = |project: &str| {
             Request::builder()
@@ -1394,7 +1395,7 @@ pub mod tests {
 
         // Create a new admin user. We can't simply make the previous user an admin, since their token
         // will live in the auth cache without the admin scope.
-        let trinity_key = world.create_user("trinity");
+        let trinity_key = world.create_user("trinity", AccountTier::Basic);
         world.set_super_user("trinity");
         let authorization = Authorization::bearer(&trinity_key).unwrap();
 
@@ -1452,14 +1453,23 @@ pub mod tests {
         // Run two health checks to get the project to go into idle mode
         normal_idle_project.run_health_check().await;
         normal_idle_project.run_health_check().await;
-        normal_idle_project.run_health_check().await;
-        normal_idle_project.run_health_check().await;
 
         normal_idle_project
             .wait_for_state(project::State::Stopped)
             .await;
 
-        let _project_two = gateway.create_project("matrix").await;
+        let mut normal_idle_project2 = gateway.create_project("project-2").await;
+
+        // Run two health checks to get the project to go into idle mode
+        normal_idle_project2.run_health_check().await;
+        normal_idle_project2.run_health_check().await;
+
+        normal_idle_project2
+            .wait_for_state(project::State::Stopped)
+            .await;
+
+        let pro_user = gateway.new_authorization_bearer("trinity", AccountTier::Pro);
+        let _long_running = gateway.user_create_project("matrix", &pro_user).await;
 
         // Now try to start the idle projects
         let cch_code = cch_idle_project
@@ -1476,6 +1486,16 @@ pub mod tests {
             normal_code,
             StatusCode::NOT_FOUND,
             "should not be able to find a service since nothing was deployed"
+        );
+
+        let normal_code2 = normal_idle_project2
+            .router_call(Method::GET, "/services/project")
+            .await;
+
+        assert_eq!(
+            normal_code2,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "should not be able to wake project that will go over soft limit"
         );
     }
 
@@ -1619,7 +1639,7 @@ pub mod tests {
 
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        let neo_key = world.create_user("neo");
+        let neo_key = world.create_user("neo", AccountTier::Basic);
         let authorization = Authorization::bearer(&neo_key).unwrap();
 
         let create_project = Request::builder()

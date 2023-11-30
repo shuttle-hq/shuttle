@@ -630,19 +630,24 @@ pub mod tests {
             self.acme_client.clone()
         }
 
-        pub fn create_user(&self, user: &str) -> String {
+        /// Create user with a specific tier
+        pub fn create_user(&self, user: &str, tier: AccountTier) -> String {
             self.auth_service
                 .lock()
                 .unwrap()
                 .users
-                .insert(user.to_string(), AccountTier::Basic.into());
+                .insert(user.to_string(), tier.into());
 
             user.to_string()
         }
 
-        /// Create with the given name and return the authorization bearer for the user
-        pub fn create_authorization_bearer(&self, user: &str) -> Authorization<Bearer> {
-            let user_key = self.create_user(user);
+        /// Create a user with the given name and tier and return the authorization bearer for the user
+        pub fn create_authorization_bearer(
+            &self,
+            user: &str,
+            tier: AccountTier,
+        ) -> Authorization<Bearer> {
+            let user_key = self.create_user(user, tier);
             Authorization::bearer(&user_key).unwrap()
         }
 
@@ -780,8 +785,12 @@ pub mod tests {
     }
 
     impl TestGateway {
-        /// Try to create a project and return the request response
-        pub async fn try_create_project(&mut self, project_name: &str) -> StatusCode {
+        /// Try to create a project with a given user and return the request response
+        pub async fn try_user_create_project(
+            &mut self,
+            project_name: &str,
+            authorization: &Authorization<Bearer>,
+        ) -> StatusCode {
             self.router
                 .call(
                     Request::builder()
@@ -790,21 +799,37 @@ pub mod tests {
                         .header("Content-Type", "application/json")
                         .body("{\"idle_minutes\": 3}".into())
                         .unwrap()
-                        .with_header(&self.authorization),
+                        .with_header(authorization),
                 )
                 .await
                 .unwrap()
                 .status()
         }
 
-        /// Create a new project in the test world and return its helping wrapper
-        pub async fn create_project(&mut self, project_name: &str) -> TestProject {
-            let status_code = self.try_create_project(project_name).await;
+        /// Try to create a project and return the request response
+        pub async fn try_create_project(&mut self, project_name: &str) -> StatusCode {
+            self.try_user_create_project(project_name, &self.authorization.clone())
+                .await
+        }
 
-            assert_eq!(status_code, StatusCode::OK);
+        /// Create a new project using the given user and return its helping wrapper
+        pub async fn user_create_project(
+            &mut self,
+            project_name: &str,
+            authorization: &Authorization<Bearer>,
+        ) -> TestProject {
+            let status_code = self
+                .try_user_create_project(project_name, authorization)
+                .await;
+
+            assert_eq!(
+                status_code,
+                StatusCode::OK,
+                "could not create {project_name}"
+            );
 
             let mut this = TestProject {
-                authorization: self.authorization.clone(),
+                authorization: authorization.clone(),
                 project_name: project_name.to_string(),
                 router: self.router.clone(),
                 pool: self.world.pool(),
@@ -816,6 +841,21 @@ pub mod tests {
 
             this
         }
+
+        /// Create a new project in the test world and return its helping wrapper
+        pub async fn create_project(&mut self, project_name: &str) -> TestProject {
+            self.user_create_project(project_name, &self.authorization.clone())
+                .await
+        }
+
+        /// Get authorization bearer for a new user
+        pub fn new_authorization_bearer(
+            &self,
+            user: &str,
+            tier: AccountTier,
+        ) -> Authorization<Bearer> {
+            self.world.create_authorization_bearer(user, tier)
+        }
     }
 
     #[async_trait]
@@ -826,7 +866,7 @@ pub mod tests {
             let (service, sender) = world.service().await;
 
             let router = world.router(service.clone(), sender.clone());
-            let authorization = world.create_authorization_bearer("neo");
+            let authorization = world.create_authorization_bearer("neo", AccountTier::Basic);
 
             Self {
                 router,
@@ -1156,7 +1196,7 @@ pub mod tests {
         // Allow the spawns to start
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        let neo_key = world.create_user("neo");
+        let neo_key = world.create_user("neo", AccountTier::Basic);
 
         let authorization = Authorization::bearer(&neo_key).unwrap();
 

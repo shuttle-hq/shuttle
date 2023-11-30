@@ -636,7 +636,7 @@ pub mod tests {
                 .lock()
                 .unwrap()
                 .users
-                .insert(user.to_string(), tier.into());
+                .insert(user.to_string(), tier);
 
             user.to_string()
         }
@@ -754,7 +754,7 @@ pub mod tests {
                         let state = state.lock().unwrap();
 
                         if let Some(tier) = state.users.get(bearer.token()) {
-                            let claim = Claim::new(bearer.token().to_string(), tier.clone().into(), tier.clone(), tier.clone());
+                            let claim = Claim::new(bearer.token().to_string(), (*tier).into(), *tier, *tier);
                             let token = claim.into_token(&state.encoding_key)?;
                             Ok(serde_json::to_vec(&ConvertResponse { token }).unwrap())
                         } else {

@@ -1415,16 +1415,21 @@ pub mod tests {
 
         // A pro user can go over the soft limits
         let pro_user = gateway.new_authorization_bearer("trinity", AccountTier::Pro);
-        let _long_running = gateway
-            .user_create_project("training-simulation", &pro_user)
+        let _long_running = gateway.user_create_project("reload", &pro_user).await;
+
+        // A pro user cannot go over the hard limits
+        let code = gateway
+            .try_user_create_project("training-simulation", &pro_user)
             .await;
+
+        assert_eq!(code, StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[test_context(TestGateway)]
     #[tokio::test]
     async fn start_idle_project_when_above_container_limit(gateway: &mut TestGateway) {
         let mut cch_idle_project = gateway.create_project("cch23-project").await;
-        // RUNNING PROJECTS = 1
+        // RUNNING PROJECTS = 1 [cch_idle_project]
         // Run four health checks to get the project to go into idle mode (cch projects always default to 5 min of idle time)
         cch_idle_project.run_health_check().await;
         cch_idle_project.run_health_check().await;
@@ -1434,9 +1439,9 @@ pub mod tests {
         cch_idle_project
             .wait_for_state(project::State::Stopped)
             .await;
-        // RUNNING PROJECTS = 0
+        // RUNNING PROJECTS = 0 []
         let mut normal_idle_project = gateway.create_project("project").await;
-        // RUNNING PROJECTS = 1
+        // RUNNING PROJECTS = 1 [normal_idle_project]
         // Run two health checks to get the project to go into idle mode
         normal_idle_project.run_health_check().await;
         normal_idle_project.run_health_check().await;
@@ -1444,9 +1449,9 @@ pub mod tests {
         normal_idle_project
             .wait_for_state(project::State::Stopped)
             .await;
-        // RUNNING PROJECTS = 0
+        // RUNNING PROJECTS = 0 []
         let mut normal_idle_project2 = gateway.create_project("project-2").await;
-        // RUNNING PROJECTS = 1
+        // RUNNING PROJECTS = 1 [normal_idle_project2]
         // Run two health checks to get the project to go into idle mode
         normal_idle_project2.run_health_check().await;
         normal_idle_project2.run_health_check().await;
@@ -1454,21 +1459,22 @@ pub mod tests {
         normal_idle_project2
             .wait_for_state(project::State::Stopped)
             .await;
-        // RUNNING PROJECTS = 0
+        // RUNNING PROJECTS = 0 []
         let pro_user = gateway.new_authorization_bearer("trinity", AccountTier::Pro);
         let mut long_running = gateway.user_create_project("matrix", &pro_user).await;
-        // RUNNING PROJECTS = 1
+        // RUNNING PROJECTS = 1 [long_running]
         // Now try to start the idle projects
         let cch_code = cch_idle_project
             .router_call(Method::GET, "/services/cch23-project")
             .await;
+        // RUNNING PROJECTS = 1 [long_running]
 
         assert_eq!(cch_code, StatusCode::SERVICE_UNAVAILABLE);
 
         let normal_code = normal_idle_project
             .router_call(Method::GET, "/services/project")
             .await;
-        // RUNNING PROJECTS = 2
+        // RUNNING PROJECTS = 2 [long_running, normal_idle_project]
 
         assert_eq!(
             normal_code,
@@ -1479,6 +1485,7 @@ pub mod tests {
         let normal_code2 = normal_idle_project2
             .router_call(Method::GET, "/services/project")
             .await;
+        // RUNNING PROJECTS = 2 [long_running, normal_idle_project]
 
         assert_eq!(
             normal_code2,
@@ -1492,12 +1499,12 @@ pub mod tests {
         long_running.run_health_check().await;
 
         long_running.wait_for_state(project::State::Stopped).await;
-        // RUNNING PROJECTS = 1
+        // RUNNING PROJECTS = 1 [normal_idle_project]
 
         let normal_code2 = normal_idle_project2
             .router_call(Method::GET, "/services/project")
             .await;
-        // RUNNING PROJECTS = 2
+        // RUNNING PROJECTS = 2 [normal_idle_project, normal_idle_project2]
 
         assert_eq!(
             normal_code2,
@@ -1508,10 +1515,31 @@ pub mod tests {
         let long_running_code = long_running
             .router_call(Method::GET, "/services/project")
             .await;
+        // RUNNING PROJECTS = 3 [normal_idle_project, normal_idle_project2, long_running]
 
         assert_eq!(
             long_running_code,
             StatusCode::NOT_FOUND,
+            "should be able to wake the project of a pro user. Even if we are over the soft limit"
+        );
+
+        // Now try to start a pro user's project when we are at the hard limit
+        long_running.run_health_check().await;
+        long_running.run_health_check().await;
+
+        long_running.wait_for_state(project::State::Stopped).await;
+        // RUNNING PROJECTS = 2 [normal_idle_project, normal_idle_project2]
+        let _extra = gateway.user_create_project("reloaded", &pro_user).await;
+        // RUNNING PROJECTS = 3 [normal_idle_project, normal_idle_project2, _extra]
+
+        let long_running_code = long_running
+            .router_call(Method::GET, "/services/project")
+            .await;
+        // RUNNING PROJECTS = 3 [normal_idle_project, normal_idle_project2, _extra]
+
+        assert_eq!(
+            long_running_code,
+            StatusCode::SERVICE_UNAVAILABLE,
             "should be able to wake the project of a pro user. Even if we are over the soft limit"
         );
     }

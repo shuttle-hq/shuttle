@@ -219,21 +219,7 @@ async fn create_project(
             .saturating_sub(is_cch_project as u32),
     );
 
-    let current_container_count = service.count_ready_projects().await?;
-    let cch_container_limit = service.cch_container_limit();
-    let soft_container_limit = service.soft_container_limit();
-
-    let has_capacity = if current_container_count < cch_container_limit {
-        true
-    } else if current_container_count < soft_container_limit {
-        !is_cch_project
-    } else {
-        false
-    };
-
-    if !has_capacity {
-        return Err(Error::from_kind(ErrorKind::ContainerLimit));
-    }
+    service.has_capacity(is_cch_project).await?;
 
     let project = service
         .create_project(
@@ -456,21 +442,7 @@ async fn route_project(
     let project_name = scoped_user.scope;
     let is_cch_project = project_name.is_cch_project();
 
-    let current_container_count = service.count_ready_projects().await?;
-    let cch_container_limit = service.cch_container_limit();
-    let soft_container_limit = service.soft_container_limit();
-
-    let has_capacity = if current_container_count < cch_container_limit {
-        true
-    } else if current_container_count < soft_container_limit {
-        !is_cch_project
-    } else {
-        false
-    };
-
-    if !has_capacity {
-        return Err(Error::from_kind(ErrorKind::ContainerLimit));
-    }
+    service.has_capacity(is_cch_project).await?;
 
     let project = service.find_or_start_project(&project_name, sender).await?;
     service

@@ -943,14 +943,23 @@ impl GatewayService {
         &self.auth_host
     }
 
-    /// Maximum number of containers that can be started by gateway before blocking cch projects
-    pub fn cch_container_limit(&self) -> u32 {
-        self.cch_container_limit
-    }
+    /// Is there enough capacity to start this project
+    pub async fn has_capacity(&self, is_cch_project: bool) -> Result<(), Error> {
+        let current_container_count = self.count_ready_projects().await?;
 
-    /// Maximum number of containers that can be started by gateway before blocking non-pro projects
-    pub fn soft_container_limit(&self) -> u32 {
-        self.soft_container_limit
+        let has_capacity = if current_container_count < self.cch_container_limit {
+            true
+        } else if current_container_count < self.soft_container_limit {
+            !is_cch_project
+        } else {
+            false
+        };
+
+        if has_capacity {
+            Ok(())
+        } else {
+            Err(Error::from_kind(ErrorKind::ContainerLimit))
+        }
     }
 }
 

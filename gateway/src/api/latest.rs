@@ -456,13 +456,20 @@ async fn route_project(
     let project_name = scoped_user.scope;
     let is_cch_project = project_name.is_cch_project();
 
-    // Don't start cch projects if we will be going over the container limit
-    if is_cch_project {
-        let current_container_count = service.count_ready_projects().await?;
+    let current_container_count = service.count_ready_projects().await?;
+    let cch_container_limit = service.cch_container_limit();
+    let soft_container_limit = service.soft_container_limit();
 
-        if current_container_count >= service.cch_container_limit() {
-            return Err(Error::from_kind(ErrorKind::ContainerLimit));
-        }
+    let has_capacity = if current_container_count < cch_container_limit {
+        true
+    } else if current_container_count < soft_container_limit {
+        !is_cch_project
+    } else {
+        false
+    };
+
+    if !has_capacity {
+        return Err(Error::from_kind(ErrorKind::ContainerLimit));
     }
 
     let project = service.find_or_start_project(&project_name, sender).await?;

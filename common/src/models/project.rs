@@ -310,6 +310,11 @@ pub mod name {
                 && name.bytes().all(is_valid_char)
                 && is_profanity_free(name)
         }
+
+        /// Is this a cch project
+        pub fn is_cch_project(&self) -> bool {
+            self.starts_with("cch23-")
+        }
     }
 
     impl std::ops::Deref for ProjectName {

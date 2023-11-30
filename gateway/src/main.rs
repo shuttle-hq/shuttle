@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, info_span, trace, warn, Instrument};
+use tracing::{debug, error, field, info, info_span, trace, warn, Instrument, Span};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> io::Result<()> {
@@ -101,7 +101,8 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                 if let Ok(projects) = gateway.iter_projects().await {
                     let span = info_span!(
                         "running health checks",
-                        healthcheck.num_projects = projects.len()
+                        healthcheck.num_projects = projects.len(),
+                        healthcheck.active_projects = field::Empty,
                     );
 
                     let gateway = gateway.clone();
@@ -116,6 +117,11 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                                 handle.await
                             }
                         }
+
+                        let active_projects =
+                            gateway.count_ready_projects().await.unwrap_or_default();
+                        let span = Span::current();
+                        span.record("healthcheck.active_projects", active_projects);
                     }
                     .instrument(span)
                     .await;

@@ -77,7 +77,7 @@ pub struct ContextArgs {
     /// Api key for the user that has rights to start deploys
     #[arg(long, default_value = "gateway4deployes")]
     pub deploys_api_key: String,
-    /// Maxixmum number of containers to start on this node
+    /// Maximum number of containers to start on this node
     #[arg(long, default_value = "1000")]
     pub container_limit: u32,
 

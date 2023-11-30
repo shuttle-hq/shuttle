@@ -442,6 +442,16 @@ async fn route_project(
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
     let project_name = scoped_user.scope;
+    let cch_modifier = project_name.starts_with("cch23-");
+
+    if cch_modifier {
+        let current_container_count = service.count_ready_projects().await?;
+
+        if current_container_count >= service.container_limit() {
+            return Err(Error::from_kind(ErrorKind::ContainerLimit));
+        }
+    }
+
     let project = service.find_or_start_project(&project_name, sender).await?;
     service
         .route(&project.state, &project_name, &scoped_user.user.name, req)

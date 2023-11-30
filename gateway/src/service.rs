@@ -960,7 +960,13 @@ impl GatewayService {
     ) -> Result<(), Error> {
         let current_container_count = self.count_ready_projects().await?;
 
-        let has_capacity = if current_container_count < self.cch_container_limit {
+        let has_capacity = if is_cch_project
+            && std::fs::metadata("/var/lib/shuttle/BLOCK_CCH23_PROJECT_TRAFFIC").is_ok()
+        {
+            // If this control file exists, block routing to cch23 projects.
+            // Used for emergency load mitigation
+            return Err(Error::from_kind(ErrorKind::CapacityLimit));
+        } else if current_container_count < self.cch_container_limit {
             true
         } else if current_container_count < self.soft_container_limit {
             !is_cch_project

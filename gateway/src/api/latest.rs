@@ -1391,9 +1391,32 @@ pub mod tests {
 
     #[test_context(TestGateway)]
     #[tokio::test]
-    async fn api_create_project_above_node_limits(gateway: &mut TestGateway) {
+    async fn api_create_project_above_container_limit(gateway: &mut TestGateway) {
         let _ = gateway.create_project("cch23-first").await;
         let code = gateway.try_create_project("cch23-second").await;
+
+        assert_eq!(code, StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test_context(TestGateway)]
+    #[tokio::test]
+    async fn start_idle_project_when_above_container_limit(gateway: &mut TestGateway) {
+        let mut project_idle = gateway.create_project("cch23-project").await;
+
+        // Run four health checks to get the project to go into idle mode (cch projects always default to 5 min of idle time)
+        project_idle.run_health_check().await;
+        project_idle.run_health_check().await;
+        project_idle.run_health_check().await;
+        project_idle.run_health_check().await;
+
+        project_idle.wait_for_state(project::State::Stopped).await;
+
+        let _project_two = gateway.create_project("matrix").await;
+
+        // Now try to start the idle project
+        let code = project_idle
+            .router_call(Method::GET, "/services/cch23-project")
+            .await;
 
         assert_eq!(code, StatusCode::INTERNAL_SERVER_ERROR);
     }

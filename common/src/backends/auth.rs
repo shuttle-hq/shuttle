@@ -523,6 +523,30 @@ mod tests {
         assert_eq!(claim, new);
     }
 
+    #[test]
+    fn to_token_and_back_pro() {
+        let mut claim = Claim::new(
+            "ferries".to_string(),
+            AccountTier::Pro.into(),
+            AccountTier::Pro,
+            AccountTier::Pro,
+        );
+
+        let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
+        let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
+        let token = claim.clone().into_token(&encoding_key).unwrap();
+
+        // Make sure the token is set
+        claim.token = Some(token.clone());
+
+        let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
+        let public_key = pair.public_key().as_ref();
+
+        let new = Claim::from_token(&token, public_key).unwrap();
+
+        assert_eq!(claim, new);
+    }
+
     #[tokio::test]
     async fn authorization_layer() {
         let claim = Claim::new(

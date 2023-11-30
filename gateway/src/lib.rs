@@ -279,7 +279,7 @@ pub mod tests {
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
     use shuttle_common::backends::auth::ConvertResponse;
-    use shuttle_common::claims::{AccountTier, Claim, Scope};
+    use shuttle_common::claims::{AccountTier, Claim};
     use shuttle_common::models::deployment::DeploymentRequest;
     use shuttle_common::models::{project, service};
     use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
@@ -528,7 +528,7 @@ pub mod tests {
                 .lock()
                 .unwrap()
                 .users
-                .insert("gateway".to_string(), vec![Scope::Resources]);
+                .insert("gateway".to_string(), AccountTier::Deployer);
 
             let prefix = format!(
                 "shuttle_test_{}_",
@@ -652,8 +652,8 @@ pub mod tests {
         }
 
         pub fn set_super_user(&self, user: &str) {
-            if let Some(scopes) = self.auth_service.lock().unwrap().users.get_mut(user) {
-                scopes.push(Scope::Admin)
+            if let Some(tier) = self.auth_service.lock().unwrap().users.get_mut(user) {
+                *tier = AccountTier::Admin;
             }
         }
 
@@ -722,7 +722,7 @@ pub mod tests {
     }
 
     struct AuthService {
-        users: HashMap<String, Vec<Scope>>,
+        users: HashMap<String, AccountTier>,
         encoding_key: EncodingKey,
         public_key: Vec<u8>,
     }
@@ -753,8 +753,8 @@ pub mod tests {
                     get(|extract::State(state): extract::State<Arc<Mutex<Self>>>, TypedHeader(bearer): TypedHeader<Authorization<Bearer>> | async move {
                         let state = state.lock().unwrap();
 
-                        if let Some(scopes) = state.users.get(bearer.token()) {
-                            let claim = Claim::new(bearer.token().to_string(), scopes.clone(), AccountTier::default(), AccountTier::default());
+                        if let Some(tier) = state.users.get(bearer.token()) {
+                            let claim = Claim::new(bearer.token().to_string(), tier.clone().into(), tier.clone(), tier.clone());
                             let token = claim.into_token(&state.encoding_key)?;
                             Ok(serde_json::to_vec(&ConvertResponse { token }).unwrap())
                         } else {

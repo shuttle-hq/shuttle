@@ -979,7 +979,7 @@ impl GatewayService {
         if has_capacity {
             Ok(())
         } else {
-            Err(Error::from_kind(ErrorKind::ContainerLimit))
+            Err(Error::from_kind(ErrorKind::CapacityLimit))
         }
     }
 }

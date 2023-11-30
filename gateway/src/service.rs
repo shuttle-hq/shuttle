@@ -327,6 +327,7 @@ impl GatewayService {
         Ok(iter)
     }
 
+    /// The number of projects that are currently in the ready state
     pub async fn count_ready_projects(&self) -> Result<u32, Error> {
         let ready_count: u32 =
             query("SELECT COUNT(*) FROM projects, JSON_EACH(project_state) WHERE key = 'ready'")

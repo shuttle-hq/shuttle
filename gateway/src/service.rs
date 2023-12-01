@@ -21,6 +21,7 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
+use shuttle_common::claims::AccountTier;
 use shuttle_common::models::project::{ProjectName, State};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
@@ -244,8 +245,12 @@ pub struct GatewayService {
     task_router: TaskRouter<BoxedTask>,
     state_location: PathBuf,
 
-    /// Maximum number of containers the gateway can start
-    container_limit: u32,
+    /// Maximum number of containers the gateway can start before blocking cch projects
+    cch_container_limit: u32,
+    /// Maximum number of containers the gateway can start before blocking non-pro projects
+    soft_container_limit: u32,
+    /// Maximum number of containers the gateway can start before blocking any project
+    hard_container_limit: u32,
 
     // We store these because we'll need them for the health checks
     provisioner_host: Endpoint,
@@ -278,7 +283,9 @@ impl GatewayService {
             provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
                 .expect("to have a valid provisioner endpoint"),
             auth_host: args.auth_uri,
-            container_limit: args.container_limit,
+            cch_container_limit: args.cch_container_limit,
+            soft_container_limit: args.soft_container_limit,
+            hard_container_limit: args.hard_container_limit,
         }
     }
 
@@ -940,9 +947,34 @@ impl GatewayService {
         &self.auth_host
     }
 
-    /// Maximum number of containers that can be started by gateway
-    pub fn container_limit(&self) -> u32 {
-        self.container_limit
+    /// Is there enough capacity to start this project
+    ///
+    /// There is capacity if we are below the cch limit.
+    /// Else free and pro tier projects below the soft limit is allowed.
+    /// But only pro tier projects are allowed between the soft and hard limit.
+    /// Nothing should be allowed above the hard limits so that our own services don't crash.
+    pub async fn has_capacity(
+        &self,
+        is_cch_project: bool,
+        account_tier: &AccountTier,
+    ) -> Result<(), Error> {
+        let current_container_count = self.count_ready_projects().await?;
+
+        let has_capacity = if current_container_count < self.cch_container_limit {
+            true
+        } else if current_container_count < self.soft_container_limit {
+            !is_cch_project
+        } else if current_container_count < self.hard_container_limit {
+            matches!(account_tier, AccountTier::Pro)
+        } else {
+            false
+        };
+
+        if has_capacity {
+            Ok(())
+        } else {
+            Err(Error::from_kind(ErrorKind::ContainerLimit))
+        }
     }
 }
 

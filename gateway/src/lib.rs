@@ -279,7 +279,7 @@ pub mod tests {
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
     use shuttle_common::backends::auth::ConvertResponse;
-    use shuttle_common::claims::{AccountTier, Claim, Scope};
+    use shuttle_common::claims::{AccountTier, Claim};
     use shuttle_common::models::deployment::DeploymentRequest;
     use shuttle_common::models::{project, service};
     use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
@@ -528,7 +528,7 @@ pub mod tests {
                 .lock()
                 .unwrap()
                 .users
-                .insert("gateway".to_string(), vec![Scope::Resources]);
+                .insert("gateway".to_string(), AccountTier::Deployer);
 
             let prefix = format!(
                 "shuttle_test_{}_",
@@ -579,7 +579,9 @@ pub mod tests {
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
                     deploys_api_key: "gateway".to_string(),
-                    container_limit: 1,
+                    cch_container_limit: 1,
+                    soft_container_limit: 2,
+                    hard_container_limit: 3,
 
                     // Allow access to the auth on the host
                     extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],
@@ -629,25 +631,30 @@ pub mod tests {
             self.acme_client.clone()
         }
 
-        pub fn create_user(&self, user: &str) -> String {
+        /// Create user with a specific tier
+        pub fn create_user(&self, user: &str, tier: AccountTier) -> String {
             self.auth_service
                 .lock()
                 .unwrap()
                 .users
-                .insert(user.to_string(), AccountTier::Basic.into());
+                .insert(user.to_string(), tier);
 
             user.to_string()
         }
 
-        /// Create with the given name and return the authorization bearer for the user
-        pub fn create_authorization_bearer(&self, user: &str) -> Authorization<Bearer> {
-            let user_key = self.create_user(user);
+        /// Create a user with the given name and tier and return the authorization bearer for the user
+        pub fn create_authorization_bearer(
+            &self,
+            user: &str,
+            tier: AccountTier,
+        ) -> Authorization<Bearer> {
+            let user_key = self.create_user(user, tier);
             Authorization::bearer(&user_key).unwrap()
         }
 
         pub fn set_super_user(&self, user: &str) {
-            if let Some(scopes) = self.auth_service.lock().unwrap().users.get_mut(user) {
-                scopes.push(Scope::Admin)
+            if let Some(tier) = self.auth_service.lock().unwrap().users.get_mut(user) {
+                *tier = AccountTier::Admin;
             }
         }
 
@@ -716,7 +723,7 @@ pub mod tests {
     }
 
     struct AuthService {
-        users: HashMap<String, Vec<Scope>>,
+        users: HashMap<String, AccountTier>,
         encoding_key: EncodingKey,
         public_key: Vec<u8>,
     }
@@ -747,8 +754,8 @@ pub mod tests {
                     get(|extract::State(state): extract::State<Arc<Mutex<Self>>>, TypedHeader(bearer): TypedHeader<Authorization<Bearer>> | async move {
                         let state = state.lock().unwrap();
 
-                        if let Some(scopes) = state.users.get(bearer.token()) {
-                            let claim = Claim::new(bearer.token().to_string(), scopes.clone(), AccountTier::default(), AccountTier::default());
+                        if let Some(tier) = state.users.get(bearer.token()) {
+                            let claim = Claim::new(bearer.token().to_string(), (*tier).into(), *tier, *tier);
                             let token = claim.into_token(&state.encoding_key)?;
                             Ok(serde_json::to_vec(&ConvertResponse { token }).unwrap())
                         } else {
@@ -779,8 +786,12 @@ pub mod tests {
     }
 
     impl TestGateway {
-        /// Try to create a project and return the request response
-        pub async fn try_create_project(&mut self, project_name: &str) -> StatusCode {
+        /// Try to create a project with a given user and return the request response
+        pub async fn try_user_create_project(
+            &mut self,
+            project_name: &str,
+            authorization: &Authorization<Bearer>,
+        ) -> StatusCode {
             self.router
                 .call(
                     Request::builder()
@@ -789,21 +800,37 @@ pub mod tests {
                         .header("Content-Type", "application/json")
                         .body("{\"idle_minutes\": 3}".into())
                         .unwrap()
-                        .with_header(&self.authorization),
+                        .with_header(authorization),
                 )
                 .await
                 .unwrap()
                 .status()
         }
 
-        /// Create a new project in the test world and return its helping wrapper
-        pub async fn create_project(&mut self, project_name: &str) -> TestProject {
-            let status_code = self.try_create_project(project_name).await;
+        /// Try to create a project and return the request response
+        pub async fn try_create_project(&mut self, project_name: &str) -> StatusCode {
+            self.try_user_create_project(project_name, &self.authorization.clone())
+                .await
+        }
 
-            assert_eq!(status_code, StatusCode::OK);
+        /// Create a new project using the given user and return its helping wrapper
+        pub async fn user_create_project(
+            &mut self,
+            project_name: &str,
+            authorization: &Authorization<Bearer>,
+        ) -> TestProject {
+            let status_code = self
+                .try_user_create_project(project_name, authorization)
+                .await;
+
+            assert_eq!(
+                status_code,
+                StatusCode::OK,
+                "could not create {project_name}"
+            );
 
             let mut this = TestProject {
-                authorization: self.authorization.clone(),
+                authorization: authorization.clone(),
                 project_name: project_name.to_string(),
                 router: self.router.clone(),
                 pool: self.world.pool(),
@@ -815,6 +842,21 @@ pub mod tests {
 
             this
         }
+
+        /// Create a new project in the test world and return its helping wrapper
+        pub async fn create_project(&mut self, project_name: &str) -> TestProject {
+            self.user_create_project(project_name, &self.authorization.clone())
+                .await
+        }
+
+        /// Get authorization bearer for a new user
+        pub fn new_authorization_bearer(
+            &self,
+            user: &str,
+            tier: AccountTier,
+        ) -> Authorization<Bearer> {
+            self.world.create_authorization_bearer(user, tier)
+        }
     }
 
     #[async_trait]
@@ -825,7 +867,7 @@ pub mod tests {
             let (service, sender) = world.service().await;
 
             let router = world.router(service.clone(), sender.clone());
-            let authorization = world.create_authorization_bearer("neo");
+            let authorization = world.create_authorization_bearer("neo", AccountTier::Basic);
 
             Self {
                 router,
@@ -1155,7 +1197,7 @@ pub mod tests {
         // Allow the spawns to start
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        let neo_key = world.create_user("neo");
+        let neo_key = world.create_user("neo", AccountTier::Basic);
 
         let authorization = Authorization::bearer(&neo_key).unwrap();
 

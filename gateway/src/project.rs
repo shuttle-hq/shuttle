@@ -656,15 +656,7 @@ where
             Self::Rebooting(rebooting) => Self::Rebooting(rebooting),
             Self::Destroying(destroying) => Self::Destroying(destroying),
             Self::Destroyed(destroyed) => Self::Destroyed(destroyed),
-            Self::Errored(err) => match err.ctx {
-                // Try to recover the error if possible
-                // This causes the state machine to eventually settle in a stable state that is not errored
-                Some(err_ctx) => match err_ctx.refresh(ctx).await {
-                    Ok(restored) => restored,
-                    error => return error,
-                },
-                None => Self::Errored(err),
-            },
+            Self::Errored(err) => Self::Errored(err),
             Self::Deleted => Self::Deleted,
         };
         Ok(refreshed)

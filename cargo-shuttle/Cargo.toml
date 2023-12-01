@@ -9,7 +9,7 @@ homepage = "https://www.shuttle.rs"
 rust-version = "1.70"
 
 [dependencies]
-shuttle-common = { workspace = true, features = ["models"] }
+shuttle-common = { workspace = true, features = ["models", "backend"] }
 shuttle-proto = { workspace = true, features = ["provisioner", "runtime"] }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
 

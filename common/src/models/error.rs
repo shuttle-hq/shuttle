@@ -4,6 +4,7 @@ use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
+use crate::models::project::name::ProjectName;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiError {
@@ -39,7 +40,7 @@ pub enum ErrorKind {
     Forbidden,
     UserNotFound,
     UserAlreadyExists,
-    ProjectNotFound,
+    ProjectNotFound(ProjectName),
     InvalidProjectName(InvalidProjectName),
     ProjectAlreadyExists,
     /// Contains a message describing a running state of the project.
@@ -77,10 +78,12 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "The 'Host' header is invalid"),
             ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "User not found"),
             ErrorKind::UserAlreadyExists => (StatusCode::BAD_REQUEST, "User already exists"),
-            ErrorKind::ProjectNotFound => (
-                StatusCode::NOT_FOUND,
-                "Project not found. Make sure you are the owner of this project name. Run `cargo shuttle project start` to create a new project.",
-            ),
+            ErrorKind::ProjectNotFound(project_name) => {
+                return Self {
+                    message: format!("Project '{}' not found. Make sure you are the owner of this project name. Run `cargo shuttle project start` to create a new project.", project_name),
+                    status_code: StatusCode::NOT_FOUND.as_u16(),
+                }
+            },
             ErrorKind::ProjectNotReady => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 // "not ready" is matched against in cargo-shuttle for giving further instructions on project deletion

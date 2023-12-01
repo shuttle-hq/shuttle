@@ -28,6 +28,7 @@ use tower::{Service, ServiceBuilder};
 use tower_sanitize_path::SanitizePath;
 use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use shuttle_common::models::error::InvalidProjectName;
 
 use crate::acme::{AcmeClient, ChallengeResponderLayer, CustomDomain};
 use crate::service::GatewayService;
@@ -110,7 +111,7 @@ impl UserProxy {
             .headers()
             .typed_get::<Host>()
             .map(|host| fqdn!(host.hostname()))
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))?;
+            .ok_or_else(|| Error::from_kind(ErrorKind::BadHost))?;
 
         let project_name =
             if fqdn.is_subdomain_of(&self.public) && fqdn.depth() - self.public.depth() == 1 {
@@ -119,13 +120,13 @@ impl UserProxy {
                     .unwrap()
                     .to_owned()
                     .parse()
-                    .map_err(|_| Error::from_kind(ErrorKind::ProjectNotFound))?
+                    .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName(InvalidProjectName)))?
             } else if let Ok(CustomDomain { project_name, .. }) =
                 self.gateway.project_details_for_custom_domain(&fqdn).await
             {
                 project_name
             } else {
-                return Err(Error::from_kind(ErrorKind::ProjectNotFound));
+                return Err(Error::from_kind(ErrorKind::CustomDomainNotFound));
             };
 
         req.headers_mut()

@@ -188,8 +188,8 @@ This will prompt your local gateway to start a deployer container.
 Then, deploy it.
 
 ```bash
-cargo run -p cargo-shuttle -- --wd examples/rocket/hello-world project start
-cargo run -p cargo-shuttle -- --wd examples/rocket/hello-world deploy
+cargo run -p cargo-shuttle -- --wd examples/rocket/hello-world shuttle project start
+cargo run -p cargo-shuttle -- --wd examples/rocket/hello-world shuttle deploy
 ```
 
 Test if the deployment is working:

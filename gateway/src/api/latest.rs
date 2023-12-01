@@ -219,7 +219,9 @@ async fn create_project(
             .saturating_sub(is_cch_project as u32),
     );
 
-    service.has_capacity(is_cch_project, &claim.tier).await?;
+    if !claim.is_admin() {
+        service.has_capacity(is_cch_project, &claim.tier).await?;
+    }
 
     let project = service
         .create_project(
@@ -442,9 +444,11 @@ async fn route_project(
     let project_name = scoped_user.scope;
     let is_cch_project = project_name.is_cch_project();
 
-    service
-        .has_capacity(is_cch_project, &scoped_user.user.claim.tier)
-        .await?;
+    if !scoped_user.user.claim.is_admin() {
+        service
+            .has_capacity(is_cch_project, &scoped_user.user.claim.tier)
+            .await?;
+    }
 
     let project = service.find_or_start_project(&project_name, sender).await?;
     service

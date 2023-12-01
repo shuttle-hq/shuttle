@@ -23,12 +23,12 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::XShuttleProject;
+use shuttle_common::models::error::InvalidProjectName;
 use tokio::sync::mpsc::Sender;
 use tower::{Service, ServiceBuilder};
 use tower_sanitize_path::SanitizePath;
 use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use shuttle_common::models::error::InvalidProjectName;
 
 use crate::acme::{AcmeClient, ChallengeResponderLayer, CustomDomain};
 use crate::service::GatewayService;
@@ -113,21 +113,22 @@ impl UserProxy {
             .map(|host| fqdn!(host.hostname()))
             .ok_or_else(|| Error::from_kind(ErrorKind::BadHost))?;
 
-        let project_name =
-            if fqdn.is_subdomain_of(&self.public) && fqdn.depth() - self.public.depth() == 1 {
-                fqdn.labels()
-                    .next()
-                    .unwrap()
-                    .to_owned()
-                    .parse()
-                    .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName(InvalidProjectName)))?
-            } else if let Ok(CustomDomain { project_name, .. }) =
-                self.gateway.project_details_for_custom_domain(&fqdn).await
-            {
-                project_name
-            } else {
-                return Err(Error::from_kind(ErrorKind::CustomDomainNotFound));
-            };
+        let project_name = if fqdn.is_subdomain_of(&self.public)
+            && fqdn.depth() - self.public.depth() == 1
+        {
+            fqdn.labels()
+                .next()
+                .unwrap()
+                .to_owned()
+                .parse()
+                .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName(InvalidProjectName)))?
+        } else if let Ok(CustomDomain { project_name, .. }) =
+            self.gateway.project_details_for_custom_domain(&fqdn).await
+        {
+            project_name
+        } else {
+            return Err(Error::from_kind(ErrorKind::CustomDomainNotFound));
+        };
 
         req.headers_mut()
             .typed_insert(XShuttleProject(project_name.to_string()));

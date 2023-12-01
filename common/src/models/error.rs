@@ -1,10 +1,10 @@
 use std::fmt::{Display, Formatter};
 
+use crate::models::project::name::ProjectName;
 use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
-use crate::models::project::name::ProjectName;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiError {

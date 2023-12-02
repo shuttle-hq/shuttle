@@ -162,7 +162,7 @@ pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project, Error
 }
 
 pub fn run_until_done() -> impl Task<ProjectContext, Output = Project, Error = Error> {
-    RunUntilDone::new()
+    RunUntilDone::default()
 }
 
 pub fn delete_project() -> impl Task<ProjectContext, Output = Project, Error = Error> {
@@ -205,7 +205,7 @@ impl TaskBuilder {
     }
 
     pub fn build(mut self) -> BoxedTask {
-        self.tasks.push_back(Box::new(RunUntilDone::new()));
+        self.tasks.push_back(Box::new(RunUntilDone::default()));
 
         let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
 
@@ -295,14 +295,9 @@ where
 }
 
 /// Advance a project's state until it's returning `is_done`
+#[derive(Default)]
 pub struct RunUntilDone {
     tries: u32,
-}
-
-impl RunUntilDone {
-    pub fn new() -> Self {
-        Self { tries: 0 }
-    }
 }
 
 #[async_trait]

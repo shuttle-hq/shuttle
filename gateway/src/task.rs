@@ -232,7 +232,7 @@ impl TaskBuilder {
         let project_name = self.project_name.clone().expect("project_name is required");
         let task_router = self.service.task_router();
         let (task, handle) = AndThenNotify::after(self.build());
-        let task = Route::<BoxedTask>::to(project_name, Box::new(task), task_router);
+        let task = Route::to(project_name, Box::new(task), task_router);
         match timeout(TASK_SEND_TIMEOUT, sender.send(Box::new(task))).await {
             Ok(Ok(_)) => Ok(handle),
             _ => Err(Error::from_kind(ErrorKind::ServiceUnavailable)),
@@ -240,14 +240,14 @@ impl TaskBuilder {
     }
 }
 
-pub struct Route<T> {
+pub struct Route {
     project_name: ProjectName,
-    inner: Option<T>,
+    inner: Option<BoxedTask>,
     router: TaskRouter,
 }
 
-impl<T> Route<T> {
-    pub fn to(project_name: ProjectName, what: T, router: TaskRouter) -> Self {
+impl Route {
+    pub fn to(project_name: ProjectName, what: BoxedTask, router: TaskRouter) -> Self {
         Self {
             project_name,
             inner: Some(what),
@@ -257,7 +257,7 @@ impl<T> Route<T> {
 }
 
 #[async_trait]
-impl Task<()> for Route<BoxedTask> {
+impl Task<()> for Route {
     type Output = ();
 
     type Error = Error;

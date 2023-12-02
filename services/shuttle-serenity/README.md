@@ -4,10 +4,23 @@
 
 ```rust,no_run
 use anyhow::anyhow;
+#[cfg(feature = "serenity-0-12")]
+use serenity_0_12::async_trait;
+#[cfg(feature = "serenity-0-12")]
+use serenity_0_12::model::channel::Message;
+#[cfg(feature = "serenity-0-12")]
+use serenity_0_12::model::gateway::Ready;
+#[cfg(feature = "serenity-0-12")]
+use serenity_0_12::prelude::*;
+#[cfg(feature = "serenity")]
 use serenity::async_trait;
+#[cfg(feature = "serenity")]
 use serenity::model::channel::Message;
+#[cfg(feature = "serenity")]
 use serenity::model::gateway::Ready;
+#[cfg(feature = "serenity")]
 use serenity::prelude::*;
+
 use shuttle_secrets::SecretStore;
 use tracing::{error, info};
 

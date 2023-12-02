@@ -663,6 +663,35 @@ where
     }
 }
 
+pub async fn refresh_with_retry(
+    project: Project,
+    ctx: &impl DockerContext,
+) -> Result<Project, Error> {
+    let max_attempt = 3;
+    let mut num_attempt = 1;
+    let mut proj = Box::new(project);
+
+    loop {
+        let refreshed = proj.refresh(ctx).await;
+        match refreshed.as_ref() {
+            Ok(Project::Errored(err)) => match &err.ctx {
+                Some(err_ctx) => {
+                    if num_attempt >= max_attempt {
+                        return refreshed;
+                    } else {
+                        num_attempt += 1;
+                        proj = err_ctx.clone();
+                        tokio::time::sleep(Duration::from_millis(100_u64 * 2_u64.pow(num_attempt)))
+                            .await
+                    }
+                }
+                _ => return refreshed,
+            },
+            _ => return refreshed,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectCreating {
     project_name: ProjectName,

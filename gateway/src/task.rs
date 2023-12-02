@@ -205,7 +205,7 @@ impl TaskBuilder {
     }
 
     pub fn build(mut self) -> BoxedTask {
-        self.tasks.push_back(Box::new(RunUntilDone::default()));
+        self.tasks.push_back(Box::<RunUntilDone>::default());
 
         let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
 

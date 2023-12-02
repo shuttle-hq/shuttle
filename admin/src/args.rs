@@ -30,6 +30,9 @@ pub enum Command {
     /// Viewing and managing stats
     #[command(subcommand)]
     Stats(StatsCommand),
+
+    /// Forcefully idle CCH projects.
+    IdleCch,
 }
 
 #[derive(Subcommand, Debug)]

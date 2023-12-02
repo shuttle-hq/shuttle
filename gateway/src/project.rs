@@ -438,7 +438,7 @@ where
     type Next = Self;
     type Error = Infallible;
 
-    #[instrument(skip_all, fields(state = %self.state()))]
+    #[instrument("getting next project state", skip_all, fields(state = %self.state()))]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let previous = self.clone();
         let previous_state = previous.state();
@@ -886,7 +886,7 @@ where
     type Next = ProjectAttaching;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to create container", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_name = self.container_name(ctx);
         let Self { recreate_count, .. } = self;
@@ -931,7 +931,7 @@ where
     type Next = ProjectStarting;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to attach container to network", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container, .. } = self;
 
@@ -1008,7 +1008,7 @@ where
     type Next = ProjectCreating;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "recreating container", skip_all, fields(recreate_count = %self.recreate_count))]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
@@ -1059,7 +1059,7 @@ where
     type Next = ProjectStarted;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to start container", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
@@ -1111,7 +1111,7 @@ where
     type Next = ProjectStarting;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "restarting container", skip_all, fields(restart_count = %self.restart_count))]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
@@ -1181,7 +1181,7 @@ where
     type Next = ProjectReadying;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "wait for container to be ready", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
@@ -1261,7 +1261,7 @@ where
     type Next = ProjectRunning;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "check if container is still healthy", skip_all)]
     async fn next(mut self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
@@ -1497,7 +1497,7 @@ where
 
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to reboot container", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { mut container } = self;
         ctx.docker()
@@ -1561,7 +1561,7 @@ where
 
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to stop container", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container } = self;
 
@@ -1597,7 +1597,7 @@ where
     type Next = ProjectStopped;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "keep container in stopped state", skip_all)]
     async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
@@ -1616,7 +1616,7 @@ where
     type Next = ProjectDestroyed;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to destroy container", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container } = self;
         let container_id = safe_unwrap!(container.id);
@@ -1653,7 +1653,7 @@ where
     type Next = ProjectDestroyed;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "keep container in destroyed state", skip_all)]
     async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
@@ -1748,7 +1748,7 @@ where
     type Next = Self;
     type Error = Infallible;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "keep the container in errored state", skip_all)]
     async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }

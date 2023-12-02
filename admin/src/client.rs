@@ -22,7 +22,14 @@ impl Client {
     }
 
     pub async fn idle_cch(&self) -> Result<()> {
-        self.post("/admin/idle-cch", Option::<String>::None).await
+        reqwest::Client::new()
+            .post(format!("{}/admin/idle-cch", self.api_url))
+            .bearer_auth(&self.api_key)
+            .send()
+            .await
+            .context("failed to send idle request")?;
+
+        Ok(())
     }
 
     pub async fn acme_account_create(

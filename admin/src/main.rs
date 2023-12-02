@@ -161,10 +161,10 @@ async fn main() {
                 resp.builds_count, has_capacity
             )
         }
-        Command::IdleCch => match client.idle_cch().await {
-            Ok(_) => "Idled CCH projects".to_string(),
-            Err(err) => format!("failed to idle CCH projects: {}", err),
-        },
+        Command::IdleCch => {
+            client.idle_cch().await.expect("cch projects to be idled");
+            "Idled CCH projects".to_string()
+        }
     };
 
     println!("{res}");

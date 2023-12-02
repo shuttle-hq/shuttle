@@ -429,10 +429,10 @@ where
 /// the error. The value returned by the inner tasks upon their
 /// completion is committed back to persistence through
 /// [GatewayService].
-pub struct ProjectTask<T> {
+pub struct ProjectTask {
     project_name: ProjectName,
     service: Arc<GatewayService>,
-    tasks: VecDeque<T>,
+    tasks: VecDeque<BoxedTask<ProjectContext, Project>>,
     tracing_context: HashMap<String, String>,
 }
 
@@ -455,10 +455,7 @@ pub struct ProjectContext {
 pub type BoxedTask<Ctx = (), O = ()> = Box<dyn Task<Ctx, Output = O>>;
 
 #[async_trait]
-impl<T> Task<()> for ProjectTask<T>
-where
-    T: Task<ProjectContext, Output = Project>,
-{
+impl Task<()> for ProjectTask {
     type Output = ();
 
     async fn poll(&mut self, _: ()) -> TaskResult<Self::Output> {

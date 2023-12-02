@@ -78,33 +78,12 @@ impl Worker<BoxedTask> {
     }
 }
 
-pub struct TaskRouter<W> {
-    table: Arc<RwLock<HashMap<ProjectName, Sender<W>>>>,
+#[derive(Clone, Default)]
+pub struct TaskRouter {
+    table: Arc<RwLock<HashMap<ProjectName, Sender<BoxedTask>>>>,
 }
 
-impl<W> Clone for TaskRouter<W> {
-    fn clone(&self) -> Self {
-        Self {
-            table: self.table.clone(),
-        }
-    }
-}
-
-impl<W> Default for TaskRouter<W> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<W> TaskRouter<W> {
-    pub fn new() -> Self {
-        Self {
-            table: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-}
-
-impl TaskRouter<BoxedTask> {
+impl TaskRouter {
     pub async fn route(
         &self,
         name: &ProjectName,

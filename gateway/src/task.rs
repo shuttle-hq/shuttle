@@ -243,11 +243,11 @@ impl TaskBuilder {
 pub struct Route<T> {
     project_name: ProjectName,
     inner: Option<T>,
-    router: TaskRouter<T>,
+    router: TaskRouter,
 }
 
 impl<T> Route<T> {
-    pub fn to(project_name: ProjectName, what: T, router: TaskRouter<T>) -> Self {
+    pub fn to(project_name: ProjectName, what: T, router: TaskRouter) -> Self {
         Self {
             project_name,
             inner: Some(what),

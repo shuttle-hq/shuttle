@@ -696,13 +696,11 @@ workflows:
                 - resources/secrets
                 - resources/turso
                 - services/shuttle-actix-web
-                - services/shuttle-axum
                 - services/shuttle-next
                 - services/shuttle-poem
                 - services/shuttle-poise
                 - services/shuttle-rocket
                 - services/shuttle-salvo
-                - services/shuttle-serenity
                 - services/shuttle-thruster
                 - services/shuttle-tide
                 - services/shuttle-tower
@@ -719,6 +717,28 @@ workflows:
                 - "-F mongodb"
                 - "-F postgres"
                 - "-F postgres-rustls"
+      - test-standalone:
+          # Has mutually exclusive features, so we run checks for each feature separately
+          name: "services/shuttle-axum: << matrix.features >>"
+          matrix:
+            alias: test-standalone-services-shuttle-axum
+            parameters:
+              path:
+                - services/shuttle-axum
+              features:
+                - "-F axum"
+                - "-F axum-0-7 --no-default-features"
+      - test-standalone:
+          # Has mutually exclusive features, so we run checks for each feature separately
+          name: "services/shuttle-serenity: << matrix.features >>"
+          matrix:
+            alias: test-standalone-services-shuttle-serenity
+            parameters:
+              path:
+                - services/shuttle-serenity
+              features:
+                - "-F serenity"
+                - "-F serenity-0-12 --no-default-features"
       - test-workspace-member:
           name: << matrix.crate >>
           matrix:

@@ -10,7 +10,7 @@ keywords = ["shuttle-service", "serenity"]
 
 [dependencies]
 serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "model"], optional = true }
-serenity-0-12 = { package = "serenity", version = "0.12", default-features = false, features = ["client", "gateway", "model"], optional = true }
+serenity-0-12 = { package = "serenity", version = "0.12", default-features = false, features = ["client", "gateway", "model", "rustls_backend"], optional = true }
 shuttle-runtime = { path = "../../runtime", version = "0.34.1", default-features = false }
 
 [dev-dependencies]

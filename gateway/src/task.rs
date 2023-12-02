@@ -14,12 +14,11 @@ use tokio::time::{sleep, timeout};
 use tracing::{error, field, info_span, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
-use uuid::Uuid;
 
 use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
 use crate::worker::TaskRouter;
-use crate::{AccountName, Error, ErrorKind, Refresh, State};
+use crate::{Error, ErrorKind, Refresh, State};
 
 // Default maximum _total_ time a task is allowed to run
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
@@ -68,16 +67,6 @@ impl<R> TaskResult<R> {
         match self {
             Self::Pending(r) | Self::Done(r) => Some(r),
             _ => None,
-        }
-    }
-
-    pub fn to_str(&self) -> &str {
-        match self {
-            Self::Pending(_) => "pending",
-            Self::Done(_) => "done",
-            Self::TryAgain => "try again",
-            Self::Cancelled => "cancelled",
-            Self::Err(_) => "error",
         }
     }
 
@@ -158,7 +147,6 @@ pub fn delete_project() -> impl Task<ProjectContext, Output = Project> {
 pub struct TaskBuilder {
     project_name: Option<ProjectName>,
     service: Arc<GatewayService>,
-    timeout: Option<Duration>,
     tasks: VecDeque<BoxedTask<ProjectContext, Project>>,
 }
 
@@ -167,7 +155,6 @@ impl TaskBuilder {
         Self {
             service,
             project_name: None,
-            timeout: None,
             tasks: VecDeque::new(),
         }
     }
@@ -185,15 +172,8 @@ impl TaskBuilder {
         self
     }
 
-    pub fn with_timeout(mut self, duration: Duration) -> Self {
-        self.timeout = Some(duration);
-        self
-    }
-
     pub fn build(mut self) -> BoxedTask {
         self.tasks.push_back(Box::<RunUntilDone>::default());
-
-        let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
 
         let cx = Span::current().context();
         let mut tracing_context: HashMap<String, String> = Default::default();
@@ -203,9 +183,8 @@ impl TaskBuilder {
         });
 
         Box::new(WithTimeout::on(
-            timeout,
+            DEFAULT_TIMEOUT,
             ProjectTask {
-                uuid: Uuid::new_v4(),
                 project_name: self.project_name.expect("project_name is required"),
                 service: self.service,
                 tasks: self.tasks,
@@ -451,17 +430,10 @@ where
 /// completion is committed back to persistence through
 /// [GatewayService].
 pub struct ProjectTask<T> {
-    uuid: Uuid,
     project_name: ProjectName,
     service: Arc<GatewayService>,
     tasks: VecDeque<T>,
     tracing_context: HashMap<String, String>,
-}
-
-impl<T> ProjectTask<T> {
-    pub fn uuid(&self) -> &Uuid {
-        &self.uuid
-    }
 }
 
 /// A context for tasks which are scoped to a specific project.
@@ -472,8 +444,6 @@ impl<T> ProjectTask<T> {
 pub struct ProjectContext {
     /// The name of the project this task is about
     pub project_name: ProjectName,
-    /// The name of the user the project belongs to
-    pub account_name: AccountName,
     /// The gateway context in which this task is running
     pub gateway: GatewayContext,
     /// The last known state of the project
@@ -503,26 +473,17 @@ where
             Err(err) => return TaskResult::Err(err),
         };
 
-        let account_name = match self
-            .service
-            .account_name_from_project(&self.project_name)
-            .await
-        {
-            Ok(account_name) => account_name,
-            Err(err) => return TaskResult::Err(err),
-        };
         let admin_secret = match self
             .service
             .control_key_from_project_name(&self.project_name)
             .await
         {
-            Ok(account_name) => account_name,
+            Ok(admin_secret) => admin_secret,
             Err(err) => return TaskResult::Err(err),
         };
 
         let project_ctx = ProjectContext {
             project_name: self.project_name.clone(),
-            account_name: account_name.clone(),
             gateway: ctx,
             state: project.state,
             admin_secret,
@@ -534,7 +495,6 @@ where
         let span = info_span!(
             "polling project",
             ctx.project = ?project_ctx.project_name.to_string(),
-            ctx.account = ?project_ctx.account_name.to_string(),
             ctx.state = project_ctx.state.state(),
             ctx.state_after = field::Empty
         );
@@ -550,7 +510,6 @@ where
                     _ = timeout => {
                         warn!(
                             project_name = ?self.project_name,
-                            account_name = ?account_name,
                             "a task has been idling for a long time"
                         );
                         poll.await

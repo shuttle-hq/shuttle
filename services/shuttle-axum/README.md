@@ -2,7 +2,7 @@
 
 ### Example
 
-```rust
+```rust,no_run
 #[cfg(feature = "axum")]
 use axum::{routing::get, Router};
 #[cfg(feature = "axum-0-7")]

@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
 use crate::worker::TaskRouter;
-use crate::{AccountName, Error, ErrorKind, Refresh, State};
+use crate::{AccountName, Error, ErrorKind, State};
 
 // Default maximum _total_ time a task is allowed to run
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);

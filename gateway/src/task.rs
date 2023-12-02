@@ -309,7 +309,7 @@ impl Task<ProjectContext> for RunUntilDone {
     async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output, Self::Error> {
         // Don't overload Docker with requests. Therefore backoff with each try up to 30 seconds
         if self.tries > 0 {
-            let backoff = min(3_u64.pow(self.tries), 30_000);
+            let backoff = min(2_u64.pow(self.tries), 300);
 
             sleep(Duration::from_millis(backoff)).await;
         }

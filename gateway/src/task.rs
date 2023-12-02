@@ -32,9 +32,7 @@ pub const PROJECT_TASK_MAX_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 pub trait Task<Ctx>: Send {
     type Output;
 
-    type Error;
-
-    async fn poll(&mut self, ctx: Ctx) -> TaskResult<Self::Output, Self::Error>;
+    async fn poll(&mut self, ctx: Ctx) -> TaskResult<Self::Output>;
 }
 
 #[async_trait]
@@ -45,16 +43,14 @@ where
 {
     type Output = T::Output;
 
-    type Error = T::Error;
-
-    async fn poll(&mut self, ctx: Ctx) -> TaskResult<Self::Output, Self::Error> {
+    async fn poll(&mut self, ctx: Ctx) -> TaskResult<Self::Output> {
         self.as_mut().poll(ctx).await
     }
 }
 
 #[must_use]
-#[derive(Debug, PartialEq, Eq)]
-pub enum TaskResult<R, E> {
+#[derive(Debug)]
+pub enum TaskResult<R> {
     /// More work needs to be done
     Pending(R),
     /// No further work needed
@@ -64,11 +60,11 @@ pub enum TaskResult<R, E> {
     /// Task has been cancelled
     Cancelled,
     /// Task has failed
-    Err(E),
+    Err(Error),
 }
 
-impl<R, E> TaskResult<R, E> {
-    pub fn ok(self) -> Option<R> {
+impl<R> TaskResult<R> {
+    pub fn ok(&self) -> Option<&R> {
         match self {
             Self::Pending(r) | Self::Done(r) => Some(r),
             _ => None,
@@ -91,22 +87,12 @@ impl<R, E> TaskResult<R, E> {
             Self::TryAgain | Self::Pending(_) => false,
         }
     }
-
-    pub fn as_ref(&self) -> TaskResult<&R, &E> {
-        match self {
-            Self::Pending(r) => TaskResult::Pending(r),
-            Self::Done(r) => TaskResult::Done(r),
-            Self::TryAgain => TaskResult::TryAgain,
-            Self::Cancelled => TaskResult::Cancelled,
-            Self::Err(e) => TaskResult::Err(e),
-        }
-    }
 }
 
-pub fn run<F, Fut>(f: F) -> impl Task<ProjectContext, Output = Project, Error = Error>
+pub fn run<F, Fut>(f: F) -> impl Task<ProjectContext, Output = Project>
 where
     F: FnMut(ProjectContext) -> Fut + Send + 'static,
-    Fut: Future<Output = TaskResult<Project, Error>> + Send + 'static,
+    Fut: Future<Output = TaskResult<Project>> + Send + 'static,
 {
     RunFn {
         f,
@@ -114,7 +100,7 @@ where
     }
 }
 
-pub fn destroy() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+pub fn destroy() -> impl Task<ProjectContext, Output = Project> {
     run(|ctx| async move {
         match ctx.state.destroy() {
             Ok(state) => TaskResult::Done(state),
@@ -123,7 +109,7 @@ pub fn destroy() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     })
 }
 
-pub fn start() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+pub fn start() -> impl Task<ProjectContext, Output = Project> {
     run(|ctx| async move {
         match ctx.state.start() {
             Ok(state) => TaskResult::Done(state),
@@ -133,7 +119,7 @@ pub fn start() -> impl Task<ProjectContext, Output = Project, Error = Error> {
 }
 
 /// Will force restart a project no matter the state it is in
-pub fn restart(project_id: Ulid) -> impl Task<ProjectContext, Output = Project, Error = Error> {
+pub fn restart(project_id: Ulid) -> impl Task<ProjectContext, Output = Project> {
     run(move |ctx| async move {
         let state = ctx
             .state
@@ -147,7 +133,7 @@ pub fn restart(project_id: Ulid) -> impl Task<ProjectContext, Output = Project, 
     })
 }
 
-pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project> {
     run(|ctx| async move {
         match ctx.state {
             Project::Ready(mut ready) => {
@@ -161,11 +147,11 @@ pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project, Error
     })
 }
 
-pub fn run_until_done() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+pub fn run_until_done() -> impl Task<ProjectContext, Output = Project> {
     RunUntilDone::default()
 }
 
-pub fn delete_project() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+pub fn delete_project() -> impl Task<ProjectContext, Output = Project> {
     DeleteProject
 }
 
@@ -193,7 +179,7 @@ impl TaskBuilder {
 
     pub fn and_then<T>(mut self, task: T) -> Self
     where
-        T: Task<ProjectContext, Output = Project, Error = Error> + 'static,
+        T: Task<ProjectContext, Output = Project> + 'static,
     {
         self.tasks.push_back(Box::new(task));
         self
@@ -260,9 +246,7 @@ impl Route {
 impl Task<()> for Route {
     type Output = ();
 
-    type Error = Error;
-
-    async fn poll(&mut self, _ctx: ()) -> TaskResult<Self::Output, Self::Error> {
+    async fn poll(&mut self, _ctx: ()) -> TaskResult<Self::Output> {
         if let Some(task) = self.inner.take() {
             match self.router.route(&self.project_name, task).await {
                 Ok(_) => TaskResult::Done(()),
@@ -283,13 +267,11 @@ pub struct RunFn<F, O> {
 impl<F, Fut> Task<ProjectContext> for RunFn<F, Fut>
 where
     F: FnMut(ProjectContext) -> Fut + Send,
-    Fut: Future<Output = TaskResult<Project, Error>> + Send,
+    Fut: Future<Output = TaskResult<Project>> + Send,
 {
     type Output = Project;
 
-    type Error = Error;
-
-    async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output, Self::Error> {
+    async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output> {
         (self.f)(ctx).await
     }
 }
@@ -304,9 +286,7 @@ pub struct RunUntilDone {
 impl Task<ProjectContext> for RunUntilDone {
     type Output = Project;
 
-    type Error = Error;
-
-    async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output, Self::Error> {
+    async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output> {
         // Don't overload Docker with requests. Therefore backoff with each try up to 30 seconds
         if self.tries > 0 {
             let backoff = min(3_u64.pow(self.tries), 30_000);
@@ -346,9 +326,7 @@ pub struct DeleteProject;
 impl Task<ProjectContext> for DeleteProject {
     type Output = Project;
 
-    type Error = Error;
-
-    async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output, Self::Error> {
+    async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output> {
         // Make sure the project state has not changed from Docker
         // Else we will make assumptions when trying to run next which can cause a failure
         let project = match ctx.state.refresh(&ctx.gateway).await {
@@ -413,9 +391,7 @@ where
 {
     type Output = T::Output;
 
-    type Error = T::Error;
-
-    async fn poll(&mut self, ctx: Ctx) -> TaskResult<Self::Output, Self::Error> {
+    async fn poll(&mut self, ctx: Ctx) -> TaskResult<Self::Output> {
         let out = self.inner.poll(ctx).await;
 
         if out.is_done() {
@@ -450,9 +426,7 @@ where
 {
     type Output = T::Output;
 
-    type Error = T::Error;
-
-    async fn poll(&mut self, ctx: Ctx) -> TaskResult<Self::Output, Self::Error> {
+    async fn poll(&mut self, ctx: Ctx) -> TaskResult<Self::Output> {
         if self.start.is_none() {
             self.start = Some(Instant::now());
         }
@@ -508,18 +482,16 @@ pub struct ProjectContext {
     pub admin_secret: String,
 }
 
-pub type BoxedTask<Ctx = (), O = ()> = Box<dyn Task<Ctx, Output = O, Error = Error>>;
+pub type BoxedTask<Ctx = (), O = ()> = Box<dyn Task<Ctx, Output = O>>;
 
 #[async_trait]
 impl<T> Task<()> for ProjectTask<T>
 where
-    T: Task<ProjectContext, Output = Project, Error = Error>,
+    T: Task<ProjectContext, Output = Project>,
 {
     type Output = ();
 
-    type Error = Error;
-
-    async fn poll(&mut self, _: ()) -> TaskResult<Self::Output, Self::Error> {
+    async fn poll(&mut self, _: ()) -> TaskResult<Self::Output> {
         if self.tasks.is_empty() {
             return TaskResult::Done(());
         }
@@ -586,7 +558,7 @@ where
                 }
             };
 
-            if let Some(update) = res.as_ref().ok() {
+            if let Some(update) = res.ok() {
                 let span = Span::current();
                 span.record("ctx.state_after", update.state());
 
@@ -636,9 +608,7 @@ pub mod tests {
     impl Task<()> for NeverEnding {
         type Output = ();
 
-        type Error = ();
-
-        async fn poll(&mut self, _ctx: ()) -> TaskResult<Self::Output, Self::Error> {
+        async fn poll(&mut self, _ctx: ()) -> TaskResult<Self::Output> {
             TaskResult::Pending(())
         }
     }
@@ -655,7 +625,10 @@ pub mod tests {
             assert!(Instant::now() - start <= timeout + Duration::from_secs(1));
         }
 
-        assert_eq!(task_with_timeout.poll(()).await, TaskResult::Cancelled);
+        assert!(matches!(
+            task_with_timeout.poll(()).await,
+            TaskResult::Cancelled
+        ));
 
         Ok(())
     }

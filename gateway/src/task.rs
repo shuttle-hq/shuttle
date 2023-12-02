@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -161,7 +162,7 @@ pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project, Error
 }
 
 pub fn run_until_done() -> impl Task<ProjectContext, Output = Project, Error = Error> {
-    RunUntilDone
+    RunUntilDone::default()
 }
 
 pub fn delete_project() -> impl Task<ProjectContext, Output = Project, Error = Error> {
@@ -204,7 +205,7 @@ impl TaskBuilder {
     }
 
     pub fn build(mut self) -> BoxedTask {
-        self.tasks.push_back(Box::new(RunUntilDone));
+        self.tasks.push_back(Box::<RunUntilDone>::default());
 
         let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
 
@@ -294,7 +295,10 @@ where
 }
 
 /// Advance a project's state until it's returning `is_done`
-pub struct RunUntilDone;
+#[derive(Default)]
+pub struct RunUntilDone {
+    tries: u32,
+}
 
 #[async_trait]
 impl Task<ProjectContext> for RunUntilDone {
@@ -303,6 +307,14 @@ impl Task<ProjectContext> for RunUntilDone {
     type Error = Error;
 
     async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output, Self::Error> {
+        // Don't overload Docker with requests. Therefore backoff with each try up to 30 seconds
+        if self.tries > 0 {
+            let backoff = min(3_u64.pow(self.tries), 30_000);
+
+            sleep(Duration::from_millis(backoff)).await;
+        }
+        self.tries += 1;
+
         // Make sure the project state has not changed from Docker
         // Else we will make assumptions when trying to run next which can cause a failure
         let project = match ctx.state.refresh(&ctx.gateway).await {

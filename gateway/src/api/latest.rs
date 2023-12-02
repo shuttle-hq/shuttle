@@ -635,6 +635,25 @@ async fn revive_projects(
 #[instrument(skip_all)]
 #[utoipa::path(
     post,
+    path = "/admin/idle-cch",
+    responses(
+        (status = 200, description = "Successfully idled all cch projects."),
+        (status = 500, description = "Server internal error.")
+    )
+)]
+async fn idle_cch_projects(
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
+) -> Result<(), Error> {
+    crate::project::exec::idle_cch(service, sender)
+        .await
+        .map_err(|_| Error::from_kind(ErrorKind::Internal))
+}
+
+#[instrument(skip_all)]
+#[utoipa::path(
+    post,
     path = "/admin/destroy",
     responses(
         (status = 200, description = "Successfully destroyed the projects."),
@@ -916,6 +935,7 @@ impl Modify for SecurityAddon {
         delete_load,
         get_projects,
         revive_projects,
+        idle_cch_projects,
         destroy_projects,
         get_load_admin,
         delete_load_admin
@@ -1030,6 +1050,7 @@ impl ApiBuilder {
             .route("/projects", get(get_projects))
             .route("/revive", post(revive_projects))
             .route("/destroy", post(destroy_projects))
+            .route("/idle-cch", post(idle_cch_projects))
             .route("/stats/load", get(get_load_admin).delete(delete_load_admin))
             // TODO: The `/swagger-ui` responds with a 303 See Other response which is followed in
             // browsers but leads to 404 Not Found. This must be investigated.

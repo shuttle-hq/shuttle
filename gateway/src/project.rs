@@ -1861,6 +1861,43 @@ pub mod exec {
         Ok(())
     }
 
+    pub async fn idle_cch(
+        gateway: Arc<GatewayService>,
+        sender: Sender<BoxedTask>,
+    ) -> Result<(), ProjectError> {
+        for project_name in gateway
+            .iter_cch_projects()
+            .await
+            .expect("could not list cch projects")
+        {
+            if let Project::Ready(ProjectReady { container, .. }) =
+                gateway.find_project(&project_name).await.unwrap().state
+            {
+                if let Ok(container) = gateway
+                    .context()
+                    .docker()
+                    .inspect_container(safe_unwrap!(container.id), None)
+                    .await
+                {
+                    if container.state.is_some() {
+                        _ = gateway
+                            .new_task()
+                            .project(project_name)
+                            .and_then(task::run(|ctx| async move {
+                                TaskResult::Done(Project::Stopping(ProjectStopping {
+                                    container: ctx.state.container().unwrap(),
+                                }))
+                            }))
+                            .send(&sender)
+                            .await;
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn destroy(
         gateway: Arc<GatewayService>,
         sender: Sender<BoxedTask>,

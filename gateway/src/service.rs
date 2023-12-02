@@ -334,6 +334,17 @@ impl GatewayService {
         Ok(iter)
     }
 
+    pub async fn iter_cch_projects(
+        &self,
+    ) -> Result<impl ExactSizeIterator<Item = ProjectName>, Error> {
+        let iter = query("SELECT project_name FROM projects WHERE project_name LIKE 'cch23-%'")
+            .fetch_all(&self.db)
+            .await?
+            .into_iter()
+            .map(|row| (row.get("project_name")));
+        Ok(iter)
+    }
+
     /// The number of projects that are currently in the ready state
     pub async fn count_ready_projects(&self) -> Result<u32, Error> {
         let ready_count: u32 =

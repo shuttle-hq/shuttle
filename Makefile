@@ -48,13 +48,13 @@ MONGO_INITDB_ROOT_PASSWORD?=password
 STRIPE_SECRET_KEY?=""
 AUTH_JWTSIGNING_PRIVATE_KEY?=""
 
-ifeq ($(PROD),true)
+DD_ENV=$(SHUTTLE_ENV)
+ifeq ($(SHUTTLE_ENV),production)
 DOCKER_COMPOSE_FILES=docker-compose.yml
 STACK=shuttle-prod
 APPS_FQDN=shuttleapp.rs
 DB_FQDN=db.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle
-DD_ENV=production
 # make sure we only ever go to production with `--tls=enable`
 USE_TLS=enable
 CARGO_PROFILE=release
@@ -65,7 +65,6 @@ STACK?=shuttle-dev
 APPS_FQDN=unstable.shuttleapp.rs
 DB_FQDN=db.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
-DD_ENV=unstable
 USE_TLS?=disable
 # default for local run
 CARGO_PROFILE?=debug
@@ -141,7 +140,8 @@ DOCKER_COMPOSE_ENV=\
 	DD_ENV=$(DD_ENV)\
 	USE_TLS=$(USE_TLS)\
 	COMPOSE_PROFILES=$(COMPOSE_PROFILES)\
-	DOCKER_SOCK=$(DOCKER_SOCK)
+	DOCKER_SOCK=$(DOCKER_SOCK)\
+	SHUTTLE_ENV=$(SHUTTLE_ENV)
 
 .PHONY: clean cargo-clean images the-shuttle-images shuttle-% postgres panamax otel deploy test docker-compose.rendered.yml up down
 
@@ -162,7 +162,7 @@ shuttle-%:
 		--build-arg folder=$(*) \
 		--build-arg crate=$(@) \
 		--build-arg prepare_args=$(PREPARE_ARGS) \
-		--build-arg PROD=$(PROD) \
+		--build-arg SHUTTLE_ENV=$(SHUTTLE_ENV) \
 		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
 		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \

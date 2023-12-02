@@ -48,6 +48,7 @@ services:
       - auth-vol:/var/lib/shuttle-auth
     environment:
       - RUST_LOG=${RUST_LOG}
+      - SHUTTLE_ENV=${SHUTTLE_ENV}
     command:
       - "--state=/var/lib/shuttle-auth"
       - "start"
@@ -90,6 +91,7 @@ services:
       - builder-store-vol:/nix/store
     environment:
       - RUST_LOG=${RUST_LOG}
+      - SHUTTLE_ENV=${SHUTTLE_ENV}
     command:
       - "--address=0.0.0.0:8000"
       - "--auth-uri=http://auth:8000"
@@ -126,6 +128,7 @@ services:
       - ${DOCKER_SOCK}:/var/run/docker.sock
     environment:
       - RUST_LOG=${RUST_LOG}
+      - SHUTTLE_ENV=${SHUTTLE_ENV}
     command:
       - "--state=/var/lib/shuttle"
       - "start"
@@ -172,6 +175,7 @@ services:
       default:
     environment:
       - RUST_LOG=${RUST_LOG}
+      - SHUTTLE_ENV=${SHUTTLE_ENV}
     command:
       - "--address=0.0.0.0:8000"
       - "--db-connection-uri=${LOGGER_POSTGRES_URI}"
@@ -184,6 +188,7 @@ services:
       - auth
     environment:
       - RUST_LOG=${RUST_LOG}
+      - SHUTTLE_ENV=${SHUTTLE_ENV}
     networks:
       user-net:
     deploy:
@@ -216,6 +221,7 @@ services:
       - auth
     environment:
       - RUST_LOG=${RUST_LOG}
+      - SHUTTLE_ENV=${SHUTTLE_ENV}
     networks:
       user-net:
     volumes:
@@ -278,6 +284,7 @@ services:
     networks:
       user-net:
     environment:
+      - SHUTTLE_ENV=${SHUTTLE_ENV}
       - DD_API_KEY=${DD_API_KEY}
       - DD_ENV=${DD_ENV}
       - HONEYCOMB_API_KEY=${HONEYCOMB_API_KEY}

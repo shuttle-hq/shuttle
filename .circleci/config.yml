@@ -363,10 +363,10 @@ jobs:
         description: "Use public registry"
         type: boolean
         default: true
-      production:
-        description: "Push and deploy to production"
-        type: boolean
-        default: false
+      shuttle-env:
+        description: "Push and deploy to the given env"
+        type: string
+        default: staging
     steps:
       - checkout
       - run:
@@ -384,7 +384,7 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            PUSH=true PROD=<< parameters.production >> PLATFORMS=linux/amd64 TAG=$TAG make images
+            PUSH=true SHUTTLE_ENV=<< parameters.shuttle-env >> PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
   deploy-images:
     executor: machine-ubuntu
@@ -423,10 +423,10 @@ jobs:
       jwt-signing-private-key:
         description: "Auth private key used for JWT signing"
         type: string
-      production:
-        description: "Push and deploy to production"
-        type: boolean
-        default: false
+      shuttle-env:
+        description: "Push and deploy to the given env"
+        type: string
+        default: staging
     steps:
       - checkout
       - run:
@@ -444,7 +444,7 @@ jobs:
           command: |
             DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> \
             TAG=$TAG \
-            PROD=<< parameters.production >> \
+            SHUTTLE_ENV=<< parameters.shuttle-env >> \
             USE_TLS=enable \
             POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
             MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
@@ -456,15 +456,14 @@ jobs:
             AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
             make deploy
       - when:
-          condition: << parameters.production >>
+          condition: << parameters.shuttle-env >> == "production"
           steps:
             - run:
                 name: Pull new deployer image on prod
                 command: |
                   ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
       - when:
-          condition:
-            not: << parameters.production >>
+          condition: << parameters.shuttle-env >> == "staging"
           steps:
             - run:
                 name: Pull new deployer image on dev
@@ -810,7 +809,7 @@ workflows:
           name: build-and-push-unstable
           aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
           aws-secret-access-key: DEV_AWS_SECRET_ACCESS_KEY
-          production: false
+          shuttle-env: staging
           requires:
             - approve-push-unstable
       - deploy-images:
@@ -883,7 +882,7 @@ workflows:
           name: build-and-push-production
           aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
           aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
-          production: true
+          shuttle-env: production
           filters:
             branches:
               only: production
@@ -904,7 +903,7 @@ workflows:
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
           ssh-config-script: production-ssh-config.sh
           ssh-host: shuttle.prod.internal
-          production: true
+          shuttle-env: production
           requires:
             - build-and-push-production
             - approve-deploy-production

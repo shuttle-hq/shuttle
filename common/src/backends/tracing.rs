@@ -23,48 +23,17 @@ use super::otlp_tracing_bridge;
 
 const OTLP_ADDRESS: &str = "http://otel-collector:4317";
 
-enum ShuttleEnv {
-    Production,
-    Staging,
-    Development,
-    Other,
-}
-
-impl TryFrom<String> for ShuttleEnv {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "production" => Ok(ShuttleEnv::Production),
-            "staging" => Ok(ShuttleEnv::Staging),
-            "dev" => Ok(ShuttleEnv::Development),
-            _ => Err(format!("unknown env: {value}")),
-        }
-    }
-}
-
 pub fn setup_tracing<S>(subscriber: S, backend: Backend, env_filter_directive: Option<&'static str>)
 where
     S: Subscriber + for<'a> LookupSpan<'a> + Send + Sync,
 {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
-    let shuttle_env_str = std::env::var("SHUTTLE_ENV").unwrap_or("".to_string());
-    let shuttle_env = ShuttleEnv::try_from(shuttle_env_str.clone()).unwrap_or(ShuttleEnv::Other);
-
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new(env_filter_directive.unwrap_or("info")))
         .unwrap();
 
-    let fmt_layer = match shuttle_env {
-        ShuttleEnv::Production | ShuttleEnv::Staging | ShuttleEnv::Development => fmt::layer()
-            .with_level(true)
-            .with_ansi(false)
-            .with_target(true)
-            .json()
-            .boxed(),
-        ShuttleEnv::Other => fmt::layer().compact().boxed(),
-    };
+    let fmt_layer = fmt::layer().compact();
 
     // The OTLP_ADDRESS env var is useful for setting a localhost address when running deployer locally.
     let otlp_address = std::env::var("OTLP_ADDRESS").unwrap_or(OTLP_ADDRESS.into());
@@ -90,9 +59,7 @@ where
     let logs = opentelemetry_otlp::new_pipeline()
         .logging()
         .with_log_config(Config::default().with_resource(Resource::new(vec![
-            // Datadog convention
             KeyValue::new("service.name", backend.to_string().to_lowercase()),
-            // KeyValue::new("deployment.environment", shuttle_env_str.clone()),
         ])))
         .with_exporter(
             opentelemetry_otlp::new_exporter()

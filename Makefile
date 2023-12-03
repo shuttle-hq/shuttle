@@ -95,7 +95,7 @@ PANAMAX_EXTRA_PATH?=./extras/panamax
 PANAMAX_TAG?=1.0.12
 
 OTEL_EXTRA_PATH?=./extras/otel
-OTEL_TAG?=0.72.0
+OTEL_TAG?=0.90.1
 
 USE_PANAMAX?=enable
 ifeq ($(USE_PANAMAX), enable)

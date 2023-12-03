@@ -4,3 +4,4 @@ mod future;
 pub mod headers;
 pub mod metrics;
 pub mod tracing;
+mod otlp_tracing_bridge;

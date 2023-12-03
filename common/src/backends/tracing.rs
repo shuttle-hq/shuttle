@@ -8,7 +8,9 @@ use http::{Request, Response};
 use opentelemetry::{global, KeyValue};
 use opentelemetry_http::HeaderExtractor;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{propagation::TraceContextPropagator, runtime::Tokio, trace, Resource};
+use opentelemetry_sdk::{
+    logs::Config, propagation::TraceContextPropagator, runtime::Tokio, trace, Resource,
+};
 use pin_project::pin_project;
 use tower::{Layer, Service};
 use tracing::{debug_span, instrument::Instrumented, Instrument, Span, Subscriber};
@@ -17,7 +19,29 @@ use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
 
 use crate::log::Backend;
 
+use super::otlp_tracing_bridge;
+
 const OTLP_ADDRESS: &str = "http://otel-collector:4317";
+
+enum ShuttleEnv {
+    Production,
+    Staging,
+    Development,
+    Other,
+}
+
+impl TryFrom<String> for ShuttleEnv {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "production" => Ok(ShuttleEnv::Production),
+            "staging" => Ok(ShuttleEnv::Staging),
+            "dev" => Ok(ShuttleEnv::Development),
+            _ => Err(format!("unknown env: {value}")),
+        }
+    }
+}
 
 pub fn setup_tracing<S>(subscriber: S, backend: Backend, env_filter_directive: Option<&'static str>)
 where
@@ -25,10 +49,22 @@ where
 {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
+    let shuttle_env_str = std::env::var("SHUTTLE_ENV").unwrap_or("".to_string());
+    let shuttle_env = ShuttleEnv::try_from(shuttle_env_str.clone()).unwrap_or(ShuttleEnv::Other);
+
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new(env_filter_directive.unwrap_or("info")))
         .unwrap();
-    let fmt_layer = fmt::layer();
+
+    let fmt_layer = match shuttle_env {
+        ShuttleEnv::Production | ShuttleEnv::Staging | ShuttleEnv::Development => fmt::layer()
+            .with_level(true)
+            .with_ansi(false)
+            .with_target(true)
+            .json()
+            .boxed(),
+        ShuttleEnv::Other => fmt::layer().compact().boxed(),
+    };
 
     // The OTLP_ADDRESS env var is useful for setting a localhost address when running deployer locally.
     let otlp_address = std::env::var("OTLP_ADDRESS").unwrap_or(OTLP_ADDRESS.into());
@@ -38,12 +74,12 @@ where
         .with_exporter(
             opentelemetry_otlp::new_exporter()
                 .tonic()
-                .with_endpoint(otlp_address),
+                .with_endpoint(otlp_address.clone()),
         )
         .with_trace_config(
             trace::config().with_resource(Resource::new(vec![KeyValue::new(
                 "service.name",
-                backend.to_string(),
+                backend.to_string().to_lowercase(),
             )])),
         )
         .install_batch(Tokio)
@@ -51,10 +87,29 @@ where
 
     let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
+    let logs = opentelemetry_otlp::new_pipeline()
+        .logging()
+        .with_log_config(Config::default().with_resource(Resource::new(vec![
+            // Datadog convention
+            KeyValue::new("service.name", backend.to_string().to_lowercase()),
+            // KeyValue::new("deployment.environment", shuttle_env_str.clone()),
+        ])))
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(otlp_address),
+        )
+        .install_batch(Tokio)
+        .unwrap();
+
+    let appender_tracing_layer =
+        otlp_tracing_bridge::OpenTelemetryTracingBridge::new(&logs.provider().unwrap());
+
     subscriber
         .with(filter_layer)
         .with(fmt_layer)
         .with(otel_layer)
+        .with(appender_tracing_layer)
         .init();
 }
 

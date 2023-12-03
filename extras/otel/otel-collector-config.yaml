@@ -27,10 +27,10 @@ receivers:
   prometheus/otel:
     config:
       scrape_configs:
-      - job_name: 'otelcol'
-        scrape_interval: 10s
-        static_configs:
-        - targets: ['0.0.0.0:8888']
+        - job_name: "otelcol"
+          scrape_interval: 10s
+          static_configs:
+            - targets: ["0.0.0.0:8888"]
   docker_stats:
     endpoint: unix:///var/run/docker.sock
     timeout: 20s
@@ -45,15 +45,32 @@ processors:
     timeout: 10s
   attributes:
     actions:
-      - key: env
+      - key: deployment.environment
         value: ${env:DD_ENV}
         action: insert
+  # See https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/1909
+  # as for why we need that.
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          # DataDog cannot pick up the span name as resource on
+          # Service Entry Spans. We append it here. This might have a
+          # side effect to overwrite an application that is instrumented with
+          # DataDog SDK. However, as long as OpenTelemetry SDK is used to
+          # instrument, this transformation will help.
+          - set(attributes["resource.name"], name)
+          # - set(attributes["service"], attributes["otel.service"])
 
 exporters:
   datadog:
     api:
       site: datadoghq.eu
       key: ${env:DD_API_KEY}
+    traces:
+      span_name_as_resource_name: true
+      # peer_tags_aggregation: true
   otlp:
     endpoint: "api.honeycomb.io:443"
     headers:
@@ -62,7 +79,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [attributes, batch]
+      processors: [attributes, batch, transform]
       exporters: [datadog, otlp]
     logs:
       receivers: [otlp]

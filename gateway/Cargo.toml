@@ -31,6 +31,7 @@ lazy_static = "1.4.0"
 num_cpus = "1.15.0"
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }
+opentelemetry-contrib = { workspace = true }
 opentelemetry-http = { workspace = true }
 pem = "1.1.1"
 pin-project = { workspace = true }

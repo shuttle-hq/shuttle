@@ -48,9 +48,6 @@ processors:
       - key: env
         value: ${env:DD_ENV}
         action: insert
-      - key: deployment.environment
-        value: ${env:DD_ENV}
-        action: insert
   # See https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/1909
   # as for why we need that.
 

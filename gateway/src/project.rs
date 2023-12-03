@@ -22,7 +22,8 @@ use hyper::client::HttpConnector;
 use hyper::{Body, Client};
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
-use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::backends::headers::{X_SHUTTLE_ACCOUNT_NAME, X_SHUTTLE_ADMIN_SECRET};
 use shuttle_common::constants::{default_idle_minutes, DEFAULT_IDLE_MINUTES};
 use shuttle_common::models::project::ProjectName;
@@ -169,6 +170,18 @@ impl From<DockerError> for Error {
         error!(error = %err, "internal Docker error");
         Self::source(ErrorKind::Internal, err)
     }
+}
+
+/// Allow some fields to default to their default value if deserializing them fails
+/// https://users.rust-lang.org/t/solved-serde-deserialization-on-error-use-default-values/6681/2
+fn ok_or_default<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+where
+    T: DeserializeOwned + Default,
+    D: Deserializer<'de>,
+{
+    // Convert to `Value` first so that we capture the whole input in case it fails later on the specific type
+    let v: serde_json::Value = Deserialize::deserialize(deserializer)?;
+    Ok(T::deserialize(v).unwrap_or_default())
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1177,7 +1190,7 @@ pub struct ProjectStarted {
     #[serde(default)]
     start_count: usize,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
-    #[serde(default)]
+    #[serde(default, deserialize_with = "ok_or_default")]
     stats: VecDeque<Stats>,
 }
 
@@ -1258,7 +1271,7 @@ pub struct ProjectReady {
     container: ContainerInspectResponse,
     service: Service,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
-    #[serde(default)]
+    #[serde(default, deserialize_with = "ok_or_default")]
     stats: VecDeque<Stats>,
 }
 

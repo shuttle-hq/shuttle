@@ -29,6 +29,7 @@ where
 {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
+    let shuttle_env = std::env::var("SHUTTLE_ENV").unwrap_or("".to_string());
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new(env_filter_directive.unwrap_or("info")))
         .unwrap();
@@ -60,6 +61,7 @@ where
         .logging()
         .with_log_config(Config::default().with_resource(Resource::new(vec![
             KeyValue::new("service.name", backend.to_string().to_lowercase()),
+            KeyValue::new("deployment.environment", shuttle_env),
         ])))
         .with_exporter(
             opentelemetry_otlp::new_exporter()

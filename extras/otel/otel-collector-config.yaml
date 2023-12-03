@@ -45,23 +45,14 @@ processors:
     timeout: 10s
   attributes:
     actions:
+      - key: env
+        value: ${env:DD_ENV}
+        action: insert
       - key: deployment.environment
         value: ${env:DD_ENV}
         action: insert
   # See https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/1909
   # as for why we need that.
-  transform:
-    error_mode: ignore
-    trace_statements:
-      - context: span
-        statements:
-          # DataDog cannot pick up the span name as resource on
-          # Service Entry Spans. We append it here. This might have a
-          # side effect to overwrite an application that is instrumented with
-          # DataDog SDK. However, as long as OpenTelemetry SDK is used to
-          # instrument, this transformation will help.
-          - set(attributes["resource.name"], name)
-          # - set(attributes["service"], attributes["otel.service"])
 
 exporters:
   datadog:
@@ -79,7 +70,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [attributes, batch, transform]
+      processors: [attributes, batch]
       exporters: [datadog, otlp]
     logs:
       receivers: [otlp]

@@ -449,6 +449,7 @@ jobs:
             POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
             MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
             DD_API_KEY=$DD_API_KEY \
+            DD_ENV=<< parameters.shuttle-env >> \
             HONEYCOMB_API_KEY=${<< parameters.honeycomb-api-key >>} \
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \

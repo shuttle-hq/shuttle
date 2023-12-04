@@ -276,7 +276,10 @@ impl Project {
             .and_then(|c| c.host_config)
             .and_then(|hc| hc.mounts)
         else {
-            warn!(shuttle.container.id = id, "No mounts found when deleting container");
+            warn!(
+                shuttle.container.id = id,
+                "No mounts found when deleting container"
+            );
             return Ok(());
         };
         // Delete the volume linked to this container.
@@ -568,8 +571,8 @@ where
                     }
                     _ => {
                         warn!(
-                            shuttle.container.id = container.id, 
-                            shuttle.container.current_state = current_state, 
+                            shuttle.container.id = container.id,
+                            shuttle.container.current_state = current_state,
                             "container resource has drifted out of sync from the starting state: cannot recover"
                         );
                         Self::Restarting(ProjectRestarting {
@@ -604,8 +607,8 @@ where
                     }),
                     _ => {
                         warn!(
-                            shuttle.container.id = container.id, 
-                            shuttle.container.current_state = current_state, 
+                            shuttle.container.id = container.id,
+                            shuttle.container.current_state = current_state,
                             "container resource has drifted out of sync from a started state. Will now reboot it"
                         );
                         Self::Restarting(ProjectRestarting {
@@ -640,8 +643,8 @@ where
                     }),
                     _ => {
                         warn!(
-                            shuttle.container.id = container.id, 
-                            shuttle.container.current_state = current_state, 
+                            shuttle.container.id = container.id,
+                            shuttle.container.current_state = current_state,
                             "container resource has drifted out of sync from a started state. Will now reboot it"
                         );
                         Self::Restarting(ProjectRestarting {
@@ -659,27 +662,27 @@ where
                 }
                 Err(err) => return Err(err.into()),
             },
-            Self::Stopping(ProjectStopping { container }) => match container
-                .clone()
-                .refresh(ctx)
-                .await
-            {
-                Ok(container) => match safe_unwrap!(container.state.status) {
-                    ContainerStateStatusEnum::RUNNING => {
-                        Self::Stopping(ProjectStopping { container })
-                    }
-                    ContainerStateStatusEnum::EXITED => Self::Stopped(ProjectStopped { container }),
-                    _ => {
-                        warn!(
-                            shuttle.container.id = container.id, 
-                            shuttle.container.current_state = current_state, 
-                            "container resource has drifted out of sync from a stopping state"
-                        );
-                        Self::Stopping(ProjectStopping { container })
-                    }
-                },
-                Err(err) => return Err(err.into()),
-            },
+            Self::Stopping(ProjectStopping { container }) => {
+                match container.clone().refresh(ctx).await {
+                    Ok(container) => match safe_unwrap!(container.state.status) {
+                        ContainerStateStatusEnum::RUNNING => {
+                            Self::Stopping(ProjectStopping { container })
+                        }
+                        ContainerStateStatusEnum::EXITED => {
+                            Self::Stopped(ProjectStopped { container })
+                        }
+                        _ => {
+                            warn!(
+                                shuttle.container.id = container.id,
+                                shuttle.container.current_state = current_state,
+                                "container resource has drifted out of sync from a stopping state"
+                            );
+                            Self::Stopping(ProjectStopping { container })
+                        }
+                    },
+                    Err(err) => return Err(err.into()),
+                }
+            }
             Self::Restarting(restarting) => Self::Restarting(restarting),
             Self::Recreating(recreating) => Self::Recreating(recreating),
             Self::Stopped(stopped) => Self::Stopped(stopped),
@@ -1012,8 +1015,8 @@ where
             .or_else(|err| {
                 if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 500) {
                     info!(
-                        shuttle.container.id = container_id, 
-                        shuttle.container.network = network, 
+                        shuttle.container.id = container_id,
+                        shuttle.container.network = network,
                         "already disconnected from the network"
                     );
                     Ok(())
@@ -1037,16 +1040,16 @@ where
                     DockerError::DockerResponseServerError { status_code, .. } if status_code == 409
                 ) {
                     info!(
-                        shuttle.container.id = container_id, 
-                        shuttle.container.network = network_name, 
+                        shuttle.container.id = container_id,
+                        shuttle.container.network = network_name,
                         "already connected to the shuttle network"
                     );
                     Ok(())
                 } else {
                     error!(
                         error = &err as &dyn std::error::Error,
-                        shuttle.container.id = container_id, 
-                        shuttle.container.network = network_name, 
+                        shuttle.container.id = container_id,
+                        shuttle.container.network = network_name,
                         "failed to connect to shuttle network"
                     );
                     Err(ProjectError::no_network(
@@ -1198,9 +1201,10 @@ where
             .unwrap_or(());
 
         debug!(
-            shuttle.container.id = container_id, 
-            shuttle.container.restart_count = restart_count, 
-            "project restarted {} times", restart_count
+            shuttle.container.id = container_id,
+            shuttle.container.restart_count = restart_count,
+            "project restarted {} times",
+            restart_count
         );
 
         if !Self::reached_max_restarts(restart_count) {
@@ -1397,7 +1401,8 @@ where
             shuttle.container.id = container.id,
             shuttle.service = service.name.to_string(),
             "{} has {} CPU usage per minute",
-            service.name, cpu_per_minute
+            service.name,
+            cpu_per_minute
         );
 
         // From analysis we know the following kind of CPU usage for different kinds of idle projects

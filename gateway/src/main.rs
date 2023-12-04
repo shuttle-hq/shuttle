@@ -76,6 +76,8 @@ async fn main() -> io::Result<()> {
     }
 }
 
+const AMBULANCE_MAX_PARALLEL_POLL: usize = 8;
+
 async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await);
 
@@ -128,7 +130,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
                         for (project_name, _) in projects {
                             // Wait for completion of next future before enqueuing a new one
-                            if work_set.len() >= 8 {
+                            if work_set.len() >= AMBULANCE_MAX_PARALLEL_POLL {
                                 if let Some(Err(err)) = work_set.join_next().await {
                                     error!(
                                         error = %err,

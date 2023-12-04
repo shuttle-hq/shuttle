@@ -1,12 +1,15 @@
 ## Shuttle service integration for the Axum web framework.
 
+Axum 0.7 is now supported by using these feature flags:
+```ignore
+axum = "0.7.0"
+shuttle-axum = { version = "0.34.1", default-features = false, features = ["axum-0-7"] }
+```
+
 ### Example
 
-```rust,no_run
-#[cfg(feature = "axum")]
+```rust,ignore
 use axum::{routing::get, Router};
-#[cfg(feature = "axum-0-7")]
-use axum_0_7::{routing::get, Router};
 
 async fn hello_world() -> &'static str {
     "Hello, world!"

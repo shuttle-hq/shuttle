@@ -1472,6 +1472,7 @@ impl Service {
             .map_err(|err| err.into())
     }
 
+    #[instrument(name = "calling status endpoint on container", skip_all, fields(project_name = %self.name))]
     pub async fn is_healthy(&mut self) -> bool {
         let uri = self.uri(format!("/projects/{}/status", self.name)).unwrap();
         let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.get(uri)).await;

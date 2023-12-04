@@ -35,7 +35,7 @@ pub mod task;
 pub mod tls;
 pub mod worker;
 
-pub const DOCKER_STATS_PATH: &str = "/sys/fs/cgroup/cpuacct/docker";
+pub const DOCKER_STATS_PATH: &str = "/sys/fs/cgroup";
 
 static AUTH_CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 

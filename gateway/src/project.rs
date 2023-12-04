@@ -517,7 +517,7 @@ where
 
         debug!(
             shuttle.container.id = container_id,
-            "Moving projectt from {previous_state} to {new_state}"
+            "Moving project from {previous_state} to {new_state}"
         );
 
         new

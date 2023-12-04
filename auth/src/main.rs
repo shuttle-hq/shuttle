@@ -19,7 +19,7 @@ async fn main() -> io::Result<()> {
 
     let pool = pgpool_init(args.db_connection_uri.as_str())
         .await
-        .expect("couln't setup the postrgres connection");
+        .expect("couldn't setup the postgres connection");
 
     match args.command {
         Commands::Start(args) => start(pool, args).await,

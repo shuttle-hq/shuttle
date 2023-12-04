@@ -8,7 +8,7 @@ use std::{io, time::Duration};
 
 use args::StartArgs;
 use shuttle_common::{claims::AccountTier, ApiKey};
-use sqlx::{migrate::Migrator, postgres::PgConnectOptions, query, PgPool};
+use sqlx::{migrate::Migrator, query, PgPool};
 use tracing::info;
 
 use crate::api::serve;
@@ -59,7 +59,7 @@ pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> io::Result
 
 /// Initialize the connection pool to a Postgres database at the given URI.
 pub async fn pgpool_init(db_uri: &str) -> io::Result<PgPool> {
-    let opts: PgConnectOptions = db_uri
+    let opts = db_uri
         .parse()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     let pool = PgPool::connect_with(opts)

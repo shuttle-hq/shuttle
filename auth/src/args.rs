@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser, Debug)]
 pub struct Args {
     /// Where to store auth state (such as users)
+    #[arg(long)]
     pub db_connection_uri: String,
 
     #[command(subcommand)]

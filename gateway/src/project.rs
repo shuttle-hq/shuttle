@@ -34,6 +34,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::service::ContainerSettings;
+use crate::DOCKER_STATS_PATH;
 use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
 
 macro_rules! safe_unwrap {
@@ -1293,18 +1294,17 @@ impl ProjectReady {
 async fn get_container_stats(container: &ContainerInspectResponse) -> Result<u64, ProjectError> {
     let id = safe_unwrap!(container.id);
 
-    let cpu_usage: u64 =
-        std::fs::read_to_string(format!("/sys/fs/cgroup/cpuacct/docker/{id}/cpuacct.usage"))
-            .map_err(|e| {
-                error!(error = %e, "failed to access docker stats file for container");
-                ProjectError::internal("failed to access docker stats file for container")
-            })?
-            .parse()
-            .map_err(|e| {
-                error!(error = %e, "failed to parse cpu usage stat");
+    let cpu_usage: u64 = std::fs::read_to_string(format!("{DOCKER_STATS_PATH}/{id}/cpuacct.usage"))
+        .map_err(|e| {
+            error!(error = %e, "failed to read docker stats file for container");
+            ProjectError::internal("failed to read docker stats file for container")
+        })?
+        .parse()
+        .map_err(|e| {
+            error!(error = %e, "failed to parse cpu usage stat");
 
-                ProjectError::internal("failed to parse cpu usage to u64")
-            })?;
+            ProjectError::internal("failed to parse cpu usage to u64")
+        })?;
 
     // TODO: the above solution only works for cgroup v1
     // This is the version used by our server. However on my local nix setup I have cgroup v2 and had to use the

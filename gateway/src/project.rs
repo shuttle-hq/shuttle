@@ -1336,6 +1336,7 @@ async fn get_container_stats(container: &ContainerInspectResponse) -> Result<u64
             error!(error = %e, shuttle.container.id = id, "failed to read docker stats file for container");
             ProjectError::internal("failed to read docker stats file for container")
         }).await?
+        .trim()
         .parse()
         .map_err(|e| {
             error!(error = %e, shuttle.container.id = id, "failed to parse cpu usage stat");

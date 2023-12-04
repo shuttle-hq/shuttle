@@ -124,12 +124,12 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                     let gateway = gateway.clone();
                     let sender = sender.clone();
                     async move {
-                        let mut work_set = futures::stream::FuturesUnordered::new();
+                        let mut work_set = tokio::task::JoinSet::new();
 
                         for (project_name, _) in projects {
                             // Wait for completion of next future before enqueuing a new one
                             if work_set.len() >= 8 {
-                                if let Some(Err(err)) = work_set.next().await {
+                                if let Some(Err(err)) = work_set.join_next().await {
                                     error!(
                                         error = %err,
                                         shuttle.sub_service = "ambulance",
@@ -141,7 +141,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                             let gateway = gateway.clone();
                             let sender = sender.clone();
 
-                            work_set.push(tokio::spawn(async move {
+                            work_set.spawn(async move {
                                 match gateway.new_task().project(project_name).send(&sender).await {
                                     Ok(handle) => handle.await,
                                     Err(err) => error!(
@@ -149,17 +149,17 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                                         shuttle.sub_service = "ambulance",
                                         "error while sending ambulance project task"
                                     ),
-                                }
-                            }))
+                                };
+                            });
                         }
-                        for fut in work_set {
-                            if let Err(err) = fut.await {
+                        while let Some(fut) = work_set.join_next().await {
+                            if let Err(err) = fut {
                                 error!(
                                     error = %err,
                                     shuttle.sub_service = "ambulance",
                                     "error while awaiting ambulance task for project"
                                 );
-                            };
+                            }
                         }
                     }
                     .instrument(span)

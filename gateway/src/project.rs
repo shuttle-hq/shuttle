@@ -1296,12 +1296,12 @@ async fn get_container_stats(container: &ContainerInspectResponse) -> Result<u64
 
     let cpu_usage: u64 = std::fs::read_to_string(format!("{DOCKER_STATS_PATH}/{id}/cpuacct.usage"))
         .map_err(|e| {
-            error!(error = %e, "failed to read docker stats file for container");
+            error!(error = %e, shuttle.container.id = id, "failed to read docker stats file for container");
             ProjectError::internal("failed to read docker stats file for container")
         })?
         .parse()
         .map_err(|e| {
-            error!(error = %e, "failed to parse cpu usage stat");
+            error!(error = %e, shuttle.container.id = id, "failed to parse cpu usage stat");
 
             ProjectError::internal("failed to parse cpu usage to u64")
         })?;

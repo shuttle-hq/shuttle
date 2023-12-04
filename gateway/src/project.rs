@@ -1293,11 +1293,19 @@ impl ProjectReady {
 async fn get_container_stats(container: &ContainerInspectResponse) -> Result<u64, ProjectError> {
     let id = safe_unwrap!(container.id);
 
-    let usage: u64 =
+    let docker_stats_file: String =
         std::fs::read_to_string(format!("/sys/fs/cgroup/cpuacct/docker/{id}/cpuacct.usage"))
-            .unwrap_or_default()
-            .parse()
-            .unwrap_or_default();
+            .map_err(|e| {
+                error!(error = %e, "failed to access docker stats file for container");
+                ProjectError::internal("failed to access docker stats file for container")
+            })?;
+
+    let usage: u64 = docker_stats_file.parse().map_err(|e| {
+        error!(error = %e, "failed to parse cpu usage stat");
+
+        ProjectError::internal("failed to parse cpu usage to u64")
+    })?;
+
     // TODO: the above solution only works for cgroup v1
     // This is the version used by our server. However on my local nix setup I have cgroup v2 and had to use the
     // following to get the 'usage_usec' which is on the first line

@@ -185,6 +185,8 @@ macro_rules! request_span {
         tracing::info_span!(
             "request",
             http.uri = %$request.uri(),
+            // Used by Datadog by default
+            http.route = path,
             http.method = %$request.method(),
             http.status_code = tracing::field::Empty,
             // A bunch of extra things for metrics

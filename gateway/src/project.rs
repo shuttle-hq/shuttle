@@ -1294,11 +1294,11 @@ impl ProjectReady {
 async fn get_container_stats(container: &ContainerInspectResponse) -> Result<u64, ProjectError> {
     let id = safe_unwrap!(container.id);
 
-    let cpu_usage: u64 = std::fs::read_to_string(format!("{DOCKER_STATS_PATH}/{id}/cpuacct.usage"))
+    let cpu_usage: u64 = tokio::fs::read_to_string(format!("{DOCKER_STATS_PATH}/{id}/cpuacct.usage"))
         .map_err(|e| {
             error!(error = %e, shuttle.container.id = id, "failed to read docker stats file for container");
             ProjectError::internal("failed to read docker stats file for container")
-        })?
+        }).await?
         .parse()
         .map_err(|e| {
             error!(error = %e, shuttle.container.id = id, "failed to parse cpu usage stat");

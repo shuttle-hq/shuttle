@@ -124,6 +124,7 @@ services:
       # This image needs to run highly privileged in order to
       # orchestrate user runtimes safely
       - ${DOCKER_SOCK}:/var/run/docker.sock
+      - /sys/fs/cgroup/cpuacct/docker:/sys/fs/cgroup/cpuacct/docker
     environment:
       - RUST_LOG=${RUST_LOG}
     command:

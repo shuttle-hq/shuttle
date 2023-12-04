@@ -1293,18 +1293,18 @@ impl ProjectReady {
 async fn get_container_stats(container: &ContainerInspectResponse) -> Result<u64, ProjectError> {
     let id = safe_unwrap!(container.id);
 
-    let docker_stats_file: String =
+    let cpu_usage: u64 =
         std::fs::read_to_string(format!("/sys/fs/cgroup/cpuacct/docker/{id}/cpuacct.usage"))
             .map_err(|e| {
                 error!(error = %e, "failed to access docker stats file for container");
                 ProjectError::internal("failed to access docker stats file for container")
+            })?
+            .parse()
+            .map_err(|e| {
+                error!(error = %e, "failed to parse cpu usage stat");
+
+                ProjectError::internal("failed to parse cpu usage to u64")
             })?;
-
-    let usage: u64 = docker_stats_file.parse().map_err(|e| {
-        error!(error = %e, "failed to parse cpu usage stat");
-
-        ProjectError::internal("failed to parse cpu usage to u64")
-    })?;
 
     // TODO: the above solution only works for cgroup v1
     // This is the version used by our server. However on my local nix setup I have cgroup v2 and had to use the
@@ -1323,7 +1323,7 @@ async fn get_container_stats(container: &ContainerInspectResponse) -> Result<u64
     // .unwrap_or_default()
     //     * 1_000;
 
-    Ok(usage)
+    Ok(cpu_usage)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

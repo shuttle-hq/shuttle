@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 
-use crate::models::project::name::ProjectName;
 use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -40,7 +39,7 @@ pub enum ErrorKind {
     Forbidden,
     UserNotFound,
     UserAlreadyExists,
-    ProjectNotFound(ProjectName),
+    ProjectNotFound(String),
     InvalidProjectName(InvalidProjectName),
     ProjectAlreadyExists,
     /// Contains a message describing a running state of the project.

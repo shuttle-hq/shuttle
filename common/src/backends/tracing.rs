@@ -46,12 +46,10 @@ where
                 .tonic()
                 .with_endpoint(otlp_address.clone()),
         )
-        .with_trace_config(
-            trace::config().with_resource(Resource::new(vec![KeyValue::new(
-                "service.name",
-                backend.to_string().to_lowercase(),
-            )])),
-        )
+        .with_trace_config(trace::config().with_resource(Resource::new(vec![
+            KeyValue::new("service.name", backend.to_string().to_lowercase()),
+            KeyValue::new("deployment.environment", shuttle_env.clone()),
+        ])))
         .install_batch(Tokio)
         .unwrap();
 
@@ -61,7 +59,7 @@ where
         .logging()
         .with_log_config(Config::default().with_resource(Resource::new(vec![
             KeyValue::new("service.name", backend.to_string().to_lowercase()),
-            KeyValue::new("deployment.environment", shuttle_env),
+            KeyValue::new("deployment.environment", shuttle_env.clone()),
         ])))
         .with_exporter(
             opentelemetry_otlp::new_exporter()

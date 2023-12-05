@@ -46,8 +46,13 @@ processors:
   attributes:
     actions:
       - key: env
-        value: ${env:DD_ENV}
+        value: ${env:SHUTTLE_ENV}
         action: insert
+  resource:
+    attributes:
+      - key: deployment.environment
+        action: upsert
+        value: ${env:SHUTTLE_ENV}
   # See https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/1909
   # as for why we need that.
 
@@ -75,5 +80,5 @@ service:
       exporters: [datadog, otlp]
     metrics:
       receivers: [hostmetrics, prometheus/otel, otlp]
-      processors: [batch]
+      processors: [attributes, batch]
       exporters: [datadog]

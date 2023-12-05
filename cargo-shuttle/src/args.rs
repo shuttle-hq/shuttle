@@ -218,7 +218,11 @@ pub enum ProjectCommand {
         raw: bool,
     },
     /// Delete a project and all linked data
-    Delete,
+    Delete {
+        #[arg(long, default_value_t = false)]
+        /// Skip project delete confirmation
+        no_confirmation: bool,
+    },
 }
 
 #[derive(Parser, Debug)]

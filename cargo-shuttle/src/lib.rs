@@ -166,7 +166,7 @@ impl Shuttle {
                         | ProjectCommand::Stop { .. }
                         | ProjectCommand::Restart { .. }
                         | ProjectCommand::Status { .. }
-                        | ProjectCommand::Delete
+                        | ProjectCommand::Delete { .. }
                 )
                 | Command::Stop
                 | Command::Clean
@@ -243,7 +243,9 @@ impl Shuttle {
                 self.projects_list(page, limit, raw).await
             }
             Command::Project(ProjectCommand::Stop) => self.project_stop().await,
-            Command::Project(ProjectCommand::Delete) => self.project_delete().await,
+            Command::Project(ProjectCommand::Delete { no_confirmation }) => {
+                self.project_delete(no_confirmation).await
+            }
         };
 
         for w in self.version_warnings {
@@ -1886,32 +1888,34 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_delete(&self) -> Result<CommandOutcome> {
+    async fn project_delete(&self, no_confirmation: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
 
-        println!(
-            "{}",
-            formatdoc!(
-                r#"
-                WARNING:
-                    Are you sure you want to delete "{}"?
-                    This will...
-                    - Delete any databases, secrets, and shuttle-persist data in this project.
-                    - Delete any custom domains linked to this project.
-                    - Release the project name from your account.
-                    This action is permanent."#,
-                self.ctx.project_name()
-            )
-            .bold()
-            .red()
-        );
-        if !Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt("Are you sure?")
-            .default(false)
-            .interact()
-            .unwrap()
-        {
-            return Ok(CommandOutcome::Ok);
+        if !no_confirmation {
+            println!(
+                "{}",
+                formatdoc!(
+                    r#"
+                    WARNING:
+                        Are you sure you want to delete "{}"?
+                        This will...
+                        - Delete any databases, secrets, and shuttle-persist data in this project.
+                        - Delete any custom domains linked to this project.
+                        - Release the project name from your account.
+                        This action is permanent."#,
+                    self.ctx.project_name()
+                )
+                .bold()
+                .red()
+            );
+            if !Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Are you sure?")
+                .default(false)
+                .interact()
+                .unwrap()
+            {
+                return Ok(CommandOutcome::Ok);
+            }
         }
 
         client

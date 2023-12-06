@@ -43,7 +43,7 @@ pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> io::Result
     query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
         .bind(&args.name)
         .bind(&key)
-        .bind(tier)
+        .bind(tier.to_string())
         .execute(&pool)
         .await
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;

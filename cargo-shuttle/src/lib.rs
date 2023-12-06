@@ -15,6 +15,9 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use args::GenerateCommand;
+use clap_mangen::Man;
+
 use shuttle_common::{
     claims::{ClaimService, InjectPropagation},
     constants::{
@@ -146,7 +149,7 @@ impl Shuttle {
     ) -> Result<CommandOutcome> {
         if let Some(ref url) = args.api_url {
             if url != API_URL_DEFAULT {
-                println!("INFO: Targeting non-standard API: {url}");
+                eprintln!("INFO: Targeting non-standard API: {url}");
             }
             if url.ends_with('/') {
                 eprintln!("WARNING: API URL is probably incorrect. Ends with '/': {url}");
@@ -166,7 +169,7 @@ impl Shuttle {
                         | ProjectCommand::Stop { .. }
                         | ProjectCommand::Restart { .. }
                         | ProjectCommand::Status { .. }
-                        | ProjectCommand::Delete
+                        | ProjectCommand::Delete { .. }
                 )
                 | Command::Stop
                 | Command::Clean
@@ -205,7 +208,10 @@ impl Shuttle {
                 self.init(init_args, args.project_args, provided_path_to_init)
                     .await
             }
-            Command::Generate { shell, output } => self.complete(shell, output),
+            Command::Generate(GenerateCommand::Manpage) => self.generate_manpage(),
+            Command::Generate(GenerateCommand::Shell { shell, output }) => {
+                self.complete(shell, output)
+            }
             Command::Login(login_args) => self.login(login_args).await,
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback(),
@@ -243,7 +249,9 @@ impl Shuttle {
                 self.projects_list(page, limit, raw).await
             }
             Command::Project(ProjectCommand::Stop) => self.project_stop().await,
-            Command::Project(ProjectCommand::Delete) => self.project_delete().await,
+            Command::Project(ProjectCommand::Delete { no_confirmation }) => {
+                self.project_delete(no_confirmation).await
+            }
         };
 
         for w in self.version_warnings {
@@ -662,9 +670,37 @@ impl Shuttle {
         let name = env!("CARGO_PKG_NAME");
         let mut app = Command::command();
         match output {
-            Some(v) => generate(shell, &mut app, name, &mut File::create(v)?),
+            Some(path) => generate(shell, &mut app, name, &mut File::create(path)?),
             None => generate(shell, &mut app, name, &mut stdout()),
         };
+        Ok(CommandOutcome::Ok)
+    }
+
+    fn generate_manpage(&self) -> Result<CommandOutcome> {
+        let app = ShuttleArgs::command();
+        let output = std::io::stdout();
+        let mut output_handle = output.lock();
+
+        Man::new(app.clone()).render(&mut output_handle)?;
+
+        for subcommand in app.get_subcommands() {
+            let primary = Man::new(subcommand.clone());
+            primary.render_name_section(&mut output_handle)?;
+            primary.render_synopsis_section(&mut output_handle)?;
+            primary.render_description_section(&mut output_handle)?;
+            primary.render_options_section(&mut output_handle)?;
+            // For example, `generate` has sub-commands `shell` and `manpage`
+            if subcommand.has_subcommands() {
+                primary.render_subcommands_section(&mut output_handle)?;
+                for sb in subcommand.get_subcommands() {
+                    let secondary = Man::new(sb.clone());
+                    secondary.render_name_section(&mut output_handle)?;
+                    secondary.render_synopsis_section(&mut output_handle)?;
+                    secondary.render_description_section(&mut output_handle)?;
+                    secondary.render_options_section(&mut output_handle)?;
+                }
+            }
+        }
 
         Ok(CommandOutcome::Ok)
     }
@@ -1886,32 +1922,34 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_delete(&self) -> Result<CommandOutcome> {
+    async fn project_delete(&self, no_confirmation: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
 
-        println!(
-            "{}",
-            formatdoc!(
-                r#"
-                WARNING:
-                    Are you sure you want to delete "{}"?
-                    This will...
-                    - Delete any databases, secrets, and shuttle-persist data in this project.
-                    - Delete any custom domains linked to this project.
-                    - Release the project name from your account.
-                    This action is permanent."#,
-                self.ctx.project_name()
-            )
-            .bold()
-            .red()
-        );
-        if !Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt("Are you sure?")
-            .default(false)
-            .interact()
-            .unwrap()
-        {
-            return Ok(CommandOutcome::Ok);
+        if !no_confirmation {
+            println!(
+                "{}",
+                formatdoc!(
+                    r#"
+                    WARNING:
+                        Are you sure you want to delete "{}"?
+                        This will...
+                        - Delete any databases, secrets, and shuttle-persist data in this project.
+                        - Delete any custom domains linked to this project.
+                        - Release the project name from your account.
+                        This action is permanent."#,
+                    self.ctx.project_name()
+                )
+                .bold()
+                .red()
+            );
+            if !Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Are you sure?")
+                .default(false)
+                .interact()
+                .unwrap()
+            {
+                return Ok(CommandOutcome::Ok);
+            }
         }
 
         client

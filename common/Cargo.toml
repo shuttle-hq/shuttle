@@ -25,6 +25,7 @@ opentelemetry = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
+opentelemetry-appender-tracing = { workspace = true, optional = true }
 pin-project = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
@@ -42,6 +43,7 @@ tonic = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 tracing = { workspace = true, features = ["std"], optional = true }
+tracing-core = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 ttl_cache = { workspace = true, optional = true }
@@ -58,6 +60,7 @@ backend = [
     "claims",
     "hyper/client",
     "opentelemetry_sdk",
+    "opentelemetry-appender-tracing",
     "opentelemetry-otlp",
     "rustrict", # only ProjectName model uses it
     "thiserror",
@@ -66,6 +69,7 @@ backend = [
     "tower-http",
     "tracing-subscriber/env-filter",
     "tracing-subscriber/fmt",
+    "tracing-core",
     "ttl_cache",
 ]
 claims = [

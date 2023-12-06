@@ -194,6 +194,8 @@ pub enum ResourceCommand {
         /// Use the string in the 'Type' column as displayed in the `resource list` command.
         /// For example, 'database::shared::postgres'.
         resource_type: resource::Type,
+        #[command(flatten)]
+        confirmation: ConfirmationArgs,
     },
 }
 
@@ -226,11 +228,14 @@ pub enum ProjectCommand {
         raw: bool,
     },
     /// Delete a project and all linked data
-    Delete {
-        #[arg(long, default_value_t = false)]
-        /// Skip project delete confirmation
-        no_confirmation: bool,
-    },
+    Delete(ConfirmationArgs),
+}
+
+#[derive(Parser, Debug)]
+pub struct ConfirmationArgs {
+    #[arg(long, short, default_value_t = false)]
+    /// Skip confirmations and proceed
+    pub yes: bool,
 }
 
 #[derive(Parser, Debug)]

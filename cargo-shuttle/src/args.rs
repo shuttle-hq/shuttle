@@ -129,17 +129,25 @@ pub enum Command {
     Login(LoginArgs),
     /// Log out of the Shuttle platform
     Logout(LogoutArgs),
-    /// Generate shell completions
-    Generate {
-        /// Which shell
-        #[arg(short, long, env, default_value_t = Shell::Bash)]
-        shell: Shell,
-        /// Output to a file (stdout by default)
-        #[arg(short, long, env)]
-        output: Option<PathBuf>,
-    },
+    /// Generate shell completions and man page
+    #[command(subcommand)]
+    Generate(GenerateCommand),
     /// Open an issue on GitHub and provide feedback
     Feedback,
+}
+
+#[derive(Parser)]
+pub enum GenerateCommand {
+    /// Generate shell completions
+    Shell {
+        /// The shell to generate shell completion for
+        shell: Shell,
+        /// Output to a file (stdout by default)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Generate man page to the standard output
+    Manpage,
 }
 
 #[derive(Parser)]

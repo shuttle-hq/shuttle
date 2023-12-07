@@ -11,7 +11,9 @@ use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::tls::make_tls_acceptor;
 use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
-use shuttle_gateway::DOCKER_STATS_PATH;
+use shuttle_gateway::{
+    DockerStatsSource, DOCKER_STATS_PATH_CGROUP_V1, DOCKER_STATS_PATH_CGROUP_V2,
+};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::{Sqlite, SqlitePool};
@@ -38,18 +40,16 @@ async fn main() -> io::Result<()> {
         Sqlite::create_database(db_uri).await.unwrap();
     }
 
-    let docker_stats_path =
-        PathBuf::from_str(DOCKER_STATS_PATH).expect("to parse docker stats path");
+    let mut docker_stats_source = DockerStatsSource::Bollard;
 
-    // Return an error early if the docker stats path is not in the expected location.
-    if !docker_stats_path.exists() {
-        return Err(std::io::Error::new(
-            io::ErrorKind::NotFound,
-            format!(
-                "could not find docker stats at path: {:?}",
-                DOCKER_STATS_PATH
-            ),
-        ));
+    let docker_stats_path_v1 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V1)
+        .expect("to parse docker stats path for cgroup v1");
+    let docker_stats_path_v2 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V2)
+        .expect("to parse docker stats path for cgroup v2");
+    if docker_stats_path_v1.exists() {
+        docker_stats_source = DockerStatsSource::CgroupV1;
+    } else if docker_stats_path_v2.exists() {
+        docker_stats_source = DockerStatsSource::CgroupV2;
     }
 
     info!(
@@ -72,12 +72,18 @@ async fn main() -> io::Result<()> {
     MIGRATIONS.run(&db).await.unwrap();
 
     match args.command {
-        Commands::Start(start_args) => start(db, args.state, start_args).await,
+        Commands::Start(start_args) => start(db, args.state, docker_stats_source, start_args).await,
     }
 }
 
-async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
-    let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await);
+async fn start(
+    db: SqlitePool,
+    fs: PathBuf,
+    stats_location: DockerStatsSource,
+    args: StartArgs,
+) -> io::Result<()> {
+    let gateway =
+        Arc::new(GatewayService::init(args.context.clone(), db, fs, stats_location).await);
 
     let worker = Worker::new();
 

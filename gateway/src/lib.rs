@@ -35,8 +35,15 @@ pub mod task;
 pub mod tls;
 pub mod worker;
 
-pub const DOCKER_STATS_PATH: &str = "/sys/fs/cgroup/cpuacct/docker";
+pub const DOCKER_STATS_PATH_CGROUP_V1: &str = "/sys/fs/cgroup/cpuacct/docker";
+pub const DOCKER_STATS_PATH_CGROUP_V2: &str = "/sys/fs/cgroup/system.slice";
 
+#[derive(Clone)]
+pub enum DockerStatsSource {
+    CgroupV1,
+    CgroupV2,
+    Bollard,
+}
 static AUTH_CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 
 /// Server-side errors that do not have to do with the user runtime
@@ -175,6 +182,8 @@ pub trait DockerContext: Send + Sync {
     fn docker(&self) -> &Docker;
 
     fn container_settings(&self) -> &ContainerSettings;
+
+    fn stats_source(&self) -> &DockerStatsSource;
 }
 
 /// A generic state which can, when provided with a [`Context`], do

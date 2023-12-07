@@ -457,14 +457,16 @@ jobs:
             AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
             make deploy
       - when:
-          condition: << parameters.shuttle-env >> == "production"
+          condition: 
+            equal: [ production, << parameters.shuttle-env >>]
           steps:
             - run:
                 name: Pull new deployer image on prod
                 command: |
                   ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
       - when:
-          condition: << parameters.shuttle-env >> == "staging"
+          condition: 
+            equal: [ staging, << parameters.shuttle-env >>] 
           steps:
             - run:
                 name: Pull new deployer image on dev
@@ -823,9 +825,9 @@ workflows:
     jobs:
       - approve-push-unstable:
           type: approval
-          filters:
-            branches:
-              only: main
+          # filters:
+          #   branches:
+          #     only: main
       - build-and-push:
           name: build-and-push-unstable
           aws-access-key-id: DEV_AWS_ACCESS_KEY_ID

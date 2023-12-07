@@ -18,7 +18,7 @@ use ulid::Ulid;
 use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
 use crate::worker::TaskRouter;
-use crate::{Error, ErrorKind, Refresh, State};
+use crate::{Error, ErrorKind, State};
 
 // Default maximum _total_ time a task is allowed to run
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
@@ -268,7 +268,7 @@ impl Task<ProjectContext> for RunUntilDone {
     async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output> {
         // Don't overload Docker with requests. Therefore backoff with each try up to 30 seconds
         if self.tries > 0 {
-            let backoff = min(3_u64.pow(self.tries), 30_000);
+            let backoff = min(2_u64.pow(self.tries), 300);
 
             sleep(Duration::from_millis(backoff)).await;
         }
@@ -276,7 +276,7 @@ impl Task<ProjectContext> for RunUntilDone {
 
         // Make sure the project state has not changed from Docker
         // Else we will make assumptions when trying to run next which can cause a failure
-        let project = match ctx.state.refresh(&ctx.gateway).await {
+        let project = match refresh_with_retry(ctx.state, &ctx.gateway).await {
             Ok(project) => project,
             Err(error) => return TaskResult::Err(error),
         };
@@ -308,7 +308,7 @@ impl Task<ProjectContext> for DeleteProject {
     async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output> {
         // Make sure the project state has not changed from Docker
         // Else we will make assumptions when trying to run next which can cause a failure
-        let project = match ctx.state.refresh(&ctx.gateway).await {
+        let project = match refresh_with_retry(ctx.state, &ctx.gateway).await {
             Ok(project) => project,
             Err(error) => return TaskResult::Err(error),
         };

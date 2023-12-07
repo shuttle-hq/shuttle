@@ -11,6 +11,7 @@ use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::tls::make_tls_acceptor;
 use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
+use shuttle_gateway::DOCKER_STATS_PATH;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::{Sqlite, SqlitePool};
@@ -20,7 +21,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, field, info, info_span, trace, warn, Instrument, Span};
+use tracing::{debug, error, info, info_span, trace, warn, Instrument};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> io::Result<()> {
@@ -35,6 +36,20 @@ async fn main() -> io::Result<()> {
 
     if !db_path.exists() {
         Sqlite::create_database(db_uri).await.unwrap();
+    }
+
+    let docker_stats_path =
+        PathBuf::from_str(DOCKER_STATS_PATH).expect("to parse docker stats path");
+
+    // Return an error early if the docker stats path is not in the expected location.
+    if !docker_stats_path.exists() {
+        return Err(std::io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "could not find docker stats at path: {:?}",
+                DOCKER_STATS_PATH
+            ),
+        ));
     }
 
     info!(
@@ -98,11 +113,10 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                     continue;
                 }
 
-                if let Ok(projects) = gateway.iter_projects().await {
+                if let Ok(projects) = gateway.iter_projects_ready().await {
                     let span = info_span!(
                         "running health checks",
-                        healthcheck.num_projects = projects.len(),
-                        healthcheck.active_projects = field::Empty,
+                        healthcheck.active_projects = projects.len(),
                     );
 
                     let gateway = gateway.clone();
@@ -117,11 +131,6 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                                 handle.await
                             }
                         }
-
-                        let active_projects =
-                            gateway.count_ready_projects().await.unwrap_or_default();
-                        let span = Span::current();
-                        span.record("healthcheck.active_projects", active_projects);
                     }
                     .instrument(span)
                     .await;

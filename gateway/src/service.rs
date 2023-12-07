@@ -334,6 +334,18 @@ impl GatewayService {
         Ok(iter)
     }
 
+    /// Only get an iterator for the projects that are ready
+    pub async fn iter_projects_ready(
+        &self,
+    ) -> Result<impl ExactSizeIterator<Item = (ProjectName, AccountName)>, Error> {
+        let iter = query("SELECT project_name, account_name FROM projects, JSON_EACH(project_state) WHERE key = 'ready'")
+            .fetch_all(&self.db)
+            .await?
+            .into_iter()
+            .map(|row| (row.get("project_name"), row.get("account_name")));
+        Ok(iter)
+    }
+
     pub async fn iter_cch_projects(
         &self,
     ) -> Result<impl ExactSizeIterator<Item = ProjectName>, Error> {

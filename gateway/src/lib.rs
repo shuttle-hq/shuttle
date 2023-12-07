@@ -35,6 +35,8 @@ pub mod task;
 pub mod tls;
 pub mod worker;
 
+pub const DOCKER_STATS_PATH: &str = "/sys/fs/cgroup/cpuacct/docker";
+
 static AUTH_CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 
 /// Server-side errors that do not have to do with the user runtime

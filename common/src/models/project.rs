@@ -132,7 +132,7 @@ impl Display for State {
             State::Destroying => write!(f, "destroying"),
             State::Destroyed => write!(f, "destroyed"),
             State::Errored { message } => {
-                write!(f, "errored\n\tmessage: {message}")
+                write!(f, "errored (message: {message})")
             }
             State::Deleted => write!(f, "deleted"),
         }

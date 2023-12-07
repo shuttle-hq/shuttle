@@ -170,6 +170,87 @@ async fn successful_upgrade_to_pro() {
 }
 
 #[tokio::test]
+async fn downgrade_from_cancelledpro() {
+    let app = app().await;
+
+    // Wait for the mocked Stripe server to start.
+    tokio::task::spawn(app.mocked_stripe_server.clone().serve());
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // Create user with basic tier
+    let response = app.post_user("test-user", "basic").await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Upgrade user to pro
+    let response = app
+        .put_user("test-user", "pro", MOCKED_CHECKOUT_SESSIONS[3])
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Cancel subscription
+    let response = app.put_user("test-user", "cancelledpro", "").await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Trigger status change to canceled
+    let response = app.get_user("test-user").await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let user: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        user.as_object().unwrap().get("account_tier").unwrap(),
+        "cancelledpro"
+    );
+
+    // Check if user is downgraded to basic
+    let response = app.get_user("test-user").await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let user: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(
+        user.as_object().unwrap().get("account_tier").unwrap(),
+        "basic"
+    );
+}
+
+#[tokio::test]
+async fn retain_cancelledpro_status() {
+    let app = app().await;
+
+    // Wait for the mocked Stripe server to start.
+    tokio::task::spawn(app.mocked_stripe_server.clone().serve());
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // Create user with basic tier
+    let response = app.post_user("test-user", "basic").await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Upgrade user to pro
+    let response = app
+        .put_user("test-user", "pro", MOCKED_CHECKOUT_SESSIONS[3])
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Cancel subscription
+    let response = app.put_user("test-user", "cancelledpro", "").await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Check if user has cancelledpro status
+    let response = app.get_user("test-user").await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let user: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(
+        user.as_object().unwrap().get("account_tier").unwrap(),
+        "cancelledpro"
+    );
+}
+
+#[tokio::test]
 async fn unsuccessful_upgrade_to_pro() {
     let app = app().await;
 

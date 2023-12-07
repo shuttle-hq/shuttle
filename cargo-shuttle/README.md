@@ -101,7 +101,7 @@ Commands:
   clean       Remove cargo build artifacts in the shuttle environment
   login       Login to the shuttle platform
   logout      Log out of the shuttle platform
-  generate    Generate shell completions
+  generate    Generate shell completions and man page
   feedback    Open an issue on GitHub and provide feedback
   help        Print this message or the help of the given subcommand(s)
 
@@ -142,8 +142,8 @@ This should generate the following dependency in `Cargo.toml`:
 
 ```toml
 rocket = "0.5.0"
-shuttle-rocket = "0.34.1"
-shuttle-runtime = "0.34.1"
+shuttle-rocket = "0.35.0"
+shuttle-runtime = "0.35.0"
 tokio = "1.26.0"
 ```
 

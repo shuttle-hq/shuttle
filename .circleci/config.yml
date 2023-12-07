@@ -363,10 +363,10 @@ jobs:
         description: "Use public registry"
         type: boolean
         default: true
-      production:
-        description: "Push and deploy to production"
-        type: boolean
-        default: false
+      shuttle-env:
+        description: "Push and deploy to the given env"
+        type: string
+        default: staging
     steps:
       - checkout
       - run:
@@ -384,7 +384,7 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            PUSH=true PROD=<< parameters.production >> PLATFORMS=linux/amd64 TAG=$TAG make images
+            PUSH=true SHUTTLE_ENV=<< parameters.shuttle-env >> PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
   deploy-images:
     executor: machine-ubuntu
@@ -423,10 +423,10 @@ jobs:
       jwt-signing-private-key:
         description: "Auth private key used for JWT signing"
         type: string
-      production:
-        description: "Push and deploy to production"
-        type: boolean
-        default: false
+      shuttle-env:
+        description: "Push and deploy to the given env"
+        type: string
+        default: staging
     steps:
       - checkout
       - run:
@@ -444,11 +444,12 @@ jobs:
           command: |
             DOCKER_HOST=ssh://ec2-user@master.<< parameters.ssh-host >> \
             TAG=$TAG \
-            PROD=<< parameters.production >> \
+            SHUTTLE_ENV=<< parameters.shuttle-env >> \
             USE_TLS=enable \
             POSTGRES_PASSWORD=${<< parameters.postgres-password >>} \
             MONGO_INITDB_ROOT_PASSWORD=${<< parameters.mongodb-password >>} \
             DD_API_KEY=$DD_API_KEY \
+            DD_ENV=<< parameters.shuttle-env >> \
             HONEYCOMB_API_KEY=${<< parameters.honeycomb-api-key >>} \
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
@@ -456,15 +457,16 @@ jobs:
             AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
             make deploy
       - when:
-          condition: << parameters.production >>
+          condition: 
+            equal: [ production, << parameters.shuttle-env >>]
           steps:
             - run:
                 name: Pull new deployer image on prod
                 command: |
                   ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
       - when:
-          condition:
-            not: << parameters.production >>
+          condition: 
+            equal: [ staging, << parameters.shuttle-env >>] 
           steps:
             - run:
                 name: Pull new deployer image on dev
@@ -696,13 +698,11 @@ workflows:
                 - resources/secrets
                 - resources/turso
                 - services/shuttle-actix-web
-                - services/shuttle-axum
                 - services/shuttle-next
                 - services/shuttle-poem
                 - services/shuttle-poise
                 - services/shuttle-rocket
                 - services/shuttle-salvo
-                - services/shuttle-serenity
                 - services/shuttle-thruster
                 - services/shuttle-tide
                 - services/shuttle-tower
@@ -719,6 +719,28 @@ workflows:
                 - "-F mongodb"
                 - "-F postgres"
                 - "-F postgres-rustls"
+      - test-standalone:
+          # Has mutually exclusive features, so we run checks for each feature separately
+          name: "services/shuttle-axum: << matrix.features >>"
+          matrix:
+            alias: test-standalone-services-shuttle-axum
+            parameters:
+              path:
+                - services/shuttle-axum
+              features:
+                - "-F axum"
+                - "-F axum-0-7 --no-default-features"
+      - test-standalone:
+          # Has mutually exclusive features, so we run checks for each feature separately
+          name: "services/shuttle-serenity: << matrix.features >>"
+          matrix:
+            alias: test-standalone-services-shuttle-serenity
+            parameters:
+              path:
+                - services/shuttle-serenity
+              features:
+                - "-F serenity"
+                - "-F serenity-0-12-rustls_backend --no-default-features"
       - test-workspace-member:
           name: << matrix.crate >>
           matrix:
@@ -810,7 +832,7 @@ workflows:
           name: build-and-push-unstable
           aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
           aws-secret-access-key: DEV_AWS_SECRET_ACCESS_KEY
-          production: false
+          shuttle-env: staging
           requires:
             - approve-push-unstable
       - deploy-images:
@@ -883,7 +905,7 @@ workflows:
           name: build-and-push-production
           aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
           aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
-          production: true
+          shuttle-env: production
           filters:
             branches:
               only: production
@@ -904,7 +926,7 @@ workflows:
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
           ssh-config-script: production-ssh-config.sh
           ssh-host: shuttle.prod.internal
-          production: true
+          shuttle-env: production
           requires:
             - build-and-push-production
             - approve-deploy-production

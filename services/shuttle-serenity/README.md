@@ -1,8 +1,14 @@
 ## Shuttle service integration for the Serenity discord bot framework.
 
+Serenity 0.12 is now supported by using these feature flags (native TLS also available):
+```toml,ignore
+serenity = { version = "0.12.0", features = ["..."] }
+shuttle-serenity = { version = "0.35.0", default-features = false, features = ["serenity-0-12-rustls_backend"] }
+```
+
 ### Example
 
-```rust,no_run
+```rust,ignore
 use anyhow::anyhow;
 use serenity::async_trait;
 use serenity::model::channel::Message;

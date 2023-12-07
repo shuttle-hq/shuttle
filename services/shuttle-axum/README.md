@@ -3,7 +3,7 @@
 Axum 0.7 is now supported by using these feature flags:
 ```toml,ignore
 axum = "0.7.0"
-shuttle-axum = { version = "0.34.1", default-features = false, features = ["axum-0-7"] }
+shuttle-axum = { version = "0.35.0", default-features = false, features = ["axum-0-7"] }
 ```
 
 ### Example

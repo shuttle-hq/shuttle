@@ -388,7 +388,7 @@ impl GatewayService {
                         ))
                     }),
             })
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
+            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound(project_name.to_string())))
     }
 
     pub async fn project_name_exists(&self, project_name: &ProjectName) -> Result<bool, Error> {
@@ -472,7 +472,7 @@ impl GatewayService {
             .fetch_optional(&self.db)
             .await?
             .map(|row| row.get("account_name"))
-            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))
+            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound(project_name.to_string())))
     }
 
     pub async fn control_key_from_project_name(
@@ -484,7 +484,7 @@ impl GatewayService {
             .fetch_optional(&self.db)
             .await?
             .map(|row| row.try_get("initial_key").unwrap())
-            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))?;
+            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound(project_name.to_string())))?;
         Ok(control_key)
     }
 
@@ -1266,7 +1266,7 @@ pub mod tests {
         assert!(matches!(
             svc.find_project(&matrix).await,
             Err(Error {
-                kind: ErrorKind::ProjectNotFound,
+                kind: ErrorKind::ProjectNotFound(_),
                 ..
             })
         ));

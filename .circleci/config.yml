@@ -825,16 +825,16 @@ workflows:
     jobs:
       - approve-push-unstable:
           type: approval
-          # filters:
-          #   branches:
-          #     only: main
-      # - build-and-push:
-      #     name: build-and-push-unstable
-      #     aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
-      #     aws-secret-access-key: DEV_AWS_SECRET_ACCESS_KEY
-      #     shuttle-env: staging
-      #     requires:
-      #       - approve-push-unstable
+          filters:
+            branches:
+              only: main
+      - build-and-push:
+          name: build-and-push-unstable
+          aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
+          aws-secret-access-key: DEV_AWS_SECRET_ACCESS_KEY
+          shuttle-env: staging
+          requires:
+            - approve-push-unstable
       - deploy-images:
           name: Deploy images to unstable
           postgres-password: DEV_POSTGRES_PASSWORD
@@ -844,8 +844,8 @@ workflows:
           logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
           stripe-secret-key: DEV_STRIPE_SECRET_KEY
           jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
-          # requires:
-          #   - build-and-push-unstable
+          requires:
+            - build-and-push-unstable
   release:
     jobs:
       - linux-qa:

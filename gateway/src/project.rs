@@ -4,7 +4,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use bollard::container::{
-    Config, CreateContainerOptions, KillContainerOptions, RemoveContainerOptions,
+    Config, CreateContainerOptions, KillContainerOptions, RemoveContainerOptions, StatsOptions,
     StopContainerOptions,
 };
 use bollard::errors::Error as DockerError;
@@ -34,8 +34,10 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::service::ContainerSettings;
-use crate::DOCKER_STATS_PATH;
-use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
+use crate::{
+    DockerContext, DockerStatsSource, Error, ErrorKind, IntoTryState, Refresh, State, TryState,
+    DOCKER_STATS_PATH_CGROUP_V1, DOCKER_STATS_PATH_CGROUP_V2,
+};
 
 macro_rules! safe_unwrap {
     {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
@@ -1327,11 +1329,13 @@ impl ProjectReady {
     }
 }
 
-#[instrument(name = "getting container stats from the cgroup file", skip_all)]
-async fn get_container_stats(container: &ContainerInspectResponse) -> Result<u64, ProjectError> {
+#[instrument(name = "getting container stats from the cgroup file v1", skip_all)]
+async fn get_container_stats_cgroup_v1(
+    container: &ContainerInspectResponse,
+) -> Result<u64, ProjectError> {
     let id = safe_unwrap!(container.id);
 
-    let cpu_usage: u64 = tokio::fs::read_to_string(format!("{DOCKER_STATS_PATH}/{id}/cpuacct.usage"))
+    let cpu_usage: u64 = tokio::fs::read_to_string(format!("{DOCKER_STATS_PATH_CGROUP_V1}/{id}/cpuacct.usage"))
         .map_err(|e| {
             error!(error = %e, shuttle.container.id = id, "failed to read docker stats file for container");
             ProjectError::internal("failed to read docker stats file for container")
@@ -1364,6 +1368,30 @@ async fn get_container_stats(container: &ContainerInspectResponse) -> Result<u64
     Ok(cpu_usage)
 }
 
+#[instrument(name = "getting container stats from the cgroup file v2", skip_all)]
+async fn get_container_stats_cgroup_v2(
+    container: &ContainerInspectResponse,
+) -> Result<u64, ProjectError> {
+    let id = safe_unwrap!(container.id);
+
+    // 'usage_usec' is on the first line
+    let usage: u64 = std::fs::read_to_string(format!(
+        "{DOCKER_STATS_PATH_CGROUP_V2}docker-{id}.scope/cpu.stat"
+    ))
+    .unwrap_or_default()
+    .lines()
+    .next()
+    .unwrap()
+    .split(' ')
+    .nth(1)
+    .unwrap_or_default()
+    .parse::<u64>()
+    .unwrap_or_default()
+        * 1_000;
+
+    Ok(usage)
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ProjectRunning {
     Ready(ProjectReady),
@@ -1379,7 +1407,7 @@ where
     type Error = ProjectError;
 
     #[instrument(name = "check if container is still healthy", skip_all)]
-    async fn next(mut self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+    async fn next(mut self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
             mut service,
@@ -1402,7 +1430,25 @@ where
             }));
         }
 
-        let new_stat = get_container_stats(&container).await?;
+        let new_stat = match ctx.stats_source() {
+            DockerStatsSource::CgroupV1 => get_container_stats_cgroup_v1(&container).await?,
+            DockerStatsSource::CgroupV2 => get_container_stats_cgroup_v2(&container).await?,
+            DockerStatsSource::Bollard => {
+                let new_stat = ctx
+                    .docker()
+                    .stats(
+                        safe_unwrap!(container.id),
+                        Some(StatsOptions {
+                            one_shot: true,
+                            stream: false,
+                        }),
+                    )
+                    .next()
+                    .await
+                    .unwrap()?;
+                new_stat.cpu_stats.cpu_usage.total_usage
+            }
+        };
 
         stats.push_back(new_stat);
 
@@ -1419,7 +1465,6 @@ where
                 stats,
             }));
         };
-
         let cpu_per_minute = (new_stat - last) / idle_minutes;
 
         debug!(

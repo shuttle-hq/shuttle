@@ -45,7 +45,9 @@ use crate::project::{Project, ProjectCreating, ProjectError, IS_HEALTHY_TIMEOUT}
 use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::TaskRouter;
-use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, AUTH_CLIENT};
+use crate::{
+    AccountName, DockerContext, DockerStatsSource, Error, ErrorKind, ProjectDetails, AUTH_CLIENT,
+};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -212,6 +214,7 @@ pub struct GatewayContextProvider {
     settings: ContainerSettings,
     api_key: String,
     auth_key_uri: Uri,
+    docker_stats_source: DockerStatsSource,
 }
 
 impl GatewayContextProvider {
@@ -220,12 +223,14 @@ impl GatewayContextProvider {
         settings: ContainerSettings,
         api_key: String,
         auth_key_uri: Uri,
+        docker_stats_source: DockerStatsSource,
     ) -> Self {
         Self {
             docker,
             settings,
             api_key,
             auth_key_uri,
+            docker_stats_source,
         }
     }
 
@@ -235,6 +240,7 @@ impl GatewayContextProvider {
             settings: self.settings.clone(),
             api_key: self.api_key.clone(),
             auth_key_uri: self.auth_key_uri.clone(),
+            docker_stats_source: self.docker_stats_source.clone(),
         }
     }
 }
@@ -262,7 +268,12 @@ impl GatewayService {
     ///
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
-    pub async fn init(args: ContextArgs, db: SqlitePool, state_location: PathBuf) -> Self {
+    pub async fn init(
+        args: ContextArgs,
+        db: SqlitePool,
+        state_location: PathBuf,
+        docker_stats_source: DockerStatsSource,
+    ) -> Self {
         let docker = Docker::connect_with_unix(&args.docker_host, 60, API_DEFAULT_VERSION).unwrap();
 
         let container_settings = ContainerSettings::builder().from_args(&args).await;
@@ -272,6 +283,7 @@ impl GatewayService {
             container_settings,
             args.deploys_api_key,
             format!("{}auth/key", args.auth_uri).parse().unwrap(),
+            docker_stats_source,
         );
 
         let task_router = TaskRouter::new();
@@ -1013,6 +1025,7 @@ pub struct GatewayContext {
     settings: ContainerSettings,
     api_key: String,
     auth_key_uri: Uri,
+    docker_stats_source: DockerStatsSource,
 }
 
 impl DockerContext for GatewayContext {
@@ -1022,6 +1035,10 @@ impl DockerContext for GatewayContext {
 
     fn container_settings(&self) -> &ContainerSettings {
         &self.settings
+    }
+
+    fn stats_source(&self) -> &DockerStatsSource {
+        &self.docker_stats_source
     }
 }
 

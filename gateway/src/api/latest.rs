@@ -209,15 +209,19 @@ async fn create_project(
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let cch_modifier = project_name.starts_with("cch23-");
+    let is_cch_project = project_name.is_cch_project();
 
     // Check that the user is within their project limits.
     let can_create_project = claim.can_create_project(
         service
             .get_project_count(&name)
             .await?
-            .saturating_sub(cch_modifier as u32),
+            .saturating_sub(is_cch_project as u32),
     );
+
+    if !claim.is_admin() {
+        service.has_capacity(is_cch_project, &claim.tier).await?;
+    }
 
     let project = service
         .create_project(
@@ -225,7 +229,11 @@ async fn create_project(
             name.clone(),
             claim.is_admin(),
             can_create_project,
-            if cch_modifier { 5 } else { config.idle_minutes },
+            if is_cch_project {
+                5
+            } else {
+                config.idle_minutes
+            },
         )
         .await?;
     let idle_minutes = project.state.idle_minutes();
@@ -434,6 +442,14 @@ async fn route_project(
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
     let project_name = scoped_user.scope;
+    let is_cch_project = project_name.is_cch_project();
+
+    if !scoped_user.user.claim.is_admin() {
+        service
+            .has_capacity(is_cch_project, &scoped_user.user.claim.tier)
+            .await?;
+    }
+
     let project = service.find_or_start_project(&project_name, sender).await?;
     service
         .route(&project.state, &project_name, &scoped_user.user.name, req)
@@ -612,6 +628,25 @@ async fn revive_projects(
     }): State<RouterState>,
 ) -> Result<(), Error> {
     crate::project::exec::revive(service, sender)
+        .await
+        .map_err(|_| Error::from_kind(ErrorKind::Internal))
+}
+
+#[instrument(skip_all)]
+#[utoipa::path(
+    post,
+    path = "/admin/idle-cch",
+    responses(
+        (status = 200, description = "Successfully idled all cch projects."),
+        (status = 500, description = "Server internal error.")
+    )
+)]
+async fn idle_cch_projects(
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
+) -> Result<(), Error> {
+    crate::project::exec::idle_cch(service, sender)
         .await
         .map_err(|_| Error::from_kind(ErrorKind::Internal))
 }
@@ -900,6 +935,7 @@ impl Modify for SecurityAddon {
         delete_load,
         get_projects,
         revive_projects,
+        idle_cch_projects,
         destroy_projects,
         get_load_admin,
         delete_load_admin
@@ -1014,6 +1050,7 @@ impl ApiBuilder {
             .route("/projects", get(get_projects))
             .route("/revive", post(revive_projects))
             .route("/destroy", post(destroy_projects))
+            .route("/idle-cch", post(idle_cch_projects))
             .route("/stats/load", get(get_load_admin).delete(delete_load_admin))
             // TODO: The `/swagger-ui` responds with a 303 See Other response which is followed in
             // browsers but leads to 404 Not Found. This must be investigated.
@@ -1115,6 +1152,7 @@ pub mod tests {
     use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
+    use shuttle_common::claims::AccountTier;
     use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
     use test_context::test_context;
     use tokio::sync::mpsc::channel;
@@ -1125,7 +1163,7 @@ pub mod tests {
     use super::*;
     use crate::project::ProjectError;
     use crate::service::GatewayService;
-    use crate::tests::{RequestBuilderExt, TestProject, World};
+    use crate::tests::{RequestBuilderExt, TestGateway, TestProject, World};
 
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
@@ -1146,7 +1184,7 @@ pub mod tests {
             .with_auth_service(world.context().auth_uri)
             .into_router();
 
-        let neo_key = world.create_user("neo");
+        let neo_key = world.create_user("neo", AccountTier::Basic);
 
         let create_project = |project: &str| {
             Request::builder()
@@ -1229,7 +1267,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let trinity_key = world.create_user("trinity");
+        let trinity_key = world.create_user("trinity", AccountTier::Basic);
 
         let authorization = Authorization::bearer(&trinity_key).unwrap();
 
@@ -1265,7 +1303,7 @@ pub mod tests {
             .unwrap();
 
         // Create new admin user
-        let admin_neo_key = world.create_user("admin-neo");
+        let admin_neo_key = world.create_user("admin-neo", AccountTier::Basic);
         world.set_super_user("admin-neo");
 
         let authorization = Authorization::bearer(&admin_neo_key).unwrap();
@@ -1328,7 +1366,7 @@ pub mod tests {
             .with_auth_service(world.context().auth_uri)
             .into_router();
 
-        let neo_key = world.create_user("neo");
+        let neo_key = world.create_user("neo", AccountTier::Basic);
 
         let create_project = |project: &str| {
             Request::builder()
@@ -1363,7 +1401,7 @@ pub mod tests {
 
         // Create a new admin user. We can't simply make the previous user an admin, since their token
         // will live in the auth cache without the admin scope.
-        let trinity_key = world.create_user("trinity");
+        let trinity_key = world.create_user("trinity", AccountTier::Basic);
         world.set_super_user("trinity");
         let authorization = Authorization::bearer(&trinity_key).unwrap();
 
@@ -1379,6 +1417,156 @@ pub mod tests {
         }
 
         Ok(())
+    }
+
+    #[test_context(TestGateway)]
+    #[tokio::test]
+    async fn api_create_project_above_container_limit(gateway: &mut TestGateway) {
+        let _ = gateway.create_project("matrix").await;
+        let cch_code = gateway.try_create_project("cch23-project").await;
+
+        assert_eq!(cch_code, StatusCode::SERVICE_UNAVAILABLE);
+
+        // It should be possible to still create a normal project
+        let _normal_project = gateway.create_project("project").await;
+
+        let more_code = gateway.try_create_project("project-normal-2").await;
+
+        assert_eq!(
+            more_code,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "more normal projects should not go over soft limit"
+        );
+
+        // A pro user can go over the soft limits
+        let pro_user = gateway.new_authorization_bearer("trinity", AccountTier::Pro);
+        let _long_running = gateway.user_create_project("reload", &pro_user).await;
+
+        // A pro user cannot go over the hard limits
+        let code = gateway
+            .try_user_create_project("training-simulation", &pro_user)
+            .await;
+
+        assert_eq!(code, StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[test_context(TestGateway)]
+    #[tokio::test]
+    async fn start_idle_project_when_above_container_limit(gateway: &mut TestGateway) {
+        let mut cch_idle_project = gateway.create_project("cch23-project").await;
+        // RUNNING PROJECTS = 1 [cch_idle_project]
+        // Run four health checks to get the project to go into idle mode (cch projects always default to 5 min of idle time)
+        cch_idle_project.run_health_check().await;
+        cch_idle_project.run_health_check().await;
+        cch_idle_project.run_health_check().await;
+        cch_idle_project.run_health_check().await;
+
+        cch_idle_project
+            .wait_for_state(project::State::Stopped)
+            .await;
+        // RUNNING PROJECTS = 0 []
+        let mut normal_idle_project = gateway.create_project("project").await;
+        // RUNNING PROJECTS = 1 [normal_idle_project]
+        // Run two health checks to get the project to go into idle mode
+        normal_idle_project.run_health_check().await;
+        normal_idle_project.run_health_check().await;
+
+        normal_idle_project
+            .wait_for_state(project::State::Stopped)
+            .await;
+        // RUNNING PROJECTS = 0 []
+        let mut normal_idle_project2 = gateway.create_project("project-2").await;
+        // RUNNING PROJECTS = 1 [normal_idle_project2]
+        // Run two health checks to get the project to go into idle mode
+        normal_idle_project2.run_health_check().await;
+        normal_idle_project2.run_health_check().await;
+
+        normal_idle_project2
+            .wait_for_state(project::State::Stopped)
+            .await;
+        // RUNNING PROJECTS = 0 []
+        let pro_user = gateway.new_authorization_bearer("trinity", AccountTier::Pro);
+        let mut long_running = gateway.user_create_project("matrix", &pro_user).await;
+        // RUNNING PROJECTS = 1 [long_running]
+        // Now try to start the idle projects
+        let cch_code = cch_idle_project
+            .router_call(Method::GET, "/services/cch23-project")
+            .await;
+        // RUNNING PROJECTS = 1 [long_running]
+
+        assert_eq!(cch_code, StatusCode::SERVICE_UNAVAILABLE);
+
+        let normal_code = normal_idle_project
+            .router_call(Method::GET, "/services/project")
+            .await;
+        // RUNNING PROJECTS = 2 [long_running, normal_idle_project]
+
+        assert_eq!(
+            normal_code,
+            StatusCode::NOT_FOUND,
+            "should not be able to find a service since nothing was deployed"
+        );
+
+        let normal_code2 = normal_idle_project2
+            .router_call(Method::GET, "/services/project")
+            .await;
+        // RUNNING PROJECTS = 2 [long_running, normal_idle_project]
+
+        assert_eq!(
+            normal_code2,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "should not be able to wake project that will go over soft limit"
+        );
+
+        // Now try to start a pro user's project
+        // Have it idle so that we can wake it up
+        long_running.run_health_check().await;
+        long_running.run_health_check().await;
+
+        long_running.wait_for_state(project::State::Stopped).await;
+        // RUNNING PROJECTS = 1 [normal_idle_project]
+
+        let normal_code2 = normal_idle_project2
+            .router_call(Method::GET, "/services/project")
+            .await;
+        // RUNNING PROJECTS = 2 [normal_idle_project, normal_idle_project2]
+
+        assert_eq!(
+            normal_code2,
+            StatusCode::NOT_FOUND,
+            "should not be able to find a service since nothing was deployed"
+        );
+
+        let long_running_code = long_running
+            .router_call(Method::GET, "/services/project")
+            .await;
+        // RUNNING PROJECTS = 3 [normal_idle_project, normal_idle_project2, long_running]
+
+        assert_eq!(
+            long_running_code,
+            StatusCode::NOT_FOUND,
+            "should be able to wake the project of a pro user. Even if we are over the soft limit"
+        );
+
+        // Now try to start a pro user's project when we are at the hard limit
+        long_running.run_health_check().await;
+        long_running.run_health_check().await;
+
+        long_running.wait_for_state(project::State::Stopped).await;
+        // RUNNING PROJECTS = 2 [normal_idle_project, normal_idle_project2]
+        let _extra = gateway.user_create_project("reloaded", &pro_user).await;
+        // RUNNING PROJECTS = 3 [normal_idle_project, normal_idle_project2, _extra]
+
+        let long_running_code = long_running
+            .router_call(Method::GET, "/services/project")
+            .await;
+        // RUNNING PROJECTS = 3 [normal_idle_project, normal_idle_project2, _extra]
+
+        assert_eq!(
+            long_running_code,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "should be able to wake the project of a pro user. Even if we are over the soft limit"
+        );
     }
 
     #[test_context(TestProject)]
@@ -1521,7 +1709,7 @@ pub mod tests {
 
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        let neo_key = world.create_user("neo");
+        let neo_key = world.create_user("neo", AccountTier::Basic);
         let authorization = Authorization::bearer(&neo_key).unwrap();
 
         let create_project = Request::builder()

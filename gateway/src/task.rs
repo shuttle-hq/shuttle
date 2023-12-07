@@ -1,22 +1,25 @@
-use std::collections::VecDeque;
+use std::cmp::min;
+use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures::Future;
+use opentelemetry::global;
 use shuttle_common::models::project::ProjectName;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
-use tracing::{error, trace, trace_span, warn};
+use tracing::{error, field, info_span, trace, warn, Instrument, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
 use crate::worker::TaskRouter;
-use crate::{AccountName, Error, ErrorKind, Refresh, State};
+use crate::{AccountName, Error, ErrorKind, State};
 
 // Default maximum _total_ time a task is allowed to run
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
@@ -159,7 +162,7 @@ pub fn start_idle_deploys() -> impl Task<ProjectContext, Output = Project, Error
 }
 
 pub fn run_until_done() -> impl Task<ProjectContext, Output = Project, Error = Error> {
-    RunUntilDone
+    RunUntilDone::default()
 }
 
 pub fn delete_project() -> impl Task<ProjectContext, Output = Project, Error = Error> {
@@ -202,9 +205,16 @@ impl TaskBuilder {
     }
 
     pub fn build(mut self) -> BoxedTask {
-        self.tasks.push_back(Box::new(RunUntilDone));
+        self.tasks.push_back(Box::<RunUntilDone>::default());
 
         let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
+
+        let cx = Span::current().context();
+        let mut tracing_context: HashMap<String, String> = Default::default();
+
+        opentelemetry::global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&cx, &mut tracing_context);
+        });
 
         Box::new(WithTimeout::on(
             timeout,
@@ -213,6 +223,7 @@ impl TaskBuilder {
                 project_name: self.project_name.expect("project_name is required"),
                 service: self.service,
                 tasks: self.tasks,
+                tracing_context,
             },
         ))
     }
@@ -284,7 +295,10 @@ where
 }
 
 /// Advance a project's state until it's returning `is_done`
-pub struct RunUntilDone;
+#[derive(Default)]
+pub struct RunUntilDone {
+    tries: u32,
+}
 
 #[async_trait]
 impl Task<ProjectContext> for RunUntilDone {
@@ -293,9 +307,17 @@ impl Task<ProjectContext> for RunUntilDone {
     type Error = Error;
 
     async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output, Self::Error> {
+        // Don't overload Docker with requests. Therefore backoff with each try up to 30 seconds
+        if self.tries > 0 {
+            let backoff = min(2_u64.pow(self.tries), 300);
+
+            sleep(Duration::from_millis(backoff)).await;
+        }
+        self.tries += 1;
+
         // Make sure the project state has not changed from Docker
         // Else we will make assumptions when trying to run next which can cause a failure
-        let project = match ctx.state.refresh(&ctx.gateway).await {
+        let project = match refresh_with_retry(ctx.state, &ctx.gateway).await {
             Ok(project) => project,
             Err(error) => return TaskResult::Err(error),
         };
@@ -329,7 +351,7 @@ impl Task<ProjectContext> for DeleteProject {
     async fn poll(&mut self, ctx: ProjectContext) -> TaskResult<Self::Output, Self::Error> {
         // Make sure the project state has not changed from Docker
         // Else we will make assumptions when trying to run next which can cause a failure
-        let project = match ctx.state.refresh(&ctx.gateway).await {
+        let project = match refresh_with_retry(ctx.state, &ctx.gateway).await {
             Ok(project) => project,
             Err(error) => return TaskResult::Err(error),
         };
@@ -459,6 +481,7 @@ pub struct ProjectTask<T> {
     project_name: ProjectName,
     service: Arc<GatewayService>,
     tasks: VecDeque<T>,
+    tracing_context: HashMap<String, String>,
 }
 
 impl<T> ProjectTask<T> {
@@ -533,68 +556,73 @@ where
             admin_secret,
         };
 
-        let span = trace_span!(
+        let parent_cx =
+            global::get_text_map_propagator(|propagator| propagator.extract(&self.tracing_context));
+
+        let span = info_span!(
             "polling project",
-            ctx.project = ?project_ctx.project_name,
-            ctx.account = ?project_ctx.account_name,
-            ctx.state = project_ctx.state.state()
+            ctx.project = ?project_ctx.project_name.to_string(),
+            ctx.account = ?project_ctx.account_name.to_string(),
+            ctx.state = project_ctx.state.state(),
+            ctx.state_after = field::Empty
         );
-        let _ = span.enter();
+        span.set_parent(parent_cx);
 
-        let task = self.tasks.front_mut().unwrap();
+        async {
+            let task = self.tasks.front_mut().unwrap();
+            let timeout = sleep(PROJECT_TASK_MAX_IDLE_TIMEOUT);
+            let res = {
+                let mut poll = task.poll(project_ctx);
+                tokio::select! {
+                    res = &mut poll => res,
+                    _ = timeout => {
+                        warn!(
+                            project_name = ?self.project_name,
+                            account_name = ?account_name,
+                            "a task has been idling for a long time"
+                        );
+                        poll.await
+                    }
+                }
+            };
 
-        let timeout = sleep(PROJECT_TASK_MAX_IDLE_TIMEOUT);
-        let res = {
-            let mut poll = task.poll(project_ctx);
-            tokio::select! {
-                res = &mut poll => res,
-                _ = timeout => {
-                    warn!(
-                        project_name = ?self.project_name,
-                        account_name = ?account_name,
-                        "a task has been idling for a long time"
-                    );
-                    poll.await
+            if let Some(update) = res.as_ref().ok() {
+                let span = Span::current();
+                span.record("ctx.state_after", update.state());
+
+                match self
+                    .service
+                    .update_project(&self.project_name, update)
+                    .await
+                {
+                    Ok(_) => {}
+                    Err(err) => {
+                        error!(err = %err, "could not update project state");
+                        return TaskResult::Err(err);
+                    }
                 }
             }
-        };
 
-        if let Some(update) = res.as_ref().ok() {
-            trace!(new_state = ?update.state(), "new state");
-            match self
-                .service
-                .update_project(&self.project_name, update)
-                .await
-            {
-                Ok(_) => {
-                    trace!(new_state = ?update.state(), "successfully updated project state");
+            match res {
+                TaskResult::Pending(_) => TaskResult::Pending(()),
+                TaskResult::TryAgain => TaskResult::TryAgain,
+                TaskResult::Done(_) => {
+                    let _ = self.tasks.pop_front().unwrap();
+                    if self.tasks.is_empty() {
+                        TaskResult::Done(())
+                    } else {
+                        TaskResult::Pending(())
+                    }
                 }
-                Err(err) => {
-                    error!(err = %err, "could not update project state");
-                    return TaskResult::Err(err);
+                TaskResult::Cancelled => TaskResult::Cancelled,
+                TaskResult::Err(err) => {
+                    error!(err = %err, "project task failure");
+                    TaskResult::Err(err)
                 }
             }
         }
-
-        trace!(result = res.to_str(), "poll result");
-
-        match res {
-            TaskResult::Pending(_) => TaskResult::Pending(()),
-            TaskResult::TryAgain => TaskResult::TryAgain,
-            TaskResult::Done(_) => {
-                let _ = self.tasks.pop_front().unwrap();
-                if self.tasks.is_empty() {
-                    TaskResult::Done(())
-                } else {
-                    TaskResult::Pending(())
-                }
-            }
-            TaskResult::Cancelled => TaskResult::Cancelled,
-            TaskResult::Err(err) => {
-                error!(err = %err, "project task failure");
-                TaskResult::Err(err)
-            }
-        }
+        .instrument(span)
+        .await
     }
 }
 

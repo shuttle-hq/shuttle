@@ -21,6 +21,17 @@ impl Client {
         self.post("/admin/destroy", Option::<String>::None).await
     }
 
+    pub async fn idle_cch(&self) -> Result<()> {
+        reqwest::Client::new()
+            .post(format!("{}/admin/idle-cch", self.api_url))
+            .bearer_auth(&self.api_key)
+            .send()
+            .await
+            .context("failed to send idle request")?;
+
+        Ok(())
+    }
+
     pub async fn acme_account_create(
         &self,
         email: &str,
@@ -125,7 +136,7 @@ impl Client {
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .context("failed to make post request")?
+            .context("failed to make get request")?
             .to_json()
             .await
             .context("failed to post text body from response")

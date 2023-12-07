@@ -180,6 +180,7 @@ pub enum AccountTier {
     Basic,
     // A basic user that is pending a payment on the backend.
     PendingPaymentPro,
+    CancelledPro,
     Pro,
     Team,
     Admin,

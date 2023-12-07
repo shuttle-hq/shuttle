@@ -7,7 +7,7 @@
 # Patch crates to be on same versions
 mkdir -p $CARGO_HOME
 touch $CARGO_HOME/config.toml
-if [[ $PROD != "true" ]]; then
+if [[ "$SHUTTLE_ENV" != "production" ]]; then
     bash scripts/apply-patches.sh $CARGO_HOME/config.toml /usr/src/shuttle
 fi
 

@@ -132,7 +132,7 @@ impl Display for State {
             State::Destroying => write!(f, "destroying"),
             State::Destroyed => write!(f, "destroyed"),
             State::Errored { message } => {
-                write!(f, "errored\n\tmessage: {message}")
+                write!(f, "errored (message: {message})")
             }
             State::Deleted => write!(f, "deleted"),
         }
@@ -309,6 +309,11 @@ pub mod name {
                 && !is_reserved(name)
                 && name.bytes().all(is_valid_char)
                 && is_profanity_free(name)
+        }
+
+        /// Is this a cch project
+        pub fn is_cch_project(&self) -> bool {
+            self.starts_with("cch23-")
         }
     }
 

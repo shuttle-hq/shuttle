@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use args::GenerateCommand;
+use args::{ConfirmationArgs, GenerateCommand};
 use clap_mangen::Man;
 
 use shuttle_common::{
@@ -233,9 +233,10 @@ impl Shuttle {
             }
             Command::Stop => self.stop().await,
             Command::Clean => self.clean().await,
-            Command::Resource(ResourceCommand::Delete { resource_type }) => {
-                self.resource_delete(&resource_type).await
-            }
+            Command::Resource(ResourceCommand::Delete {
+                resource_type,
+                confirmation: ConfirmationArgs { yes },
+            }) => self.resource_delete(&resource_type, yes).await,
             Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
                 self.project_start(idle_minutes).await
             }
@@ -249,8 +250,8 @@ impl Shuttle {
                 self.projects_list(page, limit, raw).await
             }
             Command::Project(ProjectCommand::Stop) => self.project_stop().await,
-            Command::Project(ProjectCommand::Delete { no_confirmation }) => {
-                self.project_delete(no_confirmation).await
+            Command::Project(ProjectCommand::Delete(ConfirmationArgs { yes })) => {
+                self.project_delete(yes).await
             }
         };
 
@@ -876,27 +877,34 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn resource_delete(&self, resource_type: &resource::Type) -> Result<CommandOutcome> {
+    async fn resource_delete(
+        &self,
+        resource_type: &resource::Type,
+        no_confirm: bool,
+    ) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        println!(
-            "{}",
-            formatdoc!(
-                "
-            WARNING:
-                Are you sure you want to delete this project's {}?
-                This action is permanent.",
-                resource_type
-            )
-            .bold()
-            .red()
-        );
-        if !Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt("Are you sure?")
-            .default(false)
-            .interact()
-            .unwrap()
-        {
-            return Ok(CommandOutcome::Ok);
+
+        if !no_confirm {
+            println!(
+                "{}",
+                formatdoc!(
+                    "
+                WARNING:
+                    Are you sure you want to delete this project's {}?
+                    This action is permanent.",
+                    resource_type
+                )
+                .bold()
+                .red()
+            );
+            if !Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Are you sure?")
+                .default(false)
+                .interact()
+                .unwrap()
+            {
+                return Ok(CommandOutcome::Ok);
+            }
         }
 
         client
@@ -1922,10 +1930,10 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_delete(&self, no_confirmation: bool) -> Result<CommandOutcome> {
+    async fn project_delete(&self, no_confirm: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
 
-        if !no_confirmation {
+        if !no_confirm {
             println!(
                 "{}",
                 formatdoc!(

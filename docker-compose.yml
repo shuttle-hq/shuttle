@@ -126,7 +126,11 @@ services:
       # This image needs to run highly privileged in order to
       # orchestrate user runtimes safely
       - ${DOCKER_SOCK}:/var/run/docker.sock
-      - /sys/fs/cgroup:/sys/fs/cgroup
+      # We need to mount this directory to be able to read docker
+      # stats from it. We mount it as read-only.
+      # TODO: this directory will vary depending on the host OS,
+      # we should make it more dynamic.
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
     environment:
       - RUST_LOG=${RUST_LOG}
       - SHUTTLE_ENV=${SHUTTLE_ENV}

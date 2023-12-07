@@ -46,7 +46,9 @@ impl From<AccountTier> for Limits {
             | AccountTier::Basic
             | AccountTier::PendingPaymentPro
             | AccountTier::Deployer => Self::default(),
-            AccountTier::Pro | AccountTier::Team => Self::new(MAX_PROJECTS_EXTRA, true),
+            AccountTier::Pro | AccountTier::CancelledPro | AccountTier::Team => {
+                Self::new(MAX_PROJECTS_EXTRA, true)
+            }
         }
     }
 }

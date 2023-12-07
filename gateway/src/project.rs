@@ -4,8 +4,8 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use bollard::container::{
-    Config, CreateContainerOptions, KillContainerOptions, RemoveContainerOptions, Stats,
-    StatsOptions, StopContainerOptions,
+    Config, CreateContainerOptions, KillContainerOptions, RemoveContainerOptions,
+    StopContainerOptions,
 };
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
@@ -34,6 +34,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::service::ContainerSettings;
+use crate::DOCKER_STATS_PATH;
 use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
 
 macro_rules! safe_unwrap {
@@ -1228,14 +1229,14 @@ pub struct ProjectStarted {
     start_count: usize,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default, deserialize_with = "ok_or_default")]
-    stats: VecDeque<Stats>,
+    stats: VecDeque<u64>,
 }
 
 impl ProjectStarted {
     pub fn new(
         container: ContainerInspectResponse,
         start_count: usize,
-        stats: VecDeque<Stats>,
+        stats: VecDeque<u64>,
     ) -> Self {
         Self {
             container,
@@ -1309,14 +1310,14 @@ pub struct ProjectReady {
     service: Service,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default, deserialize_with = "ok_or_default")]
-    stats: VecDeque<Stats>,
+    stats: VecDeque<u64>,
 }
 
 impl ProjectReady {
     pub fn new(
         container: ContainerInspectResponse,
         service: Service,
-        stats: VecDeque<Stats>,
+        stats: VecDeque<u64>,
     ) -> Self {
         Self {
             container,
@@ -1324,6 +1325,43 @@ impl ProjectReady {
             stats,
         }
     }
+}
+
+#[instrument(name = "getting container stats from the cgroup file", skip_all)]
+async fn get_container_stats(container: &ContainerInspectResponse) -> Result<u64, ProjectError> {
+    let id = safe_unwrap!(container.id);
+
+    let cpu_usage: u64 = tokio::fs::read_to_string(format!("{DOCKER_STATS_PATH}/{id}/cpuacct.usage"))
+        .map_err(|e| {
+            error!(error = %e, shuttle.container.id = id, "failed to read docker stats file for container");
+            ProjectError::internal("failed to read docker stats file for container")
+        }).await?
+        .trim()
+        .parse()
+        .map_err(|e| {
+            error!(error = %e, shuttle.container.id = id, "failed to parse cpu usage stat");
+
+            ProjectError::internal("failed to parse cpu usage to u64")
+        })?;
+
+    // TODO: the above solution only works for cgroup v1
+    // This is the version used by our server. However on my local nix setup I have cgroup v2 and had to use the
+    // following to get the 'usage_usec' which is on the first line
+    // let usage: u64 = std::fs::read_to_string(format!(
+    //     "/sys/fs/cgroup/system.slice/docker-{id}.scope/cpu.stat"
+    // ))
+    // .unwrap_or_default()
+    // .lines()
+    // .next()
+    // .unwrap()
+    // .split(' ')
+    // .nth(1)
+    // .unwrap_or_default()
+    // .parse::<u64>()
+    // .unwrap_or_default()
+    //     * 1_000;
+
+    Ok(cpu_usage)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1341,7 +1379,7 @@ where
     type Error = ProjectError;
 
     #[instrument(name = "check if container is still healthy", skip_all)]
-    async fn next(mut self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+    async fn next(mut self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
             mut service,
@@ -1364,20 +1402,9 @@ where
             }));
         }
 
-        let new_stat = ctx
-            .docker()
-            .stats(
-                safe_unwrap!(container.id),
-                Some(StatsOptions {
-                    one_shot: true,
-                    stream: false,
-                }),
-            )
-            .next()
-            .await
-            .unwrap()?;
+        let new_stat = get_container_stats(&container).await?;
 
-        stats.push_back(new_stat.clone());
+        stats.push_back(new_stat);
 
         let mut last = None;
 
@@ -1393,9 +1420,7 @@ where
             }));
         };
 
-        let cpu_per_minute = (new_stat.cpu_stats.cpu_usage.total_usage
-            - last.cpu_stats.cpu_usage.total_usage)
-            / idle_minutes;
+        let cpu_per_minute = (new_stat - last) / idle_minutes;
 
         debug!(
             shuttle.container.id = container.id,
@@ -1496,6 +1521,7 @@ impl Service {
             .map_err(|err| err.into())
     }
 
+    #[instrument(name = "calling status endpoint on container", skip_all, fields(project_name = %self.name))]
     pub async fn is_healthy(&mut self) -> bool {
         let uri = self.uri(format!("/projects/{}/status", self.name)).unwrap();
         let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.get(uri)).await;

@@ -31,7 +31,7 @@ pub struct StartArgs {
 
     /// Auth JWT signing private key, as a base64 encoding of
     /// a PEM encoded PKCS#8 v1 formatted unencrypted private key.
-    #[arg(long, default_value = "")]
+    #[arg(long)]
     pub jwt_signing_private_key: String,
 }
 

@@ -68,6 +68,32 @@ pub(crate) async fn update_user_tier(
     Ok(())
 }
 
+#[derive(Deserialize)]
+pub struct SubscriptionItem {
+    pub price_id: String,
+    pub quantity: u64,
+}
+
+#[instrument(skip(user_manager))]
+pub(crate) async fn add_subscription_items(
+    _: Admin,
+    State(user_manager): State<UserManagerState>,
+    Path(account_name): Path<AccountName>,
+    Json(SubscriptionItem { price_id, quantity }): Json<SubscriptionItem>,
+) -> Result<(), Error> {
+    let update_subscription_items = stripe::UpdateSubscriptionItems {
+        price: Some(price_id),
+        quantity: Some(quantity),
+        ..Default::default()
+    };
+
+    user_manager
+        .add_subscription_items(account_name, update_subscription_items)
+        .await?;
+
+    Ok(())
+}
+
 pub(crate) async fn put_user_reset_key(
     session: ReadableSession,
     State(user_manager): State<UserManagerState>,

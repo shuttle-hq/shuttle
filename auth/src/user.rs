@@ -8,7 +8,7 @@ use axum::{
     TypedHeader,
 };
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::{claims::AccountTier, secrets::Secret, ApiKey};
+use shuttle_common::{claims::AccountTier, ApiKey, Secret};
 use sqlx::{query, sqlite::SqliteRow, FromRow, Row, SqlitePool};
 use tracing::{debug, error, trace, Span};
 
@@ -29,6 +29,11 @@ pub trait UserManagement: Send + Sync {
     async fn get_user(&self, name: AccountName) -> Result<User, Error>;
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
     async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
+    async fn add_subscription_items(
+        &self,
+        name: AccountName,
+        invoice_item: stripe::UpdateSubscriptionItems,
+    ) -> Result<(), Error>;
 }
 
 #[derive(Clone)]
@@ -149,6 +154,30 @@ impl UserManagement for UserManager {
         Ok(user)
     }
 
+    async fn add_subscription_items(
+        &self,
+        name: AccountName,
+        subscription_items: stripe::UpdateSubscriptionItems,
+    ) -> Result<(), Error> {
+        let mut user: User = sqlx::query_as(
+            "SELECT account_name, key, account_tier, subscription_id FROM users WHERE account_name = ?",
+        )
+        .bind(&name)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(Error::UserNotFound)?;
+
+        // Sync the user tier based on the subscription validity, if any.
+        if user.sync_tier(self).await? {
+            debug!("synced account");
+        }
+
+        user.add_subscription_items(self, subscription_items)
+            .await?;
+
+        Ok(())
+    }
+
     async fn reset_key(&self, name: AccountName) -> Result<(), Error> {
         let key = ApiKey::generate();
 
@@ -246,6 +275,34 @@ impl User {
 
         Ok(false)
     }
+
+    async fn add_subscription_items(
+        &self,
+        user_manager: &UserManager,
+        subscription_items: stripe::UpdateSubscriptionItems,
+    ) -> Result<(), Error> {
+        let Some(ref subscription_id) = self.subscription_id else {
+            return Err(Error::MissingSubscriptionId);
+        };
+
+        let subscription_update = stripe::UpdateSubscription {
+            items: Some(vec![subscription_items]),
+            ..Default::default()
+        };
+
+        let update_subscription = stripe::Subscription::update(
+            &user_manager.stripe_client,
+            subscription_id,
+            subscription_update,
+        )
+        .await?;
+
+        if let Ok(sub) = serde_json::to_string(&update_subscription) {
+            debug!(subscription = sub, "updated subscription")
+        };
+
+        Ok(())
+    }
 }
 
 impl FromRow<'_, SqliteRow> for User {
@@ -254,10 +311,16 @@ impl FromRow<'_, SqliteRow> for User {
             name: row.try_get("account_name").unwrap(),
             key: Secret::new(row.try_get("key").unwrap()),
             account_tier: row.try_get("account_tier").unwrap(),
-            subscription_id: row
-                .try_get("subscription_id")
-                .ok()
-                .and_then(|inner| SubscriptionId::from_str(inner).ok()),
+            subscription_id: row.try_get("subscription_id").ok().and_then(|inner: &str| {
+                if inner.is_empty() {
+                    None
+                } else {
+                    // If we don't first check if the id is an empty string, the parsing below
+                    // will print an error, even though we ignore the error and return None.
+                    let id = SubscriptionId::from_str(inner);
+                    id.ok()
+                }
+            }),
         })
     }
 }

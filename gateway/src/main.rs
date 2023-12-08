@@ -51,6 +51,20 @@ async fn main() -> io::Result<()> {
     } else if docker_stats_path_v2.exists() {
         docker_stats_source = DockerStatsSource::CgroupV2;
     }
+    info!("docker stats source: {:?}", docker_stats_source.to_string());
+
+    let shuttle_env = std::env::var("SHUTTLE_ENV").unwrap_or("".to_string());
+    if (shuttle_env == "staging" || shuttle_env == "production")
+        && docker_stats_source == DockerStatsSource::Bollard
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "SHUTTLE_ENV is {} and could not find docker stats at path: {:?} or {:?}",
+                shuttle_env, DOCKER_STATS_PATH_CGROUP_V1, DOCKER_STATS_PATH_CGROUP_V2,
+            ),
+        ));
+    }
 
     info!(
         "state db: {}",

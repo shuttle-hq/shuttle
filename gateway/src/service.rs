@@ -8,6 +8,7 @@ use axum::body::Body;
 use axum::headers::HeaderMapExt;
 use axum::http::Request;
 use axum::response::Response;
+use bollard::container::StatsOptions;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use fqdn::{Fqdn, FQDN};
 use http::header::AUTHORIZATION;
@@ -30,6 +31,7 @@ use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, QueryBuilder, Row};
 use tokio::sync::mpsc::Sender;
 use tokio::time::timeout;
+use tonic::codegen::tokio_stream::StreamExt;
 use tonic::transport::Endpoint;
 use tracing::{debug, error, instrument, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -47,6 +49,7 @@ use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRES
 use crate::worker::TaskRouter;
 use crate::{
     AccountName, DockerContext, DockerStatsSource, Error, ErrorKind, ProjectDetails, AUTH_CLIENT,
+    DOCKER_STATS_PATH_CGROUP_V1, DOCKER_STATS_PATH_CGROUP_V2,
 };
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
@@ -1028,6 +1031,7 @@ pub struct GatewayContext {
     docker_stats_source: DockerStatsSource,
 }
 
+#[async_trait]
 impl DockerContext for GatewayContext {
     fn docker(&self) -> &Docker {
         &self.docker
@@ -1039,6 +1043,61 @@ impl DockerContext for GatewayContext {
 
     fn stats_source(&self) -> &DockerStatsSource {
         &self.docker_stats_source
+    }
+
+    async fn get_stats(&self, container_id: &String) -> Result<u64, Error> {
+        match self.docker_stats_source {
+            DockerStatsSource::CgroupV1 => {
+                let cpu_usage: u64 =
+                tokio::fs::read_to_string(format!("{DOCKER_STATS_PATH_CGROUP_V1}/{container_id}/cpuacct.usage"))
+                .await.map_err(|e| {
+                    error!(error = %e, shuttle.container.id = container_id, "failed to read docker stats file for container");
+                    ProjectError::internal("failed to read docker stats file for container")
+                })?
+                .trim()
+                .parse()
+                .map_err(|e| {
+                    error!(error = %e, shuttle.container.id = container_id, "failed to parse cpu usage stat");
+
+                    ProjectError::internal("failed to parse cpu usage to u64")
+                })?;
+                Ok(cpu_usage)
+            }
+            DockerStatsSource::CgroupV2 => {
+                // 'usage_usec' is on the first line
+                let usage: u64 = std::fs::read_to_string(format!(
+                    "{DOCKER_STATS_PATH_CGROUP_V2}docker-{container_id}.scope/cpu.stat"
+                ))
+                .unwrap_or_default()
+                .lines()
+                .next()
+                .unwrap()
+                .split(' ')
+                .nth(1)
+                .unwrap_or_default()
+                .parse::<u64>()
+                .unwrap_or_default()
+                    * 1_000;
+
+                Ok(usage)
+            }
+            DockerStatsSource::Bollard => {
+                let new_stat = self
+                    .docker()
+                    .stats(
+                        &*container_id,
+                        Some(StatsOptions {
+                            one_shot: true,
+                            stream: false,
+                        }),
+                    )
+                    .next()
+                    .await
+                    .unwrap()?;
+
+                Ok(new_stat.cpu_stats.cpu_usage.total_usage)
+            }
+        }
     }
 }
 

@@ -22,9 +22,8 @@ use uuid::Uuid;
 ///
 ///  #[tokio::test]
 /// async fn test_case() {
-///     // Create a unique database name so we have a new database for each test.
-///     let db_name = Uuid::new_v4().to_string();
-///     let db_uri = PG.get_unique_uri(db_name.as_str());
+///     // Get an unique db uri which points to a unique database.
+///     let db_uri = PG.get_unique_uri();
 ///     
 ///     // Test logic below, which can use `db_uri` to connect to the postgres instance.
 /// }

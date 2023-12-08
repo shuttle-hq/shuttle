@@ -12,6 +12,7 @@ use acme::AcmeClientError;
 
 use axum::response::{IntoResponse, Response};
 
+use bollard::models::ContainerInspectResponse;
 use bollard::Docker;
 use futures::prelude::*;
 use hyper::client::HttpConnector;
@@ -21,6 +22,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use shuttle_common::models::project::ProjectName;
+use strum::Display;
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
 
@@ -38,7 +40,7 @@ pub mod worker;
 pub const DOCKER_STATS_PATH_CGROUP_V1: &str = "/sys/fs/cgroup/cpuacct/docker";
 pub const DOCKER_STATS_PATH_CGROUP_V2: &str = "/sys/fs/cgroup/system.slice";
 
-#[derive(Clone)]
+#[derive(Clone, Display, PartialEq, Eq)]
 pub enum DockerStatsSource {
     CgroupV1,
     CgroupV2,
@@ -178,12 +180,15 @@ impl From<ProjectDetails> for shuttle_common::models::admin::ProjectResponse {
     }
 }
 
+#[async_trait]
 pub trait DockerContext: Send + Sync {
     fn docker(&self) -> &Docker;
 
     fn container_settings(&self) -> &ContainerSettings;
 
     fn stats_source(&self) -> &DockerStatsSource;
+
+    async fn get_stats(&self, container_id: &String) -> Result<u64, Error>;
 }
 
 /// A generic state which can, when provided with a [`Context`], do

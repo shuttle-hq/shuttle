@@ -1329,69 +1329,6 @@ impl ProjectReady {
     }
 }
 
-#[instrument(name = "getting container stats from the cgroup file v1", skip_all)]
-async fn get_container_stats_cgroup_v1(
-    container: &ContainerInspectResponse,
-) -> Result<u64, ProjectError> {
-    let id = safe_unwrap!(container.id);
-
-    let cpu_usage: u64 = tokio::fs::read_to_string(format!("{DOCKER_STATS_PATH_CGROUP_V1}/{id}/cpuacct.usage"))
-        .map_err(|e| {
-            error!(error = %e, shuttle.container.id = id, "failed to read docker stats file for container");
-            ProjectError::internal("failed to read docker stats file for container")
-        }).await?
-        .trim()
-        .parse()
-        .map_err(|e| {
-            error!(error = %e, shuttle.container.id = id, "failed to parse cpu usage stat");
-
-            ProjectError::internal("failed to parse cpu usage to u64")
-        })?;
-
-    // TODO: the above solution only works for cgroup v1
-    // This is the version used by our server. However on my local nix setup I have cgroup v2 and had to use the
-    // following to get the 'usage_usec' which is on the first line
-    // let usage: u64 = std::fs::read_to_string(format!(
-    //     "/sys/fs/cgroup/system.slice/docker-{id}.scope/cpu.stat"
-    // ))
-    // .unwrap_or_default()
-    // .lines()
-    // .next()
-    // .unwrap()
-    // .split(' ')
-    // .nth(1)
-    // .unwrap_or_default()
-    // .parse::<u64>()
-    // .unwrap_or_default()
-    //     * 1_000;
-
-    Ok(cpu_usage)
-}
-
-#[instrument(name = "getting container stats from the cgroup file v2", skip_all)]
-async fn get_container_stats_cgroup_v2(
-    container: &ContainerInspectResponse,
-) -> Result<u64, ProjectError> {
-    let id = safe_unwrap!(container.id);
-
-    // 'usage_usec' is on the first line
-    let usage: u64 = std::fs::read_to_string(format!(
-        "{DOCKER_STATS_PATH_CGROUP_V2}docker-{id}.scope/cpu.stat"
-    ))
-    .unwrap_or_default()
-    .lines()
-    .next()
-    .unwrap()
-    .split(' ')
-    .nth(1)
-    .unwrap_or_default()
-    .parse::<u64>()
-    .unwrap_or_default()
-        * 1_000;
-
-    Ok(usage)
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ProjectRunning {
     Ready(ProjectReady),
@@ -1430,25 +1367,11 @@ where
             }));
         }
 
-        let new_stat = match ctx.stats_source() {
-            DockerStatsSource::CgroupV1 => get_container_stats_cgroup_v1(&container).await?,
-            DockerStatsSource::CgroupV2 => get_container_stats_cgroup_v2(&container).await?,
-            DockerStatsSource::Bollard => {
-                let new_stat = ctx
-                    .docker()
-                    .stats(
-                        safe_unwrap!(container.id),
-                        Some(StatsOptions {
-                            one_shot: true,
-                            stream: false,
-                        }),
-                    )
-                    .next()
-                    .await
-                    .unwrap()?;
-                new_stat.cpu_stats.cpu_usage.total_usage
-            }
-        };
+        let new_stat = ctx
+            .get_stats(safe_unwrap!(container.id))
+            .await
+            .map_err(|_err| ProjectError::internal("failed to get stats for container"))?
+            as u64;
 
         stats.push_back(new_stat);
 

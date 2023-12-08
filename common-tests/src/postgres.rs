@@ -1,5 +1,4 @@
 use portpicker::pick_unused_port;
-use rand::{distributions::Alphanumeric, Rng};
 use std::{
     process::Command,
     thread::sleep,
@@ -30,24 +29,19 @@ use uuid::Uuid;
 ///     // Test logic below, which can use `db_uri` to connect to the postgres instance.
 /// }
 ///
-pub struct PostgresDockerInstance {
+pub struct DockerInstance {
     container_name: String,
     base_uri: String,
 }
 
-impl Default for PostgresDockerInstance {
+impl Default for DockerInstance {
     fn default() -> Self {
-        let s: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(7)
-            .map(char::from)
-            .collect();
-
-        PostgresDockerInstance::new(s.as_str())
+        let s = Uuid::new_v4().to_string();
+        DockerInstance::new(s.as_str())
     }
 }
 
-impl PostgresDockerInstance {
+impl DockerInstance {
     /// Create a new postgres docker instance.
     pub fn new(name: &str) -> Self {
         let container_name = format!("shuttle_test_pg_{}", name);

@@ -9,18 +9,18 @@ use once_cell::sync::Lazy;
 use serde_json::Value;
 use shuttle_auth::{pgpool_init, ApiBuilder};
 use shuttle_common::claims::{AccountTier, Claim};
+use shuttle_common_tests::postgres::DockerInstance;
 use sqlx::query;
 use std::{
     net::SocketAddr,
     str::FromStr,
     sync::{Arc, Mutex},
 };
-use test_utils::PostgresDockerInstance;
 use tower::ServiceExt;
 
 pub(crate) const ADMIN_KEY: &str = "ndh9z58jttoes3qv";
 
-static PG: Lazy<PostgresDockerInstance> = Lazy::new(PostgresDockerInstance::default);
+static PG: Lazy<DockerInstance> = Lazy::new(DockerInstance::default);
 #[ctor::dtor]
 fn cleanup() {
     PG.cleanup();

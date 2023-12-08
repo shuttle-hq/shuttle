@@ -28,10 +28,9 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default"] }
 
 [dev-dependencies]
+ctor = { workspace = true }
 once_cell = { workspace = true }
 portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
 shuttle-common-tests = { workspace = true }
-ctor = { workspace = true }
-test-utils = { workspace = true }

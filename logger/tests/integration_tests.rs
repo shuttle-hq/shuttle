@@ -20,13 +20,13 @@ use tonic::{
     Request,
 };
 
-use test_utils::PostgresDockerInstance;
+use shuttle_common_tests::postgres::DockerInstance;
 
 use prost_types::Timestamp;
 
 const SHUTTLE_SERVICE: &str = "test";
 
-static PG: Lazy<PostgresDockerInstance> = Lazy::new(PostgresDockerInstance::default);
+static PG: Lazy<DockerInstance> = Lazy::new(DockerInstance::default);
 
 #[dtor]
 fn cleanup() {

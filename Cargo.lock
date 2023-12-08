@@ -5790,9 +5790,9 @@ dependencies = [
  "serde",
  "serde_json",
  "shuttle-common",
+ "shuttle-common-tests",
  "sqlx",
  "strum 0.25.0",
- "test-utils",
  "thiserror",
  "tokio",
  "tower",
@@ -5911,6 +5911,7 @@ dependencies = [
  "tokio-stream",
  "tonic 0.10.2",
  "tower",
+ "uuid",
 ]
 
 [[package]]
@@ -6046,7 +6047,6 @@ dependencies = [
  "shuttle-common-tests",
  "shuttle-proto",
  "sqlx",
- "test-utils",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -6804,16 +6804,6 @@ checksum = "8901a55b0a7a06ebc4a674dcca925170da8e613fa3b163a1df804ed10afb154d"
 dependencies = [
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "test-utils"
-version = "0.1.0"
-dependencies = [
- "bollard",
- "portpicker",
- "rand 0.8.5",
- "uuid",
 ]
 
 [[package]]

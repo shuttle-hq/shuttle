@@ -1041,7 +1041,7 @@ impl DockerContext for GatewayContext {
         &self.settings
     }
 
-    async fn get_stats(&self, container_id: &String) -> Result<u64, Error> {
+    async fn get_stats(&self, container_id: &str) -> Result<u64, Error> {
         match self.docker_stats_source {
             DockerStatsSource::CgroupV1 => {
                 let cpu_usage: u64 =
@@ -1081,7 +1081,7 @@ impl DockerContext for GatewayContext {
                 let new_stat = self
                     .docker()
                     .stats(
-                        &*container_id,
+                        container_id,
                         Some(StatsOptions {
                             one_shot: true,
                             stream: false,

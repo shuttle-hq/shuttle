@@ -1041,10 +1041,6 @@ impl DockerContext for GatewayContext {
         &self.settings
     }
 
-    fn stats_source(&self) -> &DockerStatsSource {
-        &self.docker_stats_source
-    }
-
     async fn get_stats(&self, container_id: &String) -> Result<u64, Error> {
         match self.docker_stats_source {
             DockerStatsSource::CgroupV1 => {
@@ -1147,7 +1143,15 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_stop_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                DockerStatsSource::Bollard,
+            )
+            .await,
+        );
 
         let neo: AccountName = "neo".parse().unwrap();
         let trinity: AccountName = "trinity".parse().unwrap();
@@ -1362,7 +1366,15 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_ready_kill_restart_docker() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                DockerStatsSource::Bollard,
+            )
+            .await,
+        );
 
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
@@ -1414,7 +1426,15 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_custom_domain() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                DockerStatsSource::Bollard,
+            )
+            .await,
+        );
 
         let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();
@@ -1468,7 +1488,15 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_custom_domain_destroy_recreate_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                DockerStatsSource::Bollard,
+            )
+            .await,
+        );
 
         let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();

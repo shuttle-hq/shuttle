@@ -4,7 +4,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use bollard::container::{
-    Config, CreateContainerOptions, KillContainerOptions, RemoveContainerOptions, StatsOptions,
+    Config, CreateContainerOptions, KillContainerOptions, RemoveContainerOptions,
     StopContainerOptions,
 };
 use bollard::errors::Error as DockerError;
@@ -34,10 +34,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::service::ContainerSettings;
-use crate::{
-    DockerContext, DockerStatsSource, Error, ErrorKind, IntoTryState, Refresh, State, TryState,
-    DOCKER_STATS_PATH_CGROUP_V1, DOCKER_STATS_PATH_CGROUP_V2,
-};
+use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
 
 macro_rules! safe_unwrap {
     {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
@@ -1366,12 +1363,17 @@ where
                 stats,
             }));
         }
-
+        // return Err(ProjectError::internal("failed to get stats for container"));
         let new_stat = ctx
             .get_stats(safe_unwrap!(container.id))
             .await
-            .map_err(|_err| ProjectError::internal("failed to get stats for container"))?
-            as u64;
+            .map_err(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to get stats for container"
+                );
+                ProjectError::internal("failed to get stats for container")
+            })? as u64;
 
         stats.push_back(new_stat);
 

@@ -12,7 +12,6 @@ use acme::AcmeClientError;
 
 use axum::response::{IntoResponse, Response};
 
-use bollard::models::ContainerInspectResponse;
 use bollard::Docker;
 use futures::prelude::*;
 use hyper::client::HttpConnector;
@@ -186,8 +185,6 @@ pub trait DockerContext: Send + Sync {
 
     fn container_settings(&self) -> &ContainerSettings;
 
-    fn stats_source(&self) -> &DockerStatsSource;
-
     async fn get_stats(&self, container_id: &String) -> Result<u64, Error>;
 }
 
@@ -314,7 +311,7 @@ pub mod tests {
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::task::BoxedTask;
     use crate::worker::Worker;
-    use crate::DockerContext;
+    use crate::{DockerContext, DockerStatsSource, Error};
 
     macro_rules! value_block_helper {
         ($next:ident, $block:block) => {
@@ -676,7 +673,15 @@ pub mod tests {
 
         /// Create a service and sender to handle tasks. Also starts up a worker to create actual Docker containers for all requests
         pub async fn service(&self) -> (Arc<GatewayService>, Sender<BoxedTask>) {
-            let service = Arc::new(GatewayService::init(self.args(), self.pool(), "".into()).await);
+            let service = Arc::new(
+                GatewayService::init(
+                    self.args(),
+                    self.pool(),
+                    "".into(),
+                    DockerStatsSource::Bollard,
+                )
+                .await,
+            );
             let worker = Worker::new();
 
             let (sender, mut receiver) = channel(256);
@@ -728,6 +733,7 @@ pub mod tests {
         }
     }
 
+    #[async_trait]
     impl DockerContext for WorldContext {
         fn docker(&self) -> &Docker {
             &self.docker
@@ -735,6 +741,10 @@ pub mod tests {
 
         fn container_settings(&self) -> &ContainerSettings {
             &self.container_settings
+        }
+
+        async fn get_stats(&self, container_id: &String) -> Result<u64, Error> {
+            Ok(0)
         }
     }
 
@@ -1171,7 +1181,15 @@ pub mod tests {
     #[tokio::test]
     async fn end_to_end() {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let service = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                crate::DockerStatsSource::Bollard,
+            )
+            .await,
+        );
         let worker = Worker::new();
 
         let (log_out, mut log_in) = channel(256);

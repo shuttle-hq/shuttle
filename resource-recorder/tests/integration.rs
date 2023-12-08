@@ -36,7 +36,7 @@ async fn manage_resources() {
 
     let test_future = async {
         // Make sure the server starts first
-        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
         let mut client = ResourceRecorderClient::connect(format!("http://localhost:{port}"))
             .await

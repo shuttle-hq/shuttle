@@ -743,7 +743,7 @@ pub mod tests {
             &self.container_settings
         }
 
-        async fn get_stats(&self, container_id: &String) -> Result<u64, Error> {
+        async fn get_stats(&self, _container_id: &String) -> Result<u64, Error> {
             Ok(0)
         }
     }

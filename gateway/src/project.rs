@@ -1363,7 +1363,7 @@ where
                 stats,
             }));
         }
-        // return Err(ProjectError::internal("failed to get stats for container"));
+
         let new_stat = ctx
             .get_stats(safe_unwrap!(container.id))
             .await
@@ -1373,7 +1373,7 @@ where
                     "failed to get stats for container"
                 );
                 ProjectError::internal("failed to get stats for container")
-            })? as u64;
+            })?;
 
         stats.push_back(new_stat);
 

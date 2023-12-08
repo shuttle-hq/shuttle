@@ -1060,7 +1060,7 @@ impl DockerContext for GatewayContext {
                 Ok(cpu_usage)
             }
             DockerStatsSource::CgroupV2 => {
-                // 'usage_usec' is on the first line
+                // 'usage_usec' is on the first line and the needed stat
                 let usage: u64 = std::fs::read_to_string(format!(
                     "{DOCKER_STATS_PATH_CGROUP_V2}docker-{container_id}.scope/cpu.stat"
                 ))

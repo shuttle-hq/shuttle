@@ -242,7 +242,7 @@ impl GatewayContextProvider {
 pub struct GatewayService {
     provider: GatewayContextProvider,
     db: SqlitePool,
-    task_router: TaskRouter<BoxedTask>,
+    task_router: TaskRouter,
     state_location: PathBuf,
 
     /// Maximum number of containers the gateway can start before blocking cch projects
@@ -274,7 +274,7 @@ impl GatewayService {
             format!("{}auth/key", args.auth_uri).parse().unwrap(),
         );
 
-        let task_router = TaskRouter::new();
+        let task_router = TaskRouter::default();
         Self {
             provider,
             db,
@@ -946,7 +946,7 @@ impl GatewayService {
         )
     }
 
-    pub fn task_router(&self) -> TaskRouter<BoxedTask> {
+    pub fn task_router(&self) -> TaskRouter {
         self.task_router.clone()
     }
 

@@ -185,7 +185,7 @@ pub trait DockerContext: Send + Sync {
 
     fn container_settings(&self) -> &ContainerSettings;
 
-    async fn get_stats(&self, container_id: &String) -> Result<u64, Error>;
+    async fn get_stats(&self, container_id: &str) -> Result<u64, Error>;
 }
 
 /// A generic state which can, when provided with a [`Context`], do
@@ -743,7 +743,7 @@ pub mod tests {
             &self.container_settings
         }
 
-        async fn get_stats(&self, _container_id: &String) -> Result<u64, Error> {
+        async fn get_stats(&self, _container_id: &str) -> Result<u64, Error> {
             Ok(0)
         }
     }

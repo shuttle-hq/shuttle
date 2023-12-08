@@ -13,6 +13,7 @@ use uuid::Uuid;
 ///
 /// Example usage:
 ///
+/// ```
 /// static PG: Lazy<PostgresDockerInstance> = Lazy::new(PostgresDockerInstance::default);
 
 /// #[dtor]
@@ -27,6 +28,7 @@ use uuid::Uuid;
 ///     
 ///     // Test logic below, which can use `db_uri` to connect to the postgres instance.
 /// }
+///```
 ///
 pub struct DockerInstance {
     container_name: String,

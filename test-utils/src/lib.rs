@@ -74,12 +74,12 @@ impl PostgresDockerInstance {
 
         Command::new("docker").args(args).spawn().unwrap();
 
-        Self::_wait_ready(Duration::from_secs(120), &is_ready_cmd);
+        Self::wait_ready(Duration::from_secs(120), &is_ready_cmd);
 
         // The container enters the ready state and then reboots, sleep a little and then
         // check if it's ready again afterwards.
         sleep(Duration::from_millis(350));
-        Self::_wait_ready(Duration::from_secs(120), &is_ready_cmd);
+        Self::wait_ready(Duration::from_secs(120), &is_ready_cmd);
 
         Self {
             container_name,
@@ -87,7 +87,7 @@ impl PostgresDockerInstance {
         }
     }
 
-    fn _wait_ready(mut timeout: Duration, is_ready_cmd: &[&str]) {
+    fn wait_ready(mut timeout: Duration, is_ready_cmd: &[&str]) {
         let mut now = SystemTime::now();
         while !timeout.is_zero() {
             let status = Command::new("docker")

@@ -40,17 +40,19 @@ async fn main() -> io::Result<()> {
         Sqlite::create_database(db_uri).await.unwrap();
     }
 
-    let mut docker_stats_source = DockerStatsSource::Bollard;
-
     let docker_stats_path_v1 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V1)
         .expect("to parse docker stats path for cgroup v1");
     let docker_stats_path_v2 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V2)
         .expect("to parse docker stats path for cgroup v2");
-    if docker_stats_path_v1.exists() {
-        docker_stats_source = DockerStatsSource::CgroupV1;
+
+    let docker_stats_source = if docker_stats_path_v1.exists() {
+        DockerStatsSource::CgroupV1
     } else if docker_stats_path_v2.exists() {
-        docker_stats_source = DockerStatsSource::CgroupV2;
-    }
+        DockerStatsSource::CgroupV2
+    } else {
+        DockerStatsSource::Bollard
+    };
+
     info!("docker stats source: {:?}", docker_stats_source.to_string());
 
     let shuttle_env = std::env::var("SHUTTLE_ENV").unwrap_or("".to_string());

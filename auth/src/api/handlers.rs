@@ -11,7 +11,7 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use shuttle_common::{
     claims::{AccountTier, Claim},
-    models::user,
+    models::{subscription::SubscriptionItem, user},
 };
 use stripe::CheckoutSession;
 use tracing::instrument;
@@ -68,22 +68,16 @@ pub(crate) async fn update_user_tier(
     Ok(())
 }
 
-#[derive(Deserialize)]
-pub struct SubscriptionItem {
-    pub price_id: String,
-    pub quantity: u64,
-}
-
 #[instrument(skip(user_manager))]
 pub(crate) async fn add_subscription_items(
     _: Admin,
     State(user_manager): State<UserManagerState>,
     Path(account_name): Path<AccountName>,
-    Json(SubscriptionItem { price_id, quantity }): Json<SubscriptionItem>,
+    Json(item): Json<SubscriptionItem>,
 ) -> Result<(), Error> {
     let update_subscription_items = stripe::UpdateSubscriptionItems {
-        price: Some(price_id),
-        quantity: Some(quantity),
+        price: Some(item.price_id().to_string()),
+        quantity: Some(item.quantity()),
         ..Default::default()
     };
 

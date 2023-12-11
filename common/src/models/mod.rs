@@ -5,6 +5,7 @@ pub mod project;
 pub mod resource;
 pub mod service;
 pub mod stats;
+pub mod subscription;
 pub mod user;
 
 use anyhow::{Context, Result};

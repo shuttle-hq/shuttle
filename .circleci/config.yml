@@ -832,7 +832,7 @@ workflows:
           filters:
             branches:
               only: main
-      - approve-build-images-unstable:
+      - approve-build-and-push-images-unstable:
           type: approval
           filters:
             branches:
@@ -843,7 +843,7 @@ workflows:
           aws-secret-access-key: DEV_AWS_SECRET_ACCESS_KEY
           shuttle-env: staging
           requires:
-            - approve-build-images-unstable
+            - approve-build-and-push-images-unstable
       - deploy-images:
           name: Deploy images to unstable
           postgres-password: DEV_POSTGRES_PASSWORD
@@ -921,11 +921,6 @@ workflows:
             branches:
               only: production
       - approve-deploy-production:
-          type: approval
-          filters:
-            branches:
-              only: production
-      - approve-build-images-production:
           type: approval
           filters:
             branches:

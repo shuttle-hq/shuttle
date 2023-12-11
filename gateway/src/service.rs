@@ -1041,7 +1041,7 @@ impl DockerContext for GatewayContext {
         &self.settings
     }
 
-    #[instrument(name = "getting container stats from the proper source", skip_all)]
+    #[instrument(name = "getting container stats from the proper source", skip_all, fields(docker_stats_source = %self.docker_stats_source, shuttle.container.id = container_id))]
     async fn get_stats(&self, container_id: &str) -> Result<u64, Error> {
         match self.docker_stats_source {
             DockerStatsSource::CgroupV1 => {
@@ -1061,22 +1061,32 @@ impl DockerContext for GatewayContext {
                 Ok(cpu_usage)
             }
             DockerStatsSource::CgroupV2 => {
-                // 'usage_usec' is on the first line and the needed stat
-                let usage: u64 = std::fs::read_to_string(format!(
-                    "{DOCKER_STATS_PATH_CGROUP_V2}docker-{container_id}.scope/cpu.stat"
+                let cpu_usage: u64 = tokio::fs::read_to_string(format!(
+                    "{DOCKER_STATS_PATH_CGROUP_V2}/docker-{container_id}.scope/cpu.stat"
                 ))
-                .unwrap_or_default()
-                .lines()
-                .next()
-                .unwrap()
-                .split(' ')
-                .nth(1)
-                .unwrap_or_default()
-                .parse::<u64>()
-                .unwrap_or_default()
-                    * 1_000;
-
-                Ok(usage)
+                    .await
+                    .map_err(|e| {
+                        error!(error = %e, shuttle.container.id = container_id, "failed to read docker stats file for container");
+                        ProjectError::internal("failed to read docker stats file for container")
+                    })?
+                    .lines()
+                    .next()
+                    .ok_or_else(|| {
+                        error!(shuttle.container.id = container_id, "failed to read first line of docker stats file for container");
+                        ProjectError::internal("failed to read first line of docker stats file for container")
+                    })?
+                    .split(' ')
+                    .nth(1)
+                    .ok_or_else(|| {
+                        error!(shuttle.container.id = container_id, "failed to split docker stats line for container");
+                        ProjectError::internal("failed to split docker stats line for container")
+                    })?
+                    .parse::<u64>()
+                    .map_err(|e| {
+                        error!(error = %e, shuttle.container.id = container_id, "failed to parse cpu usage stat");
+                        ProjectError::internal("failed to parse cpu usage to u64")
+                    })?;
+                Ok(cpu_usage * 1_000)
             }
             DockerStatsSource::Bollard => {
                 let new_stat = self

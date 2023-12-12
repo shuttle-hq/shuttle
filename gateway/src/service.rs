@@ -1041,7 +1041,7 @@ impl DockerContext for GatewayContext {
         &self.settings
     }
 
-    #[instrument(name = "getting container stats from the proper source", skip_all, fields(docker_stats_source = %self.docker_stats_source, shuttle.container.id = container_id))]
+    #[instrument(name = "get container stats", skip_all, fields(docker_stats_source = %self.docker_stats_source, shuttle.container.id = container_id))]
     async fn get_stats(&self, container_id: &str) -> Result<u64, Error> {
         match self.docker_stats_source {
             DockerStatsSource::CgroupV1 => {

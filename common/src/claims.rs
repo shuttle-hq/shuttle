@@ -316,6 +316,10 @@ impl Claim {
 
         Ok(claim)
     }
+
+    pub fn token(&self) -> Option<String> {
+        self.token.clone()
+    }
 }
 
 // Future for layers that just return the inner response

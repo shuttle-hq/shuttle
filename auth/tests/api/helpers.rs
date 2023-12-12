@@ -36,14 +36,13 @@ pub(crate) async fn app() -> TestApp {
         .await
         .unwrap();
 
-    let router = ApiBuilder::new()
+    let router = ApiBuilder::new("LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUR5V0ZFYzhKYm05NnA0ZGNLTEwvQWNvVUVsbUF0MVVKSTU4WTc4d1FpWk4KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=".to_string())
         .with_sqlite_pool(sqlite_pool)
         .with_sessions()
         .with_stripe_client(stripe::Client::from_url(
             mocked_stripe_server.uri.to_string().as_str(),
             "",
         ))
-        .with_jwt_signing_private_key("LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUR5V0ZFYzhKYm05NnA0ZGNLTEwvQWNvVUVsbUF0MVVKSTU4WTc4d1FpWk4KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=".to_string())
         .into_router();
 
     TestApp {

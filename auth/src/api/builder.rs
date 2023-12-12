@@ -2,6 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     extract::FromRef,
+    handler::Handler,
     middleware::from_extractor,
     routing::{get, post, put},
     Router, Server,
@@ -9,7 +10,10 @@ use axum::{
 use axum_sessions::{async_session::MemoryStore, SessionLayer};
 use rand::RngCore;
 use shuttle_common::{
-    backends::metrics::{Metrics, TraceLayer},
+    backends::{
+        auth::JwtAuthenticationLayer,
+        metrics::{Metrics, TraceLayer},
+    },
     request_span,
 };
 use sqlx::SqlitePool;
@@ -54,17 +58,14 @@ pub struct ApiBuilder {
     pool: Option<SqlitePool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
     stripe_client: Option<stripe::Client>,
-    jwt_signing_private_key: Option<String>,
-}
-
-impl Default for ApiBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
+    key_manager: EdDsaManager,
 }
 
 impl ApiBuilder {
-    pub fn new() -> Self {
+    pub fn new(jwt_signing_private_key: String) -> Self {
+        let key_manager = EdDsaManager::new(jwt_signing_private_key);
+
+        let public_key = key_manager.public_key().to_vec();
         let router = Router::new()
             .route("/", get(health_check))
             .route("/logout", post(logout))
@@ -72,9 +73,19 @@ impl ApiBuilder {
             .route("/auth/key", get(convert_key))
             .route("/auth/refresh", post(refresh_token))
             .route("/public-key", get(get_public_key))
+            .route("/users/:account_name", get(get_user))
             .route(
-                "/users/:account_name",
-                get(get_user).put(add_subscription_items),
+                "/users/subscription/items",
+                post(
+                    add_subscription_items.layer(JwtAuthenticationLayer::new(move || {
+                        let public_key = public_key.clone();
+                        async move { public_key.clone() }
+                    })),
+                ),
+            )
+            .route(
+                "/users/subscription/:account_name",
+                post(add_subscription_items),
             )
             .route(
                 "/users/:account_name/:account_tier",
@@ -99,7 +110,7 @@ impl ApiBuilder {
             pool: None,
             session_layer: None,
             stripe_client: None,
-            jwt_signing_private_key: None,
+            key_manager,
         }
     }
 
@@ -127,27 +138,19 @@ impl ApiBuilder {
         self
     }
 
-    pub fn with_jwt_signing_private_key(mut self, private_key: String) -> Self {
-        self.jwt_signing_private_key = Some(private_key);
-        self
-    }
-
     pub fn into_router(self) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
         let session_layer = self.session_layer.expect("a session layer is required");
         let stripe_client = self.stripe_client.expect("a stripe client is required");
-        let jwt_signing_private_key = self
-            .jwt_signing_private_key
-            .expect("a jwt signing private key");
+
         let user_manager = UserManager {
             pool,
             stripe_client,
         };
-        let key_manager = EdDsaManager::new(jwt_signing_private_key);
 
         let state = RouterState {
             user_manager: Arc::new(Box::new(user_manager)),
-            key_manager: Arc::new(Box::new(key_manager)),
+            key_manager: Arc::new(Box::new(self.key_manager)),
         };
 
         self.router.layer(session_layer).with_state(state)

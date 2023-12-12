@@ -25,11 +25,10 @@ pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // On
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 pub async fn start(pool: SqlitePool, args: StartArgs) -> io::Result<()> {
-    let router = api::ApiBuilder::new()
+    let router = api::ApiBuilder::new(args.jwt_signing_private_key)
         .with_sqlite_pool(pool)
         .with_sessions()
         .with_stripe_client(stripe::Client::new(args.stripe_secret_key))
-        .with_jwt_signing_private_key(args.jwt_signing_private_key)
         .into_router();
 
     info!(address=%args.address, "Binding to and listening at address");

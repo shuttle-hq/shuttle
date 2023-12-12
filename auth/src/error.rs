@@ -20,7 +20,7 @@ pub enum Error {
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
     #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
+    Internal(#[from] anyhow::Error),
     #[error("Missing checkout session.")]
     MissingCheckoutSession,
     #[error("Incomplete checkout session.")]

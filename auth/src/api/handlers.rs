@@ -4,14 +4,14 @@ use crate::{
 };
 use axum::{
     extract::{Path, State},
-    Json,
+    Extension, Json,
 };
 use axum_sessions::extractors::{ReadableSession, WritableSession};
 use http::StatusCode;
-use serde::{Deserialize, Serialize};
 use shuttle_common::{
+    backends::subscription::SubscriptionItem,
     claims::{AccountTier, Claim},
-    models::{subscription::SubscriptionItem, user},
+    models::user,
 };
 use stripe::CheckoutSession;
 use tracing::instrument;
@@ -70,9 +70,8 @@ pub(crate) async fn update_user_tier(
 
 #[instrument(skip(user_manager))]
 pub(crate) async fn add_subscription_items(
-    _: Admin,
+    Extension(claim): Extension<Claim>,
     State(user_manager): State<UserManagerState>,
-    Path(account_name): Path<AccountName>,
     Json(item): Json<SubscriptionItem>,
 ) -> Result<(), Error> {
     let update_subscription_items = stripe::UpdateSubscriptionItems {
@@ -82,7 +81,7 @@ pub(crate) async fn add_subscription_items(
     };
 
     user_manager
-        .add_subscription_items(account_name, update_subscription_items)
+        .add_subscription_items(AccountName::from(claim.sub), update_subscription_items)
         .await?;
 
     Ok(())

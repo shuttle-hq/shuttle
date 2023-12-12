@@ -168,8 +168,13 @@ impl UserManagement for UserManager {
         .ok_or(Error::UserNotFound)?;
 
         // Sync the user tier based on the subscription validity, if any.
+        // TODO: refactor the sync_tier function to make it easier to reason about.
+        // Don't return bool, rather return an error for missing subscription, and ignore that
+        // error where a subscription isn't required?
         if user.sync_tier(self).await? {
             debug!("synced account");
+        } else {
+            return Err(anyhow::anyhow!("failed to sync subscription").into());
         }
 
         user.add_subscription_items(self, subscription_items)

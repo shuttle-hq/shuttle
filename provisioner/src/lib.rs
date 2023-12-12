@@ -10,8 +10,10 @@ use aws_sdk_rds::{
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
+use reqwest::StatusCode;
 use shuttle_common::backends::auth::VerifyClaim;
-use shuttle_common::claims::Scope;
+use shuttle_common::backends::subscription::{PriceId, SubscriptionItem};
+use shuttle_common::claims::{Claim, Scope};
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
@@ -21,8 +23,9 @@ use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeleti
 use shuttle_proto::provisioner::{Ping, Pong};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
+use tonic::transport::Uri;
 use tonic::{Request, Response, Status};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 mod args;
 mod error;
@@ -38,6 +41,8 @@ pub struct MyProvisioner {
     fqdn: String,
     internal_pg_address: String,
     internal_mongodb_address: String,
+    auth_client: reqwest::Client,
+    auth_uri: Uri,
 }
 
 impl MyProvisioner {
@@ -47,6 +52,7 @@ impl MyProvisioner {
         fqdn: String,
         internal_pg_address: String,
         internal_mongodb_address: String,
+        auth_uri: Uri,
     ) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
@@ -77,6 +83,8 @@ impl MyProvisioner {
             fqdn,
             internal_pg_address,
             internal_mongodb_address,
+            auth_client: reqwest::Client::new(),
+            auth_uri,
         })
     }
 
@@ -250,6 +258,7 @@ impl MyProvisioner {
         &self,
         project_name: &str,
         engine: aws_rds::Engine,
+        claim: Claim,
     ) -> Result<DatabaseResponse, Error> {
         let client = &self.rds_client;
 
@@ -323,6 +332,11 @@ impl MyProvisioner {
             .address
             .expect("endpoint to have an address");
 
+        // RDS was successfully provisioned, update the users subscription with the new item.
+        // TODO: if updating subscription fails, delete RDS?
+        self.update_subscription(claim, SubscriptionItem::new(PriceId::AwsRdsRecurring, 1))
+            .await?;
+
         Ok(DatabaseResponse {
             engine: engine.to_string(),
             username: instance
@@ -336,6 +350,33 @@ impl MyProvisioner {
             address_public: address,
             port: engine_to_port(engine),
         })
+    }
+
+    async fn update_subscription(
+        &self,
+        claim: Claim,
+        subscription_item: SubscriptionItem,
+    ) -> Result<(), Error> {
+        // TODO: send JWT to auth for authorization.
+        // TODO: error handling.
+        let body = serde_json::to_string(&subscription_item).unwrap();
+        let response = self
+            .auth_client
+            .post(format!("{}/users/subscription/items", self.auth_uri))
+            .body(body)
+            .bearer_auth(claim.token().unwrap())
+            .send()
+            .await
+            .map_err(|err| {
+                error!(error = %err, "failed to connect to auth service");
+                Error::Plain("failed to connect to auth service".to_string())
+            })?;
+
+        // TODO: better failed request handling.
+        match response.status() {
+            StatusCode::OK => Ok(()),
+            _ => Err(Error::Plain("failed to update subscription".to_string())),
+        }
     }
 
     async fn delete_shared_db(
@@ -470,9 +511,15 @@ impl Provisioner for MyProvisioner {
                     .await?
             }
             DbType::AwsRds(AwsRds { engine }) => {
-                can_provision_rds?;
-                self.request_aws_rds(&request.project_name, engine.expect("engine to be set"))
-                    .await?
+                let claim = can_provision_rds?;
+
+                // TODO: split subscription update into separate function?
+                self.request_aws_rds(
+                    &request.project_name,
+                    engine.expect("engine to be set"),
+                    claim,
+                )
+                .await?
             }
         };
 

@@ -6086,6 +6086,7 @@ dependencies = [
  "portpicker",
  "prost 0.12.3",
  "rand 0.8.5",
+ "reqwest",
  "serde_json",
  "shuttle-common",
  "shuttle-proto",

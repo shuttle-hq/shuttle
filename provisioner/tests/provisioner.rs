@@ -18,6 +18,8 @@ fn cleanup() {
 mod needs_docker {
     use super::*;
 
+    use tonic::transport::Uri;
+
     #[tokio::test]
     async fn shared_db_role_does_not_exist() {
         let provisioner = MyProvisioner::new(
@@ -26,6 +28,7 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            Uri::from_static("http://127.0.0.1:8008"),
         )
         .await
         .unwrap();
@@ -54,6 +57,7 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            Uri::from_static("http://127.0.0.1:8008"),
         )
         .await
         .unwrap();
@@ -84,6 +88,7 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            Uri::from_static("http://127.0.0.1:8008"),
         )
         .await
         .unwrap();
@@ -105,6 +110,7 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            Uri::from_static("http://127.0.0.1:8008"),
         )
         .await
         .unwrap();
@@ -133,6 +139,7 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            Uri::from_static("http://127.0.0.1:8008"),
         )
         .await
         .unwrap();
@@ -163,6 +170,7 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            Uri::from_static("http://127.0.0.1:8008"),
         )
         .await
         .unwrap();
@@ -187,6 +195,7 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            Uri::from_static("http://127.0.0.1:8008"),
         )
         .await
         .unwrap();

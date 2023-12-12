@@ -432,7 +432,8 @@ pub trait VerifyClaim {
 
     fn verify(&self, required_scope: Scope) -> Result<(), Self::Error>;
 
-    fn verify_rds_access(&self) -> Result<(), Self::Error>;
+    /// Verify the claim subject has permission to provision RDS, and if they do, return their claim.
+    fn verify_rds_access(&self) -> Result<Claim, Self::Error>;
 }
 
 #[cfg(feature = "tonic")]
@@ -459,14 +460,14 @@ impl<B> VerifyClaim for tonic::Request<B> {
         }
     }
 
-    fn verify_rds_access(&self) -> Result<(), Self::Error> {
+    fn verify_rds_access(&self) -> Result<Claim, Self::Error> {
         let claim = self
             .extensions()
             .get::<Claim>()
             .ok_or_else(|| tonic::Status::internal("could not get claim"))?;
 
         if claim.can_provision_rds() {
-            Ok(())
+            Ok(claim.clone())
         } else {
             Err(tonic::Status::permission_denied(
                 "don't have permission to provision rds instances",

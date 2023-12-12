@@ -1,4 +1,4 @@
-use std::{fmt::Formatter, str::FromStr};
+use std::{fmt::Formatter, io::ErrorKind, str::FromStr};
 
 use async_trait::async_trait;
 use axum::{
@@ -9,7 +9,7 @@ use axum::{
 };
 use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::{claims::AccountTier, secrets::Secret, ApiKey};
-use sqlx::{query, sqlite::SqliteRow, FromRow, Row, SqlitePool};
+use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
 use tracing::{debug, error, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
@@ -33,7 +33,7 @@ pub trait UserManagement: Send + Sync {
 
 #[derive(Clone)]
 pub struct UserManager {
-    pub pool: SqlitePool,
+    pub pool: PgPool,
     pub stripe_client: stripe::Client,
 }
 
@@ -42,10 +42,10 @@ impl UserManagement for UserManager {
     async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error> {
         let key = ApiKey::generate();
 
-        query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
+        query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
             .bind(&name)
             .bind(&key)
-            .bind(tier)
+            .bind(tier.to_string())
             .execute(&self.pool)
             .await?;
 
@@ -77,9 +77,9 @@ impl UserManagement for UserManager {
 
             // Update the user account tier and subscription_id.
             let rows_affected = query(
-                "UPDATE users SET account_tier = ?1, subscription_id = ?2 WHERE account_name = ?3",
+                "UPDATE users SET account_tier = $1, subscription_id = $2 WHERE account_name = $3",
             )
-            .bind(AccountTier::Pro)
+            .bind(AccountTier::Pro.to_string())
             .bind(subscription_id)
             .bind(name)
             .execute(&self.pool)
@@ -99,8 +99,8 @@ impl UserManagement for UserManager {
 
     // Update tier leaving the subscription_id untouched.
     async fn update_tier(&self, name: &AccountName, tier: AccountTier) -> Result<(), Error> {
-        let rows_affected = query("UPDATE users SET account_tier = ?1 WHERE account_name = ?2")
-            .bind(tier)
+        let rows_affected = query("UPDATE users SET account_tier = $1 WHERE account_name = $2")
+            .bind(tier.to_string())
             .bind(name)
             .execute(&self.pool)
             .await?
@@ -115,7 +115,7 @@ impl UserManagement for UserManager {
 
     async fn get_user(&self, name: AccountName) -> Result<User, Error> {
         let mut user: User =
-            sqlx::query_as("SELECT account_name, key, account_tier, subscription_id FROM users WHERE account_name = ?")
+            sqlx::query_as("SELECT account_name, key, account_tier, subscription_id FROM users WHERE account_name = $1")
                 .bind(&name)
                 .fetch_optional(&self.pool)
                 .await?
@@ -134,7 +134,7 @@ impl UserManagement for UserManager {
 
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error> {
         let mut user: User = sqlx::query_as(
-            "SELECT account_name, key, account_tier, subscription_id FROM users WHERE key = ?",
+            "SELECT account_name, key, account_tier, subscription_id FROM users WHERE key = $1",
         )
         .bind(&key)
         .fetch_optional(&self.pool)
@@ -152,7 +152,7 @@ impl UserManagement for UserManager {
     async fn reset_key(&self, name: AccountName) -> Result<(), Error> {
         let key = ApiKey::generate();
 
-        let rows_affected = query("UPDATE users SET key = ?1 WHERE account_name = ?2")
+        let rows_affected = query("UPDATE users SET key = $1 WHERE account_name = $2")
             .bind(&key)
             .bind(&name)
             .execute(&self.pool)
@@ -248,12 +248,17 @@ impl User {
     }
 }
 
-impl FromRow<'_, SqliteRow> for User {
-    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+impl FromRow<'_, PgRow> for User {
+    fn from_row(row: &PgRow) -> Result<Self, sqlx::Error> {
         Ok(User {
             name: row.try_get("account_name").unwrap(),
             key: Secret::new(row.try_get("key").unwrap()),
-            account_tier: row.try_get("account_tier").unwrap(),
+            account_tier: AccountTier::from_str(row.try_get("account_tier").unwrap()).map_err(
+                |err| sqlx::Error::ColumnDecode {
+                    index: "account_tier".to_string(),
+                    source: Box::new(std::io::Error::new(ErrorKind::Other, err.to_string())),
+                },
+            )?,
             subscription_id: row
                 .try_get("subscription_id")
                 .ok()

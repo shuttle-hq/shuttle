@@ -5777,9 +5777,11 @@ dependencies = [
  "axum-sessions",
  "base64 0.21.5",
  "clap",
+ "ctor",
  "http",
  "hyper",
  "jsonwebtoken",
+ "once_cell",
  "opentelemetry 0.21.0",
  "pem 2.0.1",
  "portpicker",
@@ -5788,6 +5790,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shuttle-common",
+ "shuttle-common-tests",
  "sqlx",
  "strum 0.25.0",
  "thiserror",
@@ -5908,6 +5911,7 @@ dependencies = [
  "tokio-stream",
  "tonic 0.10.2",
  "tower",
+ "uuid",
 ]
 
 [[package]]
@@ -6049,7 +6053,6 @@ dependencies = [
  "tonic 0.10.2",
  "tracing",
  "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]

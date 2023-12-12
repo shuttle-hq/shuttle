@@ -427,6 +427,9 @@ jobs:
         description: "Push and deploy to the given env"
         type: string
         default: staging
+      control-db-postgres-uri:
+        description: "Control database URI, used by the control plane components"
+        type: string
     steps:
       - checkout
       - run:
@@ -455,6 +458,7 @@ jobs:
             LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
             STRIPE_SECRET_KEY=${<< parameters.stripe-secret-key >>} \
             AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
+            CONTROL_DB_POSTGRES_URI=${<< parameters.control-db-postgres-uri >>}
             make deploy
       - when:
           condition: 
@@ -768,7 +772,6 @@ workflows:
               resource_class:
                 - large
               crate:
-                - shuttle-auth
                 - shuttle-runtime
                 - shuttle-service
       - test-workspace-member-with-integration:
@@ -791,6 +794,7 @@ workflows:
               resource_class:
                 - medium
               crate:
+                - shuttle-auth
                 - shuttle-provisioner
                 - shuttle-logger
       - test-workspace-member-with-integration-docker:
@@ -823,7 +827,12 @@ workflows:
               only: production
   unstable:
     jobs:
-      - approve-push-unstable:
+      - approve-deploy-images-unstable:
+          type: approval
+          filters:
+            branches:
+              only: main
+      - approve-build-and-push-images-unstable:
           type: approval
           filters:
             branches:
@@ -834,7 +843,7 @@ workflows:
           aws-secret-access-key: DEV_AWS_SECRET_ACCESS_KEY
           shuttle-env: staging
           requires:
-            - approve-push-unstable
+            - approve-build-and-push-images-unstable
       - deploy-images:
           name: Deploy images to unstable
           postgres-password: DEV_POSTGRES_PASSWORD
@@ -844,8 +853,10 @@ workflows:
           logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
           stripe-secret-key: DEV_STRIPE_SECRET_KEY
           jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
+          control-db-postgres-uri: DEV_CONTROL_DB_POSTGRES_URI
           requires:
             - build-and-push-unstable
+            - approve-deploy-images-unstable
   release:
     jobs:
       - linux-qa:
@@ -923,6 +934,7 @@ workflows:
           logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
           stripe-secret-key: PROD_STRIPE_SECRET_KEY
           jwt-signing-private-key: PROD_AUTH_JWTSIGNING_PRIVATE_KEY
+          control-db-postgres-uri: PROD_CONTROL_DB_POSTGRES_URI
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
           ssh-config-script: production-ssh-config.sh
           ssh-host: shuttle.prod.internal

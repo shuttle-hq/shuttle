@@ -12,7 +12,7 @@ use shuttle_common::{
     backends::metrics::{Metrics, TraceLayer},
     request_span,
 };
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use tracing::field;
 
 use crate::{
@@ -51,7 +51,7 @@ impl FromRef<RouterState> for KeyManagerState {
 
 pub struct ApiBuilder {
     router: Router<RouterState>,
-    pool: Option<SqlitePool>,
+    pool: Option<PgPool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
     stripe_client: Option<stripe::Client>,
     jwt_signing_private_key: Option<String>,
@@ -100,7 +100,7 @@ impl ApiBuilder {
         }
     }
 
-    pub fn with_sqlite_pool(mut self, pool: SqlitePool) -> Self {
+    pub fn with_pg_pool(mut self, pool: PgPool) -> Self {
         self.pool = Some(pool);
         self
     }

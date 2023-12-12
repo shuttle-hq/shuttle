@@ -20,11 +20,9 @@ use tonic::{
     Request,
 };
 
-mod helpers;
-use helpers::{exec_psql, DockerInstance};
+use shuttle_common_tests::postgres::DockerInstance;
 
 use prost_types::Timestamp;
-use uuid::Uuid;
 
 const SHUTTLE_SERVICE: &str = "test";
 
@@ -43,10 +41,7 @@ mod needs_docker {
         let logger_port = pick_unused_port().unwrap();
         let deployment_id = "runtime-fetch-logs-deployment-id";
 
-        // Create a unique database name so we have a new database for each test.
-        let db_name = Uuid::new_v4().to_string();
-
-        let server = spawn_server(logger_port, db_name);
+        let server = spawn_server(logger_port);
 
         let test_future = tokio::spawn(async move {
             // Ensure the DB has been created and server has started.
@@ -117,11 +112,7 @@ mod needs_docker {
         let logger_port = pick_unused_port().unwrap();
         let deployment_id = "runtime-fetch-logs-deployment-id";
 
-        // Create a unique database name so we have a new database for each test.
-        let db_name = Uuid::new_v4().to_string();
-
-        let server = spawn_server(logger_port, db_name);
-
+        let server = spawn_server(logger_port);
         let test_future = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(800)).await;
 
@@ -191,13 +182,9 @@ mod needs_docker {
         }
     }
 
-    fn spawn_server(port: u16, db_name: String) -> JoinHandle<()> {
+    fn spawn_server(port: u16) -> JoinHandle<()> {
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-
-        // Get the PG uri first so the static PG is initialized.
-        let pg_uri = Uri::try_from(format!("{}/{}", PG.uri, db_name)).unwrap();
-
-        exec_psql(&format!(r#"CREATE DATABASE "{}";"#, &db_name));
+        let pg_uri = Uri::try_from(PG.get_unique_uri()).unwrap();
 
         tokio::task::spawn(async move {
             let pg = Postgres::new(&pg_uri).await;

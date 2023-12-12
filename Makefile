@@ -75,7 +75,7 @@ DEPLOYS_API_KEY?=gateway4deployes
 # this should use the same version as our prod RDS database
 CONTROL_DB_POSTGRES_TAG?=15
 CONTROL_DB_POSTGRES_PASSWORD?=postgres
-CONTROL_DB_POSTGRES_URI?=postgres://postgres:${CONTROL_DB_POSTGRES_PASSWORD}@control-postgres:5432/postgres
+CONTROL_DB_POSTGRES_URI?=postgres://postgres:${CONTROL_DB_POSTGRES_PASSWORD}@control-db:5432/postgres
 
 # this should use the same version as our prod RDS logger database
 LOGGER_POSTGRES_TAG?=15

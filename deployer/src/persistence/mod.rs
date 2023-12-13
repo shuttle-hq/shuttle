@@ -222,7 +222,7 @@ impl Persistence {
     pub async fn insert_deployment(&self, deployment: impl Into<&Deployment>) -> Result<()> {
         let deployment: &Deployment = deployment.into();
 
-        sqlx::query("INSERT INTO deployments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO deployments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(deployment.id)
             .bind(deployment.service_id.to_string())
             .bind(deployment.state)
@@ -233,6 +233,7 @@ impl Persistence {
             .bind(deployment.git_commit_msg.as_ref())
             .bind(deployment.git_branch.as_ref())
             .bind(deployment.git_dirty)
+            .bind(deployment.message.as_ref())
             .execute(&self.pool)
             .await
             .map(|_| ())

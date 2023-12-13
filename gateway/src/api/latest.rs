@@ -307,7 +307,7 @@ async fn destroy_project(
 #[derive(Deserialize, IntoParams)]
 struct DeleteProjectParams {
     // Was added in v0.30.0
-    // We have not needed it since 0.35.0, but have to keep in for any old CLI users
+    // We have not needed it since 0.34.1, but have to keep in for any old CLI users
     #[allow(dead_code)]
     dry_run: Option<bool>,
 }

@@ -5,9 +5,11 @@ use hyper::{
     http::{header::AUTHORIZATION, Request},
     Server,
 };
+use once_cell::sync::Lazy;
 use serde_json::Value;
-use shuttle_auth::{sqlite_init, ApiBuilder};
-use shuttle_common::claims::Claim;
+use shuttle_auth::{pgpool_init, ApiBuilder};
+use shuttle_common::claims::{AccountTier, Claim};
+use shuttle_common_tests::postgres::DockerInstance;
 use sqlx::query;
 use std::{
     net::SocketAddr,
@@ -18,6 +20,12 @@ use tower::ServiceExt;
 
 pub(crate) const ADMIN_KEY: &str = "ndh9z58jttoes3qv";
 
+static PG: Lazy<DockerInstance> = Lazy::new(DockerInstance::default);
+#[ctor::dtor]
+fn cleanup() {
+    PG.cleanup();
+}
+
 pub(crate) struct TestApp {
     pub router: Router,
     pub mocked_stripe_server: MockedStripeServer,
@@ -25,19 +33,20 @@ pub(crate) struct TestApp {
 
 /// Initialize a router with an in-memory sqlite database for each test.
 pub(crate) async fn app() -> TestApp {
-    let sqlite_pool = sqlite_init("sqlite::memory:").await;
+    let pg_pool = pgpool_init(PG.get_unique_uri().as_str()).await.unwrap();
+
     let mocked_stripe_server = MockedStripeServer::default();
     // Insert an admin user for the tests.
-    query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
+    query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
         .bind("admin")
         .bind(ADMIN_KEY)
-        .bind("admin")
-        .execute(&sqlite_pool)
+        .bind(AccountTier::Admin.to_string())
+        .execute(&pg_pool)
         .await
         .unwrap();
 
     let router = ApiBuilder::new("LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUR5V0ZFYzhKYm05NnA0ZGNLTEwvQWNvVUVsbUF0MVVKSTU4WTc4d1FpWk4KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=".to_string())
-        .with_sqlite_pool(sqlite_pool)
+        .with_pg_pool(pg_pool)
         .with_sessions()
         .with_stripe_client(stripe::Client::from_url(
             mocked_stripe_server.uri.to_string().as_str(),

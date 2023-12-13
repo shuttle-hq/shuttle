@@ -15,7 +15,7 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
-use strum::EnumMessage;
+use strum::{EnumMessage, EnumString};
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -169,12 +169,12 @@ impl Default for ScopeBuilder {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, EnumString)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "display", derive(strum::Display))]
-#[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
 #[cfg_attr(feature = "persist", derive(sqlx::Type))]
 #[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
+#[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
 pub enum AccountTier {
     #[default]
     Basic,

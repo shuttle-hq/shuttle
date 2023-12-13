@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-auth"
-version = "0.35.0"
+version = "0.35.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -27,7 +27,7 @@ rand = { workspace = true }
 ring = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sqlx = { workspace = true, features = ["sqlite", "json", "migrate"] }
+sqlx = { workspace = true, features = ["postgres", "json", "migrate"] }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
@@ -37,7 +37,10 @@ tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 axum-extra = { version = "0.7.1", features = ["cookie"] }
+ctor = { workspace = true }
 hyper = { workspace = true }
-serde_json = { workspace = true }
-tower = { workspace = true, features = ["util"] }
+once_cell = { workspace = true }
 portpicker = { workspace = true }
+serde_json = { workspace = true }
+shuttle-common-tests = { workspace = true }
+tower = { workspace = true, features = ["util"] }

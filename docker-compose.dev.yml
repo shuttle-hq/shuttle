@@ -62,7 +62,7 @@ services:
 
         exec /usr/local/bin/shuttle-auth "$${@:0}"
     command:
-      - "--state=/var/lib/shuttle-auth"
+      - "--db-connection-uri=${CONTROL_DB_POSTGRES_URI}"
       - "start"
       - "--address=0.0.0.0:8000"
       - "--stripe-secret-key=${STRIPE_SECRET_KEY}"

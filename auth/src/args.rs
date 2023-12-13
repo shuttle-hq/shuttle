@@ -1,12 +1,12 @@
-use std::{net::SocketAddr, path::PathBuf};
+use std::net::SocketAddr;
 
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 pub struct Args {
     /// Where to store auth state (such as users)
-    #[arg(long, default_value = "./")]
-    pub state: PathBuf,
+    #[arg(long)]
+    pub db_connection_uri: String,
 
     #[command(subcommand)]
     pub command: Commands,

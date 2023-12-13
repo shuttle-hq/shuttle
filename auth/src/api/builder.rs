@@ -66,6 +66,7 @@ impl ApiBuilder {
         let key_manager = EdDsaManager::new(jwt_signing_private_key);
 
         let public_key = key_manager.public_key().to_vec();
+
         let router = Router::new()
             .route("/", get(health_check))
             .route("/logout", post(logout))
@@ -82,10 +83,6 @@ impl ApiBuilder {
                         async move { public_key.clone() }
                     })),
                 ),
-            )
-            .route(
-                "/users/subscription/:account_name",
-                post(add_subscription_items),
             )
             .route(
                 "/users/:account_name/:account_tier",

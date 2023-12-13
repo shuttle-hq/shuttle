@@ -160,7 +160,7 @@ impl UserManagement for UserManager {
         subscription_items: stripe::UpdateSubscriptionItems,
     ) -> Result<(), Error> {
         let mut user: User = sqlx::query_as(
-            "SELECT account_name, key, account_tier, subscription_id FROM users WHERE account_name = ?",
+            "SELECT account_name, key, account_tier, subscription_id FROM users WHERE account_name = $1",
         )
         .bind(&name)
         .fetch_optional(&self.pool)

@@ -53,12 +53,7 @@ impl Display for Response {
                 .to_string()
                 // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
                 .with(crossterm::style::Color::from_str(self.state.get_color()).unwrap()),
-        )?;
-        // If any message is associated with the deployment, write it on a new line.
-        if let Some(ref message) = self.message {
-            writeln!(f, "{message}")?;
-        }
-        Ok(())
+        )
     }
 }
 

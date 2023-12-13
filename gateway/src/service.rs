@@ -242,7 +242,7 @@ impl GatewayContextProvider {
 pub struct GatewayService {
     provider: GatewayContextProvider,
     db: SqlitePool,
-    task_router: TaskRouter<BoxedTask>,
+    task_router: TaskRouter,
     state_location: PathBuf,
 
     /// Maximum number of containers the gateway can start before blocking cch projects
@@ -274,7 +274,7 @@ impl GatewayService {
             format!("{}auth/key", args.auth_uri).parse().unwrap(),
         );
 
-        let task_router = TaskRouter::new();
+        let task_router = TaskRouter::default();
         Self {
             provider,
             db,
@@ -388,7 +388,7 @@ impl GatewayService {
                         ))
                     }),
             })
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
+            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound(project_name.to_string())))
     }
 
     pub async fn project_name_exists(&self, project_name: &ProjectName) -> Result<bool, Error> {
@@ -472,7 +472,7 @@ impl GatewayService {
             .fetch_optional(&self.db)
             .await?
             .map(|row| row.get("account_name"))
-            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))
+            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound(project_name.to_string())))
     }
 
     pub async fn control_key_from_project_name(
@@ -484,7 +484,7 @@ impl GatewayService {
             .fetch_optional(&self.db)
             .await?
             .map(|row| row.try_get("initial_key").unwrap())
-            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))?;
+            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound(project_name.to_string())))?;
         Ok(control_key)
     }
 
@@ -946,7 +946,7 @@ impl GatewayService {
         )
     }
 
-    pub fn task_router(&self) -> TaskRouter<BoxedTask> {
+    pub fn task_router(&self) -> TaskRouter {
         self.task_router.clone()
     }
 
@@ -1266,7 +1266,7 @@ pub mod tests {
         assert!(matches!(
             svc.find_project(&matrix).await,
             Err(Error {
-                kind: ErrorKind::ProjectNotFound,
+                kind: ErrorKind::ProjectNotFound(_),
                 ..
             })
         ));

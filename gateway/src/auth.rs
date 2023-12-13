@@ -87,7 +87,7 @@ where
         if user.projects.contains(&scope) || user.claim.scopes.contains(&Scope::Admin) {
             Ok(Self { user, scope })
         } else {
-            Err(Error::from(ErrorKind::ProjectNotFound))
+            Err(Error::from(ErrorKind::ProjectNotFound(scope.to_string())))
         }
     }
 }

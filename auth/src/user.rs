@@ -177,7 +177,7 @@ impl UserManagement for UserManager {
             return Err(anyhow::anyhow!("failed to sync subscription").into());
         }
 
-        user.add_subscription_items(self, subscription_items)
+        user.add_subscription_items(&self.stripe_client, subscription_items)
             .await?;
 
         Ok(())
@@ -283,7 +283,7 @@ impl User {
 
     async fn add_subscription_items(
         &self,
-        user_manager: &UserManager,
+        stripe_client: &stripe::Client,
         subscription_items: stripe::UpdateSubscriptionItems,
     ) -> Result<(), Error> {
         let Some(ref subscription_id) = self.subscription_id else {
@@ -295,12 +295,9 @@ impl User {
             ..Default::default()
         };
 
-        let update_subscription = stripe::Subscription::update(
-            &user_manager.stripe_client,
-            subscription_id,
-            subscription_update,
-        )
-        .await?;
+        let update_subscription =
+            stripe::Subscription::update(&stripe_client, subscription_id, subscription_update)
+                .await?;
 
         if let Ok(sub) = serde_json::to_string(&update_subscription) {
             debug!(subscription = sub, "updated subscription")

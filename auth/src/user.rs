@@ -321,16 +321,10 @@ impl FromRow<'_, PgRow> for User {
                     source: Box::new(std::io::Error::new(ErrorKind::Other, err.to_string())),
                 },
             )?,
-            subscription_id: row.try_get("subscription_id").ok().and_then(|inner: &str| {
-                if inner.is_empty() {
-                    None
-                } else {
-                    // If we don't first check if the id is an empty string, the parsing below
-                    // will print an error, even though we ignore the error and return None.
-                    let id = SubscriptionId::from_str(inner);
-                    id.ok()
-                }
-            }),
+            subscription_id: row
+                .try_get("subscription_id")
+                .ok()
+                .and_then(|inner| SubscriptionId::from_str(inner).ok()),
         })
     }
 }

@@ -13,7 +13,7 @@ use rand::Rng;
 use reqwest::StatusCode;
 use shuttle_common::backends::auth::VerifyClaim;
 use shuttle_common::backends::subscription::{PriceId, SubscriptionItem};
-use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::claims::{AccountTier, Claim, Scope};
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
@@ -334,8 +334,10 @@ impl MyProvisioner {
 
         // RDS was successfully provisioned, update the users subscription with the new item.
         // TODO: if updating subscription fails, delete RDS?
-        self.update_subscription(claim, SubscriptionItem::new(PriceId::AwsRdsRecurring, 1))
-            .await?;
+        if claim.tier != AccountTier::Admin {
+            self.update_subscription(claim, SubscriptionItem::new(PriceId::AwsRdsRecurring, 1))
+                .await?;
+        }
 
         Ok(DatabaseResponse {
             engine: engine.to_string(),

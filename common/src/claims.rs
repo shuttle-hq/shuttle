@@ -317,8 +317,8 @@ impl Claim {
         Ok(claim)
     }
 
-    pub fn token(&self) -> Option<String> {
-        self.token.clone()
+    pub fn token(&self) -> Option<&str> {
+        self.token.as_deref()
     }
 }
 

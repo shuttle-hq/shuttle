@@ -637,6 +637,16 @@ impl DeploymentUpdater for Persistence {
             .map(|_| ())
             .map_err(Error::from)
     }
+
+    async fn set_message(&self, id: &Uuid, message: &str) -> Result<()> {
+        sqlx::query("UPDATE deployments SET message = ? WHERE id = ?")
+            .bind(message)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(Error::from)
+    }
 }
 
 #[async_trait::async_trait]
@@ -744,6 +754,7 @@ mod tests {
                 git_commit_msg: None,
                 git_branch: None,
                 git_dirty: None,
+                message: None,
             })
             .collect();
 

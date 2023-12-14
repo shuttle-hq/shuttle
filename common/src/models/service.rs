@@ -48,7 +48,7 @@ URI:           {}
                 deployment.last_update.format("%Y-%m-%dT%H:%M:%SZ"),
                 self.uri,
             );
-            // If any message is associated with the deployment, write it on a new line.
+            // If any message is associated with the deployment, append it to the summary.
             if let Some(ref message) = deployment.message {
                 write!(summary, "Message:       {message}")?;
             }

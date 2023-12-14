@@ -727,11 +727,13 @@ mod tests {
 
         p.set_address(&id, &address).await.unwrap();
         p.set_is_next(&id, true).await.unwrap();
+        p.set_message(&id, "dummy message").await.unwrap();
 
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
         assert_eq!(update.address, Some(address));
         assert!(update.is_next);
+        assert_eq!(update.message, Some("dummy message".to_string()));
         assert_ne!(
             update.last_update,
             Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap()

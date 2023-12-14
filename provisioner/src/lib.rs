@@ -346,14 +346,16 @@ impl MyProvisioner {
         })
     }
 
-    async fn update_subscription(
+    /// Send a request to the auth service with new subscription items that should be added to
+    /// the subscription of the [Claim] subject.
+    async fn add_subscription_items(
         &self,
         claim: Claim,
         subscription_item: NewSubscriptionItem,
     ) -> Result<(), Error> {
-        // TODO: send JWT to auth for authorization.
-        // TODO: error handling.
-        let body = serde_json::to_string(&subscription_item).unwrap();
+        let body = serde_json::to_string(&subscription_item)
+            .expect("subscription item should be serializable");
+
         let response = self
             .auth_client
             .post(format!("{}/users/subscription/items", self.auth_uri))
@@ -366,10 +368,12 @@ impl MyProvisioner {
                 Error::Plain("failed to connect to auth service".to_string())
             })?;
 
-        // TODO: better failed request handling.
         match response.status() {
             StatusCode::OK => Ok(()),
-            _ => Err(Error::Plain("failed to update subscription".to_string())),
+            status_code => {
+                error!(status_code = %status_code, "failed to update subscription");
+                Err(Error::Plain("failed to update subscription".to_string()))
+            }
         }
     }
 
@@ -516,7 +520,7 @@ impl Provisioner for MyProvisioner {
                     // If the subscription update fails, e.g. due to a JWT expiring, delete the
                     // instance.
                     if let Err(err) = self
-                        .update_subscription(
+                        .add_subscription_items(
                             claim,
                             NewSubscriptionItem::new(SubscriptionItem::AwsRds, 1),
                         )

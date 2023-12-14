@@ -292,9 +292,8 @@ mod needs_docker {
 
         let response = app.send_request(request).await;
 
-        // TODO: The request is valid, but the endpoint is not able to correctly call stripe
-        // in this test, so for now it returns 500.
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        // The test user (claim subject) does not have a subscription ID.
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

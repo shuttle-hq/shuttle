@@ -12,7 +12,7 @@ use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use reqwest::StatusCode;
 use shuttle_common::backends::auth::VerifyClaim;
-use shuttle_common::backends::subscription::{PriceId, SubscriptionItem};
+use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItem};
 use shuttle_common::claims::{AccountTier, Claim, Scope};
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
@@ -257,8 +257,7 @@ impl MyProvisioner {
     async fn request_aws_rds(
         &self,
         project_name: &str,
-        engine: aws_rds::Engine,
-        claim: Claim,
+        engine: &aws_rds::Engine,
     ) -> Result<DatabaseResponse, Error> {
         let client = &self.rds_client;
 
@@ -332,13 +331,6 @@ impl MyProvisioner {
             .address
             .expect("endpoint to have an address");
 
-        // RDS was successfully provisioned, update the users subscription with the new item.
-        // TODO: if updating subscription fails, delete RDS?
-        if claim.tier != AccountTier::Admin {
-            self.update_subscription(claim, SubscriptionItem::new(PriceId::AwsRdsRecurring, 1))
-                .await?;
-        }
-
         Ok(DatabaseResponse {
             engine: engine.to_string(),
             username: instance
@@ -357,7 +349,7 @@ impl MyProvisioner {
     async fn update_subscription(
         &self,
         claim: Claim,
-        subscription_item: SubscriptionItem,
+        subscription_item: NewSubscriptionItem,
     ) -> Result<(), Error> {
         // TODO: send JWT to auth for authorization.
         // TODO: error handling.
@@ -471,7 +463,7 @@ impl MyProvisioner {
     async fn delete_aws_rds(
         &self,
         project_name: &str,
-        engine: aws_rds::Engine,
+        engine: &aws_rds::Engine,
     ) -> Result<DatabaseDeletionResponse, Error> {
         let client = &self.rds_client;
         let instance_name = format!("{project_name}-{engine}");
@@ -515,13 +507,32 @@ impl Provisioner for MyProvisioner {
             DbType::AwsRds(AwsRds { engine }) => {
                 let claim = can_provision_rds?;
 
-                // TODO: split subscription update into separate function?
-                self.request_aws_rds(
-                    &request.project_name,
-                    engine.expect("engine to be set"),
-                    claim,
-                )
-                .await?
+                let engine = engine.expect("engine should be set");
+
+                let response = self.request_aws_rds(&request.project_name, &engine).await?;
+
+                // Skip updating subscriptions for admin users.
+                if claim.tier != AccountTier::Admin {
+                    // If the subscription update fails, e.g. due to a JWT expiring, delete the
+                    // instance.
+                    if let Err(err) = self
+                        .update_subscription(
+                            claim,
+                            NewSubscriptionItem::new(SubscriptionItem::AwsRds, 1),
+                        )
+                        .await
+                    {
+                        error!(error = %err, "failed to update subscription after provisioning rds");
+                        self.delete_aws_rds(&request.project_name, &engine).await?;
+
+                        // TODO: will this error lead to the user knowing how to proceed? They should retry.
+                        return Err(Status::internal(
+                            "failed to update subscription after provisioning rds",
+                        ));
+                    };
+                }
+
+                response
             }
         };
 
@@ -547,7 +558,7 @@ impl Provisioner for MyProvisioner {
                     .await?
             }
             DbType::AwsRds(AwsRds { engine }) => {
-                self.delete_aws_rds(&request.project_name, engine.expect("engine to be set"))
+                self.delete_aws_rds(&request.project_name, &engine.expect("engine to be set"))
                     .await?
             }
         };
@@ -601,7 +612,7 @@ async fn wait_for_instance(
     }
 }
 
-fn engine_to_port(engine: aws_rds::Engine) -> String {
+fn engine_to_port(engine: &aws_rds::Engine) -> String {
     match engine {
         aws_rds::Engine::Postgres(_) => "5432".to_string(),
         aws_rds::Engine::Mariadb(_) => "3306".to_string(),

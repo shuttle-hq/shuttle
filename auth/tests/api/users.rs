@@ -9,7 +9,7 @@ mod needs_docker {
     use http::header::CONTENT_TYPE;
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
     use serde_json::{self, Value};
-    use shuttle_common::backends::subscription::SubscriptionItem;
+    use shuttle_common::{backends::subscription::NewSubscriptionItem, database::AwsRdsEngine};
 
     #[tokio::test]
     async fn post_user() {
@@ -233,8 +233,8 @@ mod needs_docker {
     async fn update_subscription_endpoint_requires_jwt() {
         let app = app().await;
 
-        let subscription_item = serde_json::to_string(&SubscriptionItem::new(
-            shuttle_common::backends::subscription::PriceId::AwsRdsRecurring,
+        let subscription_item = serde_json::to_string(&NewSubscriptionItem::new(
+            shuttle_common::backends::subscription::SubscriptionItem::AwsRds,
             1,
         ))
         .unwrap();

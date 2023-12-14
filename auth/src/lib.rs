@@ -2,6 +2,7 @@ mod api;
 mod args;
 mod error;
 mod secrets;
+mod subscription;
 mod user;
 
 use std::{io, time::Duration};

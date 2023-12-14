@@ -1,5 +1,6 @@
 use crate::{
     error::Error,
+    subscription::SubscriptionItemExt,
     user::{AccountName, Admin, Key, User},
 };
 use axum::{
@@ -9,7 +10,7 @@ use axum::{
 use axum_sessions::extractors::{ReadableSession, WritableSession};
 use http::StatusCode;
 use shuttle_common::{
-    backends::subscription::SubscriptionItem,
+    backends::subscription::NewSubscriptionItem,
     claims::{AccountTier, Claim},
     models::user,
 };
@@ -72,11 +73,11 @@ pub(crate) async fn update_user_tier(
 pub(crate) async fn add_subscription_items(
     Extension(claim): Extension<Claim>,
     State(user_manager): State<UserManagerState>,
-    Json(item): Json<SubscriptionItem>,
+    Json(NewSubscriptionItem { item, quantity }): Json<NewSubscriptionItem>,
 ) -> Result<(), Error> {
     let update_subscription_items = stripe::UpdateSubscriptionItems {
-        price: Some(item.price_id().to_string()),
-        quantity: Some(item.quantity()),
+        price: Some(item.price_id()),
+        quantity: Some(quantity),
         ..Default::default()
     };
 

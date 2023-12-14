@@ -296,7 +296,7 @@ impl User {
         };
 
         let update_subscription =
-            stripe::Subscription::update(&stripe_client, subscription_id, subscription_update)
+            stripe::Subscription::update(stripe_client, subscription_id, subscription_update)
                 .await?;
 
         if let Ok(sub) = serde_json::to_string(&update_subscription) {

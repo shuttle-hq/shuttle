@@ -2,9 +2,16 @@ mod helpers;
 use ctor::dtor;
 use helpers::{exec_mongosh, exec_psql, DbType, DockerInstance};
 use once_cell::sync::Lazy;
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::Value;
+use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItem};
 use shuttle_proto::provisioner::shared;
 use shuttle_provisioner::MyProvisioner;
+use tonic::transport::Uri;
+use wiremock::{
+    matchers::{body_json, header, header_exists, method, path},
+    MockServer, ResponseTemplate,
+};
 
 static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::Postgres));
 static MONGODB: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::MongoDb));
@@ -15,10 +22,43 @@ fn cleanup() {
     MONGODB.cleanup();
 }
 
+#[tokio::test]
+async fn correctly_calls_auth_service_to_add_rds_subscription_item() {
+    let mock_server = MockServer::start().await;
+
+    let provisioner = MyProvisioner::new(
+        &PG.uri,
+        &MONGODB.uri,
+        "fqdn".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
+        // Pass in the mock server's URI as the auth URI.
+        mock_server.uri().parse::<Uri>().unwrap(),
+    )
+    .await
+    .unwrap();
+
+    let subscription_item = || NewSubscriptionItem::new(SubscriptionItem::AwsRds, 1);
+
+    // Respond with a 200 for a correctly formed request.
+    wiremock::Mock::given(method("POST"))
+        .and(path("/users/subscription/items"))
+        .and(header(CONTENT_TYPE, "application/json"))
+        .and(header_exists(AUTHORIZATION))
+        .and(body_json(subscription_item()))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
+
+    let res = provisioner
+        .add_subscription_items("jwt", subscription_item())
+        .await;
+
+    assert!(res.is_ok());
+}
+
 mod needs_docker {
     use super::*;
-
-    use tonic::transport::Uri;
 
     #[tokio::test]
     async fn shared_db_role_does_not_exist() {

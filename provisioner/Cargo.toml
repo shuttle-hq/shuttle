@@ -30,3 +30,4 @@ tracing-subscriber = { workspace = true, features = ["default", "fmt"] }
 ctor = { workspace = true }
 once_cell = { workspace = true }
 portpicker = { workspace = true }
+wiremock = "0.5"

@@ -13,7 +13,7 @@ use rand::Rng;
 use reqwest::StatusCode;
 use shuttle_common::backends::auth::VerifyClaim;
 use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItem};
-use shuttle_common::claims::{AccountTier, Claim, Scope};
+use shuttle_common::claims::{AccountTier, Scope};
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
@@ -348,15 +348,15 @@ impl MyProvisioner {
 
     /// Send a request to the auth service with new subscription items that should be added to
     /// the subscription of the [Claim] subject.
-    async fn add_subscription_items(
+    pub async fn add_subscription_items(
         &self,
-        claim: Claim,
+        jwt: &str,
         subscription_item: NewSubscriptionItem,
     ) -> Result<(), Error> {
         let response = self
             .auth_client
             .post(format!("{}users/subscription/items", self.auth_uri))
-            .bearer_auth(claim.token().unwrap())
+            .bearer_auth(jwt)
             .json(&subscription_item)
             .send()
             .await
@@ -518,7 +518,7 @@ impl Provisioner for MyProvisioner {
                     // subscription expiring, delete the instance immediately.
                     if let Err(err) = self
                         .add_subscription_items(
-                            claim,
+                            claim.token().expect("claim should have a token"),
                             NewSubscriptionItem::new(SubscriptionItem::AwsRds, 1),
                         )
                         .await

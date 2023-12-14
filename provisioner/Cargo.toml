@@ -17,7 +17,7 @@ fqdn = { workspace = true }
 mongodb = "2.4.0"
 prost = { workspace = true }
 rand = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["postgres"] }
 thiserror = { workspace = true }

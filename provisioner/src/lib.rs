@@ -353,14 +353,11 @@ impl MyProvisioner {
         claim: Claim,
         subscription_item: NewSubscriptionItem,
     ) -> Result<(), Error> {
-        let body = serde_json::to_string(&subscription_item)
-            .expect("subscription item should be serializable");
-
         let response = self
             .auth_client
             .post(format!("{}users/subscription/items", self.auth_uri))
-            .body(body)
             .bearer_auth(claim.token().unwrap())
+            .json(&subscription_item)
             .send()
             .await
             .map_err(|err| {
@@ -517,8 +514,8 @@ impl Provisioner for MyProvisioner {
 
                 // Skip updating subscriptions for admin users.
                 if claim.tier != AccountTier::Admin {
-                    // If the subscription update fails, e.g. due to a JWT expiring, delete the
-                    // instance.
+                    // If the subscription update fails, e.g. due to a JWT expiring or the subject's
+                    // subscription expiring, delete the instance immediately.
                     if let Err(err) = self
                         .add_subscription_items(
                             claim,

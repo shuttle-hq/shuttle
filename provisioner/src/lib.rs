@@ -518,6 +518,7 @@ impl Provisioner for MyProvisioner {
                     // subscription expiring, delete the instance immediately.
                     if let Err(err) = self
                         .add_subscription_items(
+                            // The token should be set on the claim in the JWT auth layer.
                             claim.token().expect("claim should have a token"),
                             NewSubscriptionItem::new(SubscriptionItem::AwsRds, 1),
                         )

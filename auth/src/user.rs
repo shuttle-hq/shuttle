@@ -173,8 +173,6 @@ impl UserManagement for UserManager {
         // error where a subscription isn't required?
         if user.sync_tier(self).await? {
             debug!("synced account");
-        } else {
-            return Err(anyhow::anyhow!("failed to sync subscription").into());
         }
 
         user.add_subscription_items(&self.stripe_client, subscription_items)

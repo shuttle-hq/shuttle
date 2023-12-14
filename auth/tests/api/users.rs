@@ -9,7 +9,7 @@ mod needs_docker {
     use http::header::CONTENT_TYPE;
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
     use serde_json::{self, Value};
-    use shuttle_common::{backends::subscription::NewSubscriptionItem, database::AwsRdsEngine};
+    use shuttle_common::backends::subscription::NewSubscriptionItem;
 
     #[tokio::test]
     async fn post_user() {

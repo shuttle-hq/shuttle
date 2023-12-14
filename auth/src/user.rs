@@ -168,9 +168,6 @@ impl UserManagement for UserManager {
         .ok_or(Error::UserNotFound)?;
 
         // Sync the user tier based on the subscription validity, if any.
-        // TODO: refactor the sync_tier function to make it easier to reason about.
-        // Don't return bool, rather return an error for missing subscription, and ignore that
-        // error where a subscription isn't required?
         if user.sync_tier(self).await? {
             debug!("synced account");
         }
@@ -293,13 +290,7 @@ impl User {
             ..Default::default()
         };
 
-        let update_subscription =
-            stripe::Subscription::update(stripe_client, subscription_id, subscription_update)
-                .await?;
-
-        if let Ok(sub) = serde_json::to_string(&update_subscription) {
-            debug!(subscription = sub, "updated subscription")
-        };
+        stripe::Subscription::update(stripe_client, subscription_id, subscription_update).await?;
 
         Ok(())
     }

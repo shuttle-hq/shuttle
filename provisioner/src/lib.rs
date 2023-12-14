@@ -358,7 +358,7 @@ impl MyProvisioner {
 
         let response = self
             .auth_client
-            .post(format!("{}/users/subscription/items", self.auth_uri))
+            .post(format!("{}users/subscription/items", self.auth_uri))
             .body(body)
             .bearer_auth(claim.token().unwrap())
             .send()

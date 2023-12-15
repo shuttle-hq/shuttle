@@ -12,24 +12,18 @@ use crate::Error;
 
 pub const WORKER_QUEUE_SIZE: usize = 2048;
 
-pub struct Worker<W = BoxedTask> {
-    send: Option<Sender<W>>,
-    recv: Receiver<W>,
+pub struct Worker {
+    send: Option<Sender<BoxedTask>>,
+    recv: Receiver<BoxedTask>,
 }
 
-impl<W> Default for Worker<W>
-where
-    W: Send,
-{
+impl Default for Worker {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<W> Worker<W>
-where
-    W: Send,
-{
+impl Worker {
     pub fn new() -> Self {
         let (send, recv) = channel(WORKER_QUEUE_SIZE);
         Self {
@@ -42,12 +36,10 @@ where
     ///
     /// # Panics
     /// If this worker has already started.
-    pub fn sender(&self) -> Sender<W> {
+    pub fn sender(&self) -> Sender<BoxedTask> {
         Sender::clone(self.send.as_ref().unwrap())
     }
-}
 
-impl Worker<BoxedTask> {
     /// Starts the worker, waiting and processing elements from the
     /// queue until the last sending end for the channel is dropped,
     /// at which point this future resolves.
@@ -78,33 +70,12 @@ impl Worker<BoxedTask> {
     }
 }
 
-pub struct TaskRouter<W> {
-    table: Arc<RwLock<HashMap<ProjectName, Sender<W>>>>,
+#[derive(Clone, Default)]
+pub struct TaskRouter {
+    table: Arc<RwLock<HashMap<ProjectName, Sender<BoxedTask>>>>,
 }
 
-impl<W> Clone for TaskRouter<W> {
-    fn clone(&self) -> Self {
-        Self {
-            table: self.table.clone(),
-        }
-    }
-}
-
-impl<W> Default for TaskRouter<W> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<W> TaskRouter<W> {
-    pub fn new() -> Self {
-        Self {
-            table: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-}
-
-impl TaskRouter<BoxedTask> {
+impl TaskRouter {
     pub async fn route(
         &self,
         name: &ProjectName,

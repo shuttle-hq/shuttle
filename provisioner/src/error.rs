@@ -43,8 +43,6 @@ pub enum AuthClientError {
     Internal(String),
 }
 
-unsafe impl Send for Error {}
-
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
         error!(error = &err as &dyn std::error::Error, "provision failed");

@@ -318,6 +318,7 @@ impl GatewayService {
             docker_stats_source,
         );
 
+        let task_router = TaskRouter::default();
         Ok(Self {
             provider,
             db,

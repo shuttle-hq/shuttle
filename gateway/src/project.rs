@@ -34,7 +34,6 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::service::ContainerSettings;
-use crate::DOCKER_STATS_PATH;
 use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
 
 macro_rules! safe_unwrap {
@@ -1327,43 +1326,6 @@ impl ProjectReady {
     }
 }
 
-#[instrument(name = "getting container stats from the cgroup file", skip_all)]
-async fn get_container_stats(container: &ContainerInspectResponse) -> Result<u64, ProjectError> {
-    let id = safe_unwrap!(container.id);
-
-    let cpu_usage: u64 = tokio::fs::read_to_string(format!("{DOCKER_STATS_PATH}/{id}/cpuacct.usage"))
-        .map_err(|e| {
-            error!(error = %e, shuttle.container.id = id, "failed to read docker stats file for container");
-            ProjectError::internal("failed to read docker stats file for container")
-        }).await?
-        .trim()
-        .parse()
-        .map_err(|e| {
-            error!(error = %e, shuttle.container.id = id, "failed to parse cpu usage stat");
-
-            ProjectError::internal("failed to parse cpu usage to u64")
-        })?;
-
-    // TODO: the above solution only works for cgroup v1
-    // This is the version used by our server. However on my local nix setup I have cgroup v2 and had to use the
-    // following to get the 'usage_usec' which is on the first line
-    // let usage: u64 = std::fs::read_to_string(format!(
-    //     "/sys/fs/cgroup/system.slice/docker-{id}.scope/cpu.stat"
-    // ))
-    // .unwrap_or_default()
-    // .lines()
-    // .next()
-    // .unwrap()
-    // .split(' ')
-    // .nth(1)
-    // .unwrap_or_default()
-    // .parse::<u64>()
-    // .unwrap_or_default()
-    //     * 1_000;
-
-    Ok(cpu_usage)
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ProjectRunning {
     Ready(ProjectReady),
@@ -1379,7 +1341,7 @@ where
     type Error = ProjectError;
 
     #[instrument(name = "check if container is still healthy", skip_all)]
-    async fn next(mut self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+    async fn next(mut self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
             mut service,
@@ -1402,7 +1364,16 @@ where
             }));
         }
 
-        let new_stat = get_container_stats(&container).await?;
+        let new_stat = ctx
+            .get_stats(safe_unwrap!(container.id))
+            .await
+            .map_err(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to get stats for container"
+                );
+                ProjectError::internal("failed to get stats for container")
+            })?;
 
         stats.push_back(new_stat);
 
@@ -1419,7 +1390,6 @@ where
                 stats,
             }));
         };
-
         let cpu_per_minute = (new_stat - last) / idle_minutes;
 
         debug!(

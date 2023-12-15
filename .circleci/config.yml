@@ -127,8 +127,8 @@ commands:
             curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v$VERSION/protoc-$VERSION-$ARCH.zip" && \
                 sudo unzip -o "protoc-$VERSION-$ARCH.zip" bin/protoc "include/*" -d /usr/local && \
                 rm -f "protoc-$VERSION-$ARCH.zip"
-            curl -L https://github.com/EmbarkStudios/proto-gen/releases/download/v0.1.2/proto-gen-v0.1.2-x86_64-unknown-linux-musl.tar.gz \
-              | tar -xOz proto-gen-v0.1.2-x86_64-unknown-linux-musl/proto-gen \
+            curl -L https://github.com/EmbarkStudios/proto-gen/releases/download/v0.2.0/proto-gen-v0.2.0-x86_64-unknown-linux-musl.tar.gz \
+              | tar -xOz proto-gen-v0.2.0-x86_64-unknown-linux-musl/proto-gen \
               > ~/.cargo/bin/proto-gen
             chmod +x ~/.cargo/bin/proto-gen
   make-artifact:

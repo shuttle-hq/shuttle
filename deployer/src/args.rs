@@ -55,6 +55,10 @@ pub struct Args {
     #[clap(long)]
     pub admin_secret: String,
 
+    // Posthog client key
+    #[clap(long)]
+    pub posthog_key: String,
+
     /// Address to reach the authentication service at
     #[clap(long, default_value = "http://auth:8000")]
     pub auth_uri: Uri,

@@ -51,6 +51,7 @@ pub struct DeploymentManagerBuilder<LR, ADG, DU, RM, QC> {
             >,
         >,
     >,
+    posthog_client: Option<async_posthog::Client>,
 }
 
 impl<LR, ADG, DU, RM, QC> DeploymentManagerBuilder<LR, ADG, DU, RM, QC>
@@ -131,6 +132,12 @@ where
         self
     }
 
+    pub fn posthog_client(mut self, posthog_client: async_posthog::Client) -> Self {
+        self.posthog_client = Some(posthog_client);
+
+        self
+    }
+
     /// Creates two Tokio tasks, one for building queued services, the other for
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
@@ -150,6 +157,8 @@ where
             .expect("a deployment updater to be set");
         let resource_manager = self.resource_manager.expect("a resource manager to be set");
         let logs_fetcher = self.logs_fetcher.expect("a logs fetcher to be set");
+
+        let posthog_client = self.posthog_client.expect("a posthog client to be set");
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -186,6 +195,7 @@ where
             logs_fetcher,
             _join_set: Arc::new(Mutex::new(set)),
             builds_path,
+            posthog_client: Arc::new(posthog_client),
         }
     }
 }
@@ -202,6 +212,7 @@ pub struct DeploymentManager {
     >,
     _join_set: Arc<Mutex<JoinSet<()>>>,
     builds_path: PathBuf,
+    posthog_client: Arc<async_posthog::Client>,
 }
 
 /// ```no-test
@@ -232,6 +243,7 @@ impl DeploymentManager {
             resource_manager: None,
             queue_client: None,
             builder_client: None,
+            posthog_client: None,
         }
     }
 
@@ -267,6 +279,10 @@ impl DeploymentManager {
         >,
     > {
         &self.logs_fetcher
+    }
+
+    pub fn posthog_client(&self) -> Arc<async_posthog::Client> {
+        self.posthog_client.clone()
     }
 }
 

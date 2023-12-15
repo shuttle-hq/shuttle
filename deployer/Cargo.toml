@@ -57,6 +57,7 @@ utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
 ulid = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
+async-posthog = { git = "https://github.com/shuttle-hq/posthog-rs", branch = "main" }
 
 [dev-dependencies]
 ctor = { workspace = true }

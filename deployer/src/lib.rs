@@ -44,6 +44,7 @@ pub async fn start(
             >,
         >,
     >,
+    posthog_client: async_posthog::Client,
     args: Args,
 ) {
     // when _set is dropped once axum exits, the deployment tasks will be aborted.
@@ -57,6 +58,7 @@ pub async fn start(
         .builder_client(builder_client)
         .queue_client(GatewayClient::new(args.gateway_uri))
         .log_fetcher(log_fetcher)
+        .posthog_client(posthog_client)
         .build();
 
     persistence.cleanup_invalid_states().await.unwrap();

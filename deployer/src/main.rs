@@ -1,5 +1,4 @@
-use std::process::exit;
-
+use async_posthog::ClientOptions;
 use clap::Parser;
 use shuttle_common::{
     backends::tracing::setup_tracing,
@@ -11,6 +10,8 @@ use shuttle_proto::{
     builder::builder_client::BuilderClient,
     logger::{logger_client::LoggerClient, Batcher},
 };
+use std::process::exit;
+use std::{process::exit, time::Duration};
 use tokio::select;
 use tower::ServiceBuilder;
 use tracing::{error, trace};
@@ -59,6 +60,14 @@ async fn main() {
         }
     };
 
+    let ph_client_options = ClientOptions::new(
+        args.posthog_key.to_string(),
+        "https://eu.posthog.com".to_string(),
+        Duration::from_millis(800),
+    );
+
+    let posthog_client = async_posthog::client(ph_client_options);
+
     setup_tracing(
         tracing_subscriber::registry()
             .with(StateChangeLayer {
@@ -84,7 +93,7 @@ async fn main() {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
             error!("Proxy stopped.")
         },
-        _ = start(persistence, runtime_manager, logger_batcher, logger_client, builder_client, args) => {
+        _ = start(persistence, runtime_manager, logger_batcher, logger_client, builder_client, posthog_client, args) => {
             error!("Deployment service stopped.")
         },
     }

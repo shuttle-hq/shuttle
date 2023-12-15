@@ -225,6 +225,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-posthog"
+version = "0.2.3"
+source = "git+https://github.com/shuttle-hq/posthog-rs?branch=main#4a8299fde3080bff550620c0853be9b83fee8f44"
+dependencies = [
+ "posthog-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "async-session"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1262,8 +1275,10 @@ checksum = "7f2c685bad3eb3d45a01354cedb7d5faa66194d1d58ba6e267a8de788f79db38"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-targets 0.48.5",
 ]
 
@@ -4660,6 +4675,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "posthog-core"
+version = "0.1.0"
+source = "git+https://github.com/shuttle-hq/posthog-rs?branch=main#4a8299fde3080bff550620c0853be9b83fee8f44"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "powerfmt"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5919,6 +5945,7 @@ name = "shuttle-deployer"
 version = "0.35.1"
 dependencies = [
  "anyhow",
+ "async-posthog",
  "async-trait",
  "axum",
  "bytes",

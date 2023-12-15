@@ -609,6 +609,8 @@ pub async fn start_deployment(
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
 ) -> Result<()> {
     if let Some(deployment) = persistence.get_runnable_deployment(&deployment_id).await? {
+        let account_name = claim.sub.replace("|", "-");
+
         let built = Built {
             id: deployment.id,
             service_name: deployment.service_name,
@@ -620,6 +622,12 @@ pub async fn start_deployment(
             secrets: Default::default(),
         };
         deployment_manager.run_push(built).await;
+
+        let event =
+            async_posthog::Event::new("shuttle_api_start_deployment".to_string(), account_name);
+        if let Err(err) = deployment_manager.posthog_client().capture(event).await {
+            error!(error = %err, "failed to send event to posthog")
+        };
 
         Ok(())
     } else {

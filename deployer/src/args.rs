@@ -70,4 +70,8 @@ pub struct Args {
     /// Add an auth layer to deployer for local development
     #[arg(long)]
     pub local: bool,
+
+    // Posthog client key
+    #[clap(long)]
+    pub posthog_key: String,
 }

@@ -62,10 +62,7 @@ async fn main() -> io::Result<()> {
 }
 
 async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
-    let gateway = match GatewayService::init(args.context.clone(), db, fs).await {
-        Ok(gateway) => Arc::new(gateway),
-        Err(error) => return Err(error),
-    };
+    let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await?);
 
     let worker = Worker::new();
 

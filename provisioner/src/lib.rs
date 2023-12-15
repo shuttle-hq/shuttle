@@ -7,10 +7,10 @@ use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
     Client,
 };
+use error::AuthClientError;
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
-use reqwest::StatusCode;
 use shuttle_common::backends::auth::VerifyClaim;
 use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItem};
 use shuttle_common::claims::{AccountTier, Scope};
@@ -352,7 +352,7 @@ impl MyProvisioner {
         &self,
         jwt: &str,
         subscription_item: NewSubscriptionItem,
-    ) -> Result<(), Error> {
+    ) -> Result<(), AuthClientError> {
         let response = self
             .auth_client
             .post(format!("{}users/subscription/items", self.auth_uri))
@@ -362,14 +362,23 @@ impl MyProvisioner {
             .await
             .map_err(|err| {
                 error!(error = %err, "failed to connect to auth service");
-                Error::Plain("failed to connect to auth service".to_string())
+                AuthClientError::Internal("failed to connect to auth service".to_string())
             })?;
 
-        match response.status() {
-            StatusCode::OK => Ok(()),
+        match response.status().as_u16() {
+            200 => Ok(()),
+            499 => {
+                error!(
+                    status_code = 499,
+                    "failed to update subscription due to expired jwt"
+                );
+                Err(AuthClientError::ExpiredJwt)
+            }
             status_code => {
-                error!(status_code = %status_code, "failed to update subscription");
-                Err(Error::Plain("failed to update subscription".to_string()))
+                error!(status_code = status_code, "failed to update subscription");
+                Err(AuthClientError::Internal(
+                    "failed to update subscription".to_string(),
+                ))
             }
         }
     }
@@ -524,13 +533,9 @@ impl Provisioner for MyProvisioner {
                         )
                         .await
                     {
-                        error!(error = %err, "failed to update subscription after provisioning rds");
                         self.delete_aws_rds(&request.project_name, &engine).await?;
 
-                        // TODO: will this error lead to the user knowing how to proceed? They should retry.
-                        return Err(Status::internal(
-                            "failed to update subscription after provisioning rds",
-                        ));
+                        return Err(Status::internal(err.to_string()));
                     };
                 }
 

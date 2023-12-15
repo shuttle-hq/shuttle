@@ -311,7 +311,7 @@ pub mod tests {
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::task::BoxedTask;
     use crate::worker::Worker;
-    use crate::{DockerContext, DockerStatsSource, Error};
+    use crate::{DockerContext, Error};
 
     macro_rules! value_block_helper {
         ($next:ident, $block:block) => {
@@ -674,13 +674,9 @@ pub mod tests {
         /// Create a service and sender to handle tasks. Also starts up a worker to create actual Docker containers for all requests
         pub async fn service(&self) -> (Arc<GatewayService>, Sender<BoxedTask>) {
             let service = Arc::new(
-                GatewayService::init(
-                    self.args(),
-                    self.pool(),
-                    "".into(),
-                    DockerStatsSource::Bollard,
-                )
-                .await,
+                GatewayService::init(self.args(), self.pool(), "".into())
+                    .await
+                    .unwrap(),
             );
             let worker = Worker::new();
 
@@ -1182,13 +1178,9 @@ pub mod tests {
     async fn end_to_end() {
         let world = World::new().await;
         let service = Arc::new(
-            GatewayService::init(
-                world.args(),
-                world.pool(),
-                "".into(),
-                crate::DockerStatsSource::Bollard,
-            )
-            .await,
+            GatewayService::init(world.args(), world.pool(), "".into())
+                .await
+                .unwrap(),
         );
         let worker = Worker::new();
 

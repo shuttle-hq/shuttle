@@ -1,7 +1,9 @@
+use std::io;
 use std::io::Cursor;
 use std::net::Ipv4Addr;
 use std::ops::Sub;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -33,7 +35,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::time::timeout;
 use tonic::codegen::tokio_stream::StreamExt;
 use tonic::transport::Endpoint;
-use tracing::{debug, error, instrument, trace, warn, Span};
+use tracing::{debug, error, info, instrument, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use x509_parser::nom::AsBytes;
@@ -275,8 +277,35 @@ impl GatewayService {
         args: ContextArgs,
         db: SqlitePool,
         state_location: PathBuf,
-        docker_stats_source: DockerStatsSource,
-    ) -> Self {
+    ) -> io::Result<Self> {
+        let docker_stats_path_v1 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V1)
+            .expect("to parse docker stats path for cgroup v1");
+        let docker_stats_path_v2 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V2)
+            .expect("to parse docker stats path for cgroup v2");
+
+        let docker_stats_source = if docker_stats_path_v1.exists() {
+            DockerStatsSource::CgroupV1
+        } else if docker_stats_path_v2.exists() {
+            DockerStatsSource::CgroupV2
+        } else {
+            DockerStatsSource::Bollard
+        };
+
+        info!("docker stats source: {:?}", docker_stats_source.to_string());
+
+        let shuttle_env = std::env::var("SHUTTLE_ENV").unwrap_or("".to_string());
+        if (shuttle_env == "staging" || shuttle_env == "production")
+            && docker_stats_source == DockerStatsSource::Bollard
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!(
+                    "SHUTTLE_ENV is {} and could not find docker stats at path: {:?} or {:?}",
+                    shuttle_env, DOCKER_STATS_PATH_CGROUP_V1, DOCKER_STATS_PATH_CGROUP_V2,
+                ),
+            ));
+        }
+
         let docker = Docker::connect_with_unix(&args.docker_host, 60, API_DEFAULT_VERSION).unwrap();
 
         let container_settings = ContainerSettings::builder().from_args(&args).await;
@@ -289,8 +318,8 @@ impl GatewayService {
             docker_stats_source,
         );
 
-        let task_router = TaskRouter::default();
-        Self {
+        let task_router = TaskRouter::new();
+        Ok(Self {
             provider,
             db,
             task_router,
@@ -301,7 +330,7 @@ impl GatewayService {
             cch_container_limit: args.cch_container_limit,
             soft_container_limit: args.soft_container_limit,
             hard_container_limit: args.hard_container_limit,
-        }
+        })
     }
 
     pub async fn route(
@@ -1155,15 +1184,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_stop_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(
-            GatewayService::init(
-                world.args(),
-                world.pool(),
-                "".into(),
-                DockerStatsSource::Bollard,
-            )
-            .await,
-        );
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
 
         let neo: AccountName = "neo".parse().unwrap();
         let trinity: AccountName = "trinity".parse().unwrap();
@@ -1378,15 +1399,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_ready_kill_restart_docker() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(
-            GatewayService::init(
-                world.args(),
-                world.pool(),
-                "".into(),
-                DockerStatsSource::Bollard,
-            )
-            .await,
-        );
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
 
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
@@ -1438,15 +1451,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_custom_domain() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(
-            GatewayService::init(
-                world.args(),
-                world.pool(),
-                "".into(),
-                DockerStatsSource::Bollard,
-            )
-            .await,
-        );
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
 
         let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();
@@ -1500,15 +1505,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_custom_domain_destroy_recreate_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(
-            GatewayService::init(
-                world.args(),
-                world.pool(),
-                "".into(),
-                DockerStatsSource::Bollard,
-            )
-            .await,
-        );
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
 
         let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();

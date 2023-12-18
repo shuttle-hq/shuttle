@@ -231,7 +231,7 @@ pub mod builder_server {
                             request: tonic::Request<super::BuildRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).build(request).await };
+                            let fut = async move { <T as Builder>::build(&inner, request).await };
                             Box::pin(fut)
                         }
                     }

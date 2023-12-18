@@ -201,8 +201,9 @@ pub mod logger_server {
             request: tonic::Request<super::LogsRequest>,
         ) -> std::result::Result<tonic::Response<super::LogsResponse>, tonic::Status>;
         /// Server streaming response type for the GetLogsStream method.
-        type GetLogsStreamStream: futures_core::Stream<Item = std::result::Result<super::LogLine, tonic::Status>>
-            + Send
+        type GetLogsStreamStream: tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::LogLine, tonic::Status>,
+            > + Send
             + 'static;
         /// Get fresh logs as they are incoming
         async fn get_logs_stream(
@@ -297,7 +298,8 @@ pub mod logger_server {
                             request: tonic::Request<super::StoreLogsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).store_logs(request).await };
+                            let fut =
+                                async move { <T as Logger>::store_logs(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -335,7 +337,7 @@ pub mod logger_server {
                             request: tonic::Request<super::LogsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).get_logs(request).await };
+                            let fut = async move { <T as Logger>::get_logs(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -375,7 +377,9 @@ pub mod logger_server {
                             request: tonic::Request<super::LogsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).get_logs_stream(request).await };
+                            let fut = async move {
+                                <T as Logger>::get_logs_stream(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }

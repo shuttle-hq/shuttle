@@ -31,6 +31,10 @@ cargo run --bin shuttle-auth -- --db-connection-uri postgres://postgres:postgres
 - Then start the service, you can get a stripe-secret-key from the Stripe dashboard. **Always use the test Stripe API for this**. See instructions above for generating a jwt-signing-private-key.
 
 ```
-cargo run --bin shuttle-auth -- --db-connection-uri postgres://postgres:postgres@localhost:5434/pos
-tgres start --stripe-secret-key sk_test_<test key> --jwt-signing-private-key <key>
+cargo run --bin shuttle-auth -- \
+    --db-connection-uri postgres://postgres:postgres@localhost:5434/postgres \
+    start \
+    --stripe-secret-key sk_test_<test key> \
+    --jwt-signing-private-key <key> \
+    --stripe-rds-price-id price_1OIS06FrN7EDaGOjaV0GXD7P
 ```

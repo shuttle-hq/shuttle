@@ -33,6 +33,10 @@ pub struct StartArgs {
     /// a PEM encoded PKCS#8 v1 formatted unencrypted private key.
     #[arg(long)]
     pub jwt_signing_private_key: String,
+
+    /// The price id of the AWS RDS product.
+    #[arg(long)]
+    pub rds_price_id: String,
 }
 
 #[derive(clap::Args, Debug, Clone)]

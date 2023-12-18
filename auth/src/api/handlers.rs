@@ -1,7 +1,7 @@
 use crate::{
     error::Error,
-    subscription::SubscriptionItemExt,
     user::{AccountName, Admin, Key, User},
+    NewSubscriptionItemExtractor,
 };
 use axum::{
     extract::{Path, State},
@@ -10,17 +10,13 @@ use axum::{
 use axum_sessions::extractors::{ReadableSession, WritableSession};
 use http::StatusCode;
 use shuttle_common::{
-    backends::subscription::NewSubscriptionItem,
     claims::{AccountTier, Claim},
     models::user,
 };
 use stripe::CheckoutSession;
 use tracing::instrument;
 
-use super::{
-    builder::{KeyManagerState, UserManagerState},
-    RouterState,
-};
+use super::{builder::KeyManagerState, RouterState, UserManagerState};
 
 #[instrument(skip(user_manager))]
 pub(crate) async fn get_user(
@@ -69,18 +65,13 @@ pub(crate) async fn update_user_tier(
     Ok(())
 }
 
+// #[debug_handler]
 #[instrument(skip(claim, user_manager), fields(account_name = claim.sub, account_tier = %claim.tier))]
 pub(crate) async fn add_subscription_items(
     Extension(claim): Extension<Claim>,
     State(user_manager): State<UserManagerState>,
-    Json(NewSubscriptionItem { item, quantity }): Json<NewSubscriptionItem>,
+    NewSubscriptionItemExtractor(update_subscription_items): NewSubscriptionItemExtractor,
 ) -> Result<(), Error> {
-    let update_subscription_items = stripe::UpdateSubscriptionItems {
-        price: Some(item.price_id()),
-        quantity: Some(quantity),
-        ..Default::default()
-    };
-
     user_manager
         .add_subscription_items(AccountName::from(claim.sub), update_subscription_items)
         .await?;
@@ -144,6 +135,7 @@ pub(crate) async fn convert_key(
     State(RouterState {
         key_manager,
         user_manager,
+        ..
     }): State<RouterState>,
     key: Key,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {

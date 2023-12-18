@@ -37,6 +37,7 @@ pub type KeyManagerState = Arc<Box<dyn KeyManager>>;
 pub struct RouterState {
     pub user_manager: UserManagerState,
     pub key_manager: KeyManagerState,
+    pub rds_price_id: String,
 }
 
 // Allow getting a user management state directly
@@ -58,6 +59,7 @@ pub struct ApiBuilder {
     pool: Option<PgPool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
     stripe_client: Option<stripe::Client>,
+    rds_price_id: Option<String>,
     key_manager: EdDsaManager,
 }
 
@@ -107,6 +109,7 @@ impl ApiBuilder {
             pool: None,
             session_layer: None,
             stripe_client: None,
+            rds_price_id: None,
             key_manager,
         }
     }
@@ -135,10 +138,16 @@ impl ApiBuilder {
         self
     }
 
+    pub fn with_rds_price_id(mut self, price_id: String) -> Self {
+        self.rds_price_id = Some(price_id);
+        self
+    }
+
     pub fn into_router(self) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
         let session_layer = self.session_layer.expect("a session layer is required");
         let stripe_client = self.stripe_client.expect("a stripe client is required");
+        let rds_price_id = self.rds_price_id.expect("rds price id is required");
 
         let user_manager = UserManager {
             pool,
@@ -148,6 +157,7 @@ impl ApiBuilder {
         let state = RouterState {
             user_manager: Arc::new(Box::new(user_manager)),
             key_manager: Arc::new(Box::new(self.key_manager)),
+            rds_price_id,
         };
 
         self.router.layer(session_layer).with_state(state)

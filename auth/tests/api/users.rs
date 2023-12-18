@@ -1,13 +1,12 @@
 mod needs_docker {
     use crate::{
-        helpers::{self, app, ADMIN_KEY, STRIPE_TEST_KEY},
+        helpers::{self, app, ADMIN_KEY, STRIPE_TEST_KEY, STRIPE_TEST_RDS_PRICE_ID},
         stripe::{MOCKED_CHECKOUT_SESSIONS, MOCKED_SUBSCRIPTIONS},
     };
     use axum::body::Body;
     use http::header::CONTENT_TYPE;
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
     use serde_json::{self, Value};
-    use shuttle_auth::SubscriptionItemExt;
     use shuttle_common::backends::subscription::NewSubscriptionItem;
     use wiremock::{
         matchers::{bearer_token, body_string_contains, method, path},
@@ -328,18 +327,15 @@ mod needs_docker {
             .mount(&app.mock_server)
             .await;
 
-        // Following that, the auth service will call stripe to update the subscription.
-        // We want to ensure the request sent to Stripe has the same price id as the subscription
-        // item we sent to our auth service. We also set the quantity field.
-        let price_id = shuttle_common::backends::subscription::SubscriptionItem::AwsRds.price_id();
-
         // We just return a mocked active subscription without the RDS items, our logic doesn't check
         // the subscription after updating, if it receives a 200 and a correctly formed subscription
         // response we know that the update succeeded.
+        // We also want to ensure it's called with the correct price_id, the one the auth serviec was
+        // started with, as well as the quantity field.
         Mock::given(method("POST"))
             .and(bearer_token(STRIPE_TEST_KEY))
             .and(path("/v1/subscriptions/sub_1Nw8xOD8t1tt0S3DtwAuOVp6"))
-            .and(body_string_contains(price_id))
+            .and(body_string_contains(STRIPE_TEST_RDS_PRICE_ID))
             .and(body_string_contains("quantity"))
             .respond_with(
                 ResponseTemplate::new(200)

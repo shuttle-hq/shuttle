@@ -17,6 +17,8 @@ use wiremock::{
 pub(crate) const ADMIN_KEY: &str = "ndh9z58jttoes3qv";
 /// Stripe test API key.
 pub(crate) const STRIPE_TEST_KEY: &str = "sk_test_123";
+/// Stripe test RDS price id.
+pub(crate) const STRIPE_TEST_RDS_PRICE_ID: &str = "price_1OIS06FrN7EDaGOjaV0GXD7P";
 
 static PG: Lazy<DockerInstance> = Lazy::new(DockerInstance::default);
 #[ctor::dtor]
@@ -51,6 +53,7 @@ pub(crate) async fn app() -> TestApp {
             mock_server.uri().as_str(),
             STRIPE_TEST_KEY,
         ))
+        .with_rds_price_id(STRIPE_TEST_RDS_PRICE_ID.to_string())
         .into_router();
 
     TestApp {

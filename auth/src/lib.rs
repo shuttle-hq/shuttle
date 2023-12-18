@@ -26,10 +26,14 @@ pub async fn start(pool: PgPool, args: StartArgs) -> io::Result<()> {
         .with_pg_pool(pool)
         .with_sessions()
         .with_stripe_client(stripe::Client::new(args.stripe_secret_key))
-        .with_rds_price_id(args.rds_price_id)
+        .with_rds_price_id(args.stripe_rds_price_id.clone())
         .into_router();
 
     info!(address=%args.address, "Binding to and listening at address");
+    info!(
+        "starting auth service with RDS price id: {}",
+        args.stripe_rds_price_id
+    );
 
     serve(router, args.address).await;
 

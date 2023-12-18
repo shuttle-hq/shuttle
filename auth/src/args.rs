@@ -35,8 +35,8 @@ pub struct StartArgs {
     pub jwt_signing_private_key: String,
 
     /// The price id of the AWS RDS product.
-    #[arg(long)]
-    pub rds_price_id: String,
+    #[arg(long, default_value = "price_1OIS06FrN7EDaGOjaV0GXD7P")]
+    pub stripe_rds_price_id: String,
 }
 
 #[derive(clap::Args, Debug, Clone)]

@@ -283,7 +283,6 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         // GET /auth/key with the api key of the admin user to get their jwt.
-        // TODO: use regular user here instead.
         let response = app.get_jwt_from_api_key(ADMIN_KEY).await;
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -393,15 +392,13 @@ mod needs_docker {
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        // Cancel subscription
+        // Cancel subscription, this will be called by the console.
         let response = app.put_user("test-user", "cancelledpro", "").await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        // Trigger a sync of the account tier to cancelled. The account should not be downgraded to
-        // basic right away, since when we cancel subscriptions we pass in the "cancel_at_period_end"
-        // end flag.
-        // TODO: should we refactor our logic to change a tier to cancelledpro if "cancel_at_period_end"
-        // is true?
+        // Fetch the user to trigger a sync of the account tier to cancelled. The account should not
+        // be downgraded to basic right away, since when we cancel subscriptions we pass in the
+        // "cancel_at_period_end" end flag.
         let response = app
             .get_user_with_mocked_stripe("sub_123", MOCKED_SUBSCRIPTIONS[2], "test-user")
             .await;

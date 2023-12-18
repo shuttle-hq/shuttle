@@ -235,7 +235,6 @@ impl User {
         Ok(false)
     }
 
-    // TODO: should this return account tier? It could lead to a downgrade.
     /// Synchronize the tiers with the subscription validity.
     async fn sync_tier(&mut self, user_manager: &UserManager) -> Result<bool, Error> {
         let has_pro_access = self.account_tier == AccountTier::Pro
@@ -282,6 +281,13 @@ impl User {
         stripe_client: &stripe::Client,
         subscription_items: stripe::UpdateSubscriptionItems,
     ) -> Result<(), Error> {
+        // A pro or admin account tier is required to get to this point, but the ssubscription sync
+        // ahead of this call may lead to an account downgrade.
+        if !matches![self.account_tier, AccountTier::Pro | AccountTier::Admin] {
+            error!("account was downgraded from pro in sync, denying the addition of new items");
+            return Err(Error::Unauthorized);
+        }
+
         let Some(ref subscription_id) = self.subscription_id else {
             return Err(Error::MissingSubscriptionId);
         };

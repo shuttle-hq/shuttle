@@ -26,7 +26,7 @@ fn cleanup() {
 
 pub(crate) struct TestApp {
     pub router: Router,
-    pub wiremock: MockServer,
+    pub mock_server: MockServer,
 }
 
 /// Initialize a router with an in-memory sqlite database for each test.
@@ -55,7 +55,7 @@ pub(crate) async fn app() -> TestApp {
 
     TestApp {
         router,
-        wiremock: mock_server,
+        mock_server,
     }
 }
 
@@ -137,7 +137,7 @@ impl TestApp {
 
     /// A test util to get a user with a subscription, mocking the response from Stripe. A key part
     /// of this util is `mount_as_scoped`, since getting a user with a subscription can be done
-    /// several times in a test, and if they're not scoped the first mock would always apply.
+    /// several times in a test, if they're not scoped the first mock would always apply.
     pub async fn get_user_with_mocked_stripe(
         &self,
         subscription_id: &str,
@@ -152,7 +152,7 @@ impl TestApp {
                 ResponseTemplate::new(200)
                     .set_body_json(serde_json::from_str::<Value>(response_body).unwrap()),
             )
-            .mount_as_scoped(&self.wiremock)
+            .mount_as_scoped(&self.mock_server)
             .await;
 
         self.get_user(account_name).await

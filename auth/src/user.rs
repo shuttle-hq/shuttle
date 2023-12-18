@@ -227,7 +227,7 @@ impl User {
     async fn subscription_is_valid(&self, client: &stripe::Client) -> Result<bool, Error> {
         if let Some(subscription_id) = self.subscription_id.as_ref() {
             let subscription = stripe::Subscription::retrieve(client, subscription_id, &[]).await?;
-
+            debug!("subscription: {:#?}", subscription);
             return Ok(subscription.status == SubscriptionStatus::Active
                 || subscription.status == SubscriptionStatus::Trialing);
         }

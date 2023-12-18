@@ -133,7 +133,7 @@ mod needs_docker {
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        // Next we're going to fetch the user, which will try to sync the users tier. It will
+        // Next we're going to fetch the user, which will trigger a sync of the users tier. It will
         // fetch the subscription from stripe using the subscription ID from the previous checkout
         // session. This should return an active subscription, meaning the users tier should remain
         // pro.
@@ -326,7 +326,7 @@ mod needs_docker {
                 ResponseTemplate::new(200)
                     .set_body_json(serde_json::from_str::<Value>(MOCKED_SUBSCRIPTIONS[0]).unwrap()),
             )
-            .mount(&app.wiremock)
+            .mount(&app.mock_server)
             .await;
 
         // Following that, the auth service will call stripe to update the subscription.
@@ -346,7 +346,7 @@ mod needs_docker {
                 ResponseTemplate::new(200)
                     .set_body_json(serde_json::from_str::<Value>(MOCKED_SUBSCRIPTIONS[0]).unwrap()),
             )
-            .mount(&app.wiremock)
+            .mount(&app.mock_server)
             .await;
 
         // POST /users/:account_name with valid JWT and the user upgraded to pro.
@@ -400,6 +400,8 @@ mod needs_docker {
         // Trigger a sync of the account tier to cancelled. The account should not be downgraded to
         // basic right away, since when we cancel subscriptions we pass in the "cancel_at_period_end"
         // end flag.
+        // TODO: should we refactor our logic to change a tier to cancelledpro if "cancel_at_period_end"
+        // is true?
         let response = app
             .get_user_with_mocked_stripe("sub_123", MOCKED_SUBSCRIPTIONS[2], "test-user")
             .await;

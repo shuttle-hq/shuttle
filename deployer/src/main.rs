@@ -11,7 +11,7 @@ use shuttle_proto::{
     logger::{logger_client::LoggerClient, Batcher},
 };
 use std::process::exit;
-use std::{process::exit, time::Duration};
+use std::time::Duration;
 use tokio::select;
 use tower::ServiceBuilder;
 use tracing::{error, trace};

@@ -1,15 +1,18 @@
 mod needs_docker {
-    use std::time::Duration;
-
     use crate::{
-        helpers::{self, app, ADMIN_KEY},
+        helpers::{self, app, ADMIN_KEY, STRIPE_TEST_KEY},
         stripe::{MOCKED_CHECKOUT_SESSIONS, MOCKED_SUBSCRIPTIONS},
     };
     use axum::body::Body;
     use http::header::CONTENT_TYPE;
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
     use serde_json::{self, Value};
+    use shuttle_auth::SubscriptionItemExt;
     use shuttle_common::backends::subscription::NewSubscriptionItem;
+    use wiremock::{
+        matchers::{bearer_token, body_string_contains, method, path},
+        Mock, ResponseTemplate,
+    };
 
     #[tokio::test]
     async fn post_user() {
@@ -116,10 +119,6 @@ mod needs_docker {
     async fn successful_upgrade_to_pro() {
         let app = app().await;
 
-        // Wait for the mocked Stripe server to start.
-        tokio::task::spawn(app.mocked_stripe_server.clone().serve());
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
         // POST user first so one exists in the database.
         let response = app.post_user("test-user", "basic").await;
 
@@ -128,12 +127,24 @@ mod needs_docker {
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let expected_user: Value = serde_json::from_slice(&body).unwrap();
 
+        // PUT /users/test-user/pro with a completed checkout session to upgrade a user to pro.
         let response = app
             .put_user("test-user", "pro", MOCKED_CHECKOUT_SESSIONS[0])
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        let response = app.get_user("test-user").await;
+        // Next we're going to fetch the user, which will try to sync the users tier. It will
+        // fetch the subscription from stripe using the subscription ID from the previous checkout
+        // session. This should return an active subscription, meaning the users tier should remain
+        // pro.
+        let response = app
+            .get_user_with_mocked_stripe(
+                "sub_1Nw8xOD8t1tt0S3DtwAuOVp6",
+                MOCKED_SUBSCRIPTIONS[0],
+                "test-user",
+            )
+            .await;
+
         assert_eq!(response.status(), StatusCode::OK);
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let actual_user: Value = serde_json::from_slice(&body).unwrap();
@@ -176,10 +187,6 @@ mod needs_docker {
     async fn unsuccessful_upgrade_to_pro() {
         let app = app().await;
 
-        // Wait for the mocked Stripe server to start.
-        tokio::task::spawn(app.mocked_stripe_server.clone().serve());
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
         // POST user first so one exists in the database.
         let response = app.post_user("test-user", "basic").await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -199,10 +206,6 @@ mod needs_docker {
     async fn downgrade_in_case_subscription_due_payment() {
         let app = app().await;
 
-        // Wait for the mocked Stripe server to start.
-        tokio::task::spawn(app.mocked_stripe_server.clone().serve());
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
         // POST user first so one exists in the database.
         let response = app.post_user("test-user", "basic").await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -213,9 +216,18 @@ mod needs_docker {
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        // This get_user request should check the subscription status and return an accurate tier.
-        let response = app.get_user("test-user").await;
+        // The auth service should call stripe to fetch the subscription with the sub id from the
+        // checkout session, and return a subscription that is pending payment.
+        let response = app
+            .get_user_with_mocked_stripe(
+                "sub_1NwObED8t1tt0S3Dq0IYOEsa",
+                MOCKED_SUBSCRIPTIONS[1],
+                "test-user",
+            )
+            .await;
+
         assert_eq!(response.status(), StatusCode::OK);
+
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let actual_user: Value = serde_json::from_slice(&body).unwrap();
 
@@ -254,7 +266,6 @@ mod needs_docker {
         // Extract the body from the response so we can match on the error message.
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let message = std::str::from_utf8(&body).unwrap();
-
         // Since there is no bearer token, no claim extension could be set.
         assert!(message.contains("Missing request extension"));
 
@@ -272,6 +283,7 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         // GET /auth/key with the api key of the admin user to get their jwt.
+        // TODO: use regular user here instead.
         let response = app.get_jwt_from_api_key(ADMIN_KEY).await;
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -282,18 +294,65 @@ mod needs_docker {
         let token = convert["token"].as_str().unwrap();
 
         // POST /users/:account_name with valid JWT.
-        let request = Request::builder()
-            .uri("/users/subscription/items")
-            .method("POST")
-            .header(CONTENT_TYPE, "application/json")
-            .header(AUTHORIZATION, format!("Bearer {}", token))
-            .body(Body::from(subscription_item))
-            .unwrap();
+        let request = || {
+            Request::builder()
+                .uri("/users/subscription/items")
+                .method("POST")
+                .header(CONTENT_TYPE, "application/json")
+                .header(AUTHORIZATION, format!("Bearer {}", token))
+                .body(Body::from(subscription_item.clone()))
+                .unwrap()
+        };
 
-        let response = app.send_request(request).await;
+        let response = app.send_request(request()).await;
 
         // The test user (claim subject) does not have a subscription ID.
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // Upgrade the user to pro so they have subscription ID.
+        let response = app
+            .put_user("admin", "pro", MOCKED_CHECKOUT_SESSIONS[0])
+            .await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // We now want to retry the request.
+        // In the process the auth service will try to sync the tier, fetching the subscription
+        // from stripe.
+        Mock::given(method("GET"))
+            .and(bearer_token(STRIPE_TEST_KEY))
+            .and(path("/v1/subscriptions/sub_1Nw8xOD8t1tt0S3DtwAuOVp6"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::from_str::<Value>(MOCKED_SUBSCRIPTIONS[0]).unwrap()),
+            )
+            .mount(&app.wiremock)
+            .await;
+
+        // Following that, the auth service will call stripe to update the subscription.
+        // We want to ensure the request sent to Stripe has the same price id as the subscription
+        // item we sent to our auth service. We also set the quantity field.
+        let price_id = shuttle_common::backends::subscription::SubscriptionItem::AwsRds.price_id();
+
+        // We just return a mocked active subscription without the RDS items, our logic doesn't check
+        // the subscription after updating, if it receives a 200 and a correctly formed subscription
+        // response we know that the update succeeded.
+        Mock::given(method("POST"))
+            .and(bearer_token(STRIPE_TEST_KEY))
+            .and(path("/v1/subscriptions/sub_1Nw8xOD8t1tt0S3DtwAuOVp6"))
+            .and(body_string_contains(price_id))
+            .and(body_string_contains("quantity"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::from_str::<Value>(MOCKED_SUBSCRIPTIONS[0]).unwrap()),
+            )
+            .mount(&app.wiremock)
+            .await;
+
+        // POST /users/:account_name with valid JWT and the user upgraded to pro.
+        let response = app.send_request(request()).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -324,10 +383,6 @@ mod needs_docker {
     async fn downgrade_from_cancelledpro() {
         let app = app().await;
 
-        // Wait for the mocked Stripe server to start.
-        tokio::task::spawn(app.mocked_stripe_server.clone().serve());
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
         // Create user with basic tier
         let response = app.post_user("test-user", "basic").await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -342,10 +397,13 @@ mod needs_docker {
         let response = app.put_user("test-user", "cancelledpro", "").await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        // Trigger status change to canceled. This call has a side effect because the user has a
-        // subscription that is handled in a specific way by the MockedStripeServer, which changes
-        // the subscription state to cancelled.
-        let response = app.get_user("test-user").await;
+        // Trigger a sync of the account tier to cancelled. The account should not be downgraded to
+        // basic right away, since when we cancel subscriptions we pass in the "cancel_at_period_end"
+        // end flag.
+        let response = app
+            .get_user_with_mocked_stripe("sub_123", MOCKED_SUBSCRIPTIONS[2], "test-user")
+            .await;
+
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
@@ -355,8 +413,11 @@ mod needs_docker {
             "cancelledpro"
         );
 
-        // Check if user is downgraded to basic
-        let response = app.get_user("test-user").await;
+        // When called again at some later time, the subscription returned from stripe should be
+        // cancelled.
+        let response = app
+            .get_user_with_mocked_stripe("sub_123", MOCKED_SUBSCRIPTIONS[3], "test-user")
+            .await;
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
@@ -371,10 +432,6 @@ mod needs_docker {
     #[tokio::test]
     async fn retain_cancelledpro_status() {
         let app = app().await;
-
-        // Wait for the mocked Stripe server to start.
-        tokio::task::spawn(app.mocked_stripe_server.clone().serve());
-        tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Create user with basic tier
         let response = app.post_user("test-user", "basic").await;
@@ -391,7 +448,10 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         // Check if user has cancelledpro status
-        let response = app.get_user("test-user").await;
+        // let response = app.get_user("test-user").await;
+        let response = app
+            .get_user_with_mocked_stripe("sub_123", MOCKED_SUBSCRIPTIONS[2], "test-user")
+            .await;
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();

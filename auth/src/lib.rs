@@ -15,6 +15,7 @@ use tracing::info;
 use crate::api::serve;
 pub use api::ApiBuilder;
 pub use args::{Args, Commands, InitArgs};
+pub use subscription::SubscriptionItemExt;
 
 pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // One day
 

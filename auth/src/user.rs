@@ -227,7 +227,7 @@ impl User {
     async fn subscription_is_valid(&self, client: &stripe::Client) -> Result<bool, Error> {
         if let Some(subscription_id) = self.subscription_id.as_ref() {
             let subscription = stripe::Subscription::retrieve(client, subscription_id, &[]).await?;
-            debug!("subscription: {:#?}", subscription);
+
             return Ok(subscription.status == SubscriptionStatus::Active
                 || subscription.status == SubscriptionStatus::Trialing);
         }
@@ -235,7 +235,8 @@ impl User {
         Ok(false)
     }
 
-    // Synchronize the tiers with the subscription validity.
+    // TODO: should this return account tier? It could lead to a downgrade.
+    /// Synchronize the tiers with the subscription validity.
     async fn sync_tier(&mut self, user_manager: &UserManager) -> Result<bool, Error> {
         let has_pro_access = self.account_tier == AccountTier::Pro
             || self.account_tier == AccountTier::CancelledPro

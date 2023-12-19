@@ -65,7 +65,6 @@ pub(crate) async fn update_user_tier(
     Ok(())
 }
 
-// #[debug_handler]
 #[instrument(skip(claim, user_manager), fields(account_name = claim.sub, account_tier = %claim.tier))]
 pub(crate) async fn add_subscription_items(
     Extension(claim): Extension<Claim>,

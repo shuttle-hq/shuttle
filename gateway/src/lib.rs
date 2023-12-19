@@ -564,7 +564,7 @@ pub mod tests {
                 user,
                 bouncer,
                 use_tls: UseTls::Disable,
-                convert_key_to_jwt_secret: "dummykey".to_string(),
+                admin_key: "dummykey".to_string(),
                 context: ContextArgs {
                     docker_host,
                     image,

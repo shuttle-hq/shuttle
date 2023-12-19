@@ -38,7 +38,7 @@ pub struct StartArgs {
     pub user: SocketAddr,
     /// API key used by the gateway to authorize API keys to JWTs conversion
     #[arg(long)]
-    pub convert_key_to_jwt_secret: String,
+    pub admin_key: String,
     /// Allows to disable the use of TLS in the user proxy service (DANGEROUS)
     #[arg(long, default_value = "enable")]
     pub use_tls: UseTls,

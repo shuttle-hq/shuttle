@@ -38,19 +38,19 @@ const CACHE_MINUTES: u64 = 5;
 #[derive(Clone)]
 pub struct ShuttleAuthLayer {
     auth_uri: Uri,
-    convert_key_to_jwt_secret: String,
+    gateway_admin_key: String,
     cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
 }
 
 impl ShuttleAuthLayer {
     pub fn new(
         auth_uri: Uri,
-        convert_key_to_jwt_secret: String,
+        gateway_admin_key: String,
         cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
     ) -> Self {
         Self {
             auth_uri,
-            convert_key_to_jwt_secret,
+            gateway_admin_key,
             cache_manager,
         }
     }
@@ -62,7 +62,7 @@ impl<S> Layer<S> for ShuttleAuthLayer {
     fn layer(&self, inner: S) -> Self::Service {
         ShuttleAuthService {
             inner,
-            convert_key_to_jwt_secret: self.convert_key_to_jwt_secret.clone(),
+            gateway_admin_key: self.gateway_admin_key.clone(),
             auth_uri: self.auth_uri.clone(),
             cache_manager: self.cache_manager.clone(),
         }
@@ -73,7 +73,7 @@ impl<S> Layer<S> for ShuttleAuthLayer {
 pub struct ShuttleAuthService<S> {
     inner: S,
     auth_uri: Uri,
-    convert_key_to_jwt_secret: String,
+    gateway_admin_key: String,
     cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
 }
 
@@ -125,7 +125,7 @@ where
         // If /users/reset-api-key is called, invalidate the cached JWT.
         if req.uri().path() == "/users/reset-api-key" {
             if let Some((cache_key, _)) =
-                cache_key_and_token_req(&req, self.convert_key_to_jwt_secret.as_str())
+                cache_key_and_token_req(&req, self.gateway_admin_key.as_str())
             {
                 self.cache_manager.invalidate(&cache_key);
             };
@@ -182,7 +182,7 @@ where
             Box::pin(async move {
                 // Only if there is something to upgrade
                 if let Some((cache_key, token_request)) =
-                    cache_key_and_token_req(&req, this.convert_key_to_jwt_secret.as_str())
+                    cache_key_and_token_req(&req, this.gateway_admin_key.as_str())
                 {
                     let target_url = this.auth_uri.to_string();
 
@@ -281,14 +281,13 @@ where
 
 fn cache_key_and_token_req(
     req: &Request<Body>,
-    convert_key_to_jwt_secret: &str,
+    gateway_admin_key: &str,
 ) -> Option<(String, Request<Body>)> {
     req.headers()
         .typed_get::<Authorization<Bearer>>()
         .map(|bearer| {
             let cache_key = bearer.token().trim().to_string();
-            let token_request =
-                make_token_request("/auth/key", bearer, Some(convert_key_to_jwt_secret));
+            let token_request = make_token_request("/auth/key", bearer, Some(gateway_admin_key));
             (cache_key, token_request)
         })
         .or_else(|| {
@@ -305,7 +304,7 @@ fn cache_key_and_token_req(
 fn make_token_request(
     uri: &str,
     header: impl Header,
-    convert_key_to_jwt_secret: Option<&str>,
+    gateway_admin_key: Option<&str>,
 ) -> Request<Body> {
     let mut token_request = Request::builder().uri(uri);
     token_request
@@ -313,7 +312,7 @@ fn make_token_request(
         .expect("manual request to be valid")
         .typed_insert(header);
 
-    if let Some(key) = convert_key_to_jwt_secret {
+    if let Some(key) = gateway_admin_key {
         trace!("XShuttleAdminSecret header inserted for token request");
         token_request
             .headers_mut()

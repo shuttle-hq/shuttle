@@ -433,7 +433,7 @@ jobs:
       control-db-postgres-uri:
         description: "Control database URI, used by the control plane components"
         type: string
-      gateway-convert-key-to-jwt-secret:
+      gateway-admin-key:
         description: "Admin API key that authorizes gateway requests to auth service, for key to jwt conversion."
         type: string
     steps:
@@ -466,7 +466,7 @@ jobs:
             STRIPE_RDS_PRICE_ID=${<< parameters.stripe-rds-price-id >>} \
             AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
             CONTROL_DB_POSTGRES_URI=${<< parameters.control-db-postgres-uri >>} \
-            GATEWAY_CONVERT_KEY_TO_JWT_SECRET=${<< parameters.gateway-convert-key-to-jwt-secret >>} \
+            GATEWAY_ADMIN_KEY=${<< parameters.gateway-admin-key >>} \
             make deploy
       - when:
           condition: 
@@ -863,7 +863,7 @@ workflows:
           stripe-rds-price-id: DEV_STRIPE_RDS_PRICE_ID
           jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: DEV_CONTROL_DB_POSTGRES_URI
-          gateway-convert-key-to-jwt-secret: DEV_GATEWAY_CONVERT_KEY_TO_JWT_SECRET
+          gateway-admin-key: DEV_GATEWAY_ADMIN_KEY
           requires:
             - build-and-push-unstable
             - approve-deploy-images-unstable
@@ -946,7 +946,7 @@ workflows:
           stripe-rds-price-id: PROD_STRIPE_RDS_PRICE_ID
           jwt-signing-private-key: PROD_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: PROD_CONTROL_DB_POSTGRES_URI
-          gateway-convert-key-to-jwt-secret: PROD_GATEWAY_CONVERT_KEY_TO_JWT_SECRET
+          gateway-admin-key: PROD_GATEWAY_ADMIN_KEY
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e
           ssh-config-script: production-ssh-config.sh
           ssh-host: shuttle.prod.internal

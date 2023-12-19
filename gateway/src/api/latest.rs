@@ -1101,7 +1101,7 @@ impl ApiBuilder {
         self
     }
 
-    pub fn with_auth_service(mut self, auth_uri: Uri, convert_key_to_jwt_secret: String) -> Self {
+    pub fn with_auth_service(mut self, auth_uri: Uri, gateway_admin_key: String) -> Self {
         let auth_public_key = AuthPublicKey::new(auth_uri.clone());
 
         let jwt_cache_manager = CacheManager::new(1000);
@@ -1111,7 +1111,7 @@ impl ApiBuilder {
             .layer(JwtAuthenticationLayer::new(auth_public_key))
             .layer(ShuttleAuthLayer::new(
                 auth_uri,
-                convert_key_to_jwt_secret,
+                gateway_admin_key,
                 Arc::new(Box::new(jwt_cache_manager)),
             ));
 

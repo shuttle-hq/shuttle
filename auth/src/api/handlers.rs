@@ -14,7 +14,7 @@ use shuttle_common::{
     models::user,
 };
 use stripe::CheckoutSession;
-use tracing::instrument;
+use tracing::{error, instrument};
 
 use super::{builder::KeyManagerState, RouterState, UserManagerState};
 
@@ -71,8 +71,17 @@ pub(crate) async fn add_subscription_items(
     State(user_manager): State<UserManagerState>,
     NewSubscriptionItemExtractor(update_subscription_items): NewSubscriptionItemExtractor,
 ) -> Result<(), Error> {
+    // Fetching the user will also sync their subscription. This means we can verify that the
+    // caller still has the correct tier after the sync.
+    let user = user_manager.get_user(AccountName::from(claim.sub)).await?;
+
+    if !matches![user.account_tier, AccountTier::Pro | AccountTier::Admin] {
+        error!("account was downgraded from pro in sync, denying the addition of new items");
+        return Err(Error::Unauthorized);
+    }
+
     user_manager
-        .add_subscription_items(AccountName::from(claim.sub), update_subscription_items)
+        .add_subscription_items(user, update_subscription_items)
         .await?;
 
     Ok(())

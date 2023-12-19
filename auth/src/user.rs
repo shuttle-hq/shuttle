@@ -31,7 +31,7 @@ pub trait UserManagement: Send + Sync {
     async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
     async fn add_subscription_items(
         &self,
-        name: AccountName,
+        user: User,
         invoice_item: stripe::UpdateSubscriptionItems,
     ) -> Result<(), Error>;
 }
@@ -156,22 +156,9 @@ impl UserManagement for UserManager {
 
     async fn add_subscription_items(
         &self,
-        name: AccountName,
+        user: User,
         subscription_items: stripe::UpdateSubscriptionItems,
     ) -> Result<(), Error> {
-        let mut user: User = sqlx::query_as(
-            "SELECT account_name, key, account_tier, subscription_id FROM users WHERE account_name = $1",
-        )
-        .bind(&name)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or(Error::UserNotFound)?;
-
-        // Sync the user tier based on the subscription validity, if any.
-        if user.sync_tier(self).await? {
-            debug!("synced account");
-        }
-
         user.add_subscription_items(&self.stripe_client, subscription_items)
             .await?;
 

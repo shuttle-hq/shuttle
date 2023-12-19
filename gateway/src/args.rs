@@ -89,4 +89,8 @@ pub struct ContextArgs {
 
     /// Allow tests to set some extra /etc/hosts
     pub extra_hosts: Vec<String>,
+
+    /// Key used for PostHog connection
+    #[arg(long)]
+    pub posthog_key: String,
 }

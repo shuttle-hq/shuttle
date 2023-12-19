@@ -420,6 +420,9 @@ jobs:
       stripe-secret-key:
         description: "Stripe secret key used to connect a client to Stripe backend"
         type: string
+      posthog-key:
+        description: "S Public key used for PostHog connection"
+        type: string
       jwt-signing-private-key:
         description: "Auth private key used for JWT signing"
         type: string
@@ -457,20 +460,21 @@ jobs:
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
             STRIPE_SECRET_KEY=${<< parameters.stripe-secret-key >>} \
+            POSTHOG_KEY=${<< parameters.posthog-key >>} \
             AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
             CONTROL_DB_POSTGRES_URI=${<< parameters.control-db-postgres-uri >>} \
             make deploy
       - when:
-          condition: 
-            equal: [ production, << parameters.shuttle-env >>]
+          condition:
+            equal: [production, << parameters.shuttle-env >>]
           steps:
             - run:
                 name: Pull new deployer image on prod
                 command: |
                   ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
       - when:
-          condition: 
-            equal: [ staging, << parameters.shuttle-env >>] 
+          condition:
+            equal: [staging, << parameters.shuttle-env >>]
           steps:
             - run:
                 name: Pull new deployer image on dev
@@ -852,6 +856,7 @@ workflows:
           deploys-api-key: DEV_DEPLOYS_API_KEY
           logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
           stripe-secret-key: DEV_STRIPE_SECRET_KEY
+          posthog-key: DEV_POSTHOG_KEY
           jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: DEV_CONTROL_DB_POSTGRES_URI
           requires:
@@ -933,6 +938,7 @@ workflows:
           deploys-api-key: PROD_DEPLOYS_API_KEY
           logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
           stripe-secret-key: PROD_STRIPE_SECRET_KEY
+          posthog-key: PROD_POSTHOG_KEY
           jwt-signing-private-key: PROD_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: PROD_CONTROL_DB_POSTGRES_URI
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e

@@ -75,6 +75,7 @@ pub struct ContainerSettingsBuilder {
     network_name: Option<String>,
     fqdn: Option<String>,
     extra_hosts: Option<Vec<String>>,
+    posthog_key: Option<String>,
 }
 
 impl Default for ContainerSettingsBuilder {
@@ -95,6 +96,7 @@ impl ContainerSettingsBuilder {
             network_name: None,
             fqdn: None,
             extra_hosts: None,
+            posthog_key: None,
         }
     }
 
@@ -109,6 +111,7 @@ impl ContainerSettingsBuilder {
             image,
             proxy_fqdn,
             extra_hosts,
+            posthog_key,
             ..
         } = args;
         self.prefix(prefix)
@@ -119,6 +122,7 @@ impl ContainerSettingsBuilder {
             .resource_recorder_uri(resource_recorder_uri)
             .network_name(network_name)
             .fqdn(proxy_fqdn)
+            .posthog_key(posthog_key)
             .extra_hosts(extra_hosts)
             .build()
             .await
@@ -169,6 +173,11 @@ impl ContainerSettingsBuilder {
         self
     }
 
+    pub fn posthog_key<S: ToString>(mut self, posthog_key: S) -> Self {
+        self.posthog_key = Some(posthog_key.to_string().trim_end_matches('.').to_string());
+        self
+    }
+
     pub async fn build(mut self) -> ContainerSettings {
         let prefix = self.prefix.take().unwrap();
         let image = self.image.take().unwrap();
@@ -180,6 +189,7 @@ impl ContainerSettingsBuilder {
 
         let network_name = self.network_name.take().unwrap();
         let fqdn = self.fqdn.take().unwrap();
+        let posthog_key = self.posthog_key.take().unwrap();
 
         ContainerSettings {
             prefix,
@@ -191,6 +201,7 @@ impl ContainerSettingsBuilder {
             network_name,
             fqdn,
             extra_hosts,
+            posthog_key,
         }
     }
 }
@@ -206,6 +217,7 @@ pub struct ContainerSettings {
     pub network_name: String,
     pub fqdn: String,
     pub extra_hosts: Vec<String>,
+    pub posthog_key: String,
 }
 
 impl ContainerSettings {

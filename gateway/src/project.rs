@@ -852,6 +852,7 @@ impl ProjectCreating {
             resource_recorder_uri,
             fqdn: public,
             extra_hosts,
+            posthog_key,
             ..
         } = ctx.container_settings();
 
@@ -907,7 +908,9 @@ impl ProjectCreating {
                         "--resource-recorder",
                         resource_recorder_uri,
                         "--project-id",
-                        self.project_id.to_string()
+                        self.project_id.to_string(),
+                        "--posthog_key",
+                        posthog_key,
                     ],
                 })
             });

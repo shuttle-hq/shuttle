@@ -72,8 +72,12 @@ pub(crate) async fn add_subscription_items(
     NewSubscriptionItemExtractor(update_subscription_items): NewSubscriptionItemExtractor,
 ) -> Result<(), Error> {
     // Fetching the user will also sync their subscription. This means we can verify that the
-    // caller still has the correct tier after the sync.
+    // caller still has the required tier after the sync.
     let user = user_manager.get_user(AccountName::from(claim.sub)).await?;
+
+    let Some(ref subscription_id) = user.subscription_id else {
+        return Err(Error::MissingSubscriptionId);
+    };
 
     if !matches![user.account_tier, AccountTier::Pro | AccountTier::Admin] {
         error!("account was downgraded from pro in sync, denying the addition of new items");
@@ -81,7 +85,7 @@ pub(crate) async fn add_subscription_items(
     }
 
     user_manager
-        .add_subscription_items(user, update_subscription_items)
+        .add_subscription_items(subscription_id, update_subscription_items)
         .await?;
 
     Ok(())

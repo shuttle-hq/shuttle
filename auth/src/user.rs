@@ -31,8 +31,8 @@ pub trait UserManagement: Send + Sync {
     async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
     async fn add_subscription_items(
         &self,
-        user: User,
-        invoice_item: stripe::UpdateSubscriptionItems,
+        subscription_id: &SubscriptionId,
+        subscription_item: stripe::UpdateSubscriptionItems,
     ) -> Result<(), Error>;
 }
 
@@ -156,10 +156,15 @@ impl UserManagement for UserManager {
 
     async fn add_subscription_items(
         &self,
-        user: User,
+        subscription_id: &SubscriptionId,
         subscription_items: stripe::UpdateSubscriptionItems,
     ) -> Result<(), Error> {
-        user.add_subscription_items(&self.stripe_client, subscription_items)
+        let subscription_update = stripe::UpdateSubscription {
+            items: Some(vec![subscription_items]),
+            ..Default::default()
+        };
+
+        stripe::Subscription::update(&self.stripe_client, subscription_id, subscription_update)
             .await?;
 
         Ok(())
@@ -261,32 +266,6 @@ impl User {
         }
 
         Ok(false)
-    }
-
-    async fn add_subscription_items(
-        &self,
-        stripe_client: &stripe::Client,
-        subscription_items: stripe::UpdateSubscriptionItems,
-    ) -> Result<(), Error> {
-        // A pro or admin account tier is required to get to this point, but the ssubscription sync
-        // ahead of this call may lead to an account downgrade.
-        if !matches![self.account_tier, AccountTier::Pro | AccountTier::Admin] {
-            error!("account was downgraded from pro in sync, denying the addition of new items");
-            return Err(Error::Unauthorized);
-        }
-
-        let Some(ref subscription_id) = self.subscription_id else {
-            return Err(Error::MissingSubscriptionId);
-        };
-
-        let subscription_update = stripe::UpdateSubscription {
-            items: Some(vec![subscription_items]),
-            ..Default::default()
-        };
-
-        stripe::Subscription::update(stripe_client, subscription_id, subscription_update).await?;
-
-        Ok(())
     }
 }
 

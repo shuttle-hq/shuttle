@@ -626,14 +626,10 @@ pub async fn start_deployment(
         tokio::spawn(async move {
             let event =
                 async_posthog::Event::new("shuttle_api_start_deployment".to_string(), account_name);
-            match deployment_manager.posthog_client().capture(event).await {
-                Ok(_) => {
-                    info!("Event sent to posthog");
-                }
-                Err(err) => {
-                    error!(error = %err, "failed to send event to posthog");
-                }
-            }
+
+            if let Err(err) = deployment_manager.posthog_client().capture(event).await {
+                error!(error = %err, "failed to send event to posthog")
+            };
         });
 
         Ok(())

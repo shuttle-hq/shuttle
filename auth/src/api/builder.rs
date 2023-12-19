@@ -11,9 +11,10 @@ use axum_sessions::{async_session::MemoryStore, SessionLayer};
 use rand::RngCore;
 use shuttle_common::{
     backends::{
-        auth::JwtAuthenticationLayer,
+        auth::{JwtAuthenticationLayer, ScopedLayer},
         metrics::{Metrics, TraceLayer},
     },
+    claims::Scope,
     request_span,
 };
 use sqlx::PgPool;
@@ -80,10 +81,12 @@ impl ApiBuilder {
             .route(
                 "/users/subscription/items",
                 post(
-                    add_subscription_items.layer(JwtAuthenticationLayer::new(move || {
-                        let public_key = public_key.clone();
-                        async move { public_key.clone() }
-                    })),
+                    add_subscription_items
+                        .layer(ScopedLayer::new(vec![Scope::ResourcesWrite]))
+                        .layer(JwtAuthenticationLayer::new(move || {
+                            let public_key = public_key.clone();
+                            async move { public_key.clone() }
+                        })),
                 ),
             )
             .route(

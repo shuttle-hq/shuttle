@@ -260,13 +260,7 @@ mod needs_docker {
 
         let response = app.send_request(request).await;
 
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-
-        // Extract the body from the response so we can match on the error message.
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let message = std::str::from_utf8(&body).unwrap();
-        // Since there is no bearer token, no claim extension could be set.
-        assert!(message.contains("Missing request extension"));
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
         // POST /users/subscription/items with invalid bearer JWT.
         let request = Request::builder()

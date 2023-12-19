@@ -1101,7 +1101,7 @@ impl ApiBuilder {
         self
     }
 
-    pub fn with_auth_service(mut self, auth_uri: Uri) -> Self {
+    pub fn with_auth_service(mut self, auth_uri: Uri, convert_key_to_jwt_secret: String) -> Self {
         let auth_public_key = AuthPublicKey::new(auth_uri.clone());
 
         let jwt_cache_manager = CacheManager::new(1000);
@@ -1111,6 +1111,7 @@ impl ApiBuilder {
             .layer(JwtAuthenticationLayer::new(auth_public_key))
             .layer(ShuttleAuthLayer::new(
                 auth_uri,
+                convert_key_to_jwt_secret,
                 Arc::new(Box::new(jwt_cache_manager)),
             ));
 
@@ -1181,7 +1182,7 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
-            .with_auth_service(world.context().auth_uri)
+            .with_auth_service(world.context().auth_uri, "dummykey".to_string())
             .into_router();
 
         let neo_key = world.create_user("neo", AccountTier::Basic);
@@ -1363,7 +1364,7 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
-            .with_auth_service(world.context().auth_uri)
+            .with_auth_service(world.context().auth_uri, "dummykey".to_string())
             .into_router();
 
         let neo_key = world.create_user("neo", AccountTier::Basic);
@@ -1697,7 +1698,7 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
-            .with_auth_service(world.context().auth_uri)
+            .with_auth_service(world.context().auth_uri, "dummykey".to_string())
             .into_router();
 
         let get_status = || {

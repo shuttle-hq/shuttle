@@ -151,6 +151,7 @@ services:
       - "--builder-host=builder"
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"
+      - "--convert-key-to-jwt-secret=${GATEWAY_CONVERT_KEY_TO_JWT_SECRET}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001"]
       interval: 1m

@@ -36,6 +36,9 @@ pub struct StartArgs {
     /// Address to bind the user proxy to
     #[arg(long, default_value = "127.0.0.1:8000")]
     pub user: SocketAddr,
+    /// API key used by the gateway to authorize API keys to JWTs conversion
+    #[arg(long)]
+    pub convert_key_to_jwt_secret: String,
     /// Allows to disable the use of TLS in the user proxy service (DANGEROUS)
     #[arg(long, default_value = "enable")]
     pub use_tls: UseTls,

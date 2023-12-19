@@ -68,6 +68,24 @@ services:
       - "--stripe-secret-key=${STRIPE_SECRET_KEY}"
       # used only for local development
       - "--jwt-signing-private-key=LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUR5V0ZFYzhKYm05NnA0ZGNLTEwvQWNvVUVsbUF0MVVKSTU4WTc4d1FpWk4KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo="
+  gateway:
+    command:  
+      - --state=/var/lib/shuttle
+      - start
+      - --control=0.0.0.0:8001
+      - --user=0.0.0.0:8000
+      - --bouncer=0.0.0.0:7999
+      - --image=public.ecr.aws/shuttle-dev/deployer:v0.34.0
+      - --prefix=shuttle_
+      - --network-name=shuttle-dev_user-net
+      - --docker-host=/var/run/docker.sock
+      - --auth-uri=http://auth:8000
+      - --deploys-api-key=gateway4deployes
+      - --provisioner-host=provisioner
+      - --builder-host=builder
+      - --proxy-fqdn=unstable.shuttleapp.rs
+      - --use-tls=disable
+      - --convert-key-to-jwt-secret=dh9z58jttoes3qvt
   otel-collector:
     ports:
       - 4317:4317

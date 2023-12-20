@@ -258,7 +258,7 @@ impl MyProvisioner {
         &self,
         project_name: &str,
         engine: &aws_rds::Engine,
-    ) -> Result<DatabaseResponse, Error> {
+    ) -> Result<(bool, DatabaseResponse), Error> {
         let client = &self.rds_client;
 
         let password = generate_password();
@@ -272,6 +272,7 @@ impl MyProvisioner {
             .send()
             .await;
 
+        let mut created_new_instance = false;
         match instance {
             Ok(_) => {
                 wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
@@ -306,6 +307,8 @@ impl MyProvisioner {
                         .expect("to be able to create instance");
 
                     wait_for_instance(client, &instance_name, "creating").await?;
+
+                    created_new_instance = true;
                 } else {
                     return Err(Error::Plain(format!(
                         "got unexpected error from AWS RDS service: {}",
@@ -331,19 +334,22 @@ impl MyProvisioner {
             .address
             .expect("endpoint to have an address");
 
-        Ok(DatabaseResponse {
-            engine: engine.to_string(),
-            username: instance
-                .master_username
-                .expect("instance to have a username"),
-            password,
-            database_name: instance
-                .db_name
-                .expect("instance to have a default database"),
-            address_private: address.clone(),
-            address_public: address,
-            port: engine_to_port(engine),
-        })
+        Ok((
+            created_new_instance,
+            DatabaseResponse {
+                engine: engine.to_string(),
+                username: instance
+                    .master_username
+                    .expect("instance to have a username"),
+                password,
+                database_name: instance
+                    .db_name
+                    .expect("instance to have a default database"),
+                address_private: address.clone(),
+                address_public: address,
+                port: engine_to_port(engine),
+            },
+        ))
     }
 
     /// Send a request to the auth service with new subscription items that should be added to
@@ -519,10 +525,12 @@ impl Provisioner for MyProvisioner {
 
                 let engine = engine.expect("engine should be set");
 
-                let response = self.request_aws_rds(&request.project_name, &engine).await?;
+                let (created_new_instance, database_response) =
+                    self.request_aws_rds(&request.project_name, &engine).await?;
 
-                // Skip updating subscriptions for admin users.
-                if claim.tier != AccountTier::Admin {
+                // Skip updating subscriptions for admin users, and only update subscription if the
+                // rds instance is new.
+                if claim.tier != AccountTier::Admin && created_new_instance {
                     // If the subscription update fails, e.g. due to a JWT expiring or the subject's
                     // subscription expiring, delete the instance immediately.
                     if let Err(err) = self
@@ -539,7 +547,7 @@ impl Provisioner for MyProvisioner {
                     };
                 }
 
-                response
+                database_response
             }
         };
 

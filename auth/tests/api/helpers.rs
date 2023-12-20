@@ -112,26 +112,22 @@ impl TestApp {
         self.send_request(request).await
     }
 
-    pub async fn get_jwt_from_api_key(&self, api_key: &str) -> Response {
-        let request = Request::builder()
-            .uri("/auth/key")
-            .header(AUTHORIZATION, format!("Bearer {api_key}"))
-            .body(Body::empty())
-            .unwrap();
-        self.send_request(request).await
-    }
-
-    pub async fn get_jwt_from_non_admin_api_key(
+    /// If we don't provide a valid admin key, then the`basic_api_key` parameter
+    /// should be of an admin user.
+    pub async fn get_jwt_from_api_key(
         &self,
         basic_api_key: &str,
-        admin_api_key: &str,
+        admin_api_key: Option<&str>,
     ) -> Response {
-        let request = Request::builder()
+        let mut request_builder = Request::builder()
             .uri("/auth/key")
-            .header(AUTHORIZATION, format!("Bearer {basic_api_key}"))
-            .header(X_SHUTTLE_ADMIN_SECRET.to_string(), admin_api_key)
-            .body(Body::empty())
-            .unwrap();
+            .header(AUTHORIZATION, format!("Bearer {basic_api_key}"));
+
+        if let Some(key) = admin_api_key {
+            request_builder = request_builder.header(X_SHUTTLE_ADMIN_SECRET.to_string(), key)
+        }
+
+        let request = request_builder.body(Body::empty()).unwrap();
         self.send_request(request).await
     }
 

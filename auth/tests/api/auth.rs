@@ -37,7 +37,7 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
         // GET /auth/key with an admin user key.
-        let response = app.get_jwt_from_api_key(ADMIN_KEY).await;
+        let response = app.get_jwt_from_api_key(ADMIN_KEY, None).await;
         assert_eq!(response.status(), StatusCode::OK);
 
         // Decode the JWT into a Claim.
@@ -50,13 +50,13 @@ mod needs_docker {
 
         // GET /auth/key with a basic user key that has an XShuttleAdminSecret header with a basic user key.
         let response = app
-            .get_jwt_from_non_admin_api_key(basic_user_key, basic_user_key)
+            .get_jwt_from_api_key(basic_user_key, Some(basic_user_key))
             .await;
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
         // GET /auth/key with an admin user key that has an XShuttleAdminSecret header with a basic user key.
         let response = app
-            .get_jwt_from_non_admin_api_key(ADMIN_KEY, basic_user_key)
+            .get_jwt_from_api_key(ADMIN_KEY, Some(basic_user_key))
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -70,7 +70,7 @@ mod needs_docker {
 
         // GET /auth/key with a basic user key that has an XShuttleAdminSecret header with an admin user key.
         let response = app
-            .get_jwt_from_non_admin_api_key(basic_user_key, ADMIN_KEY)
+            .get_jwt_from_api_key(basic_user_key, Some(ADMIN_KEY))
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 

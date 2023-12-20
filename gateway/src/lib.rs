@@ -559,6 +559,9 @@ pub mod tests {
 
             let docker_host = "/var/run/docker.sock".to_string();
 
+            let posthog_key = env::var("POSTHOG_KEY")
+                .unwrap_or_else(|_| "public.ecr.aws/shuttle-dev/deployer:latest".to_string());
+
             let args = StartArgs {
                 control,
                 user,
@@ -598,6 +601,7 @@ pub mod tests {
 
                     // Allow access to the auth on the host
                     extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],
+                    posthog_key,
                 },
             };
 

@@ -421,7 +421,7 @@ jobs:
         description: "Stripe secret key used to connect a client to Stripe backend"
         type: string
       posthog-key:
-        description: "S Public key used for PostHog connection"
+        description: "Public key used for PostHog connection"
         type: string
       stripe-rds-price-id:
         description: "Stripe price id of Shuttle AWS RDS product."

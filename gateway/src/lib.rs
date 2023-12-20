@@ -564,6 +564,7 @@ pub mod tests {
                 user,
                 bouncer,
                 use_tls: UseTls::Disable,
+                admin_key: "dummykey".to_string(),
                 context: ContextArgs {
                     docker_host,
                     image,
@@ -711,7 +712,7 @@ pub mod tests {
                 .with_service(Arc::clone(&service))
                 .with_sender(sender)
                 .with_default_routes()
-                .with_auth_service(self.context().auth_uri)
+                .with_auth_service(self.context().auth_uri, "dummykey".to_string())
                 .into_router()
         }
 
@@ -1203,7 +1204,7 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(log_out.clone())
             .with_default_routes()
-            .with_auth_service(world.context().auth_uri)
+            .with_auth_service(world.context().auth_uri, "dummykey".to_string())
             .binding_to(world.args.control);
 
         let user = UserServiceBuilder::new()

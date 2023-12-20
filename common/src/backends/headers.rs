@@ -3,7 +3,7 @@ use http::HeaderValue;
 
 pub static X_SHUTTLE_ADMIN_SECRET: HeaderName = HeaderName::from_static("x-shuttle-admin-secret");
 
-/// Typed header for sending admin secrets to deployers
+/// Typed header for sending admin secrets to Shuttle components
 pub struct XShuttleAdminSecret(pub String);
 
 impl Header for XShuttleAdminSecret {

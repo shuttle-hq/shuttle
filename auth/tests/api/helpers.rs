@@ -4,7 +4,10 @@ use hyper::http::{header::AUTHORIZATION, Request};
 use once_cell::sync::Lazy;
 use serde_json::Value;
 use shuttle_auth::{pgpool_init, ApiBuilder};
-use shuttle_common::claims::{AccountTier, Claim};
+use shuttle_common::{
+    backends::headers::X_SHUTTLE_ADMIN_SECRET,
+    claims::{AccountTier, Claim},
+};
 use shuttle_common_tests::postgres::DockerInstance;
 use sqlx::query;
 use tower::ServiceExt;
@@ -109,12 +112,22 @@ impl TestApp {
         self.send_request(request).await
     }
 
-    pub async fn get_jwt_from_api_key(&self, api_key: &str) -> Response {
-        let request = Request::builder()
+    /// If we don't provide a valid admin key, then the`user_api_key` parameter
+    /// should be of an admin user.
+    pub async fn get_jwt_from_api_key(
+        &self,
+        user_api_key: &str,
+        admin_api_key: Option<&str>,
+    ) -> Response {
+        let mut request_builder = Request::builder()
             .uri("/auth/key")
-            .header(AUTHORIZATION, format!("Bearer {api_key}"))
-            .body(Body::empty())
-            .unwrap();
+            .header(AUTHORIZATION, format!("Bearer {user_api_key}"));
+
+        if let Some(key) = admin_api_key {
+            request_builder = request_builder.header(X_SHUTTLE_ADMIN_SECRET.to_string(), key)
+        }
+
+        let request = request_builder.body(Body::empty()).unwrap();
         self.send_request(request).await
     }
 

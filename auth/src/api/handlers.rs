@@ -121,6 +121,7 @@ pub(crate) async fn convert_cookie(
 
 /// Convert a valid API-key bearer token to a JWT.
 pub(crate) async fn convert_key(
+    _: Admin,
     State(RouterState {
         key_manager,
         user_manager,

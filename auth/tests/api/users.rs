@@ -276,7 +276,7 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         // GET /auth/key with the api key of the admin user to get their jwt.
-        let response = app.get_jwt_from_api_key(ADMIN_KEY).await;
+        let response = app.get_jwt_from_api_key(ADMIN_KEY, None).await;
 
         assert_eq!(response.status(), StatusCode::OK);
 

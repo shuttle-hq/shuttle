@@ -559,8 +559,7 @@ pub mod tests {
 
             let docker_host = "/var/run/docker.sock".to_string();
 
-            let posthog_key = env::var("POSTHOG_KEY")
-                .unwrap_or_else(|_| "public.ecr.aws/shuttle-dev/deployer:latest".to_string());
+            let posthog_key = "".to_string();
 
             let args = StartArgs {
                 control,

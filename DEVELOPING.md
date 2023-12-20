@@ -306,6 +306,11 @@ should be set to test upgrading a user to Pro tier, or to use a Pro tier feature
 setting up a Stripe account and generating a test API key. Auth can still be initialised and used without a Stripe secret key, but it will fail
 when retrieving a user, and when we'll verify the subscription validity.
 
+## Testing PostHog Integration
+
+We use PostHog to track how users interact with Shuttle platform. The `POSTHOG_KEY` environment variable
+should be set to test sending events to PostHog.
+
 ## Running Tests
 
 Shuttle has reasonable test coverage - and we are working on improving this

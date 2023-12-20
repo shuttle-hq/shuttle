@@ -838,9 +838,9 @@ workflows:
               only: main
       - approve-build-and-push-images-unstable:
           type: approval
-          # filters:
-          #   branches:
-          #     only: main
+          filters:
+            branches:
+              only: main
       - build-and-push:
           name: build-and-push-unstable
           aws-access-key-id: DEV_AWS_ACCESS_KEY_ID

@@ -9,7 +9,7 @@ keywords = ["shuttle-service", "salvo"]
 [workspace]
 
 [dependencies]
-salvo = { version = "0.41.0" }
+salvo = { version = "0.63.0" }
 shuttle-runtime = { path = "../../runtime", version = "0.35.1", default-features = false }
 
 [dev-dependencies]

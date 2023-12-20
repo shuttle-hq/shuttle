@@ -412,7 +412,7 @@ where
             return Ok(Self { user });
         }
 
-        return match parts.headers.typed_try_get::<XShuttleAdminSecret>() {
+        match parts.headers.typed_try_get::<XShuttleAdminSecret>() {
             Ok(Some(secret)) => {
                 let user_manager = UserManagerState::from_ref(state);
                 // For this particular case, we expect the secret to be an admin API key.
@@ -430,7 +430,7 @@ where
             Ok(_) => Err(Error::Unauthorized),
             // Returning forbidden for the cases where we don't understand why we can not authorize.
             Err(_) => Err(Error::Forbidden),
-        };
+        }
     }
 }
 

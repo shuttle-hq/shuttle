@@ -423,6 +423,9 @@ jobs:
       posthog-key:
         description: "S Public key used for PostHog connection"
         type: string
+      stripe-rds-price-id:
+        description: "Stripe price id of Shuttle AWS RDS product."
+        type: string
       jwt-signing-private-key:
         description: "Auth private key used for JWT signing"
         type: string
@@ -461,6 +464,7 @@ jobs:
             LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
             STRIPE_SECRET_KEY=${<< parameters.stripe-secret-key >>} \
             POSTHOG_KEY=${<< parameters.posthog-key >>} \
+            STRIPE_RDS_PRICE_ID=${<< parameters.stripe-rds-price-id >>} \
             AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
             CONTROL_DB_POSTGRES_URI=${<< parameters.control-db-postgres-uri >>} \
             make deploy
@@ -838,9 +842,9 @@ workflows:
               only: main
       - approve-build-and-push-images-unstable:
           type: approval
-          filters:
-            branches:
-              only: main
+          # filters:
+          #   branches:
+          #     only: main
       - build-and-push:
           name: build-and-push-unstable
           aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
@@ -857,6 +861,7 @@ workflows:
           logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
           stripe-secret-key: DEV_STRIPE_SECRET_KEY
           posthog-key: DEV_POSTHOG_KEY
+          stripe-rds-price-id: DEV_STRIPE_RDS_PRICE_ID
           jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: DEV_CONTROL_DB_POSTGRES_URI
           requires:
@@ -939,6 +944,7 @@ workflows:
           logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
           stripe-secret-key: PROD_STRIPE_SECRET_KEY
           posthog-key: PROD_POSTHOG_KEY
+          stripe-rds-price-id: PROD_STRIPE_RDS_PRICE_ID
           jwt-signing-private-key: PROD_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: PROD_CONTROL_DB_POSTGRES_URI
           ssh-fingerprint: 6a:c5:33:fe:5b:c9:06:df:99:64:ca:17:0d:32:18:2e

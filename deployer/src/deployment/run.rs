@@ -287,9 +287,11 @@ impl Built {
         load(
             self.service_name.clone(),
             self.service_id,
+            self.id,
             executable_path.clone(),
             resource_manager,
             runtime_client.clone(),
+            deployment_updater.clone(),
             self.claim,
             self.secrets,
         )
@@ -308,18 +310,21 @@ impl Built {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn load(
     service_name: String,
     service_id: Ulid,
+    deployment_id: Uuid,
     executable_path: PathBuf,
     mut resource_manager: impl ResourceManager,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+    deployment_updater: impl DeploymentUpdater,
     claim: Claim,
     mut secrets: HashMap<String, String>,
 ) -> Result<()> {
     info!("Loading resources");
 
-    let resources = resource_manager
+    let resources: Vec<_> = resource_manager
         .get_resources(&service_id, claim.clone())
         .await
         .map_err(|err| Error::Load(err.to_string()))?
@@ -352,8 +357,15 @@ async fn load(
                 }
             }
         })
-        .map(resource::Response::into_bytes)
         .collect();
+
+    // Check whether or not any rds instances are cached (already provisioned).
+    let cached_resources_contains_rds = resources.iter().any(|resource| {
+        matches!(
+            resource.r#type,
+            shuttle_common::resource::Type::Database(shuttle_common::database::Type::AwsRds(_))
+        )
+    });
 
     let mut load_request = tonic::Request::new(LoadRequest {
         path: executable_path
@@ -361,7 +373,10 @@ async fn load(
             .into_string()
             .unwrap_or_default(),
         service_name: service_name.clone(),
-        resources,
+        resources: resources
+            .into_iter()
+            .map(resource::Response::into_bytes)
+            .collect(),
         secrets,
     });
 
@@ -379,22 +394,53 @@ async fn load(
                 info!("successfully loaded service");
             }
 
-            let resources = response
+            let resources: Vec<_> = response
                 .resources
                 .into_iter()
                 .map(|res| {
                     let resource: resource::Response = serde_json::from_slice(&res).unwrap();
-                    record_request::Resource {
-                        r#type: resource.r#type.to_string(),
-                        config: resource.config.to_string().into_bytes(),
-                        data: resource.data.to_string().into_bytes(),
-                    }
+                    resource
                 })
                 .collect();
+
+            // Check whether any rds instances were included in the service resources after loading.
+            let loaded_resources_contains_rds = resources.iter().any(|resource| {
+                matches!(
+                    resource.r#type,
+                    shuttle_common::resource::Type::Database(
+                        shuttle_common::database::Type::AwsRds(_)
+                    )
+                )
+            });
+
+            let resources: Vec<_> = resources
+                .into_iter()
+                .map(|resource| record_request::Resource {
+                    r#type: resource.r#type.to_string(),
+                    config: resource.config.to_string().into_bytes(),
+                    data: resource.data.to_string().into_bytes(),
+                })
+                .collect();
+
             resource_manager
                 .insert_resources(resources, &service_id, claim.clone())
                 .await
                 .expect("to add resource to persistence");
+
+            // If any rds instances were not cached, and they were returned from the runtime load,
+            // we know that these rds instances were provisioned for the first time.
+            if !cached_resources_contains_rds && loaded_resources_contains_rds {
+                deployment_updater
+                    .set_message(
+                        &deployment_id,
+                        "This deployment increased the cost of your subscription. To check your total, log in to the Shuttle web console.",
+                    )
+                    .await
+                    .map_err(|err| {
+                        error!(error = %err, "failed to set deployment message");
+                        Error::Load("failed to set deployment message".to_string())
+                    })?;
+            }
 
             if response.success {
                 Ok(())

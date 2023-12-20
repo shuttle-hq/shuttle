@@ -36,6 +36,7 @@ pub struct Response {
     pub git_commit_msg: Option<String>,
     pub git_branch: Option<String>,
     pub git_dirty: Option<bool>,
+    pub message: Option<String>,
 }
 
 impl Display for Response {
@@ -51,7 +52,7 @@ impl Display for Response {
             self.state
                 .to_string()
                 // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                .with(crossterm::style::Color::from_str(self.state.get_color()).unwrap())
+                .with(crossterm::style::Color::from_str(self.state.get_color()).unwrap()),
         )
     }
 }

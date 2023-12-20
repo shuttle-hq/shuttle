@@ -7,11 +7,13 @@ use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
     Client,
 };
+use error::AuthClientError;
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_common::backends::auth::VerifyClaim;
-use shuttle_common::claims::Scope;
+use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItem};
+use shuttle_common::claims::{AccountTier, Scope};
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
@@ -21,8 +23,9 @@ use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeleti
 use shuttle_proto::provisioner::{Ping, Pong};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
+use tonic::transport::Uri;
 use tonic::{Request, Response, Status};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 mod args;
 mod error;
@@ -38,6 +41,8 @@ pub struct MyProvisioner {
     fqdn: String,
     internal_pg_address: String,
     internal_mongodb_address: String,
+    auth_client: reqwest::Client,
+    auth_uri: Uri,
 }
 
 impl MyProvisioner {
@@ -47,6 +52,7 @@ impl MyProvisioner {
         fqdn: String,
         internal_pg_address: String,
         internal_mongodb_address: String,
+        auth_uri: Uri,
     ) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
@@ -77,6 +83,8 @@ impl MyProvisioner {
             fqdn,
             internal_pg_address,
             internal_mongodb_address,
+            auth_client: reqwest::Client::new(),
+            auth_uri,
         })
     }
 
@@ -249,7 +257,7 @@ impl MyProvisioner {
     async fn request_aws_rds(
         &self,
         project_name: &str,
-        engine: aws_rds::Engine,
+        engine: &aws_rds::Engine,
     ) -> Result<DatabaseResponse, Error> {
         let client = &self.rds_client;
 
@@ -336,6 +344,43 @@ impl MyProvisioner {
             address_public: address,
             port: engine_to_port(engine),
         })
+    }
+
+    /// Send a request to the auth service with new subscription items that should be added to
+    /// the subscription of the [Claim] subject.
+    pub async fn add_subscription_items(
+        &self,
+        jwt: &str,
+        subscription_item: NewSubscriptionItem,
+    ) -> Result<(), AuthClientError> {
+        let response = self
+            .auth_client
+            .post(format!("{}users/subscription/items", self.auth_uri))
+            .bearer_auth(jwt)
+            .json(&subscription_item)
+            .send()
+            .await
+            .map_err(|err| {
+                error!(error = %err, "failed to connect to auth service");
+                AuthClientError::Internal("failed to connect to auth service".to_string())
+            })?;
+
+        match response.status().as_u16() {
+            200 => Ok(()),
+            499 => {
+                error!(
+                    status_code = 499,
+                    "failed to update subscription due to expired jwt"
+                );
+                Err(AuthClientError::ExpiredJwt)
+            }
+            status_code => {
+                error!(status_code = status_code, "failed to update subscription");
+                Err(AuthClientError::Internal(
+                    "failed to update subscription".to_string(),
+                ))
+            }
+        }
     }
 
     async fn delete_shared_db(
@@ -428,7 +473,7 @@ impl MyProvisioner {
     async fn delete_aws_rds(
         &self,
         project_name: &str,
-        engine: aws_rds::Engine,
+        engine: &aws_rds::Engine,
     ) -> Result<DatabaseDeletionResponse, Error> {
         let client = &self.rds_client;
         let instance_name = format!("{project_name}-{engine}");
@@ -470,9 +515,31 @@ impl Provisioner for MyProvisioner {
                     .await?
             }
             DbType::AwsRds(AwsRds { engine }) => {
-                can_provision_rds?;
-                self.request_aws_rds(&request.project_name, engine.expect("engine to be set"))
-                    .await?
+                let claim = can_provision_rds?;
+
+                let engine = engine.expect("engine should be set");
+
+                let response = self.request_aws_rds(&request.project_name, &engine).await?;
+
+                // Skip updating subscriptions for admin users.
+                if claim.tier != AccountTier::Admin {
+                    // If the subscription update fails, e.g. due to a JWT expiring or the subject's
+                    // subscription expiring, delete the instance immediately.
+                    if let Err(err) = self
+                        .add_subscription_items(
+                            // The token should be set on the claim in the JWT auth layer.
+                            claim.token().expect("claim should have a token"),
+                            NewSubscriptionItem::new(SubscriptionItem::AwsRds, 1),
+                        )
+                        .await
+                    {
+                        self.delete_aws_rds(&request.project_name, &engine).await?;
+
+                        return Err(Status::internal(err.to_string()));
+                    };
+                }
+
+                response
             }
         };
 
@@ -498,7 +565,7 @@ impl Provisioner for MyProvisioner {
                     .await?
             }
             DbType::AwsRds(AwsRds { engine }) => {
-                self.delete_aws_rds(&request.project_name, engine.expect("engine to be set"))
+                self.delete_aws_rds(&request.project_name, &engine.expect("engine to be set"))
                     .await?
             }
         };
@@ -552,7 +619,7 @@ async fn wait_for_instance(
     }
 }
 
-fn engine_to_port(engine: aws_rds::Engine) -> String {
+fn engine_to_port(engine: &aws_rds::Engine) -> String {
     match engine {
         aws_rds::Engine::Postgres(_) => "5432".to_string(),
         aws_rds::Engine::Mariadb(_) => "3306".to_string(),

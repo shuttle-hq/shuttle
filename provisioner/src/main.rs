@@ -33,6 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fqdn.to_string(),
         internal_pg_address,
         internal_mongodb_address,
+        auth_uri.clone(),
     )
     .await
     .unwrap();

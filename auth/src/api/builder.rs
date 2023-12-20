@@ -2,6 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     extract::FromRef,
+    handler::Handler,
     middleware::from_extractor,
     routing::{get, post, put},
     Router, Server,
@@ -9,7 +10,11 @@ use axum::{
 use axum_sessions::{async_session::MemoryStore, SessionLayer};
 use rand::RngCore;
 use shuttle_common::{
-    backends::metrics::{Metrics, TraceLayer},
+    backends::{
+        auth::{JwtAuthenticationLayer, ScopedLayer},
+        metrics::{Metrics, TraceLayer},
+    },
+    claims::Scope,
     request_span,
 };
 use sqlx::PgPool;
@@ -22,8 +27,8 @@ use crate::{
 };
 
 use super::handlers::{
-    convert_cookie, convert_key, get_public_key, get_user, health_check, logout, post_user,
-    put_user_reset_key, refresh_token, update_user_tier,
+    add_subscription_items, convert_cookie, convert_key, get_public_key, get_user, health_check,
+    logout, post_user, put_user_reset_key, refresh_token, update_user_tier,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -33,6 +38,7 @@ pub type KeyManagerState = Arc<Box<dyn KeyManager>>;
 pub struct RouterState {
     pub user_manager: UserManagerState,
     pub key_manager: KeyManagerState,
+    pub rds_price_id: String,
 }
 
 // Allow getting a user management state directly
@@ -54,17 +60,16 @@ pub struct ApiBuilder {
     pool: Option<PgPool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
     stripe_client: Option<stripe::Client>,
-    jwt_signing_private_key: Option<String>,
-}
-
-impl Default for ApiBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
+    rds_price_id: Option<String>,
+    key_manager: EdDsaManager,
 }
 
 impl ApiBuilder {
-    pub fn new() -> Self {
+    pub fn new(jwt_signing_private_key: String) -> Self {
+        let key_manager = EdDsaManager::new(jwt_signing_private_key);
+
+        let public_key = key_manager.public_key().to_vec();
+
         let router = Router::new()
             .route("/", get(health_check))
             .route("/logout", post(logout))
@@ -73,6 +78,17 @@ impl ApiBuilder {
             .route("/auth/refresh", post(refresh_token))
             .route("/public-key", get(get_public_key))
             .route("/users/:account_name", get(get_user))
+            .route(
+                "/users/subscription/items",
+                post(
+                    add_subscription_items
+                        .layer(ScopedLayer::new(vec![Scope::ResourcesWrite]))
+                        .layer(JwtAuthenticationLayer::new(move || {
+                            let public_key = public_key.clone();
+                            async move { public_key.clone() }
+                        })),
+                ),
+            )
             .route(
                 "/users/:account_name/:account_tier",
                 post(post_user).put(update_user_tier),
@@ -96,7 +112,8 @@ impl ApiBuilder {
             pool: None,
             session_layer: None,
             stripe_client: None,
-            jwt_signing_private_key: None,
+            rds_price_id: None,
+            key_manager,
         }
     }
 
@@ -124,8 +141,8 @@ impl ApiBuilder {
         self
     }
 
-    pub fn with_jwt_signing_private_key(mut self, private_key: String) -> Self {
-        self.jwt_signing_private_key = Some(private_key);
+    pub fn with_rds_price_id(mut self, price_id: String) -> Self {
+        self.rds_price_id = Some(price_id);
         self
     }
 
@@ -133,18 +150,17 @@ impl ApiBuilder {
         let pool = self.pool.expect("an sqlite pool is required");
         let session_layer = self.session_layer.expect("a session layer is required");
         let stripe_client = self.stripe_client.expect("a stripe client is required");
-        let jwt_signing_private_key = self
-            .jwt_signing_private_key
-            .expect("a jwt signing private key");
+        let rds_price_id = self.rds_price_id.expect("rds price id is required");
+
         let user_manager = UserManager {
             pool,
             stripe_client,
         };
-        let key_manager = EdDsaManager::new(jwt_signing_private_key);
 
         let state = RouterState {
             user_manager: Arc::new(Box::new(user_manager)),
-            key_manager: Arc::new(Box::new(key_manager)),
+            key_manager: Arc::new(Box::new(self.key_manager)),
+            rds_price_id,
         };
 
         self.router.layer(session_layer).with_state(state)

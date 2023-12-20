@@ -1,24 +1,24 @@
-use crate::stripe::MOCKED_SUBSCRIPTIONS;
-use axum::{body::Body, extract::Path, extract::State, response::Response, routing::get, Router};
+use axum::{body::Body, response::Response, Router};
 use http::{header::CONTENT_TYPE, StatusCode};
-use hyper::{
-    http::{header::AUTHORIZATION, Request},
-    Server,
-};
+use hyper::http::{header::AUTHORIZATION, Request};
 use once_cell::sync::Lazy;
 use serde_json::Value;
 use shuttle_auth::{pgpool_init, ApiBuilder};
 use shuttle_common::claims::{AccountTier, Claim};
 use shuttle_common_tests::postgres::DockerInstance;
 use sqlx::query;
-use std::{
-    net::SocketAddr,
-    str::FromStr,
-    sync::{Arc, Mutex},
-};
 use tower::ServiceExt;
+use wiremock::{
+    matchers::{bearer_token, method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
+/// Admin user API key.
 pub(crate) const ADMIN_KEY: &str = "ndh9z58jttoes3qv";
+/// Stripe test API key.
+pub(crate) const STRIPE_TEST_KEY: &str = "sk_test_123";
+/// Stripe test RDS price id.
+pub(crate) const STRIPE_TEST_RDS_PRICE_ID: &str = "price_1OIS06FrN7EDaGOjaV0GXD7P";
 
 static PG: Lazy<DockerInstance> = Lazy::new(DockerInstance::default);
 #[ctor::dtor]
@@ -28,14 +28,15 @@ fn cleanup() {
 
 pub(crate) struct TestApp {
     pub router: Router,
-    pub mocked_stripe_server: MockedStripeServer,
+    pub mock_server: MockServer,
 }
 
 /// Initialize a router with an in-memory sqlite database for each test.
 pub(crate) async fn app() -> TestApp {
     let pg_pool = pgpool_init(PG.get_unique_uri().as_str()).await.unwrap();
 
-    let mocked_stripe_server = MockedStripeServer::default();
+    let mock_server = MockServer::start().await;
+
     // Insert an admin user for the tests.
     query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
         .bind("admin")
@@ -45,19 +46,19 @@ pub(crate) async fn app() -> TestApp {
         .await
         .unwrap();
 
-    let router = ApiBuilder::new()
+    let router = ApiBuilder::new("LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUR5V0ZFYzhKYm05NnA0ZGNLTEwvQWNvVUVsbUF0MVVKSTU4WTc4d1FpWk4KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=".to_string())
         .with_pg_pool(pg_pool)
         .with_sessions()
         .with_stripe_client(stripe::Client::from_url(
-            mocked_stripe_server.uri.to_string().as_str(),
-            "",
+            mock_server.uri().as_str(),
+            STRIPE_TEST_KEY,
         ))
-        .with_jwt_signing_private_key("LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUR5V0ZFYzhKYm05NnA0ZGNLTEwvQWNvVUVsbUF0MVVKSTU4WTc4d1FpWk4KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=".to_string())
+        .with_rds_price_id(STRIPE_TEST_RDS_PRICE_ID.to_string())
         .into_router();
 
     TestApp {
         router,
-        mocked_stripe_server,
+        mock_server,
     }
 }
 
@@ -136,91 +137,27 @@ impl TestApp {
 
         Claim::from_token(token, &public_key).unwrap()
     }
-}
 
-#[derive(Clone)]
-pub(crate) struct MockedStripeServer {
-    uri: http::Uri,
-    router: Router,
-}
-
-#[derive(Clone)]
-pub(crate) struct RouterState {
-    subscription_cancel_side_effect_toggle: Arc<Mutex<bool>>,
-}
-
-impl MockedStripeServer {
-    async fn subscription_retrieve_handler(
-        Path(subscription_id): Path<String>,
-        State(state): State<RouterState>,
-    ) -> axum::response::Response<String> {
-        let is_sub_cancelled = state
-            .subscription_cancel_side_effect_toggle
-            .lock()
-            .unwrap()
-            .to_owned();
-
-        if subscription_id == "sub_123" {
-            if is_sub_cancelled {
-                return Response::new(MOCKED_SUBSCRIPTIONS[3].to_string());
-            } else {
-                let mut toggle = state.subscription_cancel_side_effect_toggle.lock().unwrap();
-                *toggle = true;
-                return Response::new(MOCKED_SUBSCRIPTIONS[2].to_string());
-            }
-        }
-
-        let sessions = MOCKED_SUBSCRIPTIONS
-            .iter()
-            .filter(|sub| sub.contains(format!("\"id\": \"{}\"", subscription_id).as_str()))
-            .map(|sub| serde_json::from_str(sub).unwrap())
-            .collect::<Vec<Value>>();
-        if sessions.len() == 1 {
-            return Response::new(sessions[0].to_string());
-        }
-
-        Response::builder()
-            .status(http::StatusCode::NOT_FOUND)
-            .body("subscription id not found".to_string())
-            .unwrap()
-    }
-
-    pub(crate) async fn serve(self) {
-        let address = &SocketAddr::from_str(
-            format!("{}:{}", self.uri.host().unwrap(), self.uri.port().unwrap()).as_str(),
-        )
-        .unwrap();
-        println!("serving on: {}", address);
-        Server::bind(address)
-            .serve(self.router.into_make_service())
-            .await
-            .unwrap_or_else(|_| panic!("Failed to bind to address: {}", self.uri));
-    }
-}
-
-impl Default for MockedStripeServer {
-    fn default() -> MockedStripeServer {
-        let router_state = RouterState {
-            subscription_cancel_side_effect_toggle: Arc::new(Mutex::new(false)),
-        };
-
-        let router = Router::new()
-            .route(
-                "/v1/subscriptions/:subscription_id",
-                get(MockedStripeServer::subscription_retrieve_handler),
+    /// A test util to get a user with a subscription, mocking the response from Stripe. A key part
+    /// of this util is `mount_as_scoped`, since getting a user with a subscription can be done
+    /// several times in a test, if they're not scoped the first mock would always apply.
+    pub async fn get_user_with_mocked_stripe(
+        &self,
+        subscription_id: &str,
+        response_body: &str,
+        account_name: &str,
+    ) -> Response {
+        // This mock will apply until the end of this function scope.
+        let _mock_guard = Mock::given(method("GET"))
+            .and(bearer_token(STRIPE_TEST_KEY))
+            .and(path(format!("/v1/subscriptions/{subscription_id}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::from_str::<Value>(response_body).unwrap()),
             )
-            .with_state(router_state);
+            .mount_as_scoped(&self.mock_server)
+            .await;
 
-        MockedStripeServer {
-            uri: http::Uri::from_str(
-                format!(
-                    "http://127.0.0.1:{}",
-                    portpicker::pick_unused_port().unwrap()
-                )
-                .as_str(),
-            )
-            .unwrap(),
-            router,
-        }
+        self.get_user(account_name).await
     }
 }

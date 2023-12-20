@@ -316,6 +316,10 @@ impl Claim {
 
         Ok(claim)
     }
+
+    pub fn token(&self) -> Option<&str> {
+        self.token.as_deref()
+    }
 }
 
 // Future for layers that just return the inner response

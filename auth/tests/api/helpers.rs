@@ -112,16 +112,16 @@ impl TestApp {
         self.send_request(request).await
     }
 
-    /// If we don't provide a valid admin key, then the`basic_api_key` parameter
+    /// If we don't provide a valid admin key, then the`user_api_key` parameter
     /// should be of an admin user.
     pub async fn get_jwt_from_api_key(
         &self,
-        basic_api_key: &str,
+        user_api_key: &str,
         admin_api_key: Option<&str>,
     ) -> Response {
         let mut request_builder = Request::builder()
             .uri("/auth/key")
-            .header(AUTHORIZATION, format!("Bearer {basic_api_key}"));
+            .header(AUTHORIZATION, format!("Bearer {user_api_key}"));
 
         if let Some(key) = admin_api_key {
             request_builder = request_builder.header(X_SHUTTLE_ADMIN_SECRET.to_string(), key)

@@ -27,7 +27,7 @@ use shuttle_common::models::error::InvalidProjectName;
 use tokio::sync::mpsc::Sender;
 use tower::{Service, ServiceBuilder};
 use tower_sanitize_path::SanitizePath;
-use tracing::{debug_span, error, field, trace};
+use tracing::{debug_span, error, field, instrument, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::{AcmeClient, ChallengeResponderLayer, CustomDomain};
@@ -200,7 +200,10 @@ impl<'r> AsResponderTo<&'r AddrStream> for Bouncer {
 }
 
 impl Bouncer {
+    #[instrument(level = "debug", skip_all, fields(http.method = %req.method(), http.host = ?req.headers().get("Host"), http.uri = %req.uri()))]
     async fn bounce(self, req: Request<Body>) -> Result<Response, Error> {
+        trace!(?req, "serving proxy request");
+
         let mut resp = Response::builder();
 
         let host = req.headers().typed_get::<Host>().unwrap();

@@ -610,7 +610,7 @@ pub async fn start_deployment(
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
 ) -> Result<()> {
     if let Some(deployment) = persistence.get_runnable_deployment(&deployment_id).await? {
-        let account_name = claim.sub.replace('|', "-");
+        let account_name = claim.sub.clone().to_string();
 
         let built = Built {
             id: deployment.id,

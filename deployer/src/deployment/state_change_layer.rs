@@ -141,6 +141,7 @@ mod tests {
         },
         RuntimeManager,
     };
+    use async_posthog::ClientOptions;
     use async_trait::async_trait;
     use axum::body::Bytes;
     use ctor::ctor;
@@ -805,6 +806,15 @@ mod tests {
     async fn get_deployment_manager() -> DeploymentManager {
         let logger_client = mocked_logger_client(RecorderMock::new()).await;
         let builder_client = mocked_builder_client(RecorderMock::new()).await;
+
+        let ph_client_options = ClientOptions::new(
+            "".to_string(),
+            "https://eu.posthog.com".to_string(),
+            Duration::from_millis(800),
+        );
+
+        let posthog_client = async_posthog::client(ph_client_options);
+
         DeploymentManager::builder()
             .build_log_recorder(RECORDER.clone())
             .active_deployment_getter(StubActiveDeploymentGetter)
@@ -815,6 +825,7 @@ mod tests {
             .runtime(get_runtime_manager(Batcher::wrap(logger_client)).await)
             .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)
+            .posthog_client(posthog_client)
             .build()
     }
 

@@ -3,12 +3,12 @@ use std::{fmt::Formatter, io::ErrorKind, str::FromStr};
 use async_trait::async_trait;
 use axum::{
     extract::{FromRef, FromRequestParts},
-    headers::{authorization::Bearer, Authorization},
+    headers::{authorization::Bearer, Authorization, HeaderMapExt},
     http::request::Parts,
     TypedHeader,
 };
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::{claims::AccountTier, secrets::Secret, ApiKey};
+use shuttle_common::{backends::headers::XShuttleAdminSecret, claims::AccountTier, ApiKey, Secret};
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
 use tracing::{debug, error, trace, Span};
 
@@ -387,11 +387,28 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let user = User::from_request_parts(parts, state).await?;
-
         if user.is_admin() {
-            Ok(Self { user })
-        } else {
-            Err(Error::Forbidden)
+            return Ok(Self { user });
+        }
+
+        match parts.headers.typed_try_get::<XShuttleAdminSecret>() {
+            Ok(Some(secret)) => {
+                let user_manager = UserManagerState::from_ref(state);
+                // For this particular case, we expect the secret to be an admin API key.
+                let key = ApiKey::parse(&secret.0).map_err(|_| Error::Unauthorized)?;
+                let admin_user = user_manager
+                    .get_user_by_key(key)
+                    .await
+                    .map_err(|_| Error::Unauthorized)?;
+                if admin_user.is_admin() {
+                    Ok(Self { user: admin_user })
+                } else {
+                    Err(Error::Unauthorized)
+                }
+            }
+            Ok(_) => Err(Error::Unauthorized),
+            // Returning forbidden for the cases where we don't understand why we can not authorize.
+            Err(_) => Err(Error::Forbidden),
         }
     }
 }

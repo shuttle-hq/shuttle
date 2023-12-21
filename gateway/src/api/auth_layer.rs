@@ -15,7 +15,9 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use shuttle_common::backends::{auth::ConvertResponse, cache::CacheManagement};
+use shuttle_common::backends::{
+    auth::ConvertResponse, cache::CacheManagement, headers::XShuttleAdminSecret,
+};
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -36,16 +38,19 @@ const CACHE_MINUTES: u64 = 5;
 #[derive(Clone)]
 pub struct ShuttleAuthLayer {
     auth_uri: Uri,
+    gateway_admin_key: String,
     cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
 }
 
 impl ShuttleAuthLayer {
     pub fn new(
         auth_uri: Uri,
+        gateway_admin_key: String,
         cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
     ) -> Self {
         Self {
             auth_uri,
+            gateway_admin_key,
             cache_manager,
         }
     }
@@ -57,6 +62,7 @@ impl<S> Layer<S> for ShuttleAuthLayer {
     fn layer(&self, inner: S) -> Self::Service {
         ShuttleAuthService {
             inner,
+            gateway_admin_key: self.gateway_admin_key.clone(),
             auth_uri: self.auth_uri.clone(),
             cache_manager: self.cache_manager.clone(),
         }
@@ -67,6 +73,7 @@ impl<S> Layer<S> for ShuttleAuthLayer {
 pub struct ShuttleAuthService<S> {
     inner: S,
     auth_uri: Uri,
+    gateway_admin_key: String,
     cache_manager: Arc<Box<dyn CacheManagement<Value = String>>>,
 }
 
@@ -117,7 +124,9 @@ where
 
         // If /users/reset-api-key is called, invalidate the cached JWT.
         if req.uri().path() == "/users/reset-api-key" {
-            if let Some((cache_key, _)) = cache_key_and_token_req(&req) {
+            if let Some((cache_key, _)) =
+                cache_key_and_token_req(&req, self.gateway_admin_key.as_str())
+            {
                 self.cache_manager.invalidate(&cache_key);
             };
         }
@@ -172,7 +181,9 @@ where
 
             Box::pin(async move {
                 // Only if there is something to upgrade
-                if let Some((cache_key, token_request)) = cache_key_and_token_req(&req) {
+                if let Some((cache_key, token_request)) =
+                    cache_key_and_token_req(&req, this.gateway_admin_key.as_str())
+                {
                     let target_url = this.auth_uri.to_string();
 
                     // Check if the token is cached.
@@ -268,34 +279,48 @@ where
     }
 }
 
-fn cache_key_and_token_req(req: &Request<Body>) -> Option<(String, Request<Body>)> {
+fn cache_key_and_token_req(
+    req: &Request<Body>,
+    gateway_admin_key: &str,
+) -> Option<(String, Request<Body>)> {
     req.headers()
         .typed_get::<Authorization<Bearer>>()
         .map(|bearer| {
             let cache_key = bearer.token().trim().to_string();
-            let token_request = make_token_request("/auth/key", bearer);
+            let token_request = make_token_request("/auth/key", bearer, Some(gateway_admin_key));
             (cache_key, token_request)
         })
         .or_else(|| {
             req.headers().typed_get::<Cookie>().and_then(|cookie| {
                 cookie.get("shuttle.sid").map(|id| {
                     let cache_key = id.to_string();
-                    let token_request = make_token_request("/auth/session", cookie.clone());
+                    let token_request = make_token_request("/auth/session", cookie.clone(), None);
                     (cache_key, token_request)
                 })
             })
         })
 }
 
-fn make_token_request(uri: &str, header: impl Header) -> Request<Body> {
+fn make_token_request(
+    uri: &str,
+    header: impl Header,
+    gateway_admin_key: Option<&str>,
+) -> Request<Body> {
     let mut token_request = Request::builder().uri(uri);
     token_request
         .headers_mut()
         .expect("manual request to be valid")
         .typed_insert(header);
 
-    let cx = Span::current().context();
+    if let Some(key) = gateway_admin_key {
+        trace!("XShuttleAdminSecret header inserted for token request");
+        token_request
+            .headers_mut()
+            .expect("manual request to be valid")
+            .typed_insert(XShuttleAdminSecret(key.to_string()));
+    }
 
+    let cx = Span::current().context();
     global::get_text_map_propagator(|propagator| {
         propagator.inject_context(
             &cx,

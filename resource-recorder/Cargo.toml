@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-resource-recorder"
-version = "0.35.1"
+version = "0.35.2"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

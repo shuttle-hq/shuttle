@@ -18,7 +18,7 @@ use shuttle_common::models::project::ProjectName;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tower::{Layer, Service};
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::proxy::AsResponderTo;
 use crate::Error;
@@ -194,6 +194,7 @@ impl AcmeClient {
             match state.status {
                 OrderStatus::Ready => break state,
                 OrderStatus::Invalid => {
+                    debug!(?state, "order status invalid");
                     return Err(AcmeClientError::ChallengeInvalid);
                 }
                 OrderStatus::Pending => {

@@ -18,7 +18,7 @@ use shuttle_common::models::project::ProjectName;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tower::{Layer, Service};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, debug_span, error, trace, warn};
 
 use crate::proxy::AsResponderTo;
 use crate::Error;
@@ -194,7 +194,7 @@ impl AcmeClient {
             match state.status {
                 OrderStatus::Ready => break state,
                 OrderStatus::Invalid => {
-                    debug!(?state, "order status invalid");
+                    error!(?state, "order status invalid");
                     return Err(AcmeClientError::ChallengeInvalid);
                 }
                 OrderStatus::Pending => {
@@ -382,8 +382,15 @@ where
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
+        let _span = debug_span!("http-challenge-responder", http.method = %req.method(), http.host = ?req.headers().get("Host"), http.uri = %req.uri());
+
         if !req.uri().path().starts_with("/.well-known/acme-challenge/") {
+            debug!(
+                req.uri = ?req.uri(),
+                "the challenge request uri is not as expected"
+            );
             let future = self.inner.call(req);
+
             return Box::pin(async move {
                 let response: Response = future.await?;
                 Ok(response)
@@ -406,15 +413,13 @@ where
             }
         };
 
-        trace!(token, "responding to certificate challenge");
-
         let client = self.client.clone();
-
         Box::pin(async move {
             let (status, body) = match client.get_http01_challenge_authorization(&token).await {
                 Some(key) => (200, Body::from(key)),
                 None => (404, Body::empty()),
             };
+            debug!(token, "responding to certificate challenge");
 
             Ok(Response::builder()
                 .status(status)

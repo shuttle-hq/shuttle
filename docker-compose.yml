@@ -153,6 +153,7 @@ services:
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"
       - "--admin-key=${GATEWAY_ADMIN_KEY}"
+      - "--posthog-key=${POSTHOG_KEY}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001"]
       interval: 1m

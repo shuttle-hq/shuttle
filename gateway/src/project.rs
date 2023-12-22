@@ -909,7 +909,7 @@ impl ProjectCreating {
                         resource_recorder_uri,
                         "--project-id",
                         self.project_id.to_string(),
-                        "--posthog_key",
+                        "--posthog-key",
                         posthog_key,
                     ],
                 })

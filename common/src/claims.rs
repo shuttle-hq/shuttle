@@ -173,8 +173,15 @@ impl Default for ScopeBuilder {
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "display", derive(strum::Display))]
 #[cfg_attr(feature = "persist", derive(sqlx::Type))]
-#[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
+#[cfg_attr(
+    feature = "persist",
+    sqlx(type_name = "tier", rename_all = "lowercase")
+)]
 #[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
+/// This enum represents the Shuttle account tiers. It gets persisted especially into
+/// our auth service database, which is PostgreSQL based, and for data validity reason
+/// is backed in PostgreSQL by an enum type, which must mirror the same enum variants
+/// we see in this Rust enum.
 pub enum AccountTier {
     #[default]
     Basic,

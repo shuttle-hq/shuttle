@@ -841,9 +841,9 @@ workflows:
     jobs:
       - approve-deploy-images-unstable:
           type: approval
-        filters:
-          branches:
-            only: main
+          filters:
+            branches:
+              only: main
       - approve-build-and-push-images-unstable:
           type: approval
           filters:

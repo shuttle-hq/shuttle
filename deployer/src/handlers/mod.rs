@@ -414,14 +414,7 @@ pub async fn create_service(
 
     let service = persistence.get_or_create_service(&service_name).await?;
     let pid = persistence.project_id();
-
     let account_name = claim.sub.clone().to_string();
-
-    let event = async_posthog::Event::new("shuttle_api_start_deployment".to_string(), account_name);
-
-    if let Err(err) = deployment_manager.posthog_client().capture(event).await {
-        error!(error = %err, "failed to send event to posthog")
-    };
 
     span.in_scope(|| {
         info!("Deployer version: {}", crate::VERSION);
@@ -431,7 +424,6 @@ pub async fn create_service(
         info!("Project ID: {}", pid);
         info!("Project name: {}", project_name);
         info!("Date: {}", now.to_rfc3339_opts(SecondsFormat::Secs, true));
-        info!("PH Event sent");
     });
 
     let deployment = Deployment {
@@ -467,6 +459,15 @@ pub async fn create_service(
     };
 
     deployment_manager.queue_push(queued).await;
+
+    tokio::spawn(async move {
+        let event =
+            async_posthog::Event::new("shuttle_api_start_deployment".to_string(), account_name);
+
+        if let Err(err) = deployment_manager.posthog_client().capture(event).await {
+            error!(error = %err, "failed to send event to posthog")
+        };
+    });
 
     Ok(Json(deployment.into()))
 }
@@ -619,8 +620,6 @@ pub async fn start_deployment(
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
 ) -> Result<()> {
     if let Some(deployment) = persistence.get_runnable_deployment(&deployment_id).await? {
-        let account_name = claim.sub.clone().to_string();
-
         let built = Built {
             id: deployment.id,
             service_name: deployment.service_name,
@@ -632,15 +631,6 @@ pub async fn start_deployment(
             secrets: Default::default(),
         };
         deployment_manager.run_push(built).await;
-
-        tokio::spawn(async move {
-            let event =
-                async_posthog::Event::new("shuttle_api_start_deployment".to_string(), account_name);
-
-            if let Err(err) = deployment_manager.posthog_client().capture(event).await {
-                error!(error = %err, "failed to send event to posthog")
-            };
-        });
 
         Ok(())
     } else {

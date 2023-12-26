@@ -68,15 +68,6 @@ async fn main() {
 
     let posthog_client = async_posthog::client(ph_client_options);
 
-    let event = async_posthog::Event::new(
-        "shuttle_api_start_deployment".to_string(),
-        "account_name".to_string(),
-    );
-
-    if let Err(err) = posthog_client.capture(event).await {
-        error!(error = %err, "failed to send event to posthog")
-    };
-
     setup_tracing(
         tracing_subscriber::registry()
             .with(StateChangeLayer {

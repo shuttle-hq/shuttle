@@ -531,7 +531,7 @@ pub async fn get_deployments(
 
         Ok(Json(deployments))
     } else {
-        Err(Error::NotFound("service not found".to_string()))
+        Ok(Json(vec![]))
     }
 }
 

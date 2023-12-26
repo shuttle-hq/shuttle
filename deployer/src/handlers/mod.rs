@@ -415,6 +415,14 @@ pub async fn create_service(
     let service = persistence.get_or_create_service(&service_name).await?;
     let pid = persistence.project_id();
 
+    let account_name = claim.sub.clone().to_string();
+
+    let event = async_posthog::Event::new("shuttle_api_start_deployment".to_string(), account_name);
+
+    if let Err(err) = deployment_manager.posthog_client().capture(event).await {
+        error!(error = %err, "failed to send event to posthog")
+    };
+
     span.in_scope(|| {
         info!("Deployer version: {}", crate::VERSION);
         info!("Deployment ID: {}", id);
@@ -423,6 +431,7 @@ pub async fn create_service(
         info!("Project ID: {}", pid);
         info!("Project name: {}", project_name);
         info!("Date: {}", now.to_rfc3339_opts(SecondsFormat::Secs, true));
+        info!("PH Event sent");
     });
 
     let deployment = Deployment {

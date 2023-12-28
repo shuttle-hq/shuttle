@@ -1,15 +1,4 @@
-//! Shuttle service integration for the Warp web framework.
-//! ## Example
-//! ```rust,no_run
-//! use warp::Filter;
-//! use warp::Reply;
-//!
-//! #[shuttle_runtime::main]
-//! async fn warp() -> shuttle_warp::ShuttleWarp<(impl Reply,)> {
-//!     let route = warp::any().map(|| "Hello, World!");
-//!     Ok(route.boxed().into())
-//! }
-//! ```
+#![doc = include_str!("../README.md")]
 use shuttle_runtime::Error;
 use std::net::SocketAddr;
 use std::ops::Deref;
@@ -49,5 +38,5 @@ impl<T> Deref for WarpService<T> {
     }
 }
 
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+#[doc = include_str!("../README.md")]
 pub type ShuttleWarp<T> = Result<WarpService<warp::filters::BoxedFilter<T>>, Error>;

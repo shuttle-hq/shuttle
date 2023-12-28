@@ -35,7 +35,15 @@
 <!-- markdownlint-disable-next-line -->
 <a id="installation"><h1>Installation</h1></a>
 
-`cargo-shuttle` is available for macOS, Linux, and Windows. To install the commandline tool, run:
+`cargo-shuttle` is available for macOS, Linux, and Windows.
+
+To install on Linux or macOS, run:
+
+```sh
+curl -sSfL https://www.shuttle.rs/install | bash
+```
+
+On Windows, you can default to installing from source:
 
 ```bash
 cargo install cargo-shuttle
@@ -43,7 +51,9 @@ cargo install cargo-shuttle
 
 ### Distro Packages
 
+<!-- markdownlint-disable-next-line -->
 <details>
+<!-- markdownlint-disable-next-line -->
   <summary>Packaging status</summary>
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/cargo-shuttle.svg)](https://repology.org/project/cargo-shuttle/versions)
@@ -52,10 +62,18 @@ cargo install cargo-shuttle
 
 #### Arch Linux
 
-`cargo-shuttle` can be installed from the [community repository](https://archlinux.org/packages/community/x86_64/cargo-shuttle) using [pacman](https://wiki.archlinux.org/title/Pacman):
+`cargo-shuttle` can be installed from the [extra repository](https://archlinux.org/packages/extra/x86_64/cargo-shuttle) using [pacman](https://wiki.archlinux.org/title/Pacman):
 
 ```sh
 pacman -S cargo-shuttle
+```
+
+#### Alpine Linux
+
+`cargo-shuttle` is available for [Alpine Edge](https://pkgs.alpinelinux.org/packages?name=cargo-shuttle&branch=edge). It can be installed via [apk](https://wiki.alpinelinux.org/wiki/Alpine_Package_Keeper) after enabling the [testing repository](https://wiki.alpinelinux.org/wiki/Repositories).
+
+```sh
+apk add cargo-shuttle
 ```
 
 ---
@@ -80,16 +98,15 @@ Commands:
   logs        View the logs of a deployment in this shuttle service
   project     List or manage projects on shuttle
   resource    Manage resources of a shuttle project
-  secrets     Manage secrets for this shuttle service
   clean       Remove cargo build artifacts in the shuttle environment
   login       Login to the shuttle platform
   logout      Log out of the shuttle platform
-  generate    Generate shell completions
+  generate    Generate shell completions and man page
   feedback    Open an issue on GitHub and provide feedback
   help        Print this message or the help of the given subcommand(s)
 
 Options:
-      --working-directory <WORKING_DIRECTORY>  Specify the working directory [default: .]
+      --working-directory <WORKING_DIRECTORY>  Specify the working directory [default: .] [aliases: wd]
       --name <NAME>                            Specify the name of the project (overrides crate name)
       --api-url <API_URL>                      Run this command against the API at the supplied URL (allows targeting a custom deployed instance for this command only, mainly
                                                for development) [env: SHUTTLE_API=]
@@ -124,10 +141,10 @@ cargo shuttle init --template rocket my-rocket-app
 This should generate the following dependency in `Cargo.toml`:
 
 ```toml
-rocket = "0.5.0-rc.2"
-shuttle-rocket = { version = "0.19.0" }
-shuttle-runtime = { version = "0.19.0" }
-tokio = { version = "1.26.0" }
+rocket = "0.5.0"
+shuttle-rocket = "0.35.1"
+shuttle-runtime = "0.35.1"
+tokio = "1.26.0"
 ```
 
 The following boilerplate code should be generated into `src/lib.rs`:
@@ -226,9 +243,5 @@ cargo shuttle stop
 <a id="development"><h1>Development</h1></a>
 
 Thanks for using `cargo-shuttle`! We’re very happy to have you with us!
-
-During our alpha period, API keys are completely free and you can deploy as many services as you want.
-
-Just keep in mind that there may be some kinks that require us to take all deployments down once in a while. In certain circumstances we may also have to delete all the data associated with those deployments.
 
 To contribute to `cargo-shuttle` or stay updated with our development, please [open an issue, discussion or PR on Github](https://github.com/shuttle-hq/shuttle) and [join our Discord](https://discord.gg/shuttle)! 🚀

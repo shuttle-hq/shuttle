@@ -1,9 +1,11 @@
 [package]
 name = "shuttle-admin"
-version = "0.19.0"
+version = "0.35.1"
 edition = "2021"
 
 [dependencies]
+shuttle-common = { workspace = true, features = ["models"] }
+
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 dirs = { workspace = true }
@@ -14,7 +16,3 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 toml = { workspace = true }
 tracing = { workspace = true, features = ["default"] }
 tracing-subscriber = { workspace = true, features = ["default", "env-filter"] }
-
-[dependencies.shuttle-common]
-workspace = true
-features = ["models"]

@@ -1,7 +1,11 @@
-// This clippy is disabled as per this prost comment
-// https://github.com/tokio-rs/prost/issues/661#issuecomment-1156606409
-#![allow(clippy::derive_partial_eq_without_eq)]
+mod generated;
 
+// useful re-exports if types are needed in other crates
+pub use prost;
+pub use prost_types;
+pub use tonic;
+
+#[cfg(feature = "provisioner")]
 pub mod provisioner {
     use std::fmt::Display;
 
@@ -10,7 +14,7 @@ pub mod provisioner {
         DatabaseReadyInfo, QdrantReadyInfo,
     };
 
-    include!("generated/provisioner.rs");
+    pub use super::generated::provisioner::*;
 
     impl From<DatabaseResponse> for DatabaseReadyInfo {
         fn from(response: DatabaseResponse) -> Self {
@@ -112,181 +116,321 @@ pub mod provisioner {
     }
 }
 
+#[cfg(feature = "runtime")]
 pub mod runtime {
-    use std::{
-        convert::TryFrom,
-        path::PathBuf,
-        time::{Duration, SystemTime},
-    };
+    pub use super::generated::runtime::*;
+}
 
+#[cfg(feature = "resource-recorder")]
+pub mod resource_recorder {
     use anyhow::Context;
-    use chrono::DateTime;
-    use prost_types::Timestamp;
-    use shuttle_common::{
-        claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer},
-        ParseError,
-    };
-    use tokio::process;
-    use tonic::transport::{Channel, Endpoint};
-    use tower::ServiceBuilder;
-    use tracing::info;
+    use std::str::FromStr;
 
-    pub enum StorageManagerType {
-        Artifacts(PathBuf),
-        WorkingDir(PathBuf),
-    }
+    pub use super::generated::resource_recorder::*;
 
-    include!("generated/runtime.rs");
+    impl TryFrom<record_request::Resource> for shuttle_common::resource::Response {
+        type Error = anyhow::Error;
 
-    impl From<shuttle_common::log::Level> for LogLevel {
-        fn from(level: shuttle_common::log::Level) -> Self {
-            match level {
-                shuttle_common::log::Level::Trace => Self::Trace,
-                shuttle_common::log::Level::Debug => Self::Debug,
-                shuttle_common::log::Level::Info => Self::Info,
-                shuttle_common::log::Level::Warn => Self::Warn,
-                shuttle_common::log::Level::Error => Self::Error,
-            }
-        }
-    }
-
-    impl TryFrom<LogItem> for shuttle_common::LogItem {
-        type Error = ParseError;
-
-        fn try_from(log: LogItem) -> Result<Self, Self::Error> {
-            Ok(Self {
-                id: Default::default(),
-                timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap_or_default())?),
-                state: shuttle_common::deployment::State::Running,
-                level: LogLevel::from_i32(log.level).unwrap_or_default().into(),
-                file: log.file,
-                line: log.line,
-                target: log.target,
-                fields: log.fields,
-            })
-        }
-    }
-
-    impl From<LogLevel> for shuttle_common::log::Level {
-        fn from(level: LogLevel) -> Self {
-            match level {
-                LogLevel::Trace => Self::Trace,
-                LogLevel::Debug => Self::Debug,
-                LogLevel::Info => Self::Info,
-                LogLevel::Warn => Self::Warn,
-                LogLevel::Error => Self::Error,
-            }
-        }
-    }
-
-    impl From<shuttle_common::wasm::Log> for LogItem {
-        fn from(log: shuttle_common::wasm::Log) -> Self {
-            let file = if log.file.is_empty() {
-                None
-            } else {
-                Some(log.file)
+        fn try_from(resource: record_request::Resource) -> Result<Self, Self::Error> {
+            let r#type = shuttle_common::resource::Type::from_str(resource.r#type.as_str())
+                .map_err(anyhow::Error::msg)
+                .context("resource type should have a valid resource string")?;
+            let response = shuttle_common::resource::Response {
+                r#type,
+                config: serde_json::from_slice(&resource.config)
+                    .context(format!("{} resource config should be valid JSON", r#type))?,
+                data: serde_json::from_slice(&resource.data)
+                    .context(format!("{} resource data should be valid JSON", r#type))?,
             };
 
-            let line = if log.line == 0 { None } else { Some(log.line) };
+            Ok(response)
+        }
+    }
 
+    impl TryFrom<Resource> for shuttle_common::resource::Response {
+        type Error = anyhow::Error;
+
+        fn try_from(resource: Resource) -> Result<Self, Self::Error> {
+            let r#type = shuttle_common::resource::Type::from_str(resource.r#type.as_str())
+                .map_err(anyhow::Error::msg)
+                .context("resource type should have a valid resource string")?;
+
+            let response = shuttle_common::resource::Response {
+                r#type,
+                config: serde_json::from_slice(&resource.config)
+                    .context(format!("{} resource config should be valid JSON", r#type))?,
+                data: serde_json::from_slice(&resource.data)
+                    .context(format!("{} resource data should be valid JSON", r#type))?,
+            };
+
+            Ok(response)
+        }
+    }
+}
+
+#[cfg(feature = "builder")]
+pub mod builder {
+    pub use super::generated::builder::*;
+}
+
+#[cfg(feature = "logger")]
+pub mod logger {
+    use std::str::FromStr;
+    use std::time::Duration;
+
+    use chrono::{NaiveDateTime, TimeZone, Utc};
+    use prost::bytes::Bytes;
+    use tokio::{select, sync::mpsc, time::interval};
+    use tonic::{
+        async_trait,
+        codegen::{Body, StdError},
+        Request,
+    };
+    use tracing::error;
+
+    use shuttle_common::{
+        log::{Backend, LogItem as LogItemCommon, LogRecorder},
+        DeploymentId,
+    };
+
+    pub use super::generated::logger::*;
+
+    impl From<LogItemCommon> for LogItem {
+        fn from(value: LogItemCommon) -> Self {
             Self {
-                timestamp: Some(Timestamp::from(SystemTime::from(log.timestamp))),
-                level: LogLevel::from(log.level) as i32,
-                file,
-                line,
-                target: log.target,
-                fields: log.fields,
+                deployment_id: value.id.to_string(),
+                log_line: Some(LogLine {
+                    tx_timestamp: Some(prost_types::Timestamp {
+                        seconds: value.timestamp.timestamp(),
+                        nanos: value.timestamp.timestamp_subsec_nanos() as i32,
+                    }),
+                    service_name: format!("{:?}", value.internal_origin),
+                    data: value.line.into_bytes(),
+                }),
             }
         }
     }
 
-    impl From<shuttle_common::wasm::Level> for LogLevel {
-        fn from(level: shuttle_common::wasm::Level) -> Self {
-            match level {
-                shuttle_common::wasm::Level::Trace => Self::Trace,
-                shuttle_common::wasm::Level::Debug => Self::Debug,
-                shuttle_common::wasm::Level::Info => Self::Info,
-                shuttle_common::wasm::Level::Warn => Self::Warn,
-                shuttle_common::wasm::Level::Error => Self::Error,
+    impl From<LogItem> for LogItemCommon {
+        fn from(value: LogItem) -> Self {
+            value
+                .log_line
+                .expect("log item to have log line")
+                .to_log_item_with_id(value.deployment_id.parse().unwrap_or_default())
+        }
+    }
+
+    impl LogLine {
+        pub fn to_log_item_with_id(self, deployment_id: DeploymentId) -> LogItemCommon {
+            let LogLine {
+                service_name,
+                tx_timestamp,
+                data,
+            } = self;
+            let tx_timestamp = tx_timestamp.expect("log to have timestamp");
+
+            LogItemCommon {
+                id: deployment_id,
+                internal_origin: Backend::from_str(&service_name)
+                    .expect("backend name to be valid"),
+                timestamp: Utc.from_utc_datetime(
+                    &NaiveDateTime::from_timestamp_opt(
+                        tx_timestamp.seconds,
+                        tx_timestamp.nanos.try_into().unwrap_or_default(),
+                    )
+                    .unwrap_or_default(),
+                ),
+                line: String::from_utf8(data).expect("line to be utf-8"),
             }
         }
     }
 
-    impl From<&tracing::Level> for LogLevel {
-        fn from(level: &tracing::Level) -> Self {
-            match *level {
-                tracing::Level::TRACE => Self::Trace,
-                tracing::Level::DEBUG => Self::Debug,
-                tracing::Level::INFO => Self::Info,
-                tracing::Level::WARN => Self::Warn,
-                tracing::Level::ERROR => Self::Error,
+    impl<I> LogRecorder for Batcher<I>
+    where
+        I: VecReceiver<Item = LogItem> + Clone + 'static,
+    {
+        fn record(&self, log: LogItemCommon) {
+            self.send(log.into());
+        }
+    }
+
+    /// Adapter to some client which expects to receive a vector of items
+    #[async_trait]
+    pub trait VecReceiver: Send {
+        type Item;
+
+        async fn receive(&mut self, items: Vec<Self::Item>);
+    }
+
+    #[async_trait]
+    impl<T> VecReceiver for logger_client::LoggerClient<T>
+    where
+        T: tonic::client::GrpcService<tonic::body::BoxBody> + Send + Sync + Clone,
+        T::Error: Into<StdError>,
+        T::ResponseBody: Body<Data = Bytes> + Send + 'static,
+        T::Future: Send,
+        <T::ResponseBody as Body>::Error: Into<StdError> + Send,
+    {
+        type Item = LogItem;
+
+        async fn receive(&mut self, items: Vec<Self::Item>) {
+            if let Err(error) = self
+                .store_logs(Request::new(StoreLogsRequest { logs: items }))
+                .await
+            {
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to send batch logs to logger"
+                );
             }
         }
     }
 
-    pub async fn start(
-        wasm: bool,
-        storage_manager_type: StorageManagerType,
-        provisioner_address: &str,
-        auth_uri: Option<&String>,
-        port: u16,
-        get_runtime_executable: impl FnOnce() -> PathBuf,
-    ) -> anyhow::Result<(
-        process::Child,
-        runtime_client::RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
-    )> {
-        let (storage_manager_type, storage_manager_path) = match storage_manager_type {
-            StorageManagerType::Artifacts(path) => ("artifacts", path),
-            StorageManagerType::WorkingDir(path) => ("working-dir", path),
+    /// Wrapper to batch together items before forwarding them to some vector receiver
+    #[derive(Clone)]
+    pub struct Batcher<I: VecReceiver> {
+        tx: mpsc::UnboundedSender<I::Item>,
+    }
+
+    impl<I: VecReceiver + 'static> Batcher<I>
+    where
+        I::Item: Send,
+    {
+        /// Create a new batcher around inner with the given batch capacity.
+        /// Items will be send when the batch has reached capacity or at the set interval. Whichever comes first.
+        pub fn new(inner: I, capacity: usize, interval: Duration) -> Self {
+            let (tx, rx) = mpsc::unbounded_channel();
+
+            tokio::spawn(Self::batch(inner, rx, capacity, interval));
+
+            Self { tx }
+        }
+
+        /// Create a batcher around inner. It will send a batch of items to inner if a capacity of 256 is reached
+        /// or if an interval of 1 second is reached.
+        pub fn wrap(inner: I) -> Self {
+            Self::new(inner, 256, Duration::from_secs(1))
+        }
+
+        /// Send a single item into this batcher
+        pub fn send(&self, item: I::Item) {
+            if self.tx.send(item).is_err() {
+                unreachable!("the receiver will never drop");
+            }
+        }
+
+        /// Background task to forward the items once the batch capacity has been reached
+        async fn batch(
+            mut inner: I,
+            mut rx: mpsc::UnboundedReceiver<I::Item>,
+            capacity: usize,
+            interval_duration: Duration,
+        ) {
+            let mut interval = interval(interval_duration);
+
+            // Without this, the default behaviour will burst any missed tickers until they are caught up.
+            // This will cause a flood which we want to avoid.
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            // Get past the first tick
+            interval.tick().await;
+
+            let mut cache = Vec::with_capacity(capacity);
+
+            loop {
+                select! {
+                    item = rx.recv() => {
+                        if let Some(item) = item {
+                            cache.push(item);
+
+                            if cache.len() == capacity {
+                                let old_cache = cache;
+                                cache = Vec::with_capacity(capacity);
+
+                                inner.receive(old_cache).await;
+                            }
+                        } else {
+                            // Sender dropped
+                            return;
+                        }
+                    },
+                    _ = interval.tick() => {
+                        if !cache.is_empty() {
+                            let old_cache = cache;
+                            cache = Vec::with_capacity(capacity);
+
+                            inner.receive(old_cache).await;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::{
+            sync::{Arc, Mutex},
+            time::Duration,
         };
 
-        let port = &port.to_string();
-        let storage_manager_path = &storage_manager_path.display().to_string();
-        let runtime_executable_path = get_runtime_executable();
+        use tokio::time::sleep;
+        use tonic::async_trait;
 
-        let args = if wasm {
-            vec!["--port", port]
-        } else {
-            let mut args = vec![
-                "--port",
-                port,
-                "--provisioner-address",
-                provisioner_address,
-                "--storage-manager-type",
-                storage_manager_type,
-                "--storage-manager-path",
-                storage_manager_path,
-            ];
+        use super::{Batcher, VecReceiver};
 
-            if let Some(auth_uri) = auth_uri {
-                args.append(&mut vec!["--auth-uri", auth_uri]);
+        #[derive(Default, Clone)]
+        struct MockGroupReceiver(Arc<Mutex<Option<Vec<u32>>>>);
+
+        #[async_trait]
+        impl VecReceiver for MockGroupReceiver {
+            type Item = u32;
+
+            async fn receive(&mut self, items: Vec<Self::Item>) {
+                *self.0.lock().unwrap() = Some(items);
             }
+        }
 
-            args
-        };
+        #[tokio::test]
+        async fn capacity_reached() {
+            let mock = MockGroupReceiver::default();
+            let batcher = Batcher::new(mock.clone(), 2, Duration::from_secs(120));
 
-        let runtime = process::Command::new(runtime_executable_path)
-            .args(&args)
-            .kill_on_drop(true)
-            .spawn()
-            .context("spawning runtime process")?;
+            batcher.send(1);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), None);
 
-        // Sleep because the timeout below does not seem to work
-        // TODO: investigate why
-        tokio::time::sleep(Duration::from_secs(2)).await;
+            batcher.send(2);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![1, 2]));
 
-        info!("connecting runtime client");
-        let conn = Endpoint::new(format!("http://127.0.0.1:{port}"))
-            .context("creating runtime client endpoint")?
-            .connect_timeout(Duration::from_secs(5));
+            batcher.send(3);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![1, 2]));
 
-        let channel = conn.connect().await.context("connecting runtime client")?;
-        let channel = ServiceBuilder::new()
-            .layer(ClaimLayer)
-            .layer(InjectPropagationLayer)
-            .service(channel);
-        let runtime_client = runtime_client::RuntimeClient::new(channel);
+            batcher.send(4);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![3, 4]));
+        }
 
-        Ok((runtime, runtime_client))
+        #[tokio::test]
+        async fn interval_reached() {
+            let mock = MockGroupReceiver::default();
+            let batcher = Batcher::new(mock.clone(), 2, Duration::from_millis(300));
+
+            sleep(Duration::from_millis(500)).await;
+            assert_eq!(
+                *mock.0.lock().unwrap(),
+                None,
+                "we should never send something when the cache is empty"
+            );
+
+            batcher.send(1);
+            sleep(Duration::from_millis(50)).await;
+            assert_eq!(*mock.0.lock().unwrap(), None);
+
+            sleep(Duration::from_millis(500)).await;
+            assert_eq!(*mock.0.lock().unwrap(), Some(vec![1]));
+        }
     }
 }

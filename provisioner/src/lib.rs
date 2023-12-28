@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::time::Duration;
 
 pub use args::Args;
@@ -6,20 +7,26 @@ use aws_sdk_rds::{
     error::SdkError, operation::modify_db_instance::ModifyDBInstanceError, types::DbInstance,
     Client,
 };
+use error::AuthClientError;
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
-use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::backends::auth::VerifyClaim;
+use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItem};
+use shuttle_common::claims::{AccountTier, Scope};
+use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse,
     QdrantRequest, QdrantResponse, Shared,
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
+use shuttle_proto::provisioner::{Ping, Pong};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
+use tonic::transport::Uri;
 use tonic::{Request, Response, Status};
-use tracing::{debug, info};
+use tracing::{debug, error, info, warn};
 
 mod args;
 mod error;
@@ -35,6 +42,8 @@ pub struct MyProvisioner {
     fqdn: String,
     internal_pg_address: String,
     internal_mongodb_address: String,
+    auth_client: reqwest::Client,
+    auth_uri: Uri,
 }
 
 impl MyProvisioner {
@@ -44,6 +53,7 @@ impl MyProvisioner {
         fqdn: String,
         internal_pg_address: String,
         internal_mongodb_address: String,
+        auth_uri: Uri,
     ) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
@@ -74,6 +84,8 @@ impl MyProvisioner {
             fqdn,
             internal_pg_address,
             internal_mongodb_address,
+            auth_client: reqwest::Client::new(),
+            auth_uri,
         })
     }
 
@@ -172,7 +184,13 @@ impl MyProvisioner {
 
             // Make sure database can't see other databases or other users
             // For #557
-            let options = self.pool.connect_options().clone().database(&database_name);
+            let options = self
+                .pool
+                .connect_options()
+                .deref()
+                .clone()
+                .database(&database_name);
+
             let mut conn = options.connect().await?;
 
             let stmts = vec![
@@ -240,8 +258,8 @@ impl MyProvisioner {
     async fn request_aws_rds(
         &self,
         project_name: &str,
-        engine: aws_rds::Engine,
-    ) -> Result<DatabaseResponse, Error> {
+        engine: &aws_rds::Engine,
+    ) -> Result<(bool, DatabaseResponse), Error> {
         let client = &self.rds_client;
 
         let password = generate_password();
@@ -255,6 +273,7 @@ impl MyProvisioner {
             .send()
             .await;
 
+        let mut created_new_instance = false;
         match instance {
             Ok(_) => {
                 wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
@@ -289,6 +308,8 @@ impl MyProvisioner {
                         .expect("to be able to create instance");
 
                     wait_for_instance(client, &instance_name, "creating").await?;
+
+                    created_new_instance = true;
                 } else {
                     return Err(Error::Plain(format!(
                         "got unexpected error from AWS RDS service: {}",
@@ -314,19 +335,59 @@ impl MyProvisioner {
             .address
             .expect("endpoint to have an address");
 
-        Ok(DatabaseResponse {
-            engine: engine.to_string(),
-            username: instance
-                .master_username
-                .expect("instance to have a username"),
-            password,
-            database_name: instance
-                .db_name
-                .expect("instance to have a default database"),
-            address_private: address.clone(),
-            address_public: address,
-            port: engine_to_port(engine),
-        })
+        Ok((
+            created_new_instance,
+            DatabaseResponse {
+                engine: engine.to_string(),
+                username: instance
+                    .master_username
+                    .expect("instance to have a username"),
+                password,
+                database_name: instance
+                    .db_name
+                    .expect("instance to have a default database"),
+                address_private: address.clone(),
+                address_public: address,
+                port: engine_to_port(engine),
+            },
+        ))
+    }
+
+    /// Send a request to the auth service with new subscription items that should be added to
+    /// the subscription of the [Claim] subject.
+    pub async fn add_subscription_items(
+        &self,
+        jwt: &str,
+        subscription_item: NewSubscriptionItem,
+    ) -> Result<(), AuthClientError> {
+        let response = self
+            .auth_client
+            .post(format!("{}users/subscription/items", self.auth_uri))
+            .bearer_auth(jwt)
+            .json(&subscription_item)
+            .send()
+            .await
+            .map_err(|err| {
+                error!(error = %err, "failed to connect to auth service");
+                AuthClientError::Internal("failed to connect to auth service".to_string())
+            })?;
+
+        match response.status().as_u16() {
+            200 => Ok(()),
+            499 => {
+                error!(
+                    status_code = 499,
+                    "failed to update subscription due to expired jwt"
+                );
+                Err(AuthClientError::ExpiredJwt)
+            }
+            status_code => {
+                error!(status_code = status_code, "failed to update subscription");
+                Err(AuthClientError::Internal(
+                    "failed to update subscription".to_string(),
+                ))
+            }
+        }
     }
 
     async fn delete_shared_db(
@@ -335,42 +396,67 @@ impl MyProvisioner {
         engine: shared::Engine,
     ) -> Result<DatabaseDeletionResponse, Error> {
         match engine {
-            shared::Engine::Postgres(_) => self.delete_pg(project_name).await?,
-            shared::Engine::Mongodb(_) => self.delete_mongodb(project_name).await?,
+            shared::Engine::Postgres(_) => self.delete_shared_postgres(project_name).await?,
+            shared::Engine::Mongodb(_) => self.delete_shared_mongodb(project_name).await?,
         }
         Ok(DatabaseDeletionResponse {})
     }
 
-    async fn delete_pg(&self, project_name: &str) -> Result<(), Error> {
+    async fn delete_shared_postgres(&self, project_name: &str) -> Result<(), Error> {
         let database_name = format!("db-{project_name}");
         let role_name = format!("user-{project_name}");
 
-        // Idenfitiers cannot be used as query parameters
-        let drop_db_query = format!("DROP DATABASE \"{database_name}\";");
-
-        // Drop the database. Note that this can fail if there are still active connections to it
-        sqlx::query(&drop_db_query)
-            .execute(&self.pool)
+        if sqlx::query("SELECT 1 FROM pg_database WHERE datname = $1")
+            .bind(&database_name)
+            .fetch_optional(&self.pool)
             .await
-            .map_err(|e| Error::DeleteRole(e.to_string()))?;
+            .map_err(|e| Error::DeleteDB(e.to_string()))?
+            .is_some()
+        {
+            // Identifiers cannot be used as query parameters.
+            let drop_db_query = format!("DROP DATABASE \"{database_name}\" WITH (FORCE)");
 
-        // Drop the role
-        let drop_role_query = format!("DROP ROLE IF EXISTS \"{role_name}\"");
-        sqlx::query(&drop_role_query)
-            .execute(&self.pool)
+            // Drop the database with force, which will try to terminate existing connections to the
+            // database. This can fail if prepared transactions, active logical replication slots or
+            // subscriptions are present in the database.
+            sqlx::query(&drop_db_query)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| Error::DeleteDB(e.to_string()))?;
+
+            info!("dropped shared postgres database: {database_name}");
+        } else {
+            warn!("did not drop shared postgres database: {database_name}. Does not exist.");
+        }
+
+        if sqlx::query("SELECT 1 FROM pg_roles WHERE rolname = $1")
+            .bind(&role_name)
+            .fetch_optional(&self.pool)
             .await
-            .map_err(|e| Error::DeleteDB(e.to_string()))?;
+            .map_err(|e| Error::DeleteRole(e.to_string()))?
+            .is_some()
+        {
+            // Drop the role.
+            let drop_role_query = format!("DROP ROLE IF EXISTS \"{role_name}\"");
+            sqlx::query(&drop_role_query)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| Error::DeleteRole(e.to_string()))?;
+
+            info!("dropped shared postgres role: {role_name}");
+        } else {
+            warn!("did not drop shared postgres role: {role_name}. Does not exist.");
+        }
 
         Ok(())
     }
 
-    async fn delete_mongodb(&self, project_name: &str) -> Result<(), Error> {
+    async fn delete_shared_mongodb(&self, project_name: &str) -> Result<(), Error> {
         let database_name = format!("mongodb-{project_name}");
         let db = self.mongodb_client.database(&database_name);
 
-        // dropping a database in mongodb doesn't delete any associated users
-        // so do that first
-
+        // Dropping a database in mongodb doesn't delete any associated users
+        // so do that first.
         let drop_users_command = doc! {
             "dropAllUsersFromDatabase": 1
         };
@@ -379,11 +465,14 @@ impl MyProvisioner {
             .await
             .map_err(|e| Error::DeleteRole(e.to_string()))?;
 
-        // drop the actual database
+        info!("dropped users from shared mongodb database: {database_name}");
 
+        // Drop the actual database.
         db.drop(None)
             .await
             .map_err(|e| Error::DeleteDB(e.to_string()))?;
+
+        info!("dropped shared mongodb database: {database_name}");
 
         Ok(())
     }
@@ -391,27 +480,20 @@ impl MyProvisioner {
     async fn delete_aws_rds(
         &self,
         project_name: &str,
-        engine: aws_rds::Engine,
+        engine: &aws_rds::Engine,
     ) -> Result<DatabaseDeletionResponse, Error> {
         let client = &self.rds_client;
         let instance_name = format!("{project_name}-{engine}");
 
-        // try to delete the db instance
-        let delete_result = client
+        // Try to delete the db instance.
+        client
             .delete_db_instance()
+            .skip_final_snapshot(true)
             .db_instance_identifier(&instance_name)
             .send()
-            .await;
+            .await?;
 
-        // Did we get an error that wasn't "db instance not found"
-        if let Err(SdkError::ServiceError(err)) = delete_result {
-            if !err.err().is_db_instance_not_found_fault() {
-                return Err(Error::Plain(format!(
-                    "got unexpected error from AWS RDS service: {}",
-                    err.err()
-                )));
-            }
-        }
+        info!("deleted database instance: {instance_name}");
 
         Ok(DatabaseDeletionResponse {})
     }
@@ -424,19 +506,49 @@ impl Provisioner for MyProvisioner {
         &self,
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseResponse>, Status> {
-        verify_claim(&request)?;
+        request.verify(Scope::ResourcesWrite)?;
+
+        let can_provision_rds = request.verify_rds_access();
 
         let request = request.into_inner();
+        if !ProjectName::is_valid(&request.project_name) {
+            return Err(Status::invalid_argument("invalid project name"));
+        }
         let db_type = request.db_type.unwrap();
 
         let reply = match db_type {
             DbType::Shared(Shared { engine }) => {
-                self.request_shared_db(&request.project_name, engine.expect("oneof to be set"))
+                self.request_shared_db(&request.project_name, engine.expect("engine to be set"))
                     .await?
             }
             DbType::AwsRds(AwsRds { engine }) => {
-                self.request_aws_rds(&request.project_name, engine.expect("oneof to be set"))
-                    .await?
+                let claim = can_provision_rds?;
+
+                let engine = engine.expect("engine should be set");
+
+                let (created_new_instance, database_response) =
+                    self.request_aws_rds(&request.project_name, &engine).await?;
+
+                // Skip updating subscriptions for admin users, and only update subscription if the
+                // rds instance is new.
+                if claim.tier != AccountTier::Admin && created_new_instance {
+                    // If the subscription update fails, e.g. due to a JWT expiring or the subject's
+                    // subscription expiring, delete the instance immediately.
+                    if let Err(err) = self
+                        .add_subscription_items(
+                            // The token should be set on the claim in the JWT auth layer.
+                            claim.token().expect("claim should have a token"),
+                            NewSubscriptionItem::new(SubscriptionItem::AwsRds, 1),
+                        )
+                        .await
+                    {
+                        self.delete_aws_rds(&request.project_name, &engine).await?;
+
+                        return Err(Status::internal(err.to_string()));
+                    };
+                }
+
+                database_response
             }
         };
 
@@ -448,18 +560,21 @@ impl Provisioner for MyProvisioner {
         &self,
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
-        verify_claim(&request)?;
+        request.verify(Scope::ResourcesWrite)?;
 
         let request = request.into_inner();
+        if !ProjectName::is_valid(&request.project_name) {
+            return Err(Status::invalid_argument("invalid project name"));
+        }
         let db_type = request.db_type.unwrap();
 
         let reply = match db_type {
             DbType::Shared(Shared { engine }) => {
-                self.delete_shared_db(&request.project_name, engine.expect("oneof to be set"))
+                self.delete_shared_db(&request.project_name, engine.expect("engine to be set"))
                     .await?
             }
             DbType::AwsRds(AwsRds { engine }) => {
-                self.delete_aws_rds(&request.project_name, engine.expect("oneof to be set"))
+                self.delete_aws_rds(&request.project_name, &engine.expect("engine to be set"))
                     .await?
             }
         };
@@ -485,21 +600,10 @@ impl Provisioner for MyProvisioner {
             api_key: Some(api_key),
         }))
     }
-}
 
-/// Verify the claim on the request has the correct scope to call this service
-fn verify_claim<B>(request: &Request<B>) -> Result<(), Status> {
-    let claim = request
-        .extensions()
-        .get::<Claim>()
-        .ok_or_else(|| Status::internal("could not get claim"))?;
-
-    if claim.scopes.contains(&Scope::ResourcesWrite) {
-        Ok(())
-    } else {
-        Err(Status::permission_denied(
-            "does not have resource allocation scope",
-        ))
+    #[tracing::instrument(skip(self))]
+    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        Ok(Response::new(Pong {}))
     }
 }
 
@@ -543,7 +647,7 @@ async fn wait_for_instance(
     }
 }
 
-fn engine_to_port(engine: aws_rds::Engine) -> String {
+fn engine_to_port(engine: &aws_rds::Engine) -> String {
     match engine {
         aws_rds::Engine::Postgres(_) => "5432".to_string(),
         aws_rds::Engine::Mariadb(_) => "3306".to_string(),

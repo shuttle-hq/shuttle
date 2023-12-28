@@ -8,7 +8,10 @@ This plugin provisions databases on AWS RDS using [shuttle](https://www.shuttle.
 
 ## Usage
 
-Add `shuttle-aws-rds` to the dependencies for your service. Every engine is behind the following feature flags and attribute paths:
+Add `shuttle-aws-rds` to the dependencies for your service.
+Every engine is behind the following feature flags and attribute paths.
+The default is to use native TLS.
+You can also add `-rustls` after the feature flag, for example `postgres-rustls`.
 
 | Engine   | Feature flag | Attribute path            |
 |----------|--------------|---------------------------|

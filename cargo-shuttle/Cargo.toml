@@ -1,13 +1,18 @@
 [package]
 name = "cargo-shuttle"
-version = "0.19.1"
+version = "0.35.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"
 homepage = "https://www.shuttle.rs"
+rust-version = "1.70"
 
 [dependencies]
+shuttle-common = { workspace = true, features = ["models"] }
+shuttle-proto = { workspace = true, features = ["provisioner", "runtime"] }
+shuttle-service = { workspace = true, features = ["builder", "runner"] }
+
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bollard = { workspace = true }
@@ -15,32 +20,41 @@ cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 clap_complete = "4.3.1"
-crossbeam-channel = { workspace = true }
+clap_mangen = "0.2.15"
 crossterm = { workspace = true }
-dialoguer = { version = "0.10.4", features = ["fuzzy-select"] }
+dialoguer = { version = "0.11.0", features = ["fuzzy-select"] }
 dirs = { workspace = true }
-dunce = "1.0.3"
+dunce = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
-git2 = "0.17.2"
+git2 = { version = "0.18.1", default-features = false }
+gix = { version = "0.55.2", default-features = false, features = [
+  "blocking-http-transport-reqwest-rust-tls",
+  "worktree-mutation",
+] }
+globset = "0.4.13"
 home = { workspace = true }
 headers = { workspace = true }
 indicatif = "0.17.3"
 ignore = "0.4.20"
 indoc = "2.0.1"
-openssl = { version = "0.10", optional = true }
+percent-encoding = { workspace = true }
 portpicker = { workspace = true }
+regex = "1.9.5"
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = "0.2.0"
-reqwest-retry = "0.2.0"
+reqwest-retry = "0.3.0"
 rmp-serde = { workspace = true }
+semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres"] }
 strum = { workspace = true }
 tar = { workspace = true }
-tokio = { workspace = true, features = ["macros", "signal"] }
-tokio-tungstenite = { version = "0.19.0", features = ["rustls-tls-webpki-roots"] }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "signal", "rt-multi-thread"] }
+tokio-tungstenite = { version = "0.20.1", features = [
+  "rustls-tls-webpki-roots",
+] }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tonic = { workspace = true }
@@ -50,30 +64,15 @@ tracing-subscriber = { workspace = true, features = [
   "env-filter",
   "fmt",
 ] }
-url = "2.3.1"
+url = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
+walkdir = "2.3.3"
 webbrowser = "0.8.2"
-semver = "1.0.17"
-cargo-generate = "0.18.3"
-
-[dependencies.shuttle-common]
-workspace = true
-features = ["models"]
-
-[dependencies.shuttle-proto]
-workspace = true
-
-[dependencies.shuttle-service]
-workspace = true
-features = ["builder"]
-
-[features]
-vendored-openssl = ["openssl/vendored"]
 
 [dev-dependencies]
 assert_cmd = "2.0.6"
 rexpect = "0.5.0"
-tempfile = { workspace = true }
-test-context = "0.1.4"
 # Tmp until this branch is merged and released
 tokiotest-httpserver = { git = "https://github.com/shuttle-hq/tokiotest-httpserver", branch = "feat/body" }
+# Publication of this crate will fail if this is changed to a workspace dependency
+shuttle-common-tests = { path = "../common-tests" }

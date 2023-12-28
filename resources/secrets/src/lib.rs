@@ -1,9 +1,11 @@
-use async_trait::async_trait;
+#![doc = include_str!("../README.md")]
 
+use async_trait::async_trait;
 use serde::Serialize;
 pub use shuttle_service::SecretStore;
 use shuttle_service::{Error, Factory, ResourceBuilder, Type};
 
+/// A struct that represents service secrets
 #[derive(Serialize)]
 pub struct Secrets;
 

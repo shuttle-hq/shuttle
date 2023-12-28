@@ -9,13 +9,19 @@ use std::pin::Pin;
 use std::str::FromStr;
 
 use acme::AcmeClientError;
+
 use axum::response::{IntoResponse, Response};
-use axum::Json;
+
 use bollard::Docker;
 use futures::prelude::*;
+use hyper::client::HttpConnector;
+use hyper::Client;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
+use shuttle_common::models::project::ProjectName;
+use strum::Display;
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
 
@@ -29,6 +35,17 @@ pub mod service;
 pub mod task;
 pub mod tls;
 pub mod worker;
+
+pub const DOCKER_STATS_PATH_CGROUP_V1: &str = "/sys/fs/cgroup/cpuacct/docker";
+pub const DOCKER_STATS_PATH_CGROUP_V2: &str = "/sys/fs/cgroup/system.slice";
+
+#[derive(Clone, Display, PartialEq, Eq)]
+pub enum DockerStatsSource {
+    CgroupV1,
+    CgroupV2,
+    Bollard,
+}
+static AUTH_CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 
 /// Server-side errors that do not have to do with the user runtime
 /// should be [`Error`]s.
@@ -67,7 +84,7 @@ impl Error {
     }
 
     pub fn kind(&self) -> ErrorKind {
-        self.kind
+        self.kind.clone()
     }
 }
 
@@ -101,7 +118,7 @@ impl IntoResponse for Error {
 
         let error: ApiError = self.kind.into();
 
-        (error.status(), Json(error)).into_response()
+        error.into_response()
     }
 }
 
@@ -117,60 +134,6 @@ impl std::fmt::Display for Error {
 }
 
 impl StdError for Error {}
-
-#[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq, Hash)]
-#[sqlx(transparent)]
-pub struct ProjectName(String);
-
-impl ProjectName {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-
-    pub fn is_valid(&self) -> bool {
-        let name = self.0.clone();
-
-        fn is_valid_char(byte: u8) -> bool {
-            matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-')
-        }
-
-        // each label in a hostname can be between 1 and 63 chars
-        let is_invalid_length = name.len() > 63;
-
-        !(name.bytes().any(|byte| !is_valid_char(byte))
-            || name.ends_with('-')
-            || name.starts_with('-')
-            || name.is_empty()
-            || is_invalid_length)
-    }
-}
-
-impl<'de> Deserialize<'de> for ProjectName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(<D::Error as serde::de::Error>::custom)
-    }
-}
-
-impl FromStr for ProjectName {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse::<shuttle_common::project::ProjectName>()
-            .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName))
-            .map(|pn| Self(pn.to_string()))
-    }
-}
-
-impl std::fmt::Display for ProjectName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
 #[sqlx(transparent)]
@@ -207,7 +170,7 @@ pub struct ProjectDetails {
     pub account_name: AccountName,
 }
 
-impl From<ProjectDetails> for shuttle_common::models::project::AdminResponse {
+impl From<ProjectDetails> for shuttle_common::models::admin::ProjectResponse {
     fn from(project: ProjectDetails) -> Self {
         Self {
             project_name: project.project_name.to_string(),
@@ -216,25 +179,13 @@ impl From<ProjectDetails> for shuttle_common::models::project::AdminResponse {
     }
 }
 
+#[async_trait]
 pub trait DockerContext: Send + Sync {
     fn docker(&self) -> &Docker;
 
     fn container_settings(&self) -> &ContainerSettings;
-}
 
-#[async_trait]
-pub trait Service {
-    type Context;
-
-    type State: EndState<Self::Context>;
-
-    type Error;
-
-    /// Asks for the latest available context for task execution
-    fn context(&self) -> Self::Context;
-
-    /// Commit a state update to persistence
-    async fn update(&self, state: &Self::State) -> Result<(), Self::Error>;
+    async fn get_stats(&self, container_id: &str) -> Result<u64, Error>;
 }
 
 /// A generic state which can, when provided with a [`Context`], do
@@ -250,14 +201,7 @@ pub trait State<Ctx>: Send {
 
 pub type StateTryStream<'c, St, Err> = Pin<Box<dyn Stream<Item = Result<St, Err>> + Send + 'c>>;
 
-pub trait EndState<Ctx>
-where
-    Self: State<Ctx, Error = Infallible, Next = Self>,
-{
-    fn is_done(&self) -> bool;
-}
-
-pub trait EndStateExt<Ctx>: TryState + EndState<Ctx>
+pub trait StateExt<Ctx>: TryState + State<Ctx, Error = Infallible, Next = Self>
 where
     Ctx: Sync,
     Self: Clone,
@@ -281,9 +225,9 @@ where
     }
 }
 
-impl<Ctx, S> EndStateExt<Ctx> for S
+impl<Ctx, S> StateExt<Ctx> for S
 where
-    S: Clone + TryState + EndState<Ctx>,
+    S: Clone + TryState + State<Ctx, Error = Infallible, Next = Self>,
     Ctx: Send + Sync,
 {
 }
@@ -323,6 +267,7 @@ pub trait Refresh<Ctx>: Sized {
 pub mod tests {
     use std::collections::HashMap;
     use std::env;
+    use std::fs::{canonicalize, read_dir};
     use std::net::SocketAddr;
     use std::str::FromStr;
     use std::sync::{Arc, Mutex};
@@ -334,8 +279,11 @@ pub mod tests {
     use axum::routing::get;
     use axum::{extract, Router, TypedHeader};
     use bollard::Docker;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
     use fqdn::FQDN;
     use futures::prelude::*;
+    use http::Method;
     use hyper::client::HttpConnector;
     use hyper::http::uri::Scheme;
     use hyper::http::Uri;
@@ -344,18 +292,26 @@ pub mod tests {
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
     use shuttle_common::backends::auth::ConvertResponse;
-    use shuttle_common::claims::{Claim, Scope};
-    use shuttle_common::models::project;
-    use sqlx::SqlitePool;
-    use tokio::sync::mpsc::channel;
+    use shuttle_common::claims::{AccountTier, Claim};
+    use shuttle_common::models::deployment::DeploymentRequest;
+    use shuttle_common::models::{project, service};
+    use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
+    use sqlx::sqlite::SqliteConnectOptions;
+    use sqlx::{query, SqlitePool};
+    use test_context::AsyncTestContext;
+    use tokio::sync::mpsc::{channel, Sender};
+    use tokio::time::sleep;
+    use tower::Service;
 
     use crate::acme::AcmeClient;
     use crate::api::latest::ApiBuilder;
     use crate::args::{ContextArgs, StartArgs, UseTls};
+    use crate::project::Project;
     use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
+    use crate::task::BoxedTask;
     use crate::worker::Worker;
-    use crate::DockerContext;
+    use crate::{DockerContext, Error};
 
     macro_rules! value_block_helper {
         ($next:ident, $block:block) => {
@@ -418,7 +374,7 @@ pub mod tests {
             $($(#[$($meta:tt)*])* $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
         } => {{
             let state = $state;
-            let mut stream = crate::EndStateExt::into_stream(state, &$ctx);
+            let mut stream = crate::StateExt::into_stream(state, &$ctx);
             assert_stream_matches!(
                 stream,
                 $($(#[$($meta)*])* $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
@@ -546,7 +502,6 @@ pub mod tests {
         docker: Docker,
         settings: ContainerSettings,
         args: StartArgs,
-        hyper: HyperClient<HttpConnector, Body>,
         pool: SqlitePool,
         acme_client: AcmeClient,
         auth_service: Arc<Mutex<AuthService>>,
@@ -557,7 +512,6 @@ pub mod tests {
     pub struct WorldContext {
         pub docker: Docker,
         pub container_settings: ContainerSettings,
-        pub hyper: HyperClient<HttpConnector, Body>,
         pub auth_uri: Uri,
     }
 
@@ -574,14 +528,20 @@ pub mod tests {
             let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
             let user = control + 1;
             let bouncer = user + 1;
-            let auth = bouncer + 1;
+            let auth_port = bouncer + 1;
             let control = format!("127.0.0.1:{control}").parse().unwrap();
             let user = format!("127.0.0.1:{user}").parse().unwrap();
             let bouncer = format!("127.0.0.1:{bouncer}").parse().unwrap();
-            let auth: SocketAddr = format!("127.0.0.1:{auth}").parse().unwrap();
+            let auth: SocketAddr = format!("0.0.0.0:{auth_port}").parse().unwrap();
             let auth_uri: Uri = format!("http://{auth}").parse().unwrap();
+            let resource_recorder_port = start_mocked_resource_recorder().await;
 
             let auth_service = AuthService::new(auth);
+            auth_service
+                .lock()
+                .unwrap()
+                .users
+                .insert("gateway".to_string(), AccountTier::Deployer);
 
             let prefix = format!(
                 "shuttle_test_{}_",
@@ -589,12 +549,13 @@ pub mod tests {
             );
 
             let image = env::var("SHUTTLE_TESTS_RUNTIME_IMAGE")
-                .unwrap_or_else(|_| "public.ecr.aws/shuttle/deployer:latest".to_string());
+                .unwrap_or_else(|_| "public.ecr.aws/shuttle-dev/deployer:latest".to_string());
 
             let network_name =
                 env::var("SHUTTLE_TESTS_NETWORK").unwrap_or_else(|_| "shuttle_default".to_string());
 
             let provisioner_host = "provisioner".to_string();
+            let builder_host = "builder".to_string();
 
             let docker_host = "/var/run/docker.sock".to_string();
 
@@ -603,22 +564,56 @@ pub mod tests {
                 user,
                 bouncer,
                 use_tls: UseTls::Disable,
+                admin_key: "dummykey".to_string(),
                 context: ContextArgs {
                     docker_host,
                     image,
                     prefix,
                     provisioner_host,
-                    auth_uri: auth_uri.clone(),
+                    builder_host,
+                    // The started containers need to reach auth on the host.
+                    // For this to work, the firewall should not be blocking traffic on the `SHUTTLE_TEST_NETWORK` interface.
+                    // The following command can be used on NixOs to allow traffic on the interface.
+                    // ```
+                    // sudo iptables -I nixos-fw -i <interface> -j nixos-fw-accept
+                    // ```
+                    //
+                    // Something like this should work on other systems.
+                    // ```
+                    // sudo iptables -I INPUT -i <interface> -j ACCEPT
+                    // ```
+                    auth_uri: format!("http://host.docker.internal:{auth_port}")
+                        .parse()
+                        .unwrap(),
+                    resource_recorder_uri: format!(
+                        "http://host.docker.internal:{resource_recorder_port}"
+                    )
+                    .parse()
+                    .unwrap(),
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
+                    deploys_api_key: "gateway".to_string(),
+                    cch_container_limit: 1,
+                    soft_container_limit: 2,
+                    hard_container_limit: 3,
+
+                    // Allow access to the auth on the host
+                    extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],
                 },
             };
 
             let settings = ContainerSettings::builder().from_args(&args.context).await;
 
-            let hyper = HyperClient::builder().build(HttpConnector::new());
-
-            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+            let pool = SqlitePool::connect_with(
+                SqliteConnectOptions::from_str("sqlite::memory:")
+                    .unwrap()
+                    // Set the ulid0 extension for generating ULID's in migrations.
+                    // This uses the ulid0.so file in the crate root, with the
+                    // LD_LIBRARY_PATH env set in build.rs.
+                    .extension("ulid0"),
+            )
+            .await
+            .unwrap();
             MIGRATIONS.run(&pool).await.unwrap();
 
             let acme_client = AcmeClient::new();
@@ -627,7 +622,6 @@ pub mod tests {
                 docker,
                 settings,
                 args,
-                hyper,
                 pool,
                 acme_client,
                 auth_service,
@@ -643,10 +637,6 @@ pub mod tests {
             self.pool.clone()
         }
 
-        pub fn client<A: Into<SocketAddr>>(&self, addr: A) -> Client {
-            Client::new(addr).with_hyper_client(self.hyper.clone())
-        }
-
         pub fn fqdn(&self) -> FQDN {
             self.args().proxy_fqdn
         }
@@ -655,34 +645,92 @@ pub mod tests {
             self.acme_client.clone()
         }
 
-        pub fn create_user(&self, user: &str) -> String {
+        /// Create user with a specific tier
+        pub fn create_user(&self, user: &str, tier: AccountTier) -> String {
             self.auth_service
                 .lock()
                 .unwrap()
                 .users
-                .insert(user.to_string(), vec![Scope::Project, Scope::ProjectCreate]);
+                .insert(user.to_string(), tier);
 
             user.to_string()
         }
 
+        /// Create a user with the given name and tier and return the authorization bearer for the user
+        pub fn create_authorization_bearer(
+            &self,
+            user: &str,
+            tier: AccountTier,
+        ) -> Authorization<Bearer> {
+            let user_key = self.create_user(user, tier);
+            Authorization::bearer(&user_key).unwrap()
+        }
+
         pub fn set_super_user(&self, user: &str) {
-            if let Some(scopes) = self.auth_service.lock().unwrap().users.get_mut(user) {
-                scopes.push(Scope::Admin)
+            if let Some(tier) = self.auth_service.lock().unwrap().users.get_mut(user) {
+                *tier = AccountTier::Admin;
             }
         }
-    }
 
-    impl World {
+        /// Create a service and sender to handle tasks. Also starts up a worker to create actual Docker containers for all requests
+        pub async fn service(&self) -> (Arc<GatewayService>, Sender<BoxedTask>) {
+            let service = Arc::new(
+                GatewayService::init(self.args(), self.pool(), "".into())
+                    .await
+                    .unwrap(),
+            );
+            let worker = Worker::new();
+
+            let (sender, mut receiver) = channel(256);
+            tokio::spawn({
+                let worker_sender = worker.sender();
+                async move {
+                    while let Some(work) = receiver.recv().await {
+                        // Forward tasks to an actual worker
+                        worker_sender
+                            .send(work)
+                            .await
+                            .map_err(|_| "could not send work")
+                            .unwrap();
+                    }
+                }
+            });
+
+            let _worker = tokio::spawn(async move {
+                worker.start().await.unwrap();
+            });
+
+            // Allow the spawns to start
+            tokio::time::sleep(Duration::from_secs(1)).await;
+
+            (service, sender)
+        }
+
+        /// Create a router to make API calls against
+        pub fn router(&self, service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Router {
+            ApiBuilder::new()
+                .with_service(Arc::clone(&service))
+                .with_sender(sender)
+                .with_default_routes()
+                .with_auth_service(self.context().auth_uri, "dummykey".to_string())
+                .into_router()
+        }
+
+        pub fn client<A: Into<SocketAddr>>(addr: A) -> Client {
+            let hyper = HyperClient::builder().build(HttpConnector::new());
+            Client::new(addr).with_hyper_client(hyper)
+        }
+
         pub fn context(&self) -> WorldContext {
             WorldContext {
                 docker: self.docker.clone(),
                 container_settings: self.settings.clone(),
-                hyper: self.hyper.clone(),
                 auth_uri: self.auth_uri.clone(),
             }
         }
     }
 
+    #[async_trait]
     impl DockerContext for WorldContext {
         fn docker(&self) -> &Docker {
             &self.docker
@@ -691,10 +739,14 @@ pub mod tests {
         fn container_settings(&self) -> &ContainerSettings {
             &self.container_settings
         }
+
+        async fn get_stats(&self, _container_id: &str) -> Result<u64, Error> {
+            Ok(0)
+        }
     }
 
     struct AuthService {
-        users: HashMap<String, Vec<Scope>>,
+        users: HashMap<String, AccountTier>,
         encoding_key: EncodingKey,
         public_key: Vec<u8>,
     }
@@ -725,8 +777,8 @@ pub mod tests {
                     get(|extract::State(state): extract::State<Arc<Mutex<Self>>>, TypedHeader(bearer): TypedHeader<Authorization<Bearer>> | async move {
                         let state = state.lock().unwrap();
 
-                        if let Some(scopes) = state.users.get(bearer.token()) {
-                            let claim = Claim::new(bearer.token().to_string(), scopes.clone());
+                        if let Some(tier) = state.users.get(bearer.token()) {
+                            let claim = Claim::new(bearer.token().to_string(), (*tier).into(), *tier, *tier);
                             let token = claim.into_token(&state.encoding_key)?;
                             Ok(serde_json::to_vec(&ConvertResponse { token }).unwrap())
                         } else {
@@ -747,10 +799,390 @@ pub mod tests {
         }
     }
 
+    /// Helper struct to wrap a bunch of commands to run against gateway's API
+    pub struct TestGateway {
+        router: Router,
+        authorization: Authorization<Bearer>,
+        service: Arc<GatewayService>,
+        sender: Sender<BoxedTask>,
+        world: World,
+    }
+
+    impl TestGateway {
+        /// Try to create a project with a given user and return the request response
+        pub async fn try_user_create_project(
+            &mut self,
+            project_name: &str,
+            authorization: &Authorization<Bearer>,
+        ) -> StatusCode {
+            self.router
+                .call(
+                    Request::builder()
+                        .method("POST")
+                        .uri(format!("/projects/{project_name}"))
+                        .header("Content-Type", "application/json")
+                        .body("{\"idle_minutes\": 3}".into())
+                        .unwrap()
+                        .with_header(authorization),
+                )
+                .await
+                .unwrap()
+                .status()
+        }
+
+        /// Try to create a project and return the request response
+        pub async fn try_create_project(&mut self, project_name: &str) -> StatusCode {
+            self.try_user_create_project(project_name, &self.authorization.clone())
+                .await
+        }
+
+        /// Create a new project using the given user and return its helping wrapper
+        pub async fn user_create_project(
+            &mut self,
+            project_name: &str,
+            authorization: &Authorization<Bearer>,
+        ) -> TestProject {
+            let status_code = self
+                .try_user_create_project(project_name, authorization)
+                .await;
+
+            assert_eq!(
+                status_code,
+                StatusCode::OK,
+                "could not create {project_name}"
+            );
+
+            let mut this = TestProject {
+                authorization: authorization.clone(),
+                project_name: project_name.to_string(),
+                router: self.router.clone(),
+                pool: self.world.pool(),
+                service: self.service.clone(),
+                sender: self.sender.clone(),
+            };
+
+            this.wait_for_state(project::State::Ready).await;
+
+            this
+        }
+
+        /// Create a new project in the test world and return its helping wrapper
+        pub async fn create_project(&mut self, project_name: &str) -> TestProject {
+            self.user_create_project(project_name, &self.authorization.clone())
+                .await
+        }
+
+        /// Get authorization bearer for a new user
+        pub fn new_authorization_bearer(
+            &self,
+            user: &str,
+            tier: AccountTier,
+        ) -> Authorization<Bearer> {
+            self.world.create_authorization_bearer(user, tier)
+        }
+    }
+
+    #[async_trait]
+    impl AsyncTestContext for TestGateway {
+        async fn setup() -> Self {
+            let world = World::new().await;
+
+            let (service, sender) = world.service().await;
+
+            let router = world.router(service.clone(), sender.clone());
+            let authorization = world.create_authorization_bearer("neo", AccountTier::Basic);
+
+            Self {
+                router,
+                authorization,
+                service,
+                sender,
+                world,
+            }
+        }
+
+        async fn teardown(mut self) {}
+    }
+
+    /// Helper struct to wrap a bunch of commands to run against a test project
+    pub struct TestProject {
+        router: Router,
+        authorization: Authorization<Bearer>,
+        project_name: String,
+        pool: SqlitePool,
+        service: Arc<GatewayService>,
+        sender: Sender<BoxedTask>,
+    }
+
+    impl TestProject {
+        /// Wait a few seconds for the project to enter the desired state
+        pub async fn wait_for_state(&mut self, state: project::State) {
+            let mut tries = 0;
+            let project_name = &self.project_name;
+
+            loop {
+                let resp = self
+                    .router
+                    .call(
+                        Request::get(format!("/projects/{project_name}"))
+                            .with_header(&self.authorization)
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+
+                assert_eq!(resp.status(), StatusCode::OK);
+                let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
+                let project: project::Response = serde_json::from_slice(&body).unwrap();
+
+                if project.state == state {
+                    break;
+                }
+
+                tries += 1;
+                if tries > 12 {
+                    panic!("timed out waiting for state {state}");
+                }
+
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+
+        /// Is this project still available - aka has it been deleted
+        pub async fn is_missing(&mut self) -> bool {
+            let project_name = &self.project_name;
+
+            let resp = self
+                .router
+                .call(
+                    Request::get(format!("/projects/{project_name}"))
+                        .with_header(&self.authorization)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            resp.status() == StatusCode::NOT_FOUND
+        }
+
+        /// Destroy / stop a project. Like `cargo shuttle project stop`
+        pub async fn destroy_project(&mut self) {
+            let TestProject {
+                router,
+                authorization,
+                project_name,
+                ..
+            } = self;
+
+            router
+                .call(
+                    Request::builder()
+                        .method("DELETE")
+                        .uri(format!("/projects/{project_name}"))
+                        .body(Body::empty())
+                        .unwrap()
+                        .with_header(authorization),
+                )
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+
+            self.wait_for_state(project::State::Destroyed).await;
+        }
+
+        /// Send a request to the router for this project
+        pub async fn router_call(&mut self, method: Method, sub_path: &str) -> StatusCode {
+            let project_name = &self.project_name;
+
+            self.router
+                .call(
+                    Request::builder()
+                        .method(method)
+                        .uri(format!("/projects/{project_name}{sub_path}"))
+                        .body(Body::empty())
+                        .unwrap()
+                        .with_header(&self.authorization),
+                )
+                .map_ok(|resp| resp.status())
+                .await
+                .unwrap()
+        }
+
+        /// Just deploy the code at the path and don't wait for it to finish
+        pub async fn just_deploy(&mut self, path: &str) {
+            let path = canonicalize(path).expect("deploy path to be valid");
+            let name = path.file_name().unwrap().to_str().unwrap();
+            let enc = GzEncoder::new(Vec::new(), Compression::fast());
+            let mut tar = tar::Builder::new(enc);
+
+            for dir_entry in read_dir(&path).unwrap() {
+                let dir_entry = dir_entry.unwrap();
+                if dir_entry.file_name() != "target" {
+                    let path = format!("{name}/{}", dir_entry.file_name().to_str().unwrap());
+
+                    if dir_entry.file_type().unwrap().is_dir() {
+                        tar.append_dir_all(path, dir_entry.path()).unwrap();
+                    } else {
+                        tar.append_path_with_name(dir_entry.path(), path).unwrap();
+                    }
+                }
+            }
+
+            let enc = tar.into_inner().unwrap();
+            let bytes = enc.finish().unwrap();
+
+            println!("{name}: finished getting archive for test");
+
+            let project_name = &self.project_name;
+            let deployment_req = rmp_serde::to_vec(&DeploymentRequest {
+                data: bytes,
+                no_test: true,
+                ..Default::default()
+            })
+            .expect("to serialize DeploymentRequest as a MessagePack byte vector");
+
+            self.router
+                .call(
+                    Request::builder()
+                        .method(Method::POST)
+                        .header("Transfer-Encoding", "chunked")
+                        .uri(format!("/projects/{project_name}/services/{project_name}"))
+                        .body(deployment_req.into())
+                        .unwrap()
+                        .with_header(&self.authorization),
+                )
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+        }
+
+        /// Deploy the code at the path to the project and wait for it to finish
+        pub async fn deploy(&mut self, path: &str) {
+            self.just_deploy(path).await;
+
+            let project_name = &self.project_name;
+
+            // Wait for deployment to be up
+            let mut tries = 0;
+
+            loop {
+                let resp = self
+                    .router
+                    .call(
+                        Request::get(format!("/projects/{project_name}/services/{project_name}"))
+                            .with_header(&self.authorization)
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+
+                assert_eq!(resp.status(), StatusCode::OK);
+                let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
+                let service: service::Summary = serde_json::from_slice(&body).unwrap();
+
+                if service.deployment.is_some() {
+                    break;
+                }
+
+                tries += 1;
+                // We should consider making a mock deployer image to be able to "deploy" (aka fake deploy) things instantly for tests
+                if tries > 240 {
+                    panic!("timed out waiting for deployment");
+                }
+
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+
+        /// Stop a service running in a project
+        pub async fn stop_service(&mut self) {
+            let TestProject {
+                router,
+                authorization,
+                project_name,
+                ..
+            } = self;
+
+            router
+                .call(
+                    Request::builder()
+                        .method("DELETE")
+                        .uri(format!("/projects/{project_name}/services/{project_name}"))
+                        .body(Body::empty())
+                        .unwrap()
+                        .with_header(authorization),
+                )
+                .map_ok(|resp| {
+                    assert_eq!(resp.status(), StatusCode::OK);
+                })
+                .await
+                .unwrap();
+        }
+
+        /// Puts the project in a new state
+        pub async fn update_state(&self, state: Project) {
+            let TestProject {
+                project_name, pool, ..
+            } = self;
+
+            let state = sqlx::types::Json(state);
+
+            query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+                .bind(&state)
+                .bind(project_name)
+                .execute(pool)
+                .await
+                .expect("test to update project state");
+        }
+
+        /// Run one iteration of health checks for this project
+        pub async fn run_health_check(&self) {
+            let handle = self
+                .service
+                .new_task()
+                .project(self.project_name.parse().unwrap())
+                .send(&self.sender)
+                .await
+                .expect("to send one ambulance task");
+
+            // We wait for the check to be done before moving on
+            handle.await
+        }
+    }
+
+    #[async_trait]
+    impl AsyncTestContext for TestProject {
+        async fn setup() -> Self {
+            let mut world = TestGateway::setup().await;
+
+            world.create_project("matrix").await
+        }
+
+        async fn teardown(mut self) {
+            let dangling = !self.is_missing().await;
+
+            if dangling {
+                self.router_call(Method::DELETE, "/delete").await;
+                eprintln!("test left a dangling project which you might need to clean manually");
+            }
+        }
+    }
+
     #[tokio::test]
     async fn end_to_end() {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let service = Arc::new(
+            GatewayService::init(world.args(), world.pool(), "".into())
+                .await
+                .unwrap(),
+        );
         let worker = Worker::new();
 
         let (log_out, mut log_in) = channel(256);
@@ -767,12 +1199,12 @@ pub mod tests {
             }
         });
 
-        let api_client = world.client(world.args.control);
+        let api_client = World::client(world.args.control);
         let api = ApiBuilder::new()
             .with_service(Arc::clone(&service))
             .with_sender(log_out.clone())
             .with_default_routes()
-            .with_auth_service(world.context().auth_uri)
+            .with_auth_service(world.context().auth_uri, "dummykey".to_string())
             .binding_to(world.args.control);
 
         let user = UserServiceBuilder::new()
@@ -792,7 +1224,7 @@ pub mod tests {
         // Allow the spawns to start
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        let neo_key = world.create_user("neo");
+        let neo_key = world.create_user("neo", AccountTier::Basic);
 
         let authorization = Authorization::bearer(&neo_key).unwrap();
 

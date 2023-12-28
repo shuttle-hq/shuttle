@@ -5,6 +5,7 @@ service Provisioner {
   rpc ProvisionDatabase(DatabaseRequest) returns (DatabaseResponse);
   rpc ProvisionQdrant(QdrantRequest) returns (QdrantResponse);
   rpc DeleteDatabase(DatabaseRequest) returns (DatabaseDeletionResponse);
+  rpc HealthCheck(Ping) returns (Pong);
 }
 
 message DatabaseRequest {
@@ -13,12 +14,6 @@ message DatabaseRequest {
     Shared Shared = 10;
     AwsRds AwsRds = 11;
   };
-}
-
-message QdrantRequest {
-  string project_name = 1;
-  string url = 2;
-  string api_key = 3;
 }
 
 message Shared {
@@ -50,7 +45,16 @@ message DatabaseResponse {
 
 message DatabaseDeletionResponse {}
 
+message QdrantRequest {
+  string project_name = 1;
+  string url = 2;
+  string api_key = 3;
+}
+
 message QdrantResponse {
   string url = 1;
   optional string api_key = 2;
 }
+
+message Ping {}
+message Pong {}

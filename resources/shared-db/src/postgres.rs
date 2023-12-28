@@ -4,6 +4,7 @@ use shuttle_service::{
     database, error::CustomError, DbInput, DbOutput, Error, Factory, ResourceBuilder, Type,
 };
 
+/// Handles the state of a Shuttle managed Postgres DB and sets up a Postgres driver.
 #[derive(Serialize)]
 pub struct Postgres {
     config: DbInput,
@@ -29,8 +30,8 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
     }
 
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, Error> {
-        let info = match factory.get_environment() {
-            shuttle_service::Environment::Production => DbOutput::Info(
+        let info = match factory.get_metadata().env {
+            shuttle_service::Environment::Deployment => DbOutput::Info(
                 factory
                     .get_db_connection(database::Type::Shared(database::SharedEngine::Postgres))
                     .await?,

@@ -1,25 +1,24 @@
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf};
 
 use async_trait::async_trait;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
+    constants::STORAGE_DIRNAME,
     database,
-    storage_manager::StorageManager,
-    DatabaseReadyInfo, QdrantReadyInfo,
+    secrets::Secret,
+    DatabaseReadyInfo,
 };
 use shuttle_proto::provisioner::{
     provisioner_client::ProvisionerClient, DatabaseRequest, QdrantRequest,
 };
-use shuttle_service::{Environment, Factory, ServiceName};
+use shuttle_service::{DeploymentMetadata, Environment, Factory};
 use tonic::{transport::Channel, Request};
-use tracing::info;
 
 /// A factory (service locator) which goes through the provisioner crate
 pub struct ProvisionerFactory {
-    service_name: ServiceName,
-    storage_manager: Arc<dyn StorageManager>,
+    service_name: String,
     provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
-    secrets: BTreeMap<String, String>,
+    secrets: BTreeMap<String, Secret<String>>,
     env: Environment,
     claim: Option<Claim>,
 }
@@ -27,16 +26,14 @@ pub struct ProvisionerFactory {
 impl ProvisionerFactory {
     pub(crate) fn new(
         provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
-        service_name: ServiceName,
-        secrets: BTreeMap<String, String>,
-        storage_manager: Arc<dyn StorageManager>,
+        service_name: String,
+        secrets: BTreeMap<String, Secret<String>>,
         env: Environment,
         claim: Option<Claim>,
     ) -> Self {
         Self {
             provisioner_client,
             service_name,
-            storage_manager,
             secrets,
             env,
             claim,
@@ -50,11 +47,9 @@ impl Factory for ProvisionerFactory {
         &mut self,
         db_type: database::Type,
     ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
-        info!("Provisioning a {db_type}. This can take a while...");
-
         let mut request = Request::new(DatabaseRequest {
             project_name: self.service_name.to_string(),
-            db_type: Some(db_type.clone().into()),
+            db_type: Some(db_type.into()),
         });
 
         if let Some(claim) = &self.claim {
@@ -69,8 +64,6 @@ impl Factory for ProvisionerFactory {
             .into_inner();
 
         let info: DatabaseReadyInfo = response.into();
-
-        info!("Done provisioning database");
 
         Ok(info)
     }
@@ -103,27 +96,18 @@ impl Factory for ProvisionerFactory {
         Ok(info)
     }
 
-    async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
+    async fn get_secrets(
+        &mut self,
+    ) -> Result<BTreeMap<String, Secret<String>>, shuttle_service::Error> {
         Ok(self.secrets.clone())
     }
 
-    fn get_service_name(&self) -> ServiceName {
-        self.service_name.clone()
-    }
-
-    fn get_environment(&self) -> shuttle_service::Environment {
-        self.env
-    }
-
-    fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
-        self.storage_manager
-            .service_build_path(self.service_name.as_str())
-            .map_err(Into::into)
-    }
-
-    fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
-        self.storage_manager
-            .service_storage_path(self.service_name.as_str())
-            .map_err(Into::into)
+    fn get_metadata(&self) -> DeploymentMetadata {
+        DeploymentMetadata {
+            env: self.env,
+            project_name: self.service_name.to_string(),
+            service_name: self.service_name.to_string(),
+            storage_path: PathBuf::from(STORAGE_DIRNAME),
+        }
     }
 }

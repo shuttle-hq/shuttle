@@ -94,6 +94,7 @@ async fn bind_panic_owned() {
     assert_ne!(reason.message, "<no panic message>");
     assert_eq!(reason.message, "panic in bind");
 }
+
 #[tokio::test]
 async fn loader_panic() {
     let project_path = format!(

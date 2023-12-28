@@ -1,16 +1,4 @@
-//! Shuttle service integration for the Tide web framework.
-//! ## Example
-//! ```rust,no_run
-//! #[shuttle_runtime::main]
-//! async fn tide() -> shuttle_tide::ShuttleTide<()> {
-//!     let mut app = tide::new();
-//!     app.with(tide::log::LogMiddleware::new());
-//!
-//!     app.at("/hello").get(|_| async { Ok("Hello, world!") });
-//!
-//!     Ok(app.into())
-//! }
-//! ```
+#![doc = include_str!("../README.md")]
 use shuttle_runtime::{CustomError, Error};
 use std::net::SocketAddr;
 
@@ -36,5 +24,6 @@ impl<T> From<tide::Server<T>> for TideService<T> {
         Self(router)
     }
 }
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+
+#[doc = include_str!("../README.md")]
 pub type ShuttleTide<T> = Result<TideService<T>, Error>;

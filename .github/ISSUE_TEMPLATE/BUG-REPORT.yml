@@ -1,7 +1,7 @@
 name: Bug Report
 description: File a bug report
 title: "[Bug]: "
-labels: ["bug"]
+labels: ["S-Triage", "T-Bug"]
 body:
   - type: markdown
     attributes:
@@ -20,7 +20,7 @@ body:
     attributes:
       label: Version
       description: What version of `cargo-shuttle` are you running (`cargo shuttle --version`)?
-      placeholder: "v0.19.0"
+      placeholder: "v0.35.1"
     validations:
       required: true
   - type: dropdown

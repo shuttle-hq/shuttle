@@ -1,4 +1,5 @@
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
 use syn::{
@@ -12,18 +13,23 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let loader = Loader::from_item_fn(&mut fn_decl);
 
-    let expanded = quote! {
-        #[tokio::main]
-        async fn main() {
-            shuttle_runtime::start(loader).await;
+    quote! {
+        fn main() {
+            // manual expansion of #[tokio::main]
+            ::shuttle_runtime::tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    ::shuttle_runtime::__internals::start(loader).await;
+                })
         }
 
         #loader
 
         #fn_decl
-    };
-
-    expanded.into()
+    }
+    .into()
 }
 
 struct Loader {
@@ -85,15 +91,11 @@ impl Parse for BuilderOption {
 
 impl Loader {
     pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Option<Self> {
-        let fn_ident = item_fn.sig.ident.clone();
-
-        if fn_ident.to_string().as_str() == "main" {
-            emit_error!(
-                fn_ident,
-                "shuttle_runtime::main functions cannot be named `main`"
-            );
-            return None;
-        }
+        // rename function to allow any name, such as 'main'
+        item_fn.sig.ident = Ident::new(
+            &format!("__shuttle_{}", item_fn.sig.ident),
+            Span::call_site(),
+        );
 
         let inputs: Vec<_> = item_fn
             .sig
@@ -122,7 +124,7 @@ impl Loader {
             .collect();
 
         check_return_type(item_fn.sig.clone()).map(|type_path| Self {
-            fn_ident: fn_ident.clone(),
+            fn_ident: item_fn.sig.ident.clone(),
             fn_inputs: inputs,
             fn_return: type_path,
         })
@@ -183,9 +185,9 @@ impl ToTokens for Loader {
 
         let return_type = &self.fn_return;
 
-        let mut fn_inputs: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
-        let mut fn_inputs_builder: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
-        let mut fn_inputs_builder_options: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
+        let mut fn_inputs = Vec::with_capacity(self.fn_inputs.len());
+        let mut fn_inputs_builder = Vec::with_capacity(self.fn_inputs.len());
+        let mut fn_inputs_builder_options = Vec::with_capacity(self.fn_inputs.len());
 
         let mut needs_vars = false;
 
@@ -204,7 +206,7 @@ impl ToTokens for Loader {
                             lit: Lit::Str(str), ..
                         }) => {
                             needs_vars = true;
-                            quote!(&shuttle_runtime::strfmt(#str, &vars)?)
+                            quote!(&::shuttle_runtime::__internals::strfmt(#str, &vars)?)
                         }
                         other => quote!(#other),
                     };
@@ -232,45 +234,46 @@ impl ToTokens for Loader {
             None
         } else {
             Some(parse_quote!(
-                use shuttle_runtime::{Factory, ResourceBuilder};
+                use ::shuttle_runtime::{Factory, ResourceBuilder};
             ))
         };
 
-        let vars: Option<Stmt> = if needs_vars {
-            Some(parse_quote!(
-                let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
-            ))
+        // variables for string interpolating secrets into the attribute macros
+        let (vars, drop_vars): (Option<Stmt>, Option<Stmt>) = if needs_vars {
+            (
+                Some(parse_quote!(
+                    let vars = std::collections::HashMap::from_iter(
+                        factory
+                            .get_secrets()
+                            .await?
+                            .into_iter()
+                            .map(|(key, value)| (format!("secrets.{}", key), value.expose().clone()))
+                    );
+                )),
+                Some(parse_quote!(
+                    std::mem::drop(vars);
+                )),
+            )
         } else {
-            None
+            (None, None)
         };
 
         let loader = quote! {
             async fn loader(
-                mut #factory_ident: shuttle_runtime::ProvisionerFactory,
-                mut #resource_tracker_ident: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
+                mut #factory_ident: ::shuttle_runtime::__internals::ProvisionerFactory,
+                mut #resource_tracker_ident: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> #return_type {
-                use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
+                use ::shuttle_runtime::__internals::Context;
                 #extra_imports
-
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
-
-                shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger)
-                    .init();
-
                 #vars
-                #(let #fn_inputs = shuttle_runtime::get_resource(
+                #(let #fn_inputs = ::shuttle_runtime::__internals::get_resource(
                     #fn_inputs_builder::new()#fn_inputs_builder_options,
                     &mut #factory_ident,
                     &mut #resource_tracker_ident,
                 )
                 .await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
+
+                #drop_vars
 
                 #fn_ident(#(#fn_inputs),*).await
             }
@@ -284,7 +287,7 @@ impl ToTokens for Loader {
 mod tests {
     use pretty_assertions::assert_eq;
     use quote::quote;
-    use syn::{parse_quote, Ident};
+    use syn::{parse_quote, Ident, TypePath};
 
     use super::{Builder, BuilderOptions, Input, Loader};
 
@@ -295,10 +298,24 @@ mod tests {
         );
 
         let actual = Loader::from_item_fn(&mut input).unwrap();
-        let expected_ident: Ident = parse_quote!(simple);
+        let expected_ident: Ident = parse_quote!(__shuttle_simple);
+        let expected_return: TypePath = parse_quote!(ShuttleAxum);
 
         assert_eq!(actual.fn_ident, expected_ident);
         assert_eq!(actual.fn_inputs, Vec::<Input>::new());
+        assert_eq!(actual.fn_return, expected_return);
+    }
+
+    #[test]
+    fn from_with_main() {
+        let mut input = parse_quote!(
+            async fn main() -> ShuttleAxum {}
+        );
+
+        let actual = Loader::from_item_fn(&mut input).unwrap();
+        let expected_ident: Ident = parse_quote!(__shuttle_main);
+
+        assert_eq!(actual.fn_ident, expected_ident);
     }
 
     #[test]
@@ -312,23 +329,10 @@ mod tests {
         let actual = quote!(#input);
         let expected = quote! {
             async fn loader(
-                mut _factory: shuttle_runtime::ProvisionerFactory,
-                mut _resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
+                mut _factory: ::shuttle_runtime::__internals::ProvisionerFactory,
+                mut _resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> ShuttleSimple {
-                use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
-
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
-
-                shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger)
-                    .init();
-
+                use ::shuttle_runtime::__internals::Context;
                 simple().await
             }
         };
@@ -343,7 +347,7 @@ mod tests {
         );
 
         let actual = Loader::from_item_fn(&mut input).unwrap();
-        let expected_ident: Ident = parse_quote!(complex);
+        let expected_ident: Ident = parse_quote!(__shuttle_complex);
         let expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
             builder: Builder {
@@ -370,7 +374,7 @@ mod tests {
     #[test]
     fn output_with_inputs() {
         let input = Loader {
-            fn_ident: parse_quote!(complex),
+            fn_ident: parse_quote!(__shuttle_complex),
             fn_inputs: vec![
                 Input {
                     ident: parse_quote!(pool),
@@ -393,36 +397,23 @@ mod tests {
         let actual = quote!(#input);
         let expected = quote! {
             async fn loader(
-                mut factory: shuttle_runtime::ProvisionerFactory,
-                mut resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
+                mut factory: ::shuttle_runtime::__internals::ProvisionerFactory,
+                mut resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> ShuttleComplex {
-                use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
-                use shuttle_runtime::{Factory, ResourceBuilder};
-
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
-
-                shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger)
-                    .init();
-
-                let pool = shuttle_runtime::get_resource(
+                use ::shuttle_runtime::__internals::Context;
+                use ::shuttle_runtime::{Factory, ResourceBuilder};
+                let pool = ::shuttle_runtime::__internals::get_resource(
                     shuttle_shared_db::Postgres::new(),
                     &mut factory,
                     &mut resource_tracker,
                 ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
-                let redis = shuttle_runtime::get_resource(
+                let redis = ::shuttle_runtime::__internals::get_resource(
                     shuttle_shared_db::Redis::new(),
                     &mut factory,
                     &mut resource_tracker,
                 ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?;
 
-                complex(pool, redis).await
+                __shuttle_complex(pool, redis).await
             }
         };
 
@@ -465,7 +456,7 @@ mod tests {
         );
 
         let actual = Loader::from_item_fn(&mut input).unwrap();
-        let expected_ident: Ident = parse_quote!(complex);
+        let expected_ident: Ident = parse_quote!(__shuttle_complex);
         let mut expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
             builder: Builder {
@@ -517,30 +508,18 @@ mod tests {
         let actual = quote!(#input);
         let expected = quote! {
             async fn loader(
-                mut factory: shuttle_runtime::ProvisionerFactory,
-                mut resource_tracker: shuttle_runtime::ResourceTracker,
-                logger: shuttle_runtime::Logger,
+                mut factory: ::shuttle_runtime::__internals::ProvisionerFactory,
+                mut resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> ShuttleComplex {
-                use shuttle_runtime::Context;
-                use shuttle_runtime::tracing_subscriber::prelude::*;
-                use shuttle_runtime::{Factory, ResourceBuilder};
-
-                let filter_layer =
-                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
-                        .unwrap();
-
-                shuttle_runtime::tracing_subscriber::registry()
-                    .with(filter_layer)
-                    .with(logger)
-                    .init();
-
-                let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
-                let pool = shuttle_runtime::get_resource (
-                    shuttle_shared_db::Postgres::new().size(&shuttle_runtime::strfmt("10Gb", &vars)?).public(false),
+                use ::shuttle_runtime::__internals::Context;
+                use ::shuttle_runtime::{Factory, ResourceBuilder};
+                let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value.expose().clone())));
+                let pool = ::shuttle_runtime::__internals::get_resource (
+                    shuttle_shared_db::Postgres::new().size(&::shuttle_runtime::__internals::strfmt("10Gb", &vars)?).public(false),
                     &mut factory,
                     &mut resource_tracker,
                 ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
+                std::mem::drop(vars);
 
                 complex(pool).await
             }

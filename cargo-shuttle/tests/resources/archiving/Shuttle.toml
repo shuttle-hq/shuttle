@@ -1,0 +1,5 @@
+assets = [
+    "asset2",
+    "asset5",
+    "dist/*",
+]

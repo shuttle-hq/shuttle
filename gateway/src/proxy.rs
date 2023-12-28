@@ -23,6 +23,7 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::XShuttleProject;
+use shuttle_common::models::error::InvalidProjectName;
 use tokio::sync::mpsc::Sender;
 use tower::{Service, ServiceBuilder};
 use tower_sanitize_path::SanitizePath;
@@ -110,23 +111,24 @@ impl UserProxy {
             .headers()
             .typed_get::<Host>()
             .map(|host| fqdn!(host.hostname()))
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))?;
+            .ok_or_else(|| Error::from_kind(ErrorKind::BadHost))?;
 
-        let project_name =
-            if fqdn.is_subdomain_of(&self.public) && fqdn.depth() - self.public.depth() == 1 {
-                fqdn.labels()
-                    .next()
-                    .unwrap()
-                    .to_owned()
-                    .parse()
-                    .map_err(|_| Error::from_kind(ErrorKind::ProjectNotFound))?
-            } else if let Ok(CustomDomain { project_name, .. }) =
-                self.gateway.project_details_for_custom_domain(&fqdn).await
-            {
-                project_name
-            } else {
-                return Err(Error::from_kind(ErrorKind::ProjectNotFound));
-            };
+        let project_name = if fqdn.is_subdomain_of(&self.public)
+            && fqdn.depth() - self.public.depth() == 1
+        {
+            fqdn.labels()
+                .next()
+                .unwrap()
+                .to_owned()
+                .parse()
+                .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName(InvalidProjectName)))?
+        } else if let Ok(CustomDomain { project_name, .. }) =
+            self.gateway.project_details_for_custom_domain(&fqdn).await
+        {
+            project_name
+        } else {
+            return Err(Error::from_kind(ErrorKind::CustomDomainNotFound));
+        };
 
         req.headers_mut()
             .typed_insert(XShuttleProject(project_name.to_string()));
@@ -140,6 +142,7 @@ impl UserProxy {
         span.record("project", &project_name.to_string());
 
         let target_ip = project
+            .state
             .target_ip()?
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 
@@ -371,7 +374,7 @@ impl UserServiceBuilder {
             futs.push(user_without_tls);
         }
 
-        future::select_all(futs.into_iter()).map(|((name, resolved), _, _)| {
+        future::select_all(futs).map(|((name, resolved), _, _)| {
             error!(service = %name, "exited early");
             resolved
         })

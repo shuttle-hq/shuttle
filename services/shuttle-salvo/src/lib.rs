@@ -1,21 +1,4 @@
-//! Shuttle service integration for the Salvo web framework.
-//! ## Example
-//! ```rust,no_run
-//! use salvo::prelude::*;
-//!
-//! #[handler]
-//! async fn hello_world(res: &mut Response) {
-//!     res.render(Text::Plain("Hello, world!"));
-//! }
-//!
-//! #[shuttle_runtime::main]
-//! async fn salvo() -> shuttle_salvo::ShuttleSalvo {
-//!     let router = Router::new().get(hello_world);
-//!
-//!     Ok(router.into())
-//! }
-//!
-//! ```
+#![doc = include_str!("../README.md")]
 use salvo::Listener;
 use shuttle_runtime::Error;
 use std::net::SocketAddr;
@@ -41,5 +24,6 @@ impl From<salvo::Router> for SalvoService {
         Self(router)
     }
 }
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+
+#[doc = include_str!("../README.md")]
 pub type ShuttleSalvo = Result<SalvoService, Error>;

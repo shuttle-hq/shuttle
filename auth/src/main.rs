@@ -1,11 +1,11 @@
 use std::io;
 
 use clap::Parser;
-use shuttle_common::backends::tracing::setup_tracing;
+use shuttle_common::{backends::tracing::setup_tracing, claims::AccountTier, log::Backend};
 use sqlx::migrate::Migrator;
-use tracing::{info, trace};
+use tracing::trace;
 
-use shuttle_auth::{init, sqlite_init, start, Args, Commands};
+use shuttle_auth::{init, pgpool_init, start, Args, Commands};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -15,23 +15,15 @@ async fn main() -> io::Result<()> {
 
     trace!(args = ?args, "parsed args");
 
-    setup_tracing(tracing_subscriber::registry(), "auth");
+    setup_tracing(tracing_subscriber::registry(), Backend::Auth, None);
 
-    let db_path = args.state.join("authentication.sqlite");
-
-    let db_uri = db_path.to_str().unwrap();
-
-    let pool = sqlite_init(db_uri).await;
-
-    info!(
-        "state db: {}",
-        std::fs::canonicalize(&args.state)
-            .unwrap()
-            .to_string_lossy()
-    );
+    let pool = pgpool_init(args.db_connection_uri.as_str())
+        .await
+        .expect("couldn't setup the postgres connection");
 
     match args.command {
         Commands::Start(args) => start(pool, args).await,
-        Commands::Init(args) => init(pool, args).await,
+        Commands::InitAdmin(args) => init(pool, args, AccountTier::Admin).await,
+        Commands::InitDeployer(args) => init(pool, args, AccountTier::Deployer).await,
     }
 }

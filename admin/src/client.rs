@@ -1,9 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
-use shuttle_common::{
-    models::{project, stats, ToJson},
-    project::ProjectName,
-};
+use shuttle_common::models::{admin::ProjectResponse, stats, ToJson};
 use tracing::trace;
 
 pub struct Client {
@@ -24,6 +21,17 @@ impl Client {
         self.post("/admin/destroy", Option::<String>::None).await
     }
 
+    pub async fn idle_cch(&self) -> Result<()> {
+        reqwest::Client::new()
+            .post(format!("{}/admin/idle-cch", self.api_url))
+            .bearer_auth(&self.api_key)
+            .send()
+            .await
+            .context("failed to send idle request")?;
+
+        Ok(())
+    }
+
     pub async fn acme_account_create(
         &self,
         email: &str,
@@ -36,7 +44,7 @@ impl Client {
     pub async fn acme_request_certificate(
         &self,
         fqdn: &str,
-        project_name: &ProjectName,
+        project_name: &str,
         credentials: &serde_json::Value,
     ) -> Result<String> {
         let path = format!("/admin/acme/request/{project_name}/{fqdn}");
@@ -46,7 +54,7 @@ impl Client {
     pub async fn acme_renew_custom_domain_certificate(
         &self,
         fqdn: &str,
-        project_name: &ProjectName,
+        project_name: &str,
         credentials: &serde_json::Value,
     ) -> Result<String> {
         let path = format!("/admin/acme/renew/{project_name}/{fqdn}");
@@ -61,7 +69,7 @@ impl Client {
         self.post(&path, Some(credentials)).await
     }
 
-    pub async fn get_projects(&self) -> Result<Vec<project::AdminResponse>> {
+    pub async fn get_projects(&self) -> Result<Vec<ProjectResponse>> {
         self.get("/admin/projects").await
     }
 
@@ -128,7 +136,7 @@ impl Client {
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .context("failed to make post request")?
+            .context("failed to make get request")?
             .to_json()
             .await
             .context("failed to post text body from response")

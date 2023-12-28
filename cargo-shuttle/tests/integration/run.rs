@@ -1,88 +1,5 @@
-use cargo_shuttle::{Command, ProjectArgs, RunArgs, Shuttle, ShuttleArgs};
-use portpicker::pick_unused_port;
 use reqwest::StatusCode;
-use std::{fs::canonicalize, process::exit, time::Duration};
-use tokio::time::sleep;
-
-/// creates a `cargo-shuttle` run instance with some reasonable defaults set.
-async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
-    let working_directory = match canonicalize(working_directory) {
-        Ok(wd) => wd,
-        Err(e) => {
-            // DEBUG CI (no such file): SLEEP AND TRY AGAIN?
-            println!(
-                "Did not find directory: {} !!! because {:?}",
-                working_directory, e
-            );
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-            canonicalize(working_directory).unwrap()
-        }
-    };
-
-    let port = pick_unused_port().unwrap();
-
-    let url = if !external {
-        format!("http://localhost:{port}")
-    } else {
-        format!("http://0.0.0.0:{port}")
-    };
-
-    let run_args = RunArgs {
-        port,
-        external,
-        release: false,
-    };
-
-    let runner = Shuttle::new().unwrap().run(ShuttleArgs {
-        api_url: Some("http://shuttle.invalid:80".to_string()),
-        project_args: ProjectArgs {
-            working_directory: working_directory.clone(),
-            name: None,
-        },
-        cmd: Command::Run(run_args),
-    });
-
-    tokio::spawn({
-        let working_directory = working_directory.clone();
-        async move {
-            sleep(Duration::from_secs(10 * 60)).await;
-
-            println!(
-                "run test for '{}' took too long. Did it fail to shutdown?",
-                working_directory.display()
-            );
-            exit(1);
-        }
-    });
-
-    let runner_handle = tokio::spawn(runner);
-
-    // Wait for service to be responsive
-    let mut counter = 0;
-    let client = reqwest::Client::new();
-    while client.get(url.clone()).send().await.is_err() {
-        if runner_handle.is_finished() {
-            println!(
-                "run test for '{}' exited early. Did it fail to compile/run?",
-                working_directory.clone().display()
-            );
-            exit(1);
-        }
-
-        // reduce spam
-        if counter == 0 {
-            println!(
-                "waiting for '{}' to start up...",
-                working_directory.display()
-            );
-        }
-        counter = (counter + 1) % 10;
-
-        sleep(Duration::from_millis(500)).await;
-    }
-
-    url
-}
+use shuttle_common_tests::cargo_shuttle::cargo_shuttle_run;
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
@@ -103,6 +20,12 @@ async fn rocket_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rocket_secrets() {
+    std::fs::copy(
+        "../examples/rocket/secrets/Secrets.toml.example",
+        "../examples/rocket/secrets/Secrets.toml",
+    )
+    .unwrap();
+
     let url = cargo_shuttle_run("../examples/rocket/secrets", false).await;
 
     let request_text = reqwest::Client::new()
@@ -115,37 +38,6 @@ async fn rocket_secrets() {
         .unwrap();
 
     assert_eq!(request_text, "the contents of my API key");
-}
-
-// This example uses a shared Postgres. Thus local runs should create a docker container for it.
-#[tokio::test(flavor = "multi_thread")]
-#[ignore]
-async fn rocket_postgres() {
-    let url = cargo_shuttle_run("../examples/rocket/postgres", false).await;
-    let client = reqwest::Client::new();
-
-    let post_text = client
-        .post(format!("{url}/todo"))
-        .body("{\"note\": \"Deploy to shuttle\"}")
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert_eq!(post_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
-
-    let request_text = client
-        .get(format!("{url}/todo/1"))
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -218,7 +110,7 @@ async fn rocket_authentication() {
 
     assert_eq!(
         public_text,
-        "{\"message\":\"This endpoint is open to anyone\"}"
+        r#"{"message":"This endpoint is open to anyone"}"#
     );
 
     let private_status = client
@@ -232,7 +124,7 @@ async fn rocket_authentication() {
 
     let body = client
         .post(format!("{url}/login"))
-        .body("{\"username\": \"username\", \"password\": \"password\"}")
+        .body(r#"{"username": "username", "password": "password"}"#)
         .send()
         .await
         .unwrap()
@@ -254,7 +146,7 @@ async fn rocket_authentication() {
 
     assert_eq!(
         private_text,
-        "{\"message\":\"The `Claims` request guard ensures only valid JWTs can access this endpoint\",\"user\":\"username\"}"
+        r#"{"message":"The `Claims` request guard ensures only valid JWTs can access this endpoint","user":"username"}"#
     );
 }
 
@@ -360,70 +252,6 @@ async fn poem_hello_world() {
     assert_eq!(request_text, "Hello, world!");
 }
 
-// This example uses a shared Postgres. Thus local runs should create a docker container for it.
-#[tokio::test(flavor = "multi_thread")]
-async fn poem_postgres() {
-    let url = cargo_shuttle_run("../examples/poem/postgres", false).await;
-    let client = reqwest::Client::new();
-
-    let post_text = client
-        .post(format!("{url}/todo"))
-        .body("{\"note\": \"Deploy to shuttle\"}")
-        .header("content-type", "application/json")
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert_eq!(post_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
-
-    let request_text = client
-        .get(format!("{url}/todo/1"))
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
-}
-
-// This example uses a shared MongoDb. Thus local runs should create a docker container for it.
-#[tokio::test(flavor = "multi_thread")]
-async fn poem_mongodb() {
-    let url = cargo_shuttle_run("../examples/poem/mongodb", false).await;
-    let client = reqwest::Client::new();
-
-    // Post a todo note and get the persisted todo objectId
-    let post_text = client
-        .post(format!("{url}/todo"))
-        .body("{\"note\": \"Deploy to shuttle\"}")
-        .header("content-type", "application/json")
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    // Valid objectId is 24 char hex string
-    assert_eq!(post_text.len(), 24);
-
-    let request_text = client
-        .get(format!("{url}/todo/{post_text}"))
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert_eq!(request_text, "{\"note\":\"Deploy to shuttle\"}");
-}
-
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn salvo_hello_world() {
@@ -472,4 +300,101 @@ async fn rocket_hello_world_with_router_ip() {
         .unwrap();
 
     assert_eq!(request_text, "Hello, world!");
+}
+
+// These examples use a shared Postgres/Mongo. Thus local runs should create a docker containers.
+mod needs_docker {
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore]
+    async fn rocket_postgres() {
+        let url = cargo_shuttle_run("../examples/rocket/postgres", false).await;
+        let client = reqwest::Client::new();
+
+        let post_text = client
+            .post(format!("{url}/todo"))
+            .body("{\"note\": \"Deploy to shuttle\"}")
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert_eq!(post_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+
+        let request_text = client
+            .get(format!("{url}/todo/1"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn poem_postgres() {
+        let url = cargo_shuttle_run("../examples/poem/postgres", false).await;
+        let client = reqwest::Client::new();
+
+        let post_text = client
+            .post(format!("{url}/todo"))
+            .body("{\"note\": \"Deploy to shuttle\"}")
+            .header("content-type", "application/json")
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert_eq!(post_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+
+        let request_text = client
+            .get(format!("{url}/todo/1"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn poem_mongodb() {
+        let url = cargo_shuttle_run("../examples/poem/mongodb", false).await;
+        let client = reqwest::Client::new();
+
+        // Post a todo note and get the persisted todo objectId
+        let post_text = client
+            .post(format!("{url}/todo"))
+            .body("{\"note\": \"Deploy to shuttle\"}")
+            .header("content-type", "application/json")
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        // Valid objectId is 24 char hex string
+        assert_eq!(post_text.len(), 24);
+
+        let request_text = client
+            .get(format!("{url}/todo/{post_text}"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert_eq!(request_text, "{\"note\":\"Deploy to shuttle\"}");
+    }
 }

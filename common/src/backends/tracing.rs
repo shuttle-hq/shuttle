@@ -5,52 +5,78 @@ use std::{
 };
 
 use http::{Request, Response};
-use opentelemetry::{
-    global,
-    runtime::Tokio,
-    sdk::{propagation::TraceContextPropagator, trace, Resource},
-    KeyValue,
-};
+use opentelemetry::{global, KeyValue};
 use opentelemetry_http::HeaderExtractor;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{
+    logs::Config, propagation::TraceContextPropagator, runtime::Tokio, trace, Resource,
+};
 use pin_project::pin_project;
 use tower::{Layer, Service};
 use tracing::{debug_span, instrument::Instrumented, Instrument, Span, Subscriber};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
 
-pub fn setup_tracing<S>(subscriber: S, service_name: &str)
+use crate::log::Backend;
+
+use super::otlp_tracing_bridge;
+
+const OTLP_ADDRESS: &str = "http://otel-collector:4317";
+
+pub fn setup_tracing<S>(subscriber: S, backend: Backend, env_filter_directive: Option<&'static str>)
 where
     S: Subscriber + for<'a> LookupSpan<'a> + Send + Sync,
 {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
+    let shuttle_env = std::env::var("SHUTTLE_ENV").unwrap_or("".to_string());
     let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
+        .or_else(|_| EnvFilter::try_new(env_filter_directive.unwrap_or("info")))
         .unwrap();
-    let fmt_layer = fmt::layer();
+
+    let fmt_layer = fmt::layer().compact();
+
+    // The OTLP_ADDRESS env var is useful for setting a localhost address when running deployer locally.
+    let otlp_address = std::env::var("OTLP_ADDRESS").unwrap_or(OTLP_ADDRESS.into());
 
     let tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
                 .tonic()
-                .with_endpoint("http://otel-collector:4317"),
+                .with_endpoint(otlp_address.clone()),
         )
-        .with_trace_config(
-            trace::config().with_resource(Resource::new(vec![KeyValue::new(
-                "service.name",
-                service_name.to_string(),
-            )])),
+        .with_trace_config(trace::config().with_resource(Resource::new(vec![
+            KeyValue::new("service.name", backend.to_string().to_lowercase()),
+            KeyValue::new("deployment.environment", shuttle_env.clone()),
+        ])))
+        .install_batch(Tokio)
+        .unwrap();
+
+    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    let logs = opentelemetry_otlp::new_pipeline()
+        .logging()
+        .with_log_config(Config::default().with_resource(Resource::new(vec![
+            KeyValue::new("service.name", backend.to_string().to_lowercase()),
+            KeyValue::new("deployment.environment", shuttle_env.clone()),
+        ])))
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(otlp_address),
         )
         .install_batch(Tokio)
         .unwrap();
-    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    let appender_tracing_layer =
+        otlp_tracing_bridge::OpenTelemetryTracingBridge::new(&logs.provider().unwrap());
 
     subscriber
         .with(filter_layer)
         .with(fmt_layer)
         .with(otel_layer)
+        .with(appender_tracing_layer)
         .init();
 }
 

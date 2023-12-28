@@ -1,8 +1,7 @@
 use std::error::Error as StdError;
 
-use axum::http::{header, HeaderValue, StatusCode};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 
 use serde::{ser::SerializeMap, Serialize};
 use shuttle_common::models::error::ApiError;
@@ -23,8 +22,10 @@ pub enum Error {
     },
     #[error("{0}, try running `cargo shuttle deploy`")]
     NotFound(String),
-    #[error("Custom error: {0}")]
-    Custom(#[from] anyhow::Error),
+    #[error("Internal error: {0}")]
+    Internal(#[from] anyhow::Error),
+    #[error("Missing header: {0}")]
+    MissingHeader(String),
 }
 
 impl Serialize for Error {
@@ -49,18 +50,11 @@ impl IntoResponse for Error {
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
-        (
-            code,
-            [(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("application/json"),
-            )],
-            Json(ApiError {
-                message: self.to_string(),
-                status_code: code.as_u16(),
-            }),
-        )
-            .into_response()
+        ApiError {
+            message: self.to_string(),
+            status_code: code.as_u16(),
+        }
+        .into_response()
     }
 }
 

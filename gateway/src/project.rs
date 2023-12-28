@@ -4,30 +4,37 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use bollard::container::{
-    Config, CreateContainerOptions, KillContainerOptions, RemoveContainerOptions, Stats,
-    StatsOptions, StopContainerOptions,
+    Config, CreateContainerOptions, KillContainerOptions, RemoveContainerOptions,
+    StopContainerOptions,
 };
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
 use bollard::network::{ConnectNetworkOptions, DisconnectNetworkOptions};
+use bollard::service::MountTypeEnum;
 use bollard::system::EventsOptions;
+use bollard::volume::RemoveVolumeOptions;
 use fqdn::FQDN;
 use futures::prelude::*;
+use http::header::AUTHORIZATION;
 use http::uri::InvalidUri;
-use http::Uri;
+use http::{Method, Request, Uri};
 use hyper::client::HttpConnector;
-use hyper::Client;
+use hyper::{Body, Client};
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
-use serde::{Deserialize, Serialize};
-use shuttle_common::models::project::{idle_minutes, IDLE_MINUTES};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize};
+use shuttle_common::backends::headers::{X_SHUTTLE_ACCOUNT_NAME, X_SHUTTLE_ADMIN_SECRET};
+use shuttle_common::constants::{default_idle_minutes, DEFAULT_IDLE_MINUTES};
+use shuttle_common::models::project::ProjectName;
+use shuttle_common::models::service;
 use tokio::time::{sleep, timeout};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, trace, warn};
+use ulid::Ulid;
+use uuid::Uuid;
 
 use crate::service::ContainerSettings;
-use crate::{
-    DockerContext, EndState, Error, ErrorKind, IntoTryState, ProjectName, Refresh, State, TryState,
-};
+use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
 
 macro_rules! safe_unwrap {
     {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
@@ -72,7 +79,7 @@ const MAX_REBOOTS: usize = 3;
 // Client used for health checks
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 // Health check must succeed within 10 seconds
-static IS_HEALTHY_TIMEOUT: Duration = Duration::from_secs(10);
+pub static IS_HEALTHY_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[async_trait]
 impl<Ctx> Refresh<Ctx> for ContainerInspectResponse
@@ -99,18 +106,27 @@ pub trait ContainerInspectResponseExt {
             .map_err(|_| ProjectError::internal("invalid project name"))
     }
 
+    fn project_id(&self) -> Result<Ulid, ProjectError> {
+        let container = self.container();
+        Ulid::from_string(safe_unwrap!(container
+            .config
+            .labels
+            .get("shuttle.project_id")))
+        .map_err(|_| ProjectError::internal("invalid project id"))
+    }
+
     fn idle_minutes(&self) -> u64 {
         let container = self.container();
 
         if let Some(config) = &container.config {
             if let Some(labels) = &config.labels {
                 if let Some(idle_minutes) = labels.get("shuttle.idle_minutes") {
-                    return idle_minutes.parse::<u64>().unwrap_or(IDLE_MINUTES);
+                    return idle_minutes.parse::<u64>().unwrap_or(DEFAULT_IDLE_MINUTES);
                 }
             }
         }
 
-        IDLE_MINUTES
+        DEFAULT_IDLE_MINUTES
     }
 
     fn find_arg_and_then<'s, F, O>(&'s self, find: &str, and_then: F) -> Result<O, ProjectError>
@@ -156,6 +172,18 @@ impl From<DockerError> for Error {
     }
 }
 
+/// Allow some fields to default to their default value if deserializing them fails
+/// https://users.rust-lang.org/t/solved-serde-deserialization-on-error-use-default-values/6681/2
+fn ok_or_default<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+where
+    T: DeserializeOwned + Default,
+    D: Deserializer<'de>,
+{
+    // Convert to `Value` first so that we capture the whole input in case it fails later on the specific type
+    let v: serde_json::Value = Deserialize::deserialize(deserializer)?;
+    Ok(T::deserialize(v).unwrap_or_default())
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Project {
@@ -172,6 +200,7 @@ pub enum Project {
     Destroying(ProjectDestroying),
     Destroyed(ProjectDestroyed),
     Errored(ProjectError),
+    Deleted,
 }
 
 impl_from_variant!(Project:
@@ -218,6 +247,55 @@ impl Project {
         } else {
             Ok(Self::Destroyed(ProjectDestroyed { destroyed: None }))
         }
+    }
+
+    pub async fn delete<Ctx>(self, ctx: &Ctx) -> Result<(), Error>
+    where
+        Ctx: DockerContext,
+    {
+        let Some(ref id) = self.container_id() else {
+            error!("No container id found for deleting");
+            return Err(Error::custom(
+                ErrorKind::ProjectUnavailable,
+                "container id not found",
+            ));
+        };
+        ctx.docker()
+            .remove_container(
+                id,
+                Some(RemoveContainerOptions {
+                    v: true, // This only deletes anonymous volumes (there should be none)
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await?;
+
+        let Some(mounts) = self
+            .container()
+            .and_then(|c| c.host_config)
+            .and_then(|hc| hc.mounts)
+        else {
+            warn!(
+                shuttle.container.id = id,
+                "No mounts found when deleting container"
+            );
+            return Ok(());
+        };
+        // Delete the volume linked to this container.
+        // This, along with the DB row removal is what separates a
+        // project stop (destroy) from a project delete.
+        for mount in mounts {
+            if mount.typ.is_some_and(|t| t == MountTypeEnum::VOLUME) && mount.source.is_some() {
+                let name = mount.source.unwrap();
+                ctx.docker()
+                    .remove_volume(name.as_str(), Some(RemoveVolumeOptions { force: true }))
+                    .await?;
+                info!(shuttle.container.volume = name, "deleted volume");
+            }
+        }
+
+        Ok(())
     }
 
     pub fn start(self) -> Result<Self, Error> {
@@ -296,6 +374,7 @@ impl Project {
             Self::Destroying(_) => "destroying".to_string(),
             Self::Destroyed(_) => "destroyed".to_string(),
             Self::Errored(_) => "error".to_string(),
+            Self::Deleted => "deleted".to_string(),
         }
     }
 
@@ -310,9 +389,12 @@ impl Project {
             | Self::Stopping(ProjectStopping { container, .. })
             | Self::Stopped(ProjectStopped { container, .. })
             | Self::Rebooting(ProjectRebooting { container, .. })
-            | Self::Destroying(ProjectDestroying { container }) => Some(container.clone()),
+            | Self::Destroying(ProjectDestroying { container })
+            | Self::Destroyed(ProjectDestroyed {
+                destroyed: Some(container),
+            }) => Some(container.clone()),
             Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container(),
-            Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) => None,
+            Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) | Self::Deleted => None,
         }
     }
 
@@ -326,6 +408,10 @@ impl Project {
 
     pub fn container_id(&self) -> Option<String> {
         self.container().and_then(|container| container.id)
+    }
+
+    pub fn idle_minutes(&self) -> Option<u64> {
+        self.container().map(|container| container.idle_minutes())
     }
 }
 
@@ -355,6 +441,7 @@ impl From<Project> for shuttle_common::models::project::State {
             Project::Destroying(_) => Self::Destroying,
             Project::Destroyed(_) => Self::Destroyed,
             Project::Errored(ProjectError { message, .. }) => Self::Errored { message },
+            Project::Deleted => Self::Deleted,
         }
     }
 }
@@ -367,7 +454,7 @@ where
     type Next = Self;
     type Error = Infallible;
 
-    #[instrument(skip_all, fields(state = %self.state()))]
+    #[instrument("getting next project state", skip_all, fields(shuttle.container.state = %self.state()))]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let previous = self.clone();
         let previous_state = previous.state();
@@ -392,6 +479,7 @@ where
                 Err(error) => {
                     error!(
                         error = &error as &dyn std::error::Error,
+                        shuttle.container_id = starting.container.id,
                         "project failed to start. Will restart it"
                     );
 
@@ -406,16 +494,20 @@ where
             Self::Started(started) => match started.next(ctx).await {
                 Ok(ProjectReadying::Ready(ready)) => Ok(ready.into()),
                 Ok(ProjectReadying::Started(started)) => Ok(started.into()),
-                Ok(ProjectReadying::Idle(stopping)) => Ok(stopping.into()),
                 Err(err) => Ok(Self::Errored(err)),
             },
-            Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
+            Self::Ready(ready) => match ready.next(ctx).await {
+                Ok(ProjectRunning::Ready(ready)) => Ok(ready.into()),
+                Ok(ProjectRunning::Idle(stopping)) => Ok(stopping.into()),
+                Err(err) => Ok(Self::Errored(err)),
+            },
             Self::Stopped(stopped) => stopped.next(ctx).await.into_try_state(),
             Self::Stopping(stopping) => stopping.next(ctx).await.into_try_state(),
             Self::Rebooting(rebooting) => rebooting.next(ctx).await.into_try_state(),
             Self::Destroying(destroying) => destroying.next(ctx).await.into_try_state(),
             Self::Destroyed(destroyed) => destroyed.next(ctx).await.into_try_state(),
             Self::Errored(errored) => Ok(Self::Errored(errored)),
+            Self::Deleted => Ok(Self::Deleted),
         };
 
         if let Ok(Self::Errored(errored)) = &mut new {
@@ -424,27 +516,14 @@ where
         }
 
         let new_state = new.as_ref().unwrap().state();
-        let container_id = new
-            .as_ref()
-            .unwrap()
-            .container_id()
-            .map(|id| format!("{id}: "))
-            .unwrap_or_default();
-        debug!("{container_id}{previous_state} -> {new_state}");
+        let container_id = new.as_ref().unwrap().container_id().unwrap_or_default();
+
+        debug!(
+            shuttle.container.id = container_id,
+            "Moving project from {previous_state} to {new_state}"
+        );
 
         new
-    }
-}
-
-impl<Ctx> EndState<Ctx> for Project
-where
-    Ctx: DockerContext,
-{
-    fn is_done(&self) -> bool {
-        matches!(
-            self,
-            Self::Errored(_) | Self::Ready(_) | Self::Destroyed(_) | Self::Stopped(_)
-        )
     }
 }
 
@@ -466,34 +545,40 @@ where
 {
     type Error = Error;
 
-    /// TODO: we could be a bit more clever than this by using the
-    /// health checks instead of matching against the raw container
-    /// state which is probably prone to erroneously setting the
-    /// project into the wrong state if the docker is transitioning
-    /// the state of its resources under us
     async fn refresh(self, ctx: &Ctx) -> Result<Self, Self::Error> {
+        let current_state = self.state();
         let refreshed = match self {
             Self::Creating(creating) => Self::Creating(creating),
             Self::Attaching(attaching) => Self::Attaching(attaching),
-            Self::Starting(ProjectStarting { container, restart_count }) => match container
-                .clone()
-                .refresh(ctx)
-                .await
-            {
+            Self::Starting(ProjectStarting {
+                container,
+                restart_count,
+            }) => match container.clone().refresh(ctx).await {
                 Ok(container) => match safe_unwrap!(container.state.status) {
-                    ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ProjectStarted::new(container, VecDeque::new()))
-                    }
-                    ContainerStateStatusEnum::CREATED => Self::Starting(ProjectStarting {
+                    ContainerStateStatusEnum::RUNNING => Self::Started(ProjectStarted::new(
                         container,
                         restart_count,
-                    }),
-                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
+                        VecDeque::new(),
+                    )),
+                    // We can reach the starting state because either:
+                    // - The project was created for the first time
+                    // - It crashed and we are restarting it
+                    ContainerStateStatusEnum::CREATED | ContainerStateStatusEnum::EXITED => {
+                        Self::Starting(ProjectStarting {
+                            container,
+                            restart_count,
+                        })
+                    }
                     _ => {
-                        return Err(Error::custom(
-                            ErrorKind::Internal,
-                            "container resource has drifted out of sync from the starting state: cannot recover",
-                        ))
+                        warn!(
+                            shuttle.container.id = container.id,
+                            shuttle.container.current_state = current_state,
+                            "container resource has drifted out of sync from the starting state: cannot recover"
+                        );
+                        Self::Restarting(ProjectRestarting {
+                            container,
+                            restart_count,
+                        })
                     }
                 },
                 Err(DockerError::DockerResponseServerError {
@@ -505,24 +590,31 @@ where
                 }
                 Err(err) => return Err(err.into()),
             },
-            Self::Started(ProjectStarted { container, stats, .. })
-            | Self::Ready(ProjectReady { container, stats, .. })
-             => match container
-                .clone()
-                .refresh(ctx)
-                .await
-            {
+            Self::Started(ProjectStarted {
+                container,
+                stats,
+                start_count,
+                ..
+            }) => match container.clone().refresh(ctx).await {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ProjectStarted::new(container, stats))
+                        Self::Started(ProjectStarted::new(container, start_count, stats))
                     }
                     // Restart the container if it went down
-                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
+                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting {
+                        container,
+                        restart_count: start_count + 1,
+                    }),
                     _ => {
-                        return Err(Error::custom(
-                            ErrorKind::Internal,
-                            "container resource has drifted out of sync from a started state: cannot recover",
-                        ))
+                        warn!(
+                            shuttle.container.id = container.id,
+                            shuttle.container.current_state = current_state,
+                            "container resource has drifted out of sync from a started state. Will now reboot it"
+                        );
+                        Self::Restarting(ProjectRestarting {
+                            container,
+                            restart_count: start_count + 1,
+                        })
                     }
                 },
                 Err(DockerError::DockerResponseServerError {
@@ -534,26 +626,63 @@ where
                 }
                 Err(err) => return Err(err.into()),
             },
-            Self::Stopping(ProjectStopping { container })
-             => match container
-                .clone()
-                .refresh(ctx)
-                .await
-            {
+            Self::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+                ..
+            }) => match container.clone().refresh(ctx).await {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Stopping(ProjectStopping{ container })
+                        Self::Ready(ProjectReady::new(container, service, stats))
                     }
-                    ContainerStateStatusEnum::EXITED => Self::Stopped(ProjectStopped { container }),
+                    // Restart the container if it went down
+                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting {
+                        container,
+                        restart_count: 0,
+                    }),
                     _ => {
-                        return Err(Error::custom(
-                            ErrorKind::Internal,
-                            "container resource has drifted out of sync from a stopping state: cannot recover",
-                        ))
+                        warn!(
+                            shuttle.container.id = container.id,
+                            shuttle.container.current_state = current_state,
+                            "container resource has drifted out of sync from a started state. Will now reboot it"
+                        );
+                        Self::Restarting(ProjectRestarting {
+                            container,
+                            restart_count: 0,
+                        })
                     }
                 },
+                Err(DockerError::DockerResponseServerError {
+                    status_code: 404, ..
+                }) => {
+                    // container not found, let's try to recreate it
+                    // with the same image
+                    Self::Creating(ProjectCreating::from_container(container, 0)?)
+                }
                 Err(err) => return Err(err.into()),
             },
+            Self::Stopping(ProjectStopping { container }) => {
+                match container.clone().refresh(ctx).await {
+                    Ok(container) => match safe_unwrap!(container.state.status) {
+                        ContainerStateStatusEnum::RUNNING => {
+                            Self::Stopping(ProjectStopping { container })
+                        }
+                        ContainerStateStatusEnum::EXITED => {
+                            Self::Stopped(ProjectStopped { container })
+                        }
+                        _ => {
+                            warn!(
+                                shuttle.container.id = container.id,
+                                shuttle.container.current_state = current_state,
+                                "container resource has drifted out of sync from a stopping state"
+                            );
+                            Self::Stopping(ProjectStopping { container })
+                        }
+                    },
+                    Err(err) => return Err(err.into()),
+                }
+            }
             Self::Restarting(restarting) => Self::Restarting(restarting),
             Self::Recreating(recreating) => Self::Recreating(recreating),
             Self::Stopped(stopped) => Self::Stopped(stopped),
@@ -561,14 +690,46 @@ where
             Self::Destroying(destroying) => Self::Destroying(destroying),
             Self::Destroyed(destroyed) => Self::Destroyed(destroyed),
             Self::Errored(err) => Self::Errored(err),
+            Self::Deleted => Self::Deleted,
         };
         Ok(refreshed)
+    }
+}
+
+pub async fn refresh_with_retry(
+    project: Project,
+    ctx: &impl DockerContext,
+) -> Result<Project, Error> {
+    let max_attempt = 3;
+    let mut num_attempt = 1;
+    let mut proj = Box::new(project);
+
+    loop {
+        let refreshed = proj.refresh(ctx).await;
+        match refreshed.as_ref() {
+            Ok(Project::Errored(err)) => match &err.ctx {
+                Some(err_ctx) => {
+                    if num_attempt >= max_attempt {
+                        return refreshed;
+                    } else {
+                        num_attempt += 1;
+                        proj = err_ctx.clone();
+                        tokio::time::sleep(Duration::from_millis(100_u64 * 2_u64.pow(num_attempt)))
+                            .await
+                    }
+                }
+                _ => return refreshed,
+            },
+            _ => return refreshed,
+        }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectCreating {
     project_name: ProjectName,
+    /// The project id which this deployer is created for
+    project_id: Ulid,
     /// The admin secret with which the start deployer
     initial_key: String,
     /// Override the default fqdn (`${project_name}.${public}`)
@@ -582,14 +743,20 @@ pub struct ProjectCreating {
     #[serde(default)]
     recreate_count: usize,
     /// Label set on container as to how many minutes to wait before a project is considered idle
-    #[serde(default = "idle_minutes")]
+    #[serde(default = "default_idle_minutes")]
     idle_minutes: u64,
 }
 
 impl ProjectCreating {
-    pub fn new(project_name: ProjectName, initial_key: String, idle_minutes: u64) -> Self {
+    pub fn new(
+        project_name: ProjectName,
+        project_id: Ulid,
+        initial_key: String,
+        idle_minutes: u64,
+    ) -> Self {
         Self {
             project_name,
+            project_id,
             initial_key,
             fqdn: None,
             image: None,
@@ -604,11 +771,13 @@ impl ProjectCreating {
         recreate_count: usize,
     ) -> Result<Self, ProjectError> {
         let project_name = container.project_name()?;
+        let project_id = container.project_id()?;
         let idle_minutes = container.idle_minutes();
         let initial_key = container.initial_key()?;
 
         Ok(Self {
             project_name,
+            project_id,
             initial_key,
             fqdn: None,
             image: None,
@@ -628,9 +797,13 @@ impl ProjectCreating {
         self
     }
 
-    pub fn new_with_random_initial_key(project_name: ProjectName, idle_minutes: u64) -> Self {
+    pub fn new_with_random_initial_key(
+        project_name: ProjectName,
+        project_id: Ulid,
+        idle_minutes: u64,
+    ) -> Self {
         let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
-        Self::new(project_name, initial_key, idle_minutes)
+        Self::new(project_name, project_id, initial_key, idle_minutes)
     }
 
     pub fn with_image(mut self, image: String) -> Self {
@@ -658,6 +831,14 @@ impl ProjectCreating {
         format!("{prefix}{project_name}_run")
     }
 
+    fn volume_name<C: DockerContext>(&self, ctx: &C) -> String {
+        let prefix = &ctx.container_settings().prefix;
+
+        let Self { project_name, .. } = &self;
+
+        format!("{prefix}{project_name}_vol")
+    }
+
     fn generate_container_config<C: DockerContext>(
         &self,
         ctx: &C,
@@ -666,8 +847,11 @@ impl ProjectCreating {
             image: default_image,
             prefix,
             provisioner_host,
+            builder_host,
             auth_uri,
+            resource_recorder_uri,
             fqdn: public,
+            extra_hosts,
             ..
         } = ctx.container_settings();
 
@@ -696,6 +880,7 @@ impl ProjectCreating {
                     "Labels": {
                         "shuttle.prefix": prefix,
                         "shuttle.project": project_name,
+                        "shuttle.project_id": self.project_id.to_string(),
                         "shuttle.idle_minutes": format!("{idle_minutes}"),
                     },
                     "Cmd": [
@@ -717,10 +902,13 @@ impl ProjectCreating {
                         "/opt/shuttle/deployer.sqlite",
                         "--auth-uri",
                         auth_uri,
+                        "--builder-uri",
+                        format!("http://{builder_host}:8000"),
+                        "--resource-recorder",
+                        resource_recorder_uri,
+                        "--project-id",
+                        self.project_id.to_string()
                     ],
-                    "Env": [
-                        "RUST_LOG=debug,shuttle=trace,h2=warn",
-                    ]
                 })
             });
 
@@ -729,7 +917,7 @@ impl ProjectCreating {
         config.host_config = deserialize_json!({
             "Mounts": [{
                 "Target": "/opt/shuttle",
-                "Source": format!("{prefix}{project_name}_vol"),
+                "Source": self.volume_name(ctx),
                 "Type": "volume"
             }],
             // https://docs.docker.com/config/containers/resource_constraints/#memory
@@ -737,9 +925,12 @@ impl ProjectCreating {
             "MemoryReservation": 4295000000i64, // 4 GiB soft limit, applied if host is low on memory
             // https://docs.docker.com/config/containers/resource_constraints/#cpu
             "CpuPeriod": 100000i64,
-            "CpuQuota": 400000i64
+            "CpuQuota": 400000i64,
+            "ExtraHosts": extra_hosts,
         });
 
+        // TODO: remove the config from the log message, add that into the span attributes as a
+        // serialized JSON.
         debug!(
             r"generated a container configuration:
 CreateContainerOpts: {create_container_options:#?}
@@ -759,7 +950,7 @@ where
     type Next = ProjectAttaching;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to create container", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_name = self.container_name(ctx);
         let Self { recreate_count, .. } = self;
@@ -804,7 +995,7 @@ where
     type Next = ProjectStarting;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to attach container to network", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container, .. } = self;
 
@@ -823,7 +1014,11 @@ where
             .await
             .or_else(|err| {
                 if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 500) {
-                    info!("already disconnected from the {network} network");
+                    info!(
+                        shuttle.container.id = container_id,
+                        shuttle.container.network = network,
+                        "already disconnected from the network"
+                    );
                     Ok(())
                 } else {
                     Err(err)
@@ -844,11 +1039,17 @@ where
                     err,
                     DockerError::DockerResponseServerError { status_code, .. } if status_code == 409
                 ) {
-                    info!("already connected to the shuttle network");
+                    info!(
+                        shuttle.container.id = container_id,
+                        shuttle.container.network = network_name,
+                        "already connected to the shuttle network"
+                    );
                     Ok(())
                 } else {
                     error!(
                         error = &err as &dyn std::error::Error,
+                        shuttle.container.id = container_id,
+                        shuttle.container.network = network_name,
                         "failed to connect to shuttle network"
                     );
                     Err(ProjectError::no_network(
@@ -881,7 +1082,7 @@ where
     type Next = ProjectCreating;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "recreating container", skip_all, fields(recreate_count = %self.recreate_count))]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
@@ -932,9 +1133,12 @@ where
     type Next = ProjectStarted;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to start container", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let Self { container, .. } = self;
+        let Self {
+            container,
+            restart_count,
+        } = self;
         let container_id = safe_unwrap!(container.id);
 
         ctx.docker()
@@ -951,7 +1155,7 @@ where
 
         let container = container.refresh(ctx).await?;
 
-        Ok(Self::Next::new(container, VecDeque::new()))
+        Ok(Self::Next::new(container, restart_count, VecDeque::new()))
     }
 }
 
@@ -962,6 +1166,17 @@ pub struct ProjectRestarting {
     restart_count: usize,
 }
 
+impl ProjectRestarting {
+    /// Has the restart count been exhausted
+    pub fn exhausted(&self) -> bool {
+        Self::reached_max_restarts(self.restart_count)
+    }
+
+    fn reached_max_restarts(restart_count: usize) -> bool {
+        restart_count >= MAX_RESTARTS
+    }
+}
+
 #[async_trait]
 impl<Ctx> State<Ctx> for ProjectRestarting
 where
@@ -970,7 +1185,7 @@ where
     type Next = ProjectStarting;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "restarting container", skip_all, fields(restart_count = %self.restart_count))]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
@@ -985,9 +1200,14 @@ where
             .await
             .unwrap_or(());
 
-        debug!("project restarted {} times", restart_count);
+        debug!(
+            shuttle.container.id = container_id,
+            shuttle.container.restart_count = restart_count,
+            "project restarted {} times",
+            restart_count
+        );
 
-        if restart_count < MAX_RESTARTS {
+        if !Self::reached_max_restarts(restart_count) {
             sleep(Duration::from_secs(5)).await;
             Ok(ProjectStarting {
                 container,
@@ -1005,14 +1225,22 @@ pub struct ProjectStarted {
     service: Option<Service>,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default)]
-    stats: VecDeque<Stats>,
+    start_count: usize,
+    // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
+    #[serde(default, deserialize_with = "ok_or_default")]
+    stats: VecDeque<u64>,
 }
 
 impl ProjectStarted {
-    pub fn new(container: ContainerInspectResponse, stats: VecDeque<Stats>) -> Self {
+    pub fn new(
+        container: ContainerInspectResponse,
+        start_count: usize,
+        stats: VecDeque<u64>,
+    ) -> Self {
         Self {
             container,
             service: None,
+            start_count,
             stats,
         }
     }
@@ -1022,7 +1250,6 @@ impl ProjectStarted {
 pub enum ProjectReadying {
     Ready(ProjectReady),
     Started(ProjectStarted),
-    Idle(ProjectStopping),
 }
 
 #[async_trait]
@@ -1033,12 +1260,13 @@ where
     type Next = ProjectReadying;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "wait for container to be ready", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
             service,
-            mut stats,
+            start_count,
+            stats,
         } = self;
         let container = container.refresh(ctx).await?;
         let mut service = match service {
@@ -1047,79 +1275,11 @@ where
         };
 
         if service.is_healthy().await {
-            let idle_minutes = container.idle_minutes();
-
-            // Idle minutes of `0` means it is disabled and the project will always stay up
-            if idle_minutes < 1 {
-                Ok(Self::Next::Ready(ProjectReady {
-                    container,
-                    service,
-                    stats,
-                }))
-            } else {
-                let new_stat = ctx
-                    .docker()
-                    .stats(
-                        safe_unwrap!(container.id),
-                        Some(StatsOptions {
-                            one_shot: true,
-                            stream: false,
-                        }),
-                    )
-                    .next()
-                    .await
-                    .unwrap()?;
-
-                stats.push_back(new_stat.clone());
-
-                let mut last = None;
-
-                while stats.len() > (idle_minutes as usize) {
-                    last = stats.pop_front();
-                }
-
-                if let Some(last) = last {
-                    let cpu_per_minute = (new_stat.cpu_stats.cpu_usage.total_usage
-                        - last.cpu_stats.cpu_usage.total_usage)
-                        / idle_minutes;
-
-                    debug!(
-                        "{} has {} CPU usage per minute",
-                        service.name, cpu_per_minute
-                    );
-
-                    // From analysis we know the following kind of CPU usage for different kinds of idle projects
-                    // Web framework uses 6_200_000 CPU per minute
-                    // Serenity uses 20_000_000 CPU per minute
-                    //
-                    // We want to make sure we are able to stop these kinds of projects
-                    //
-                    // Now, the following kind of CPU usage has been observed for different kinds of projects having
-                    // 2 web requests / processing 2 discord messages per minute
-                    // Web framework uses 100_000_000 CPU per minute
-                    // Serenity uses 30_000_000 CPU per minute
-                    //
-                    // And projects at these levels we will want to keep active. However, the 30_000_000
-                    // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
-                    // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
-                    // active framework for now
-                    if cpu_per_minute < 100_000_000 {
-                        Ok(Self::Next::Idle(ProjectStopping { container }))
-                    } else {
-                        Ok(Self::Next::Ready(ProjectReady {
-                            container,
-                            service,
-                            stats,
-                        }))
-                    }
-                } else {
-                    Ok(Self::Next::Ready(ProjectReady {
-                        container,
-                        service,
-                        stats,
-                    }))
-                }
-            }
+            Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+            }))
         } else {
             let started_at =
                 chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
@@ -1136,6 +1296,7 @@ where
             Ok(Self::Next::Started(ProjectStarted {
                 container,
                 service: Some(service),
+                start_count,
                 stats,
             }))
         }
@@ -1147,8 +1308,28 @@ pub struct ProjectReady {
     container: ContainerInspectResponse,
     service: Service,
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
-    #[serde(default)]
-    stats: VecDeque<Stats>,
+    #[serde(default, deserialize_with = "ok_or_default")]
+    stats: VecDeque<u64>,
+}
+
+impl ProjectReady {
+    pub fn new(
+        container: ContainerInspectResponse,
+        service: Service,
+        stats: VecDeque<u64>,
+    ) -> Self {
+        Self {
+            container,
+            service,
+            stats,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ProjectRunning {
+    Ready(ProjectReady),
+    Idle(ProjectStopping),
 }
 
 #[async_trait]
@@ -1156,12 +1337,93 @@ impl<Ctx> State<Ctx> for ProjectReady
 where
     Ctx: DockerContext,
 {
-    type Next = Self;
+    type Next = ProjectRunning;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
-    async fn next(mut self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        Ok(self)
+    #[instrument(name = "check if container is still healthy", skip_all)]
+    async fn next(mut self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+        let Self {
+            container,
+            mut service,
+            mut stats,
+        } = self;
+
+        if !service.is_healthy().await {
+            return Err(ProjectError::internal(
+                "running project is no longer healthy",
+            ));
+        }
+        let idle_minutes = container.idle_minutes();
+
+        // Idle minutes of `0` means it is disabled and the project will always stay up
+        if idle_minutes < 1 {
+            return Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+            }));
+        }
+
+        let new_stat = ctx
+            .get_stats(safe_unwrap!(container.id))
+            .await
+            .map_err(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to get stats for container"
+                );
+                ProjectError::internal("failed to get stats for container")
+            })?;
+
+        stats.push_back(new_stat);
+
+        let mut last = None;
+
+        while stats.len() > idle_minutes as usize {
+            last = stats.pop_front();
+        }
+
+        let Some(last) = last else {
+            return Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+            }));
+        };
+        let cpu_per_minute = (new_stat - last) / idle_minutes;
+
+        debug!(
+            shuttle.container.id = container.id,
+            shuttle.service = service.name.to_string(),
+            "{} has {} CPU usage per minute",
+            service.name,
+            cpu_per_minute
+        );
+
+        // From analysis we know the following kind of CPU usage for different kinds of idle projects
+        // Web framework uses 6_200_000 CPU per minute
+        // Serenity uses 20_000_000 CPU per minute
+        //
+        // We want to make sure we are able to stop these kinds of projects
+        //
+        // Now, the following kind of CPU usage has been observed for different kinds of projects having
+        // 2 web requests / processing 2 discord messages per minute
+        // Web framework uses 100_000_000 CPU per minute
+        // Serenity uses 30_000_000 CPU per minute
+        //
+        // And projects at these levels we will want to keep active. However, the 30_000_000
+        // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
+        // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
+        // active framework for now
+        if cpu_per_minute < 100_000_000 {
+            Ok(Self::Next::Idle(ProjectStopping { container }))
+        } else {
+            Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                stats,
+            }))
+        }
     }
 }
 
@@ -1174,8 +1436,10 @@ impl ProjectReady {
         &self.service.target
     }
 
-    pub async fn is_healthy(&mut self) -> bool {
-        self.service.is_healthy().await
+    pub async fn start_last_deploy(&mut self, jwt: String, admin_secret: String) {
+        if let Err(error) = self.service.start_last_deploy(jwt, admin_secret).await {
+            error!(error, "failed to start last running deploy");
+        };
     }
 }
 
@@ -1227,12 +1491,73 @@ impl Service {
             .map_err(|err| err.into())
     }
 
+    #[instrument(name = "calling status endpoint on container", skip_all, fields(project_name = %self.name))]
     pub async fn is_healthy(&mut self) -> bool {
         let uri = self.uri(format!("/projects/{}/status", self.name)).unwrap();
         let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.get(uri)).await;
         let is_healthy = matches!(resp, Ok(Ok(res)) if res.status().is_success());
         self.last_check = Some(HealthCheckRecord::new(is_healthy));
         is_healthy
+    }
+
+    pub async fn start_last_deploy(
+        &mut self,
+        jwt: String,
+        admin_secret: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        trace!(jwt, "getting last deploy");
+
+        let running_id = self.get_running_deploy(&jwt, &admin_secret).await?;
+
+        trace!(?running_id, "starting deploy");
+
+        if let Some(running_id) = running_id {
+            // Start this deployment
+            let uri = self.uri(format!(
+                "/projects/{}/deployments/{}",
+                self.name, running_id
+            ))?;
+
+            let req = Request::builder()
+                .method(Method::PUT)
+                .uri(uri)
+                .header(AUTHORIZATION, format!("Bearer {}", jwt))
+                .header(X_SHUTTLE_ACCOUNT_NAME.clone(), "gateway")
+                .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
+                .body(Body::empty())?;
+
+            let _ = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await;
+        }
+
+        Ok(())
+    }
+
+    /// Get the last running deployment
+    async fn get_running_deploy(
+        &self,
+        jwt: &str,
+        admin_secret: &str,
+    ) -> Result<Option<Uuid>, Box<dyn std::error::Error>> {
+        let uri = self.uri(format!("/projects/{}/services/{}", self.name, self.name))?;
+
+        let req = Request::builder()
+            .uri(uri)
+            .header(AUTHORIZATION, format!("Bearer {}", jwt))
+            .header(X_SHUTTLE_ACCOUNT_NAME.clone(), "gateway")
+            .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
+            .body(Body::empty())?;
+
+        let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await??;
+
+        let body = hyper::body::to_bytes(resp.into_body()).await?;
+
+        let service: service::Summary = serde_json::from_slice(&body)?;
+
+        if let Some(deployment) = service.deployment {
+            Ok(Some(deployment.id))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -1250,7 +1575,7 @@ where
 
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to reboot container", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { mut container } = self;
         ctx.docker()
@@ -1314,7 +1639,7 @@ where
 
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to stop container", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container } = self;
 
@@ -1350,7 +1675,7 @@ where
     type Next = ProjectStopped;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "keep container in stopped state", skip_all)]
     async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
@@ -1369,7 +1694,7 @@ where
     type Next = ProjectDestroyed;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "try to destroy container", skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container } = self;
         let container_id = safe_unwrap!(container.id);
@@ -1406,7 +1731,7 @@ where
     type Next = ProjectDestroyed;
     type Error = ProjectError;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "keep container in destroyed state", skip_all)]
     async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
@@ -1501,7 +1826,7 @@ where
     type Next = Self;
     type Error = Infallible;
 
-    #[instrument(skip_all)]
+    #[instrument(name = "keep the container in errored state", skip_all)]
     async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
@@ -1530,7 +1855,7 @@ pub mod exec {
             .await
             .expect("could not list projects")
         {
-            match gateway.find_project(&project_name).await.unwrap() {
+            match gateway.find_project(&project_name).await.unwrap().state {
                 Project::Errored(ProjectError { ctx: Some(ctx), .. }) => {
                     if let Some(container) = ctx.container() {
                         if let Ok(container) = gateway
@@ -1614,6 +1939,43 @@ pub mod exec {
         Ok(())
     }
 
+    pub async fn idle_cch(
+        gateway: Arc<GatewayService>,
+        sender: Sender<BoxedTask>,
+    ) -> Result<(), ProjectError> {
+        for project_name in gateway
+            .iter_cch_projects()
+            .await
+            .expect("could not list cch projects")
+        {
+            if let Project::Ready(ProjectReady { container, .. }) =
+                gateway.find_project(&project_name).await.unwrap().state
+            {
+                if let Ok(container) = gateway
+                    .context()
+                    .docker()
+                    .inspect_container(safe_unwrap!(container.id), None)
+                    .await
+                {
+                    if container.state.is_some() {
+                        _ = gateway
+                            .new_task()
+                            .project(project_name)
+                            .and_then(task::run(|ctx| async move {
+                                TaskResult::Done(Project::Stopping(ProjectStopping {
+                                    container: ctx.state.container().unwrap(),
+                                }))
+                            }))
+                            .send(&sender)
+                            .await;
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn destroy(
         gateway: Arc<GatewayService>,
         sender: Sender<BoxedTask>,
@@ -1645,7 +2007,7 @@ pub mod tests {
 
     use super::*;
     use crate::tests::{assert_matches, assert_stream_matches, World};
-    use crate::EndStateExt;
+    use crate::StateExt;
 
     #[tokio::test]
     async fn create_start_stop_destroy_project() -> anyhow::Result<()> {
@@ -1657,6 +2019,7 @@ pub mod tests {
             ctx,
             Project::Creating(ProjectCreating {
                 project_name: "my-project-test".parse().unwrap(),
+                project_id: Ulid::new(),
                 initial_key: "test".to_string(),
                 fqdn: None,
                 image: None,
@@ -1739,7 +2102,7 @@ pub mod tests {
             .unwrap()
             .unwrap();
 
-        let client = world.client(target_addr);
+        let client = World::client(target_addr);
 
         client
             .request(

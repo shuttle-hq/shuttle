@@ -15,9 +15,12 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
+use strum::{EnumMessage, EnumString};
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+use crate::limits::Limits;
 
 /// Minutes before a claim expires
 ///
@@ -28,7 +31,7 @@ const ISS: &str = "shuttle";
 
 /// The scope of operations that can be performed on shuttle
 /// Every scope defaults to read and will use a suffix for updating tasks
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, EnumMessage)]
 #[serde(rename_all = "snake_case")]
 pub enum Scope {
     /// Read the details, such as status and address, of a deployment
@@ -49,13 +52,18 @@ pub enum Scope {
     /// Read the status of a project
     Project,
 
-    /// Create a new project
-    ProjectCreate,
+    /// Create and delete projects
+    #[serde(rename = "project_create")] // compatibility
+    ProjectWrite,
+
+    /// Create more projects than the free tier default
+    // NOTE: this is no longer used, but removing it is a breaking change for the time being.
+    ExtraProjects,
 
     /// Get the resources for a project
     Resources,
 
-    /// Provision new resources for a project or update existing ones
+    /// Provision new resources for a project or update or delete existing ones
     ResourcesWrite,
 
     /// List the secrets of a project
@@ -93,19 +101,7 @@ pub struct ScopeBuilder(Vec<Scope>);
 impl ScopeBuilder {
     /// Create a builder with the standard scopes for new users.
     pub fn new() -> Self {
-        Self(vec![
-            Scope::Deployment,
-            Scope::DeploymentPush,
-            Scope::Logs,
-            Scope::Service,
-            Scope::ServiceCreate,
-            Scope::Project,
-            Scope::ProjectCreate,
-            Scope::Resources,
-            Scope::ResourcesWrite,
-            Scope::Secret,
-            Scope::SecretWrite,
-        ])
+        Self(Default::default())
     }
 
     /// Extend the current scopes with admin scopes.
@@ -122,6 +118,46 @@ impl ScopeBuilder {
         self
     }
 
+    /// Extend the current scopes with Pro rights.
+    pub fn with_pro(mut self) -> Self {
+        self.0.push(Scope::ExtraProjects);
+        self
+    }
+
+    /// Extend the current scopes with basic rights needed by a user.
+    pub fn with_basic(mut self) -> Self {
+        self.0.extend(vec![
+            Scope::Deployment,
+            Scope::DeploymentPush,
+            Scope::Logs,
+            Scope::Service,
+            Scope::ServiceCreate,
+            Scope::Project,
+            Scope::ProjectWrite,
+            Scope::Resources,
+            Scope::ResourcesWrite,
+            Scope::Secret,
+            Scope::SecretWrite,
+        ]);
+        self
+    }
+
+    /// Extend the current scopes with those needed by a deployer machine / user.
+    pub fn with_deploy_rights(mut self) -> Self {
+        self.0.extend(vec![
+            Scope::DeploymentPush, // To start an idle deploy
+            Scope::Resources,      // To get past resources for an idle deploy
+            Scope::Service,        // To get the running deploy for a service
+            // To add the locally persisted resources from the older deployers
+            // to the resource-recorder the first time the old deployer is updated
+            // to the new deployer (based on resource-recorder). After this moment
+            // all requests are routed to the resource-recorder instead of local
+            // persistence.
+            Scope::ResourcesWrite,
+        ]);
+        self
+    }
+
     pub fn build(self) -> Vec<Scope> {
         self.0
     }
@@ -133,7 +169,45 @@ impl Default for ScopeBuilder {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, EnumString)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "display", derive(strum::Display))]
+#[cfg_attr(feature = "persist", derive(sqlx::Type))]
+#[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
+#[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
+pub enum AccountTier {
+    #[default]
+    Basic,
+    // A basic user that is pending a payment on the backend.
+    PendingPaymentPro,
+    CancelledPro,
+    Pro,
+    Team,
+    Admin,
+    Deployer,
+}
+
+impl From<AccountTier> for Vec<Scope> {
+    fn from(tier: AccountTier) -> Self {
+        let mut builder = ScopeBuilder::new();
+
+        if tier == AccountTier::Deployer {
+            builder = builder.with_deploy_rights();
+        } else {
+            builder = builder.with_basic();
+
+            if tier == AccountTier::Admin {
+                builder = builder.with_admin();
+            } else if tier == AccountTier::Pro {
+                builder = builder.with_pro();
+            }
+        }
+
+        builder.build()
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).
     pub exp: usize,
@@ -149,11 +223,20 @@ pub struct Claim {
     pub scopes: Vec<Scope>,
     /// The original token that was parsed
     pub(crate) token: Option<String>,
+    /// A struct that holds the account limits.
+    pub limits: Limits,
+    /// The account tier of the subject.
+    pub tier: AccountTier,
 }
 
 impl Claim {
-    /// Create a new claim for a user with the given scopes
-    pub fn new(sub: String, scopes: Vec<Scope>) -> Self {
+    /// Create a new claim for a user with the given scopes and limits.
+    pub fn new(
+        sub: String,
+        scopes: Vec<Scope>,
+        tier: AccountTier,
+        limits: impl Into<Limits>,
+    ) -> Self {
         let iat = Utc::now();
         let exp = iat.add(Duration::minutes(EXP_MINUTES));
 
@@ -165,6 +248,8 @@ impl Claim {
             sub,
             scopes,
             token: None,
+            limits: limits.into(),
+            tier,
         }
     }
 
@@ -196,7 +281,7 @@ impl Claim {
         let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
         validation.set_issuer(&[ISS]);
 
-        trace!(token, "converting token to claim");
+        trace!("converting token to claim");
         let mut claim: Self = decode(token, &decoding_key, &validation)
             .map_err(|err| {
                 error!(
@@ -230,6 +315,10 @@ impl Claim {
         claim.token = Some(token.to_string());
 
         Ok(claim)
+    }
+
+    pub fn token(&self) -> Option<&str> {
+        self.token.as_deref()
     }
 }
 

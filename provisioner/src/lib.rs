@@ -585,20 +585,11 @@ impl Provisioner for MyProvisioner {
     #[tracing::instrument(skip(self))]
     async fn provision_qdrant(
         &self,
-        request: Request<QdrantRequest>,
+        _request: Request<QdrantRequest>,
     ) -> Result<Response<QdrantResponse>, Status> {
-        verify_claim(&request)?;
-
-        let QdrantRequest {
-            project_name: _,
-            url,
-            api_key,
-        } = request.into_inner();
-
-        Ok(Response::new(QdrantResponse {
-            url,
-            api_key: Some(api_key),
-        }))
+        Err(Status::invalid_argument(
+            "Provisioning Qdrant on Shuttle is not supported",
+        ))
     }
 
     #[tracing::instrument(skip(self))]

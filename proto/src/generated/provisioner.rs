@@ -82,18 +82,12 @@ pub struct DatabaseDeletionResponse {}
 pub struct QdrantRequest {
     #[prost(string, tag = "1")]
     pub project_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub url: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub api_key: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QdrantResponse {
     #[prost(string, tag = "1")]
     pub url: ::prost::alloc::string::String,
-    #[prost(string, optional, tag = "2")]
-    pub api_key: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

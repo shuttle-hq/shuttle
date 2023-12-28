@@ -13,7 +13,8 @@ use shuttle_proto::{
     logger::Batcher,
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong, QdrantRequest,
+        QdrantResponse,
     },
     resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     runtime::{StopReason, SubscribeStopResponse},
@@ -56,6 +57,13 @@ impl Provisioner for ProvisionerMock {
         _request: tonic::Request<DatabaseRequest>,
     ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
         panic!("no run tests should delete a db");
+    }
+
+    async fn provision_qdrant(
+        &self,
+        _request: tonic::Request<QdrantRequest>,
+    ) -> Result<tonic::Response<QdrantResponse>, tonic::Status> {
+        panic!("no run tests should request qdrant");
     }
 
     async fn health_check(

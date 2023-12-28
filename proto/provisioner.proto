@@ -47,13 +47,10 @@ message DatabaseDeletionResponse {}
 
 message QdrantRequest {
   string project_name = 1;
-  string url = 2;
-  string api_key = 3;
 }
 
 message QdrantResponse {
   string url = 1;
-  optional string api_key = 2;
 }
 
 message Ping {}

@@ -32,19 +32,13 @@ pub mod provisioner {
 
     impl From<QdrantResponse> for QdrantReadyInfo {
         fn from(response: QdrantResponse) -> Self {
-            QdrantReadyInfo {
-                url: response.url,
-                api_key: response.api_key,
-            }
+            QdrantReadyInfo { url: response.url }
         }
     }
 
     impl From<QdrantReadyInfo> for QdrantResponse {
         fn from(info: QdrantReadyInfo) -> Self {
-            QdrantResponse {
-                url: info.url,
-                api_key: info.api_key,
-            }
+            QdrantResponse { url: info.url }
         }
     }
 

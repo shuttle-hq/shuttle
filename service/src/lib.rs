@@ -32,11 +32,10 @@ pub trait Factory: Send + Sync {
         db_type: database::Type,
     ) -> Result<DatabaseReadyInfo, crate::Error>;
 
-    /// Get a Qdrant connection
+    /// Get a Qdrant connection. Only used in local runs.
     async fn get_qdrant_connection(
         &mut self,
-        url: String,
-        api_key: String,
+        project_name: String,
     ) -> Result<QdrantReadyInfo, crate::Error>;
 
     /// Get all the secrets for a service

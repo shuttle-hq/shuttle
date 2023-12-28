@@ -6,7 +6,7 @@ use shuttle_common::{
     constants::STORAGE_DIRNAME,
     database,
     secrets::Secret,
-    DatabaseReadyInfo,
+    DatabaseReadyInfo, QdrantReadyInfo,
 };
 use shuttle_proto::provisioner::{
     provisioner_client::ProvisionerClient, DatabaseRequest, QdrantRequest,
@@ -70,14 +70,9 @@ impl Factory for ProvisionerFactory {
 
     async fn get_qdrant_connection(
         &mut self,
-        url: String,
-        api_key: String,
+        project_name: String,
     ) -> Result<QdrantReadyInfo, shuttle_service::Error> {
-        let mut request = Request::new(QdrantRequest {
-            project_name: self.service_name.to_string(),
-            url,
-            api_key,
-        });
+        let mut request = Request::new(QdrantRequest { project_name });
 
         if let Some(claim) = &self.claim {
             request.extensions_mut().insert(claim.clone());
@@ -90,10 +85,7 @@ impl Factory for ProvisionerFactory {
             .map_err(shuttle_service::error::CustomError::new)?
             .into_inner();
 
-        let info: QdrantReadyInfo = response.into();
-
-        // return the connection info
-        Ok(info)
+        Ok(response.into())
     }
 
     async fn get_secrets(

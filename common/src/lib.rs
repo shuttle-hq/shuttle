@@ -107,7 +107,6 @@ pub struct QdrantInput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QdrantReadyInfo {
     pub url: String,
-    pub api_key: Option<String>,
 }
 
 /// Holds the details for a database connection

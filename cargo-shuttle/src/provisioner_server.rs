@@ -19,7 +19,7 @@ use futures::StreamExt;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     database::{AwsRdsEngine, SharedEngine},
-    QdrantReadyInfo,
+    QdrantReadyInfo, Secret,
 };
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
@@ -156,10 +156,10 @@ impl LocalProvisioner {
 
     async fn get_db_connection_string(
         &self,
-        service_name: &str,
+        project_name: &str,
         db_type: Type,
     ) -> Result<DatabaseResponse, Status> {
-        trace!("getting sql string for service '{}'", service_name);
+        trace!("getting sql string for project '{}'", project_name);
 
         let EngineConfig {
             r#type,
@@ -172,7 +172,7 @@ impl LocalProvisioner {
             env,
             is_ready_cmd,
         } = db_type_to_config(db_type);
-        let container_name = format!("shuttle_{service_name}_{type}");
+        let container_name = format!("shuttle_{project_name}_{type}");
 
         let container = match self.docker.inspect_container(&container_name, None).await {
             Ok(container) => {
@@ -284,13 +284,10 @@ impl LocalProvisioner {
         &self,
         project_name: &str,
     ) -> Result<QdrantReadyInfo, Status> {
-        let QdrantConfig {
-            container_prefix,
-            image,
-            port,
-        } = qdrant_config();
+        let image = "qdrant/qdrant:latest".to_string();
+        let port = "6334/tcp".to_string();
 
-        let container_name = format!("{container_prefix}{project_name}");
+        let container_name = format!("shuttle_{project_name}_qdrant");
 
         let env = None;
 
@@ -305,7 +302,7 @@ impl LocalProvisioner {
 
         let url = format!("http://localhost:{port}");
 
-        Ok(QdrantReadyInfo { url, api_key: None })
+        Ok(QdrantReadyInfo { url })
     }
 
     async fn wait_for_ready(
@@ -421,11 +418,7 @@ impl Provisioner for LocalProvisioner {
         &self,
         request: Request<QdrantRequest>,
     ) -> Result<Response<QdrantResponse>, Status> {
-        let QdrantRequest {
-            project_name,
-            url: _,
-            api_key: _,
-        } = request.into_inner();
+        let QdrantRequest { project_name } = request.into_inner();
 
         let res = self.get_qdrant_connection_info(&project_name).await?;
 
@@ -485,20 +478,6 @@ struct EngineConfig {
     port: String,
     env: Option<Vec<String>>,
     is_ready_cmd: Vec<String>,
-}
-
-struct QdrantConfig {
-    container_prefix: String,
-    image: String,
-    port: String,
-}
-
-fn qdrant_config() -> QdrantConfig {
-    QdrantConfig {
-        container_prefix: "shuttle_qdrant_".to_string(),
-        image: "qdrant/qdrant:latest".to_string(),
-        port: "6334/tcp".to_string(),
-    }
 }
 
 fn db_type_to_config(db_type: Type) -> EngineConfig {

@@ -29,7 +29,7 @@ pub(crate) async fn get_user(
     Ok(Json(user.into()))
 }
 
-#[instrument(skip(user_manager), fields(account.name = %account_name))]
+#[instrument(skip(user_manager), fields(account.name = %account_name, account.tier = %account_tier))]
 pub(crate) async fn post_user(
     _: Admin,
     State(user_manager): State<UserManagerState>,
@@ -40,7 +40,7 @@ pub(crate) async fn post_user(
     Ok(Json(user.into()))
 }
 
-#[instrument(skip(user_manager), fields(account.name = %account_name))]
+#[instrument(skip(user_manager), fields(account.name = %account_name, account.tier = %account_tier))]
 pub(crate) async fn update_user_tier(
     _: Admin,
     State(user_manager): State<UserManagerState>,
@@ -65,7 +65,7 @@ pub(crate) async fn update_user_tier(
     Ok(())
 }
 
-#[instrument(skip(claim, user_manager), fields(account_name = claim.sub, account_tier = %claim.tier))]
+#[instrument(skip(claim, user_manager), fields(account.name = claim.sub, account.tier = %claim.tier))]
 pub(crate) async fn add_subscription_items(
     Extension(claim): Extension<Claim>,
     State(user_manager): State<UserManagerState>,

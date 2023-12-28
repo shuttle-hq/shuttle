@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::headers::HeaderMapExt;
+use axum::headers::{Authorization, HeaderMapExt};
 use axum::http::Request;
 use axum::response::Response;
 use bollard::container::StatsOptions;
@@ -217,7 +217,8 @@ impl ContainerSettings {
 pub struct GatewayContextProvider {
     docker: Docker,
     settings: ContainerSettings,
-    api_key: String,
+    gateway_api_key: String,
+    deploys_api_key: String,
     auth_key_uri: Uri,
     docker_stats_source: DockerStatsSource,
 }
@@ -226,14 +227,16 @@ impl GatewayContextProvider {
     pub fn new(
         docker: Docker,
         settings: ContainerSettings,
-        api_key: String,
+        gateway_api_key: String,
+        deploys_api_key: String,
         auth_key_uri: Uri,
         docker_stats_source: DockerStatsSource,
     ) -> Self {
         Self {
             docker,
             settings,
-            api_key,
+            gateway_api_key,
+            deploys_api_key,
             auth_key_uri,
             docker_stats_source,
         }
@@ -243,7 +246,8 @@ impl GatewayContextProvider {
         GatewayContext {
             docker: self.docker.clone(),
             settings: self.settings.clone(),
-            api_key: self.api_key.clone(),
+            gateway_api_key: self.gateway_api_key.clone(),
+            deploys_api_key: self.deploys_api_key.clone(),
             auth_key_uri: self.auth_key_uri.clone(),
             docker_stats_source: self.docker_stats_source.clone(),
         }
@@ -313,6 +317,7 @@ impl GatewayService {
         let provider = GatewayContextProvider::new(
             docker,
             container_settings,
+            args.admin_key,
             args.deploys_api_key,
             format!("{}auth/key", args.auth_uri).parse().unwrap(),
             docker_stats_source,
@@ -1055,7 +1060,8 @@ impl GatewayService {
 pub struct GatewayContext {
     docker: Docker,
     settings: ContainerSettings,
-    api_key: String,
+    gateway_api_key: String,
+    deploys_api_key: String,
     auth_key_uri: Uri,
     docker_stats_source: DockerStatsSource,
 }
@@ -1139,13 +1145,20 @@ impl DockerContext for GatewayContext {
 }
 
 impl GatewayContext {
-    #[instrument(skip(self), fields(auth_key_uri = %self.auth_key_uri, api_key = self.api_key))]
+    #[instrument(skip(self), fields(auth_key_uri = %self.auth_key_uri, gateway_key = self.gateway_api_key, deploys_key = self.deploys_api_key))]
     pub async fn get_jwt(&self) -> String {
-        let req = Request::builder()
-            .uri(self.auth_key_uri.clone())
-            .header(AUTHORIZATION, format!("Bearer {}", self.api_key))
-            .body(Body::empty())
-            .unwrap();
+        let mut req = Request::builder().uri(self.auth_key_uri.clone());
+
+        let headers = req
+            .headers_mut()
+            .expect("to get headers on manually created request");
+
+        headers.typed_insert(
+            Authorization::bearer(&self.deploys_api_key).expect("to build an authorization bearer"),
+        );
+        headers.typed_insert(XShuttleAdminSecret(self.gateway_api_key.clone()));
+
+        let req = req.body(Body::empty()).unwrap();
 
         trace!("getting jwt");
 
@@ -1161,6 +1174,7 @@ impl GatewayContext {
 
             convert["token"].as_str().unwrap_or_default().to_string()
         } else {
+            error!("was not able to get JWT for gateway");
             Default::default()
         }
     }

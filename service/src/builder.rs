@@ -6,7 +6,7 @@ use anyhow::{anyhow, bail, Context};
 use cargo_metadata::{Package, Target};
 use shuttle_common::constants::{NEXT_NAME, RUNTIME_NAME};
 use tokio::io::AsyncBufReadExt;
-use tracing::{debug, error, trace};
+use tracing::{debug, error, info, trace};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// This represents a compiled alpha or shuttle-next service.
@@ -128,10 +128,21 @@ pub async fn build_workspace(
     let mut next_packages = Vec::new();
 
     for member in metadata.workspace_packages() {
-        if is_next(member) {
+        let next = is_next(member);
+        let alpha = is_alpha(member);
+        if next || alpha {
+            let mut shuttle_deps = member
+                .dependencies
+                .iter()
+                .filter_map(|d| d.name.starts_with("shuttle-").then(|| d.name.clone()))
+                .collect::<Vec<_>>();
+            shuttle_deps.sort();
+            info!(name = member.name, deps = ?shuttle_deps, "Compiled workspace member with shuttle dependencies");
+        }
+        if next {
             ensure_cdylib(member)?;
             next_packages.push(member);
-        } else if is_alpha(member) {
+        } else if alpha {
             ensure_binary(member)?;
             alpha_packages.push(member);
         }

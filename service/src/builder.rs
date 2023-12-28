@@ -134,7 +134,11 @@ pub async fn build_workspace(
             let mut shuttle_deps = member
                 .dependencies
                 .iter()
-                .filter_map(|d| d.name.starts_with("shuttle-").then(|| d.name.clone()))
+                .filter_map(|d| {
+                    d.name
+                        .starts_with("shuttle-")
+                        .then(|| format!("{} '{}'", d.name, d.req))
+                })
                 .collect::<Vec<_>>();
             shuttle_deps.sort();
             info!(name = member.name, deps = ?shuttle_deps, "Compiled workspace member with shuttle dependencies");

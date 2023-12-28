@@ -13,7 +13,6 @@ use axum::response::Response;
 use bollard::container::StatsOptions;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use fqdn::{Fqdn, FQDN};
-use http::header::AUTHORIZATION;
 use http::Uri;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;

@@ -964,7 +964,7 @@ impl GatewayService {
 
         // Start the project if it is idle
         if project.state.is_stopped() {
-            trace!(%project_name, "starting up idle project");
+            trace!(shuttle.project.name = %project_name, "starting up idle project");
 
             let handle = self
                 .new_task()

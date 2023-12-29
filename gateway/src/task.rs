@@ -491,7 +491,7 @@ impl Task<()> for ProjectTask {
 
         let span = info_span!(
             "polling project",
-            ctx.project = ?project_ctx.project_name.to_string(),
+            shuttle.project.name = %project_ctx.project_name,
             ctx.state = project_ctx.state.state(),
             ctx.state_after = field::Empty
         );
@@ -506,7 +506,7 @@ impl Task<()> for ProjectTask {
                     res = &mut poll => res,
                     _ = timeout => {
                         warn!(
-                            project_name = ?self.project_name,
+                            shuttle.project.name = %self.project_name,
                             "a task has been idling for a long time"
                         );
                         poll.await

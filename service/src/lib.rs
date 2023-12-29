@@ -8,7 +8,7 @@ pub use shuttle_common::{
     database,
     deployment::{DeploymentMetadata, Environment},
     resource::Type,
-    DatabaseReadyInfo, DbInput, DbOutput, QdrantInput, QdrantReadyInfo, SecretStore,
+    DatabaseReadyInfo, DbInput, DbOutput, QdrantReadyInfo, SecretStore,
 };
 
 pub use crate::error::{CustomError, Error};

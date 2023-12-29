@@ -1,12 +1,13 @@
 [package]
 name = "shuttle-qdrant"
-version = "0.18.0"
+version = "0.35.1"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "Apache-2.0"
+description = "Shuttle plugin for connecting to a Qdrant database"
+keywords = ["shuttle-service", "qdrant"]
 
 [dependencies]
 async-trait = "0.1.56"
-qdrant-client = "1.2.0"
+qdrant-client = "1.7.0"
 serde = { version = "1.0.148", features = ["derive"] }
-shuttle-service = { path = "../../service", version = "0.18.0", default-features = false }
+shuttle-service = { path = "../../service", version = "0.35.1", default-features = false }

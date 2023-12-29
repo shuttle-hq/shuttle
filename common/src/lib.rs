@@ -97,18 +97,6 @@ pub enum DbOutput {
     Local(String),
 }
 
-// Holds the input for a Qdrant resource
-#[derive(Deserialize, Serialize, Default)]
-pub struct QdrantInput {
-    pub cloud_url: Option<String>,
-    pub api_key: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QdrantReadyInfo {
-    pub url: String,
-}
-
 /// Holds the details for a database connection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {
@@ -169,6 +157,11 @@ impl DatabaseReadyInfo {
             self.database_name,
         )
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QdrantReadyInfo {
+    pub url: String,
 }
 
 #[cfg(feature = "openapi")]

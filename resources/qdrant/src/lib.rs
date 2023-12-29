@@ -1,15 +1,31 @@
 use async_trait::async_trait;
 use qdrant_client::prelude::*;
-use serde::Serialize;
-pub use shuttle_service::QdrantReadyInfo;
-use shuttle_service::{Environment, Factory, QdrantInput, ResourceBuilder, Type};
+use serde::{Deserialize, Serialize};
+use shuttle_service::{
+    error::{CustomError, Error as ShuttleError},
+    Environment, Factory, ResourceBuilder, Type,
+};
 
 /// A Qdrant vector database
-#[derive(Serialize)]
+#[derive(Default, Serialize)]
 pub struct Qdrant {
-    pub cloud_url: String,
-    pub api_key: String,
-    pub local_url: Option<String>,
+    cloud_url: String,
+    api_key: Option<String>,
+    local_url: Option<String>,
+}
+
+/// Scrappy wrapper over `QdrantClientConfig` to implement Clone and serde
+/// for use in ResourceBuilder
+#[derive(Clone, Serialize, Deserialize)]
+pub struct QdrantClientConfigWrap {
+    url: String,
+    api_key: Option<String>,
+}
+
+impl From<QdrantClientConfigWrap> for QdrantClientConfig {
+    fn from(wrap: QdrantClientConfigWrap) -> Self {
+        QdrantClientConfig::from_url(&wrap.url).with_api_key(wrap.api_key)
+    }
 }
 
 impl Qdrant {
@@ -19,7 +35,7 @@ impl Qdrant {
     }
 
     pub fn api_key(mut self, api_key: &str) -> Self {
-        self.api_key = api_key.to_string();
+        self.api_key = Some(api_key.to_string());
         self
     }
 
@@ -34,16 +50,14 @@ impl ResourceBuilder<QdrantClient> for Qdrant {
     const TYPE: Type = Type::Custom;
 
     type Config = Self;
-    type Output = QdrantClientConfig;
+    type Output = QdrantClientConfigWrap;
 
     fn new() -> Self {
-        Self {
-            config: Default::default(),
-        }
+        Default::default()
     }
 
     fn config(&self) -> &Self::Config {
-        &self.config
+        &self
     }
 
     async fn output(
@@ -58,14 +72,20 @@ impl ResourceBuilder<QdrantClient> for Qdrant {
                         "missing `cloud_url`",
                     )))
                 } else {
-                    QdrantClientConfig::from_url(self.cloud_url).with_api_key(self.api_key)
+                    Ok(QdrantClientConfigWrap {
+                        url: self.cloud_url,
+                        api_key: self.api_key,
+                    })
                 }
             }
             Environment::Local => match self.local_url {
-                Some(ref local_url) => QdrantClientConfig::from_url(self.local_url),
+                Some(local_url) => Ok(QdrantClientConfigWrap {
+                    url: local_url,
+                    api_key: self.api_key,
+                }),
                 None => {
-                    let url = factory.get_qdrant_connection(md.project_name).await?;
-                    QdrantClientConfig::from_url(url)
+                    let url = factory.get_qdrant_connection(md.project_name).await?.url;
+                    Ok(QdrantClientConfigWrap { url, api_key: None })
                 }
             },
         }
@@ -73,6 +93,6 @@ impl ResourceBuilder<QdrantClient> for Qdrant {
 
     async fn build(client_config: &Self::Output) -> Result<QdrantClient, shuttle_service::Error> {
         // TODO: Handle error better?
-        Ok(QdrantClient::new(Some(client_config))?)
+        Ok(Into::<QdrantClientConfig>::into(client_config.clone()).build()?)
     }
 }

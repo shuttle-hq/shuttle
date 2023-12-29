@@ -20,10 +20,10 @@ use url::Url;
 use crate::args::TemplateLocation;
 
 pub fn generate_project(
-    dest: PathBuf, 
-    name: &str, 
-    temp_loc: TemplateLocation, 
-    no_git: bool
+    dest: PathBuf,
+    name: &str,
+    temp_loc: TemplateLocation,
+    no_git: bool,
 ) -> Result<()> {
     println!(r#"Creating project "{name}" in "{}""#, dest.display());
 

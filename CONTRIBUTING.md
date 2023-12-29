@@ -23,6 +23,16 @@ Raising issues is encouraged. Please find the appropriate repository in the [rep
 If you found an error in our docs, or you simply want to make them better, contributions to our [docs](https://github.com/shuttle-hq/shuttle-docs)
 are always appreciated!
 
+## Code Style and Guidelines
+
+1. Code Formatting: Ensure that your code follows the established formatting conventions. You can use tools like cargo fmt for Rust repositories to automatically format your code.
+
+2. Comments and Documentation: Include comments where necessary to explain complex sections of code or any non-trivial implementation details. Additionally, update or add documentation in the codebase to reflect changes made during your contribution.
+
+3. Dependency Management: Clearly specify and document any external dependencies introduced or modified by your contribution. This ensures that others can easily replicate the development environment.
+
+By adhering to these coding standards, contributors can streamline the review process and promote a more maintainable codebase. Remember to refer to any project-specific guidelines or conventions in addition to these general recommendations.
+
 ## Committing
 
 We use the [Angular Commit Guidelines](https://github.com/angular/angular/blob/master/CONTRIBUTING.md#commit). We expect all commits to conform to these guidelines.

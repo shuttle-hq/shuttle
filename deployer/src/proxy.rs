@@ -23,7 +23,7 @@ static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
 static SERVER_HEADER: Lazy<HeaderValue> = Lazy::new(|| "shuttle.rs".parse().unwrap());
 
-#[instrument(name = "proxy_request", skip_all, fields(http.method = %req.method(), http.uri = %req.uri(), http.status_code = field::Empty, http.host = field::Empty, shuttle.service = field::Empty, service = field::Empty))]
+#[instrument(name = "proxy_request", skip_all, fields(http.method = %req.method(), http.uri = %req.uri(), http.status_code = field::Empty, http.host = field::Empty, shuttle.service = field::Empty))]
 pub async fn handle(
     remote_address: SocketAddr,
     fqdn: FQDN,
@@ -81,6 +81,8 @@ pub async fn handle(
         Ok(Some(address)) => address,
         Ok(None) => {
             trace!(?host, service, "service not found on this server");
+            Span::current().record("http.status_code", StatusCode::NOT_FOUND.as_u16());
+
             let response_body = format!("could not find service: {}", service);
             return Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
@@ -89,6 +91,10 @@ pub async fn handle(
         }
         Err(err) => {
             error!(error = %err, service, "proxy failed to find address for host");
+            Span::current().record(
+                "http.status_code",
+                StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+            );
 
             let response_body = format!("failed to find service for host: {}", host);
             return Ok(Response::builder()

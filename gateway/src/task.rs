@@ -506,7 +506,7 @@ impl Task<()> for ProjectTask {
                     res = &mut poll => res,
                     _ = timeout => {
                         warn!(
-                            project_name = %self.project_name,
+                            shuttle.project.name = %self.project_name,
                             "a task has been idling for a long time"
                         );
                         poll.await

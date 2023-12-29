@@ -537,7 +537,11 @@ impl Provisioner for MyProvisioner {
                         .add_subscription_items(
                             // The token should be set on the claim in the JWT auth layer.
                             claim.token().expect("claim should have a token"),
-                            NewSubscriptionItem::new(SubscriptionItem::AwsRds, 1),
+                            NewSubscriptionItem::new(
+                                &database_response.database_name,
+                                SubscriptionItem::AwsRds,
+                                1,
+                            ),
                         )
                         .await
                     {

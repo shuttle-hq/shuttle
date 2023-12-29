@@ -245,6 +245,7 @@ mod needs_docker {
         let app = app().await;
 
         let subscription_item = serde_json::to_string(&NewSubscriptionItem::new(
+            "database-test-db",
             shuttle_common::backends::subscription::SubscriptionItem::AwsRds,
             1,
         ))
@@ -324,13 +325,15 @@ mod needs_docker {
         // We just return a mocked active subscription without the RDS items, our logic doesn't check
         // the subscription after updating, if it receives a 200 and a correctly formed subscription
         // response we know that the update succeeded.
-        // We also want to ensure it's called with the correct price_id, the one the auth serviec was
-        // started with, as well as the quantity field.
+        // We also want to ensure it's called with the correct price_id for this item, the one the
+        // auth service was started with, that it has the quantity field and the metadata id.
         Mock::given(method("POST"))
             .and(bearer_token(STRIPE_TEST_KEY))
             .and(path("/v1/subscriptions/sub_1Nw8xOD8t1tt0S3DtwAuOVp6"))
             .and(body_string_contains(STRIPE_TEST_RDS_PRICE_ID))
             .and(body_string_contains("quantity"))
+            .and(body_string_contains("metadata"))
+            .and(body_string_contains("database-test-db"))
             .respond_with(
                 ResponseTemplate::new(200)
                     .set_body_json(serde_json::from_str::<Value>(MOCKED_SUBSCRIPTIONS[0]).unwrap()),

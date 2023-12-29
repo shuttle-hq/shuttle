@@ -38,7 +38,8 @@ async fn correctly_calls_auth_service_to_add_rds_subscription_item() {
     .await
     .unwrap();
 
-    let subscription_item = || NewSubscriptionItem::new(SubscriptionItem::AwsRds, 1);
+    let subscription_item =
+        || NewSubscriptionItem::new("database-test-db", SubscriptionItem::AwsRds, 1);
 
     // Respond with a 200 for a correctly formed request.
     wiremock::Mock::given(method("POST"))

@@ -139,7 +139,7 @@ impl UserProxy {
             .await?;
 
         // Record current project for tracing purposes
-        span.record("project", &project_name.to_string());
+        span.record("shuttle.project.name", &project_name.to_string());
 
         let target_ip = project
             .state

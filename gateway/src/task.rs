@@ -491,7 +491,7 @@ impl Task<()> for ProjectTask {
 
         let span = info_span!(
             "polling project",
-            ctx.project = %project_ctx.project_name,
+            shuttle.project.name = %project_ctx.project_name,
             ctx.state = project_ctx.state.state(),
             ctx.state_after = field::Empty
         );

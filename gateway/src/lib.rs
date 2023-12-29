@@ -564,7 +564,6 @@ pub mod tests {
                 user,
                 bouncer,
                 use_tls: UseTls::Disable,
-                admin_key: "dummykey".to_string(),
                 context: ContextArgs {
                     docker_host,
                     image,
@@ -592,6 +591,7 @@ pub mod tests {
                     .unwrap(),
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
+                    admin_key: "dummykey".to_string(),
                     deploys_api_key: "gateway".to_string(),
                     cch_container_limit: 1,
                     soft_container_limit: 2,

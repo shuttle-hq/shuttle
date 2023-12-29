@@ -460,7 +460,7 @@ impl Shuttle {
                 .as_ref()
                 .expect("to have a project name provided"),
             template,
-            no_git
+            no_git,
         )?;
         println!();
 

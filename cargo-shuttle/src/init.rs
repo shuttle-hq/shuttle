@@ -19,7 +19,12 @@ use url::Url;
 
 use crate::args::TemplateLocation;
 
-pub fn generate_project(dest: PathBuf, name: &str, temp_loc: TemplateLocation, no_git: bool) -> Result<()> {
+pub fn generate_project(
+    dest: PathBuf, 
+    name: &str, 
+    temp_loc: TemplateLocation, 
+    no_git: bool
+) -> Result<()> {
     println!(r#"Creating project "{name}" in "{}""#, dest.display());
 
     let temp_dir: TempDir = setup_template(&temp_loc.auto_path)

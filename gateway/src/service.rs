@@ -1144,7 +1144,7 @@ impl DockerContext for GatewayContext {
 }
 
 impl GatewayContext {
-    #[instrument(skip(self), fields(auth_key_uri = %self.auth_key_uri, gateway_key = self.gateway_api_key, deploys_key = self.deploys_api_key))]
+    #[instrument(skip(self), fields(auth_key_uri = %self.auth_key_uri))]
     pub async fn get_jwt(&self) -> String {
         let mut req = Request::builder().uri(self.auth_key_uri.clone());
 

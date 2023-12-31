@@ -87,6 +87,12 @@ On Linux and macOS, you can use this install script, which will automatically in
 curl -sSfL https://www.shuttle.rs/install | bash
 ```
 
+On Windows, you can use this install script to do the same:
+
+```powershell
+Set-ExecutionPolicy Unrestricted -Scope Process; iex (iwr "https://www.shuttle.rs/install-win").Content
+```
+
 Our binaries can also be installed using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall).
 To install with `cargo-binstall`, run:
 

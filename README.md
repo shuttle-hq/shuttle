@@ -90,7 +90,7 @@ curl -sSfL https://www.shuttle.rs/install | bash
 On Windows, you can use this install script to do the same:
 
 ```powershell
-Set-ExecutionPolicy Unrestricted -Scope Process; iex (iwr "https://www.shuttle.rs/install-win").Content
+iwr "https://www.shuttle.rs/install-win" | iex
 ```
 
 Our binaries can also be installed using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall).

@@ -68,7 +68,7 @@ else {
 	if ($Arch -in "AMD64", "x86") {
 		Write-Host "Could not find cargo.exe, Rust may not be installed" -ForegroundColor Red
 		$Confirm = Read-Host -Prompt "Would you like to install Rust via Rustup? [y/N]"
-		if ($Confirm -notin "y", "yes") {
+		if ($Confirm -inotin "y", "yes") {
 			Write-Host "Skipping rustup install, cargo-shuttle not installed"
 			[Environment]::Exit(1)
 		}

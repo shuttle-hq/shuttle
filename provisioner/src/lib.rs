@@ -12,7 +12,7 @@ pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_common::backends::auth::VerifyClaim;
-use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItem};
+use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItemType};
 use shuttle_common::claims::{AccountTier, Scope};
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
@@ -539,7 +539,7 @@ impl Provisioner for MyProvisioner {
                             claim.token().expect("claim should have a token"),
                             NewSubscriptionItem::new(
                                 &database_response.database_name,
-                                SubscriptionItem::AwsRds,
+                                SubscriptionItemType::AwsRds,
                                 1,
                             ),
                         )

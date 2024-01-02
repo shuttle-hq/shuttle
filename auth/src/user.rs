@@ -34,6 +34,11 @@ pub trait UserManagement: Send + Sync {
         subscription_id: &SubscriptionId,
         subscription_item: stripe::UpdateSubscriptionItems,
     ) -> Result<(), Error>;
+    async fn delete_subscription_item(
+        &self,
+        subscription_id: &SubscriptionId,
+        metadata_id: &str,
+    ) -> Result<(), Error>;
 }
 
 #[derive(Clone)]
@@ -166,6 +171,48 @@ impl UserManagement for UserManager {
 
         stripe::Subscription::update(&self.stripe_client, subscription_id, subscription_update)
             .await?;
+
+        Ok(())
+    }
+
+    async fn delete_subscription_item(
+        &self,
+        subscription_id: &SubscriptionId,
+        metadata_id: &str,
+    ) -> Result<(), Error> {
+        let subscription =
+            stripe::Subscription::retrieve(&self.stripe_client, subscription_id, &[]).await?;
+
+        // First we filter out any items that do not have the expected metadata ID, then we map
+        // the remaining items (there should only be one) to a SubscriptionItemId, which we
+        // can use in the delete request.
+        let items_to_delete: Vec<_> = subscription
+            .items
+            .data
+            .into_iter()
+            .filter(|item| {
+                item.metadata
+                    .clone()
+                    .is_some_and(|metadata| metadata.get("id").is_some_and(|id| id == metadata_id))
+            })
+            .map(|item| item.id)
+            .collect();
+
+        if items_to_delete.len() > 1 {
+            error!("found more than one subscription item with given metadata id");
+            return Err(Error::Internal(anyhow::anyhow!(
+                "failed to delete subscription item"
+            )));
+        }
+
+        let Some(subscription_item_id) = items_to_delete.first() else {
+            error!("subscription item with given metadata it was not found");
+            return Err(Error::Internal(anyhow::anyhow!(
+                "failed to delete subscription item"
+            )));
+        };
+
+        stripe::SubscriptionItem::delete(&self.stripe_client, subscription_item_id).await?;
 
         Ok(())
     }

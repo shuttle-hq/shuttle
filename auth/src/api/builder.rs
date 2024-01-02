@@ -4,7 +4,7 @@ use axum::{
     extract::FromRef,
     handler::Handler,
     middleware::from_extractor,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Router, Server,
 };
 use axum_sessions::{async_session::MemoryStore, SessionLayer};
@@ -27,8 +27,8 @@ use crate::{
 };
 
 use super::handlers::{
-    add_subscription_items, convert_cookie, convert_key, get_public_key, get_user, health_check,
-    logout, post_user, put_user_reset_key, refresh_token, update_user_tier,
+    add_subscription_items, convert_cookie, convert_key, delete_subscription_items, get_public_key,
+    get_user, health_check, logout, post_user, put_user_reset_key, refresh_token, update_user_tier,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -70,6 +70,23 @@ impl ApiBuilder {
 
         let public_key = key_manager.public_key().to_vec();
 
+        // A separate router for subscription routes, guarded by the JWT auth layer.
+        let subscription_routes = Router::new()
+            .route(
+                "/items",
+                post(add_subscription_items.layer(ScopedLayer::new(vec![Scope::ResourcesWrite]))),
+            )
+            .route(
+                "/items/:metadata_id",
+                delete(
+                    delete_subscription_items.layer(ScopedLayer::new(vec![Scope::ResourcesWrite])),
+                ),
+            )
+            .layer(JwtAuthenticationLayer::new(move || {
+                let public_key = public_key.clone();
+                async move { public_key.clone() }
+            }));
+
         let router = Router::new()
             .route("/", get(health_check))
             .route("/logout", post(logout))
@@ -79,21 +96,11 @@ impl ApiBuilder {
             .route("/public-key", get(get_public_key))
             .route("/users/:account_name", get(get_user))
             .route(
-                "/users/subscription/items",
-                post(
-                    add_subscription_items
-                        .layer(ScopedLayer::new(vec![Scope::ResourcesWrite]))
-                        .layer(JwtAuthenticationLayer::new(move || {
-                            let public_key = public_key.clone();
-                            async move { public_key.clone() }
-                        })),
-                ),
-            )
-            .route(
                 "/users/:account_name/:account_tier",
                 post(post_user).put(update_user_tier),
             )
             .route("/users/reset-api-key", put(put_user_reset_key))
+            .nest("/users/subscription", subscription_routes)
             .route_layer(from_extractor::<Metrics>())
             .layer(
                 TraceLayer::new(|request| {

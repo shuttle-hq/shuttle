@@ -149,36 +149,21 @@ mod needs_docker {
         let actual_user: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(
-            expected_user.as_object().unwrap().get("name").unwrap(),
-            actual_user.as_object().unwrap().get("name").unwrap()
+            expected_user.get("name").unwrap(),
+            actual_user.get("name").unwrap()
         );
 
         assert_eq!(
-            expected_user.as_object().unwrap().get("key").unwrap(),
-            actual_user.as_object().unwrap().get("key").unwrap()
+            expected_user.get("key").unwrap(),
+            actual_user.get("key").unwrap()
         );
 
-        assert_eq!(
-            actual_user
-                .as_object()
-                .unwrap()
-                .get("account_tier")
-                .unwrap(),
-            "pro"
-        );
+        assert_eq!(actual_user.get("account_tier").unwrap(), "pro");
 
         let mocked_subscription_obj: Value = serde_json::from_str(MOCKED_SUBSCRIPTIONS[0]).unwrap();
         assert_eq!(
-            actual_user
-                .as_object()
-                .unwrap()
-                .get("subscription_id")
-                .unwrap(),
-            mocked_subscription_obj
-                .as_object()
-                .unwrap()
-                .get("id")
-                .unwrap()
+            actual_user.get("subscription_id").unwrap(),
+            mocked_subscription_obj.get("id").unwrap()
         );
     }
 
@@ -231,22 +216,18 @@ mod needs_docker {
         let actual_user: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(
-            actual_user
-                .as_object()
-                .unwrap()
-                .get("account_tier")
-                .unwrap(),
+            actual_user.get("account_tier").unwrap(),
             "pendingpaymentpro"
         );
     }
 
     #[tokio::test]
-    async fn update_subscription_endpoint_requires_jwt() {
+    async fn add_rds_subscription_item() {
         let app = app().await;
 
         let subscription_item = serde_json::to_string(&NewSubscriptionItem::new(
             "database-test-db",
-            shuttle_common::backends::subscription::SubscriptionItem::AwsRds,
+            shuttle_common::backends::subscription::SubscriptionItemType::AwsRds,
             1,
         ))
         .unwrap();
@@ -330,6 +311,7 @@ mod needs_docker {
         Mock::given(method("POST"))
             .and(bearer_token(STRIPE_TEST_KEY))
             .and(path("/v1/subscriptions/sub_1Nw8xOD8t1tt0S3DtwAuOVp6"))
+            // TODO: change these to body_partial_json?
             .and(body_string_contains(STRIPE_TEST_RDS_PRICE_ID))
             .and(body_string_contains("quantity"))
             .and(body_string_contains("metadata"))
@@ -343,6 +325,165 @@ mod needs_docker {
 
         // POST /users/:account_name with valid JWT and the user upgraded to pro.
         let response = app.send_request(request()).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn delete_rds_subscription_item() {
+        let app = app().await;
+        let metadata_id = "database-test-db";
+
+        // --- First, we need to add a subscription item to the test users subscription. ---
+        // TODO: deduplicate this?
+        let subscription_item = serde_json::to_string(&NewSubscriptionItem::new(
+            metadata_id,
+            shuttle_common::backends::subscription::SubscriptionItemType::AwsRds,
+            1,
+        ))
+        .unwrap();
+
+        // GET /auth/key with the api key of the admin user to get their jwt.
+        let response = app.get_jwt_from_api_key(ADMIN_KEY, None).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Extract the token, we'll need it to create and delete the subscription item.
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let convert: Value = serde_json::from_slice(&body).unwrap();
+        let token = convert["token"].as_str().unwrap();
+
+        // Update the test admin user to pro so they have subscription ID.
+        let response = app
+            .put_user("admin", "pro", MOCKED_CHECKOUT_SESSIONS[0])
+            .await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // We use a block here so we can scope the subscription fetching to this part of the test.
+        let response =
+            {
+                // POST /users/:account_name with valid JWT.
+                let request = Request::builder()
+                    .uri("/users/subscription/items")
+                    .method("POST")
+                    .header(CONTENT_TYPE, "application/json")
+                    .header(AUTHORIZATION, format!("Bearer {}", token))
+                    .body(Body::from(subscription_item.clone()))
+                    .unwrap();
+
+                // In the process of adding the subscription item, the auth service will try to sync the tier,
+                // fetching the subscription from stripe.
+                let _get_guard = Mock::given(method("GET"))
+                    .and(bearer_token(STRIPE_TEST_KEY))
+                    .and(path("/v1/subscriptions/sub_1Nw8xOD8t1tt0S3DtwAuOVp6"))
+                    .respond_with(ResponseTemplate::new(200).set_body_json(
+                        serde_json::from_str::<Value>(MOCKED_SUBSCRIPTIONS[0]).unwrap(),
+                    ))
+                    .mount_as_scoped(&app.mock_server)
+                    .await;
+
+                // We just return a mocked active subscription without the RDS items, our logic doesn't check
+                // the subscription after updating, if it receives a 200 and a correctly formed subscription
+                // response we know that the update succeeded.
+                // We also want to ensure it's called with the correct price_id for this item, the one the
+                // auth service was started with, that it has the quantity field and the metadata id.
+                Mock::given(method("POST"))
+                    .and(bearer_token(STRIPE_TEST_KEY))
+                    .and(path("/v1/subscriptions/sub_1Nw8xOD8t1tt0S3DtwAuOVp6"))
+                    // TODO: change these to body_partial_json?
+                    .and(body_string_contains(STRIPE_TEST_RDS_PRICE_ID))
+                    .and(body_string_contains("quantity"))
+                    .and(body_string_contains("metadata"))
+                    .and(body_string_contains(metadata_id))
+                    .respond_with(ResponseTemplate::new(200).set_body_json(
+                        serde_json::from_str::<Value>(MOCKED_SUBSCRIPTIONS[0]).unwrap(),
+                    ))
+                    .mount(&app.mock_server)
+                    .await;
+
+                // POST /users/:account_name with valid JWT and the user upgraded to pro.
+                app.send_request(request).await
+            };
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // --- Then we proceed with deleting the subscription item. ---
+
+        // In the process of adding the subscription item, the auth service will try to sync the tier,
+        // fetching the subscription from stripe.
+        //
+        // Our deletion handler logic will then fetch the subscription again, so we can see if it has
+        // an item of the type we want to delete, as well as with the metadata ID of the item we
+        // want to delete.
+        //
+        // We return a mocked subscription that has the RDS item we added earlier in the test, with
+        // the same ID. We will get the subscription item id from the subscription, and use it in
+        // the delete request.
+        Mock::given(method("GET"))
+            .and(bearer_token(STRIPE_TEST_KEY))
+            .and(path("/v1/subscriptions/sub_1Nw8xOD8t1tt0S3DtwAuOVp6"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::from_str::<Value>(MOCKED_SUBSCRIPTIONS[4]).unwrap()),
+            )
+            .mount(&app.mock_server)
+            .await;
+
+        // Extract the subscription item id from the mocked subscription.
+        let subscription_item_id = serde_json::from_str::<Value>(MOCKED_SUBSCRIPTIONS[4]).unwrap();
+        let subscription_item_id = subscription_item_id
+            .get("items")
+            .unwrap()
+            .get("data")
+            .unwrap()
+            .get(1)
+            .unwrap()
+            .get("id")
+            .unwrap()
+            .as_str()
+            .unwrap();
+
+        // The expected successful response from stripe.
+        let json_response = serde_json::json!({
+            "id": subscription_item_id,
+            "object": "subscription_item",
+            "deleted": true
+        });
+
+        // Then, our handler should send a request to stripe to delete the item from the subscription,
+        // with the subscription item id from the users subscription.
+        Mock::given(method("DELETE"))
+            .and(bearer_token(STRIPE_TEST_KEY))
+            .and(path(format!(
+                "/v1/subscription_items/{subscription_item_id}"
+            )))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json_response))
+            .mount(&app.mock_server)
+            .await;
+
+        // We'll first try with a non-existent subscription item metadata id, which should error and
+        // return a 500 before getting to the call to delete the item from stripe.
+        let request = Request::builder()
+            .uri("/users/subscription/items/non-existent-id")
+            .method("DELETE")
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.send_request(request).await;
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        // Finally, send a delete request with the correct metadata id.
+        let request = Request::builder()
+            .uri(format!("/users/subscription/items/{metadata_id}"))
+            .method("DELETE")
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.send_request(request).await;
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -400,10 +541,7 @@ mod needs_docker {
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let user: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(
-            user.as_object().unwrap().get("account_tier").unwrap(),
-            "cancelledpro"
-        );
+        assert_eq!(user.get("account_tier").unwrap(), "cancelledpro");
 
         // When called again at some later time, the subscription returned from stripe should be
         // cancelled.
@@ -415,9 +553,6 @@ mod needs_docker {
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let user: Value = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(
-            user.as_object().unwrap().get("account_tier").unwrap(),
-            "basic"
-        );
+        assert_eq!(user.get("account_tier").unwrap(), "basic");
     }
 }

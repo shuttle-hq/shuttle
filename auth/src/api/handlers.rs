@@ -14,7 +14,7 @@ use shuttle_common::{
     models::user,
 };
 use stripe::CheckoutSession;
-use tracing::{error, instrument};
+use tracing::{error, instrument, span};
 
 use super::{builder::KeyManagerState, RouterState, UserManagerState};
 
@@ -65,7 +65,7 @@ pub(crate) async fn update_user_tier(
     Ok(())
 }
 
-#[instrument(skip(claim, user_manager), fields(account.name = claim.sub, account.tier = %claim.tier))]
+#[instrument(skip(claim, user_manager), fields(account.name = claim.sub, account.tier = %claim.tier, account.subscription_id = tracing::field::Empty))]
 pub(crate) async fn add_subscription_items(
     Extension(claim): Extension<Claim>,
     State(user_manager): State<UserManagerState>,
@@ -79,6 +79,8 @@ pub(crate) async fn add_subscription_items(
         return Err(Error::MissingSubscriptionId);
     };
 
+    span::Span::current().record("account.subscription_id", subscription_id.as_str());
+
     if !matches![user.account_tier, AccountTier::Pro | AccountTier::Admin] {
         error!("account was downgraded from pro in sync, denying the addition of new items");
         return Err(Error::Unauthorized);
@@ -86,6 +88,31 @@ pub(crate) async fn add_subscription_items(
 
     user_manager
         .add_subscription_items(subscription_id, update_subscription_items)
+        .await?;
+
+    Ok(())
+}
+
+#[instrument(skip(claim, user_manager), fields(account.name = claim.sub, account.tier = %claim.tier, account.subscription_id = tracing::field::Empty))]
+pub(crate) async fn delete_subscription_items(
+    Extension(claim): Extension<Claim>,
+    State(user_manager): State<UserManagerState>,
+    Path(metadata_id): Path<String>,
+) -> Result<(), Error> {
+    // Fetching the user will also sync their subscription. This means we can verify that the
+    // caller still has the required tier after the sync.
+    let user = user_manager.get_user(AccountName::from(claim.sub)).await?;
+
+    let Some(ref subscription_id) = user.subscription_id else {
+        return Err(Error::MissingSubscriptionId);
+    };
+
+    // TODO: do we need to check account tier here, like we do when adding items?
+
+    span::Span::current().record("account.subscription_id", subscription_id.as_str());
+
+    user_manager
+        .delete_subscription_item(subscription_id, &metadata_id)
         .await?;
 
     Ok(())

@@ -4,7 +4,7 @@ use helpers::{exec_mongosh, exec_psql, DbType, DockerInstance};
 use once_cell::sync::Lazy;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::Value;
-use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItem};
+use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItemType};
 use shuttle_proto::provisioner::shared;
 use shuttle_provisioner::MyProvisioner;
 use tonic::transport::Uri;
@@ -39,7 +39,7 @@ async fn correctly_calls_auth_service_to_add_rds_subscription_item() {
     .unwrap();
 
     let subscription_item =
-        || NewSubscriptionItem::new("database-test-db", SubscriptionItem::AwsRds, 1);
+        || NewSubscriptionItem::new("database-test-db", SubscriptionItemType::AwsRds, 1);
 
     // Respond with a 200 for a correctly formed request.
     wiremock::Mock::given(method("POST"))

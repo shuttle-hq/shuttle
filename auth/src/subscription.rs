@@ -3,7 +3,7 @@ use axum::extract::{FromRef, FromRequest};
 use axum::response::{IntoResponse, Response};
 use axum::BoxError;
 use http::Request;
-use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItem};
+use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItemType};
 
 use crate::RouterState;
 
@@ -24,7 +24,11 @@ where
     async fn from_request(req: Request<B>, state: &S) -> Result<Self, Self::Rejection> {
         // Extract the NewSubscriptionItem, the struct that other services should use when calling
         // the endpoint to add subscription items.
-        let NewSubscriptionItem { id, quantity, item } = axum::Json::from_request(req, state)
+        let NewSubscriptionItem {
+            id,
+            quantity,
+            r#type,
+        } = axum::Json::from_request(req, state)
             .await
             .map_err(IntoResponse::into_response)?
             .0;
@@ -32,8 +36,8 @@ where
         // Access the router state to extract price IDs.
         let state = RouterState::from_ref(state);
 
-        let price_id = match item {
-            SubscriptionItem::AwsRds => state.rds_price_id,
+        let price_id = match r#type {
+            SubscriptionItemType::AwsRds => state.rds_price_id,
         };
 
         let metadata = stripe::Metadata::from([("id".to_string(), id)]);

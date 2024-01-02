@@ -38,3 +38,17 @@ cargo run --bin shuttle-auth -- \
     --jwt-signing-private-key <key> \
     --stripe-rds-price-id price_1OIS06FrN7EDaGOjaV0GXD7P
 ```
+
+## Getting a JWT for manual testing
+
+Some endpoints expect a JWT. To get a JWT for a specific user, you can run the following command:
+
+```bash
+curl localhost:8000/auth/key -H "x-shuttle-admin-secret: <admin user api key>" -H "Authorization: Bearer <api key of user to get jwt for>"
+```
+
+A token will be returned in the response, which you can pass in as a bearer token in requests to JWT guarded endpoints, e.g.
+
+```bash
+curl -X POST localhost:8000/users/subscription/items -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" -d '{"id":"test-database","item":"AwsRds","quantity":1}' -v
+```

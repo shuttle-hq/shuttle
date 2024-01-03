@@ -9,8 +9,11 @@ use shuttle_service::{
 /// A Qdrant vector database
 #[derive(Default, Serialize)]
 pub struct Qdrant {
-    cloud_url: String,
+    /// Required if deploying
+    cloud_url: Option<String>,
+    /// Required if url endpoint is protected by key
     api_key: Option<String>,
+    /// If given, use this instead of the default docker container on local run
     local_url: Option<String>,
 }
 
@@ -30,15 +33,13 @@ impl From<QdrantClientConfigWrap> for QdrantClientConfig {
 
 impl Qdrant {
     pub fn cloud_url(mut self, cloud_url: &str) -> Self {
-        self.cloud_url = cloud_url.to_string();
+        self.cloud_url = Some(cloud_url.to_string());
         self
     }
-
     pub fn api_key(mut self, api_key: &str) -> Self {
         self.api_key = Some(api_key.to_string());
         self
     }
-
     pub fn local_url(mut self, local_url: &str) -> Self {
         self.local_url = Some(local_url.to_string());
         self
@@ -66,18 +67,15 @@ impl ResourceBuilder<QdrantClient> for Qdrant {
     ) -> Result<Self::Output, shuttle_service::Error> {
         let md = factory.get_metadata();
         match md.env {
-            Environment::Deployment => {
-                if self.cloud_url.is_empty() {
-                    Err(ShuttleError::Custom(CustomError::msg(
-                        "missing `cloud_url`",
-                    )))
-                } else {
-                    Ok(QdrantClientConfigWrap {
-                        url: self.cloud_url,
-                        api_key: self.api_key,
-                    })
-                }
-            }
+            Environment::Deployment => match self.cloud_url {
+                Some(cloud_url) => Ok(QdrantClientConfigWrap {
+                    url: cloud_url,
+                    api_key: self.api_key,
+                }),
+                None => Err(ShuttleError::Custom(CustomError::msg(
+                    "missing `cloud_url` parameter",
+                ))),
+            },
             Environment::Local => match self.local_url {
                 Some(local_url) => Ok(QdrantClientConfigWrap {
                     url: local_url,

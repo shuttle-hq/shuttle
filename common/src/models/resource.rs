@@ -32,7 +32,6 @@ pub fn get_resource_tables(
                 Type::Secrets => "Secrets",
                 Type::StaticFolder => "Static Folder",
                 Type::Persist => "Persist",
-                Type::Qdrant => "Qdrant",
                 Type::Turso => "Turso",
                 Type::Metadata => "Metadata",
                 Type::Custom => "Custom",

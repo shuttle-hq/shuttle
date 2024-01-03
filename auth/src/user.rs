@@ -1,5 +1,6 @@
 use std::{fmt::Formatter, io::ErrorKind, str::FromStr};
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
     extract::{FromRef, FromRequestParts},
@@ -200,16 +201,12 @@ impl UserManagement for UserManager {
 
         if items_to_delete.len() > 1 {
             error!("found more than one subscription item with given metadata id");
-            return Err(Error::Internal(anyhow::anyhow!(
-                "failed to delete subscription item"
-            )));
+            return Err(anyhow!("failed to delete subscription item").into());
         }
 
         let Some(subscription_item_id) = items_to_delete.first() else {
             error!("subscription item with given metadata it was not found");
-            return Err(Error::Internal(anyhow::anyhow!(
-                "failed to delete subscription item"
-            )));
+            return Err(anyhow!("failed to delete subscription item").into());
         };
 
         stripe::SubscriptionItem::delete(&self.stripe_client, subscription_item_id).await?;

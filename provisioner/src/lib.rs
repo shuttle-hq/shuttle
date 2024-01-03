@@ -583,6 +583,8 @@ impl Provisioner for MyProvisioner {
                 // Skip updating subscriptions for admin users, and only update subscription if the
                 // rds instance is new.
                 if claim.tier != AccountTier::Admin && created_new_instance {
+                    let instance_name = format!("{}-{}", &request.project_name, engine);
+
                     // If the subscription update fails, e.g. due to a JWT expiring or the subject's
                     // subscription expiring, delete the instance immediately.
                     if let Err(err) = self
@@ -590,14 +592,13 @@ impl Provisioner for MyProvisioner {
                             // The token should be set on the claim in the JWT auth layer.
                             claim.token().expect("claim should have a token"),
                             NewSubscriptionItem::new(
-                                &database_response.database_name,
+                                &instance_name,
                                 SubscriptionItemType::AwsRds,
                                 1,
                             ),
                         )
                         .await
                     {
-                        let instance_name = format!("{}-{}", &request.project_name, engine);
                         self.delete_aws_rds(&instance_name).await?;
 
                         return Err(Status::internal(err.to_string()));

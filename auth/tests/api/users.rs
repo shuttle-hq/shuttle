@@ -9,7 +9,7 @@ mod needs_docker {
     use serde_json::{self, Value};
     use shuttle_common::backends::subscription::NewSubscriptionItem;
     use wiremock::{
-        matchers::{bearer_token, body_string_contains, method, path},
+        matchers::{bearer_token, body_partial_json, body_string_contains, method, path},
         Mock, ResponseTemplate,
     };
 
@@ -311,7 +311,6 @@ mod needs_docker {
         Mock::given(method("POST"))
             .and(bearer_token(STRIPE_TEST_KEY))
             .and(path("/v1/subscriptions/sub_1Nw8xOD8t1tt0S3DtwAuOVp6"))
-            // TODO: change these to body_partial_json?
             .and(body_string_contains(STRIPE_TEST_RDS_PRICE_ID))
             .and(body_string_contains("quantity"))
             .and(body_string_contains("metadata"))
@@ -335,7 +334,7 @@ mod needs_docker {
         let metadata_id = "database-test-db";
 
         // --- First, we need to add a subscription item to the test users subscription. ---
-        // TODO: deduplicate this?
+
         let subscription_item = serde_json::to_string(&NewSubscriptionItem::new(
             metadata_id,
             shuttle_common::backends::subscription::SubscriptionItemType::AwsRds,
@@ -391,7 +390,6 @@ mod needs_docker {
                 Mock::given(method("POST"))
                     .and(bearer_token(STRIPE_TEST_KEY))
                     .and(path("/v1/subscriptions/sub_1Nw8xOD8t1tt0S3DtwAuOVp6"))
-                    // TODO: change these to body_partial_json?
                     .and(body_string_contains(STRIPE_TEST_RDS_PRICE_ID))
                     .and(body_string_contains("quantity"))
                     .and(body_string_contains("metadata"))
@@ -414,8 +412,7 @@ mod needs_docker {
         // fetching the subscription from stripe.
         //
         // Our deletion handler logic will then fetch the subscription again, so we can see if it has
-        // an item of the type we want to delete, as well as with the metadata ID of the item we
-        // want to delete.
+        // an item with the metadata ID of the item we want to delete.
         //
         // We return a mocked subscription that has the RDS item we added earlier in the test, with
         // the same ID. We will get the subscription item id from the subscription, and use it in

@@ -99,8 +99,6 @@ pub(crate) async fn delete_subscription_items(
     State(user_manager): State<UserManagerState>,
     Path(metadata_id): Path<String>,
 ) -> Result<(), Error> {
-    // Fetching the user will also sync their subscription. This means we can verify that the
-    // caller still has the required tier after the sync.
     let user = user_manager.get_user(AccountName::from(claim.sub)).await?;
 
     let Some(ref subscription_id) = user.subscription_id else {

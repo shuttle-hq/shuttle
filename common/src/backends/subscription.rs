@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 /// Used when sending requests to the Auth service to add a new item to a user's subscription.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct NewSubscriptionItem {
-    /// A unique id to tie the subscription item to a resource, e.g. a database name or resource ulid.
+    /// A unique id to tie the subscription item to a resource, e.g. a database name or resource ulid,
+    /// that will be inserted into the metadata of the new Stripe subscription item.
     pub metadata_id: String,
     pub r#type: SubscriptionItemType,
     pub quantity: u64,

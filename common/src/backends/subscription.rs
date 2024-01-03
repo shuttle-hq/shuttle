@@ -28,3 +28,9 @@ impl NewSubscriptionItem {
 pub enum SubscriptionItemType {
     AwsRds,
 }
+
+#[derive(Deserialize, Debug, Serialize)]
+pub struct SubscriptionResponse {
+    pub success: bool,
+    pub message: String,
+}

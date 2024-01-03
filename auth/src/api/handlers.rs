@@ -10,6 +10,7 @@ use axum::{
 use axum_sessions::extractors::{ReadableSession, WritableSession};
 use http::StatusCode;
 use shuttle_common::{
+    backends::subscription::SubscriptionResponse,
     claims::{AccountTier, Claim},
     models::user,
 };
@@ -98,20 +99,32 @@ pub(crate) async fn delete_subscription_items(
     Extension(claim): Extension<Claim>,
     State(user_manager): State<UserManagerState>,
     Path(metadata_id): Path<String>,
-) -> Result<(), Error> {
+) -> Result<Json<SubscriptionResponse>, Error> {
     let user = user_manager.get_user(AccountName::from(claim.sub)).await?;
 
     let Some(ref subscription_id) = user.subscription_id else {
-        return Err(Error::MissingSubscriptionId);
+        return Ok(Json(SubscriptionResponse {
+            success: false,
+            message: "subscription does not exist".to_string(),
+        }));
     };
 
     span::Span::current().record("account.subscription_id", subscription_id.as_str());
 
-    user_manager
+    match user_manager
         .delete_subscription_item(subscription_id, &metadata_id)
-        .await?;
-
-    Ok(())
+        .await
+    {
+        Ok(_) => Ok(Json(SubscriptionResponse {
+            success: true,
+            message: "successfully deleted subscription item".to_string(),
+        })),
+        Err(error @ Error::MissingSubscriptionItem(_)) => Ok(Json(SubscriptionResponse {
+            success: false,
+            message: error.to_string(),
+        })),
+        Err(error) => Err(error),
+    }
 }
 
 pub(crate) async fn put_user_reset_key(

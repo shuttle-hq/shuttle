@@ -1,6 +1,5 @@
 use std::{fmt::Formatter, io::ErrorKind, str::FromStr};
 
-use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
     extract::{FromRef, FromRequestParts},
@@ -11,7 +10,7 @@ use axum::{
 use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::{backends::headers::XShuttleAdminSecret, claims::AccountTier, ApiKey, Secret};
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
-use tracing::{debug, error, trace, Span};
+use tracing::{debug, error, info, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
 use stripe::{
@@ -200,13 +199,19 @@ impl UserManagement for UserManager {
             .collect();
 
         if items_to_delete.len() > 1 {
-            error!("found more than one subscription item with given metadata id");
-            return Err(anyhow!("failed to delete subscription item").into());
+            error!(
+                metadata_id,
+                "found more than one subscription item with given metadata id"
+            );
+            return Err(Error::DuplicateSubscriptionItems(metadata_id.to_string()));
         }
 
         let Some(subscription_item_id) = items_to_delete.first() else {
-            error!("subscription item with given metadata it was not found");
-            return Err(anyhow!("failed to delete subscription item").into());
+            info!(
+                metadata_id,
+                "subscription item with given metadata id does not exist"
+            );
+            return Err(Error::MissingSubscriptionItem(metadata_id.to_string()));
         };
 
         stripe::SubscriptionItem::delete(&self.stripe_client, subscription_item_id).await?;

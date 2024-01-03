@@ -12,7 +12,9 @@ pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_common::backends::auth::VerifyClaim;
-use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItemType};
+use shuttle_common::backends::subscription::{
+    NewSubscriptionItem, SubscriptionItemType, SubscriptionResponse,
+};
 use shuttle_common::claims::{AccountTier, Claim, Scope};
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
@@ -410,25 +412,19 @@ impl MyProvisioner {
             })?;
 
         match response.status().as_u16() {
-            200 => Ok(()),
-            400 => {
+            200 => {
                 // The user requesting a subscription item deletion may not have a subscription,
-                // e.g. users who provisioned RDS before it became limited to the Pro tier.
-                if let Ok(body) = response.bytes().await {
-                    let str = std::str::from_utf8(&body).expect("body to be utf-8");
-                    // NOTE: this matches on the display impl of the auth service error for missing
-                    // subscription ID.
-                    if str.contains("Missing subscription ID") {
-                        return Ok(());
-                    }
-                };
-                error!(
-                    status_code = 400,
-                    "failed to update subscription due to malformed request"
-                );
-                Err(AuthClientError::Internal(
-                    "failed to update subscription".to_string(),
-                ))
+                // e.g. users who provisioned RDS before it became limited to the Pro tier, so
+                // the subscription item deletion may not succeed. We still want to proceed with
+                // the resource deletion in this case.
+                if let Ok(SubscriptionResponse { success, message }) =
+                    response.json::<SubscriptionResponse>().await
+                {
+                    info!(success, message);
+                } else {
+                    error!("received unexpected response from auth service")
+                }
+                Ok(())
             }
             499 => {
                 error!(

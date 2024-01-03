@@ -7,7 +7,7 @@ mod needs_docker {
     use http::header::CONTENT_TYPE;
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
     use serde_json::{self, Value};
-    use shuttle_common::backends::subscription::NewSubscriptionItem;
+    use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionResponse};
     use wiremock::{
         matchers::{bearer_token, body_string_contains, method, path},
         Mock, ResponseTemplate,
@@ -441,6 +441,28 @@ mod needs_docker {
             .as_str()
             .unwrap();
 
+        // We'll first try with a non-existent subscription item metadata id, which should still
+        // return a 200, since some resources will have been created before billing was implemented.
+        let request = Request::builder()
+            .uri("/users/subscription/items/non-existent-id")
+            .method("DELETE")
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.send_request(request).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let response: SubscriptionResponse = serde_json::from_slice(&body).unwrap();
+
+        assert!(!response.success);
+        assert_eq!(
+            response.message,
+            format!("found no subscription item with the given metadata id: non-existent-id")
+        );
+
         // The expected successful response from stripe.
         let json_response = serde_json::json!({
             "id": subscription_item_id,
@@ -459,19 +481,6 @@ mod needs_docker {
             .mount(&app.mock_server)
             .await;
 
-        // We'll first try with a non-existent subscription item metadata id, which should error and
-        // return a 500 before getting to the call to delete the item from stripe.
-        let request = Request::builder()
-            .uri("/users/subscription/items/non-existent-id")
-            .method("DELETE")
-            .header(AUTHORIZATION, format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.send_request(request).await;
-
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-
         // Finally, send a delete request with the correct metadata id.
         let request = Request::builder()
             .uri(format!("/users/subscription/items/{metadata_id}"))
@@ -483,6 +492,15 @@ mod needs_docker {
         let response = app.send_request(request).await;
 
         assert_eq!(response.status(), StatusCode::OK);
+
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let response: SubscriptionResponse = serde_json::from_slice(&body).unwrap();
+
+        assert!(response.success);
+        assert_eq!(
+            response.message,
+            "successfully deleted subscription item".to_string()
+        );
     }
 
     #[tokio::test]

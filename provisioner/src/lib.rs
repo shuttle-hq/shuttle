@@ -620,7 +620,7 @@ async fn wait_for_instance(
             .await?
             .db_instances
             .expect("aws to return instances")
-            .get(0)
+            .first()
             .expect("to find the instance just created or modified")
             .clone();
 

@@ -23,7 +23,7 @@ static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
 static SERVER_HEADER: Lazy<HeaderValue> = Lazy::new(|| "shuttle.rs".parse().unwrap());
 
-#[instrument(name = "proxy_request", skip_all, fields(http.method = %req.method(), http.uri = %req.uri(), http.status_code = field::Empty, service = field::Empty))]
+#[instrument(name = "proxy_request", skip_all, fields(http.method = %req.method(), http.uri = %req.uri(), http.status_code = field::Empty, http.host = field::Empty, shuttle.service.name = field::Empty, proxy.status_code = field::Empty))]
 pub async fn handle(
     remote_address: SocketAddr,
     fqdn: FQDN,
@@ -45,6 +45,7 @@ pub async fn handle(
             .to_owned(),
         None => {
             trace!("proxy request has no host header");
+            Span::current().record("proxy.status_code", StatusCode::BAD_REQUEST.as_u16());
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::empty())
@@ -55,6 +56,7 @@ pub async fn handle(
 
     if host != fqdn {
         trace!(?host, "proxy won't serve foreign domain");
+        Span::current().record("proxy.status_code", StatusCode::BAD_REQUEST.as_u16());
         return Ok(Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::from("this domain is not served by proxy"))
@@ -67,6 +69,7 @@ pub async fn handle(
         Some(project) => project.0,
         None => {
             trace!("proxy request has no X-Shuttle-Project header");
+            Span::current().record("proxy.status_code", StatusCode::BAD_REQUEST.as_u16());
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::from("request has no X-Shuttle-Project header"))
@@ -75,12 +78,14 @@ pub async fn handle(
     };
 
     // Record current service for tracing purposes
-    span.record("shuttle.service", &service);
+    span.record("shuttle.service.name", &service);
 
     let proxy_address = match address_getter.get_address_for_service(&service).await {
         Ok(Some(address)) => address,
         Ok(None) => {
             trace!(?host, service, "service not found on this server");
+            Span::current().record("proxy.status_code", StatusCode::NOT_FOUND.as_u16());
+
             let response_body = format!("could not find service: {}", service);
             return Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
@@ -89,6 +94,10 @@ pub async fn handle(
         }
         Err(err) => {
             error!(error = %err, service, "proxy failed to find address for host");
+            Span::current().record(
+                "proxy.status_code",
+                StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+            );
 
             let response_body = format!("failed to find service for host: {}", host);
             return Ok(Response::builder()
@@ -101,6 +110,7 @@ pub async fn handle(
     match reverse_proxy(remote_address.ip(), &proxy_address.to_string(), req).await {
         Ok(response) => {
             Span::current().record("http.status_code", response.status().as_u16());
+            Span::current().record("proxy.status_code", StatusCode::OK.as_u16());
             Ok(response)
         }
         Err(error) => {
@@ -118,6 +128,12 @@ pub async fn handle(
                     "error while handling request needing upgrade in reverse proxy"
                 ),
             };
+
+            Span::current().record(
+                "proxy.status_code",
+                StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+            );
+
             Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
                 .body(Body::empty())

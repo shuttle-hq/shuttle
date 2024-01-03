@@ -1394,7 +1394,7 @@ where
 
         debug!(
             shuttle.container.id = container.id,
-            shuttle.service = service.name.to_string(),
+            shuttle.service.name = %service.name,
             "{} has {} CPU usage per minute",
             service.name,
             cpu_per_minute
@@ -1491,7 +1491,7 @@ impl Service {
             .map_err(|err| err.into())
     }
 
-    #[instrument(name = "calling status endpoint on container", skip_all, fields(project_name = %self.name))]
+    #[instrument(name = "calling status endpoint on container", skip_all, fields(shuttle.project.name = %self.name))]
     pub async fn is_healthy(&mut self) -> bool {
         let uri = self.uri(format!("/projects/{}/status", self.name)).unwrap();
         let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.get(uri)).await;

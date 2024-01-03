@@ -707,6 +707,7 @@ workflows:
                 - resources/aws-rds
                 - resources/metadata
                 - resources/persist
+                - resources/qdrant
                 - resources/secrets
                 - resources/turso
                 - services/shuttle-actix-web
@@ -984,6 +985,7 @@ workflows:
                 - resources/aws-rds
                 - resources/metadata
                 - resources/persist
+                - resources/qdrant
                 - resources/secrets
                 - resources/shared-db
                 - resources/turso

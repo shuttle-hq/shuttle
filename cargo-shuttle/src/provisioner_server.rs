@@ -174,90 +174,22 @@ impl LocalProvisioner {
         } = db_type_to_config(db_type);
         let container_name = format!("shuttle_{project_name}_{type}");
 
-        let container = match self.docker.inspect_container(&container_name, None).await {
-            Ok(container) => {
-                trace!("found DB container {container_name}");
-                container
-            }
-            Err(bollard::errors::Error::DockerResponseServerError {
-                status_code: 404, ..
-            }) => {
-                self.pull_image(&image).await.expect("failed to pull image");
-                trace!("will create DB container {container_name}");
-                let options = Some(CreateContainerOptions {
-                    name: container_name.clone(),
-                    platform: None,
-                });
-                let mut port_bindings = HashMap::new();
-                let host_port = pick_unused_port().expect("system to have a free port");
-                port_bindings.insert(
-                    port.clone(),
-                    Some(vec![PortBinding {
-                        host_port: Some(host_port.to_string()),
-                        ..Default::default()
-                    }]),
-                );
-                let host_config = HostConfig {
-                    port_bindings: Some(port_bindings),
-                    ..Default::default()
-                };
-
-                let config = Config {
-                    image: Some(image),
-                    env,
-                    host_config: Some(host_config),
-                    ..Default::default()
-                };
-
-                self.docker
-                    .create_container(options, config)
-                    .await
-                    .expect("to be able to create container");
-
-                self.docker
-                    .inspect_container(&container_name, None)
-                    .await
-                    .expect("container to be created")
-            }
-            Err(error) => {
-                error!("Got unexpected error while inspecting docker container: {error}.");
+        let container = self
+            .get_container(&container_name, image, &port, env)
+            .await
+            .map_err(|e| {
                 error!(
                     "Make sure Docker is installed and running. \
                     If you're using Podman, view these instructions: \
                     https://docs.rs/shuttle-runtime/latest/shuttle_runtime/#using-podman-instead-of-docker"
                 );
-                return Err(Status::internal(error.to_string()));
-            }
-        };
+                e
+            })?;
 
-        let port = container
-            .host_config
-            .expect("container to have host config")
-            .port_bindings
-            .expect("port bindings on container")
-            .get(&port)
-            .expect("a port bindings entry")
-            .as_ref()
-            .expect("a port bindings")
-            .first()
-            .expect("at least one port binding")
-            .host_port
-            .as_ref()
-            .expect("a host port")
-            .clone();
+        let port = self.get_container_host_port(container.clone(), &port);
 
-        if !container
-            .state
-            .expect("container to have a state")
-            .running
-            .expect("state to have a running key")
-        {
-            trace!("DB container '{container_name}' not running, so starting it");
-            self.docker
-                .start_container(&container_name, None::<StartContainerOptions<String>>)
-                .await
-                .expect("failed to start none running container");
-        }
+        self.start_container_if_not_running(container, "DB", &container_name)
+            .await;
 
         self.wait_for_ready(&container_name, is_ready_cmd.clone())
             .await?;

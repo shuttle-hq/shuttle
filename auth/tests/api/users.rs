@@ -9,7 +9,7 @@ mod needs_docker {
     use serde_json::{self, Value};
     use shuttle_common::backends::subscription::NewSubscriptionItem;
     use wiremock::{
-        matchers::{bearer_token, body_partial_json, body_string_contains, method, path},
+        matchers::{bearer_token, body_string_contains, method, path},
         Mock, ResponseTemplate,
     };
 

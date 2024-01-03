@@ -25,7 +25,7 @@ where
         // Extract the NewSubscriptionItem, the struct that other services should use when calling
         // the endpoint to add subscription items.
         let NewSubscriptionItem {
-            id,
+            metadata_id,
             quantity,
             r#type,
         } = axum::Json::from_request(req, state)
@@ -40,7 +40,7 @@ where
             SubscriptionItemType::AwsRds => state.rds_price_id,
         };
 
-        let metadata = stripe::Metadata::from([("id".to_string(), id)]);
+        let metadata = stripe::Metadata::from([("id".to_string(), metadata_id)]);
 
         let update_subscription_items = stripe::UpdateSubscriptionItems {
             price: Some(price_id),

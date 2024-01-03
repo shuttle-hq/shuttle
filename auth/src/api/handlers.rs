@@ -107,8 +107,6 @@ pub(crate) async fn delete_subscription_items(
         return Err(Error::MissingSubscriptionId);
     };
 
-    // TODO: do we need to check account tier here, like we do when adding items?
-
     span::Span::current().record("account.subscription_id", subscription_id.as_str());
 
     user_manager

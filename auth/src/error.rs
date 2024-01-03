@@ -27,7 +27,9 @@ pub enum Error {
     IncompleteCheckoutSession,
     #[error("Interacting with stripe resulted in error: {0}.")]
     Stripe(#[from] StripeError),
-    #[error("Missing subscription ID from the checkout session.")]
+    // NOTE: this string is matched in the provisioner when requesting subscription item deletion.
+    // If this is changed here it needs to be changed there as well.
+    #[error("Missing subscription ID.")]
     MissingSubscriptionId,
 }
 
@@ -51,6 +53,7 @@ impl IntoResponse for Error {
             Error::Unauthorized | Error::KeyMissing => StatusCode::UNAUTHORIZED,
             Error::Database(_) | Error::UserNotFound => StatusCode::NOT_FOUND,
             Error::MissingCheckoutSession
+            // NOTE: the provisioner expects a MissingSubscriptionId to return 400.
             | Error::MissingSubscriptionId
             | Error::IncompleteCheckoutSession => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

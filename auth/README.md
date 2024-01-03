@@ -50,5 +50,5 @@ curl localhost:8000/auth/key -H "x-shuttle-admin-secret: <admin user api key>" -
 A token will be returned in the response, which you can pass in as a bearer token in requests to JWT guarded endpoints, e.g.
 
 ```bash
-curl -X POST localhost:8000/users/subscription/items -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" -d '{"id":"test-database","item":"AwsRds","quantity":1}' -v
+curl -X POST localhost:8000/users/subscription/items -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" -d '{"metadata_id":"test-database","item":"AwsRds","quantity":1}' -v
 ```

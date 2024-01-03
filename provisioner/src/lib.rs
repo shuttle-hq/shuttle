@@ -13,7 +13,7 @@ use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_common::backends::auth::VerifyClaim;
 use shuttle_common::backends::subscription::{NewSubscriptionItem, SubscriptionItemType};
-use shuttle_common::claims::{AccountTier, Scope};
+use shuttle_common::claims::{AccountTier, Claim, Scope};
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
@@ -389,6 +389,63 @@ impl MyProvisioner {
         }
     }
 
+    /// Send a request to the auth service to delete a subscription item with the given metadata id.
+    pub async fn delete_subscription_item(
+        &self,
+        jwt: &str,
+        subscription_item_metadata_id: &str,
+    ) -> Result<(), AuthClientError> {
+        let response = self
+            .auth_client
+            .delete(format!(
+                "{}users/subscription/items/{subscription_item_metadata_id}",
+                self.auth_uri
+            ))
+            .bearer_auth(jwt)
+            .send()
+            .await
+            .map_err(|err| {
+                error!(error = %err, "failed to connect to auth service");
+                AuthClientError::Internal("failed to connect to auth service".to_string())
+            })?;
+
+        match response.status().as_u16() {
+            200 => Ok(()),
+            400 => {
+                // The user requesting a subscription item deletion may not have a subscription,
+                // e.g. users who provisioned RDS before it became limited to the Pro tier.
+                if let Ok(body) = response.bytes().await {
+                    let str = std::str::from_utf8(&body).expect("body to be utf-8");
+                    // NOTE: this matches on the display impl of the auth service error for missing
+                    // subscription ID.
+                    if str.contains("Missing subscription ID") {
+                        return Ok(());
+                    }
+                };
+                error!(
+                    status_code = 400,
+                    "failed to update subscription due to malformed request"
+                );
+                Err(AuthClientError::Internal(
+                    "failed to update subscription".to_string(),
+                ))
+            }
+            499 => {
+                error!(
+                    status_code = 499,
+                    "failed to update subscription due to expired jwt"
+                );
+                Err(AuthClientError::ExpiredJwt)
+            }
+            status_code => {
+                error!(status_code = status_code, "failed to update subscription");
+                Err(AuthClientError::Internal(
+                    "failed to update subscription".to_string(),
+                ))
+            }
+        }
+    }
+
     async fn delete_shared_db(
         &self,
         project_name: &str,
@@ -476,19 +533,14 @@ impl MyProvisioner {
         Ok(())
     }
 
-    async fn delete_aws_rds(
-        &self,
-        project_name: &str,
-        engine: &aws_rds::Engine,
-    ) -> Result<DatabaseDeletionResponse, Error> {
+    async fn delete_aws_rds(&self, instance_name: &str) -> Result<DatabaseDeletionResponse, Error> {
         let client = &self.rds_client;
-        let instance_name = format!("{project_name}-{engine}");
 
         // Try to delete the db instance.
         client
             .delete_db_instance()
             .skip_final_snapshot(true)
-            .db_instance_identifier(&instance_name)
+            .db_instance_identifier(instance_name)
             .send()
             .await?;
 
@@ -545,7 +597,8 @@ impl Provisioner for MyProvisioner {
                         )
                         .await
                     {
-                        self.delete_aws_rds(&request.project_name, &engine).await?;
+                        let instance_name = format!("{}-{}", &request.project_name, engine);
+                        self.delete_aws_rds(&instance_name).await?;
 
                         return Err(Status::internal(err.to_string()));
                     };
@@ -565,6 +618,12 @@ impl Provisioner for MyProvisioner {
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         request.verify(Scope::ResourcesWrite)?;
 
+        let claim = request
+            .extensions()
+            .get::<Claim>()
+            .ok_or_else(|| tonic::Status::internal("could not get claim"))?
+            .clone();
+
         let request = request.into_inner();
         if !ProjectName::is_valid(&request.project_name) {
             return Err(Status::invalid_argument("invalid project name"));
@@ -577,8 +636,23 @@ impl Provisioner for MyProvisioner {
                     .await?
             }
             DbType::AwsRds(AwsRds { engine }) => {
-                self.delete_aws_rds(&request.project_name, &engine.expect("engine to be set"))
-                    .await?
+                let instance_name = format!(
+                    "{}-{}",
+                    &request.project_name,
+                    engine.expect("engine should be set")
+                );
+
+                // Try to delete the subscription item first, if a subscription exists.
+                self.delete_subscription_item(
+                    claim
+                        .token()
+                        .expect("the token should be set on the claim in the jwt auth layer"),
+                    &instance_name,
+                )
+                .await
+                .map_err(|err| Status::internal(err.to_string()))?;
+
+                self.delete_aws_rds(&instance_name).await?
             }
         };
 

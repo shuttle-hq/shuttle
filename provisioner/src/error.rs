@@ -39,6 +39,8 @@ pub enum Error {
 pub enum AuthClientError {
     #[error["token sent to auth service was expired, retry the request"]]
     ExpiredJwt,
+    #[error["claim subject does not have a subscription"]]
+    MissingSubscription,
     #[error["failed to request subscription update from auth service: {0}"]]
     Internal(String),
 }

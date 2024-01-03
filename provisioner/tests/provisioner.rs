@@ -23,7 +23,7 @@ fn cleanup() {
 }
 
 #[tokio::test]
-async fn correctly_calls_auth_service_to_add_rds_subscription_item() {
+async fn call_auth_service_to_add_rds_subscription_item() {
     let mock_server = MockServer::start().await;
 
     let provisioner = MyProvisioner::new(
@@ -53,6 +53,41 @@ async fn correctly_calls_auth_service_to_add_rds_subscription_item() {
 
     let res = provisioner
         .add_subscription_items("jwt", subscription_item())
+        .await;
+
+    assert!(res.is_ok());
+}
+
+#[tokio::test]
+async fn call_auth_service_to_delete_rds_subscription_item() {
+    let mock_server = MockServer::start().await;
+
+    let provisioner = MyProvisioner::new(
+        &PG.uri,
+        &MONGODB.uri,
+        "fqdn".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
+        // Pass in the mock server's URI as the auth URI.
+        mock_server.uri().parse::<Uri>().unwrap(),
+    )
+    .await
+    .unwrap();
+
+    let subscription_item_metadata_id = "database-test-db";
+
+    // Respond with a 200 for a correctly formed request.
+    wiremock::Mock::given(method("DELETE"))
+        .and(path(format!(
+            "/users/subscription/items/{subscription_item_metadata_id}"
+        )))
+        .and(header_exists(AUTHORIZATION))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
+
+    let res = provisioner
+        .delete_subscription_item("jwt", subscription_item_metadata_id)
         .await;
 
     assert!(res.is_ok());

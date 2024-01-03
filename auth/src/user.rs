@@ -170,7 +170,11 @@ impl UserManagement for UserManager {
         };
 
         stripe::Subscription::update(&self.stripe_client, subscription_id, subscription_update)
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(error = %err, "failed to update stripe subscription");
+                err
+            })?;
 
         Ok(())
     }
@@ -182,6 +186,11 @@ impl UserManagement for UserManager {
     ) -> Result<(), Error> {
         let subscription =
             stripe::Subscription::retrieve(&self.stripe_client, subscription_id, &[]).await?;
+
+        if subscription.status == SubscriptionStatus::Canceled {
+            info!("tried to delete subscription item for a canceled subscription");
+            return Err(Error::CanceledSubscription);
+        }
 
         // First we filter out any items that do not have the expected metadata ID, then we map
         // the remaining items (there should only be one) to a SubscriptionItemId, which we
@@ -214,7 +223,12 @@ impl UserManagement for UserManager {
             return Err(Error::MissingSubscriptionItem(metadata_id.to_string()));
         };
 
-        stripe::SubscriptionItem::delete(&self.stripe_client, subscription_item_id).await?;
+        stripe::SubscriptionItem::delete(&self.stripe_client, subscription_item_id)
+            .await
+            .map_err(|err| {
+                error!(error = %err, "failed to delete subscription item");
+                err
+            })?;
 
         Ok(())
     }

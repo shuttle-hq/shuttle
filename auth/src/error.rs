@@ -33,6 +33,8 @@ pub enum Error {
     DuplicateSubscriptionItems(String),
     #[error("found no subscription item with the given metadata id: {0}")]
     MissingSubscriptionItem(String),
+    #[error("stripe subscription is canceled")]
+    CanceledSubscription,
 }
 
 impl Serialize for Error {

@@ -140,7 +140,7 @@ impl ResourceBuilder<Client> for Turso {
 #[cfg(test)]
 mod test {
     use super::*;
-    use shuttle_service::Secret;
+    use shuttle_service::{QdrantReadyInfo, Secret};
 
     struct MockFactory {
         pub environment: Environment,
@@ -164,7 +164,7 @@ mod test {
         async fn get_qdrant_connection(
             &mut self,
             _project_name: String,
-        ) -> Result<QdrantReadyInfo, crate::Error> {
+        ) -> Result<QdrantReadyInfo, shuttle_service::Error> {
             panic!("no turso test should try to get a db connection string")
         }
 

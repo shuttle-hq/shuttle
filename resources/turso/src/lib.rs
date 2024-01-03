@@ -161,6 +161,13 @@ mod test {
             panic!("no turso test should try to get a db connection string")
         }
 
+        async fn get_qdrant_connection(
+            &mut self,
+            _project_name: String,
+        ) -> Result<QdrantReadyInfo, crate::Error> {
+            panic!("no turso test should try to get a db connection string")
+        }
+
         async fn get_secrets(
             &mut self,
         ) -> Result<std::collections::BTreeMap<String, Secret<String>>, shuttle_service::Error>

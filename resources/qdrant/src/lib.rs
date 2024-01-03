@@ -58,7 +58,7 @@ impl ResourceBuilder<QdrantClient> for Qdrant {
     }
 
     fn config(&self) -> &Self::Config {
-        &self
+        self
     }
 
     async fn output(

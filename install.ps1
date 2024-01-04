@@ -41,7 +41,7 @@ if (($Arch -eq "AMD64") -and (Get-Command -CommandType Application -ErrorAction 
 	Invoke-WebRequest $BinaryUrl -OutFile "$TempDir\cargo-shuttle.tar.gz"
 	New-Item -ItemType Directory -Force "$TempDir\cargo-shuttle"
 	tar.exe -xzf "$TempDir\cargo-shuttle.tar.gz" -C "$TempDir\cargo-shuttle"
-	Move-Item "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\cargo-shuttle.exe" "$CargoHome\bin\cargo-shuttle.exe"
+	Move-Item -Force "$TempDir\cargo-shuttle\cargo-shuttle-x86_64-pc-windows-msvc-$LatestRelease\cargo-shuttle.exe" "$CargoHome\bin\cargo-shuttle.exe"
 	Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$TempDir\cargo-shuttle.tar.gz", "$TempDir\cargo-shuttle"
 	Write-Host "Installed cargo-shuttle, try running ``cargo shuttle --help``" -ForegroundColor Green
 	[Environment]::Exit(0)

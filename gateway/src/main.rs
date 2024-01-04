@@ -1,3 +1,4 @@
+use async_posthog::ClientOptions;
 use clap::Parser;
 use futures::prelude::*;
 
@@ -28,6 +29,14 @@ async fn main() -> io::Result<()> {
 
     trace!(args = ?args, "parsed args");
 
+    let ph_client_options = ClientOptions::new(
+        "phc_cQMQqF5QmcEzXEaVlrhv3yBSNRyaabXYAyiCV7xKHUH".to_string(),
+        "https://eu.posthog.com".to_string(),
+        Duration::from_millis(800),
+    );
+
+    let posthog_client = async_posthog::client(ph_client_options);
+
     setup_tracing(tracing_subscriber::registry(), Backend::Gateway, None);
 
     let db_path = args.state.join("gateway.sqlite");
@@ -57,11 +66,16 @@ async fn main() -> io::Result<()> {
     MIGRATIONS.run(&db).await.unwrap();
 
     match args.command {
-        Commands::Start(start_args) => start(db, args.state, start_args).await,
+        Commands::Start(start_args) => start(db, args.state, posthog_client, start_args).await,
     }
 }
 
-async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
+async fn start(
+    db: SqlitePool,
+    fs: PathBuf,
+    posthog_client: async_posthog::Client,
+    args: StartArgs,
+) -> io::Result<()> {
     let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await?);
 
     let worker = Worker::new();
@@ -129,6 +143,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     let mut api_builder = ApiBuilder::new()
         .with_service(Arc::clone(&gateway))
         .with_sender(sender.clone())
+        .with_posthog_client(posthog_client)
         .binding_to(args.control);
 
     let mut user_builder = UserServiceBuilder::new()

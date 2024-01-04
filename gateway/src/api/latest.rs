@@ -14,7 +14,7 @@ use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::{StatusCode, Uri};
+use http::{Method, StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
@@ -35,7 +35,7 @@ use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
-use tracing::{field, instrument, trace};
+use tracing::{error, field, instrument, trace};
 use ttl_cache::TtlCache;
 use ulid::Ulid;
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
@@ -436,11 +436,34 @@ async fn delete_project(
 #[instrument(skip_all, fields(scope = %scoped_user.scope))]
 async fn route_project(
     State(RouterState {
-        service, sender, ..
+        service,
+        sender,
+        posthog_client,
+        ..
     }): State<RouterState>,
     scoped_user: ScopedUser,
+    method: Method,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
+    let project_name = scoped_user.scope.clone();
+    let uri_path = req.uri().path().to_string();
+
+    // Check if it matches route: "/projects/:project_name/services/:project_name"
+    if method == Method::POST
+        && uri_path == format!("/projects/{}/services/{}", project_name, project_name)
+    {
+        let account_name = scoped_user.user.claim.sub.clone().to_string();
+
+        tokio::spawn(async move {
+            let event =
+                async_posthog::Event::new("shuttle_api_start_deployment".to_string(), account_name);
+
+            if let Err(err) = posthog_client.capture(event).await {
+                error!(error = %err, "failed to send event to posthog")
+            };
+        });
+    }
+
     let project_name = scoped_user.scope;
     let is_cch_project = project_name.is_cch_project();
 
@@ -956,12 +979,14 @@ pub(crate) struct RouterState {
     pub service: Arc<GatewayService>,
     pub sender: Sender<BoxedTask>,
     pub running_builds: Arc<Mutex<TtlCache<Uuid, ()>>>,
+    pub posthog_client: async_posthog::Client,
 }
 
 pub struct ApiBuilder {
     router: Router<RouterState>,
     service: Option<Arc<GatewayService>>,
     sender: Option<Sender<BoxedTask>>,
+    posthog_client: Option<async_posthog::Client>,
     bind: Option<SocketAddr>,
 }
 
@@ -977,6 +1002,7 @@ impl ApiBuilder {
             router: Router::new(),
             service: None,
             sender: None,
+            posthog_client: None,
             bind: None,
         }
     }
@@ -1021,6 +1047,11 @@ impl ApiBuilder {
 
     pub fn with_sender(mut self, sender: Sender<BoxedTask>) -> Self {
         self.sender = Some(sender);
+        self
+    }
+
+    pub fn with_posthog_client(mut self, posthog_client: async_posthog::Client) -> Self {
+        self.posthog_client = Some(posthog_client);
         self
     }
 
@@ -1121,6 +1152,7 @@ impl ApiBuilder {
     pub fn into_router(self) -> Router {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
+        let posthog_client = self.posthog_client.expect("a task Sender is required");
 
         // Allow about 4 cores per build, but use at most 75% (* 3 / 4) of all cores and at least 1 core
         let concurrent_builds: usize = (num_cpus::get() * 3 / 4 / 4).max(1);
@@ -1130,6 +1162,7 @@ impl ApiBuilder {
         self.router.with_state(RouterState {
             service,
             sender,
+            posthog_client,
             running_builds,
         })
     }

@@ -36,9 +36,6 @@ pub struct StartArgs {
     /// Address to bind the user proxy to
     #[arg(long, default_value = "127.0.0.1:8000")]
     pub user: SocketAddr,
-    /// API key used by the gateway to authorize API keys to JWTs conversion
-    #[arg(long)]
-    pub admin_key: String,
     /// Allows to disable the use of TLS in the user proxy service (DANGEROUS)
     #[arg(long, default_value = "enable")]
     pub use_tls: UseTls,
@@ -77,6 +74,9 @@ pub struct ContextArgs {
     /// The path to the docker daemon socket
     #[arg(long, default_value = "/var/run/docker.sock")]
     pub docker_host: String,
+    /// API key used by the gateway to authorize API keys to JWTs conversion
+    #[arg(long)]
+    pub admin_key: String,
     /// Api key for the user that has rights to start deploys
     #[arg(long, default_value = "gateway4deployes")]
     pub deploys_api_key: String,

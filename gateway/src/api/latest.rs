@@ -189,7 +189,7 @@ async fn get_projects_list(
     Ok(AxumJson(projects))
 }
 
-#[instrument(skip_all, fields(%project_name))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name))]
 #[utoipa::path(
     post,
     path = "/projects/{project_name}",
@@ -256,7 +256,7 @@ async fn create_project(
     Ok(AxumJson(response))
 }
 
-#[instrument(skip_all, fields(%project_name))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name))]
 #[utoipa::path(
     delete,
     path = "/projects/{project_name}",
@@ -312,7 +312,7 @@ struct DeleteProjectParams {
     dry_run: Option<bool>,
 }
 
-#[instrument(skip_all, fields(project_name = %scoped_user.scope))]
+#[instrument(skip_all, fields(shuttle.project.name = %scoped_user.scope))]
 #[utoipa::path(
     delete,
     path = "/projects/{project_name}/delete",
@@ -716,7 +716,7 @@ async fn create_acme_account(
     Ok(AxumJson(res))
 }
 
-#[instrument(skip_all, fields(%project_name, %fqdn))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, %fqdn))]
 #[utoipa::path(
     post,
     path = "/admin/acme/request/{project_name}/{fqdn}",
@@ -795,7 +795,7 @@ async fn request_custom_domain_acme_certificate(
     ))
 }
 
-#[instrument(skip_all, fields(%project_name, %fqdn))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, %fqdn))]
 #[utoipa::path(
     post,
     path = "/admin/acme/renew/{project_name}/{fqdn}",

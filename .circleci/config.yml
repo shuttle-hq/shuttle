@@ -469,16 +469,16 @@ jobs:
             GATEWAY_ADMIN_KEY=${<< parameters.gateway-admin-key >>} \
             make deploy
       - when:
-          condition: 
-            equal: [ production, << parameters.shuttle-env >>]
+          condition:
+            equal: [production, << parameters.shuttle-env >>]
           steps:
             - run:
                 name: Pull new deployer image on prod
                 command: |
                   ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
       - when:
-          condition: 
-            equal: [ staging, << parameters.shuttle-env >>] 
+          condition:
+            equal: [staging, << parameters.shuttle-env >>]
           steps:
             - run:
                 name: Pull new deployer image on dev
@@ -837,14 +837,14 @@ workflows:
     jobs:
       - approve-deploy-images-unstable:
           type: approval
-          filters:
-            branches:
-              only: main
+          # filters:
+          #   branches:
+          #     only: main
       - approve-build-and-push-images-unstable:
           type: approval
-          filters:
-            branches:
-              only: main
+          # filters:
+          #   branches:
+          #     only: main
       - build-and-push:
           name: build-and-push-unstable
           aws-access-key-id: DEV_AWS_ACCESS_KEY_ID

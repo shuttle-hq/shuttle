@@ -27,7 +27,7 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! axum = "0.6.20"
+//! axum = "0.7.3"
 //! shuttle-axum = "0.35.1"
 //! shuttle-runtime = "0.35.1"
 //! tokio = "1.28.2"

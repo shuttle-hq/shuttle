@@ -19,7 +19,12 @@ use url::Url;
 
 use crate::args::TemplateLocation;
 
-pub fn generate_project(dest: PathBuf, name: &str, temp_loc: TemplateLocation) -> Result<()> {
+pub fn generate_project(
+    dest: PathBuf,
+    name: &str,
+    temp_loc: TemplateLocation,
+    no_git: bool,
+) -> Result<()> {
     println!(r#"Creating project "{name}" in "{}""#, dest.display());
 
     let temp_dir: TempDir = setup_template(&temp_loc.auto_path)
@@ -52,9 +57,12 @@ pub fn generate_project(dest: PathBuf, name: &str, temp_loc: TemplateLocation) -
 
     // Initialize a Git repository in the destination directory if there
     // is no existing Git repository present in the surrounding folders.
-    let no_git_repo = gix::discover(&dest).is_err();
-    if no_git_repo {
-        gix::init(&dest).context("Failed to initialize project repository")?;
+    // only if no-git argument is not passed otherwise initialize git repo
+    if !no_git {
+        let no_git_repo = gix::discover(&dest).is_err();
+        if no_git_repo {
+            gix::init(&dest).context("Failed to initialize project repository")?;
+        }
     }
 
     Ok(())

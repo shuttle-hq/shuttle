@@ -61,6 +61,8 @@ async fn main() -> io::Result<()> {
     }
 }
 
+const AMBULANCE_MAX_PARALLEL_POLL: usize = 8;
+
 async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await?);
 
@@ -93,6 +95,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                     // If degraded, don't stack more health checks.
                     warn!(
                         sender.capacity = sender.capacity(),
+                        shuttle.sub_service = "ambulance",
                         "skipping health checks"
                     );
                     continue;
@@ -101,19 +104,48 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                 if let Ok(projects) = gateway.iter_projects_ready().await {
                     let span = info_span!(
                         "running health checks",
+                        shuttle.sub_service = "ambulance",
                         healthcheck.active_projects = projects.len(),
                     );
 
                     let gateway = gateway.clone();
                     let sender = sender.clone();
                     async move {
+                        let mut work_set = tokio::task::JoinSet::new();
+
                         for (project_name, _) in projects {
-                            if let Ok(handle) =
-                                gateway.new_task().project(project_name).send(&sender).await
-                            {
-                                // We wait for the check to be done before
-                                // queuing up the next one.
-                                handle.await
+                            // Wait for completion of next future before enqueuing a new one
+                            if work_set.len() >= AMBULANCE_MAX_PARALLEL_POLL {
+                                if let Some(Err(err)) = work_set.join_next().await {
+                                    error!(
+                                        error = %err,
+                                        shuttle.sub_service = "ambulance",
+                                        "error while awaiting ambulance task for project"
+                                    );
+                                }
+                            }
+
+                            let gateway = gateway.clone();
+                            let sender = sender.clone();
+
+                            work_set.spawn(async move {
+                                match gateway.new_task().project(project_name).send(&sender).await {
+                                    Ok(handle) => handle.await,
+                                    Err(err) => error!(
+                                        error = %err,
+                                        shuttle.sub_service = "ambulance",
+                                        "error while sending ambulance project task"
+                                    ),
+                                };
+                            });
+                        }
+                        while let Some(fut) = work_set.join_next().await {
+                            if let Err(err) = fut {
+                                error!(
+                                    error = %err,
+                                    shuttle.sub_service = "ambulance",
+                                    "error while awaiting ambulance task for project"
+                                );
                             }
                         }
                     }

@@ -458,10 +458,11 @@ mod needs_docker {
         let response: SubscriptionResponse = serde_json::from_slice(&body).unwrap();
 
         assert!(!response.success);
-        assert_eq!(
-            response.message,
-            format!("found no subscription item with the given metadata id: non-existent-id")
-        );
+
+        // The returned message will be created from the expected error.
+        let err = shuttle_auth::Error::MissingSubscriptionItem("non-existent-id".to_string());
+
+        assert_eq!(response.message, err.to_string());
 
         // The expected successful response from stripe.
         let json_response = serde_json::json!({

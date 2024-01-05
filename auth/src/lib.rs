@@ -15,6 +15,7 @@ use tracing::info;
 use crate::api::serve;
 pub use api::{ApiBuilder, RouterState};
 pub use args::{Args, Commands, InitArgs};
+pub use error::Error;
 pub use subscription::NewSubscriptionItemExtractor;
 
 pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // One day

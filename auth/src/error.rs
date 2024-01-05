@@ -29,12 +29,12 @@ pub enum Error {
     Stripe(#[from] StripeError),
     #[error("Missing subscription ID.")]
     MissingSubscriptionId,
-    #[error("found more than one subscription items with the same metadata id: {0}")]
+    #[error("Found more than one subscription items with the same metadata id: {0}")]
     DuplicateSubscriptionItems(String),
-    #[error("found no subscription item with the given metadata id: {0}")]
+    #[error("Found no subscription item with the given metadata id: {0}")]
     MissingSubscriptionItem(String),
-    #[error("stripe subscription is canceled")]
-    CanceledSubscription,
+    #[error("Stripe subscription is already cancelled")]
+    CancelledSubscription,
 }
 
 impl Serialize for Error {

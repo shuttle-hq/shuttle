@@ -120,10 +120,10 @@ pub(crate) async fn delete_subscription_items(
             message: "successfully deleted subscription item".to_string(),
         })),
         // If the subscription item is missing, we still return 200, since the rds instance could
-        // have been provisioned before we implemented billing. If the subscription is canceled,
+        // have been provisioned before we implemented billing. If the subscription is cancelled,
         // we return 200 since we don't need to remove any items. A cancelled Stripe subscription
         // cannot be restarted.
-        Err(error @ Error::MissingSubscriptionItem(_) | error @ Error::CanceledSubscription) => {
+        Err(error @ Error::MissingSubscriptionItem(_) | error @ Error::CancelledSubscription) => {
             Ok(Json(SubscriptionResponse {
                 success: false,
                 message: error.to_string(),

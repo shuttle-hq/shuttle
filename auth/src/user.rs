@@ -188,8 +188,8 @@ impl UserManagement for UserManager {
             stripe::Subscription::retrieve(&self.stripe_client, subscription_id, &[]).await?;
 
         if subscription.status == SubscriptionStatus::Canceled {
-            info!("tried to delete subscription item for a canceled subscription");
-            return Err(Error::CanceledSubscription);
+            info!("tried to delete subscription item for a cancelled subscription");
+            return Err(Error::CancelledSubscription);
         }
 
         // First we filter out any items that do not have the expected metadata ID, then we map

@@ -320,6 +320,7 @@ impl Shuttle {
     ) -> Result<CommandOutcome> {
         // Turns the template or git args (if present) to a repo+folder.
         let git_template = args.git_template()?;
+        let no_git = args.no_git;
 
         let unauthorized = self.ctx.api_key().is_err() && args.login_args.api_key.is_none();
 
@@ -459,6 +460,7 @@ impl Shuttle {
                 .as_ref()
                 .expect("to have a project name provided"),
             template,
+            no_git,
         )?;
         println!();
 

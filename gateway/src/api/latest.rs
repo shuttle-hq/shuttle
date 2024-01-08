@@ -455,8 +455,7 @@ async fn route_project(
         let account_name = scoped_user.user.claim.sub.clone();
 
         tokio::spawn(async move {
-            let event =
-                async_posthog::Event::new("shuttle_api_start_deployment", &account_name);
+            let event = async_posthog::Event::new("shuttle_api_start_deployment", &account_name);
 
             if let Err(err) = posthog_client.capture(event).await {
                 error!(error = %err, "failed to send event to posthog")

@@ -741,7 +741,7 @@ workflows:
                 - services/shuttle-axum
               features:
                 - "-F axum"
-                - "-F axum-0-7 --no-default-features"
+                - "-F axum-0-6 --no-default-features"
       - test-standalone:
           # Has mutually exclusive features, so we run checks for each feature separately
           name: "services/shuttle-serenity: << matrix.features >>"

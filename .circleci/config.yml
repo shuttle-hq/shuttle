@@ -469,16 +469,16 @@ jobs:
             GATEWAY_ADMIN_KEY=${<< parameters.gateway-admin-key >>} \
             make deploy
       - when:
-          condition: 
-            equal: [ production, << parameters.shuttle-env >>]
+          condition:
+            equal: [production, << parameters.shuttle-env >>]
           steps:
             - run:
                 name: Pull new deployer image on prod
                 command: |
                   ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
       - when:
-          condition: 
-            equal: [ staging, << parameters.shuttle-env >>] 
+          condition:
+            equal: [staging, << parameters.shuttle-env >>]
           steps:
             - run:
                 name: Pull new deployer image on dev

@@ -39,9 +39,6 @@
     <img alt="rewarded bounties" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fshuttle%2Fbounties%3Fstatus%3Dcompleted"/>
   </a>
 </p>
-<p align="center">
-  🎄 <b>Shuttle Christmas Code Hunt</b> is here! Take on 16 days of Rust challenges and win prizes! <a href="https://www.shuttle.rs/cch">Click here to sign up!</a> 🎁
-</p>
 <!-- markdownlint-restore -->
 
 ---
@@ -85,6 +82,12 @@ On Linux and macOS, you can use this install script, which will automatically in
 
 ```sh
 curl -sSfL https://www.shuttle.rs/install | bash
+```
+
+On Windows, you can use this install script to do the same:
+
+```powershell
+iwr "https://www.shuttle.rs/install-win" | iex
 ```
 
 Our binaries can also be installed using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall).

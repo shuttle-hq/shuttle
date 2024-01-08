@@ -194,7 +194,7 @@ async fn start(
 
     let api_handle = api_builder
         .with_default_routes()
-        .with_auth_service(args.context.auth_uri, args.admin_key)
+        .with_auth_service(args.context.auth_uri, args.context.admin_key)
         .with_default_traces()
         .serve();
 

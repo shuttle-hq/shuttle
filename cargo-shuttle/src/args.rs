@@ -304,6 +304,9 @@ pub struct InitArgs {
     /// Whether to start the container for this project on Shuttle, and claim the project name
     #[arg(long)]
     pub create_env: bool,
+    /// Don't initialize a new git repository
+    #[arg(long)]
+    pub no_git: bool,
     #[command(flatten)]
     pub login_args: LoginArgs,
 }

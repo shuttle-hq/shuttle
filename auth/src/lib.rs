@@ -2,7 +2,6 @@ mod api;
 mod args;
 mod error;
 mod secrets;
-mod subscription;
 mod user;
 
 use std::{io, time::Duration};
@@ -13,27 +12,22 @@ use sqlx::{migrate::Migrator, query, PgPool};
 use tracing::info;
 
 use crate::api::serve;
-pub use api::{ApiBuilder, RouterState};
+pub use api::ApiBuilder;
 pub use args::{Args, Commands, InitArgs};
-pub use subscription::NewSubscriptionItemExtractor;
 
 pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // One day
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 pub async fn start(pool: PgPool, args: StartArgs) -> io::Result<()> {
-    let router = api::ApiBuilder::new(args.jwt_signing_private_key)
+    let router = api::ApiBuilder::new()
         .with_pg_pool(pool)
         .with_sessions()
         .with_stripe_client(stripe::Client::new(args.stripe_secret_key))
-        .with_rds_price_id(args.stripe_rds_price_id.clone())
+        .with_jwt_signing_private_key(args.jwt_signing_private_key)
         .into_router();
 
     info!(address=%args.address, "Binding to and listening at address");
-    info!(
-        "starting auth service with RDS price id: {}",
-        args.stripe_rds_price_id
-    );
 
     serve(router, args.address).await;
 

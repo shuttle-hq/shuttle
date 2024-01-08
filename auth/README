@@ -1,0 +1,13 @@
+# Auth service considerations
+
+## JWT signing private key
+
+Starting the service locally requires provisioning of a base64 encoded PEM encoded PKCS#8 v1 unencrypted private key.
+The service was tested with keys generated as follows:
+
+```bash
+openssl genpkey -algorithm ED25519 -out auth_jwtsigning_private_key.pem
+base64 < auth_jwtsigning_private_key.pem
+```
+
+Used `OpenSSL 3.1.2 1 Aug 2023 (Library: OpenSSL 3.1.2 1 Aug 2023)` and `FreeBSD base64`, on a `macOS Sonoma 14.1.1`.

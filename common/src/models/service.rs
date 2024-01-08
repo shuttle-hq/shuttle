@@ -2,7 +2,7 @@
 use crate::ulid_type;
 use crossterm::style::{Color, Stylize};
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Write};
+use std::fmt::Display;
 use std::str::FromStr;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -31,7 +31,7 @@ pub struct Summary {
 impl Display for Summary {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let deployment = if let Some(ref deployment) = self.deployment {
-            let mut summary = format!(
+            format!(
                 r#"
 Service Name:  {}
 Deployment ID: {}
@@ -47,12 +47,7 @@ URI:           {}
                 ),
                 deployment.last_update.format("%Y-%m-%dT%H:%M:%SZ"),
                 self.uri,
-            );
-            // If any message is associated with the deployment, append it to the summary.
-            if let Some(ref message) = deployment.message {
-                write!(summary, "Message:       {message}")?;
-            }
-            summary
+            )
         } else {
             format!(
                 "{}\n\n",

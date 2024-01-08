@@ -29,11 +29,6 @@ pub trait UserManagement: Send + Sync {
     async fn get_user(&self, name: AccountName) -> Result<User, Error>;
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
     async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
-    async fn add_subscription_items(
-        &self,
-        subscription_id: &SubscriptionId,
-        subscription_item: stripe::UpdateSubscriptionItems,
-    ) -> Result<(), Error>;
 }
 
 #[derive(Clone)]
@@ -154,22 +149,6 @@ impl UserManagement for UserManager {
         Ok(user)
     }
 
-    async fn add_subscription_items(
-        &self,
-        subscription_id: &SubscriptionId,
-        subscription_items: stripe::UpdateSubscriptionItems,
-    ) -> Result<(), Error> {
-        let subscription_update = stripe::UpdateSubscription {
-            items: Some(vec![subscription_items]),
-            ..Default::default()
-        };
-
-        stripe::Subscription::update(&self.stripe_client, subscription_id, subscription_update)
-            .await?;
-
-        Ok(())
-    }
-
     async fn reset_key(&self, name: AccountName) -> Result<(), Error> {
         let key = ApiKey::generate();
 
@@ -227,7 +206,7 @@ impl User {
         Ok(false)
     }
 
-    /// Synchronize the tiers with the subscription validity.
+    // Synchronize the tiers with the subscription validity.
     async fn sync_tier(&mut self, user_manager: &UserManager) -> Result<bool, Error> {
         let has_pro_access = self.account_tier == AccountTier::Pro
             || self.account_tier == AccountTier::CancelledPro

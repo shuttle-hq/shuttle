@@ -153,10 +153,6 @@ impl DeploymentUpdater for StubDeploymentUpdater {
     async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
         Ok(())
     }
-
-    async fn set_message(&self, _id: &Uuid, _message: &str) -> Result<(), Self::Err> {
-        Ok(())
-    }
 }
 
 // This test uses the kill signal to make sure a service does stop when asked to

@@ -264,7 +264,6 @@ impl MyProvisioner {
             .send()
             .await;
 
-        let mut created_new_instance = false;
         match instance {
             Ok(_) => {
                 wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
@@ -299,8 +298,6 @@ impl MyProvisioner {
                         .expect("to be able to create instance");
 
                     wait_for_instance(client, &instance_name, "creating").await?;
-
-                    created_new_instance = true;
                 } else {
                     return Err(Error::Plain(format!(
                         "got unexpected error from AWS RDS service: {}",

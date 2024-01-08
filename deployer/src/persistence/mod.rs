@@ -222,7 +222,7 @@ impl Persistence {
     pub async fn insert_deployment(&self, deployment: impl Into<&Deployment>) -> Result<()> {
         let deployment: &Deployment = deployment.into();
 
-        sqlx::query("INSERT INTO deployments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO deployments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(deployment.id)
             .bind(deployment.service_id.to_string())
             .bind(deployment.state)
@@ -233,7 +233,6 @@ impl Persistence {
             .bind(deployment.git_commit_msg.as_ref())
             .bind(deployment.git_branch.as_ref())
             .bind(deployment.git_dirty)
-            .bind(deployment.message.as_ref())
             .execute(&self.pool)
             .await
             .map(|_| ())
@@ -638,16 +637,6 @@ impl DeploymentUpdater for Persistence {
             .map(|_| ())
             .map_err(Error::from)
     }
-
-    async fn set_message(&self, id: &Uuid, message: &str) -> Result<()> {
-        sqlx::query("UPDATE deployments SET message = ? WHERE id = ?")
-            .bind(message)
-            .bind(id)
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(Error::from)
-    }
 }
 
 #[async_trait::async_trait]
@@ -727,13 +716,11 @@ mod tests {
 
         p.set_address(&id, &address).await.unwrap();
         p.set_is_next(&id, true).await.unwrap();
-        p.set_message(&id, "dummy message").await.unwrap();
 
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
         assert_eq!(update.address, Some(address));
         assert!(update.is_next);
-        assert_eq!(update.message, Some("dummy message".to_string()));
         assert_ne!(
             update.last_update,
             Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap()
@@ -757,7 +744,6 @@ mod tests {
                 git_commit_msg: None,
                 git_branch: None,
                 git_dirty: None,
-                message: None,
             })
             .collect();
 

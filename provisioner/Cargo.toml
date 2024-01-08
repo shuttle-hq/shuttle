@@ -17,8 +17,6 @@ fqdn = { workspace = true }
 mongodb = "2.4.0"
 prost = { workspace = true }
 rand = { workspace = true }
-reqwest = { workspace = true, features = ["json"] }
-serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["postgres"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
@@ -30,4 +28,4 @@ tracing-subscriber = { workspace = true, features = ["default", "fmt"] }
 ctor = { workspace = true }
 once_cell = { workspace = true }
 portpicker = { workspace = true }
-wiremock = "0.5"
+serde_json = { workspace = true }

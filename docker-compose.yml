@@ -55,7 +55,6 @@ services:
       - "--address=0.0.0.0:8000"
       - "--stripe-secret-key=${STRIPE_SECRET_KEY}"
       - "--jwt-signing-private-key=${AUTH_JWTSIGNING_PRIVATE_KEY}"
-      - "--stripe-rds-price-id=${STRIPE_RDS_PRICE_ID}"
     healthcheck:
       test: curl --fail http://localhost:8000/ || exit 1
       interval: 1m

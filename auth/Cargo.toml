@@ -26,7 +26,6 @@ pem = "2"
 rand = { workspace = true }
 ring = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["postgres", "json", "migrate"] }
 strum = { workspace = true }
 thiserror = { workspace = true }
@@ -44,4 +43,3 @@ portpicker = { workspace = true }
 serde_json = { workspace = true }
 shuttle-common-tests = { workspace = true }
 tower = { workspace = true, features = ["util"] }
-wiremock = "0.5"

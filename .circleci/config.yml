@@ -420,9 +420,6 @@ jobs:
       stripe-secret-key:
         description: "Stripe secret key used to connect a client to Stripe backend"
         type: string
-      stripe-rds-price-id:
-        description: "Stripe price id of Shuttle AWS RDS product."
-        type: string
       jwt-signing-private-key:
         description: "Auth private key used for JWT signing"
         type: string
@@ -463,7 +460,6 @@ jobs:
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
             STRIPE_SECRET_KEY=${<< parameters.stripe-secret-key >>} \
-            STRIPE_RDS_PRICE_ID=${<< parameters.stripe-rds-price-id >>} \
             AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
             CONTROL_DB_POSTGRES_URI=${<< parameters.control-db-postgres-uri >>} \
             GATEWAY_ADMIN_KEY=${<< parameters.gateway-admin-key >>} \
@@ -860,7 +856,6 @@ workflows:
           deploys-api-key: DEV_DEPLOYS_API_KEY
           logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
           stripe-secret-key: DEV_STRIPE_SECRET_KEY
-          stripe-rds-price-id: DEV_STRIPE_RDS_PRICE_ID
           jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: DEV_CONTROL_DB_POSTGRES_URI
           gateway-admin-key: DEV_GATEWAY_ADMIN_KEY
@@ -943,7 +938,6 @@ workflows:
           deploys-api-key: PROD_DEPLOYS_API_KEY
           logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
           stripe-secret-key: PROD_STRIPE_SECRET_KEY
-          stripe-rds-price-id: PROD_STRIPE_RDS_PRICE_ID
           jwt-signing-private-key: PROD_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: PROD_CONTROL_DB_POSTGRES_URI
           gateway-admin-key: PROD_GATEWAY_ADMIN_KEY

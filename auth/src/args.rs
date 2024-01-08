@@ -31,12 +31,8 @@ pub struct StartArgs {
 
     /// Auth JWT signing private key, as a base64 encoding of
     /// a PEM encoded PKCS#8 v1 formatted unencrypted private key.
-    #[arg(long)]
+    #[arg(long, default_value = "")]
     pub jwt_signing_private_key: String,
-
-    /// The price id of the AWS RDS product.
-    #[arg(long, default_value = "price_1OIS06FrN7EDaGOjaV0GXD7P")]
-    pub stripe_rds_price_id: String,
 }
 
 #[derive(clap::Args, Debug, Clone)]

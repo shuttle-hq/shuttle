@@ -245,7 +245,7 @@ pub async fn get_services(
     Ok(Json(services))
 }
 
-#[instrument(skip_all, fields(%project_name, %service_name))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name))]
 #[utoipa::path(
     get,
     path = "/projects/{project_name}/services/{service_name}",
@@ -282,7 +282,7 @@ pub async fn get_service(
     }
 }
 
-#[instrument(skip_all, fields(%project_name, %service_name))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name))]
 #[utoipa::path(
     get,
     path = "/projects/{project_name}/services/{service_name}/resources",
@@ -326,7 +326,7 @@ pub async fn get_service_resources(
     }
 }
 
-#[instrument(skip_all, fields(%project_name, %service_name, %resource_type))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name, %resource_type))]
 #[utoipa::path(
     delete,
     path = "/projects/{project_name}/services/{service_name}/resources/{resource_type}",
@@ -383,7 +383,7 @@ pub async fn delete_service_resource(
     Ok(Json(()))
 }
 
-#[instrument(skip_all, fields(%project_name, %service_name))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name))]
 #[utoipa::path(
     post,
     path = "/projects/{project_name}/services/{service_name}",
@@ -461,7 +461,7 @@ pub async fn create_service(
     Ok(Json(deployment.into()))
 }
 
-#[instrument(skip_all, fields(%project_name, %service_name))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name))]
 #[utoipa::path(
     delete,
     path = "/projects/{project_name}/services/{service_name}",
@@ -499,7 +499,7 @@ pub async fn stop_service(
     Ok(Json(response))
 }
 
-#[instrument(skip_all, fields(%project_name, page, limit))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, page, limit))]
 #[utoipa::path(
     get,
     path = "/projects/{project_name}/deployments",
@@ -530,11 +530,11 @@ pub async fn get_deployments(
 
         Ok(Json(deployments))
     } else {
-        Err(Error::NotFound("service not found".to_string()))
+        Ok(Json(vec![]))
     }
 }
 
-#[instrument(skip_all, fields(%project_name, %deployment_id))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, %deployment_id))]
 #[utoipa::path(
     get,
     path = "/projects/{project_name}/deployments/{deployment_id}",
@@ -559,7 +559,7 @@ pub async fn get_deployment(
     }
 }
 
-#[instrument(skip_all, fields(%project_name, %deployment_id))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, %deployment_id))]
 #[utoipa::path(
     delete,
     path = "/projects/{project_name}/deployments/{deployment_id}",
@@ -587,7 +587,7 @@ pub async fn delete_deployment(
     }
 }
 
-#[instrument(skip_all, fields(%project_name, %deployment_id))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, %deployment_id))]
 #[utoipa::path(
     put,
     path = "/projects/{project_name}/deployments/{deployment_id}",
@@ -627,7 +627,7 @@ pub async fn start_deployment(
     }
 }
 
-#[instrument(skip_all, fields(%project_name, %deployment_id))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, %deployment_id))]
 #[utoipa::path(
     get,
     path = "/projects/{project_name}/deployments/{deployment_id}/logs",
@@ -670,7 +670,7 @@ pub async fn get_logs(
 }
 
 // don't instrument id to prevent it from showing up in deployment log
-#[instrument(skip_all, fields(%project_name))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name))]
 #[utoipa::path(
     get,
     path = "/projects/{project_name}/ws/deployments/{deployment_id}/logs",
@@ -764,7 +764,7 @@ async fn logs_websocket_handler(
     let _ = s.close().await;
 }
 
-#[instrument(skip_all, fields(%project_name))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name))]
 #[utoipa::path(
     post,
     path = "/projects/{project_name}/clean",

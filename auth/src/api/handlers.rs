@@ -21,7 +21,7 @@ use super::{
     RouterState,
 };
 
-#[instrument(skip(user_manager))]
+#[instrument(skip_all, fields(account.name = %account_name))]
 pub(crate) async fn get_user(
     _: Admin,
     State(user_manager): State<UserManagerState>,
@@ -32,7 +32,7 @@ pub(crate) async fn get_user(
     Ok(Json(user.into()))
 }
 
-#[instrument(skip(user_manager))]
+#[instrument(skip_all, fields(account.name = %account_name, account.tier = %account_tier))]
 pub(crate) async fn post_user(
     _: Admin,
     State(user_manager): State<UserManagerState>,
@@ -43,7 +43,7 @@ pub(crate) async fn post_user(
     Ok(Json(user.into()))
 }
 
-#[instrument(skip(user_manager))]
+#[instrument(skip(user_manager, account_name, account_tier), fields(account.name = %account_name, account.tier = %account_tier))]
 pub(crate) async fn update_user_tier(
     _: Admin,
     State(user_manager): State<UserManagerState>,

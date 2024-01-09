@@ -334,7 +334,9 @@ pub mod provisioner_server {
                             request: tonic::Request<super::DatabaseRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).provision_database(request).await };
+                            let fut = async move {
+                                <T as Provisioner>::provision_database(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -372,7 +374,9 @@ pub mod provisioner_server {
                             request: tonic::Request<super::DatabaseRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).delete_database(request).await };
+                            let fut = async move {
+                                <T as Provisioner>::delete_database(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -407,7 +411,9 @@ pub mod provisioner_server {
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<super::Ping>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).health_check(request).await };
+                            let fut = async move {
+                                <T as Provisioner>::health_check(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }

@@ -6,6 +6,6 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-axum = "0.6.0"
+axum = "0.7.3"
 shuttle-runtime = { path = "../../../../runtime" }
 shuttle-axum = { path = "../../../../services/shuttle-axum" }

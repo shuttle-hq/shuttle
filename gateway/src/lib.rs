@@ -21,6 +21,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use shuttle_common::models::project::ProjectName;
+use strum::Display;
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
 
@@ -35,8 +36,15 @@ pub mod task;
 pub mod tls;
 pub mod worker;
 
-pub const DOCKER_STATS_PATH: &str = "/sys/fs/cgroup/cpuacct/docker";
+pub const DOCKER_STATS_PATH_CGROUP_V1: &str = "/sys/fs/cgroup/cpuacct/docker";
+pub const DOCKER_STATS_PATH_CGROUP_V2: &str = "/sys/fs/cgroup/system.slice";
 
+#[derive(Clone, Display, PartialEq, Eq)]
+pub enum DockerStatsSource {
+    CgroupV1,
+    CgroupV2,
+    Bollard,
+}
 static AUTH_CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 
 /// Server-side errors that do not have to do with the user runtime
@@ -171,10 +179,13 @@ impl From<ProjectDetails> for shuttle_common::models::admin::ProjectResponse {
     }
 }
 
+#[async_trait]
 pub trait DockerContext: Send + Sync {
     fn docker(&self) -> &Docker;
 
     fn container_settings(&self) -> &ContainerSettings;
+
+    async fn get_stats(&self, container_id: &str) -> Result<u64, Error>;
 }
 
 /// A generic state which can, when provided with a [`Context`], do
@@ -300,7 +311,7 @@ pub mod tests {
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::task::BoxedTask;
     use crate::worker::Worker;
-    use crate::DockerContext;
+    use crate::{DockerContext, Error};
 
     macro_rules! value_block_helper {
         ($next:ident, $block:block) => {
@@ -581,6 +592,7 @@ pub mod tests {
                     .unwrap(),
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
+                    admin_key: "dummykey".to_string(),
                     deploys_api_key: "gateway".to_string(),
                     cch_container_limit: 1,
                     soft_container_limit: 2,
@@ -663,7 +675,11 @@ pub mod tests {
 
         /// Create a service and sender to handle tasks. Also starts up a worker to create actual Docker containers for all requests
         pub async fn service(&self) -> (Arc<GatewayService>, Sender<BoxedTask>) {
-            let service = Arc::new(GatewayService::init(self.args(), self.pool(), "".into()).await);
+            let service = Arc::new(
+                GatewayService::init(self.args(), self.pool(), "".into())
+                    .await
+                    .unwrap(),
+            );
             let worker = Worker::new();
 
             let (sender, mut receiver) = channel(256);
@@ -715,6 +731,7 @@ pub mod tests {
         }
     }
 
+    #[async_trait]
     impl DockerContext for WorldContext {
         fn docker(&self) -> &Docker {
             &self.docker
@@ -722,6 +739,10 @@ pub mod tests {
 
         fn container_settings(&self) -> &ContainerSettings {
             &self.container_settings
+        }
+
+        async fn get_stats(&self, _container_id: &str) -> Result<u64, Error> {
+            Ok(0)
         }
     }
 
@@ -1158,7 +1179,11 @@ pub mod tests {
     #[tokio::test]
     async fn end_to_end() {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let service = Arc::new(
+            GatewayService::init(world.args(), world.pool(), "".into())
+                .await
+                .unwrap(),
+        );
         let worker = Worker::new();
 
         let (log_out, mut log_in) = channel(256);

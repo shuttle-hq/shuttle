@@ -225,6 +225,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-posthog"
+version = "0.2.3"
+source = "git+https://github.com/shuttle-hq/posthog-rs?branch=main#4a8299fde3080bff550620c0853be9b83fee8f44"
+dependencies = [
+ "posthog-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "async-session"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1131,7 +1144,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1262,8 +1275,10 @@ checksum = "7f2c685bad3eb3d45a01354cedb7d5faa66194d1d58ba6e267a8de788f79db38"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-targets 0.48.5",
 ]
 
@@ -4660,6 +4675,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "posthog-core"
+version = "0.1.0"
+source = "git+https://github.com/shuttle-hq/posthog-rs?branch=main#4a8299fde3080bff550620c0853be9b83fee8f44"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "powerfmt"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5750,7 +5776,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-admin"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -5767,7 +5793,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-auth"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "anyhow",
  "async-stripe",
@@ -5803,7 +5829,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-builder"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "async-trait",
  "clap",
@@ -5829,7 +5855,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -5846,7 +5872,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5899,7 +5925,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common-tests"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "cargo-shuttle",
  "hyper",
@@ -5916,7 +5942,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5968,9 +5994,10 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "anyhow",
+ "async-posthog",
  "async-trait",
  "axum",
  "axum-server",
@@ -6032,7 +6059,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-logger"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6057,11 +6084,11 @@ dependencies = [
 
 [[package]]
 name = "shuttle-orchestrator"
-version = "0.35.2"
+version = "0.36.0"
 
 [[package]]
 name = "shuttle-proto"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6077,7 +6104,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -6102,7 +6129,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-resource-recorder"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6126,7 +6153,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-runtime"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6159,7 +6186,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.35.2"
+version = "0.36.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8751,18 +8778,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.7.29"
+version = "0.7.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d075cf85bbb114e933343e087b92f2146bac0d55b534cbb8188becf0039948e"
+checksum = "1c4061bedbb353041c12f413700357bec76df2c7e2ca8e4df8bac24c6bf68e3d"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.7.29"
+version = "0.7.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86cd5ca076997b97ef09d3ad65efe811fa68c9e874cb636ccb211223a813b0c2"
+checksum = "b3c129550b3e6de3fd0ba67ba5c81818f9805e58b8d7fee80a3a59d2c9fc601a"
 dependencies = [
  "proc-macro2",
  "quote",

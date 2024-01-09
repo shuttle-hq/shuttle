@@ -1,16 +1,18 @@
+use std::io;
 use std::io::Cursor;
 use std::net::Ipv4Addr;
 use std::ops::Sub;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::headers::HeaderMapExt;
+use axum::headers::{Authorization, HeaderMapExt};
 use axum::http::Request;
 use axum::response::Response;
+use bollard::container::StatsOptions;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use fqdn::{Fqdn, FQDN};
-use http::header::AUTHORIZATION;
 use http::Uri;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
@@ -30,8 +32,9 @@ use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, QueryBuilder, Row};
 use tokio::sync::mpsc::Sender;
 use tokio::time::timeout;
+use tonic::codegen::tokio_stream::StreamExt;
 use tonic::transport::Endpoint;
-use tracing::{debug, error, instrument, trace, warn, Span};
+use tracing::{debug, error, info, instrument, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use x509_parser::nom::AsBytes;
@@ -45,7 +48,10 @@ use crate::project::{Project, ProjectCreating, ProjectError, IS_HEALTHY_TIMEOUT}
 use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::TaskRouter;
-use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, AUTH_CLIENT};
+use crate::{
+    AccountName, DockerContext, DockerStatsSource, Error, ErrorKind, ProjectDetails, AUTH_CLIENT,
+    DOCKER_STATS_PATH_CGROUP_V1, DOCKER_STATS_PATH_CGROUP_V2,
+};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -210,22 +216,28 @@ impl ContainerSettings {
 pub struct GatewayContextProvider {
     docker: Docker,
     settings: ContainerSettings,
-    api_key: String,
+    gateway_api_key: String,
+    deploys_api_key: String,
     auth_key_uri: Uri,
+    docker_stats_source: DockerStatsSource,
 }
 
 impl GatewayContextProvider {
     pub fn new(
         docker: Docker,
         settings: ContainerSettings,
-        api_key: String,
+        gateway_api_key: String,
+        deploys_api_key: String,
         auth_key_uri: Uri,
+        docker_stats_source: DockerStatsSource,
     ) -> Self {
         Self {
             docker,
             settings,
-            api_key,
+            gateway_api_key,
+            deploys_api_key,
             auth_key_uri,
+            docker_stats_source,
         }
     }
 
@@ -233,8 +245,10 @@ impl GatewayContextProvider {
         GatewayContext {
             docker: self.docker.clone(),
             settings: self.settings.clone(),
-            api_key: self.api_key.clone(),
+            gateway_api_key: self.gateway_api_key.clone(),
+            deploys_api_key: self.deploys_api_key.clone(),
             auth_key_uri: self.auth_key_uri.clone(),
+            docker_stats_source: self.docker_stats_source.clone(),
         }
     }
 }
@@ -262,7 +276,39 @@ impl GatewayService {
     ///
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
-    pub async fn init(args: ContextArgs, db: SqlitePool, state_location: PathBuf) -> Self {
+    pub async fn init(
+        args: ContextArgs,
+        db: SqlitePool,
+        state_location: PathBuf,
+    ) -> io::Result<Self> {
+        let docker_stats_path_v1 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V1)
+            .expect("to parse docker stats path for cgroup v1");
+        let docker_stats_path_v2 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V2)
+            .expect("to parse docker stats path for cgroup v2");
+
+        let docker_stats_source = if docker_stats_path_v1.exists() {
+            DockerStatsSource::CgroupV1
+        } else if docker_stats_path_v2.exists() {
+            DockerStatsSource::CgroupV2
+        } else {
+            DockerStatsSource::Bollard
+        };
+
+        info!("docker stats source: {:?}", docker_stats_source.to_string());
+
+        let shuttle_env = std::env::var("SHUTTLE_ENV").unwrap_or("".to_string());
+        if (shuttle_env == "staging" || shuttle_env == "production")
+            && docker_stats_source == DockerStatsSource::Bollard
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!(
+                    "SHUTTLE_ENV is {} and could not find docker stats at path: {:?} or {:?}",
+                    shuttle_env, DOCKER_STATS_PATH_CGROUP_V1, DOCKER_STATS_PATH_CGROUP_V2,
+                ),
+            ));
+        }
+
         let docker = Docker::connect_with_unix(&args.docker_host, 60, API_DEFAULT_VERSION).unwrap();
 
         let container_settings = ContainerSettings::builder().from_args(&args).await;
@@ -270,12 +316,14 @@ impl GatewayService {
         let provider = GatewayContextProvider::new(
             docker,
             container_settings,
+            args.admin_key,
             args.deploys_api_key,
             format!("{}auth/key", args.auth_uri).parse().unwrap(),
+            docker_stats_source,
         );
 
         let task_router = TaskRouter::default();
-        Self {
+        Ok(Self {
             provider,
             db,
             task_router,
@@ -286,7 +334,7 @@ impl GatewayService {
             cch_container_limit: args.cch_container_limit,
             soft_container_limit: args.soft_container_limit,
             hard_container_limit: args.hard_container_limit,
-        }
+        })
     }
 
     pub async fn route(
@@ -916,7 +964,7 @@ impl GatewayService {
 
         // Start the project if it is idle
         if project.state.is_stopped() {
-            trace!(%project_name, "starting up idle project");
+            trace!(shuttle.project.name = %project_name, "starting up idle project");
 
             let handle = self
                 .new_task()
@@ -1011,10 +1059,13 @@ impl GatewayService {
 pub struct GatewayContext {
     docker: Docker,
     settings: ContainerSettings,
-    api_key: String,
+    gateway_api_key: String,
+    deploys_api_key: String,
     auth_key_uri: Uri,
+    docker_stats_source: DockerStatsSource,
 }
 
+#[async_trait]
 impl DockerContext for GatewayContext {
     fn docker(&self) -> &Docker {
         &self.docker
@@ -1023,16 +1074,90 @@ impl DockerContext for GatewayContext {
     fn container_settings(&self) -> &ContainerSettings {
         &self.settings
     }
+
+    #[instrument(name = "get container stats", skip_all, fields(docker_stats_source = %self.docker_stats_source, shuttle.container.id = container_id))]
+    async fn get_stats(&self, container_id: &str) -> Result<u64, Error> {
+        match self.docker_stats_source {
+            DockerStatsSource::CgroupV1 => {
+                let cpu_usage: u64 =
+                tokio::fs::read_to_string(format!("{DOCKER_STATS_PATH_CGROUP_V1}/{container_id}/cpuacct.usage"))
+                .await.map_err(|e| {
+                    error!(error = %e, shuttle.container.id = container_id, "failed to read docker stats file for container");
+                    ProjectError::internal("failed to read docker stats file for container")
+                })?
+                .trim()
+                .parse()
+                .map_err(|e| {
+                    error!(error = %e, shuttle.container.id = container_id, "failed to parse cpu usage stat");
+
+                    ProjectError::internal("failed to parse cpu usage to u64")
+                })?;
+                Ok(cpu_usage)
+            }
+            DockerStatsSource::CgroupV2 => {
+                // 'usage_usec' is on the first line and the needed stat
+                let cpu_usage: u64 = tokio::fs::read_to_string(format!(
+                    "{DOCKER_STATS_PATH_CGROUP_V2}/docker-{container_id}.scope/cpu.stat"
+                ))
+                    .await
+                    .map_err(|e| {
+                        error!(error = %e, shuttle.container.id = container_id, "failed to read docker stats file for container");
+                        ProjectError::internal("failed to read docker stats file for container")
+                    })?
+                    .lines()
+                    .next()
+                    .ok_or_else(|| {
+                        error!(shuttle.container.id = container_id, "failed to read first line of docker stats file for container");
+                        ProjectError::internal("failed to read first line of docker stats file for container")
+                    })?
+                    .split(' ')
+                    .nth(1)
+                    .ok_or_else(|| {
+                        error!(shuttle.container.id = container_id, "failed to split docker stats line for container");
+                        ProjectError::internal("failed to split docker stats line for container")
+                    })?
+                    .parse::<u64>()
+                    .map_err(|e| {
+                        error!(error = %e, shuttle.container.id = container_id, "failed to parse cpu usage stat");
+                        ProjectError::internal("failed to parse cpu usage to u64")
+                    })?;
+                Ok(cpu_usage * 1_000)
+            }
+            DockerStatsSource::Bollard => {
+                let new_stat = self
+                    .docker()
+                    .stats(
+                        container_id,
+                        Some(StatsOptions {
+                            one_shot: true,
+                            stream: false,
+                        }),
+                    )
+                    .next()
+                    .await
+                    .unwrap()?;
+
+                Ok(new_stat.cpu_stats.cpu_usage.total_usage)
+            }
+        }
+    }
 }
 
 impl GatewayContext {
-    #[instrument(skip(self), fields(auth_key_uri = %self.auth_key_uri, api_key = self.api_key))]
+    #[instrument(skip(self), fields(auth_key_uri = %self.auth_key_uri))]
     pub async fn get_jwt(&self) -> String {
-        let req = Request::builder()
-            .uri(self.auth_key_uri.clone())
-            .header(AUTHORIZATION, format!("Bearer {}", self.api_key))
-            .body(Body::empty())
-            .unwrap();
+        let mut req = Request::builder().uri(self.auth_key_uri.clone());
+
+        let headers = req
+            .headers_mut()
+            .expect("to get headers on manually created request");
+
+        headers.typed_insert(
+            Authorization::bearer(&self.deploys_api_key).expect("to build an authorization bearer"),
+        );
+        headers.typed_insert(XShuttleAdminSecret(self.gateway_api_key.clone()));
+
+        let req = req.body(Body::empty()).unwrap();
 
         trace!("getting jwt");
 
@@ -1048,6 +1173,7 @@ impl GatewayContext {
 
             convert["token"].as_str().unwrap_or_default().to_string()
         } else {
+            error!("was not able to get JWT for gateway");
             Default::default()
         }
     }
@@ -1071,7 +1197,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_stop_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
 
         let neo: AccountName = "neo".parse().unwrap();
         let trinity: AccountName = "trinity".parse().unwrap();
@@ -1286,7 +1412,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_ready_kill_restart_docker() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
 
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
@@ -1338,7 +1464,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_custom_domain() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
 
         let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();
@@ -1392,7 +1518,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_custom_domain_destroy_recreate_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
 
         let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();

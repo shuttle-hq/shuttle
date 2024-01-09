@@ -77,6 +77,9 @@ pub struct ContextArgs {
     /// The path to the docker daemon socket
     #[arg(long, default_value = "/var/run/docker.sock")]
     pub docker_host: String,
+    /// API key used by the gateway to authorize API keys to JWTs conversion
+    #[arg(long)]
+    pub admin_key: String,
     /// Api key for the user that has rights to start deploys
     #[arg(long, default_value = "gateway4deployes")]
     pub deploys_api_key: String,

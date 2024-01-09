@@ -409,7 +409,9 @@ pub mod resource_recorder_server {
                             request: tonic::Request<super::RecordRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).record_resources(request).await };
+                            let fut = async move {
+                                <T as ResourceRecorder>::record_resources(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -450,7 +452,10 @@ pub mod resource_recorder_server {
                             request: tonic::Request<super::ProjectResourcesRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).get_project_resources(request).await };
+                            let fut = async move {
+                                <T as ResourceRecorder>::get_project_resources(&inner, request)
+                                    .await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -491,7 +496,10 @@ pub mod resource_recorder_server {
                             request: tonic::Request<super::ServiceResourcesRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).get_service_resources(request).await };
+                            let fut = async move {
+                                <T as ResourceRecorder>::get_service_resources(&inner, request)
+                                    .await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -529,7 +537,9 @@ pub mod resource_recorder_server {
                             request: tonic::Request<super::ResourceIds>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).get_resource(request).await };
+                            let fut = async move {
+                                <T as ResourceRecorder>::get_resource(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -567,7 +577,9 @@ pub mod resource_recorder_server {
                             request: tonic::Request<super::ResourceIds>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).delete_resource(request).await };
+                            let fut = async move {
+                                <T as ResourceRecorder>::delete_resource(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }

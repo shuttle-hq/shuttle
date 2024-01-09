@@ -1,3 +1,4 @@
+use async_posthog::ClientOptions;
 use clap::Parser;
 use futures::prelude::*;
 
@@ -11,7 +12,6 @@ use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::tls::make_tls_acceptor;
 use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
-use shuttle_gateway::DOCKER_STATS_PATH;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::{Sqlite, SqlitePool};
@@ -29,6 +29,14 @@ async fn main() -> io::Result<()> {
 
     trace!(args = ?args, "parsed args");
 
+    let ph_client_options = ClientOptions::new(
+        "phc_cQMQqF5QmcEzXEaVlrhv3yBSNRyaabXYAyiCV7xKHUH".to_string(),
+        "https://eu.posthog.com".to_string(),
+        Duration::from_millis(800),
+    );
+
+    let posthog_client = async_posthog::client(ph_client_options);
+
     setup_tracing(tracing_subscriber::registry(), Backend::Gateway, None);
 
     let db_path = args.state.join("gateway.sqlite");
@@ -36,20 +44,6 @@ async fn main() -> io::Result<()> {
 
     if !db_path.exists() {
         Sqlite::create_database(db_uri).await.unwrap();
-    }
-
-    let docker_stats_path =
-        PathBuf::from_str(DOCKER_STATS_PATH).expect("to parse docker stats path");
-
-    // Return an error early if the docker stats path is not in the expected location.
-    if !docker_stats_path.exists() {
-        return Err(std::io::Error::new(
-            io::ErrorKind::NotFound,
-            format!(
-                "could not find docker stats at path: {:?}",
-                DOCKER_STATS_PATH
-            ),
-        ));
     }
 
     info!(
@@ -72,12 +66,17 @@ async fn main() -> io::Result<()> {
     MIGRATIONS.run(&db).await.unwrap();
 
     match args.command {
-        Commands::Start(start_args) => start(db, args.state, start_args).await,
+        Commands::Start(start_args) => start(db, args.state, posthog_client, start_args).await,
     }
 }
 
-async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
-    let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await);
+async fn start(
+    db: SqlitePool,
+    fs: PathBuf,
+    posthog_client: async_posthog::Client,
+    args: StartArgs,
+) -> io::Result<()> {
+    let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await?);
 
     let worker = Worker::new();
 
@@ -144,6 +143,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     let mut api_builder = ApiBuilder::new()
         .with_service(Arc::clone(&gateway))
         .with_sender(sender.clone())
+        .with_posthog_client(posthog_client)
         .binding_to(args.control);
 
     let mut user_builder = UserServiceBuilder::new()
@@ -194,7 +194,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
     let api_handle = api_builder
         .with_default_routes()
-        .with_auth_service(args.context.auth_uri, args.admin_key)
+        .with_auth_service(args.context.auth_uri, args.context.admin_key)
         .with_default_traces()
         .serve();
 

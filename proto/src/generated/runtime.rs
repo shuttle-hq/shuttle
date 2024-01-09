@@ -281,7 +281,7 @@ pub mod runtime_server {
             request: tonic::Request<super::StopRequest>,
         ) -> std::result::Result<tonic::Response<super::StopResponse>, tonic::Status>;
         /// Server streaming response type for the SubscribeStop method.
-        type SubscribeStopStream: futures_core::Stream<
+        type SubscribeStopStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<super::SubscribeStopResponse, tonic::Status>,
             > + Send
             + 'static;
@@ -378,7 +378,7 @@ pub mod runtime_server {
                             request: tonic::Request<super::LoadRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).load(request).await };
+                            let fut = async move { <T as Runtime>::load(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -416,7 +416,7 @@ pub mod runtime_server {
                             request: tonic::Request<super::StartRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).start(request).await };
+                            let fut = async move { <T as Runtime>::start(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -454,7 +454,7 @@ pub mod runtime_server {
                             request: tonic::Request<super::StopRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).stop(request).await };
+                            let fut = async move { <T as Runtime>::stop(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -497,7 +497,9 @@ pub mod runtime_server {
                             request: tonic::Request<super::SubscribeStopRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).subscribe_stop(request).await };
+                            let fut = async move {
+                                <T as Runtime>::subscribe_stop(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }

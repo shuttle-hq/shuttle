@@ -20,13 +20,13 @@ pub enum Error {
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
     #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
+    Unexpected(#[from] anyhow::Error),
     #[error("Missing checkout session.")]
     MissingCheckoutSession,
     #[error("Incomplete checkout session.")]
     IncompleteCheckoutSession,
     #[error("Interacting with stripe resulted in error: {0}.")]
-    StripeError(#[from] StripeError),
+    Stripe(#[from] StripeError),
     #[error("Missing subscription ID from the checkout session.")]
     MissingSubscriptionId,
 }

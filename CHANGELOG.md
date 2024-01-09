@@ -7,6 +7,46 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
+## [0.36.0](https://github.com/shuttle-hq/shuttle/compare/v0.35.1..v0.36.0) - 2024-01-08
+
+### Features
+
+- *(installer)* Add windows installer script ([#1503](https://github.com/shuttle-hq/shuttle/issues/1503)) - ([52ca24a](https://github.com/shuttle-hq/shuttle/commit/52ca24a63279b3879db14886134c1964e7e3e715))
+- *(service)* Emit trace with shuttle dependencies ([#1498](https://github.com/shuttle-hq/shuttle/issues/1498)) - ([90dfb72](https://github.com/shuttle-hq/shuttle/commit/90dfb72d3ac6b6dfdf3e5572f13c9beebabe6da5))
+- Track project deployments ([#1508](https://github.com/shuttle-hq/shuttle/issues/1508)) - ([82f815b](https://github.com/shuttle-hq/shuttle/commit/82f815b64e41b06c2770c276c1fed7f623619055))
+- `--no-git` to `cargo shuttle init` ([#1501](https://github.com/shuttle-hq/shuttle/issues/1501)) - ([05c5e53](https://github.com/shuttle-hq/shuttle/commit/05c5e5322a5825ecce55d746936f332fb7c0e287))
+- Add subscription items endpoint and call it when provisioning rds ([#1478](https://github.com/shuttle-hq/shuttle/issues/1478)) - ([657815d](https://github.com/shuttle-hq/shuttle/commit/657815d07ba169cc90094b6121b3c6dc9d7d1e36))
+
+### Bug Fixes
+
+- *(deployer)* Return empty list when when no service is found ([#1495](https://github.com/shuttle-hq/shuttle/issues/1495)) - ([386c9cd](https://github.com/shuttle-hq/shuttle/commit/386c9cd4cfb9738848a56191e4490419f65138ee))
+- *(gateway)* Dynamically pick docker stats source ([#1476](https://github.com/shuttle-hq/shuttle/issues/1476)) - ([402e3f0](https://github.com/shuttle-hq/shuttle/commit/402e3f0ba527b891360e621e68688537d9ab4ec8))
+- *(provisioner)* Only delete new rds on failed subscription update ([#1488](https://github.com/shuttle-hq/shuttle/issues/1488)) - ([f81b5ef](https://github.com/shuttle-hq/shuttle/commit/f81b5efbbf167c674ae5afc9179715f6bd4af9bd))
+- Tracing fixes, use consistent key names for project and service names ([#1500](https://github.com/shuttle-hq/shuttle/issues/1500)) - ([1568b1c](https://github.com/shuttle-hq/shuttle/commit/1568b1cf795686e4423ce3109d4aeeb406e9257e))
+
+### Documentation
+
+- Update README.md ([#1505](https://github.com/shuttle-hq/shuttle/issues/1505)) - ([7cce28b](https://github.com/shuttle-hq/shuttle/commit/7cce28b0e3543ae6f09ed3141739ce7c8a253f74))
+
+### Miscellaneous Tasks
+
+- *(shuttle-axum)* Use axum 0.7 by default ([#1507](https://github.com/shuttle-hq/shuttle/issues/1507)) - ([1325b12](https://github.com/shuttle-hq/shuttle/commit/1325b1208cb57592acb8626a29f69b29717c2e8d))
+- *(shuttle-salvo)* Bump salvo version ([#1486](https://github.com/shuttle-hq/shuttle/issues/1486)) - ([eb7362c](https://github.com/shuttle-hq/shuttle/commit/eb7362cf49879fad204a85a6483e3f255b96c306))
+- Bump examples - ([9ac5982](https://github.com/shuttle-hq/shuttle/commit/9ac59820697e3f22eda70c39b0297bd7bb2e9c72))
+- V0.36.0 - ([afeea5b](https://github.com/shuttle-hq/shuttle/commit/afeea5b2dae5bd35f9ed89d8377f4bd9fe6c849f))
+- Rust 1.75 ([#1506](https://github.com/shuttle-hq/shuttle/issues/1506)) - ([74fb4fb](https://github.com/shuttle-hq/shuttle/commit/74fb4fba8a2815ea3ee223607efe92cf9ccb5cea))
+- Guard the `/auth/key` endpoint ([#1487](https://github.com/shuttle-hq/shuttle/issues/1487)) - ([e8bb1a0](https://github.com/shuttle-hq/shuttle/commit/e8bb1a0b4fed9a1b1bc1f94f6071dd12783541b8))
+- Bump zerocopy ([#1489](https://github.com/shuttle-hq/shuttle/issues/1489)) - ([ab6ab8e](https://github.com/shuttle-hq/shuttle/commit/ab6ab8e195d230d7dc8993abfbcb21e64213774a))
+- Upgrade proto-gen to 0.2.0 ([#1482](https://github.com/shuttle-hq/shuttle/issues/1482)) - ([2ee5934](https://github.com/shuttle-hq/shuttle/commit/2ee59348a3124cef2e317f6bc54182f10a4d7dea))
+
+### Revert
+
+- Initial implementation of rds billing ([#1510](https://github.com/shuttle-hq/shuttle/issues/1510)) - ([3adff9e](https://github.com/shuttle-hq/shuttle/commit/3adff9e1edf4f8200425837e2271cc46cabc20c8))
+
+### Miscellaneous
+
+- Missing gateway key when trying to get jwt ([#1499](https://github.com/shuttle-hq/shuttle/issues/1499)) - ([68c8255](https://github.com/shuttle-hq/shuttle/commit/68c82555501e011b49920875a645e9f112ebe82d))
+
 ## [0.35.1](https://github.com/shuttle-hq/shuttle/compare/v0.35.0..v0.35.1) - 2023-12-13
 
 ### Features
@@ -28,13 +68,8 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous Tasks
 
-- V0.35.1 - ([30cf22a](https://github.com/shuttle-hq/shuttle/commit/30cf22a750828ccaaecd2f10f0a1abdfd5368dd9))
+- V0.35.1 ([#1480](https://github.com/shuttle-hq/shuttle/issues/1480)) - ([fa0fce6](https://github.com/shuttle-hq/shuttle/commit/fa0fce6eb44218551ef71e7fe3a2fa67b03009f1))
 - Store state in postgres instance ([#1420](https://github.com/shuttle-hq/shuttle/issues/1420)) - ([da538ac](https://github.com/shuttle-hq/shuttle/commit/da538ac3f3647f6b8889bd7bff037c6f35fa6f5d))
-
-### Miscellaneous
-
-- Change back to main commit - ([17a9116](https://github.com/shuttle-hq/shuttle/commit/17a91166ffe770cf59434ae909a31bbda013f339))
-- Fix comment - ([88bcea8](https://github.com/shuttle-hq/shuttle/commit/88bcea8a393821d483f22b5c6abb05450c73825c))
 
 ## [0.35.0](https://github.com/shuttle-hq/shuttle/compare/v0.34.1..v0.35.0) - 2023-12-07
 
@@ -396,7 +431,6 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 - *(deployer)* Connect deployer to builder service ([#1248](https://github.com/shuttle-hq/shuttle/issues/1248)) - ([97077ae](https://github.com/shuttle-hq/shuttle/commit/97077ae67727e90b8ebc6144d457a1445d6fd961))
 - Execute projects from within workspace and other resources changes ([#1050](https://github.com/shuttle-hq/shuttle/issues/1050)) - ([9d28100](https://github.com/shuttle-hq/shuttle/commit/9d28100081ff71e906b8f8bbbb4ac6e8ec905a3e))
 - Builder service ([#1244](https://github.com/shuttle-hq/shuttle/issues/1244)) - ([361e00e](https://github.com/shuttle-hq/shuttle/commit/361e00ec41c2bcce3a2fc87d910d4524cf60646c))
-- Outdated log parse warning ([#1243](https://github.com/shuttle-hq/shuttle/issues/1243)) - ([a77ecb1](https://github.com/shuttle-hq/shuttle/commit/a77ecb1732e8ae8813428050583216ac0ea65db0))
 
 ### Bug Fixes
 
@@ -409,14 +443,13 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 - *(shuttle-shared-db)* Bump local postgres version from 11 to 14 ([#1073](https://github.com/shuttle-hq/shuttle/issues/1073)) - ([0d64923](https://github.com/shuttle-hq/shuttle/commit/0d64923f7598ce65e603589b0cedbd08fc8a6101))
 - V0.27.0 ([#1261](https://github.com/shuttle-hq/shuttle/issues/1261)) - ([2af0076](https://github.com/shuttle-hq/shuttle/commit/2af0076623fa5bb5fd98524642c5afc8b98eab66))
-- Bump examples ([#1246](https://github.com/shuttle-hq/shuttle/issues/1246)) - ([c7c0ceb](https://github.com/shuttle-hq/shuttle/commit/c7c0ceb59be91b986169bf624f2e99ed806c7345))
 
 ### Miscellaneous
 
 - Project entering a state loop ([#1260](https://github.com/shuttle-hq/shuttle/issues/1260)) - ([6b73157](https://github.com/shuttle-hq/shuttle/commit/6b731577593a4de5ad0a6c90d32ae0efedb6eafd))
 - Fix Cargo.lock - ([9889b59](https://github.com/shuttle-hq/shuttle/commit/9889b59bdbf73df20f6cc552d4cff591e6c791f1))
 
-## [0.26.0](https://github.com/shuttle-hq/shuttle/compare/v0.25.1..v0.26.0) - 2023-09-14
+## [0.26.0](https://github.com/shuttle-hq/shuttle/compare/v0.25.1..v0.26.0) - 2023-09-18
 
 ### Features
 
@@ -433,6 +466,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 - *(runtime)* Write next runtime logs to stdout ([#1187](https://github.com/shuttle-hq/shuttle/issues/1187)) - ([0f269d6](https://github.com/shuttle-hq/shuttle/commit/0f269d67ab2c1c27575f317c0f5bbb464582adb9))
 - *(services)* Enable auto-sharding in shuttle-poise ([#1217](https://github.com/shuttle-hq/shuttle/issues/1217)) - ([32d63eb](https://github.com/shuttle-hq/shuttle/commit/32d63ebdc44ffe23e6077d3609733777b6e6d554))
 - *(shuttle-next)* Enable tracing by default ([#1219](https://github.com/shuttle-hq/shuttle/issues/1219)) - ([ef47eae](https://github.com/shuttle-hq/shuttle/commit/ef47eaeea61836d8c3a60d765509084829872b4e))
+- Outdated log parse warning ([#1243](https://github.com/shuttle-hq/shuttle/issues/1243)) - ([a77ecb1](https://github.com/shuttle-hq/shuttle/commit/a77ecb1732e8ae8813428050583216ac0ea65db0))
 - Match local logs with deployer logs ([#1216](https://github.com/shuttle-hq/shuttle/issues/1216)) - ([1d13115](https://github.com/shuttle-hq/shuttle/commit/1d131150976a77973a81e480f1bcb936ede07759))
 - Logs batching ([#1188](https://github.com/shuttle-hq/shuttle/issues/1188)) - ([64520fb](https://github.com/shuttle-hq/shuttle/commit/64520fb14d87a2c5dfc3194ce857a989181d90b3))
 
@@ -470,6 +504,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 - *(gateway)* Stop setting `RUST_LOG` in deployers ([#1197](https://github.com/shuttle-hq/shuttle/issues/1197)) - ([bd5c9ff](https://github.com/shuttle-hq/shuttle/commit/bd5c9ff5a1159b374515d624e4ced25c5cc2eda5))
 - *(makefile)* Remove unused commands ([#1196](https://github.com/shuttle-hq/shuttle/issues/1196)) - ([a9ffc8f](https://github.com/shuttle-hq/shuttle/commit/a9ffc8f7be326d62a41831c1af8b159a645d0551))
 - *(services)* Disable default features for shuttle-runtime ([#1205](https://github.com/shuttle-hq/shuttle/issues/1205)) - ([b158bca](https://github.com/shuttle-hq/shuttle/commit/b158bca50c9cc57c3d77eef09ec6254e2c4adb90))
+- Bump examples ([#1246](https://github.com/shuttle-hq/shuttle/issues/1246)) - ([c7c0ceb](https://github.com/shuttle-hq/shuttle/commit/c7c0ceb59be91b986169bf624f2e99ed806c7345))
 - V0.26.0 ([#1239](https://github.com/shuttle-hq/shuttle/issues/1239)) - ([94f7966](https://github.com/shuttle-hq/shuttle/commit/94f79662bd0f99b9cc229a62ce78b5ad725f38e8))
 - Uncomment build & deploy branch filters ([#1238](https://github.com/shuttle-hq/shuttle/issues/1238)) - ([7703d85](https://github.com/shuttle-hq/shuttle/commit/7703d85685462b08ba2d0fb7927fa98cb0501455))
 - Logger postgres uri ([#1228](https://github.com/shuttle-hq/shuttle/issues/1228)) - ([4fb7629](https://github.com/shuttle-hq/shuttle/commit/4fb762961eb63d817e7312f87b12fe6060f8f867))
@@ -589,9 +624,8 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 - Sync resource-recorder with persistence ([#1101](https://github.com/shuttle-hq/shuttle/issues/1101)) - ([c055cae](https://github.com/shuttle-hq/shuttle/commit/c055cae5d3d3780a352abc15f570040d4e0e2547))
 - Add warning for api url arg ([#1128](https://github.com/shuttle-hq/shuttle/issues/1128)) - ([2f5ec20](https://github.com/shuttle-hq/shuttle/commit/2f5ec208012a206a6e68cec693eb8ba10ebe97f4))
-- Copy the certificate ([#1123](https://github.com/shuttle-hq/shuttle/issues/1123)) - ([0a78f36](https://github.com/shuttle-hq/shuttle/commit/0a78f369931a459b46c234d5f7af7950c400efaa))
 
-## [0.22.0](https://github.com/shuttle-hq/shuttle/compare/v0.21.0..v0.22.0) - 2023-07-31
+## [0.22.0](https://github.com/shuttle-hq/shuttle/compare/v0.21.0..v0.22.0) - 2023-08-02
 
 ### Features
 
@@ -616,6 +650,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous
 
+- Copy the certificate ([#1123](https://github.com/shuttle-hq/shuttle/issues/1123)) - ([0a78f36](https://github.com/shuttle-hq/shuttle/commit/0a78f369931a459b46c234d5f7af7950c400efaa))
 - Chore/v0.22.0 ([#1119](https://github.com/shuttle-hq/shuttle/issues/1119)) - ([bc38d36](https://github.com/shuttle-hq/shuttle/commit/bc38d3644c4bf841b3e74355cf9e534565a416c2))
 - Chore/bump sqlx ([#1118](https://github.com/shuttle-hq/shuttle/issues/1118)) - ([9d12b68](https://github.com/shuttle-hq/shuttle/commit/9d12b689e23c78a7b243941fa9fee3fcb1f31551))
 - Fixed runtime logs receiving ([#1108](https://github.com/shuttle-hq/shuttle/issues/1108)) - ([1a400be](https://github.com/shuttle-hq/shuttle/commit/1a400be6017213180fc40beb11454a983e4caa90))

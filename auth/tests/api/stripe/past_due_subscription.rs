@@ -1,4 +1,4 @@
-pub(crate) const MOCKED_PAST_DUE_SUBSCRIPTION: &str = r#"{
+pub const MOCKED_PAST_DUE_SUBSCRIPTION: &str = r#"{
     "id": "sub_1NwObED8t1tt0S3Dq0IYOEsa",
     "object": "subscription",
     "application": null,

@@ -1,7 +1,12 @@
 mod needs_docker {
     use crate::{
         helpers::{self, app},
-        stripe::{MOCKED_CHECKOUT_SESSIONS, MOCKED_SUBSCRIPTIONS},
+        stripe::{
+            MOCKED_ACTIVE_SUBSCRIPTION, MOCKED_CANCELLEDPRO_CHECKOUT_SESSION,
+            MOCKED_CANCELLEDPRO_SUBSCRIPTION_ACTIVE, MOCKED_CANCELLEDPRO_SUBSCRIPTION_CANCELLED,
+            MOCKED_COMPLETED_CHECKOUT_SESSION, MOCKED_INCOMPLETE_CHECKOUT_SESSION,
+            MOCKED_OVERDUE_PAYMENT_CHECKOUT_SESSION, MOCKED_PAST_DUE_SUBSCRIPTION,
+        },
     };
     use axum::body::Body;
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
@@ -122,7 +127,7 @@ mod needs_docker {
 
         // PUT /users/test-user/pro with a completed checkout session to upgrade a user to pro.
         let response = app
-            .put_user("test-user", "pro", MOCKED_CHECKOUT_SESSIONS[0])
+            .put_user("test-user", "pro", MOCKED_COMPLETED_CHECKOUT_SESSION)
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -133,7 +138,7 @@ mod needs_docker {
         let response = app
             .get_user_with_mocked_stripe(
                 "sub_1Nw8xOD8t1tt0S3DtwAuOVp6",
-                MOCKED_SUBSCRIPTIONS[0],
+                MOCKED_ACTIVE_SUBSCRIPTION,
                 "test-user",
             )
             .await;
@@ -154,7 +159,8 @@ mod needs_docker {
 
         assert_eq!(actual_user.get("account_tier").unwrap(), "pro");
 
-        let mocked_subscription_obj: Value = serde_json::from_str(MOCKED_SUBSCRIPTIONS[0]).unwrap();
+        let mocked_subscription_obj: Value =
+            serde_json::from_str(MOCKED_ACTIVE_SUBSCRIPTION).unwrap();
         assert_eq!(
             actual_user.get("subscription_id").unwrap(),
             mocked_subscription_obj.get("id").unwrap()
@@ -175,7 +181,7 @@ mod needs_docker {
 
         // Test upgrading to pro with an incomplete checkout session object.
         let response = app
-            .put_user("test-user", "pro", MOCKED_CHECKOUT_SESSIONS[1])
+            .put_user("test-user", "pro", MOCKED_INCOMPLETE_CHECKOUT_SESSION)
             .await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
@@ -190,7 +196,7 @@ mod needs_docker {
 
         // Test upgrading to pro with a checkout session that points to a due session.
         let response = app
-            .put_user("test-user", "pro", MOCKED_CHECKOUT_SESSIONS[2])
+            .put_user("test-user", "pro", MOCKED_OVERDUE_PAYMENT_CHECKOUT_SESSION)
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -199,7 +205,7 @@ mod needs_docker {
         let response = app
             .get_user_with_mocked_stripe(
                 "sub_1NwObED8t1tt0S3Dq0IYOEsa",
-                MOCKED_SUBSCRIPTIONS[1],
+                MOCKED_PAST_DUE_SUBSCRIPTION,
                 "test-user",
             )
             .await;
@@ -249,7 +255,7 @@ mod needs_docker {
 
         // Upgrade user to pro
         let response = app
-            .put_user("test-user", "pro", MOCKED_CHECKOUT_SESSIONS[3])
+            .put_user("test-user", "pro", MOCKED_CANCELLEDPRO_CHECKOUT_SESSION)
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -261,7 +267,11 @@ mod needs_docker {
         // be downgraded to basic right away, since when we cancel subscriptions we pass in the
         // "cancel_at_period_end" end flag.
         let response = app
-            .get_user_with_mocked_stripe("sub_123", MOCKED_SUBSCRIPTIONS[2], "test-user")
+            .get_user_with_mocked_stripe(
+                "sub_123",
+                MOCKED_CANCELLEDPRO_SUBSCRIPTION_ACTIVE,
+                "test-user",
+            )
             .await;
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -273,7 +283,11 @@ mod needs_docker {
         // When called again at some later time, the subscription returned from stripe should be
         // cancelled.
         let response = app
-            .get_user_with_mocked_stripe("sub_123", MOCKED_SUBSCRIPTIONS[3], "test-user")
+            .get_user_with_mocked_stripe(
+                "sub_123",
+                MOCKED_CANCELLEDPRO_SUBSCRIPTION_CANCELLED,
+                "test-user",
+            )
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 

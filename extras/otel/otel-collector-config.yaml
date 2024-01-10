@@ -32,12 +32,18 @@ receivers:
           static_configs:
             - targets: ["0.0.0.0:8888"]
   docker_stats:
-    endpoint: unix:///var/run/docker.sock
-    timeout: 20s
-    api_version: 1.41
+    collection_interval: 1m
+    container_labels_to_metric_labels:
+      shuttle.idle_minutes: shuttle.idle_minutes
+      shuttle.project: shuttle.project_name
+      shuttle.project_id: shuttle.project_id
+      shuttle.prefix: shuttle.prefix
 
 processors:
   batch:
+  resourcedetection:
+    detectors: [gcp, ecs, ec2, azure, system]
+  batch/datadog:
     # Make small enough to be processed by datadog
     # https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/datadogexporter#why-am-i-getting-errors-413---request-entity-too-large-how-do-i-fix-it
     send_batch_max_size: 100
@@ -68,17 +74,28 @@ exporters:
     endpoint: "api.honeycomb.io:443"
     headers:
       "x-honeycomb-team": ${env:HONEYCOMB_API_KEY}
+  awss3/metrics:
+    s3uploader:
+        region: 'eu-west-2'
+        s3_bucket: 'otel-test-093afe'
+        s3_prefix: 'metrics'
+        s3_partition: 'minute'
+
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [attributes, batch]
+      processors: [attributes, batch/datadog]
       exporters: [datadog, otlp]
     logs:
       receivers: [otlp]
-      processors: [attributes, batch]
+      processors: [attributes, batch/datadog]
       exporters: [datadog, otlp]
-    metrics:
+    metrics/awss3:
+      receivers: [docker_stats]
+      processors: [batch, resourcedetection]
+      exporters: [awss3/metrics]
+    metrics/datadog:
       receivers: [hostmetrics, prometheus/otel, otlp]
-      processors: [attributes, batch]
+      processors: [attributes, batch/datadog]
       exporters: [datadog]

@@ -3,12 +3,12 @@ use std::net::SocketAddr;
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
-pub use shuttle_common::secrets::Secret;
 pub use shuttle_common::{
     database,
     deployment::{DeploymentMetadata, Environment},
-    resource::Type,
-    DatabaseReadyInfo, DbInput, DbOutput, SecretStore,
+    resource,
+    secrets::Secret,
+    DatabaseInfo, DatabaseResource, DbInput, SecretStore,
 };
 
 pub use crate::error::{CustomError, Error};
@@ -30,7 +30,7 @@ pub trait Factory: Send + Sync {
     async fn get_db_connection(
         &mut self,
         db_type: database::Type,
-    ) -> Result<DatabaseReadyInfo, crate::Error>;
+    ) -> Result<DatabaseInfo, crate::Error>;
 
     /// Get all the secrets for a service
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, Secret<String>>, crate::Error>;
@@ -39,33 +39,25 @@ pub trait Factory: Send + Sync {
     fn get_metadata(&self) -> DeploymentMetadata;
 }
 
-/// Used to get resources of type `T` from factories.
+/// Used to get resources of type `Output` from factories.
 ///
 /// This is mainly meant for consumption by our code generator and should generally not be called by users.
 ///
-/// ## Creating your own managed resource
-///
-/// You may want to create your own managed resource by implementing this trait for some builder `B` to construct resource `T`.
-/// [`Factory`] can be used to provision resources on Shuttle's servers if your service will need any.
-///
-/// Please refer to `shuttle-examples/custom-resource` for examples of how to create custom resource. For more advanced provisioning
-/// of custom resources, please [get in touch](https://discord.gg/shuttle) and detail your use case. We'll be interested to see what you
-/// want to provision and how to do it on your behalf on the fly.
-///
-/// ```
+/// TODO: New docs
 #[async_trait]
-pub trait ResourceBuilder<T> {
+pub trait ResourceBuilder {
     /// The type of resource this creates
-    const TYPE: Type;
+    const TYPE: resource::Type;
 
-    /// The internal config being constructed by this builder. This will be used to find cached [Self::Output].
+    /// The input config to this resource.
     type Config: Serialize;
 
-    /// The output type used to build this resource later
+    /// The output from requesting this resource.
+    /// A cached copy of this will be used if the same [`Self::Config`] is found for this [`Self::TYPE`].
     type Output: Serialize + DeserializeOwned;
 
     /// Create a new instance of this resource builder
-    fn new() -> Self;
+    fn new() -> Self; // consider dropping this and use .default() in codegen?
 
     /// Get the internal config state of the builder
     ///
@@ -80,10 +72,22 @@ pub trait ResourceBuilder<T> {
     /// can at times even take minutes. That is why the output of this method is cached and calling this method can be
     /// skipped as explained in [Self::config()].
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, crate::Error>;
-
-    /// Build this resource from its config output
-    async fn build(build_data: &Self::Output) -> Result<T, crate::Error>;
 }
+
+#[async_trait]
+pub trait IntoResource {
+    type Output;
+
+    async fn init(self) -> Result<Self::Output, crate::Error>;
+}
+
+// #[async_trait]
+// impl<T1, T2> IntoResource<T1> for T2 {
+//     type Output = T2;
+//     async fn init(r: T1) -> Result<Self::Output, crate::Error> {
+//         r.init().await
+//     }
+// }
 
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.
 ///

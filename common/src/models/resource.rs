@@ -10,7 +10,7 @@ use crossterm::style::Stylize;
 use crate::{
     resource::{Response, Type},
     secrets::SecretStore,
-    DbOutput,
+    DatabaseResource,
 };
 
 pub fn get_resource_tables(
@@ -106,10 +106,10 @@ fn get_databases_table(
     }
 
     for database in databases {
-        let info = serde_json::from_value::<DbOutput>(database.data.clone())
+        let info = serde_json::from_value::<DatabaseResource>(database.data.clone())
             .expect("resource data to be a valid database");
         let conn_string = match info {
-            DbOutput::Local(url) => {
+            DatabaseResource::ConnectionString(url) => {
                 if let Ok(mut url) = url.parse::<url::Url>() {
                     // if the local_uri can correctly be parsed as a url,
                     // hide the password before producing table,
@@ -123,11 +123,11 @@ fn get_databases_table(
                     url
                 }
             }
-            DbOutput::Info(info) => {
-                if info.address_private == "localhost" && info.address_public == "localhost" {
+            DatabaseResource::Info(info) => {
+                if info.hostname_shuttle == "localhost" && info.hostname_shuttle == "localhost" {
                     // If both hostnames are localhost, this must be a local container
                     // from the local provisioner with a default password.
-                    // (DbOutput::Info is always from a provisioner server)
+                    // (DatabaseResource::Info is always from a provisioner server)
                     // It is revealed here since it is the only place the local db url is printed.
                     info.connection_string_public(true)
                 } else {

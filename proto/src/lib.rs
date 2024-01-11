@@ -11,14 +11,14 @@ pub mod provisioner {
 
     use shuttle_common::{
         database::{self, AwsRdsEngine, SharedEngine},
-        DatabaseReadyInfo,
+        DatabaseInfo,
     };
 
     pub use super::generated::provisioner::*;
 
-    impl From<DatabaseResponse> for DatabaseReadyInfo {
+    impl From<DatabaseResponse> for DatabaseInfo {
         fn from(response: DatabaseResponse) -> Self {
-            DatabaseReadyInfo::new(
+            DatabaseInfo::new(
                 response.engine,
                 response.username,
                 response.password,

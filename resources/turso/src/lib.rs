@@ -140,7 +140,7 @@ impl ResourceBuilder<Client> for Turso {
 #[cfg(test)]
 mod test {
     use super::*;
-    use shuttle_service::{QdrantReadyInfo, Secret};
+    use shuttle_service::Secret;
 
     struct MockFactory {
         pub environment: Environment,
@@ -163,8 +163,8 @@ mod test {
 
         async fn get_container(
             &mut self,
-            _project_name: String,
-        ) -> Result<QdrantReadyInfo, shuttle_service::Error> {
+            _req: shuttle_service::ContainerRequest,
+        ) -> Result<shuttle_service::ContainerResponse, shuttle_service::Error> {
             panic!("no turso test should try to get a container")
         }
 

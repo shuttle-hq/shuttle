@@ -95,7 +95,7 @@ impl LocalProvisioner {
         {
             trace!("{container_type} container '{name}' not running, so starting it");
             self.docker
-                .start_container(&name, None::<StartContainerOptions<String>>)
+                .start_container(name, None::<StartContainerOptions<String>>)
                 .await
                 .expect("failed to start none running container");
         }
@@ -356,7 +356,7 @@ impl Provisioner for LocalProvisioner {
         request: Request<ContainerRequest>,
     ) -> Result<Response<ContainerResponse>, Status> {
         Ok(Response::new(
-            self.start_container(request.into_inner()).await?.into(),
+            self.start_container(request.into_inner()).await?,
         ))
     }
 

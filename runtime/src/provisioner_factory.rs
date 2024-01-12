@@ -85,7 +85,7 @@ impl Factory for ProvisionerFactory {
             .map_err(shuttle_service::error::CustomError::new)?
             .into_inner();
 
-        Ok(response.into())
+        Ok(response)
     }
 
     async fn get_secrets(

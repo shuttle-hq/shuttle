@@ -9,7 +9,7 @@ orbs:
 executors:
   docker-rust:
     docker:
-      - image: cimg/rust:1.74.0
+      - image: cimg/rust:1.75.0
     resource_class: small
   machine-ubuntu:
     machine:
@@ -114,7 +114,7 @@ commands:
       - run:
           name: Install Rust
           command: |
-            which cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.74.0
+            which cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75.0
       - run: rustup target add wasm32-wasi
   install-protoc:
     steps:
@@ -420,9 +420,6 @@ jobs:
       stripe-secret-key:
         description: "Stripe secret key used to connect a client to Stripe backend"
         type: string
-      stripe-rds-price-id:
-        description: "Stripe price id of Shuttle AWS RDS product."
-        type: string
       jwt-signing-private-key:
         description: "Auth private key used for JWT signing"
         type: string
@@ -463,22 +460,21 @@ jobs:
             DEPLOYS_API_KEY=${<< parameters.deploys-api-key >>} \
             LOGGER_POSTGRES_URI=${<< parameters.logger-postgres-uri >>} \
             STRIPE_SECRET_KEY=${<< parameters.stripe-secret-key >>} \
-            STRIPE_RDS_PRICE_ID=${<< parameters.stripe-rds-price-id >>} \
             AUTH_JWTSIGNING_PRIVATE_KEY=${<< parameters.jwt-signing-private-key >>} \
             CONTROL_DB_POSTGRES_URI=${<< parameters.control-db-postgres-uri >>} \
             GATEWAY_ADMIN_KEY=${<< parameters.gateway-admin-key >>} \
             make deploy
       - when:
-          condition: 
-            equal: [ production, << parameters.shuttle-env >>]
+          condition:
+            equal: [production, << parameters.shuttle-env >>]
           steps:
             - run:
                 name: Pull new deployer image on prod
                 command: |
                   ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle/deployer:$TAG"
       - when:
-          condition: 
-            equal: [ staging, << parameters.shuttle-env >>] 
+          condition:
+            equal: [staging, << parameters.shuttle-env >>]
           steps:
             - run:
                 name: Pull new deployer image on dev
@@ -503,7 +499,7 @@ jobs:
       - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
       - run:
           name: Install Rust
-          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.74.0 --target << parameters.target >>
+          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.75.0 --target << parameters.target >>
       - run:
           name: Build
           command: |
@@ -526,7 +522,7 @@ jobs:
           name: Install Rust
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
-            C:\rustup-init.exe -y --default-toolchain 1.74.0 --target x86_64-pc-windows-msvc
+            C:\rustup-init.exe -y --default-toolchain 1.75.0 --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - run:
           name: Build
@@ -549,7 +545,7 @@ jobs:
       - macos/install-rosetta
       - run:
           name: Install Rust
-          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.74.0 --target x86_64-apple-darwin
+          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.75.0 --target x86_64-apple-darwin
       - run:
           name: Build
           command: |
@@ -660,7 +656,7 @@ jobs:
           name: Install Rust
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
-            C:\rustup-init.exe -y --default-toolchain 1.74.0 --target x86_64-pc-windows-msvc
+            C:\rustup-init.exe -y --default-toolchain 1.75.0 --target x86_64-pc-windows-msvc
       - run:
           name: "Install Shuttle"
           command: ..\.cargo\bin\cargo.exe install cargo-shuttle --path ./cargo-shuttle
@@ -694,7 +690,16 @@ jobs:
       - run:
           name: Publish crate
           # Don't build the crate, we know that the crate should build based on other workflows
-          command: cargo publish --no-verify --manifest-path << parameters.path >>/Cargo.toml
+          # Ignore failure if the crate is already uploaded
+          command: |
+            set +e
+            cargo publish --no-verify --manifest-path << parameters.path >>/Cargo.toml > /tmp/publish-out 2>&1
+            ERR=$?
+            set -e
+            if [ $ERR != 0 ] && ! grep "already uploaded" /tmp/publish-out; then
+              cat /tmp/publish-out
+              exit 1
+            fi
 workflows:
   ci:
     jobs:
@@ -742,7 +747,7 @@ workflows:
                 - services/shuttle-axum
               features:
                 - "-F axum"
-                - "-F axum-0-7 --no-default-features"
+                - "-F axum-0-6 --no-default-features"
       - test-standalone:
           # Has mutually exclusive features, so we run checks for each feature separately
           name: "services/shuttle-serenity: << matrix.features >>"
@@ -861,27 +866,29 @@ workflows:
           deploys-api-key: DEV_DEPLOYS_API_KEY
           logger-postgres-uri: DEV_LOGGER_POSTGRES_URI
           stripe-secret-key: DEV_STRIPE_SECRET_KEY
-          stripe-rds-price-id: DEV_STRIPE_RDS_PRICE_ID
           jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: DEV_CONTROL_DB_POSTGRES_URI
           gateway-admin-key: DEV_GATEWAY_ADMIN_KEY
           requires:
             - build-and-push-unstable
             - approve-deploy-images-unstable
-  release:
+  ### TODO: Fix and re-enable this
+  # qa:
+  #   jobs:
+  #     - linux-qa:
+  #         filters:
+  #           branches:
+  #             only: production
+  #     - mac-qa:
+  #         filters:
+  #           branches:
+  #             only: production
+  #     - windows-qa:
+  #         filters:
+  #           branches:
+  #             only: production
+  build-binaries:
     jobs:
-      - linux-qa:
-          filters:
-            branches:
-              only: production
-      - mac-qa:
-          filters:
-            branches:
-              only: production
-      - windows-qa:
-          filters:
-            branches:
-              only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
@@ -921,6 +928,8 @@ workflows:
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac
+  deploy:
+    jobs:
       # time save: build and push without approval since a merge to production should want to deploy.
       # deploy requires approval.
       - build-and-push:
@@ -944,7 +953,6 @@ workflows:
           deploys-api-key: PROD_DEPLOYS_API_KEY
           logger-postgres-uri: PROD_LOGGER_POSTGRES_URI
           stripe-secret-key: PROD_STRIPE_SECRET_KEY
-          stripe-rds-price-id: PROD_STRIPE_RDS_PRICE_ID
           jwt-signing-private-key: PROD_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: PROD_CONTROL_DB_POSTGRES_URI
           gateway-admin-key: PROD_GATEWAY_ADMIN_KEY
@@ -955,6 +963,8 @@ workflows:
           requires:
             - build-and-push-production
             - approve-deploy-production
+  publish-crates:
+    jobs:
       - approve-publish-crates:
           type: approval
           filters:

@@ -23,7 +23,6 @@ pub struct Deployment {
     pub git_commit_msg: Option<String>,
     pub git_branch: Option<String>,
     pub git_dirty: Option<bool>,
-    pub message: Option<String>,
 }
 
 impl FromRow<'_, SqliteRow> for Deployment {
@@ -52,7 +51,6 @@ impl FromRow<'_, SqliteRow> for Deployment {
             git_commit_msg: row.try_get("git_commit_msg")?,
             git_branch: row.try_get("git_branch")?,
             git_dirty: row.try_get("git_dirty")?,
-            message: row.try_get("message")?,
         })
     }
 }
@@ -68,7 +66,6 @@ impl From<Deployment> for shuttle_common::models::deployment::Response {
             git_commit_msg: deployment.git_commit_msg,
             git_branch: deployment.git_branch,
             git_dirty: deployment.git_dirty,
-            message: deployment.message,
         }
     }
 }
@@ -83,9 +80,6 @@ pub trait DeploymentUpdater: Clone + Send + Sync + 'static {
 
     /// Set if a deployment is build on shuttle-next
     async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<(), Self::Err>;
-
-    /// Associate messages with a deployment.
-    async fn set_message(&self, id: &Uuid, message: &str) -> Result<(), Self::Err>;
 }
 
 #[derive(Debug, PartialEq, Eq)]

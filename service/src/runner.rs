@@ -50,9 +50,8 @@ pub async fn start(
     };
 
     info!(
-        "Spawning runtime process: {} {}",
-        runtime_executable.display(),
-        args.join(" ")
+        args = %format!("{} {}", runtime_executable.display(), args.join(" ")),
+        "Spawning runtime process",
     );
     let runtime = process::Command::new(
         dunce::canonicalize(runtime_executable).context("canonicalize path of executable")?,

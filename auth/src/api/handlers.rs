@@ -1,22 +1,25 @@
 use crate::{
     error::Error,
     user::{AccountName, Admin, Key, User},
-    NewSubscriptionItemExtractor,
 };
 use axum::{
     extract::{Path, State},
-    Extension, Json,
+    Json,
 };
 use axum_sessions::extractors::{ReadableSession, WritableSession};
 use http::StatusCode;
+use serde::{Deserialize, Serialize};
 use shuttle_common::{
     claims::{AccountTier, Claim},
     models::user,
 };
 use stripe::CheckoutSession;
-use tracing::{error, instrument};
+use tracing::instrument;
 
-use super::{builder::KeyManagerState, RouterState, UserManagerState};
+use super::{
+    builder::{KeyManagerState, UserManagerState},
+    RouterState,
+};
 
 #[instrument(skip_all, fields(account.name = %account_name))]
 pub(crate) async fn get_user(
@@ -61,32 +64,6 @@ pub(crate) async fn update_user_tier(
             .update_tier(&account_name, account_tier)
             .await?;
     };
-
-    Ok(())
-}
-
-#[instrument(skip(claim, user_manager), fields(account.name = claim.sub, account.tier = %claim.tier))]
-pub(crate) async fn add_subscription_items(
-    Extension(claim): Extension<Claim>,
-    State(user_manager): State<UserManagerState>,
-    NewSubscriptionItemExtractor(update_subscription_items): NewSubscriptionItemExtractor,
-) -> Result<(), Error> {
-    // Fetching the user will also sync their subscription. This means we can verify that the
-    // caller still has the required tier after the sync.
-    let user = user_manager.get_user(AccountName::from(claim.sub)).await?;
-
-    let Some(ref subscription_id) = user.subscription_id else {
-        return Err(Error::MissingSubscriptionId);
-    };
-
-    if !matches![user.account_tier, AccountTier::Pro | AccountTier::Admin] {
-        error!("account was downgraded from pro in sync, denying the addition of new items");
-        return Err(Error::Unauthorized);
-    }
-
-    user_manager
-        .add_subscription_items(subscription_id, update_subscription_items)
-        .await?;
 
     Ok(())
 }
@@ -148,7 +125,6 @@ pub(crate) async fn convert_key(
     State(RouterState {
         key_manager,
         user_manager,
-        ..
     }): State<RouterState>,
     key: Key,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
@@ -177,4 +153,9 @@ pub(crate) async fn refresh_token() {}
 
 pub(crate) async fn get_public_key(State(key_manager): State<KeyManagerState>) -> Vec<u8> {
     key_manager.public_key().to_vec()
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct LoginRequest {
+    account_name: AccountName,
 }

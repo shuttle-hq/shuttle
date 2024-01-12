@@ -35,13 +35,7 @@ pub enum Error {
     Plain(String),
 }
 
-#[derive(Error, Debug)]
-pub enum AuthClientError {
-    #[error["token sent to auth service was expired, retry the request"]]
-    ExpiredJwt,
-    #[error["failed to request subscription update from auth service: {0}"]]
-    Internal(String),
-}
+unsafe impl Send for Error {}
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {

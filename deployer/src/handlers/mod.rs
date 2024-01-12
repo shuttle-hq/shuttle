@@ -442,7 +442,6 @@ pub async fn create_service(
             .git_branch
             .map(|s| s.chars().take(GIT_STRINGS_MAX_LENGTH).collect()),
         git_dirty: deployment_req.git_dirty,
-        message: None,
     };
 
     persistence.insert_deployment(&deployment).await?;
@@ -531,7 +530,7 @@ pub async fn get_deployments(
 
         Ok(Json(deployments))
     } else {
-        Err(Error::NotFound("service not found".to_string()))
+        Ok(Json(vec![]))
     }
 }
 

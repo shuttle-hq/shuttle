@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-gateway"
-version = "0.35.1"
+version = "0.36.0"
 edition.workspace = true
 license.workspace = true
 publish = false
@@ -58,6 +58,7 @@ x509-parser = "0.15.1"
 tonic = { workspace = true }
 tower-sanitize-path = "0.2.0"
 ulid = { workspace = true, features = ["serde"] }
+async-posthog = { git = "https://github.com/shuttle-hq/posthog-rs", branch = "main" }
 
 [dev-dependencies]
 anyhow = { workspace = true }

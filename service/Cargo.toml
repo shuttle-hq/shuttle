@@ -17,7 +17,10 @@ shuttle-common = { workspace = true, features = [
     "tracing",
     "display",
 ] }
-shuttle-proto = { workspace = true, optional = true, features = ["runtime"] }
+shuttle-proto = { workspace = true, optional = true, features = [
+    "provisioner",
+    "runtime",
+] }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }

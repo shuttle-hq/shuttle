@@ -6,10 +6,10 @@ use shuttle_common::{
     constants::STORAGE_DIRNAME,
     database,
     secrets::Secret,
-    DatabaseReadyInfo, QdrantReadyInfo,
+    DatabaseReadyInfo,
 };
 use shuttle_proto::provisioner::{
-    provisioner_client::ProvisionerClient, DatabaseRequest, QdrantRequest,
+    provisioner_client::ProvisionerClient, ContainerRequest, ContainerResponse, DatabaseRequest,
 };
 use shuttle_service::{DeploymentMetadata, Environment, Factory};
 use tonic::{transport::Channel, Request};
@@ -68,11 +68,11 @@ impl Factory for ProvisionerFactory {
         Ok(info)
     }
 
-    async fn get_qdrant_connection(
+    async fn get_container(
         &mut self,
-        project_name: String,
-    ) -> Result<QdrantReadyInfo, shuttle_service::Error> {
-        let mut request = Request::new(QdrantRequest { project_name });
+        req: ContainerRequest,
+    ) -> Result<ContainerResponse, shuttle_service::Error> {
+        let mut request = Request::new(req);
 
         if let Some(claim) = &self.claim {
             request.extensions_mut().insert(claim.clone());
@@ -80,7 +80,7 @@ impl Factory for ProvisionerFactory {
 
         let response = self
             .provisioner_client
-            .provision_qdrant(request)
+            .provision_arbitrary_container(request)
             .await
             .map_err(shuttle_service::error::CustomError::new)?
             .into_inner();

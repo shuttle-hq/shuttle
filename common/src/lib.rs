@@ -159,11 +159,6 @@ impl DatabaseReadyInfo {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QdrantReadyInfo {
-    pub url: String,
-}
-
 #[cfg(feature = "openapi")]
 pub fn ulid_type() -> Object {
     ObjectBuilder::new()

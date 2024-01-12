@@ -8,8 +8,9 @@ pub use shuttle_common::{
     database,
     deployment::{DeploymentMetadata, Environment},
     resource::Type,
-    DatabaseReadyInfo, DbInput, DbOutput, QdrantReadyInfo, SecretStore,
+    DatabaseReadyInfo, DbInput, DbOutput, SecretStore,
 };
+use shuttle_proto::provisioner::{ContainerRequest, ContainerResponse};
 
 pub use crate::error::{CustomError, Error};
 
@@ -32,11 +33,11 @@ pub trait Factory: Send + Sync {
         db_type: database::Type,
     ) -> Result<DatabaseReadyInfo, crate::Error>;
 
-    /// Get a Qdrant connection. Only used in local runs.
-    async fn get_qdrant_connection(
+    /// Start a Docker container. Only used in local runs.
+    async fn get_container(
         &mut self,
-        project_name: String,
-    ) -> Result<QdrantReadyInfo, crate::Error>;
+        req: ContainerRequest,
+    ) -> Result<ContainerResponse, crate::Error>;
 
     /// Get all the secrets for a service
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, Secret<String>>, crate::Error>;

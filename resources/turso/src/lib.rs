@@ -161,11 +161,11 @@ mod test {
             panic!("no turso test should try to get a db connection string")
         }
 
-        async fn get_qdrant_connection(
+        async fn get_container(
             &mut self,
             _project_name: String,
         ) -> Result<QdrantReadyInfo, shuttle_service::Error> {
-            panic!("no turso test should try to get a db connection string")
+            panic!("no turso test should try to get a container")
         }
 
         async fn get_secrets(

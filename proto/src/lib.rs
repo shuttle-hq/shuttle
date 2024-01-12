@@ -11,7 +11,7 @@ pub mod provisioner {
 
     use shuttle_common::{
         database::{self, AwsRdsEngine, SharedEngine},
-        DatabaseReadyInfo, QdrantReadyInfo,
+        DatabaseReadyInfo,
     };
 
     pub use super::generated::provisioner::*;
@@ -27,18 +27,6 @@ pub mod provisioner {
                 response.address_private,
                 response.address_public,
             )
-        }
-    }
-
-    impl From<QdrantResponse> for QdrantReadyInfo {
-        fn from(response: QdrantResponse) -> Self {
-            QdrantReadyInfo { url: response.url }
-        }
-    }
-
-    impl From<QdrantReadyInfo> for QdrantResponse {
-        fn from(info: QdrantReadyInfo) -> Self {
-            QdrantResponse { url: info.url }
         }
     }
 

@@ -82,7 +82,18 @@ impl ResourceBuilder<QdrantClient> for Qdrant {
                     api_key: self.api_key,
                 }),
                 None => {
-                    let url = factory.get_qdrant_connection(md.project_name).await?.url;
+                    let port = factory
+                        .get_container(ContainerRequest {
+                            project_name: md.project_name,
+                            container_type: "qdrant".to_string(),
+                            image: "qdrant/qdrant:latest".to_string(),
+                            port: "6334/tcp".to_string(),
+                            env: vec![],
+                        })
+                        .await?
+                        .host_port;
+                    let url = format!("http://localhost:{port}");
+
                     Ok(QdrantClientConfigWrap { url, api_key: None })
                 }
             },

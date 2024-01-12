@@ -19,12 +19,12 @@ use futures::StreamExt;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     database::{AwsRdsEngine, SharedEngine},
-    QdrantReadyInfo, Secret,
+    Secret,
 };
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
-    DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong, QdrantRequest,
-    QdrantResponse,
+    ContainerRequest, ContainerResponse, DatabaseDeletionResponse, DatabaseRequest,
+    DatabaseResponse, Ping, Pong,
 };
 use shuttle_service::database::Type;
 use tokio::{task::JoinHandle, time::sleep};
@@ -56,11 +56,17 @@ impl LocalProvisioner {
         })
     }
 
-    fn get_container_host_port(&self, container: ContainerInspectResponse, port: &str) -> String {
+    fn get_container_first_host_port(
+        &self,
+        container: &ContainerInspectResponse,
+        port: &str,
+    ) -> String {
         container
             .host_config
+            .as_ref()
             .expect("container to have host config")
             .port_bindings
+            .as_ref()
             .expect("port bindings on container")
             .get(port)
             .expect("a port bindings entry")
@@ -76,19 +82,20 @@ impl LocalProvisioner {
 
     async fn start_container_if_not_running(
         &self,
-        container: ContainerInspectResponse,
+        container: &ContainerInspectResponse,
         container_type: &str,
-        container_name: &str,
     ) {
+        let name = container.name.as_ref().expect("container to have a name");
         if !container
             .state
+            .as_ref()
             .expect("container to have a state")
             .running
             .expect("state to have a running key")
         {
-            trace!("{container_type} container '{container_name}' not running, so starting it");
+            trace!("{container_type} container '{name}' not running, so starting it");
             self.docker
-                .start_container(container_name, None::<StartContainerOptions<String>>)
+                .start_container(&name, None::<StartContainerOptions<String>>)
                 .await
                 .expect("failed to start none running container");
         }
@@ -97,7 +104,7 @@ impl LocalProvisioner {
     async fn get_container(
         &self,
         container_name: &str,
-        image: String,
+        image: &str,
         port: &str,
         env: Option<Vec<String>>,
     ) -> Result<ContainerInspectResponse, Status> {
@@ -109,7 +116,7 @@ impl LocalProvisioner {
             Err(bollard::errors::Error::DockerResponseServerError {
                 status_code: 404, ..
             }) => {
-                self.pull_image(&image).await.expect("failed to pull image");
+                self.pull_image(image).await.expect("failed to pull image");
                 trace!("will create container {container_name}");
                 let options = Some(CreateContainerOptions {
                     name: container_name,
@@ -159,7 +166,7 @@ impl LocalProvisioner {
         project_name: &str,
         db_type: Type,
     ) -> Result<DatabaseResponse, Status> {
-        trace!("getting sql string for project '{}'", project_name);
+        trace!("getting sql string for project '{project_name}'");
 
         let EngineConfig {
             r#type,
@@ -175,7 +182,7 @@ impl LocalProvisioner {
         let container_name = format!("shuttle_{project_name}_{type}");
 
         let container = self
-            .get_container(&container_name, image, &port, env)
+            .get_container(&container_name, &image, &port, env)
             .await
             .map_err(|e| {
                 error!(
@@ -186,9 +193,9 @@ impl LocalProvisioner {
                 e
             })?;
 
-        let port = self.get_container_host_port(container.clone(), &port);
+        let host_port = self.get_container_first_host_port(&container, &port);
 
-        self.start_container_if_not_running(container, "DB", &container_name)
+        self.start_container_if_not_running(&container, &r#type)
             .await;
 
         self.wait_for_ready(&container_name, is_ready_cmd.clone())
@@ -204,7 +211,7 @@ impl LocalProvisioner {
             username,
             password: password.expose().to_owned(),
             database_name,
-            port,
+            port: host_port,
             address_private: "localhost".to_string(),
             address_public: "localhost".to_string(),
         };
@@ -212,29 +219,27 @@ impl LocalProvisioner {
         Ok(res)
     }
 
-    async fn get_qdrant_connection_info(
-        &self,
-        project_name: &str,
-    ) -> Result<QdrantReadyInfo, Status> {
-        let image = "qdrant/qdrant:latest".to_string();
-        let port = "6334/tcp".to_string();
+    async fn start_container(&self, req: ContainerRequest) -> Result<ContainerResponse, Status> {
+        let ContainerRequest {
+            project_name,
+            container_type,
+            env,
+            image,
+            port,
+        } = req;
 
-        let container_name = format!("shuttle_{project_name}_qdrant");
-
-        let env = None;
+        let container_name = format!("shuttle_{project_name}_{container_type}");
 
         let container = self
-            .get_container(&container_name, image, &port, env)
+            .get_container(&container_name, &image, &port, Some(env))
             .await?;
 
-        let port = self.get_container_host_port(container.clone(), &port);
+        let host_port = self.get_container_first_host_port(&container, &port);
 
-        self.start_container_if_not_running(container, "Qdrant", &container_name)
+        self.start_container_if_not_running(&container, &container_type)
             .await;
 
-        let url = format!("http://localhost:{port}");
-
-        Ok(QdrantReadyInfo { url })
+        Ok(ContainerResponse { host_port })
     }
 
     async fn wait_for_ready(
@@ -346,15 +351,13 @@ impl Provisioner for LocalProvisioner {
         panic!("local runner should not try to delete databases");
     }
 
-    async fn provision_qdrant(
+    async fn provision_arbitrary_container(
         &self,
-        request: Request<QdrantRequest>,
-    ) -> Result<Response<QdrantResponse>, Status> {
-        let QdrantRequest { project_name } = request.into_inner();
-
-        let res = self.get_qdrant_connection_info(&project_name).await?;
-
-        Ok(Response::new(res.into()))
+        request: Request<ContainerRequest>,
+    ) -> Result<Response<ContainerResponse>, Status> {
+        Ok(Response::new(
+            self.start_container(request.into_inner()).await?.into(),
+        ))
     }
 
     async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {

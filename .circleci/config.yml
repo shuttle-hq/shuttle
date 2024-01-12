@@ -871,20 +871,23 @@ workflows:
           requires:
             - build-and-push-unstable
             - approve-deploy-images-unstable
-  release:
+  ### TODO: Fix and re-enable this
+  # qa:
+  #   jobs:
+  #     - linux-qa:
+  #         filters:
+  #           branches:
+  #             only: production
+  #     - mac-qa:
+  #         filters:
+  #           branches:
+  #             only: production
+  #     - windows-qa:
+  #         filters:
+  #           branches:
+  #             only: production
+  build-binaries:
     jobs:
-      - linux-qa:
-          filters:
-            branches:
-              only: production
-      - mac-qa:
-          filters:
-            branches:
-              only: production
-      - windows-qa:
-          filters:
-            branches:
-              only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
@@ -924,6 +927,8 @@ workflows:
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac
+  deploy:
+    jobs:
       # time save: build and push without approval since a merge to production should want to deploy.
       # deploy requires approval.
       - build-and-push:
@@ -957,6 +962,8 @@ workflows:
           requires:
             - build-and-push-production
             - approve-deploy-production
+  publish-crates:
+    jobs:
       - approve-publish-crates:
           type: approval
           filters:

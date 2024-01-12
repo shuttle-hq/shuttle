@@ -690,7 +690,16 @@ jobs:
       - run:
           name: Publish crate
           # Don't build the crate, we know that the crate should build based on other workflows
-          command: cargo publish --no-verify --manifest-path << parameters.path >>/Cargo.toml
+          # Ignore failure if the crate is already uploaded
+          command: |
+            set +e
+            cargo publish --no-verify --manifest-path << parameters.path >>/Cargo.toml > /tmp/publish-out 2>&1
+            ERR=$?
+            set -e
+            if [ $ERR != 0 ] && ! grep "already uploaded" /tmp/publish-out; then
+              cat /tmp/publish-out
+              exit 1
+            fi
 workflows:
   ci:
     jobs:

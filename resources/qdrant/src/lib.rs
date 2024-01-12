@@ -86,7 +86,7 @@ impl ResourceBuilder<QdrantClient> for Qdrant {
                         .get_container(ContainerRequest {
                             project_name: md.project_name,
                             container_type: "qdrant".to_string(),
-                            image: "qdrant/qdrant:latest".to_string(),
+                            image: "docker.io/library/qdrant/qdrant:latest".to_string(),
                             port: "6334/tcp".to_string(),
                             env: vec![],
                         })

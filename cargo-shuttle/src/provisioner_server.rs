@@ -84,8 +84,8 @@ impl LocalProvisioner {
         &self,
         container: &ContainerInspectResponse,
         container_type: &str,
+        name: &str,
     ) {
-        let name = container.name.as_ref().expect("container to have a name");
         if !container
             .state
             .as_ref()
@@ -97,7 +97,7 @@ impl LocalProvisioner {
             self.docker
                 .start_container(name, None::<StartContainerOptions<String>>)
                 .await
-                .expect("failed to start none running container");
+                .expect("failed to start container");
         }
     }
 
@@ -195,7 +195,7 @@ impl LocalProvisioner {
 
         let host_port = self.get_container_first_host_port(&container, &port);
 
-        self.start_container_if_not_running(&container, &r#type)
+        self.start_container_if_not_running(&container, &r#type, &container_name)
             .await;
 
         self.wait_for_ready(&container_name, is_ready_cmd.clone())
@@ -236,7 +236,7 @@ impl LocalProvisioner {
 
         let host_port = self.get_container_first_host_port(&container, &port);
 
-        self.start_container_if_not_running(&container, &container_type)
+        self.start_container_if_not_running(&container, &container_type, &container_name)
             .await;
 
         Ok(ContainerResponse { host_port })

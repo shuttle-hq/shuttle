@@ -101,7 +101,6 @@ impl ResourceBuilder<QdrantClient> for Qdrant {
     }
 
     async fn build(client_config: &Self::Output) -> Result<QdrantClient, shuttle_service::Error> {
-        // TODO: Handle error better?
         Ok(Into::<QdrantClientConfig>::into(client_config.clone()).build()?)
     }
 }

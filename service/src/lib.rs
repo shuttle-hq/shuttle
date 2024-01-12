@@ -10,7 +10,7 @@ pub use shuttle_common::{
     resource::Type,
     DatabaseReadyInfo, DbInput, DbOutput, SecretStore,
 };
-use shuttle_proto::provisioner::{ContainerRequest, ContainerResponse};
+pub use shuttle_proto::provisioner::{ContainerRequest, ContainerResponse};
 
 pub use crate::error::{CustomError, Error};
 

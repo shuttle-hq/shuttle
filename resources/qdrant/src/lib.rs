@@ -3,7 +3,7 @@ use qdrant_client::prelude::*;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
-    Environment, Factory, ResourceBuilder, Type,
+    ContainerRequest, Environment, Factory, ResourceBuilder, Type,
 };
 
 /// A Qdrant vector database

@@ -1,4 +1,4 @@
-pub(crate) const MOCKED_INCOMPLETE_CHECKOUT_SESSION: &str = r#"{
+pub const MOCKED_INCOMPLETE_CHECKOUT_SESSION: &str = r#"{
     "id": "cs_test_a11rHy7qRTwFZuj4lBHso3Frq7CMZheZYcYqNXEFBV4oddxXFLx7bT911p",
     "object": "checkout.session",
     "after_expiration": null,

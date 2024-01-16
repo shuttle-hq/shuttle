@@ -19,11 +19,7 @@ pub mod error;
 #[cfg(feature = "runner")]
 pub mod runner;
 
-/// Factories can be used to request the provisioning of additional resources (like databases).
-///
-/// An instance of factory is passed by the deployer as an argument to [ResourceBuilder::output] in the initial phase of deployment.
-///
-/// Also see the [shuttle_runtime::main] macro.
+/// An interface for the provisioner used in [`ResourceBuilder::output`].
 #[async_trait]
 pub trait Factory: Send + Sync {
     /// Get a database connection
@@ -39,60 +35,50 @@ pub trait Factory: Send + Sync {
     fn get_metadata(&self) -> DeploymentMetadata;
 }
 
-/// Used to get resources of type `Output` from factories.
-///
-/// This is mainly meant for consumption by our code generator and should generally not be called by users.
-///
-/// TODO: New docs
+/// Allows implementing plugins for the Shuttle main function.
 #[async_trait]
 pub trait ResourceBuilder {
-    /// The type of resource this creates
+    /// The type of resource this plugin creates.
     const TYPE: resource::Type;
 
     /// The input config to this resource.
     type Config: Default + Serialize;
 
     /// The output from requesting this resource.
-    /// A cached copy of this will be used if the same [`Self::Config`] is found for this [`Self::TYPE`].
+    /// A cached copy of this will be used if the same [`ResourceBuilder::Config`] is found for this [`ResourceBuilder::TYPE`].
     type Output: Serialize + DeserializeOwned;
 
-    /// Get the internal config state of the builder
+    /// Get the config of this plugin after it has been built from its macro arguments with the builder pattern.
     ///
-    /// If the exact same config was returned by a previous deployment that used this resource, then [Self::output()]
+    /// If the exact same config was returned by a previous deployment that used this resource, then [`ResourceBuilder::output`]
     /// will not be called to get the builder output again. Rather the output state of the previous deployment
-    /// will be passed to [Self::build()].
+    /// will be passed to [`ResourceBuilder::build`].
     fn config(&self) -> &Self::Config;
 
-    /// Get the config output of this builder
+    /// Construct this resource with the help of metadata and by calling provisioner methods in the [`Factory`].
     ///
     /// This method is where the actual resource provisioning should take place and is expected to take the longest. It
     /// can at times even take minutes. That is why the output of this method is cached and calling this method can be
-    /// skipped as explained in [Self::config()].
+    /// skipped as explained in [`ResourceBuilder::config`].
+    ///
+    /// The output from this function is passed to [`IntoResource::init`].
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, crate::Error>;
 }
 
-/// Implement this on an ResourceBuilder::Output type to turn the
-/// base resource into the end type exposed to the shuttle main function.
+/// Implement this on an [`ResourceBuilder::Output`] type to turn the
+/// base resource into the end type exposed to the Shuttle main function.
 #[async_trait]
 pub trait IntoResource<R>: Serialize + DeserializeOwned {
     async fn init(self) -> Result<R, crate::Error>;
 }
 
-// #[async_trait]
-// impl<T1, T2> IntoResource<T1> for T2 {
-//     type Output = T2;
-//     async fn init(r: T1) -> Result<Self::Output, crate::Error> {
-//         r.init().await
-//     }
-// }
-
-/// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.
+/// The core trait of the Shuttle platform. Every service deployed to Shuttle needs to implement this trait.
 ///
-/// Use the [main][main] macro to expose your implementation to the deployment backend.
+/// Use the [`shuttle_runtime::main`] macro to expose your implementation to the deployment backend.
 #[async_trait]
 pub trait Service: Send {
     /// This function is run exactly once on each instance of a deployment.
     ///
-    /// The deployer expects this instance of [Service][Service] to bind to the passed [SocketAddr][SocketAddr].
+    /// The deployer expects this instance of [`Service`] to bind to the passed [`SocketAddr`].
     async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error>;
 }

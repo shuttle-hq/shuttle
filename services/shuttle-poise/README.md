@@ -1,5 +1,11 @@
 ## Shuttle service integration for the Poise discord bot framework.
 
+Poise 0.6 is now supported by using these feature flags:
+```toml,ignore
+poise = { version = "0.6.1", features = ["..."] }
+shuttle-poise = { version = "0.36.0", default-features = false, features = ["poise-0-6"] }
+```
+
 ### Example
 
 ```rust,no_run

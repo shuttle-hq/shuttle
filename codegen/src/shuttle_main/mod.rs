@@ -45,6 +45,9 @@ struct Input {
 
     /// The shuttle_runtime builder for this resource
     builder: Builder,
+
+    /// The type declaration of the resource input
+    ty: Type,
 }
 
 #[derive(Debug, PartialEq)]
@@ -106,14 +109,15 @@ impl Loader {
                 FnArg::Typed(typed) => Some(typed),
             })
             .filter_map(|typed| match typed.pat.as_ref() {
-                Pat::Ident(ident) => Some((ident, typed.attrs.drain(..).collect())),
+                Pat::Ident(ident) => Some((ident, typed.attrs.drain(..).collect(), typed.ty.clone())),
                 _ => None,
             })
-            .filter_map(|(pat_ident, attrs)| {
+            .filter_map(|(pat_ident, attrs, ty)| {
                 match attribute_to_builder(pat_ident, attrs) {
                     Ok(builder) => Some(Input {
                         ident: pat_ident.ident.clone(),
                         builder,
+                        ty: *ty,
                     }),
                     Err(err) => {
                         emit_error!(pat_ident, err; hint = pat_ident.span() => "Try adding a config like `#[shuttle_shared_db::Postgres]`");
@@ -188,12 +192,15 @@ impl ToTokens for Loader {
         let mut fn_inputs = Vec::with_capacity(self.fn_inputs.len());
         let mut fn_inputs_builder = Vec::with_capacity(self.fn_inputs.len());
         let mut fn_inputs_builder_options = Vec::with_capacity(self.fn_inputs.len());
+        let mut fn_inputs_types = Vec::with_capacity(self.fn_inputs.len());
 
+        // whether any string literals are being used in resource macro args
         let mut needs_vars = false;
 
         for input in self.fn_inputs.iter() {
             fn_inputs.push(&input.ident);
             fn_inputs_builder.push(&input.builder.path);
+            fn_inputs_types.push(&input.ty);
 
             let (methods, values): (Vec<_>, Vec<_>) = input
                 .builder
@@ -206,7 +213,7 @@ impl ToTokens for Loader {
                             lit: Lit::Str(str), ..
                         }) => {
                             needs_vars = true;
-                            quote!(&::shuttle_runtime::__internals::strfmt(#str, &vars)?)
+                            quote!(&::shuttle_runtime::__internals::strfmt(#str, &__vars)?)
                         }
                         other => quote!(#other),
                     };
@@ -218,31 +225,29 @@ impl ToTokens for Loader {
             fn_inputs_builder_options.push(chain);
         }
 
-        let factory_ident: Ident = if self.fn_inputs.is_empty() {
-            parse_quote!(_factory)
-        } else {
-            parse_quote!(factory)
-        };
-
-        let resource_tracker_ident: Ident = if self.fn_inputs.is_empty() {
-            parse_quote!(_resource_tracker)
-        } else {
-            parse_quote!(resource_tracker)
-        };
-
-        let extra_imports: Option<Stmt> = if self.fn_inputs.is_empty() {
-            None
-        } else {
-            Some(parse_quote!(
-                use ::shuttle_runtime::IntoResource;
-            ))
-        };
+        // modify output based on if any resource macros are being used
+        let (factory_ident, resource_tracker_ident, extra_imports): (Ident, Ident, Option<Stmt>) =
+            if self.fn_inputs.is_empty() {
+                (
+                    parse_quote!(_factory),
+                    parse_quote!(_resource_tracker),
+                    None,
+                )
+            } else {
+                (
+                    parse_quote!(factory),
+                    parse_quote!(resource_tracker),
+                    Some(parse_quote!(
+                        use ::shuttle_runtime::{Factory, IntoResource};
+                    )),
+                )
+            };
 
         // variables for string interpolating secrets into the attribute macros
         let (vars, drop_vars): (Option<Stmt>, Option<Stmt>) = if needs_vars {
             (
                 Some(parse_quote!(
-                    let vars = std::collections::HashMap::from_iter(
+                    let __vars = std::collections::HashMap::from_iter(
                         factory
                             .get_secrets()
                             .await?
@@ -251,7 +256,7 @@ impl ToTokens for Loader {
                     );
                 )),
                 Some(parse_quote!(
-                    std::mem::drop(vars);
+                    std::mem::drop(__vars);
                 )),
             )
         } else {
@@ -265,9 +270,12 @@ impl ToTokens for Loader {
             ) -> #return_type {
                 use ::shuttle_runtime::__internals::Context;
                 #extra_imports
+
                 #vars
+
                 #(
-                    let #fn_inputs = ::shuttle_runtime::__internals::get_resource(
+                    let #fn_inputs: #fn_inputs_types =
+                        ::shuttle_runtime::__internals::get_resource::<_, _, #fn_inputs_types>(
                             #fn_inputs_builder::default()#fn_inputs_builder_options,
                             &mut #factory_ident,
                             &mut #resource_tracker_ident,
@@ -276,8 +284,7 @@ impl ToTokens for Loader {
                         .context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?
                         .init()
                         .await
-                        .context(format!("failed to initialize {}", stringify!(#fn_inputs_builder)))?
-                        ;
+                        .context(format!("failed to initialize {}", stringify!(#fn_inputs_builder)))?;
                 )*
 
                 #drop_vars
@@ -361,6 +368,7 @@ mod tests {
                 path: parse_quote!(shuttle_shared_db::Postgres),
                 options: Default::default(),
             },
+            ty: parse_quote!(PgPool),
         }];
 
         assert_eq!(actual.fn_ident, expected_ident);
@@ -389,6 +397,7 @@ mod tests {
                         path: parse_quote!(shuttle_shared_db::Postgres),
                         options: Default::default(),
                     },
+                    ty: parse_quote!(sqlx::PgPool),
                 },
                 Input {
                     ident: parse_quote!(redis),
@@ -396,6 +405,7 @@ mod tests {
                         path: parse_quote!(shuttle_shared_db::Redis),
                         options: Default::default(),
                     },
+                    ty: parse_quote!(something::Redis),
                 },
             ],
             fn_return: parse_quote!(ShuttleComplex),
@@ -408,17 +418,27 @@ mod tests {
                 mut resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> ShuttleComplex {
                 use ::shuttle_runtime::__internals::Context;
-                use ::shuttle_runtime::{Factory, ResourceBuilder};
-                let pool = ::shuttle_runtime::__internals::get_resource(
-                    shuttle_shared_db::Postgres::new(),
+                use ::shuttle_runtime::{Factory, IntoResource};
+                let pool: sqlx::PgPool = ::shuttle_runtime::__internals::get_resource::<_, _, sqlx::PgPool>(
+                    shuttle_shared_db::Postgres::default(),
                     &mut factory,
                     &mut resource_tracker,
-                ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
-                let redis = ::shuttle_runtime::__internals::get_resource(
-                    shuttle_shared_db::Redis::new(),
+                )
+                .await
+                .context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?
+                .init()
+                .await
+                .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let redis: something::Redis = ::shuttle_runtime::__internals::get_resource::<_, _, something::Redis>(
+                    shuttle_shared_db::Redis::default(),
                     &mut factory,
                     &mut resource_tracker,
-                ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?;
+                )
+                .await
+                .context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?
+                .init()
+                .await
+                .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Redis)))?;
 
                 __shuttle_complex(pool, redis).await
             }
@@ -470,6 +490,7 @@ mod tests {
                 path: parse_quote!(shared::Postgres),
                 options: Default::default(),
             },
+            ty: parse_quote!(PgPool),
         }];
 
         expected_inputs[0]
@@ -497,6 +518,7 @@ mod tests {
                     path: parse_quote!(shuttle_shared_db::Postgres),
                     options: Default::default(),
                 },
+                ty: parse_quote!(sqlx::PgPool),
             }],
             fn_return: parse_quote!(ShuttleComplex),
         };
@@ -519,14 +541,19 @@ mod tests {
                 mut resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
             ) -> ShuttleComplex {
                 use ::shuttle_runtime::__internals::Context;
-                use ::shuttle_runtime::{Factory, ResourceBuilder};
-                let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value.expose().clone())));
-                let pool = ::shuttle_runtime::__internals::get_resource (
-                    shuttle_shared_db::Postgres::new().size(&::shuttle_runtime::__internals::strfmt("10Gb", &vars)?).public(false),
+                use ::shuttle_runtime::{Factory, IntoResource};
+                let __vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value.expose().clone())));
+                let pool: sqlx::PgPool = ::shuttle_runtime::__internals::get_resource::<_, _, sqlx::PgPool>(
+                    shuttle_shared_db::Postgres::default().size(&::shuttle_runtime::__internals::strfmt("10Gb", &__vars)?).public(false),
                     &mut factory,
                     &mut resource_tracker,
-                ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
-                std::mem::drop(vars);
+                )
+                .await
+                .context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?
+                .init()
+                .await
+                .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Postgres)))?;
+                std::mem::drop(__vars);
 
                 complex(pool).await
             }

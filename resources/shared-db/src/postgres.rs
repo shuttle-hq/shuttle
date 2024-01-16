@@ -25,7 +25,7 @@ impl ResourceBuilder for Postgres {
 
     type Config = DbInput;
 
-    type Output = MyWrapper;
+    type Output = Wrap;
 
     fn config(&self) -> &Self::Config {
         &self.0
@@ -53,16 +53,26 @@ impl ResourceBuilder for Postgres {
             }
         };
 
-        Ok(MyWrapper(info))
+        Ok(Wrap(info))
     }
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct MyWrapper(DatabaseResource);
+pub struct Wrap(DatabaseResource);
+
+#[async_trait]
+impl IntoResource<String> for Wrap {
+    async fn init(self) -> Result<String, Error> {
+        Ok(match self.0 {
+            DatabaseResource::ConnectionString(s) => s.clone(),
+            DatabaseResource::Info(info) => info.connection_string_shuttle(),
+        })
+    }
+}
 
 #[cfg(feature = "sqlx")]
 #[async_trait]
-impl IntoResource<sqlx::PgPool> for MyWrapper {
+impl IntoResource<sqlx::PgPool> for Wrap {
     async fn init(self) -> Result<sqlx::PgPool, Error> {
         let connection_string = match self.0 {
             DatabaseResource::ConnectionString(s) => s.clone(),
@@ -77,14 +87,3 @@ impl IntoResource<sqlx::PgPool> for MyWrapper {
             .map_err(shuttle_service::error::CustomError::new)?)
     }
 }
-
-// #[cfg(not(feature = "sqlx"))]
-// #[async_trait]
-// impl FromResource<DatabaseResource> for String {
-//     async fn init(resource: DatabaseResource) -> Result<Self, Error> {
-//         Ok(match resource {
-//             DatabaseResource::ConnectionString(s) => s.clone(),
-//             DatabaseResource::Info(info) => info.connection_string_shuttle(),
-//         })
-//     }
-// }

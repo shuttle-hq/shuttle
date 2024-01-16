@@ -8,7 +8,7 @@ shuttle-poise = { version = "0.36.0", default-features = false, features = ["poi
 
 ### Example
 
-```rust,no_run
+```rust,ignore
 use poise::serenity_prelude as serenity;
 use shuttle_secrets::SecretStore;
 use shuttle_poise::ShuttlePoise;

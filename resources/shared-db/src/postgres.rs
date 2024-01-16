@@ -5,7 +5,7 @@ use shuttle_service::{
     ResourceBuilder,
 };
 
-/// Handles the state of a Shuttle managed Postgres DB and sets up a Postgres driver.
+/// Shuttle managed Postgres DB in a shared cluster.
 #[derive(Default)]
 pub struct Postgres(DbInput);
 

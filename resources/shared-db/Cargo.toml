@@ -18,8 +18,6 @@ default = []
 
 # Mongodb
 mongodb = ["dep:mongodb"]
-# Mongodb with a default client
-mongodb-client = ["mongodb"]
 
 # Postgres
 postgres = ["sqlx?/postgres", "sqlx?/runtime-tokio", "sqlx?/tls-native-tls"]

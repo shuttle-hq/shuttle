@@ -50,14 +50,11 @@ pub trait ResourceBuilder {
     const TYPE: resource::Type;
 
     /// The input config to this resource.
-    type Config: Serialize;
+    type Config: Default + Serialize;
 
     /// The output from requesting this resource.
     /// A cached copy of this will be used if the same [`Self::Config`] is found for this [`Self::TYPE`].
     type Output: Serialize + DeserializeOwned;
-
-    /// Create a new instance of this resource builder
-    fn new() -> Self; // consider dropping this and use .default() in codegen?
 
     /// Get the internal config state of the builder
     ///
@@ -74,11 +71,11 @@ pub trait ResourceBuilder {
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, crate::Error>;
 }
 
+/// Implement this on an ResourceBuilder::Output type to turn the
+/// base resource into the end type exposed to the shuttle main function.
 #[async_trait]
-pub trait IntoResource {
-    type Output;
-
-    async fn init(self) -> Result<Self::Output, crate::Error>;
+pub trait IntoResource<R>: Serialize + DeserializeOwned {
+    async fn init(self) -> Result<R, crate::Error>;
 }
 
 // #[async_trait]

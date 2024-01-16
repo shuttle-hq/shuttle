@@ -63,14 +63,14 @@ macro_rules! log {
 /// Helper function to get a resource from a builder.
 ///
 /// This function is called by the loader (see codegen) to create each type of needed resource.
-pub async fn get_resource<B, O, T>(
+pub async fn get_resource<B, O, R>(
     builder: B,
     factory: &mut ProvisionerFactory,
     resource_tracker: &mut ResourceTracker,
-) -> Result<T, shuttle_service::Error>
+) -> Result<O, shuttle_service::Error>
 where
     B: ResourceBuilder<Output = O>,
-    O: Serialize + DeserializeOwned + IntoResource<Output = T>,
+    O: Serialize + DeserializeOwned + IntoResource<R>,
 {
     log!("Getting resource");
 
@@ -91,8 +91,7 @@ where
                     None
                 }
             }
-        })
-        ;
+        });
     let output = match output {
         Some(output) => output,
         None => {
@@ -111,12 +110,7 @@ where
 
     let output_value =
         serde_json::to_value(&output).context("failed to turn builder output into a JSON value")?;
-
-    log!("Connecting resource");
-    let resource: T = output.init().await?;
-    log!("Resource connected");
-
     resource_tracker.record_resource(B::TYPE, config, output_value);
 
-    Ok(resource)
+    Ok(output)
 }

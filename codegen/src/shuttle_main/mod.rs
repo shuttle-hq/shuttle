@@ -234,7 +234,7 @@ impl ToTokens for Loader {
             None
         } else {
             Some(parse_quote!(
-                use ::shuttle_runtime::{Factory, ResourceBuilder};
+                use ::shuttle_runtime::IntoResource;
             ))
         };
 
@@ -266,12 +266,19 @@ impl ToTokens for Loader {
                 use ::shuttle_runtime::__internals::Context;
                 #extra_imports
                 #vars
-                #(let #fn_inputs = ::shuttle_runtime::__internals::get_resource(
-                    #fn_inputs_builder::new()#fn_inputs_builder_options,
-                    &mut #factory_ident,
-                    &mut #resource_tracker_ident,
-                )
-                .await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
+                #(
+                    let #fn_inputs = ::shuttle_runtime::__internals::get_resource(
+                            #fn_inputs_builder::default()#fn_inputs_builder_options,
+                            &mut #factory_ident,
+                            &mut #resource_tracker_ident,
+                        )
+                        .await
+                        .context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?
+                        .init()
+                        .await
+                        .context(format!("failed to initialize {}", stringify!(#fn_inputs_builder)))?
+                        ;
+                )*
 
                 #drop_vars
 

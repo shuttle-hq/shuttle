@@ -6,15 +6,13 @@ use shuttle_service::{
 };
 
 /// Handles the state of a Shuttle managed Postgres DB and sets up a Postgres driver.
-#[derive(Serialize)]
-pub struct Postgres {
-    config: DbInput,
-}
+#[derive(Default)]
+pub struct Postgres(DbInput);
 
 impl Postgres {
     /// Use a custom connection string for local runs
     pub fn local_uri(mut self, local_uri: &str) -> Self {
-        self.config.local_uri = Some(local_uri.to_string());
+        self.0.local_uri = Some(local_uri.to_string());
 
         self
     }
@@ -27,16 +25,10 @@ impl ResourceBuilder for Postgres {
 
     type Config = DbInput;
 
-    type Output = Test;
-
-    fn new() -> Self {
-        Self {
-            config: Default::default(),
-        }
-    }
+    type Output = MyWrapper;
 
     fn config(&self) -> &Self::Config {
-        &self.config
+        &self.0
     }
 
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, Error> {
@@ -47,7 +39,7 @@ impl ResourceBuilder for Postgres {
                     .await?,
             ),
             shuttle_service::Environment::Local => {
-                if let Some(local_uri) = self.config.local_uri {
+                if let Some(local_uri) = self.0.local_uri {
                     DatabaseResource::ConnectionString(local_uri)
                 } else {
                     DatabaseResource::Info(
@@ -61,19 +53,17 @@ impl ResourceBuilder for Postgres {
             }
         };
 
-        Ok(Test(info))
+        Ok(MyWrapper(info))
     }
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Test(DatabaseResource);
+pub struct MyWrapper(DatabaseResource);
 
 #[cfg(feature = "sqlx")]
 #[async_trait]
-impl IntoResource for Test {
-    type Output = sqlx::PgPool;
-
-    async fn init(self) -> Result<Self::Output, Error> {
+impl IntoResource<sqlx::PgPool> for MyWrapper {
+    async fn init(self) -> Result<sqlx::PgPool, Error> {
         let connection_string = match self.0 {
             DatabaseResource::ConnectionString(s) => s.clone(),
             DatabaseResource::Info(info) => info.connection_string_shuttle(),

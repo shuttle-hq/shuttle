@@ -1,5 +1,14 @@
 ## Shuttle service integration for the Poem web framework.
 
+Poem 1.* is used by default.
+
+Poem 2.* is supported by using these feature flags:
+
+```toml,ignore
+poem = "2.0.0"
+shuttle-poem = { version = "0.36.1", default-features = false, features = ["poem-2"] }
+```
+
 ### Example
 
 ```rust,no_run

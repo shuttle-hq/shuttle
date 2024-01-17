@@ -22,13 +22,13 @@ pub mod runner;
 /// An interface for the provisioner used in [`ResourceBuilder::output`].
 #[async_trait]
 pub trait Factory: Send + Sync {
-    /// Get a database connection
+    /// Provision a Shuttle database and get the connection information
     async fn get_db_connection(
         &mut self,
         db_type: database::Type,
     ) -> Result<DatabaseInfo, crate::Error>;
 
-    /// Get all the secrets for a service
+    /// Get the secrets associated with this service
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, Secret<String>>, crate::Error>;
 
     /// Get the metadata for this deployment
@@ -36,9 +36,24 @@ pub trait Factory: Send + Sync {
 }
 
 /// Allows implementing plugins for the Shuttle main function.
+///
+/// ## Creating your own Shuttle plugin
+///
+/// You can add your own implementation of this trait along with [`IntoResource<R>`] to customize the
+/// input type `R` that gets into the Shuttle main function on an existing resource.
+/// The [`Factory`] in [`ResourceBuilder::output`] can be used to provision resources on Shuttle's servers if your service will need any.
+///
+/// You can also make your own plugin, for example to generalise the connection logic to a third-party service.
+/// One example of this is `shuttle-qdrant`.
+///
+/// Please refer to `shuttle-examples/custom-resource` for examples of how to create a custom resource. For more advanced provisioning
+/// of custom resources, please [get in touch](https://discord.gg/shuttle) and detail your use case. We'll be interested to see what you
+/// want to provision and how to do it on your behalf on the fly.
 #[async_trait]
 pub trait ResourceBuilder {
     /// The type of resource this plugin creates.
+    /// If dealing with a Shuttle-provisioned resource, such as a database, use the corresponding variant.
+    /// Otherwise, use the `Custom` variant.
     const TYPE: resource::Type;
 
     /// The input config to this resource.
@@ -69,16 +84,21 @@ pub trait ResourceBuilder {
 /// base resource into the end type exposed to the Shuttle main function.
 #[async_trait]
 pub trait IntoResource<R>: Serialize + DeserializeOwned {
-    async fn init(self) -> Result<R, crate::Error>;
+    /// Initialize any logic for creating the final resource of type `R` from the base resource.
+    ///
+    /// Example: turn a connection string into a connection pool.
+    async fn into_resource(self) -> Result<R, crate::Error>;
 }
 
 /// The core trait of the Shuttle platform. Every service deployed to Shuttle needs to implement this trait.
 ///
-/// Use the [`shuttle_runtime::main`] macro to expose your implementation to the deployment backend.
+/// An `Into<Service>` implementor is what is returned in the [`shuttle_runtime::main`] macro
+/// in order to run it on the Shuttle servers.
 #[async_trait]
 pub trait Service: Send {
-    /// This function is run exactly once on each instance of a deployment.
+    /// This function is run exactly once on startup of a deployment.
     ///
-    /// The deployer expects this instance of [`Service`] to bind to the passed [`SocketAddr`].
+    /// The passed [`SocketAddr`] receives proxied HTTP traffic from you Shuttle subdomain (or custom domain).
+    /// Binding to the address is only relevant if this service is an HTTP server.
     async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error>;
 }

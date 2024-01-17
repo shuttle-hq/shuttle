@@ -62,7 +62,7 @@ pub struct Wrap(DatabaseResource);
 
 #[async_trait]
 impl IntoResource<String> for Wrap {
-    async fn init(self) -> Result<String, Error> {
+    async fn into_resource(self) -> Result<String, Error> {
         Ok(match self.0 {
             DatabaseResource::ConnectionString(s) => s.clone(),
             DatabaseResource::Info(info) => info.connection_string_shuttle(),
@@ -73,7 +73,7 @@ impl IntoResource<String> for Wrap {
 #[cfg(feature = "sqlx")]
 #[async_trait]
 impl IntoResource<sqlx::PgPool> for Wrap {
-    async fn init(self) -> Result<sqlx::PgPool, Error> {
+    async fn into_resource(self) -> Result<sqlx::PgPool, Error> {
         let connection_string = match self.0 {
             DatabaseResource::ConnectionString(s) => s.clone(),
             DatabaseResource::Info(info) => info.connection_string_shuttle(),

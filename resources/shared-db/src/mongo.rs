@@ -64,7 +64,7 @@ pub struct Wrap(DatabaseResource);
 
 #[async_trait]
 impl IntoResource<String> for Wrap {
-    async fn init(self) -> Result<String, Error> {
+    async fn into_resource(self) -> Result<String, Error> {
         Ok(match self.0 {
             DatabaseResource::ConnectionString(s) => s.clone(),
             DatabaseResource::Info(info) => info.connection_string_shuttle(),
@@ -74,7 +74,7 @@ impl IntoResource<String> for Wrap {
 
 #[async_trait]
 impl IntoResource<mongodb::Database> for Wrap {
-    async fn init(self) -> Result<mongodb::Database, Error> {
+    async fn into_resource(self) -> Result<mongodb::Database, Error> {
         let connection_string = match self.0 {
             DatabaseResource::ConnectionString(s) => s.clone(),
             DatabaseResource::Info(info) => info.connection_string_shuttle(),
@@ -88,8 +88,8 @@ impl IntoResource<mongodb::Database> for Wrap {
 
         let client = mongodb::Client::with_options(client_options).map_err(CustomError::new)?;
 
-        // Return a handle to the database defined at the end of the connection string, which is the users provisioned
-        // database
+        // Return a handle to the database defined at the end of the connection string,
+        // which is the users provisioned database
         let database = client.default_database();
 
         database.ok_or_else(|| {

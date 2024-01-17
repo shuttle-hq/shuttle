@@ -282,7 +282,7 @@ impl ToTokens for Loader {
                         )
                         .await
                         .context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?
-                        .init()
+                        .into_resource()
                         .await
                         .context(format!("failed to initialize {}", stringify!(#fn_inputs_builder)))?;
                 )*
@@ -426,7 +426,7 @@ mod tests {
                 )
                 .await
                 .context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?
-                .init()
+                .into_resource()
                 .await
                 .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Postgres)))?;
                 let redis: something::Redis = ::shuttle_runtime::__internals::get_resource::<_, _, something::Redis>(
@@ -436,7 +436,7 @@ mod tests {
                 )
                 .await
                 .context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?
-                .init()
+                .into_resource()
                 .await
                 .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Redis)))?;
 
@@ -550,7 +550,7 @@ mod tests {
                 )
                 .await
                 .context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?
-                .init()
+                .into_resource()
                 .await
                 .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Postgres)))?;
                 std::mem::drop(__vars);

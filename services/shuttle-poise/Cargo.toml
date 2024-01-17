@@ -9,8 +9,8 @@ keywords = ["shuttle-service", "poise", "discord-bot", "serenity"]
 [workspace]
 
 [dependencies]
-poise = { version = "0.5.2", optional = true }
-poise-0-6 = { package = "poise", version = "0.6.1", optional = true }
+poise = { version = "0.6.1", optional = true }
+poise-0-5 = { package = "poise", version = "0.5.7", optional = true }
 shuttle-runtime = { path = "../../runtime", version = "0.36.0", default-features = false }
 
 [dev-dependencies]

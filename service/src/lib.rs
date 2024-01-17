@@ -50,14 +50,14 @@ pub trait Factory: Send + Sync {
 /// of custom resources, please [get in touch](https://discord.gg/shuttle) and detail your use case. We'll be interested to see what you
 /// want to provision and how to do it on your behalf on the fly.
 #[async_trait]
-pub trait ResourceBuilder {
+pub trait ResourceBuilder: Default {
     /// The type of resource this plugin creates.
     /// If dealing with a Shuttle-provisioned resource, such as a database, use the corresponding variant.
     /// Otherwise, use the `Custom` variant.
     const TYPE: resource::Type;
 
     /// The input config to this resource.
-    type Config: Default + Serialize;
+    type Config: Serialize;
 
     /// The output from requesting this resource.
     /// A cached copy of this will be used if the same [`ResourceBuilder::Config`] is found for this [`ResourceBuilder::TYPE`].
@@ -88,6 +88,14 @@ pub trait IntoResource<R>: Serialize + DeserializeOwned {
     ///
     /// Example: turn a connection string into a connection pool.
     async fn into_resource(self) -> Result<R, crate::Error>;
+}
+
+// Base impl for [`ResourceBuilder::Output`] types that don't need to convert into anything else
+#[async_trait]
+impl<R: Serialize + DeserializeOwned + Send> IntoResource<R> for R {
+    async fn into_resource(self) -> Result<R, crate::Error> {
+        Ok(self)
+    }
 }
 
 /// The core trait of the Shuttle platform. Every service deployed to Shuttle needs to implement this trait.

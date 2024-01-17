@@ -5,7 +5,7 @@ use shuttle_service::{
     IntoResource, ResourceBuilder,
 };
 
-/// Shuttle managed MongoDB in a shared cluster.
+/// Shuttle managed MongoDB in a shared cluster
 #[derive(Default)]
 pub struct MongoDb(DbInput);
 
@@ -18,7 +18,6 @@ impl MongoDb {
     }
 }
 
-/// Get a MongoDB database connection or connection string
 #[async_trait]
 impl ResourceBuilder for MongoDb {
     const TYPE: Type = Type::Database(database::Type::Shared(database::SharedEngine::MongoDb));
@@ -60,6 +59,7 @@ impl ResourceBuilder for MongoDb {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Wrap(DatabaseResource);
 
 #[async_trait]

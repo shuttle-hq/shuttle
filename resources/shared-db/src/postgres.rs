@@ -5,7 +5,7 @@ use shuttle_service::{
     ResourceBuilder,
 };
 
-/// Shuttle managed Postgres DB in a shared cluster.
+/// Shuttle managed Postgres DB in a shared cluster
 #[derive(Default)]
 pub struct Postgres(DbInput);
 
@@ -18,7 +18,6 @@ impl Postgres {
     }
 }
 
-/// Get a Postgres Database as an `sqlx::PgPool` or connection string
 #[async_trait]
 impl ResourceBuilder for Postgres {
     const TYPE: Type = Type::Database(database::Type::Shared(database::SharedEngine::Postgres));
@@ -58,6 +57,7 @@ impl ResourceBuilder for Postgres {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Wrap(DatabaseResource);
 
 #[async_trait]

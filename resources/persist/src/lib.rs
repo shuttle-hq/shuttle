@@ -7,7 +7,7 @@ use std::{
 use async_trait::async_trait;
 use bincode::{deserialize_from, serialize_into, Error as BincodeError};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use shuttle_service::{DeploymentMetadata, Factory, ResourceBuilder, Type};
+use shuttle_service::{resource::Type, DeploymentMetadata, Factory, ResourceBuilder};
 use thiserror::Error;
 
 #[derive(Error, Debug)]

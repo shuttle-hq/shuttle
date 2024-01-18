@@ -3,7 +3,8 @@ use libsql_client::{Client, Config};
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
-    Environment, Factory, ResourceBuilder, Type,
+    resource::Type,
+    Environment, Factory, IntoResource, ResourceBuilder,
 };
 use url::Url;
 
@@ -54,10 +55,7 @@ impl From<Error> for shuttle_service::Error {
 }
 
 impl Turso {
-    async fn output_from_addr(
-        &self,
-        addr: &str,
-    ) -> Result<<Turso as ResourceBuilder<Client>>::Output, shuttle_service::Error> {
+    async fn output_from_addr(&self, addr: &str) -> Result<TursoOutput, shuttle_service::Error> {
         Ok(TursoOutput {
             conn_url: Url::parse(addr).map_err(Error::UrlParseError)?,
             token: if self.token.is_empty() {
@@ -70,7 +68,7 @@ impl Turso {
 }
 
 #[async_trait]
-impl ResourceBuilder<Client> for Turso {
+impl ResourceBuilder for Turso {
     const TYPE: Type = Type::Turso;
     type Config = Self;
     type Output = TursoOutput;
@@ -125,10 +123,10 @@ impl ResourceBuilder<Client> for Turso {
 
 #[async_trait]
 impl IntoResource<Client> for TursoOutput {
-    async fn into_resource(self) -> Result<String, Error> {
+    async fn into_resource(self) -> Result<Client, shuttle_service::Error> {
         Ok(Client::from_config(Config {
-            url: self.conn_url.clone(),
-            auth_token: self.token.clone(),
+            url: self.conn_url,
+            auth_token: self.token,
         })
         .await?)
     }
@@ -154,7 +152,7 @@ mod test {
         async fn get_db_connection(
             &mut self,
             _db_type: shuttle_service::database::Type,
-        ) -> Result<shuttle_service::DatabaseReadyInfo, shuttle_service::Error> {
+        ) -> Result<shuttle_service::DatabaseInfo, shuttle_service::Error> {
             panic!("no turso test should try to get a db connection string")
         }
 
@@ -179,7 +177,7 @@ mod test {
     async fn local_database_default() {
         let mut factory = MockFactory::new(Environment::Local);
 
-        let turso = Turso::new();
+        let turso = Turso::default();
         let output = turso.output(&mut factory).await.unwrap();
         assert_eq!(output.token, None);
         assert!(output.conn_url.to_string().starts_with("file:///"));
@@ -190,7 +188,7 @@ mod test {
     async fn local_database_user_supplied() {
         let mut factory = MockFactory::new(Environment::Local);
 
-        let mut turso = Turso::new();
+        let mut turso = Turso::default();
         let local_addr = "libsql://test-addr.turso.io";
         turso = turso.local_addr(local_addr);
 
@@ -209,7 +207,7 @@ mod test {
     async fn remote_database_empty_addr() {
         let mut factory = MockFactory::new(Environment::Deployment);
 
-        let turso = Turso::new();
+        let turso = Turso::default();
         turso.output(&mut factory).await.unwrap();
     }
 
@@ -217,7 +215,7 @@ mod test {
     async fn remote_database() {
         let mut factory = MockFactory::new(Environment::Deployment);
 
-        let mut turso = Turso::new();
+        let mut turso = Turso::default();
         let addr = "my-turso-addr.turso.io".to_string();
         turso.addr = addr.clone();
         turso.token = "token".to_string();

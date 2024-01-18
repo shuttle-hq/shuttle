@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use shuttle_service::{error::Error, Factory, ResourceBuilder, Type};
+use shuttle_service::{error::Error, resource::Type, Factory, ResourceBuilder};
 pub use shuttle_service::{DeploymentMetadata as Metadata, Environment};
 
 #[derive(Default)]

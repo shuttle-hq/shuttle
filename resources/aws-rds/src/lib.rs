@@ -2,10 +2,10 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use shuttle_service::{DatabaseResource, Error};
+use shuttle_service::{DatabaseResource, Error, IntoResource};
 
 macro_rules! aws_engine {
-    ($feature:expr, $pool_path:path, $options_path:path, $struct_ident:ident) => {
+    ($feature:expr, $struct_ident:ident) => {
         paste::paste! {
             #[cfg(feature = $feature)]
             #[derive(Default)]
@@ -25,7 +25,7 @@ macro_rules! aws_engine {
             #[cfg(feature = $feature)]
             #[async_trait::async_trait]
             impl shuttle_service::ResourceBuilder for $struct_ident {
-                const TYPE: shuttle_service::Type = shuttle_service::Type::Database(
+                const TYPE: shuttle_service::resource::Type = shuttle_service::resource::Type::Database(
                     shuttle_service::database::Type::AwsRds(
                         shuttle_service::database::AwsRdsEngine::$struct_ident
                     )
@@ -61,24 +61,15 @@ macro_rules! aws_engine {
                     Ok(Wrap(info))
                 }
             }
-
-            #[cfg(all(feature = "sqlx", feature = $feature))]
-            #[async_trait]
-            impl IntoResource<$pool_path> for Wrap {
-                async fn into_resource(self) -> Result<$pool_path, Error> {
-                    let connection_string: String = self.into_resource().await.unwrap();
-
-                    Ok($options_path::new()
-                        .min_connections(1)
-                        .max_connections(5)
-                        .connect(&connection_string)
-                        .await
-                        .map_err(shuttle_service::error::CustomError::new)?)
-                }
-            }
         }
     };
 }
+
+aws_engine!("postgres", Postgres);
+
+aws_engine!("mysql", MySql);
+
+aws_engine!("mariadb", MariaDB);
 
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
@@ -94,23 +85,38 @@ impl IntoResource<String> for Wrap {
     }
 }
 
-aws_engine!(
-    "postgres",
-    sqlx::PgPool,
-    sqlx::postgres::PgPoolOptions,
-    Postgres
-);
+// If these were done in the main macro above, this would produce two conflicting `impl IntoResource<sqlx::MySqlPool>`
+#[cfg(feature = "sqlx")]
+mod _sqlx {
+    use super::*;
 
-aws_engine!(
-    "mysql",
-    sqlx::MySqlPool,
-    sqlx::mysql::MySqlPoolOptions,
-    MySql
-);
+    #[cfg(feature = "postgres")]
+    #[async_trait]
+    impl IntoResource<sqlx::PgPool> for Wrap {
+        async fn into_resource(self) -> Result<sqlx::PgPool, Error> {
+            let connection_string: String = self.into_resource().await.unwrap();
 
-aws_engine!(
-    "mariadb",
-    sqlx::MySqlPool,
-    sqlx::mysql::MySqlPoolOptions,
-    MariaDB
-);
+            Ok(sqlx::postgres::PgPoolOptions::new()
+                .min_connections(1)
+                .max_connections(5)
+                .connect(&connection_string)
+                .await
+                .map_err(shuttle_service::error::CustomError::new)?)
+        }
+    }
+
+    #[cfg(any(feature = "mysql", feature = "mariadb"))]
+    #[async_trait]
+    impl IntoResource<sqlx::MySqlPool> for Wrap {
+        async fn into_resource(self) -> Result<sqlx::MySqlPool, Error> {
+            let connection_string: String = self.into_resource().await.unwrap();
+
+            Ok(sqlx::mysql::MySqlPoolOptions::new()
+                .min_connections(1)
+                .max_connections(5)
+                .connect(&connection_string)
+                .await
+                .map_err(shuttle_service::error::CustomError::new)?)
+        }
+    }
+}

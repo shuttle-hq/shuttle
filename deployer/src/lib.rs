@@ -24,7 +24,8 @@ mod runtime_manager;
 
 pub use crate::args::Args;
 pub use crate::deployment::state_change_layer::StateChangeLayer;
-use crate::deployment::{gateway_client::GatewayClient, DeploymentManager};
+use crate::deployment::DeploymentManager;
+use shuttle_common::backends::client::GatewayClient;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -55,7 +56,10 @@ pub async fn start(
         .deployment_updater(persistence.clone())
         .resource_manager(persistence.clone())
         .builder_client(builder_client)
-        .queue_client(GatewayClient::new(args.gateway_uri))
+        .queue_client(GatewayClient::new(
+            args.gateway_uri.clone(),
+            args.gateway_uri,
+        ))
         .log_fetcher(log_fetcher)
         .build();
 

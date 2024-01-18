@@ -767,7 +767,7 @@ workflows:
                 - services/shuttle-serenity
               features:
                 - "-F serenity"
-                - "-F serenity-0-12-rustls_backend --no-default-features"
+                - "-F serenity-0-11-rustls_backend --no-default-features"
       - test-workspace-member:
           name: << matrix.crate >>
           matrix:

@@ -14,7 +14,7 @@ ON subscriptions
 FOR EACH ROW
 EXECUTE PROCEDURE sync_updated_at();
 
--- Insert existing subscriptions into the new subscriptions table
+-- Insert existing subscriptions into the new subscriptions table, all of which are of the pro type
 INSERT INTO subscriptions (subscription_id, account_name, type)
 SELECT subscription_id, account_name, 'pro'
 FROM users

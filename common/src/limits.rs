@@ -11,6 +11,8 @@ pub struct Limits {
     project_limit: u32,
     /// Whether this user has permission to provision RDS instances.
     rds_access: bool,
+    /// The quantity of RDS instances this user can provision.
+    rds_quota: u32,
 }
 
 impl Default for Limits {
@@ -18,15 +20,17 @@ impl Default for Limits {
         Self {
             project_limit: MAX_PROJECTS_DEFAULT,
             rds_access: false,
+            rds_quota: 0,
         }
     }
 }
 
 impl Limits {
-    pub fn new(project_limit: u32, rds_limit: bool) -> Self {
+    pub fn new(project_limit: u32, rds_access: bool, rds_quota: u32) -> Self {
         Self {
             project_limit,
-            rds_access: rds_limit,
+            rds_access,
+            rds_quota,
         }
     }
 
@@ -36,6 +40,11 @@ impl Limits {
 
     pub fn rds_access(&self) -> bool {
         self.rds_access
+    }
+
+    /// Use the subscription quantity to set the RDS quota for this claim.
+    pub fn quota(&mut self, quantity: u32) {
+        self.rds_quota = quantity;
     }
 }
 
@@ -47,7 +56,7 @@ impl From<AccountTier> for Limits {
             | AccountTier::PendingPaymentPro
             | AccountTier::Deployer => Self::default(),
             AccountTier::Pro | AccountTier::CancelledPro | AccountTier::Team => {
-                Self::new(MAX_PROJECTS_EXTRA, true)
+                Self::new(MAX_PROJECTS_EXTRA, true, 1)
             }
         }
     }

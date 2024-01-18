@@ -75,10 +75,7 @@ impl IntoResource<String> for Wrap {
 #[async_trait]
 impl IntoResource<mongodb::Database> for Wrap {
     async fn into_resource(self) -> Result<mongodb::Database, Error> {
-        let connection_string = match self.0 {
-            DatabaseResource::ConnectionString(s) => s.clone(),
-            DatabaseResource::Info(info) => info.connection_string_shuttle(),
-        };
+        let connection_string: String = self.into_resource().await.unwrap();
 
         let mut client_options = mongodb::options::ClientOptions::parse(connection_string)
             .await

@@ -74,10 +74,7 @@ impl IntoResource<String> for Wrap {
 #[async_trait]
 impl IntoResource<sqlx::PgPool> for Wrap {
     async fn into_resource(self) -> Result<sqlx::PgPool, Error> {
-        let connection_string = match self.0 {
-            DatabaseResource::ConnectionString(s) => s.clone(),
-            DatabaseResource::Info(info) => info.connection_string_shuttle(),
-        };
+        let connection_string: String = self.into_resource().await.unwrap();
 
         Ok(sqlx::postgres::PgPoolOptions::new()
             .min_connections(1)

@@ -7,7 +7,7 @@ use shuttle_service::{
 };
 use url::Url;
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Default)]
 pub struct Turso {
     addr: String,
     token: String,
@@ -72,13 +72,8 @@ impl Turso {
 #[async_trait]
 impl ResourceBuilder<Client> for Turso {
     const TYPE: Type = Type::Turso;
-
     type Config = Self;
     type Output = TursoOutput;
-
-    fn new() -> Self {
-        Self::default()
-    }
 
     fn config(&self) -> &Self::Config {
         self
@@ -126,14 +121,16 @@ impl ResourceBuilder<Client> for Turso {
             }
         }
     }
+}
 
-    async fn build(config: &Self::Output) -> Result<Client, shuttle_service::Error> {
-        let client = Client::from_config(Config {
-            url: config.conn_url.clone(),
-            auth_token: config.token.clone(),
+#[async_trait]
+impl IntoResource<Client> for TursoOutput {
+    async fn into_resource(self) -> Result<String, Error> {
+        Ok(Client::from_config(Config {
+            url: self.conn_url.clone(),
+            auth_token: self.token.clone(),
         })
-        .await?;
-        Ok(client)
+        .await?)
     }
 }
 

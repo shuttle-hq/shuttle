@@ -32,7 +32,7 @@ pub enum PersistError {
     Deserialize(BincodeError),
 }
 
-#[derive(Serialize)]
+#[derive(Default)]
 pub struct Persist;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -123,16 +123,10 @@ impl PersistInstance {
 }
 
 #[async_trait]
-impl ResourceBuilder<PersistInstance> for Persist {
+impl ResourceBuilder for Persist {
     const TYPE: Type = Type::Persist;
-
     type Config = ();
-
     type Output = PersistInstance;
-
-    fn new() -> Self {
-        Self {}
-    }
 
     fn config(&self) -> &Self::Config {
         &()
@@ -154,10 +148,6 @@ impl ResourceBuilder<PersistInstance> for Persist {
                 .join(PathBuf::from(service_name)), // separate persist directories per service
         )
         .map_err(|e| shuttle_service::Error::Custom(e.into()))
-    }
-
-    async fn build(build_data: &Self::Output) -> Result<PersistInstance, shuttle_service::Error> {
-        Ok(build_data.clone())
     }
 }
 

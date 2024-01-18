@@ -40,6 +40,7 @@ ctor = { workspace = true }
 hyper = { workspace = true }
 once_cell = { workspace = true }
 portpicker = { workspace = true }
+pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
 shuttle-common-tests = { workspace = true }
 tower = { workspace = true, features = ["util"] }

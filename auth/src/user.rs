@@ -75,16 +75,31 @@ impl UserManagement for UserManager {
                 })
                 .ok_or(Error::MissingSubscriptionId)?;
 
-            // Update the user account tier and subscription_id.
-            let rows_affected = query(
-                "UPDATE users SET account_tier = $1, subscription_id = $2 WHERE account_name = $3",
+            // Update the user account tier and insert or update their pro subscription.
+            let mut transaction = self.pool.begin().await?;
+
+            let rows_affected = query("UPDATE users SET account_tier = $1 WHERE account_name = $2")
+                .bind(AccountTier::Pro.to_string())
+                .bind(name)
+                .execute(&mut *transaction)
+                .await?
+                .rows_affected();
+
+            // Insert a new pro subscription. If a pro subscription already exists, update the
+            // subscription id.
+            query(
+                r#"INSERT INTO subscriptions (subscription_id, account_name, type)
+                    VALUES ($1, $2, 'pro')
+                    ON CONFLICT (account_name, type)
+                    DO UPDATE SET subscription_id = EXCLUDED.subscription_id
+                "#,
             )
-            .bind(AccountTier::Pro.to_string())
-            .bind(subscription_id)
+            .bind(&subscription_id)
             .bind(name)
-            .execute(&self.pool)
-            .await?
-            .rows_affected();
+            .execute(&mut *transaction)
+            .await?;
+
+            transaction.commit().await?;
 
             // In case no rows were updated, this means the account doesn't exist.
             if rows_affected > 0 {
@@ -114,12 +129,17 @@ impl UserManagement for UserManager {
     }
 
     async fn get_user(&self, name: AccountName) -> Result<User, Error> {
-        let mut user: User =
-            sqlx::query_as("SELECT account_name, key, account_tier, subscription_id FROM users WHERE account_name = $1")
-                .bind(&name)
-                .fetch_optional(&self.pool)
-                .await?
-                .ok_or(Error::UserNotFound)?;
+        let mut user: User = sqlx::query_as(
+            r#"SELECT u.account_name, u.key, u.account_tier, s.subscription_id
+                FROM users u
+                LEFT JOIN subscriptions s ON u.account_name = s.account_name  AND s.type = 'pro'
+                WHERE u.account_name = $1;
+            "#,
+        )
+        .bind(&name)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(Error::UserNotFound)?;
 
         // Sync the user tier based on the subscription validity, if any.
         if let Err(err) = user.sync_tier(self).await {
@@ -134,7 +154,11 @@ impl UserManagement for UserManager {
 
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error> {
         let mut user: User = sqlx::query_as(
-            "SELECT account_name, key, account_tier, subscription_id FROM users WHERE key = $1",
+            r#"SELECT u.account_name, u.key, u.account_tier, s.subscription_id
+                FROM users u
+                LEFT JOIN subscriptions s ON u.account_name = s.account_name  AND s.type = 'pro'
+                WHERE u.key = $1;
+            "#,
         )
         .bind(&key)
         .fetch_optional(&self.pool)

@@ -5852,6 +5852,7 @@ dependencies = [
  "opentelemetry 0.21.0",
  "pem 2.0.1",
  "portpicker",
+ "pretty_assertions",
  "rand 0.8.5",
  "ring 0.17.7",
  "serde",

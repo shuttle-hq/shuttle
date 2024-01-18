@@ -10,6 +10,7 @@ mod needs_docker {
     };
     use axum::body::Body;
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
+    use pretty_assertions::assert_eq;
     use serde_json::{self, Value};
 
     #[tokio::test]

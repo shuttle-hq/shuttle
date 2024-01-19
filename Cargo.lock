@@ -5974,7 +5974,7 @@ dependencies = [
  "hyper",
  "portpicker",
  "reqwest",
- "serde_json",
+ "serde",
  "shuttle-common",
  "shuttle-proto",
  "tokio",

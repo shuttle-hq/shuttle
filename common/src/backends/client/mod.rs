@@ -30,6 +30,7 @@ pub struct ServicesApiClient {
 }
 
 impl ServicesApiClient {
+    /// Make a new client that to connect to the given endpoint
     fn new(base: Uri) -> Self {
         Self {
             client: Client::new(),
@@ -37,7 +38,7 @@ impl ServicesApiClient {
         }
     }
 
-    /// Make a get request to the service
+    /// Make a get request to a path on the service
     pub async fn request<B: Serialize, T: DeserializeOwned, H: Header>(
         &self,
         method: Method,

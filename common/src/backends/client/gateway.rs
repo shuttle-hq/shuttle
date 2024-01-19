@@ -76,16 +76,24 @@ mod tests {
         let client =
             GatewayClient::new(server.uri().parse().unwrap(), server.uri().parse().unwrap());
 
-        let res = client.get_user_projects("t").await.unwrap();
+        let res = client.get_user_projects("user-1").await.unwrap();
 
         assert_eq!(
             res,
-            vec![Response {
-                id: "01HMGS32BRKBFSY82WZE2WZZRY".to_string(),
-                name: "mock-project-1".to_string(),
-                state: State::Stopped,
-                idle_minutes: Some(30)
-            }]
+            vec![
+                Response {
+                    id: "id1".to_string(),
+                    name: "user-1-project-1".to_string(),
+                    state: State::Stopped,
+                    idle_minutes: Some(30)
+                },
+                Response {
+                    id: "id2".to_string(),
+                    name: "user-1-project-2".to_string(),
+                    state: State::Ready,
+                    idle_minutes: Some(30)
+                }
+            ]
         )
     }
 }

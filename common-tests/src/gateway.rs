@@ -1,23 +1,57 @@
+use http_types::headers::AUTHORIZATION;
 use hyper::Method;
 use serde::Serialize;
 use wiremock::{
     matchers::{method, path},
-    Mock, MockServer, ResponseTemplate,
+    Mock, MockServer, Request, ResponseTemplate,
 };
 
 pub async fn mocked_gateway_server() -> MockServer {
     let mock_server = MockServer::start().await;
 
-    let projects = vec![Project {
-        id: "01HMGS32BRKBFSY82WZE2WZZRY",
-        name: "mock-project-1",
-        state: "stopped",
-        idle_minutes: 30,
-    }];
+    let projects = vec![
+        Project {
+            id: "id1",
+            account_id: "user-1",
+            name: "user-1-project-1",
+            state: "stopped",
+            idle_minutes: 30,
+        },
+        Project {
+            id: "id2",
+            account_id: "user-1",
+            name: "user-1-project-2",
+            state: "ready",
+            idle_minutes: 30,
+        },
+        Project {
+            id: "id3",
+            account_id: "user-2",
+            name: "user-2-project-1",
+            state: "ready",
+            idle_minutes: 30,
+        },
+    ];
 
     Mock::given(method(Method::GET))
         .and(path("/projects"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(projects))
+        .respond_with(move |req: &Request| {
+            let Some(bearer) = req.headers.get(&AUTHORIZATION) else {
+                panic!("expect authorization to be set");
+            };
+
+            let user = bearer
+                .last()
+                .as_str()
+                .split_whitespace()
+                .skip(1)
+                .next()
+                .unwrap();
+
+            let body: Vec<_> = projects.iter().filter(|p| p.account_id == user).collect();
+
+            ResponseTemplate::new(200).set_body_json(body)
+        })
         .mount(&mock_server)
         .await;
 
@@ -28,6 +62,7 @@ pub async fn mocked_gateway_server() -> MockServer {
 #[derive(Serialize)]
 struct Project<'a> {
     id: &'a str,
+    account_id: &'a str,
     name: &'a str,
     state: &'a str,
     idle_minutes: u64,

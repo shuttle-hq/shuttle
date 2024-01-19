@@ -32,6 +32,7 @@ impl GatewayClient {
     }
 }
 
+/// Interact with all the data relating to projects
 #[async_trait::async_trait]
 trait ProjectsDal {
     /// Get the projects that belong to a user
@@ -39,6 +40,18 @@ trait ProjectsDal {
         &self,
         user_token: &str,
     ) -> Result<Vec<models::project::Response>, Error>;
+
+    /// Get the IDs of all the projects belonging to a user
+    async fn get_user_project_ids(&self, user_token: &str) -> Result<Vec<String>, Error> {
+        let ids = self
+            .get_user_projects(user_token)
+            .await?
+            .into_iter()
+            .map(|p| p.id)
+            .collect();
+
+        Ok(ids)
+    }
 }
 
 #[async_trait::async_trait]
@@ -104,5 +117,13 @@ mod tests {
                 }
             ]
         )
+    }
+
+    #[test_context(GatewayClient)]
+    #[tokio::test]
+    async fn get_user_project_ids(client: &mut GatewayClient) {
+        let res = client.get_user_project_ids("user-2").await.unwrap();
+
+        assert_eq!(res, vec!["id3"])
     }
 }

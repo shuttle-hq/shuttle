@@ -7,9 +7,11 @@ use axum::{
     http::request::Parts,
     TypedHeader,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::{backends::headers::XShuttleAdminSecret, claims::AccountTier, ApiKey, Secret};
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
+use strum::EnumString;
 use tracing::{debug, error, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
@@ -49,7 +51,7 @@ impl UserManagement for UserManager {
             .execute(&self.pool)
             .await?;
 
-        Ok(User::new(name, key, tier, None))
+        Ok(User::new(name, key, tier, vec![]))
     }
 
     // Update user tier to pro and update the subscription id.
@@ -87,15 +89,18 @@ impl UserManagement for UserManager {
 
             // Insert a new pro subscription. If a pro subscription already exists, update the
             // subscription id.
+            // NOTE: we do not increase the quantity if a pro subscription exists, because it
+            // should never be increased.
             query(
                 r#"INSERT INTO subscriptions (subscription_id, account_name, type)
-                    VALUES ($1, $2, 'pro')
+                    VALUES ($1, $2, $3)
                     ON CONFLICT (account_name, type)
                     DO UPDATE SET subscription_id = EXCLUDED.subscription_id
                 "#,
             )
             .bind(&subscription_id)
             .bind(name)
+            .bind(ShuttleSubscriptionType::Pro.to_string())
             .execute(&mut *transaction)
             .await?;
 
@@ -130,16 +135,23 @@ impl UserManagement for UserManager {
 
     async fn get_user(&self, name: AccountName) -> Result<User, Error> {
         let mut user: User = sqlx::query_as(
-            r#"SELECT u.account_name, u.key, u.account_tier, s.subscription_id
-                FROM users u
-                LEFT JOIN subscriptions s ON u.account_name = s.account_name  AND s.type = 'pro'
-                WHERE u.account_name = $1;
-            "#,
+            "SELECT account_name, key, account_tier FROM users WHERE account_name = $1",
         )
         .bind(&name)
         .fetch_optional(&self.pool)
         .await?
         .ok_or(Error::UserNotFound)?;
+
+        let subscriptions: Vec<Subscription> = sqlx::query_as(
+            "SELECT subscription_id, type, quantity, updated_at FROM subscriptions WHERE account_name = $1",
+        )
+        .bind(&user.name.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+
+        if !subscriptions.is_empty() {
+            user.subscriptions = subscriptions;
+        }
 
         // Sync the user tier based on the subscription validity, if any.
         if let Err(err) = user.sync_tier(self).await {
@@ -153,17 +165,23 @@ impl UserManagement for UserManager {
     }
 
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error> {
-        let mut user: User = sqlx::query_as(
-            r#"SELECT u.account_name, u.key, u.account_tier, s.subscription_id
-                FROM users u
-                LEFT JOIN subscriptions s ON u.account_name = s.account_name  AND s.type = 'pro'
-                WHERE u.key = $1;
-            "#,
+        let mut user: User =
+            sqlx::query_as("SELECT account_name, key, account_tier FROM users WHERE key = $1")
+                .bind(&key)
+                .fetch_optional(&self.pool)
+                .await?
+                .ok_or(Error::UserNotFound)?;
+
+        let subscriptions: Vec<Subscription> = sqlx::query_as(
+            "SELECT subscription_id, type, quantity, updated_at FROM subscriptions WHERE account_name = $1",
         )
-        .bind(&key)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or(Error::UserNotFound)?;
+        .bind(&user.name.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+
+        if !subscriptions.is_empty() {
+            user.subscriptions = subscriptions;
+        }
 
         // Sync the user tier based on the subscription validity, if any.
         if user.sync_tier(self).await? {
@@ -191,12 +209,27 @@ impl UserManagement for UserManager {
     }
 }
 
-#[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
+#[derive(Clone, Debug)]
 pub struct User {
     pub name: AccountName,
     pub key: Secret<ApiKey>,
     pub account_tier: AccountTier,
-    pub subscription_id: Option<SubscriptionId>,
+    pub subscriptions: Vec<Subscription>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Subscription {
+    pub id: stripe::SubscriptionId,
+    pub r#type: ShuttleSubscriptionType,
+    pub quantity: i32,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, EnumString, strum::Display)]
+#[strum(serialize_all = "lowercase")]
+pub enum ShuttleSubscriptionType {
+    Pro,
+    Rds,
 }
 
 impl User {
@@ -204,23 +237,30 @@ impl User {
         self.account_tier == AccountTier::Admin
     }
 
+    pub fn pro_subscription_id(&self) -> Option<&stripe::SubscriptionId> {
+        self.subscriptions
+            .iter()
+            .find(|sub| matches!(sub.r#type, ShuttleSubscriptionType::Pro))
+            .map(|sub| &sub.id)
+    }
+
     pub fn new(
         name: AccountName,
         key: ApiKey,
         account_tier: AccountTier,
-        subscription_id: Option<SubscriptionId>,
+        subscriptions: Vec<Subscription>,
     ) -> Self {
         Self {
             name,
             key: Secret::new(key),
             account_tier,
-            subscription_id,
+            subscriptions,
         }
     }
 
     /// In case of an existing subscription, check if valid.
     async fn subscription_is_valid(&self, client: &stripe::Client) -> Result<bool, Error> {
-        if let Some(subscription_id) = self.subscription_id.as_ref() {
+        if let Some(subscription_id) = self.pro_subscription_id() {
             let subscription = stripe::Subscription::retrieve(client, subscription_id, &[]).await?;
             debug!("subscription: {:#?}", subscription);
             return Ok(subscription.status == SubscriptionStatus::Active
@@ -283,10 +323,27 @@ impl FromRow<'_, PgRow> for User {
                     source: Box::new(std::io::Error::new(ErrorKind::Other, err.to_string())),
                 },
             )?,
-            subscription_id: row
+            subscriptions: vec![],
+        })
+    }
+}
+
+impl FromRow<'_, PgRow> for Subscription {
+    fn from_row(row: &PgRow) -> Result<Self, sqlx::Error> {
+        Ok(Subscription {
+            id: row
                 .try_get("subscription_id")
                 .ok()
-                .and_then(|inner| SubscriptionId::from_str(inner).ok()),
+                .and_then(|inner| SubscriptionId::from_str(inner).ok())
+                .unwrap(),
+            r#type: ShuttleSubscriptionType::from_str(row.try_get("type").unwrap()).map_err(
+                |err| sqlx::Error::ColumnDecode {
+                    index: "type".to_string(),
+                    source: Box::new(std::io::Error::new(ErrorKind::Other, err.to_string())),
+                },
+            )?,
+            quantity: row.try_get("quantity").unwrap(),
+            updated_at: row.try_get("updated_at").unwrap(),
         })
     }
 }
@@ -323,7 +380,10 @@ impl From<User> for shuttle_common::models::user::Response {
             name: user.name.to_string(),
             key: user.key.expose().as_ref().to_owned(),
             account_tier: user.account_tier.to_string(),
-            subscription_id: user.subscription_id.map(|inner| inner.to_string()),
+            // TODO: this just returns what was always returned, the id of the pro subscription.
+            // We will need to update this when we want to also return the rds subscription. We
+            // can return a vec of IDs, but it will be a breaking change for the console (I don't believe it is used anywhere else).
+            subscription_id: user.pro_subscription_id().map(|id| id.to_string()),
         }
     }
 }

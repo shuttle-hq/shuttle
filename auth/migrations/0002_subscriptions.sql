@@ -2,7 +2,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   subscription_id TEXT PRIMARY KEY,
   account_name TEXT NOT NULL,
   type TEXT NOT NULL,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+  quantity INT DEFAULT 1,
+  updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, 
   UNIQUE (account_name, type),
   FOREIGN KEY (account_name) REFERENCES users(account_name)
 );

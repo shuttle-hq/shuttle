@@ -32,7 +32,7 @@ pub struct ServicesApiClient {
 }
 
 impl ServicesApiClient {
-    /// Make a new client that to connect to the given endpoint
+    /// Make a new client that connects to the given endpoint
     fn new(base: Uri) -> Self {
         Self {
             client: Client::new(),

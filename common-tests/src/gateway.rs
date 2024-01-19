@@ -40,13 +40,7 @@ pub async fn mocked_gateway_server() -> MockServer {
                 return ResponseTemplate::new(401);
             };
 
-            let user = bearer
-                .last()
-                .as_str()
-                .split_whitespace()
-                .skip(1)
-                .next()
-                .unwrap();
+            let user = bearer.last().as_str().split_whitespace().nth(1).unwrap();
 
             let body: Vec<_> = projects.iter().filter(|p| p.account_id == user).collect();
 

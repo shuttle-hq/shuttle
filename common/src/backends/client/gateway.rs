@@ -63,8 +63,29 @@ impl ProjectsDal for GatewayClient {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn get_user_projects() {
-        assert!(false);
+    use shuttle_common_tests::gateway::mocked_gateway_server;
+
+    use crate::models::project::{Response, State};
+
+    use super::{GatewayClient, ProjectsDal};
+
+    #[tokio::test]
+    async fn get_user_projects() {
+        let server = mocked_gateway_server().await;
+
+        let client =
+            GatewayClient::new(server.uri().parse().unwrap(), server.uri().parse().unwrap());
+
+        let res = client.get_user_projects("t").await.unwrap();
+
+        assert_eq!(
+            res,
+            vec![Response {
+                id: "01HMGS32BRKBFSY82WZE2WZZRY".to_string(),
+                name: "mock-project-1".to_string(),
+                state: State::Stopped,
+                idle_minutes: Some(30)
+            }]
+        )
     }
 }

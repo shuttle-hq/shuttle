@@ -1,5 +1,5 @@
 use headers::{ContentType, Header, HeaderMapExt};
-use http::{Method, Request, Uri};
+use http::{Method, Request, StatusCode, Uri};
 use hyper::{body, client::HttpConnector, Body, Client};
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
@@ -75,6 +75,10 @@ impl ServicesApiClient {
         let resp = self.client.request(req?).await?;
 
         trace!(response = ?resp, "Load response");
+
+        if resp.status() != StatusCode::OK {
+            todo!();
+        }
 
         let body = resp.into_body();
         let bytes = body::to_bytes(body).await?;

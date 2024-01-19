@@ -5946,6 +5946,7 @@ dependencies = [
  "semver 1.0.20",
  "serde",
  "serde_json",
+ "shuttle-common-tests",
  "sqlx",
  "strum 0.25.0",
  "thiserror",
@@ -5973,6 +5974,7 @@ dependencies = [
  "hyper",
  "portpicker",
  "reqwest",
+ "serde_json",
  "shuttle-common",
  "shuttle-proto",
  "tokio",
@@ -5980,6 +5982,7 @@ dependencies = [
  "tonic 0.10.2",
  "tower",
  "uuid",
+ "wiremock",
 ]
 
 [[package]]

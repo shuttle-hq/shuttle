@@ -143,7 +143,8 @@ DOCKER_COMPOSE_ENV=\
 	USE_TLS=$(USE_TLS)\
 	COMPOSE_PROFILES=$(COMPOSE_PROFILES)\
 	DOCKER_SOCK=$(DOCKER_SOCK)\
-	SHUTTLE_ENV=$(SHUTTLE_ENV)
+	SHUTTLE_ENV=$(SHUTTLE_ENV)\
+	SHUTTLE_SERVICE_VERSION=$(SHUTTLE_SERVICE_VERSION)
 
 .PHONY: clean cargo-clean images the-shuttle-images shuttle-% postgres panamax otel deploy test docker-compose.rendered.yml up down
 
@@ -165,6 +166,7 @@ shuttle-%:
 		--build-arg crate=$(@) \
 		--build-arg prepare_args=$(PREPARE_ARGS) \
 		--build-arg SHUTTLE_ENV=$(SHUTTLE_ENV) \
+		--build-arg SHUTTLE_SERVICE_VERSION=$(SHUTTLE_SERVICE_VERSION) \
 		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
 		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \

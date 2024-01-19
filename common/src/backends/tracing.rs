@@ -39,6 +39,17 @@ where
     // The OTLP_ADDRESS env var is useful for setting a localhost address when running deployer locally.
     let otlp_address = std::env::var("OTLP_ADDRESS").unwrap_or(OTLP_ADDRESS.into());
 
+    let resources = {
+        let mut resources = vec![
+            KeyValue::new("service.name", backend.to_string().to_lowercase()),
+            KeyValue::new("deployment.environment", shuttle_env.clone()),
+        ];
+        if let Ok(service_version) = std::env::var("SHUTTLE_SERVICE_VERSION") {
+            resources.push(KeyValue::new("service.version", service_version));
+        }
+        resources
+    };
+
     let tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(
@@ -46,10 +57,7 @@ where
                 .tonic()
                 .with_endpoint(otlp_address.clone()),
         )
-        .with_trace_config(trace::config().with_resource(Resource::new(vec![
-            KeyValue::new("service.name", backend.to_string().to_lowercase()),
-            KeyValue::new("deployment.environment", shuttle_env.clone()),
-        ])))
+        .with_trace_config(trace::config().with_resource(Resource::new(resources.clone())))
         .install_batch(Tokio)
         .unwrap();
 
@@ -57,10 +65,7 @@ where
 
     let logs = opentelemetry_otlp::new_pipeline()
         .logging()
-        .with_log_config(Config::default().with_resource(Resource::new(vec![
-            KeyValue::new("service.name", backend.to_string().to_lowercase()),
-            KeyValue::new("deployment.environment", shuttle_env.clone()),
-        ])))
+        .with_log_config(Config::default().with_resource(Resource::new(resources.clone())))
         .with_exporter(
             opentelemetry_otlp::new_exporter()
                 .tonic()

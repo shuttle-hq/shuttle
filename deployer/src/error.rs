@@ -1,5 +1,5 @@
-use std::error::Error as StdError;
 use shuttle_common::backends;
+use std::error::Error as StdError;
 use std::io;
 use thiserror::Error;
 

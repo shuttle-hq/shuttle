@@ -6406,6 +6406,7 @@ dependencies = [
  "shuttle-common-tests",
  "sqlx",
  "strum 0.25.0",
+ "test-context",
  "thiserror",
  "tokio",
  "tonic 0.10.2",

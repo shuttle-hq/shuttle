@@ -63,19 +63,28 @@ impl ProjectsDal for GatewayClient {
 
 #[cfg(test)]
 mod tests {
+    use async_trait::async_trait;
     use shuttle_common_tests::gateway::mocked_gateway_server;
+    use test_context::{test_context, AsyncTestContext};
 
     use crate::models::project::{Response, State};
 
     use super::{GatewayClient, ProjectsDal};
 
+    #[async_trait]
+    impl AsyncTestContext for GatewayClient {
+        async fn setup() -> Self {
+            let server = mocked_gateway_server().await;
+
+            GatewayClient::new(server.uri().parse().unwrap(), server.uri().parse().unwrap())
+        }
+
+        async fn teardown(mut self) {}
+    }
+
+    #[test_context(GatewayClient)]
     #[tokio::test]
-    async fn get_user_projects() {
-        let server = mocked_gateway_server().await;
-
-        let client =
-            GatewayClient::new(server.uri().parse().unwrap(), server.uri().parse().unwrap());
-
+    async fn get_user_projects(client: &mut GatewayClient) {
         let res = client.get_user_projects("user-1").await.unwrap();
 
         assert_eq!(

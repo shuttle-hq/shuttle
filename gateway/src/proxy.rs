@@ -104,7 +104,7 @@ impl UserProxy {
         task_sender: Sender<BoxedTask>,
         mut req: Request<Body>,
     ) -> Result<Response, Error> {
-        let span = debug_span!("proxy", http.method = %req.method(), http.host = ?req.headers().get("Host"), http.uri = %req.uri(), http.status_code = field::Empty, shuttle.project.name = field::Empty);
+        let span = debug_span!("proxy", http.method = %req.method(), http.host = field::Empty, http.uri = %req.uri(), http.status_code = field::Empty, shuttle.project.name = field::Empty);
         trace!(?req, "serving proxy request");
 
         let fqdn = req
@@ -112,6 +112,8 @@ impl UserProxy {
             .typed_get::<Host>()
             .map(|host| fqdn!(host.hostname()))
             .ok_or_else(|| Error::from_kind(ErrorKind::BadHost))?;
+
+        span.record("http.host", fqdn.to_string());
 
         let project_name = if fqdn.is_subdomain_of(&self.public)
             && fqdn.depth() - self.public.depth() == 1

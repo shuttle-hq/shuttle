@@ -20,6 +20,8 @@ pub enum Error {
     SerdeJson(#[from] serde_json::Error),
     #[error("Hyper error: {0}")]
     Http(#[from] hyper::http::Error),
+    #[error("Request did not return correctly. Got status code: {0}")]
+    RequestError(StatusCode),
 }
 
 /// `Hyper` wrapper to make request to RESTful Shuttle services easy
@@ -77,7 +79,7 @@ impl ServicesApiClient {
         trace!(response = ?resp, "Load response");
 
         if resp.status() != StatusCode::OK {
-            todo!();
+            return Err(Error::RequestError(resp.status()));
         }
 
         let body = resp.into_body();
@@ -85,5 +87,36 @@ impl ServicesApiClient {
         let json = serde_json::from_slice(&bytes)?;
 
         Ok(json)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use headers::{authorization::Bearer, Authorization};
+    use http::{Method, StatusCode};
+    use shuttle_common_tests::gateway::mocked_gateway_server;
+
+    use crate::models;
+
+    use super::{Error, ServicesApiClient};
+
+    // Make sure we handle any unexpected responses correctly
+    #[tokio::test]
+    async fn api_errors() {
+        let server = mocked_gateway_server().await;
+
+        let client = ServicesApiClient::new(server.uri().parse().unwrap());
+
+        let err = client
+            .request::<_, Vec<models::project::Response>, _>(
+                Method::GET,
+                "projects",
+                None::<()>,
+                None::<Authorization<Bearer>>,
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, Error::RequestError(StatusCode::UNAUTHORIZED)));
     }
 }

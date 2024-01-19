@@ -37,7 +37,7 @@ pub async fn mocked_gateway_server() -> MockServer {
         .and(path("/projects"))
         .respond_with(move |req: &Request| {
             let Some(bearer) = req.headers.get(&AUTHORIZATION) else {
-                panic!("expect authorization to be set");
+                return ResponseTemplate::new(401);
             };
 
             let user = bearer

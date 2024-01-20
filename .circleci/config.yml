@@ -384,7 +384,7 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            PUSH=true SHUTTLE_ENV=<< parameters.shuttle-env >> PLATFORMS=linux/amd64 TAG=$TAG make images
+            PUSH=true SHUTTLE_SERVICE_VERSION=$TAG SHUTTLE_ENV=<< parameters.shuttle-env >> PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
   deploy-images:
     executor: machine-ubuntu

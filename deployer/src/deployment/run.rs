@@ -367,10 +367,10 @@ async fn load(
 
     load_request.extensions_mut().insert(claim.clone());
 
-    debug!(shuttle.service.name = %service_name, "loading service");
+    debug!(shuttle.project.name = %service_name, shuttle.service.name = %service_name, "loading service");
     let response = runtime_client.load(load_request).await;
 
-    debug!(shuttle.service.name = %service_name, "service loaded");
+    debug!(shuttle.project.name = %service_name, shuttle.service.name = %service_name, "service loaded");
     match response {
         Ok(response) => {
             let response = response.into_inner();

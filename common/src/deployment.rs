@@ -34,7 +34,7 @@ pub struct DeploymentMetadata {
 }
 
 /// The environment this project is running in
-#[derive(Clone, Copy, Debug, Display, EnumString, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Display, EnumString, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum Environment {

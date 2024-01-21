@@ -9,11 +9,11 @@ keywords = ["shuttle-service", "turso"]
 [dependencies]
 async-trait = "0.1.56"
 dunce = "1.0.4"
-libsql-client = "0.31.0" # Stays on 0.31 until https://github.com/libsql/libsql-client-rs/issues/52
+libsql = { version = "0.2.0", default-features = false, features = ["core", "remote"] }
 serde = { version = "1.0.148", features = ["derive"] }
 shuttle-service = { path = "../../service", version = "0.36.0", default-features = false }
 url = { version = "2.3.1", features = ["serde"] }
 
 [dev-dependencies]
 tempfile = "3.3.0"
-tokio = "1.28.2"
+tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros"] }

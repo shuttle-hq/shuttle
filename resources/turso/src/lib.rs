@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use libsql_client::{Client, Config};
+use libsql::{Database};
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
@@ -18,6 +18,7 @@ pub struct Turso {
 pub struct TursoOutput {
     conn_url: Url,
     token: Option<String>,
+    environment: Environment,
 }
 
 impl Turso {
@@ -57,7 +58,8 @@ impl Turso {
     async fn output_from_addr(
         &self,
         addr: &str,
-    ) -> Result<<Turso as ResourceBuilder<Client>>::Output, shuttle_service::Error> {
+        environment: Environment,
+    ) -> Result<<Turso as ResourceBuilder<Database>>::Output, shuttle_service::Error> {
         Ok(TursoOutput {
             conn_url: Url::parse(addr).map_err(Error::UrlParseError)?,
             token: if self.token.is_empty() {
@@ -65,12 +67,13 @@ impl Turso {
             } else {
                 Some(self.token.clone())
             },
+            environment,
         })
     }
 }
 
 #[async_trait]
-impl ResourceBuilder<Client> for Turso {
+impl ResourceBuilder<Database> for Turso {
     const TYPE: Type = Type::Turso;
 
     type Config = Self;
@@ -99,12 +102,12 @@ impl ResourceBuilder<Client> for Turso {
                     } else {
                         format!("libsql://{}", self.addr)
                     };
-                    self.output_from_addr(&addr).await
+                    self.output_from_addr(&addr, md.env).await
                 }
             }
             Environment::Local => {
                 match self.local_addr {
-                    Some(ref local_addr) => self.output_from_addr(local_addr).await,
+                    Some(ref local_addr) => self.output_from_addr(local_addr, md.env).await,
                     None => {
                         // Default to a local db of the name of the service.
                         let db_file = std::env::current_dir() // Should be root of the project's workspace
@@ -120,6 +123,7 @@ impl ResourceBuilder<Client> for Turso {
                             conn_url: Url::parse(&conn_url).map_err(Error::UrlParseError)?,
                             // Nullify the token since we're using a file as database.
                             token: None,
+                            environment: md.env,
                         })
                     }
                 }
@@ -127,13 +131,12 @@ impl ResourceBuilder<Client> for Turso {
         }
     }
 
-    async fn build(config: &Self::Output) -> Result<Client, shuttle_service::Error> {
-        let client = Client::from_config(Config {
-            url: config.conn_url.clone(),
-            auth_token: config.token.clone(),
-        })
-        .await?;
-        Ok(client)
+    async fn build(config: &Self::Output) -> Result<Database, shuttle_service::Error> {
+        let database = match config.environment {
+            Environment::Deployment => Database::open_remote(config.conn_url.to_string(), config.token.clone().unwrap().to_string()),
+            Environment::Local => Database::open(config.conn_url.to_string()),
+        };
+        database.map_err(|err| ShuttleError::Custom(err.into()))
     }
 }
 
@@ -202,7 +205,8 @@ mod test {
             output,
             TursoOutput {
                 conn_url: Url::parse(local_addr).unwrap(),
-                token: None
+                token: None,
+                environment: Environment::Local,
             }
         )
     }
@@ -230,7 +234,8 @@ mod test {
             output,
             TursoOutput {
                 conn_url: Url::parse(&format!("libsql://{}", addr)).unwrap(),
-                token: Some("token".to_string())
+                token: Some("token".to_string()),
+                environment: Environment::Deployment,
             }
         )
     }

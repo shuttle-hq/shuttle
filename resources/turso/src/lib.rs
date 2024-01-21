@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use libsql::{Database};
+use libsql::Database;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
@@ -133,7 +133,10 @@ impl ResourceBuilder<Database> for Turso {
 
     async fn build(config: &Self::Output) -> Result<Database, shuttle_service::Error> {
         let database = match config.environment {
-            Environment::Deployment => Database::open_remote(config.conn_url.to_string(), config.token.clone().unwrap().to_string()),
+            Environment::Deployment => Database::open_remote(
+                config.conn_url.to_string(),
+                config.token.clone().unwrap().to_string(),
+            ),
             Environment::Local => Database::open(config.conn_url.to_string()),
         };
         database.map_err(|err| ShuttleError::Custom(err.into()))

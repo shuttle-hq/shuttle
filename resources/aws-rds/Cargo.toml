@@ -16,7 +16,7 @@ sqlx = { version = "0.7.1", optional = true }
 [features]
 default = []
 
-# Database and TLS
+# Database
 postgres = ["sqlx?/postgres"]
 mysql = ["sqlx?/mysql"]
 mariadb = ["sqlx?/mysql"]
@@ -24,4 +24,3 @@ mariadb = ["sqlx?/mysql"]
 # Add an sqlx Pool as a resource output type
 sqlx = ["dep:sqlx", "sqlx/runtime-tokio", "sqlx/tls-rustls"]
 sqlx-native-tls = ["dep:sqlx", "sqlx/runtime-tokio", "sqlx/tls-native-tls"]
-

@@ -62,6 +62,7 @@ backend = [
     "opentelemetry_sdk",
     "opentelemetry-appender-tracing",
     "opentelemetry-otlp",
+    "models",
     "rustrict", # only ProjectName model uses it
     "thiserror",
     "tokio",
@@ -107,6 +108,8 @@ base64 = { workspace = true }
 hyper = { workspace = true }
 proptest = "1.1.0"
 ring = { workspace = true }
+shuttle-common-tests = { workspace = true }
+test-context = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true, features = ["util"] }
 tracing-fluent-assertions = "0.3.0"

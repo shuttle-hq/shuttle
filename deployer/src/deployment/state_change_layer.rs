@@ -411,14 +411,14 @@ mod tests {
         async fn get_slot(
             &self,
             _id: Uuid,
-        ) -> Result<bool, crate::deployment::gateway_client::Error> {
+        ) -> Result<bool, shuttle_common::backends::client::Error> {
             Ok(true)
         }
 
         async fn release_slot(
             &self,
             _id: Uuid,
-        ) -> Result<(), crate::deployment::gateway_client::Error> {
+        ) -> Result<(), shuttle_common::backends::client::Error> {
             Ok(())
         }
     }

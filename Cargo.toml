@@ -89,9 +89,10 @@ serde_json = "1.0.89"
 sqlx = { version = "0.7.1", features = ["runtime-tokio", "tls-rustls"] }
 strfmt = "0.2.2"
 strum = { version = "0.25.0", features = ["derive"] }
-tempfile = "3.4.0"
-thiserror = "1.0.37"
 tar = "0.4.38"
+tempfile = "3.4.0"
+test-context = "0.1.4"
+thiserror = "1.0.37"
 tokio = "1.22.0"
 tokio-stream = "0.1.11"
 toml = "0.8.2"
@@ -112,4 +113,5 @@ utoipa-swagger-ui = { version = "4.0.0", features = ["axum"] }
 ulid = "1.0.0"
 url = "2.4.0"
 uuid = "1.2.2"
+wiremock = "0.5"
 zeroize = "1.6.0"

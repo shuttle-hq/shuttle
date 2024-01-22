@@ -10,14 +10,22 @@ pub struct Limits {
     /// The amount of projects this user can create.
     project_limit: u32,
     /// Whether this user has permission to provision RDS instances.
+    #[deprecated(
+        since = "0.38.0",
+        note = "This was replaced with rds_quota, but old runtimes might still try to deserialize a claim expecting this field"
+    )]
+    #[serde(skip_deserializing)]
+    rds_access: bool,
     /// The quantity of RDS instances this user can provision.
     rds_quota: u32,
 }
 
 impl Default for Limits {
     fn default() -> Self {
+        #[allow(deprecated)]
         Self {
             project_limit: MAX_PROJECTS_DEFAULT,
+            rds_access: false,
             rds_quota: 0,
         }
     }
@@ -25,8 +33,10 @@ impl Default for Limits {
 
 impl Limits {
     pub fn new(project_limit: u32, rds_quota: u32) -> Self {
+        #[allow(deprecated)]
         Self {
             project_limit,
+            rds_access: false,
             rds_quota,
         }
     }

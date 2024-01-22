@@ -735,8 +735,8 @@ workflows:
               features:
                 - "-F mongodb"
                 - "-F postgres"
-                - "-F postgres-rustls"
                 - "-F postgres,sqlx"
+                - "-F postgres,sqlx-native-tls"
       - test-standalone:
           # Has mutually exclusive features, so we run checks for each feature separately
           name: "services/shuttle-axum: << matrix.features >>"

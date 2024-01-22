@@ -24,7 +24,7 @@ impl ResourceBuilder for MongoDb {
 
     type Config = DbInput;
 
-    type Output = Wrap;
+    type Output = Wrapper;
 
     fn config(&self) -> &Self::Config {
         &self.0
@@ -54,16 +54,16 @@ impl ResourceBuilder for MongoDb {
             }
         };
 
-        Ok(Wrap(info))
+        Ok(Wrapper(info))
     }
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Wrap(DatabaseResource);
+pub struct Wrapper(DatabaseResource);
 
 #[async_trait]
-impl IntoResource<String> for Wrap {
+impl IntoResource<String> for Wrapper {
     async fn into_resource(self) -> Result<String, Error> {
         Ok(match self.0 {
             DatabaseResource::ConnectionString(s) => s.clone(),
@@ -73,7 +73,7 @@ impl IntoResource<String> for Wrap {
 }
 
 #[async_trait]
-impl IntoResource<mongodb::Database> for Wrap {
+impl IntoResource<mongodb::Database> for Wrapper {
     async fn into_resource(self) -> Result<mongodb::Database, Error> {
         let connection_string: String = self.into_resource().await.unwrap();
 

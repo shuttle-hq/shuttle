@@ -32,7 +32,7 @@ macro_rules! aws_engine {
                 );
 
                 type Config = shuttle_service::DbInput;
-                type Output = Wrap;
+                type Output = Wrapper;
 
                 fn config(&self) -> &Self::Config {
                     &self.0
@@ -58,7 +58,7 @@ macro_rules! aws_engine {
                         }
                     };
 
-                    Ok(Wrap(info))
+                    Ok(Wrapper(info))
                 }
             }
         }
@@ -73,10 +73,10 @@ aws_engine!("mariadb", MariaDB);
 
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Wrap(DatabaseResource);
+pub struct Wrapper(DatabaseResource);
 
 #[async_trait]
-impl IntoResource<String> for Wrap {
+impl IntoResource<String> for Wrapper {
     async fn into_resource(self) -> Result<String, Error> {
         Ok(match self.0 {
             DatabaseResource::ConnectionString(s) => s.clone(),
@@ -92,7 +92,7 @@ mod _sqlx {
 
     #[cfg(feature = "postgres")]
     #[async_trait]
-    impl IntoResource<sqlx::PgPool> for Wrap {
+    impl IntoResource<sqlx::PgPool> for Wrapper {
         async fn into_resource(self) -> Result<sqlx::PgPool, Error> {
             let connection_string: String = self.into_resource().await.unwrap();
 
@@ -107,7 +107,7 @@ mod _sqlx {
 
     #[cfg(any(feature = "mysql", feature = "mariadb"))]
     #[async_trait]
-    impl IntoResource<sqlx::MySqlPool> for Wrap {
+    impl IntoResource<sqlx::MySqlPool> for Wrapper {
         async fn into_resource(self) -> Result<sqlx::MySqlPool, Error> {
             let connection_string: String = self.into_resource().await.unwrap();
 

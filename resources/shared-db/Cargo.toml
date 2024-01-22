@@ -20,7 +20,7 @@ default = []
 mongodb = ["dep:mongodb"]
 
 # Postgres
-postgres = ["sqlx?/postgres", "sqlx?/runtime-tokio", "sqlx?/tls-native-tls"]
-postgres-rustls = ["sqlx?/postgres", "sqlx?/runtime-tokio", "sqlx?/tls-rustls"]
+postgres = ["sqlx?/postgres"]
 # Postgres with an sqlx PgPool
-sqlx = ["dep:sqlx"]
+sqlx = ["dep:sqlx", "sqlx/runtime-tokio", "sqlx/tls-rustls"]
+sqlx-native-tls = ["dep:sqlx", "sqlx/runtime-tokio", "sqlx/tls-native-tls"]

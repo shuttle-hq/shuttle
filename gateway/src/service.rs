@@ -1,7 +1,6 @@
 use std::io;
 use std::io::Cursor;
 use std::net::Ipv4Addr;
-use std::ops::Sub;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -37,16 +36,12 @@ use tonic::transport::Endpoint;
 use tracing::{debug, error, info, instrument, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
-use x509_parser::nom::AsBytes;
-use x509_parser::parse_x509_certificate;
-use x509_parser::prelude::parse_x509_pem;
-use x509_parser::time::ASN1Time;
 
-use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
+use crate::acme::{AcmeClient, CustomDomain};
 use crate::args::ContextArgs;
 use crate::project::{Project, ProjectCreating, ProjectError, IS_HEALTHY_TIMEOUT};
 use crate::task::{self, BoxedTask, TaskBuilder};
-use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
+use crate::tls::ChainAndPrivateKey;
 use crate::worker::TaskRouter;
 use crate::{
     AccountName, DockerContext, DockerStatsSource, Error, ErrorKind, ProjectDetails, AUTH_CLIENT,
@@ -257,7 +252,7 @@ pub struct GatewayService {
     provider: GatewayContextProvider,
     db: SqlitePool,
     task_router: TaskRouter,
-    state_location: PathBuf,
+    pub state_location: PathBuf,
 
     /// Maximum number of containers the gateway can start before blocking cch projects
     cch_container_limit: u32,
@@ -858,7 +853,7 @@ impl GatewayService {
         }
     }
 
-    async fn create_certificate<'a>(
+    pub async fn create_certificate<'a>(
         &self,
         acme: &AcmeClient,
         creds: AccountCredentials<'a>,
@@ -901,47 +896,6 @@ impl GatewayService {
                 certs.clone().save_pem(&tls_path).unwrap();
                 certs
             }
-        }
-    }
-
-    /// Renew the gateway certificate if there less than 30 days until the current
-    /// certificate expiration.
-    pub(crate) async fn renew_certificate(
-        &self,
-        acme: &AcmeClient,
-        resolver: Arc<GatewayCertResolver>,
-        creds: AccountCredentials<'_>,
-    ) {
-        let account = AccountWrapper::from(creds).0;
-        let certs = self.fetch_certificate(acme, account.credentials()).await;
-        // Safe to unwrap because a 'ChainAndPrivateKey' is built from a PEM.
-        let chain_and_pk = certs.into_pem().unwrap();
-
-        let (_, pem) = parse_x509_pem(chain_and_pk.as_bytes())
-            .unwrap_or_else(|_| panic!("Malformed existing PEM certificate for the gateway."));
-        let (_, x509_cert) = parse_x509_certificate(pem.contents.as_bytes())
-            .unwrap_or_else(|_| panic!("Malformed existing X509 certificate for the gateway."));
-
-        // We compute the difference between the certificate expiry date and current timestamp because we want to trigger the
-        // gateway certificate renewal only during it's last 30 days of validity or if the certificate is expired.
-        let diff = x509_cert.validity().not_after.sub(ASN1Time::now());
-
-        // Renew only when the difference is `None` (meaning certificate expired) or we're within the last 30 days of validity.
-        if diff.is_none()
-            || diff
-                .expect("to be Some given we checked for None previously")
-                .whole_days()
-                <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS
-        {
-            let tls_path = self.state_location.join("ssl.pem");
-            let certs = self.create_certificate(acme, account.credentials()).await;
-            resolver
-                .serve_default_der(certs.clone())
-                .await
-                .expect("Failed to serve the default certs");
-            certs
-                .save_pem(&tls_path)
-                .expect("to save the certificate locally");
         }
     }
 

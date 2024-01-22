@@ -1,7 +1,7 @@
 // This is a synthetic checkout session. It is used to simplify the code path for downgrading to `PendingPaymentPro` tier
 // when user payment is overdue.
 
-pub(crate) const MOCKED_OVERDUE_PAYMENT_CHECKOUT_SESSION: &str = r#"{
+pub const MOCKED_OVERDUE_PAYMENT_CHECKOUT_SESSION: &str = r#"{
     "id": "cs_test_a11rHy7qRTwFZuj4lBHso3Frq7CMZheZYcYqNXEFBV4oddxXFLx7bT911p",
     "object": "checkout.session",
     "after_expiration": null,

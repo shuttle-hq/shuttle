@@ -1,46 +1,47 @@
 use async_trait::async_trait;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    database, error::CustomError, DbInput, DbOutput, Error, Factory, ResourceBuilder, Type,
+    database, resource::Type, DatabaseResource, DbInput, Error, Factory, IntoResource,
+    ResourceBuilder,
 };
 
-/// Handles the state of a Shuttle managed Postgres DB and sets up a Postgres driver.
-#[derive(Serialize)]
-pub struct Postgres {
-    config: DbInput,
+/// Shuttle managed Postgres DB in a shared cluster
+#[derive(Default)]
+pub struct Postgres(DbInput);
+
+impl Postgres {
+    /// Use a custom connection string for local runs
+    pub fn local_uri(mut self, local_uri: &str) -> Self {
+        self.0.local_uri = Some(local_uri.to_string());
+
+        self
+    }
 }
 
-/// Get an `sqlx::PgPool` from any factory
 #[async_trait]
-impl ResourceBuilder<sqlx::PgPool> for Postgres {
+impl ResourceBuilder for Postgres {
     const TYPE: Type = Type::Database(database::Type::Shared(database::SharedEngine::Postgres));
 
     type Config = DbInput;
 
-    type Output = DbOutput;
-
-    fn new() -> Self {
-        Self {
-            config: Default::default(),
-        }
-    }
+    type Output = Wrapper;
 
     fn config(&self) -> &Self::Config {
-        &self.config
+        &self.0
     }
 
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, Error> {
         let info = match factory.get_metadata().env {
-            shuttle_service::Environment::Deployment => DbOutput::Info(
+            shuttle_service::Environment::Deployment => DatabaseResource::Info(
                 factory
                     .get_db_connection(database::Type::Shared(database::SharedEngine::Postgres))
                     .await?,
             ),
             shuttle_service::Environment::Local => {
-                if let Some(local_uri) = self.config.local_uri {
-                    DbOutput::Local(local_uri)
+                if let Some(local_uri) = self.0.local_uri {
+                    DatabaseResource::ConnectionString(local_uri)
                 } else {
-                    DbOutput::Info(
+                    DatabaseResource::Info(
                         factory
                             .get_db_connection(database::Type::Shared(
                                 database::SharedEngine::Postgres,
@@ -51,31 +52,35 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
             }
         };
 
-        Ok(info)
+        Ok(Wrapper(info))
     }
+}
 
-    async fn build(build_data: &Self::Output) -> Result<sqlx::PgPool, Error> {
-        let connection_string = match build_data {
-            DbOutput::Local(local_uri) => local_uri.clone(),
-            DbOutput::Info(info) => info.connection_string_private(),
-        };
+#[derive(Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Wrapper(DatabaseResource);
 
-        let pool = sqlx::postgres::PgPoolOptions::new()
+#[async_trait]
+impl IntoResource<String> for Wrapper {
+    async fn into_resource(self) -> Result<String, Error> {
+        Ok(match self.0 {
+            DatabaseResource::ConnectionString(s) => s.clone(),
+            DatabaseResource::Info(info) => info.connection_string_shuttle(),
+        })
+    }
+}
+
+#[cfg(feature = "sqlx")]
+#[async_trait]
+impl IntoResource<sqlx::PgPool> for Wrapper {
+    async fn into_resource(self) -> Result<sqlx::PgPool, Error> {
+        let connection_string: String = self.into_resource().await.unwrap();
+
+        Ok(sqlx::postgres::PgPoolOptions::new()
             .min_connections(1)
             .max_connections(5)
             .connect(&connection_string)
             .await
-            .map_err(CustomError::new)?;
-
-        Ok(pool)
-    }
-}
-
-impl Postgres {
-    /// Use a custom connection string for local runs
-    pub fn local_uri(mut self, local_uri: &str) -> Self {
-        self.config.local_uri = Some(local_uri.to_string());
-
-        self
+            .map_err(shuttle_service::error::CustomError::new)?)
     }
 }

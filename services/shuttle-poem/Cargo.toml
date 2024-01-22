@@ -9,7 +9,7 @@ keywords = ["shuttle-service", "poem"]
 [workspace]
 
 [dependencies]
-poem = { version = "1.3.55" }
+poem = { version = "2.0.0" }
 shuttle-runtime = { path = "../../runtime", version = "0.36.0", default-features = false }
 
 [dev-dependencies]

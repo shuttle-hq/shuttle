@@ -205,7 +205,7 @@
 
 // Public API
 pub use shuttle_codegen::main;
-pub use shuttle_service::{CustomError, Error, Factory, ResourceBuilder, Service};
+pub use shuttle_service::{CustomError, Error, Factory, IntoResource, ResourceBuilder, Service};
 
 // Useful re-exports
 pub use async_trait::async_trait;

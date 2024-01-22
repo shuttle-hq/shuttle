@@ -1,4 +1,4 @@
-pub(crate) const MOCKED_CANCELLEDPRO_CHECKOUT_SESSION: &str = r#"{
+pub const MOCKED_CANCELLEDPRO_CHECKOUT_SESSION: &str = r#"{
     "id": "cs_test",
     "object": "checkout.session",
     "after_expiration": null,

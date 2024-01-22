@@ -8,7 +8,7 @@ use axum::body::Body;
 use axum::extract::{Extension, Path, Query, State};
 use axum::handler::Handler;
 use axum::http::Request;
-use axum::middleware::from_extractor;
+use axum::middleware::{self, from_extractor};
 use axum::response::Response;
 use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
@@ -48,7 +48,8 @@ use x509_parser::parse_x509_certificate;
 use x509_parser::pem::parse_x509_pem;
 use x509_parser::time::ASN1Time;
 
-use crate::acme::{AcmeClient, CustomDomain};
+use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
+use crate::api::tracing::project_name_tracing_layer;
 use crate::auth::{ScopedUser, User};
 use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
 use crate::service::GatewayService;
@@ -902,10 +903,48 @@ async fn renew_gateway_acme_certificate(
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<String, Error> {
-    service
-        .renew_certificate(&acme_client, resolver, credentials)
+    let account = AccountWrapper::from(credentials).0;
+    let certs = service
+        .fetch_certificate(&acme_client, account.credentials())
         .await;
-    Ok(r#""Renewed the gateway certificate.""#.to_string())
+    // Safe to unwrap because a 'ChainAndPrivateKey' is built from a PEM.
+    let chain_and_pk = certs.into_pem().unwrap();
+
+    let (_, pem) = parse_x509_pem(chain_and_pk.as_bytes())
+        .unwrap_or_else(|_| panic!("Malformed existing PEM certificate for the gateway."));
+    let (_, x509_cert) = parse_x509_certificate(pem.contents.as_bytes())
+        .unwrap_or_else(|_| panic!("Malformed existing X509 certificate for the gateway."));
+
+    // We compute the difference between the certificate expiry date and current timestamp because we want to trigger the
+    // gateway certificate renewal only during it's last 30 days of validity or if the certificate is expired.
+    let diff = x509_cert.validity().not_after.sub(ASN1Time::now());
+
+    // Renew only when the difference is `None` (meaning certificate expired) or we're within the last 30 days of validity.
+    if diff.is_none()
+        || diff
+            .expect("to be Some given we checked for None previously")
+            .whole_days()
+            <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS
+    {
+        let tls_path = service.state_location.join("ssl.pem");
+        let certs = service
+            .create_certificate(&acme_client, account.credentials())
+            .await;
+        resolver
+            .serve_default_der(certs.clone())
+            .await
+            .expect("Failed to serve the default certs");
+        certs
+            .save_pem(&tls_path)
+            .expect("to save the certificate locally");
+        return Ok(r#""Renewed the gateway certificate.""#.to_string());
+    }
+
+    Ok(format!(
+        "\"Gateway certificate was not renewed. There are {} days until the certificate expires.\"",
+        diff.expect("to be Some given we checked for None previously")
+            .whole_days()
+    ))
 }
 
 #[utoipa::path(
@@ -1089,9 +1128,25 @@ impl ApiBuilder {
 
         const CARGO_SHUTTLE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+        let project_routes = Router::new()
+            .route(
+                "/projects/:project_name",
+                get(get_project.layer(ScopedLayer::new(vec![Scope::Project])))
+                    .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite])))
+                    .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
+            )
+            .route(
+                "/projects/:project_name/delete",
+                delete(delete_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
+            )
+            .route("/projects/name/:project_name", get(check_project_name))
+            .route("/projects/:project_name/*any", any(route_project))
+            .route_layer(middleware::from_fn(project_name_tracing_layer));
+
         self.router = self
             .router
             .route("/", get(get_status))
+            .merge(project_routes)
             .route(
                 "/versions",
                 get(|| async {
@@ -1113,18 +1168,6 @@ impl ApiBuilder {
                 "/projects",
                 get(get_projects_list.layer(ScopedLayer::new(vec![Scope::Project]))),
             )
-            .route(
-                "/projects/:project_name",
-                get(get_project.layer(ScopedLayer::new(vec![Scope::Project])))
-                    .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite])))
-                    .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
-            )
-            .route(
-                "/projects/:project_name/delete",
-                delete(delete_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
-            )
-            .route("/projects/name/:project_name", get(check_project_name))
-            .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
             .nest("/admin", admin_routes);
 

@@ -1,26 +1,17 @@
 #![doc = include_str!("../README.md")]
-
 use async_trait::async_trait;
-use serde::Serialize;
 pub use shuttle_service::SecretStore;
-use shuttle_service::{Error, Factory, ResourceBuilder, Type};
+use shuttle_service::{resource::Type, Error, Factory, ResourceBuilder};
 
-/// A struct that represents service secrets
-#[derive(Serialize)]
+/// Secrets plugin that provides service secrets
+#[derive(Default)]
 pub struct Secrets;
 
-/// Get a store with all the secrets available to a deployment
 #[async_trait]
-impl ResourceBuilder<SecretStore> for Secrets {
+impl ResourceBuilder for Secrets {
     const TYPE: Type = Type::Secrets;
-
     type Config = ();
-
     type Output = SecretStore;
-
-    fn new() -> Self {
-        Self {}
-    }
 
     fn config(&self) -> &Self::Config {
         &()
@@ -30,9 +21,5 @@ impl ResourceBuilder<SecretStore> for Secrets {
         let secrets = factory.get_secrets().await?;
 
         Ok(SecretStore::new(secrets))
-    }
-
-    async fn build(build_data: &Self::Output) -> Result<SecretStore, crate::Error> {
-        Ok(build_data.clone())
     }
 }

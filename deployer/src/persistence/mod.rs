@@ -580,7 +580,7 @@ impl ResourceManager for Persistence {
 
 #[async_trait::async_trait]
 impl AddressGetter for Persistence {
-    #[instrument(skip_all, fields(shuttle.service.name = service_name))]
+    #[instrument(skip_all, fields(shuttle.service.name = service_name, shuttle.project.name = service_name))]
     async fn get_address_for_service(
         &self,
         service_name: &str,

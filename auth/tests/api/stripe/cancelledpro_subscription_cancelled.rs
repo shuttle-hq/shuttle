@@ -1,4 +1,4 @@
-pub(crate) const MOCKED_CANCELLEDPRO_SUBSCRIPTION_CANCELLED: &str = r#"{
+pub const MOCKED_CANCELLEDPRO_SUBSCRIPTION_CANCELLED: &str = r#"{
     "id": "sub_123",
     "object": "subscription",
     "application": null,

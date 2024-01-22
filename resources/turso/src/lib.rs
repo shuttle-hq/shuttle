@@ -135,7 +135,12 @@ impl ResourceBuilder<Database> for Turso {
         let database = match config.environment {
             Environment::Deployment => Database::open_remote(
                 config.conn_url.to_string(),
-                config.token.clone().unwrap().to_string(),
+                config
+                    .token
+                    .clone()
+                    .ok_or(ShuttleError::Custom(CustomError::msg(
+                        "missing token for remote database",
+                    )))?,
             ),
             Environment::Local => Database::open(config.conn_url.to_string()),
         };

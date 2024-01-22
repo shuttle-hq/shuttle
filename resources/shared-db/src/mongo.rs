@@ -1,46 +1,48 @@
 use async_trait::async_trait;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    database, error::CustomError, DbInput, DbOutput, Error, Factory, ResourceBuilder, Type,
+    database, error::CustomError, resource::Type, DatabaseResource, DbInput, Error, Factory,
+    IntoResource, ResourceBuilder,
 };
 
-#[derive(Serialize)]
-pub struct MongoDb {
-    config: DbInput,
+/// Shuttle managed MongoDB in a shared cluster
+#[derive(Default)]
+pub struct MongoDb(DbInput);
+
+impl MongoDb {
+    /// Use a custom connection string for local runs
+    pub fn local_uri(mut self, local_uri: &str) -> Self {
+        self.0.local_uri = Some(local_uri.to_string());
+
+        self
+    }
 }
 
-/// Get a `mongodb::Database` from any factory
 #[async_trait]
-impl ResourceBuilder<mongodb::Database> for MongoDb {
+impl ResourceBuilder for MongoDb {
     const TYPE: Type = Type::Database(database::Type::Shared(database::SharedEngine::MongoDb));
 
     type Config = DbInput;
 
-    type Output = DbOutput;
-
-    fn new() -> Self {
-        Self {
-            config: Default::default(),
-        }
-    }
+    type Output = Wrapper;
 
     fn config(&self) -> &Self::Config {
-        &self.config
+        &self.0
     }
 
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, Error> {
         let info = match factory.get_metadata().env {
-            shuttle_service::Environment::Deployment => DbOutput::Info(
+            shuttle_service::Environment::Deployment => DatabaseResource::Info(
                 factory
                     .get_db_connection(database::Type::Shared(database::SharedEngine::MongoDb))
                     .await
                     .map_err(CustomError::new)?,
             ),
             shuttle_service::Environment::Local => {
-                if let Some(local_uri) = self.config.local_uri {
-                    DbOutput::Local(local_uri)
+                if let Some(local_uri) = self.0.local_uri {
+                    DatabaseResource::ConnectionString(local_uri)
                 } else {
-                    DbOutput::Info(
+                    DatabaseResource::Info(
                         factory
                             .get_db_connection(database::Type::Shared(
                                 database::SharedEngine::MongoDb,
@@ -51,14 +53,29 @@ impl ResourceBuilder<mongodb::Database> for MongoDb {
                 }
             }
         };
-        Ok(info)
-    }
 
-    async fn build(build_data: &Self::Output) -> Result<mongodb::Database, Error> {
-        let connection_string = match build_data {
-            DbOutput::Local(local_uri) => local_uri.clone(),
-            DbOutput::Info(info) => info.connection_string_private(),
-        };
+        Ok(Wrapper(info))
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Wrapper(DatabaseResource);
+
+#[async_trait]
+impl IntoResource<String> for Wrapper {
+    async fn into_resource(self) -> Result<String, Error> {
+        Ok(match self.0 {
+            DatabaseResource::ConnectionString(s) => s.clone(),
+            DatabaseResource::Info(info) => info.connection_string_shuttle(),
+        })
+    }
+}
+
+#[async_trait]
+impl IntoResource<mongodb::Database> for Wrapper {
+    async fn into_resource(self) -> Result<mongodb::Database, Error> {
+        let connection_string: String = self.into_resource().await.unwrap();
 
         let mut client_options = mongodb::options::ClientOptions::parse(connection_string)
             .await
@@ -68,24 +85,12 @@ impl ResourceBuilder<mongodb::Database> for MongoDb {
 
         let client = mongodb::Client::with_options(client_options).map_err(CustomError::new)?;
 
-        // Return a handle to the database defined at the end of the connection string, which is the users provisioned
-        // database
+        // Return a handle to the database defined at the end of the connection string,
+        // which is the users provisioned database
         let database = client.default_database();
 
-        match database {
-            Some(database) => Ok(database),
-            None => Err(Error::Database(
-                "mongodb connection string missing default database".into(),
-            )),
-        }
-    }
-}
-
-impl MongoDb {
-    /// Use a custom connection string for local runs
-    pub fn local_uri(mut self, local_uri: &str) -> Self {
-        self.config.local_uri = Some(local_uri.to_string());
-
-        self
+        database.ok_or_else(|| {
+            Error::Database("mongodb connection string missing default database".into())
+        })
     }
 }

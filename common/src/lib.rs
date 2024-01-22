@@ -84,40 +84,43 @@ impl AsRef<str> for ApiKey {
     }
 }
 
-/// Holds the input for a DB resource
+/// The input given to Shuttle DB resources
 #[derive(Deserialize, Serialize, Default)]
 pub struct DbInput {
     pub local_uri: Option<String>,
 }
 
-/// Holds the output for a DB resource
+/// The output produced by Shuttle DB resources
 #[derive(Deserialize, Serialize)]
-pub enum DbOutput {
-    Info(DatabaseReadyInfo),
-    Local(String),
+pub enum DatabaseResource {
+    ConnectionString(String),
+    Info(DatabaseInfo),
 }
 
-/// Holds the details for a database connection
+/// Holds the data for building a database connection string.
+///
+/// Use [`Self::connection_string_shuttle`] when running on Shuttle,
+/// otherwise [`Self::connection_string_public`] for the public URI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DatabaseReadyInfo {
+pub struct DatabaseInfo {
     engine: String,
     role_name: String,
     role_password: Secret<String>,
     database_name: String,
     port: String,
-    address_private: String,
-    address_public: String,
+    hostname_shuttle: String,
+    hostname_public: String,
 }
 
-impl DatabaseReadyInfo {
+impl DatabaseInfo {
     pub fn new(
         engine: String,
         role_name: String,
         role_password: String,
         database_name: String,
         port: String,
-        address_private: String,
-        address_public: String,
+        hostname_shuttle: String,
+        hostname_public: String,
     ) -> Self {
         Self {
             engine,
@@ -125,18 +128,18 @@ impl DatabaseReadyInfo {
             role_password: Secret::new(role_password),
             database_name,
             port,
-            address_private,
-            address_public,
+            hostname_shuttle,
+            hostname_public,
         }
     }
     /// For connecting to the db from inside the Shuttle network
-    pub fn connection_string_private(&self) -> String {
+    pub fn connection_string_shuttle(&self) -> String {
         format!(
             "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
             self.role_password.expose(),
-            self.address_private,
+            self.hostname_shuttle,
             self.port,
             self.database_name,
         )
@@ -152,7 +155,7 @@ impl DatabaseReadyInfo {
             } else {
                 self.role_password.redacted()
             },
-            self.address_public,
+            self.hostname_public,
             self.port,
             self.database_name,
         )

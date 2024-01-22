@@ -14,5 +14,13 @@ shuttle-service = { path = "../../service", version = "0.36.0" }
 sqlx = { version = "0.7.1", optional = true }
 
 [features]
-postgres = ["sqlx/postgres", "sqlx/runtime-tokio-native-tls"]
-postgres-rustls = ["sqlx/postgres", "sqlx/runtime-tokio-rustls"]
+default = []
+
+# Mongodb
+mongodb = ["dep:mongodb"]
+
+# Postgres
+postgres = ["sqlx?/postgres"]
+# Postgres with an sqlx PgPool
+sqlx = ["dep:sqlx", "sqlx/runtime-tokio", "sqlx/tls-rustls"]
+sqlx-native-tls = ["dep:sqlx", "sqlx/runtime-tokio", "sqlx/tls-native-tls"]

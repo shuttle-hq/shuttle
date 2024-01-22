@@ -43,7 +43,7 @@ impl Limits {
     }
 
     /// Use the subscription quantity to set the RDS quota for this claim.
-    pub fn quota(&mut self, quantity: u32) {
+    pub fn rds_quota(&mut self, quantity: u32) {
         self.rds_quota = quantity;
     }
 }

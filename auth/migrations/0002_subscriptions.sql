@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   FOREIGN KEY (account_name) REFERENCES users(account_name)
 );
 
--- Create a trigger to automatically update updated_at
+-- Create a trigger to automatically update the updated_at column
 CREATE TRIGGER sync_users_updated_at
 BEFORE UPDATE
 ON subscriptions

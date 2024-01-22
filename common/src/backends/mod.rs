@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod cache;
+pub mod client;
 mod future;
 pub mod headers;
 pub mod metrics;

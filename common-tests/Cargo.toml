@@ -14,8 +14,11 @@ hyper = { workspace = true }
 portpicker = { workspace = true }
 reqwest = { workspace = true }
 shuttle-common = { workspace = true }
+serde = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
 uuid = { workspace = true }
+wiremock = { workspace = true }
+http-types = "2.12.0"

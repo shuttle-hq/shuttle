@@ -76,7 +76,7 @@ pub trait ResourceBuilder: Default {
     /// can at times even take minutes. That is why the output of this method is cached and calling this method can be
     /// skipped as explained in [`ResourceBuilder::config`].
     ///
-    /// The output from this function is passed to [`IntoResource::init`].
+    /// The output from this function is passed to [`IntoResource::into_resource`].
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, crate::Error>;
 }
 

@@ -143,7 +143,7 @@ impl UserManagement for UserManager {
         .ok_or(Error::UserNotFound)?;
 
         let subscriptions: Vec<Subscription> = sqlx::query_as(
-            "SELECT subscription_id, type, quantity, updated_at FROM subscriptions WHERE account_name = $1",
+            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE account_name = $1",
         )
         .bind(&user.name.to_string())
         .fetch_all(&self.pool)
@@ -173,7 +173,7 @@ impl UserManagement for UserManager {
                 .ok_or(Error::UserNotFound)?;
 
         let subscriptions: Vec<Subscription> = sqlx::query_as(
-            "SELECT subscription_id, type, quantity, updated_at FROM subscriptions WHERE account_name = $1",
+            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE account_name = $1",
         )
         .bind(&user.name.to_string())
         .fetch_all(&self.pool)
@@ -222,6 +222,7 @@ pub struct Subscription {
     pub id: stripe::SubscriptionId,
     pub r#type: ShuttleSubscriptionType,
     pub quantity: i32,
+    pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -343,6 +344,7 @@ impl FromRow<'_, PgRow> for Subscription {
                 },
             )?,
             quantity: row.try_get("quantity").unwrap(),
+            created_at: row.try_get("created_at").unwrap(),
             updated_at: row.try_get("updated_at").unwrap(),
         })
     }

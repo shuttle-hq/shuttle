@@ -1,6 +1,6 @@
-## Shuttle service integration for the Serenity discord bot framework.
+## Shuttle service integration for the Serenity Discord bot framework
 
-Serenity 0.12 is used by default.
+Serenity 0.12 is used by default. Poise 0.6 is also supported.
 
 Serenity 0.11 is supported by using these feature flags (native TLS also available):
 

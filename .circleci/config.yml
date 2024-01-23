@@ -718,7 +718,6 @@ workflows:
                 - services/shuttle-actix-web
                 - services/shuttle-next
                 - services/shuttle-poem
-                - services/shuttle-poise
                 - services/shuttle-rocket
                 - services/shuttle-salvo
                 - services/shuttle-thruster
@@ -759,7 +758,7 @@ workflows:
                 - services/shuttle-serenity
               features:
                 - "-F serenity"
-                - "-F serenity-0-12-rustls_backend --no-default-features"
+                - "-F serenity-0-11-rustls_backend --no-default-features"
       - test-workspace-member:
           name: << matrix.crate >>
           matrix:

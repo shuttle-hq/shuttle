@@ -106,7 +106,13 @@ pub mod runtime {
 #[cfg(feature = "resource-recorder")]
 pub mod resource_recorder {
     use anyhow::Context;
+    use shuttle_common::{
+        backends::client::{self, ResourceDal},
+        claims::Claim,
+    };
     use std::str::FromStr;
+
+    use self::resource_recorder_client::ResourceRecorderClient;
 
     pub use super::generated::resource_recorder::*;
 
@@ -146,6 +152,38 @@ pub mod resource_recorder {
             };
 
             Ok(response)
+        }
+    }
+
+    impl ResourceDal
+        for ResourceRecorderClient<
+            shuttle_common::claims::ClaimService<
+                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+            >,
+        >
+    {
+        async fn get_project_resources(
+            &mut self,
+            project_id: &str,
+            claim: &Claim,
+        ) -> Result<impl Iterator<Item = shuttle_common::resource::Response>, client::Error>
+        {
+            let mut req = tonic::Request::new(ProjectResourcesRequest {
+                project_id: project_id.to_string(),
+            });
+
+            req.extensions_mut().insert(claim.clone());
+
+            let resp = self.get_project_resources(req).await?.into_inner();
+
+            let resources = resp
+                .resources
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error: anyhow::Error| tonic::Status::internal(error.to_string()))?;
+
+            Ok(resources.into_iter())
         }
     }
 }

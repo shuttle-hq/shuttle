@@ -9,8 +9,10 @@ use tracing::{trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 mod gateway;
+mod resource_recorder;
 
 pub use gateway::GatewayClient;
+pub use resource_recorder::ResourceDal;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -22,6 +24,8 @@ pub enum Error {
     Http(#[from] hyper::http::Error),
     #[error("Request did not return correctly. Got status code: {0}")]
     RequestError(StatusCode),
+    #[error("GRpc request did not return correctly. Got status code: {0}")]
+    GrpcError(#[from] tonic::Status),
 }
 
 /// `Hyper` wrapper to make request to RESTful Shuttle services easy

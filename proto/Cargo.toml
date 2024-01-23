@@ -30,5 +30,5 @@ logger = [
     "tokio/time",
 ]
 provisioner = []
-resource-recorder = ["anyhow", "serde_json"]
+resource-recorder = ["anyhow", "serde_json", "shuttle-common/backend"]
 runtime = []

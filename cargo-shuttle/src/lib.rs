@@ -1029,7 +1029,8 @@ impl Shuttle {
                             Hint: A newer version of shuttle-runtime is available.
                             Change its version to {} in Cargo.toml to update it, or
                             run this command: cargo add shuttle-runtime@{}",
-                            mismatch.cargo_shuttle
+                            mismatch.cargo_shuttle,
+                            mismatch.cargo_shuttle,
                         };
                     }
                 } else {

@@ -4,8 +4,8 @@ use std::net::SocketAddr;
 
 #[cfg(feature = "serenity")]
 use serenity::Client;
-#[cfg(feature = "serenity-0-12")]
-use serenity_0_12::Client;
+#[cfg(feature = "serenity-0-11")]
+use serenity_0_11::Client;
 
 /// A wrapper type for [serenity::Client] so we can implement [shuttle_runtime::Service] for it.
 pub struct SerenityService(pub Client);

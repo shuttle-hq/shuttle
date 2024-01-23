@@ -156,7 +156,7 @@ pub mod resource_recorder {
     #[async_trait]
     impl<T> ResourceDal for &mut ResourceRecorderClient<T>
     where
-        T: tonic::client::GrpcService<tonic::body::BoxBody> + Clone + Send,
+        T: tonic::client::GrpcService<tonic::body::BoxBody> + Send,
         T::Error: Into<tonic::codegen::StdError>,
         T::ResponseBody: tonic::codegen::Body<Data = tonic::codegen::Bytes> + Send + 'static,
         T::Future: Send,
@@ -228,11 +228,18 @@ pub mod resource_recorder {
                 .record_resources(Request::new(RecordRequest {
                     project_id: "project_1".to_string(),
                     service_id: "service_1".to_string(),
-                    resources: vec![record_request::Resource {
-                        r#type: "database::shared::postgres".to_string(),
-                        config: serde_json::to_vec(&json!({"public": true})).unwrap(),
-                        data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
-                    }],
+                    resources: vec![
+                        record_request::Resource {
+                            r#type: "database::shared::postgres".to_string(),
+                            config: serde_json::to_vec(&json!({"public": true})).unwrap(),
+                            data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
+                        },
+                        record_request::Resource {
+                            r#type: "database::aws_rds::mariadb".to_string(),
+                            config: serde_json::to_vec(&json!({})).unwrap(),
+                            data: serde_json::to_vec(&json!({"username": "maria"})).unwrap(),
+                        },
+                    ],
                 }))
                 .await
                 .unwrap();
@@ -244,12 +251,38 @@ pub mod resource_recorder {
 
             assert_eq!(
                 resources,
+                vec![
+                    resource::Response {
+                        r#type: resource::Type::Database(database::Type::Shared(
+                            database::SharedEngine::Postgres
+                        )),
+                        config: json!({"public": true}),
+                        data: json!({"username": "test"}),
+                    },
+                    resource::Response {
+                        r#type: resource::Type::Database(database::Type::AwsRds(
+                            database::AwsRdsEngine::MariaDB
+                        )),
+                        config: json!({}),
+                        data: json!({"username": "maria"}),
+                    }
+                ]
+            );
+
+            // Getting only RDS resources should filter correctly
+            let resources = (&mut r_r_client as &mut dyn ResourceDal)
+                .get_project_rds_resources("project_1", "user-1")
+                .await
+                .unwrap();
+
+            assert_eq!(
+                resources,
                 vec![resource::Response {
-                    r#type: resource::Type::Database(database::Type::Shared(
-                        database::SharedEngine::Postgres
+                    r#type: resource::Type::Database(database::Type::AwsRds(
+                        database::AwsRdsEngine::MariaDB
                     )),
-                    config: json!({"public": true}),
-                    data: json!({"username": "test"}),
+                    config: json!({}),
+                    data: json!({"username": "maria"}),
                 }]
             );
         }

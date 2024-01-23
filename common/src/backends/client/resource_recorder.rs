@@ -5,7 +5,7 @@ use crate::{database, resource};
 use super::Error;
 
 #[async_trait]
-pub trait ResourceDal {
+pub trait ResourceDal: Send {
     async fn get_project_resources(
         &mut self,
         project_id: &str,

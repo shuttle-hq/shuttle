@@ -1026,8 +1026,9 @@ impl Shuttle {
                         };
                     } else {
                         printdoc! {"
-                            Hint: A newer version of shuttle-runtime is available. Run this command to update:
-                                cargo add shuttle-runtime@{}",
+                            Hint: A newer version of shuttle-runtime is available.
+                            Change its version to {} in Cargo.toml to update it, or
+                            run this command: cargo add shuttle-runtime@{}",
                             mismatch.cargo_shuttle
                         };
                     }

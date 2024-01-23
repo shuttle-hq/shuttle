@@ -9,9 +9,5 @@ keywords = ["shuttle-service", "poise", "discord-bot", "serenity"]
 [workspace]
 
 [dependencies]
-poise = { version = "0.5.2" }
-shuttle-runtime = { path = "../../runtime", version = "0.37.0", default-features = false }
-
-[dev-dependencies]
-shuttle-secrets = { path = "../../resources/secrets" }
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }
+poise = "0.5.2"
+shuttle-runtime = { path = "../../runtime", version = "<=0.40.0", default-features = false }

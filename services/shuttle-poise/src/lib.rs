@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 /// A wrapper type for [poise::Framework] so we can implement [shuttle_runtime::Service] for it.
+#[deprecated = "shuttle-poise for poise 0.5 is deprecated. To use poise 0.6 and Shuttle, check https://docs.rs/shuttle-serenity/latest/shuttle_serenity/"]
 pub struct PoiseService<T, E>(pub Arc<poise::Framework<T, E>>);
 
 #[shuttle_runtime::async_trait]

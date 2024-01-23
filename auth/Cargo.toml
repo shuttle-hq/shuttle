@@ -18,6 +18,7 @@ async-trait = { workspace = true }
 axum = { workspace = true, features = ["headers"] }
 axum-sessions = { workspace = true }
 base64 = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true }
 http = { workspace = true }
 jsonwebtoken = { workspace = true }
@@ -26,7 +27,7 @@ pem = "2"
 rand = { workspace = true }
 ring = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-sqlx = { workspace = true, features = ["postgres", "json", "migrate"] }
+sqlx = { workspace = true, features = ["postgres", "json", "migrate", "chrono"] }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
@@ -40,7 +41,8 @@ ctor = { workspace = true }
 hyper = { workspace = true }
 once_cell = { workspace = true }
 portpicker = { workspace = true }
+pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
 shuttle-common-tests = { workspace = true }
 tower = { workspace = true, features = ["util"] }
-wiremock = "0.5"
+wiremock = { workspace = true }

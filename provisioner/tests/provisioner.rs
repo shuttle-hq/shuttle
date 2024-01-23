@@ -4,7 +4,7 @@ use helpers::{exec_mongosh, exec_psql, DbType, DockerInstance};
 use once_cell::sync::Lazy;
 use serde_json::Value;
 use shuttle_proto::provisioner::shared;
-use shuttle_provisioner::MyProvisioner;
+use shuttle_provisioner::ShuttleProvisioner;
 
 static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::Postgres));
 static MONGODB: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::MongoDb));
@@ -20,7 +20,7 @@ mod needs_docker {
 
     #[tokio::test]
     async fn shared_db_role_does_not_exist() {
-        let provisioner = MyProvisioner::new(
+        let provisioner = ShuttleProvisioner::new(
             &PG.uri,
             &MONGODB.uri,
             "fqdn".to_string(),
@@ -48,7 +48,7 @@ mod needs_docker {
 
     #[tokio::test]
     async fn shared_db_role_does_exist() {
-        let provisioner = MyProvisioner::new(
+        let provisioner = ShuttleProvisioner::new(
             &PG.uri,
             &MONGODB.uri,
             "fqdn".to_string(),
@@ -78,7 +78,7 @@ mod needs_docker {
         expected = "CreateRole(\"error returned from database: cannot insert multiple commands into a prepared statement\""
     )]
     async fn injection_safe() {
-        let provisioner = MyProvisioner::new(
+        let provisioner = ShuttleProvisioner::new(
             &PG.uri,
             &MONGODB.uri,
             "fqdn".to_string(),
@@ -99,7 +99,7 @@ mod needs_docker {
 
     #[tokio::test]
     async fn shared_db_missing() {
-        let provisioner = MyProvisioner::new(
+        let provisioner = ShuttleProvisioner::new(
             &PG.uri,
             &MONGODB.uri,
             "fqdn".to_string(),
@@ -127,7 +127,7 @@ mod needs_docker {
 
     #[tokio::test]
     async fn shared_db_filled() {
-        let provisioner = MyProvisioner::new(
+        let provisioner = ShuttleProvisioner::new(
             &PG.uri,
             &MONGODB.uri,
             "fqdn".to_string(),
@@ -157,7 +157,7 @@ mod needs_docker {
 
     #[tokio::test]
     async fn shared_mongodb_role_does_not_exist() {
-        let provisioner = MyProvisioner::new(
+        let provisioner = ShuttleProvisioner::new(
             &PG.uri,
             &MONGODB.uri,
             "fqdn".to_string(),
@@ -181,7 +181,7 @@ mod needs_docker {
 
     #[tokio::test]
     async fn shared_mongodb_role_does_exist() {
-        let provisioner = MyProvisioner::new(
+        let provisioner = ShuttleProvisioner::new(
             &PG.uri,
             &MONGODB.uri,
             "fqdn".to_string(),

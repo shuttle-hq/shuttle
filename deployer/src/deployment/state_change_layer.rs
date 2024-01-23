@@ -156,7 +156,8 @@ mod tests {
         },
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
-            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+            ContainerRequest, ContainerResponse, DatabaseDeletionResponse, DatabaseRequest,
+            DatabaseResponse, Ping, Pong,
         },
         resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     };
@@ -334,6 +335,13 @@ mod tests {
             panic!("no deploy layer tests should request a db");
         }
 
+        async fn provision_arbitrary_container(
+            &self,
+            _req: tonic::Request<ContainerRequest>,
+        ) -> Result<tonic::Response<ContainerResponse>, tonic::Status> {
+            panic!("no deploy layer tests should request container")
+        }
+
         async fn delete_database(
             &self,
             _request: tonic::Request<DatabaseRequest>,
@@ -411,14 +419,14 @@ mod tests {
         async fn get_slot(
             &self,
             _id: Uuid,
-        ) -> Result<bool, crate::deployment::gateway_client::Error> {
+        ) -> Result<bool, shuttle_common::backends::client::Error> {
             Ok(true)
         }
 
         async fn release_slot(
             &self,
             _id: Uuid,
-        ) -> Result<(), crate::deployment::gateway_client::Error> {
+        ) -> Result<(), shuttle_common::backends::client::Error> {
             Ok(())
         }
     }

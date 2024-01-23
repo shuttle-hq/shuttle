@@ -1395,6 +1395,7 @@ where
         debug!(
             shuttle.container.id = container.id,
             shuttle.service.name = %service.name,
+            shuttle.project.name = %service.name,
             "{} has {} CPU usage per minute",
             service.name,
             cpu_per_minute

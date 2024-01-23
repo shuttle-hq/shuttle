@@ -8,7 +8,7 @@ use axum::body::Body;
 use axum::extract::{Extension, Path, Query, State};
 use axum::handler::Handler;
 use axum::http::Request;
-use axum::middleware::from_extractor;
+use axum::middleware::{self, from_extractor};
 use axum::response::Response;
 use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
@@ -49,6 +49,7 @@ use x509_parser::pem::parse_x509_pem;
 use x509_parser::time::ASN1Time;
 
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
+use crate::api::tracing::project_name_tracing_layer;
 use crate::auth::{ScopedUser, User};
 use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
 use crate::service::GatewayService;
@@ -1127,9 +1128,25 @@ impl ApiBuilder {
 
         const CARGO_SHUTTLE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+        let project_routes = Router::new()
+            .route(
+                "/projects/:project_name",
+                get(get_project.layer(ScopedLayer::new(vec![Scope::Project])))
+                    .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite])))
+                    .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
+            )
+            .route(
+                "/projects/:project_name/delete",
+                delete(delete_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
+            )
+            .route("/projects/name/:project_name", get(check_project_name))
+            .route("/projects/:project_name/*any", any(route_project))
+            .route_layer(middleware::from_fn(project_name_tracing_layer));
+
         self.router = self
             .router
             .route("/", get(get_status))
+            .merge(project_routes)
             .route(
                 "/versions",
                 get(|| async {
@@ -1151,18 +1168,6 @@ impl ApiBuilder {
                 "/projects",
                 get(get_projects_list.layer(ScopedLayer::new(vec![Scope::Project]))),
             )
-            .route(
-                "/projects/:project_name",
-                get(get_project.layer(ScopedLayer::new(vec![Scope::Project])))
-                    .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite])))
-                    .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
-            )
-            .route(
-                "/projects/:project_name/delete",
-                delete(delete_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
-            )
-            .route("/projects/name/:project_name", get(check_project_name))
-            .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
             .nest("/admin", admin_routes);
 

@@ -3,7 +3,8 @@ use qdrant_client::prelude::*;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
-    ContainerRequest, Environment, Factory, ResourceBuilder, Type,
+    resource::Type,
+    ContainerRequest, Environment, Factory, IntoResource, ResourceBuilder,
 };
 
 /// A Qdrant vector database
@@ -25,12 +26,6 @@ pub struct QdrantClientConfigWrap {
     api_key: Option<String>,
 }
 
-impl From<QdrantClientConfigWrap> for QdrantClientConfig {
-    fn from(wrap: QdrantClientConfigWrap) -> Self {
-        QdrantClientConfig::from_url(&wrap.url).with_api_key(wrap.api_key)
-    }
-}
-
 impl Qdrant {
     pub fn cloud_url(mut self, cloud_url: &str) -> Self {
         self.cloud_url = Some(cloud_url.to_string());
@@ -47,15 +42,11 @@ impl Qdrant {
 }
 
 #[async_trait]
-impl ResourceBuilder<QdrantClient> for Qdrant {
+impl ResourceBuilder for Qdrant {
     const TYPE: Type = Type::Custom;
 
     type Config = Self;
     type Output = QdrantClientConfigWrap;
-
-    fn new() -> Self {
-        Default::default()
-    }
 
     fn config(&self) -> &Self::Config {
         self
@@ -99,8 +90,13 @@ impl ResourceBuilder<QdrantClient> for Qdrant {
             },
         }
     }
+}
 
-    async fn build(client_config: &Self::Output) -> Result<QdrantClient, shuttle_service::Error> {
-        Ok(Into::<QdrantClientConfig>::into(client_config.clone()).build()?)
+#[async_trait]
+impl IntoResource<QdrantClient> for QdrantClientConfigWrap {
+    async fn into_resource(self) -> Result<QdrantClient, shuttle_service::Error> {
+        Ok(QdrantClientConfig::from_url(&self.url)
+            .with_api_key(self.api_key)
+            .build()?)
     }
 }

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use libsql::Database;
+use libsql::{Connection, Database};
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
@@ -56,8 +56,11 @@ impl From<Error> for shuttle_service::Error {
 }
 
 impl Turso {
-    async fn output_from_addr(&self, addr: &str
-        environment: Environment,) -> Result<TursoOutput, shuttle_service::Error> {
+    async fn output_from_addr(
+        &self,
+        addr: &str,
+        environment: Environment,
+    ) -> Result<TursoOutput, shuttle_service::Error> {
         Ok(TursoOutput {
             conn_url: Url::parse(addr).map_err(Error::UrlParseError)?,
             token: if self.token.is_empty() {
@@ -90,7 +93,13 @@ impl ResourceBuilder for Turso {
                 if self.addr.is_empty() {
                     Err(ShuttleError::Custom(CustomError::msg("missing addr")))
                 } else {
-                    self.output_from_addr(&self.addr, md.env).await
+                    // libsql automatically converts libsql:// to https:// or adds https:// if missing
+                    // but Url::parse() expects an absolute url
+                    let mut url = self.addr.clone();
+                    if !self.addr.contains("://") {
+                        url = format!("libsql://{}", url)
+                    }
+                    self.output_from_addr(&url, md.env).await
                 }
             }
             Environment::Local => {
@@ -106,7 +115,7 @@ impl ResourceBuilder for Turso {
                                 p
                             })
                             .map_err(Error::LocateLocalDB)?;
-                        let conn_url = format!("file:///{}", db_file.display());
+                        let conn_url = format!("file:{}", db_file.display());
                         Ok(TursoOutput {
                             conn_url: Url::parse(&conn_url).map_err(Error::UrlParseError)?,
                             // Nullify the token since we're using a file as database.
@@ -121,13 +130,12 @@ impl ResourceBuilder for Turso {
 }
 
 #[async_trait]
-impl IntoResource<Database> for TursoOutput {
-    async fn into_resource(self) -> Result<Database, shuttle_service::Error> {
-        match self.environment {
+impl IntoResource<Connection> for TursoOutput {
+    async fn into_resource(self) -> Result<Connection, shuttle_service::Error> {
+        let database = match self.environment {
             Environment::Deployment => Database::open_remote(
                 self.conn_url.to_string(),
-                self
-                    .token
+                self.token
                     .clone()
                     .ok_or(ShuttleError::Custom(CustomError::msg(
                         "missing token for remote database",
@@ -135,7 +143,10 @@ impl IntoResource<Database> for TursoOutput {
             ),
             Environment::Local => Database::open(self.conn_url.to_string()),
         };
-        database.map_err(|err| ShuttleError::Custom(err.into()))
+        database
+            .map_err(|err| ShuttleError::Custom(err.into()))?
+            .connect()
+            .map_err(|err| ShuttleError::Custom(err.into()))
     }
 }
 

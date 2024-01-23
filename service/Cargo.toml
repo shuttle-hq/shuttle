@@ -17,7 +17,9 @@ shuttle-common = { workspace = true, features = [
     "tracing",
     "display",
 ] }
-shuttle-proto = { workspace = true, optional = true, features = ["runtime"] }
+shuttle-proto = { workspace = true, features = [
+    "provisioner",
+] }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -46,4 +48,4 @@ builder = [
     "toml",
     "tracing",
 ]
-runner = ["shuttle-proto", "tokio/process", "dunce", "tower"]
+runner = ["shuttle-proto/runtime", "tokio/process", "dunce", "tower"]

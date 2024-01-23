@@ -10,7 +10,8 @@ use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+        ContainerRequest, ContainerResponse, DatabaseDeletionResponse, DatabaseRequest,
+        DatabaseResponse, Ping, Pong,
     },
     runtime::runtime_client::RuntimeClient,
 };
@@ -94,6 +95,13 @@ impl Provisioner for DummyProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseResponse>, Status> {
         panic!("did not expect any runtime test to use dbs")
+    }
+
+    async fn provision_arbitrary_container(
+        &self,
+        _req: tonic::Request<ContainerRequest>,
+    ) -> Result<tonic::Response<ContainerResponse>, tonic::Status> {
+        panic!("did not expect any runtime test to use container")
     }
 
     async fn delete_database(

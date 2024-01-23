@@ -10,6 +10,7 @@ pub use shuttle_common::{
     secrets::Secret,
     DatabaseInfo, DatabaseResource, DbInput, SecretStore,
 };
+pub use shuttle_proto::provisioner::{ContainerRequest, ContainerResponse};
 
 pub use crate::error::{CustomError, Error};
 
@@ -27,6 +28,12 @@ pub trait Factory: Send + Sync {
         &mut self,
         db_type: database::Type,
     ) -> Result<DatabaseInfo, crate::Error>;
+
+    /// Start a Docker container. Only used in local runs.
+    async fn get_container(
+        &mut self,
+        req: ContainerRequest,
+    ) -> Result<ContainerResponse, crate::Error>;
 
     /// Get the secrets associated with this service
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, Secret<String>>, crate::Error>;

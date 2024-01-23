@@ -156,6 +156,13 @@ mod test {
             panic!("no turso test should try to get a db connection string")
         }
 
+        async fn get_container(
+            &mut self,
+            _req: shuttle_service::ContainerRequest,
+        ) -> Result<shuttle_service::ContainerResponse, shuttle_service::Error> {
+            panic!("no turso test should try to get a container")
+        }
+
         async fn get_secrets(
             &mut self,
         ) -> Result<std::collections::BTreeMap<String, Secret<String>>, shuttle_service::Error>

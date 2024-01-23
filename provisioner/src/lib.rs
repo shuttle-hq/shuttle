@@ -18,7 +18,7 @@ use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
-use shuttle_proto::provisioner::{Ping, Pong};
+use shuttle_proto::provisioner::{ContainerRequest, ContainerResponse, Ping, Pong};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};
@@ -31,7 +31,7 @@ const AWS_RDS_CLASS: &str = "db.t4g.micro";
 const MASTER_USERNAME: &str = "master";
 const RDS_SUBNET_GROUP: &str = "shuttle_rds";
 
-pub struct MyProvisioner {
+pub struct ShuttleProvisioner {
     pool: PgPool,
     rds_client: aws_sdk_rds::Client,
     mongodb_client: mongodb::Client,
@@ -40,7 +40,7 @@ pub struct MyProvisioner {
     internal_mongodb_address: String,
 }
 
-impl MyProvisioner {
+impl ShuttleProvisioner {
     pub async fn new(
         shared_pg_uri: &str,
         shared_mongodb_uri: &str,
@@ -448,7 +448,7 @@ impl MyProvisioner {
 }
 
 #[tonic::async_trait]
-impl Provisioner for MyProvisioner {
+impl Provisioner for ShuttleProvisioner {
     #[tracing::instrument(skip(self))]
     async fn provision_database(
         &self,
@@ -504,6 +504,17 @@ impl Provisioner for MyProvisioner {
         };
 
         Ok(Response::new(reply))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn provision_arbitrary_container(
+        &self,
+        _request: Request<ContainerRequest>,
+    ) -> Result<Response<ContainerResponse>, Status> {
+        // Intended for use in local runs
+        Err(Status::unimplemented(
+            "Provisioning arbitrary containers on Shuttle is not supported",
+        ))
     }
 
     #[tracing::instrument(skip(self))]

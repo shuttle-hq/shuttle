@@ -156,7 +156,8 @@ mod tests {
         },
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
-            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+            ContainerRequest, ContainerResponse, DatabaseDeletionResponse, DatabaseRequest,
+            DatabaseResponse, Ping, Pong,
         },
         resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     };
@@ -332,6 +333,13 @@ mod tests {
             _request: tonic::Request<DatabaseRequest>,
         ) -> Result<tonic::Response<DatabaseResponse>, tonic::Status> {
             panic!("no deploy layer tests should request a db");
+        }
+
+        async fn provision_arbitrary_container(
+            &self,
+            _req: tonic::Request<ContainerRequest>,
+        ) -> Result<tonic::Response<ContainerResponse>, tonic::Status> {
+            panic!("no deploy layer tests should request container")
         }
 
         async fn delete_database(

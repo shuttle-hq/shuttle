@@ -21,4 +21,4 @@ tonic = { workspace = true }
 tower = { workspace = true }
 uuid = { workspace = true }
 wiremock = { workspace = true }
-http-types = "2.12.0"
+http = "1"

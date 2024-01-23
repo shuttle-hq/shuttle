@@ -1,5 +1,4 @@
-use http_types::headers::AUTHORIZATION;
-use hyper::Method;
+use http::Method;
 use serde::Serialize;
 use wiremock::{
     matchers::{method, path},
@@ -36,11 +35,11 @@ pub async fn mocked_gateway_server() -> MockServer {
     Mock::given(method(Method::GET))
         .and(path("/projects"))
         .respond_with(move |req: &Request| {
-            let Some(bearer) = req.headers.get(&AUTHORIZATION) else {
+            let Some(bearer) = req.headers.get(&http::header::AUTHORIZATION) else {
                 return ResponseTemplate::new(401);
             };
 
-            let user = bearer.last().as_str().split_whitespace().nth(1).unwrap();
+            let user = bearer.to_str().unwrap().split_whitespace().nth(1).unwrap();
 
             let body: Vec<_> = projects.iter().filter(|p| p.account_id == user).collect();
 

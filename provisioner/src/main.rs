@@ -8,7 +8,7 @@ use shuttle_common::{
     },
     log::Backend,
 };
-use shuttle_provisioner::{Args, MyProvisioner, ProvisionerServer};
+use shuttle_provisioner::{Args, ProvisionerServer, ShuttleProvisioner};
 use tonic::transport::Server;
 
 #[tokio::main]
@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } = Args::parse();
     let addr = SocketAddr::new(ip, port);
 
-    let provisioner = MyProvisioner::new(
+    let provisioner = ShuttleProvisioner::new(
         &shared_pg_uri,
         &shared_mongodb_uri,
         fqdn.to_string(),

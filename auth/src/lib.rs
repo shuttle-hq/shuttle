@@ -65,7 +65,10 @@ pub async fn pgpool_init(db_uri: &str) -> io::Result<PgPool> {
     let pool = PgPool::connect_with(opts)
         .await
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    MIGRATIONS.run(&pool).await.unwrap();
+    MIGRATIONS
+        .run(&pool)
+        .await
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
     Ok(pool)
 }

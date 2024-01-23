@@ -113,5 +113,5 @@ utoipa-swagger-ui = { version = "4.0.0", features = ["axum"] }
 ulid = "1.0.0"
 url = "2.4.0"
 uuid = "1.2.2"
-wiremock = "0.5"
+wiremock = "0.6.0-rc.3"
 zeroize = "1.6.0"

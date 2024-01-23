@@ -6,9 +6,11 @@ use shuttle_common::{
     constants::STORAGE_DIRNAME,
     database,
     secrets::Secret,
-    DatabaseReadyInfo,
+    DatabaseInfo,
 };
-use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
+use shuttle_proto::provisioner::{
+    provisioner_client::ProvisionerClient, ContainerRequest, ContainerResponse, DatabaseRequest,
+};
 use shuttle_service::{DeploymentMetadata, Environment, Factory};
 use tonic::{transport::Channel, Request};
 
@@ -44,7 +46,7 @@ impl Factory for ProvisionerFactory {
     async fn get_db_connection(
         &mut self,
         db_type: database::Type,
-    ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
+    ) -> Result<DatabaseInfo, shuttle_service::Error> {
         let mut request = Request::new(DatabaseRequest {
             project_name: self.service_name.to_string(),
             db_type: Some(db_type.into()),
@@ -61,9 +63,29 @@ impl Factory for ProvisionerFactory {
             .map_err(shuttle_service::error::CustomError::new)?
             .into_inner();
 
-        let info: DatabaseReadyInfo = response.into();
+        let info: DatabaseInfo = response.into();
 
         Ok(info)
+    }
+
+    async fn get_container(
+        &mut self,
+        req: ContainerRequest,
+    ) -> Result<ContainerResponse, shuttle_service::Error> {
+        let mut request = Request::new(req);
+
+        if let Some(claim) = &self.claim {
+            request.extensions_mut().insert(claim.clone());
+        }
+
+        let response = self
+            .provisioner_client
+            .provision_arbitrary_container(request)
+            .await
+            .map_err(shuttle_service::error::CustomError::new)?
+            .into_inner();
+
+        Ok(response)
     }
 
     async fn get_secrets(

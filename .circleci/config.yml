@@ -718,6 +718,7 @@ workflows:
                 - services/shuttle-actix-web
                 - services/shuttle-next
                 - services/shuttle-poem
+                - services/shuttle-poise
                 - services/shuttle-rocket
                 - services/shuttle-salvo
                 - services/shuttle-thruster
@@ -748,17 +749,6 @@ workflows:
               features:
                 - "-F axum"
                 - "-F axum-0-6 --no-default-features"
-      - test-standalone:
-          # Has mutually exclusive features, so we run checks for each feature separately
-          name: "services/shuttle-poise: << matrix.features >>"
-          matrix:
-            alias: test-standalone-services-shuttle-poise
-            parameters:
-              path:
-                - services/shuttle-poise
-              features:
-                - "-F poise"
-                - "-F poise-0-5 --no-default-features"
       - test-standalone:
           # Has mutually exclusive features, so we run checks for each feature separately
           name: "services/shuttle-serenity: << matrix.features >>"

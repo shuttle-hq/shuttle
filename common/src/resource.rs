@@ -8,7 +8,7 @@ use utoipa::ToSchema;
 use crate::database;
 
 /// Common type to hold all the information we need for a generic resource
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::resource::Response))]
 pub struct Response {

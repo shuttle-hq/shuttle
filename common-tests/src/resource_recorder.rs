@@ -53,10 +53,25 @@ impl ResourceRecorder for MockedResourceRecorder {
 
     async fn get_project_resources(
         &self,
-        _request: Request<ProjectResourcesRequest>,
+        request: Request<ProjectResourcesRequest>,
     ) -> Result<Response<ResourcesResponse>, Status> {
         println!("getting project resources");
-        Ok(Response::new(Default::default()))
+
+        let ProjectResourcesRequest { project_id } = request.into_inner();
+        let resources = self
+            .resources
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|r| r.project_id == project_id)
+            .cloned()
+            .collect();
+
+        Ok(Response::new(ResourcesResponse {
+            success: true,
+            message: Default::default(),
+            resources,
+        }))
     }
 
     async fn get_service_resources(
@@ -141,7 +156,7 @@ impl ResourceRecorder for MockedResourceRecorder {
     }
 }
 
-/// Start a mocked resource recorder and return the address it started on
+/// Start a mocked resource recorder and return the port it started on
 /// This mock will function like a normal resource recorder. However, it will always fail to delete metadata resources
 /// if any tests need to simulate a failure.
 pub async fn start_mocked_resource_recorder() -> u16 {

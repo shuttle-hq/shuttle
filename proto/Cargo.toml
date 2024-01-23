@@ -9,6 +9,7 @@ description = "Library for all the gRPC definitions used by shuttle"
 shuttle-common = { workspace = true }
 
 anyhow = { workspace = true, optional = true }
+async-trait = { workspace = true }
 chrono = { workspace = true, optional = true }
 futures-core = "0.3.28"
 prost = { workspace = true }
@@ -17,6 +18,10 @@ tokio = { workspace = true, optional = true }
 tonic = { workspace = true }
 tracing = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
+
+[dev-dependencies]
+test-context = { workspace = true }
+shuttle-common-tests = { workspace = true }
 
 [features]
 default = []

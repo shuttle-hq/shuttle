@@ -106,10 +106,8 @@ pub mod runtime {
 #[cfg(feature = "resource-recorder")]
 pub mod resource_recorder {
     use anyhow::Context;
-    use shuttle_common::{
-        backends::client::{self, ResourceDal},
-        claims::Claim,
-    };
+    use async_trait::async_trait;
+    use shuttle_common::backends::client::{self, ResourceDal};
     use std::str::FromStr;
 
     use self::resource_recorder_client::ResourceRecorderClient;
@@ -155,26 +153,32 @@ pub mod resource_recorder {
         }
     }
 
-    impl ResourceDal
-        for ResourceRecorderClient<
-            shuttle_common::claims::ClaimService<
-                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-            >,
-        >
+    #[async_trait]
+    impl<T> ResourceDal for &mut ResourceRecorderClient<T>
+    where
+        T: tonic::client::GrpcService<tonic::body::BoxBody> + Clone + Send,
+        T::Error: Into<tonic::codegen::StdError>,
+        T::ResponseBody: tonic::codegen::Body<Data = tonic::codegen::Bytes> + Send + 'static,
+        T::Future: Send,
+        <T::ResponseBody as tonic::codegen::Body>::Error: Into<tonic::codegen::StdError> + Send,
     {
         async fn get_project_resources(
             &mut self,
             project_id: &str,
-            claim: &Claim,
-        ) -> Result<impl Iterator<Item = shuttle_common::resource::Response>, client::Error>
-        {
+            token: &str,
+        ) -> Result<Vec<shuttle_common::resource::Response>, client::Error> {
             let mut req = tonic::Request::new(ProjectResourcesRequest {
                 project_id: project_id.to_string(),
             });
 
-            req.extensions_mut().insert(claim.clone());
+            // req.extensions_mut().insert(claim.clone());
 
-            let resp = self.get_project_resources(req).await?.into_inner();
+            let resp = (*self)
+                .get_project_resources(req)
+                .await
+                .unwrap()
+                .into_inner()
+                .clone();
 
             let resources = resp
                 .resources
@@ -183,7 +187,71 @@ pub mod resource_recorder {
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|error: anyhow::Error| tonic::Status::internal(error.to_string()))?;
 
-            Ok(resources.into_iter())
+            Ok(resources)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use async_trait::async_trait;
+        use serde_json::json;
+        use shuttle_common::{database, resource};
+        use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
+        use test_context::{test_context, AsyncTestContext};
+        use tonic::{transport::Channel, Request};
+
+        use crate::generated::resource_recorder::{record_request, RecordRequest};
+
+        use super::{ResourceDal, ResourceRecorderClient};
+
+        type RRClient = ResourceRecorderClient<Channel>;
+
+        #[async_trait]
+        impl AsyncTestContext for RRClient {
+            async fn setup() -> Self {
+                let port = start_mocked_resource_recorder().await;
+
+                let client = ResourceRecorderClient::connect(format!("http://localhost:{port}"))
+                    .await
+                    .unwrap();
+
+                client
+            }
+
+            async fn teardown(mut self) {}
+        }
+
+        #[test_context(RRClient)]
+        #[tokio::test]
+        async fn get_project_resources(mut r_r_client: &mut RRClient) {
+            r_r_client
+                .record_resources(Request::new(RecordRequest {
+                    project_id: "project_1".to_string(),
+                    service_id: "service_1".to_string(),
+                    resources: vec![record_request::Resource {
+                        r#type: "database::shared::postgres".to_string(),
+                        config: serde_json::to_vec(&json!({"public": true})).unwrap(),
+                        data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
+                    }],
+                }))
+                .await
+                .unwrap();
+
+            let resources = (&mut r_r_client as &mut dyn ResourceDal)
+                .get_project_resources("project_1", "user-1")
+                .await
+                .unwrap();
+
+            assert_eq!(
+                resources,
+                vec![resource::Response {
+                    r#type: resource::Type::Database(database::Type::Shared(
+                        database::SharedEngine::Postgres
+                    )),
+                    config: json!({"public": true}),
+                    data: json!({"username": "test"}),
+                }]
+            );
         }
     }
 }

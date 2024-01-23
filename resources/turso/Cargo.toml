@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-turso"
-version = "0.36.0"
+version = "0.37.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Plugin to obtain a client connected to a Turso database"
@@ -11,7 +11,7 @@ async-trait = "0.1.56"
 dunce = "1.0.4"
 libsql-client = "0.31.0" # Stays on 0.31 until https://github.com/libsql/libsql-client-rs/issues/52
 serde = { version = "1.0.148", features = ["derive"] }
-shuttle-service = { path = "../../service", version = "0.36.0", default-features = false }
+shuttle-service = { path = "../../service", version = "0.37.0", default-features = false }
 url = { version = "2.3.1", features = ["serde"] }
 
 [dev-dependencies]

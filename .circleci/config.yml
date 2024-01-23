@@ -718,7 +718,6 @@ workflows:
                 - services/shuttle-actix-web
                 - services/shuttle-next
                 - services/shuttle-poem
-                - services/shuttle-poise
                 - services/shuttle-rocket
                 - services/shuttle-salvo
                 - services/shuttle-thruster

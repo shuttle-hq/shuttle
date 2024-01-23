@@ -93,13 +93,12 @@ impl ResourceBuilder for Turso {
                 if self.addr.is_empty() {
                     Err(ShuttleError::Custom(CustomError::msg("missing addr")))
                 } else {
-                    // libsql automatically converts libsql:// to https:// or adds https:// if missing
-                    // but Url::parse() expects an absolute url
-                    let mut url = self.addr.clone();
-                    if !self.addr.contains("://") {
-                        url = format!("libsql://{}", url)
+                    if !self.addr.starts_with("libsql://") && !self.addr.starts_with("https://") {
+                        return Err(ShuttleError::Custom(CustomError::msg(
+                            "addr must start with either libsql:// or https://",
+                        )));
                     }
-                    self.output_from_addr(&url, md.env).await
+                    self.output_from_addr(&self.addr, md.env).await
                 }
             }
             Environment::Local => {
@@ -242,7 +241,7 @@ mod test {
         let mut factory = MockFactory::new(Environment::Deployment);
 
         let mut turso = Turso::default();
-        let addr = "my-turso-addr.turso.io".to_string();
+        let addr = "libsql://my-turso-addr.turso.io".to_string();
         turso.addr = addr.clone();
         turso.token = "token".to_string();
         let output = turso.output(&mut factory).await.unwrap();
@@ -250,7 +249,7 @@ mod test {
         assert_eq!(
             output,
             TursoOutput {
-                conn_url: Url::parse(&format!("libsql://{}", addr)).unwrap(),
+                conn_url: Url::parse(&addr).unwrap(),
                 token: Some("token".to_string()),
                 environment: Environment::Deployment,
             }

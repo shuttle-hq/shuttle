@@ -57,6 +57,7 @@ impl ResourceRecorder for MockedResourceRecorder {
     ) -> Result<Response<ResourcesResponse>, Status> {
         println!("getting project resources");
 
+        // Make sure clients set the authorization correctly
         let _user = request
             .metadata()
             .get("authorization")

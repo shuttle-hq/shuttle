@@ -227,6 +227,7 @@ pub mod resource_recorder {
         #[test_context(RRClient)]
         #[tokio::test]
         async fn get_project_resources(mut r_r_client: &mut RRClient) {
+            // First record some resources
             r_r_client
                 .record_resources(Request::new(RecordRequest {
                     project_id: "project_1".to_string(),

@@ -9,10 +9,10 @@ description = "Library for all the gRPC definitions used by shuttle"
 shuttle-common = { workspace = true }
 
 anyhow = { workspace = true, optional = true }
-async-trait = { workspace = true }
+async-trait = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 futures-core = "0.3.28"
-http = { workspace = true }
+http = { workspace = true, optional = true }
 prost = { workspace = true }
 prost-types = { workspace = true }
 tokio = { workspace = true, optional = true }
@@ -36,5 +36,5 @@ logger = [
     "tokio/time",
 ]
 provisioner = []
-resource-recorder = ["anyhow", "serde_json", "shuttle-common/backend"]
+resource-recorder = ["anyhow", "async-trait", "http", "serde_json", "shuttle-common/backend"]
 runtime = []

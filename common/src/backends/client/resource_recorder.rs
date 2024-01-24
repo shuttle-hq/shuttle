@@ -4,14 +4,17 @@ use crate::{database, resource};
 
 use super::Error;
 
+/// DAL for access resources data of projects
 #[async_trait]
 pub trait ResourceDal: Send {
+    /// Get the resources belonging to a project
     async fn get_project_resources(
         &mut self,
         project_id: &str,
         token: &str,
     ) -> Result<Vec<resource::Response>, Error>;
 
+    /// Get only the RDS resources that belong to a project
     async fn get_project_rds_resources(
         &mut self,
         project_id: &str,

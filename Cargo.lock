@@ -6695,6 +6695,7 @@ dependencies = [
  "test-context",
  "tokio",
  "tonic 0.10.2",
+ "tower",
  "tracing",
 ]
 
@@ -6714,6 +6715,7 @@ dependencies = [
  "rand 0.8.5",
  "serde_json",
  "shuttle-common",
+ "shuttle-common-tests",
  "shuttle-proto",
  "sqlx",
  "thiserror",

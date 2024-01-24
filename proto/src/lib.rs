@@ -107,7 +107,7 @@ pub mod runtime {
 pub mod resource_recorder {
     use anyhow::Context;
     use async_trait::async_trait;
-    use http::header::AUTHORIZATION;
+    use http::{header::AUTHORIZATION, Uri};
     use shuttle_common::backends::client::{self, ResourceDal};
     use std::str::FromStr;
 
@@ -154,15 +154,29 @@ pub mod resource_recorder {
         }
     }
 
+    pub type Client = ResourceRecorderClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >;
+
+    /// Get a resource recorder client that is correctly configured for all services
+    pub async fn get_client(resource_recorder_uri: Uri) -> Client {
+        let channel = tonic::transport::Endpoint::from(resource_recorder_uri)
+            .connect()
+            .await
+            .expect("failed to connect to resource recorder");
+
+        let resource_recorder_service = tower::ServiceBuilder::new()
+            .layer(shuttle_common::claims::ClaimLayer)
+            .layer(shuttle_common::claims::InjectPropagationLayer)
+            .service(channel);
+
+        ResourceRecorderClient::new(resource_recorder_service)
+    }
+
     #[async_trait]
-    impl<T> ResourceDal for &mut ResourceRecorderClient<T>
-    where
-        T: tonic::client::GrpcService<tonic::body::BoxBody> + Send,
-        T::Error: Into<tonic::codegen::StdError>,
-        T::ResponseBody: tonic::codegen::Body<Data = tonic::codegen::Bytes> + Send + 'static,
-        T::Future: Send,
-        <T::ResponseBody as tonic::codegen::Body>::Error: Into<tonic::codegen::StdError> + Send,
-    {
+    impl ResourceDal for &mut Client {
         async fn get_project_resources(
             &mut self,
             project_id: &str,
@@ -203,30 +217,26 @@ pub mod resource_recorder {
         use shuttle_common::{database, resource};
         use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
         use test_context::{test_context, AsyncTestContext};
-        use tonic::{transport::Channel, Request};
+        use tonic::Request;
 
         use crate::generated::resource_recorder::{record_request, RecordRequest};
 
-        use super::{ResourceDal, ResourceRecorderClient};
-
-        type RRClient = ResourceRecorderClient<Channel>;
+        use super::{get_client, Client, ResourceDal};
 
         #[async_trait]
-        impl AsyncTestContext for RRClient {
+        impl AsyncTestContext for Client {
             async fn setup() -> Self {
                 let port = start_mocked_resource_recorder().await;
 
-                ResourceRecorderClient::connect(format!("http://localhost:{port}"))
-                    .await
-                    .unwrap()
+                get_client(format!("http://localhost:{port}").parse().unwrap()).await
             }
 
             async fn teardown(mut self) {}
         }
 
-        #[test_context(RRClient)]
+        #[test_context(Client)]
         #[tokio::test]
-        async fn get_project_resources(mut r_r_client: &mut RRClient) {
+        async fn get_project_resources(mut r_r_client: &mut Client) {
             // First record some resources
             r_r_client
                 .record_resources(Request::new(RecordRequest {

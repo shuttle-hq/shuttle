@@ -19,8 +19,10 @@ use shuttle_proto::provisioner::{
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
 use shuttle_proto::provisioner::{ContainerRequest, ContainerResponse, Ping, Pong};
+use shuttle_proto::resource_recorder;
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
+use tonic::transport::Uri;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info, warn};
 
@@ -38,6 +40,7 @@ pub struct ShuttleProvisioner {
     fqdn: String,
     internal_pg_address: String,
     internal_mongodb_address: String,
+    rr_client: resource_recorder::Client,
 }
 
 impl ShuttleProvisioner {
@@ -47,6 +50,7 @@ impl ShuttleProvisioner {
         fqdn: String,
         internal_pg_address: String,
         internal_mongodb_address: String,
+        resource_recorder_uri: Uri,
     ) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
@@ -70,6 +74,8 @@ impl ShuttleProvisioner {
 
         let rds_client = aws_sdk_rds::Client::new(&aws_config);
 
+        let rr_client = resource_recorder::get_client(resource_recorder_uri).await;
+
         Ok(Self {
             pool,
             rds_client,
@@ -77,6 +83,7 @@ impl ShuttleProvisioner {
             fqdn,
             internal_pg_address,
             internal_mongodb_address,
+            rr_client,
         })
     }
 

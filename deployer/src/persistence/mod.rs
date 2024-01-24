@@ -12,8 +12,8 @@ use shuttle_common::{
 use shuttle_proto::{
     provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest},
     resource_recorder::{
-        record_request, resource_recorder_client::ResourceRecorderClient, RecordRequest,
-        ResourceIds, ResourceResponse, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
+        self, record_request, RecordRequest, ResourceIds, ResourceResponse, ResourcesResponse,
+        ResultResponse, ServiceResourcesRequest,
     },
 };
 use sqlx::{
@@ -54,13 +54,7 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 pub struct Persistence {
     pool: SqlitePool,
     state_send: tokio::sync::mpsc::UnboundedSender<DeploymentState>,
-    resource_recorder_client: Option<
-        ResourceRecorderClient<
-            shuttle_common::claims::ClaimService<
-                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-            >,
-        >,
-    >,
+    resource_recorder_client: Option<resource_recorder::Client>,
     provisioner_client: Option<
         ProvisionerClient<
             shuttle_common::claims::ClaimService<
@@ -78,7 +72,7 @@ impl Persistence {
     /// than repeatedly calling [`Persistence::new`].
     pub async fn new(
         path: &str,
-        resource_recorder_uri: &Uri,
+        resource_recorder_uri: Uri,
         provisioner_address: &Uri,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
@@ -111,7 +105,7 @@ impl Persistence {
 
         Self::configure(
             pool,
-            resource_recorder_uri.to_string(),
+            resource_recorder_uri,
             provisioner_address.to_string(),
             project_id,
         )
@@ -144,21 +138,10 @@ impl Persistence {
 
     async fn configure(
         pool: SqlitePool,
-        resource_recorder_uri: String,
+        resource_recorder_uri: Uri,
         provisioner_address: String,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
-        let channel = Endpoint::from_shared(resource_recorder_uri)
-            .expect("to have a valid string endpoint for the resource recorder")
-            .connect()
-            .await
-            .expect("failed to connect to resource recorder");
-
-        let resource_recorder_service = ServiceBuilder::new()
-            .layer(ClaimLayer)
-            .layer(InjectPropagationLayer)
-            .service(channel);
-
         let channel = Endpoint::from_shared(provisioner_address)
             .expect("to have a valid string endpoint for the provisioner")
             .connect()
@@ -170,7 +153,7 @@ impl Persistence {
             .layer(InjectPropagationLayer)
             .service(channel);
 
-        let resource_recorder_client = ResourceRecorderClient::new(resource_recorder_service);
+        let resource_recorder_client = resource_recorder::get_client(resource_recorder_uri).await;
         let provisioner_client = ProvisionerClient::new(provisioner_service);
 
         let (state_send, handle) = Self::from_pool(pool.clone()).await;

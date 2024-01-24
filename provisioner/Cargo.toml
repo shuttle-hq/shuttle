@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 shuttle-common = { workspace = true, features = ["backend", "models", "service", "tonic"] }
-shuttle-proto = { workspace = true, features = ["provisioner"] }
+shuttle-proto = { workspace = true, features = ["provisioner", "resource-recorder"] }
 
 aws-config = "0.56.1"
 aws-sdk-rds = "0.33.1"
@@ -29,3 +29,4 @@ ctor = { workspace = true }
 once_cell = { workspace = true }
 portpicker = { workspace = true }
 serde_json = { workspace = true }
+shuttle-common-tests = { workspace = true }

@@ -138,7 +138,7 @@ pub async fn build_workspace(
                 .map(|d| format!("{} '{}'", d.name, d.req))
                 .collect::<Vec<_>>();
             shuttle_deps.sort();
-            info!(name = member.name, deps = ?shuttle_deps, "Compiled workspace member with shuttle dependencies");
+            info!(name = member.name, deps = ?shuttle_deps, "Compiling workspace member with shuttle dependencies");
         }
         if next {
             ensure_cdylib(member)?;

@@ -26,6 +26,9 @@ pub mod tracing;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
+#[cfg(test)]
+mod test_utils;
+
 use std::fmt::Debug;
 
 use anyhow::bail;

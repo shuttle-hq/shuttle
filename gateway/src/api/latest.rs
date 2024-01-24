@@ -434,7 +434,7 @@ async fn delete_project(
     Ok(AxumJson("project successfully deleted".to_owned()))
 }
 
-#[instrument(skip_all, fields(scope = %scoped_user.scope))]
+#[instrument(skip_all, fields(shuttle.project.name = %scoped_user.scope))]
 async fn route_project(
     State(RouterState {
         service,

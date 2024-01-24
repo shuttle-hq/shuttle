@@ -216,11 +216,9 @@ pub mod resource_recorder {
             async fn setup() -> Self {
                 let port = start_mocked_resource_recorder().await;
 
-                let client = ResourceRecorderClient::connect(format!("http://localhost:{port}"))
+                ResourceRecorderClient::connect(format!("http://localhost:{port}"))
                     .await
-                    .unwrap();
-
-                client
+                    .unwrap()
             }
 
             async fn teardown(mut self) {}

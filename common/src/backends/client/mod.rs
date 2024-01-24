@@ -8,10 +8,9 @@ use thiserror::Error;
 use tracing::{trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-mod gateway;
+pub mod gateway;
 mod resource_recorder;
 
-pub use gateway::GatewayClient;
 pub use resource_recorder::ResourceDal;
 
 #[derive(Error, Debug)]

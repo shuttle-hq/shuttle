@@ -11,6 +11,7 @@ pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_common::backends::auth::VerifyClaim;
+use shuttle_common::backends::client::gateway;
 use shuttle_common::claims::Scope;
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
@@ -41,6 +42,7 @@ pub struct ShuttleProvisioner {
     internal_pg_address: String,
     internal_mongodb_address: String,
     rr_client: resource_recorder::Client,
+    gateway_client: gateway::Client,
 }
 
 impl ShuttleProvisioner {
@@ -51,6 +53,7 @@ impl ShuttleProvisioner {
         internal_pg_address: String,
         internal_mongodb_address: String,
         resource_recorder_uri: Uri,
+        gateway_uri: Uri,
     ) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
@@ -76,6 +79,8 @@ impl ShuttleProvisioner {
 
         let rr_client = resource_recorder::get_client(resource_recorder_uri).await;
 
+        let gateway_client = gateway::Client::new(gateway_uri.clone(), gateway_uri);
+
         Ok(Self {
             pool,
             rds_client,
@@ -84,6 +89,7 @@ impl ShuttleProvisioner {
             internal_pg_address,
             internal_mongodb_address,
             rr_client,
+            gateway_client,
         })
     }
 

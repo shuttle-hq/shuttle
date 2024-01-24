@@ -4,7 +4,9 @@ use ctor::dtor;
 use helpers::{exec_mongosh, exec_psql, DbType, DockerInstance};
 use once_cell::sync::Lazy;
 use serde_json::Value;
-use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
+use shuttle_common_tests::{
+    gateway::mocked_gateway_server, resource_recorder::start_mocked_resource_recorder,
+};
 use shuttle_proto::provisioner::shared;
 use shuttle_provisioner::ShuttleProvisioner;
 use tonic::transport::Uri;
@@ -12,6 +14,7 @@ use tonic::transport::Uri;
 static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::Postgres));
 static MONGODB: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::MongoDb));
 static RR_URI: tokio::sync::OnceCell<Uri> = tokio::sync::OnceCell::const_new();
+static GATEWAY_URI: tokio::sync::OnceCell<Uri> = tokio::sync::OnceCell::const_new();
 
 async fn get_rr_uri() -> Uri {
     let uri = RR_URI
@@ -19,6 +22,18 @@ async fn get_rr_uri() -> Uri {
             let port = start_mocked_resource_recorder().await;
 
             format!("http://localhost:{port}").parse().unwrap()
+        })
+        .await;
+
+    uri.clone()
+}
+
+async fn get_gateway_uri() -> Uri {
+    let uri = GATEWAY_URI
+        .get_or_init(|| async {
+            let server = mocked_gateway_server().await;
+
+            server.uri().parse().unwrap()
         })
         .await;
 
@@ -43,6 +58,7 @@ mod needs_docker {
             "pg".to_string(),
             "mongodb".to_string(),
             get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -72,6 +88,7 @@ mod needs_docker {
             "pg".to_string(),
             "mongodb".to_string(),
             get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -103,6 +120,7 @@ mod needs_docker {
             "pg".to_string(),
             "mongodb".to_string(),
             get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -125,6 +143,7 @@ mod needs_docker {
             "pg".to_string(),
             "mongodb".to_string(),
             get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -154,6 +173,7 @@ mod needs_docker {
             "pg".to_string(),
             "mongodb".to_string(),
             get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -185,6 +205,7 @@ mod needs_docker {
             "pg".to_string(),
             "mongodb".to_string(),
             get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -210,6 +231,7 @@ mod needs_docker {
             "pg".to_string(),
             "mongodb".to_string(),
             get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();

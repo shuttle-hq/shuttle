@@ -7,12 +7,12 @@ use super::{Error, ServicesApiClient};
 
 /// Wrapper struct to make API calls to gateway easier
 #[derive(Clone)]
-pub struct GatewayClient {
+pub struct Client {
     public_client: ServicesApiClient,
     private_client: ServicesApiClient,
 }
 
-impl GatewayClient {
+impl Client {
     /// Make a gateway client that is able to call the public and private APIs on gateway
     pub fn new(public_uri: Uri, private_uri: Uri) -> Self {
         Self {
@@ -53,7 +53,7 @@ trait ProjectsDal {
     }
 }
 
-impl ProjectsDal for GatewayClient {
+impl ProjectsDal for Client {
     async fn get_user_projects(
         &self,
         user_token: &str,
@@ -80,22 +80,22 @@ mod tests {
 
     use crate::models::project::{Response, State};
 
-    use super::{GatewayClient, ProjectsDal};
+    use super::{Client, ProjectsDal};
 
     #[async_trait]
-    impl AsyncTestContext for GatewayClient {
+    impl AsyncTestContext for Client {
         async fn setup() -> Self {
             let server = mocked_gateway_server().await;
 
-            GatewayClient::new(server.uri().parse().unwrap(), server.uri().parse().unwrap())
+            Client::new(server.uri().parse().unwrap(), server.uri().parse().unwrap())
         }
 
         async fn teardown(mut self) {}
     }
 
-    #[test_context(GatewayClient)]
+    #[test_context(Client)]
     #[tokio::test]
-    async fn get_user_projects(client: &mut GatewayClient) {
+    async fn get_user_projects(client: &mut Client) {
         let res = client.get_user_projects("user-1").await.unwrap();
 
         assert_eq!(
@@ -117,9 +117,9 @@ mod tests {
         )
     }
 
-    #[test_context(GatewayClient)]
+    #[test_context(Client)]
     #[tokio::test]
-    async fn get_user_project_ids(client: &mut GatewayClient) {
+    async fn get_user_project_ids(client: &mut Client) {
         let res = client.get_user_project_ids("user-2").await.unwrap();
 
         assert_eq!(res, vec!["id3"])

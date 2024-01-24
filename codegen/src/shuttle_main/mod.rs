@@ -213,7 +213,14 @@ impl ToTokens for Loader {
                             lit: Lit::Str(str), ..
                         }) => {
                             needs_vars = true;
-                            quote!(&::shuttle_runtime::__internals::strfmt(#str, &__vars)?)
+                            // Allow KeyErrors (missing secrets) and substitute them with empty strings
+                            quote!(
+                                &match ::shuttle_runtime::__internals::strfmt::strfmt(#str, &__vars) {
+                                    Ok(s) => Ok(s),
+                                    Err(::shuttle_runtime::__internals::strfmt::FmtError::KeyError(_)) => Ok("".to_owned()),
+                                    Err(e) => Err(e),
+                                }?
+                            )
                         }
                         other => quote!(#other),
                     };

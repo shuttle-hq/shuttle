@@ -92,17 +92,8 @@ endif
 POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=14
 
-PANAMAX_EXTRA_PATH?=./extras/panamax
-PANAMAX_TAG?=1.0.12
-
 OTEL_EXTRA_PATH?=./extras/otel
 OTEL_TAG?=0.90.1
-
-USE_PANAMAX?=enable
-ifeq ($(USE_PANAMAX), enable)
-PREPARE_ARGS+=-p
-COMPOSE_PROFILES+=panamax
-endif
 
 ifeq ($(SHUTTLE_DETACH), disable)
 SHUTTLE_DETACH=
@@ -126,7 +117,6 @@ DOCKER_COMPOSE_ENV=\
 	LOGGER_POSTGRES_TAG=${LOGGER_POSTGRES_TAG}\
 	LOGGER_POSTGRES_PASSWORD=${LOGGER_POSTGRES_PASSWORD}\
 	LOGGER_POSTGRES_URI=${LOGGER_POSTGRES_URI}\
-	PANAMAX_TAG=${PANAMAX_TAG}\
 	OTEL_TAG=${OTEL_TAG}\
 	APPS_FQDN=$(APPS_FQDN)\
 	DB_FQDN=$(DB_FQDN)\
@@ -146,7 +136,7 @@ DOCKER_COMPOSE_ENV=\
 	SHUTTLE_ENV=$(SHUTTLE_ENV)\
 	SHUTTLE_SERVICE_VERSION=$(SHUTTLE_SERVICE_VERSION)
 
-.PHONY: clean cargo-clean images the-shuttle-images shuttle-% postgres panamax otel deploy test docker-compose.rendered.yml up down
+.PHONY: clean cargo-clean images the-shuttle-images shuttle-% postgres otel deploy test docker-compose.rendered.yml up down
 
 clean:
 	rm .shuttle-*
@@ -155,7 +145,7 @@ clean:
 cargo-clean:
 	find . -type d \( -name target -or -name .shuttle-executables \) | xargs rm -rf
 
-images: the-shuttle-images postgres panamax otel
+images: the-shuttle-images postgres otel
 
 the-shuttle-images: shuttle-auth shuttle-builder shuttle-deployer shuttle-gateway shuttle-logger shuttle-provisioner shuttle-resource-recorder
 
@@ -184,16 +174,6 @@ postgres:
 		-f $(POSTGRES_EXTRA_PATH)/Containerfile \
 		$(POSTGRES_EXTRA_PATH)
 
-panamax:
-	if [ $(USE_PANAMAX) = "enable" ]; then \
-		$(DOCKER_BUILD) \
-			--build-arg PANAMAX_TAG=$(PANAMAX_TAG) \
-			--tag $(CONTAINER_REGISTRY)/panamax:$(PANAMAX_TAG) \
-			$(BUILDX_FLAGS) \
-			-f $(PANAMAX_EXTRA_PATH)/Containerfile \
-			$(PANAMAX_EXTRA_PATH); \
-	fi
-
 otel:
 	$(DOCKER_BUILD) \
 		--build-arg OTEL_TAG=$(OTEL_TAG) \
@@ -213,9 +193,7 @@ test:
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@
 
-# Start the containers locally. This does not start panamax by default,
-# to start panamax locally run this command with an override for the profiles:
-# `make COMPOSE_PROFILES=panamax up`
+# Start the containers locally.
 up: $(DOCKER_COMPOSE_FILES)
 	$(DOCKER_COMPOSE_ENV) \
 	$(DOCKER_COMPOSE) \

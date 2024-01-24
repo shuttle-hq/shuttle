@@ -4,8 +4,6 @@ volumes:
   builder-store-vol:
   gateway-vol:
   postgres-vol:
-  panamax-crates-vol:
-  panamax-io-index-vol:
   resource-recorder-vol:
   mongodb-vol:
 networks:
@@ -294,33 +292,6 @@ services:
       - DD_API_KEY=${DD_API_KEY}
       - DD_ENV=${DD_ENV}
       - HONEYCOMB_API_KEY=${HONEYCOMB_API_KEY}
-    deploy:
-      placement:
-        constraints:
-          - node.hostname==controller
-  panamax:
-    image: "${CONTAINER_REGISTRY}/panamax:${PANAMAX_TAG}"
-    restart: always
-    networks:
-      user-net:
-    volumes:
-      - panamax-crates-vol:/mirror/crates
-      - panamax-io-index-vol:/mirror/crates.io-index
-    labels:
-      deck-chores.sync-mirror.command: panamax sync /mirror
-      deck-chores.sync-mirror.interval: 5 minutes
-      deck-chores.sync-mirror.max: 1
-    deploy:
-      placement:
-        constraints:
-          - node.hostname==controller
-  deck-chores:
-    image: docker.io/funkyfuture/deck-chores:1
-    restart: unless-stopped
-    environment:
-      TIMEZONE: UTC
-    volumes:
-      - ${DOCKER_SOCK}:/var/run/docker.sock
     deploy:
       placement:
         constraints:

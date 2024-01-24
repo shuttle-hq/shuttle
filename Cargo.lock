@@ -6033,7 +6033,6 @@ dependencies = [
  "semver 1.0.20",
  "serde",
  "serde_json",
- "shuttle-common-tests",
  "sqlx",
  "strum 0.25.0",
  "test-context",
@@ -6051,6 +6050,7 @@ dependencies = [
  "url",
  "utoipa",
  "uuid",
+ "wiremock",
  "zeroize",
 ]
 
@@ -6059,7 +6059,6 @@ name = "shuttle-common-tests"
 version = "0.37.0"
 dependencies = [
  "cargo-shuttle",
- "http 1.0.0",
  "hyper 0.14.27",
  "portpicker",
  "reqwest",
@@ -6071,7 +6070,6 @@ dependencies = [
  "tonic 0.10.2",
  "tower",
  "uuid",
- "wiremock",
 ]
 
 [[package]]

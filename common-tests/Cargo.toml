@@ -20,5 +20,3 @@ tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
 uuid = { workspace = true }
-wiremock = { workspace = true }
-http = "1"

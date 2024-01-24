@@ -107,6 +107,7 @@ pub mod runtime {
 pub mod resource_recorder {
     use anyhow::Context;
     use async_trait::async_trait;
+    use http::header::AUTHORIZATION;
     use shuttle_common::backends::client::{self, ResourceDal};
     use std::str::FromStr;
 
@@ -171,12 +172,16 @@ pub mod resource_recorder {
                 project_id: project_id.to_string(),
             });
 
-            // req.extensions_mut().insert(claim.clone());
+            req.metadata_mut().insert(
+                AUTHORIZATION.as_str(),
+                format!("Bearer {token}")
+                    .parse()
+                    .expect("to construct a bearer token"),
+            );
 
             let resp = (*self)
                 .get_project_resources(req)
-                .await
-                .unwrap()
+                .await?
                 .into_inner()
                 .clone();
 

@@ -12,6 +12,7 @@ anyhow = { workspace = true, optional = true }
 async-trait = { workspace = true }
 chrono = { workspace = true, optional = true }
 futures-core = "0.3.28"
+http = { workspace = true }
 prost = { workspace = true }
 prost-types = { workspace = true }
 tokio = { workspace = true, optional = true }

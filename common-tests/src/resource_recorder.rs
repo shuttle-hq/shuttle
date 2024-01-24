@@ -57,6 +57,16 @@ impl ResourceRecorder for MockedResourceRecorder {
     ) -> Result<Response<ResourcesResponse>, Status> {
         println!("getting project resources");
 
+        let _user = request
+            .metadata()
+            .get("authorization")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .split_whitespace()
+            .nth(1)
+            .unwrap();
+
         let ProjectResourcesRequest { project_id } = request.into_inner();
         let resources = self
             .resources

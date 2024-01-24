@@ -6686,6 +6686,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "futures-core",
+ "http",
  "prost 0.12.3",
  "prost-types",
  "serde_json",

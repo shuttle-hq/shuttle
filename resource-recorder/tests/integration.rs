@@ -82,7 +82,7 @@ async fn manage_resources() {
                 project_id: project_id.clone(),
                 service_id: service_id2.clone(),
                 resources: vec![record_request::Resource {
-                    r#type: "static_folder".to_string(),
+                    r#type: "secrets".to_string(),
                     config: serde_json::to_vec(&json!({"folder": "static"})).unwrap(),
                     data: serde_json::to_vec(&json!({"path": "/tmp/static"})).unwrap(),
                 }],
@@ -102,7 +102,7 @@ async fn manage_resources() {
                 project_id: project_id2,
                 service_id: service_id3,
                 resources: vec![record_request::Resource {
-                    r#type: "static_folder".to_string(),
+                    r#type: "secrets".to_string(),
                     config: serde_json::to_vec(&json!({"folder": "publi"})).unwrap(),
                     data: serde_json::to_vec(&json!({"path": "/tmp/publi"})).unwrap(),
                 }],
@@ -163,7 +163,7 @@ async fn manage_resources() {
         let service2_static_folder = ResourceIds {
             project_id: project_id.clone(),
             service_id: service_id2.clone(),
-            r#type: "static_folder".to_string(),
+            r#type: "secrets".to_string(),
         };
 
         let expected = ResourcesResponse {

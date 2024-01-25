@@ -124,7 +124,7 @@ impl PersistInstance {
 
 #[async_trait]
 impl ResourceBuilder for Persist {
-    const TYPE: Type = Type::Persist;
+    const TYPE: Type = Type::Custom;
     type Config = ();
     type Output = PersistInstance;
 

@@ -75,7 +75,7 @@ impl Turso {
 
 #[async_trait]
 impl ResourceBuilder for Turso {
-    const TYPE: Type = Type::Turso;
+    const TYPE: Type = Type::Custom;
     type Config = Self;
     type Output = TursoOutput;
 

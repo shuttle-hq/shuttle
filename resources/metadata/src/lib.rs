@@ -7,7 +7,7 @@ pub struct ShuttleMetadata;
 
 #[async_trait]
 impl ResourceBuilder for ShuttleMetadata {
-    const TYPE: Type = Type::Metadata;
+    const TYPE: Type = Type::Custom;
     type Config = ();
     type Output = Metadata;
 

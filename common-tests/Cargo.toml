@@ -10,8 +10,6 @@ publish = false
 cargo-shuttle = { path = "../cargo-shuttle" }
 shuttle-proto = { workspace = true, features = ["builder", "logger", "resource-recorder"] }
 
-http = "1"
-http-types = "2.12.0"
 hyper = { workspace = true }
 portpicker = { workspace = true }
 reqwest = { workspace = true }
@@ -22,4 +20,3 @@ tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
 uuid = { workspace = true }
-wiremock = { workspace = true }

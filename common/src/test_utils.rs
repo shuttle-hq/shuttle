@@ -1,6 +1,6 @@
-use http::Method;
 use serde::Serialize;
 use wiremock::{
+    http,
     matchers::{method, path},
     Mock, MockServer, Request, ResponseTemplate,
 };
@@ -32,10 +32,10 @@ pub async fn mocked_gateway_server() -> MockServer {
         },
     ];
 
-    Mock::given(method(Method::GET))
+    Mock::given(method(http::Method::GET))
         .and(path("/projects"))
         .respond_with(move |req: &Request| {
-            let Some(bearer) = req.headers.get(&http::header::AUTHORIZATION) else {
+            let Some(bearer) = req.headers.get("AUTHORIZATION") else {
                 return ResponseTemplate::new(401);
             };
 

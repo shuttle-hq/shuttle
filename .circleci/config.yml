@@ -1020,7 +1020,6 @@ workflows:
                 - services/shuttle-axum
                 - services/shuttle-next
                 - services/shuttle-poem
-                - services/shuttle-poise
                 - services/shuttle-rocket
                 - services/shuttle-salvo
                 - services/shuttle-serenity

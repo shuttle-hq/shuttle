@@ -98,9 +98,9 @@ impl ServicesApiClient {
 mod tests {
     use headers::{authorization::Bearer, Authorization};
     use http::{Method, StatusCode};
-    use shuttle_common_tests::gateway::mocked_gateway_server;
 
     use crate::models;
+    use crate::test_utils::mocked_gateway_server;
 
     use super::{Error, ServicesApiClient};
 

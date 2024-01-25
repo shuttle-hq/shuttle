@@ -76,10 +76,10 @@ impl ProjectsDal for Client {
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use shuttle_common_tests::gateway::mocked_gateway_server;
     use test_context::{test_context, AsyncTestContext};
 
     use crate::models::project::{Response, State};
+    use crate::test_utils::mocked_gateway_server;
 
     use super::{Client, ProjectsDal};
 

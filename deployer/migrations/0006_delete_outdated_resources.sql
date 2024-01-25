@@ -3,3 +3,4 @@ DELETE FROM resources WHERE type = "static_folder";
 DELETE FROM resources WHERE type = "persist";
 DELETE FROM resources WHERE type = "turso";
 DELETE FROM resources WHERE type = "metadata";
+DELETE FROM resources WHERE type = "custom";

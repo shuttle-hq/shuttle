@@ -383,6 +383,7 @@ async fn load(
                 .resources
                 .into_iter()
                 .filter_map(|res| {
+                    // filter out resources with invalid types
                     serde_json::from_slice::<resource::Response>(&res)
                         .ok()
                         .map(|r| record_request::Resource {

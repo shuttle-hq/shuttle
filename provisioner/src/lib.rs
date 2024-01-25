@@ -13,8 +13,8 @@ use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_common::backends::auth::VerifyClaim;
 use shuttle_common::backends::client::gateway;
+use shuttle_common::backends::ClaimExt;
 use shuttle_common::claims::Scope;
-use shuttle_common::limits::ClaimExt;
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{

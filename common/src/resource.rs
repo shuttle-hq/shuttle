@@ -69,7 +69,7 @@ impl Display for Type {
     }
 }
 
-// this can be removed when deployers no longer holds resources in sqlite state
+// this can be removed when deployers AND r-r no longer hold resources in sqlite state
 #[cfg(feature = "sqlx")]
 mod _sqlx {
     use std::{borrow::Cow, str::FromStr};

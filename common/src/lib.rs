@@ -26,8 +26,8 @@ pub mod tracing;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-#[cfg(test)]
-mod test_utils;
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;
 
 use std::fmt::Debug;
 

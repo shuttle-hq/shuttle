@@ -29,4 +29,5 @@ ctor = { workspace = true }
 once_cell = { workspace = true }
 portpicker = { workspace = true }
 serde_json = { workspace = true }
+shuttle-common = { workspace = true, features = ["test-utils"] }
 shuttle-common-tests = { workspace = true }

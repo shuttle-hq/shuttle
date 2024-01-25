@@ -4,9 +4,8 @@ use ctor::dtor;
 use helpers::{exec_mongosh, exec_psql, DbType, DockerInstance};
 use once_cell::sync::Lazy;
 use serde_json::Value;
-use shuttle_common_tests::{
-    gateway::mocked_gateway_server, resource_recorder::start_mocked_resource_recorder,
-};
+use shuttle_common::test_utils::mocked_gateway_server;
+use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
 use shuttle_proto::provisioner::shared;
 use shuttle_provisioner::ShuttleProvisioner;
 use tonic::transport::Uri;

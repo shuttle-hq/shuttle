@@ -62,7 +62,7 @@ impl FromRow<'_, SqliteRow> for Resource {
 impl From<Resource> for shuttle_common::resource::Response {
     fn from(resource: Resource) -> Self {
         shuttle_common::resource::Response {
-            r#type: resource.r#type.into(),
+            r#type: resource.r#type,
             config: resource.config,
             data: resource.data,
         }

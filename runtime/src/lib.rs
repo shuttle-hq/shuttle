@@ -235,7 +235,7 @@ pub mod __internals {
     pub use anyhow::Context;
     #[cfg(feature = "setup-tracing")]
     pub use colored;
-    pub use strfmt;
+    pub use strfmt::strfmt;
     #[cfg(feature = "setup-tracing")]
     pub use tracing_subscriber;
 

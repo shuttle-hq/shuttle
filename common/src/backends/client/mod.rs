@@ -11,6 +11,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 pub mod gateway;
 mod resource_recorder;
 
+pub use gateway::ProjectsDal;
 pub use resource_recorder::ResourceDal;
 
 #[derive(Error, Debug)]

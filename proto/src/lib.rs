@@ -176,7 +176,7 @@ pub mod resource_recorder {
     }
 
     #[async_trait]
-    impl ResourceDal for &mut Client {
+    impl ResourceDal for Client {
         async fn get_project_resources(
             &mut self,
             project_id: &str,

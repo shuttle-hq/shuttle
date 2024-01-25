@@ -35,3 +35,17 @@ pub trait ResourceDal: Send {
         Ok(rds_resources)
     }
 }
+
+#[async_trait]
+impl<T> ResourceDal for &mut T
+where
+    T: ResourceDal,
+{
+    async fn get_project_resources(
+        &mut self,
+        project_id: &str,
+        token: &str,
+    ) -> Result<Vec<resource::Response>, Error> {
+        (**self).get_project_resources(project_id, token).await
+    }
+}

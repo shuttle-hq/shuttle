@@ -33,7 +33,8 @@ impl Client {
 }
 
 /// Interact with all the data relating to projects
-trait ProjectsDal {
+#[allow(async_fn_in_trait)]
+pub trait ProjectsDal {
     /// Get the projects that belong to a user
     async fn get_user_projects(
         &self,

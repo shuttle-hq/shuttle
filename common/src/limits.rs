@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    backends::client::{self, ProjectsDal, ResourceDal},
     claims::{AccountTier, Claim, Scope},
     constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA},
 };
@@ -65,13 +66,18 @@ impl From<AccountTier> for Limits {
     }
 }
 
+#[allow(async_fn_in_trait)]
 pub trait ClaimExt {
     /// Verify that the [Claim] has the [Scope::Admin] scope.
     fn is_admin(&self) -> bool;
     /// Verify that the user's current project count is lower than the account limit in [Claim::limits].
     fn can_create_project(&self, current_count: u32) -> bool;
     /// Verify that the user has permission to provision RDS instances.
-    fn can_provision_rds(&self) -> bool;
+    async fn can_provision_rds<G: ProjectsDal, R: ResourceDal>(
+        &self,
+        projects_dal: &G,
+        resource_dal: &mut R,
+    ) -> Result<bool, client::Error>;
 }
 
 impl ClaimExt for Claim {
@@ -83,7 +89,24 @@ impl ClaimExt for Claim {
         self.is_admin() || self.limits.project_limit() > current_count
     }
 
-    fn can_provision_rds(&self) -> bool {
-        self.is_admin() || self.limits.rds_quota > 0
+    async fn can_provision_rds<G: ProjectsDal, R: ResourceDal>(
+        &self,
+        projects_dal: &G,
+        resource_dal: &mut R,
+    ) -> Result<bool, client::Error> {
+        let token = self.token.as_ref().expect("token to be set");
+
+        let projects = projects_dal.get_user_project_ids(token).await?;
+
+        let mut rds_count = 0;
+
+        for project_id in projects {
+            rds_count += resource_dal
+                .get_project_rds_resources(&project_id, token)
+                .await?
+                .len();
+        }
+
+        Ok(self.is_admin() || self.limits.rds_quota > (rds_count as u32))
     }
 }

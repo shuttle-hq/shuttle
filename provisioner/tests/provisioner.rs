@@ -47,7 +47,81 @@ fn cleanup() {
 }
 
 mod needs_docker {
+    use serde_json::json;
+    use shuttle_common::{
+        claims::{AccountTier, Claim},
+        limits::Limits,
+    };
+    use shuttle_common_tests::ClaimTestsExt;
+    use shuttle_proto::{
+        provisioner::{
+            aws_rds::Engine, database_request::DbType, provisioner_server::Provisioner, AwsRds,
+            DatabaseRequest,
+        },
+        resource_recorder::{self, record_request, RecordRequest},
+    };
+    use tonic::{Code, Request};
+
     use super::*;
+
+    #[tokio::test]
+    async fn going_over_rds_quota() {
+        let provisioner = ShuttleProvisioner::new(
+            &PG.uri,
+            &MONGODB.uri,
+            "fqdn".to_string(),
+            "pg".to_string(),
+            "mongodb".to_string(),
+            get_rr_uri().await,
+            get_gateway_uri().await,
+        )
+        .await
+        .unwrap();
+
+        // First record some resources
+        let mut r_r_client = resource_recorder::get_client(get_rr_uri().await).await;
+        r_r_client
+            .record_resources(Request::new(RecordRequest {
+                project_id: "id1".to_string(),
+                service_id: "service_id".to_string(),
+                resources: vec![
+                    record_request::Resource {
+                        r#type: "database::shared::postgres".to_string(),
+                        config: serde_json::to_vec(&json!({"public": true})).unwrap(),
+                        data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
+                    },
+                    // Make one RDS record that already exists
+                    record_request::Resource {
+                        r#type: "database::aws_rds::mariadb".to_string(),
+                        config: serde_json::to_vec(&json!({})).unwrap(),
+                        data: serde_json::to_vec(&json!({"username": "maria"})).unwrap(),
+                    },
+                ],
+            }))
+            .await
+            .unwrap();
+
+        let mut req = Request::new(DatabaseRequest {
+            project_name: "user-1-project-1".to_string(),
+            db_type: Some(DbType::AwsRds(AwsRds {
+                engine: Some(Engine::Postgres(Default::default())),
+            })),
+        });
+
+        req.extensions_mut().insert(
+            Claim::new(
+                "user-1".to_string(),
+                AccountTier::Basic.into(),
+                AccountTier::Basic,
+                Limits::new(1, 1),
+            )
+            .fill_token(),
+        );
+
+        let err = provisioner.provision_database(req).await.unwrap_err();
+
+        assert_eq!(err.code(), Code::PermissionDenied);
+    }
 
     #[tokio::test]
     async fn shared_db_role_does_not_exist() {

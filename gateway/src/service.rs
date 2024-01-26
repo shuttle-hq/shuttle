@@ -905,7 +905,10 @@ impl GatewayService {
 
     /// Create a builder for a new [ProjectTask]
     pub fn new_task(self: &Arc<Self>) -> TaskBuilder {
-        TaskBuilder::new(self.clone())
+        TaskBuilder::new(
+            self.clone(),
+            Span::current().metadata().map(|m| m.name().to_string()),
+        )
     }
 
     /// Find a project by name. And start the project if it is idle, waiting for it to start up

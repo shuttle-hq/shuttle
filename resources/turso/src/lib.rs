@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use libsql_client::{Client, Config};
+use libsql::{Connection, Database};
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
@@ -19,6 +19,7 @@ pub struct Turso {
 pub struct TursoOutput {
     conn_url: Url,
     token: Option<String>,
+    environment: Environment,
 }
 
 impl Turso {
@@ -55,7 +56,11 @@ impl From<Error> for shuttle_service::Error {
 }
 
 impl Turso {
-    async fn output_from_addr(&self, addr: &str) -> Result<TursoOutput, shuttle_service::Error> {
+    async fn output_from_addr(
+        &self,
+        addr: &str,
+        environment: Environment,
+    ) -> Result<TursoOutput, shuttle_service::Error> {
         Ok(TursoOutput {
             conn_url: Url::parse(addr).map_err(Error::UrlParseError)?,
             token: if self.token.is_empty() {
@@ -63,6 +68,7 @@ impl Turso {
             } else {
                 Some(self.token.clone())
             },
+            environment,
         })
     }
 }
@@ -87,17 +93,17 @@ impl ResourceBuilder for Turso {
                 if self.addr.is_empty() {
                     Err(ShuttleError::Custom(CustomError::msg("missing addr")))
                 } else {
-                    let addr = if self.addr.starts_with("libsql://") {
-                        self.addr.to_string()
-                    } else {
-                        format!("libsql://{}", self.addr)
-                    };
-                    self.output_from_addr(&addr).await
+                    if !self.addr.starts_with("libsql://") && !self.addr.starts_with("https://") {
+                        return Err(ShuttleError::Custom(CustomError::msg(
+                            "addr must start with either libsql:// or https://",
+                        )));
+                    }
+                    self.output_from_addr(&self.addr, md.env).await
                 }
             }
             Environment::Local => {
                 match self.local_addr {
-                    Some(ref local_addr) => self.output_from_addr(local_addr).await,
+                    Some(ref local_addr) => self.output_from_addr(local_addr, md.env).await,
                     None => {
                         // Default to a local db of the name of the service.
                         let db_file = std::env::current_dir() // Should be root of the project's workspace
@@ -108,11 +114,12 @@ impl ResourceBuilder for Turso {
                                 p
                             })
                             .map_err(Error::LocateLocalDB)?;
-                        let conn_url = format!("file:///{}", db_file.display());
+                        let conn_url = format!("file:{}", db_file.display());
                         Ok(TursoOutput {
                             conn_url: Url::parse(&conn_url).map_err(Error::UrlParseError)?,
                             // Nullify the token since we're using a file as database.
                             token: None,
+                            environment: md.env,
                         })
                     }
                 }
@@ -122,13 +129,23 @@ impl ResourceBuilder for Turso {
 }
 
 #[async_trait]
-impl IntoResource<Client> for TursoOutput {
-    async fn into_resource(self) -> Result<Client, shuttle_service::Error> {
-        Ok(Client::from_config(Config {
-            url: self.conn_url,
-            auth_token: self.token,
-        })
-        .await?)
+impl IntoResource<Connection> for TursoOutput {
+    async fn into_resource(self) -> Result<Connection, shuttle_service::Error> {
+        let database = match self.environment {
+            Environment::Deployment => Database::open_remote(
+                self.conn_url.to_string(),
+                self.token
+                    .clone()
+                    .ok_or(ShuttleError::Custom(CustomError::msg(
+                        "missing token for remote database",
+                    )))?,
+            ),
+            Environment::Local => Database::open(self.conn_url.to_string()),
+        };
+        database
+            .map_err(|err| ShuttleError::Custom(err.into()))?
+            .connect()
+            .map_err(|err| ShuttleError::Custom(err.into()))
     }
 }
 
@@ -204,7 +221,8 @@ mod test {
             output,
             TursoOutput {
                 conn_url: Url::parse(local_addr).unwrap(),
-                token: None
+                token: None,
+                environment: Environment::Local,
             }
         )
     }
@@ -223,7 +241,7 @@ mod test {
         let mut factory = MockFactory::new(Environment::Deployment);
 
         let mut turso = Turso::default();
-        let addr = "my-turso-addr.turso.io".to_string();
+        let addr = "libsql://my-turso-addr.turso.io".to_string();
         turso.addr = addr.clone();
         turso.token = "token".to_string();
         let output = turso.output(&mut factory).await.unwrap();
@@ -231,8 +249,9 @@ mod test {
         assert_eq!(
             output,
             TursoOutput {
-                conn_url: Url::parse(&format!("libsql://{}", addr)).unwrap(),
-                token: Some("token".to_string())
+                conn_url: Url::parse(&addr).unwrap(),
+                token: Some("token".to_string()),
+                environment: Environment::Deployment,
             }
         )
     }

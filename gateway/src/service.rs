@@ -994,20 +994,16 @@ impl GatewayService {
         is_cch_project: bool,
         account_tier: &AccountTier,
     ) -> Result<(), Error> {
+        // If this control file exists, block routing to cch23 projects.
+        // Used for emergency load mitigation
         const CCH_CONTROL_FILE: &str = "/var/lib/shuttle/BLOCK_CCH23_PROJECT_TRAFFIC";
         const CCH_CONCURRENT_LIMIT: u32 = 20;
 
-        if is_cch_project {
-            if std::fs::metadata(CCH_CONTROL_FILE).is_ok() {
-                // If this control file exists, block routing to cch23 projects.
-                // Used for emergency load mitigation
-                return Err(Error::from_kind(ErrorKind::CapacityLimit));
-            } else if self.count_ready_cch_projects().await? >= CCH_CONCURRENT_LIMIT {
-                // If max concurrent active cch project is reached
-                return Err(Error::from_kind(ErrorKind::CapacityLimit));
-            } else {
-                return Ok(());
-            }
+        if is_cch_project
+            && (std::fs::metadata(CCH_CONTROL_FILE).is_ok()
+                || self.count_ready_cch_projects().await? >= CCH_CONCURRENT_LIMIT)
+        {
+            return Err(Error::from_kind(ErrorKind::CapacityLimit));
         }
 
         let current_container_count = self.count_ready_projects().await?;

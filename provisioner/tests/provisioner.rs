@@ -107,6 +107,7 @@ mod needs_docker {
             })),
         });
 
+        // Add a claim that only allows for one RDS - the one that will be returned by r-r
         req.extensions_mut().insert(
             Claim::new(
                 "user-1".to_string(),
@@ -119,7 +120,11 @@ mod needs_docker {
 
         let err = provisioner.provision_database(req).await.unwrap_err();
 
-        assert_eq!(err.code(), Code::PermissionDenied);
+        assert_eq!(
+            err.code(),
+            Code::PermissionDenied,
+            "quota has been reached so user should not be able to provision another RDS"
+        );
     }
 
     #[tokio::test]

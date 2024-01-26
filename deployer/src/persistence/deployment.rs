@@ -5,7 +5,6 @@ use chrono::{DateTime, Utc};
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
 use tracing::error;
 use ulid::Ulid;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::state::State;

@@ -1,5 +1,4 @@
 use strum::{Display, EnumString};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// States a deployment can be in

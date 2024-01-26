@@ -38,10 +38,6 @@ use tower::ServiceBuilder;
 use tracing::{error, field, instrument, trace};
 use ttl_cache::TtlCache;
 use ulid::Ulid;
-use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
-use utoipa::IntoParams;
-use utoipa::{Modify, OpenApi};
-use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
@@ -106,17 +102,6 @@ impl StatusResponse {
 }
 
 #[instrument(skip(service))]
-#[utoipa::path(
-    get,
-    path = "/projects/{project_name}",
-    responses(
-        (status = 200, description = "Successfully got a specific project information.", body = shuttle_common::models::project::Response),
-        (status = 500, description = "Server internal error.")
-    ),
-    params(
-        ("project_name" = String, Path, description = "The name of the project."),
-    )
-)]
 async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
@@ -135,18 +120,6 @@ async fn get_project(
 }
 
 #[instrument(skip(service))]
-#[utoipa::path(
-    get,
-    path = "/projects/name/{project_name}",
-    responses(
-        (status = 200, description = "True if project name is taken. False if free.", body = bool),
-        (status = 400, description = "Invalid project name.", body = String),
-        (status = 500, description = "Server internal error.")
-    ),
-    params(
-        ("project_name" = String, Path, description = "The project name to check."),
-    )
-)]
 async fn check_project_name(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
@@ -157,17 +130,6 @@ async fn check_project_name(
         .map(AxumJson)
 }
 
-#[utoipa::path(
-    get,
-    path = "/projects",
-    responses(
-        (status = 200, description = "Successfully got the projects list.", body = [shuttle_common::models::project::Response]),
-        (status = 500, description = "Server internal error.")
-    ),
-    params(
-        PaginationDetails
-    )
-)]
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
     User { name, .. }: User,
@@ -191,17 +153,6 @@ async fn get_projects_list(
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name))]
-#[utoipa::path(
-    post,
-    path = "/projects/{project_name}",
-    responses(
-        (status = 200, description = "Successfully created a specific project.", body = shuttle_common::models::project::Response),
-        (status = 500, description = "Server internal error.")
-    ),
-    params(
-        ("project_name" = String, Path, description = "The name of the project."),
-    )
-)]
 async fn create_project(
     State(RouterState {
         service, sender, ..
@@ -258,17 +209,6 @@ async fn create_project(
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name))]
-#[utoipa::path(
-    delete,
-    path = "/projects/{project_name}",
-    responses(
-        (status = 200, description = "Successfully destroyed a specific project.", body = shuttle_common::models::project::Response),
-        (status = 500, description = "Server internal error.")
-    ),
-    params(
-        ("project_name" = String, Path, description = "The name of the project."),
-    )
-)]
 async fn destroy_project(
     State(RouterState {
         service, sender, ..
@@ -314,18 +254,6 @@ struct DeleteProjectParams {
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %scoped_user.scope))]
-#[utoipa::path(
-    delete,
-    path = "/projects/{project_name}/delete",
-    responses(
-        (status = 200, description = "Successfully deleted a project, unless dry run.", body = shuttle_common::models::project::Response),
-        (status = 403, description = "Project cannot be deleted now."),
-        (status = 500, description = "Server internal error."),
-    ),
-    params(
-        ("project_name" = String, Path, description = "The name of the project."),
-    )
-)]
 async fn delete_project(
     State(state): State<RouterState>,
     scoped_user: ScopedUser,
@@ -479,14 +407,6 @@ async fn route_project(
         .await
 }
 
-#[utoipa::path(
-    get,
-    path = "/",
-    responses(
-        (status = 200, description = "Get the gateway operational status."),
-        (status = 500, description = "Server internal error.")
-    )
-)]
 async fn get_status(
     State(RouterState {
         sender, service, ..
@@ -535,14 +455,6 @@ async fn get_status(
 }
 
 #[instrument(skip_all)]
-#[utoipa::path(
-    post,
-    path = "/stats/load",
-    responses(
-        (status = 200, description = "Successfully fetched the build queue load.", body = shuttle_common::models::stats::LoadResponse),
-        (status = 500, description = "Server internal error.")
-    )
-)]
 async fn post_load(
     State(RouterState { running_builds, .. }): State<RouterState>,
     AxumJson(build): AxumJson<stats::LoadRequest>,
@@ -565,14 +477,6 @@ async fn post_load(
 }
 
 #[instrument(skip_all)]
-#[utoipa::path(
-    delete,
-    path = "/stats/load",
-    responses(
-        (status = 200, description = "Successfully removed the build with the ID specified in the load request from the build queue.", body = shuttle_common::models::stats::LoadResponse),
-        (status = 500, description = "Server internal error.")
-    )
-)]
 async fn delete_load(
     State(RouterState { running_builds, .. }): State<RouterState>,
     AxumJson(build): AxumJson<stats::LoadRequest>,
@@ -587,14 +491,6 @@ async fn delete_load(
 }
 
 #[instrument(skip_all)]
-#[utoipa::path(
-    get,
-    path = "/admin/stats/load",
-    responses(
-        (status = 200, description = "Successfully gets the build queue load as an admin.", body = shuttle_common::models::stats::LoadResponse),
-        (status = 500, description = "Server internal error.")
-    )
-)]
 async fn get_load_admin(
     State(RouterState { running_builds, .. }): State<RouterState>,
 ) -> Result<AxumJson<stats::LoadResponse>, Error> {
@@ -606,14 +502,6 @@ async fn get_load_admin(
 }
 
 #[instrument(skip_all)]
-#[utoipa::path(
-    delete,
-    path = "/admin/stats/load",
-    responses(
-        (status = 200, description = "Successfully clears the build queue.", body = shuttle_common::models::stats::LoadResponse),
-        (status = 500, description = "Server internal error.")
-    )
-)]
 async fn delete_load_admin(
     State(RouterState { running_builds, .. }): State<RouterState>,
 ) -> Result<AxumJson<stats::LoadResponse>, Error> {
@@ -637,14 +525,6 @@ fn calculate_capacity(running_builds: &mut MutexGuard<TtlCache<Uuid, ()>>) -> st
 }
 
 #[instrument(skip_all)]
-#[utoipa::path(
-    post,
-    path = "/admin/revive",
-    responses(
-        (status = 200, description = "Successfully revived stopped or errored projects."),
-        (status = 500, description = "Server internal error.")
-    )
-)]
 async fn revive_projects(
     State(RouterState {
         service, sender, ..
@@ -656,14 +536,6 @@ async fn revive_projects(
 }
 
 #[instrument(skip_all)]
-#[utoipa::path(
-    post,
-    path = "/admin/idle-cch",
-    responses(
-        (status = 200, description = "Successfully idled all cch projects."),
-        (status = 500, description = "Server internal error.")
-    )
-)]
 async fn idle_cch_projects(
     State(RouterState {
         service, sender, ..
@@ -675,14 +547,6 @@ async fn idle_cch_projects(
 }
 
 #[instrument(skip_all)]
-#[utoipa::path(
-    post,
-    path = "/admin/destroy",
-    responses(
-        (status = 200, description = "Successfully destroyed the projects."),
-        (status = 500, description = "Server internal error.")
-    )
-)]
 async fn destroy_projects(
     State(RouterState {
         service, sender, ..
@@ -694,18 +558,6 @@ async fn destroy_projects(
 }
 
 #[instrument(skip_all, fields(%email, ?acme_server))]
-#[utoipa::path(
-    post,
-    path = "/admin/acme/{email}",
-    responses(
-        (status = 200, description = "Created an acme account.", content_type = "application/json", body = String),
-        (status = 500, description = "Server internal error.")
-    ),
-    params(
-        ("email" = String, Path, description = "An email the acme account binds to."),
-    ),
-
-)]
 async fn create_acme_account(
     Extension(acme_client): Extension<AcmeClient>,
     Path(email): Path<String>,
@@ -717,18 +569,6 @@ async fn create_acme_account(
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, %fqdn))]
-#[utoipa::path(
-    post,
-    path = "/admin/acme/request/{project_name}/{fqdn}",
-    responses(
-        (status = 200, description = "Successfully requested a custom domain for the the project."),
-        (status = 500, description = "Server internal error.")
-    ),
-    params(
-        ("project_name" = String, Path, description = "The project name associated to the requested custom domain."),
-        ("fqdn" = String, Path, description = "The fqdn that represents the requested custom domain."),
-    )
-)]
 async fn request_custom_domain_acme_certificate(
     State(RouterState {
         service, sender, ..
@@ -796,18 +636,6 @@ async fn request_custom_domain_acme_certificate(
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, %fqdn))]
-#[utoipa::path(
-    post,
-    path = "/admin/acme/renew/{project_name}/{fqdn}",
-    responses(
-        (status = 200, description = "Successfully renewed the project TLS certificate for the appointed custom domain fqdn."),
-        (status = 500, description = "Server internal error.")
-    ),
-    params(
-        ("project_name" = String, Path, description = "The project name associated to the requested custom domain."),
-        ("fqdn" = String, Path, description = "The fqdn that represents the requested custom domain."),
-    )
-)]
 async fn renew_custom_domain_acme_certificate(
     State(RouterState { service, .. }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
@@ -889,14 +717,6 @@ async fn renew_custom_domain_acme_certificate(
 }
 
 #[instrument(skip_all)]
-#[utoipa::path(
-    post,
-    path = "/admin/acme/gateway/renew",
-    responses(
-        (status = 200, description = "Successfully renewed the gateway TLS certificate."),
-        (status = 500, description = "Server internal error.")
-    )
-)]
 async fn renew_gateway_acme_certificate(
     State(RouterState { service, .. }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
@@ -947,14 +767,6 @@ async fn renew_gateway_acme_certificate(
     ))
 }
 
-#[utoipa::path(
-    post,
-    path = "/admin/projects",
-    responses(
-        (status = 200, description = "Successfully fetched the projects list.", body = shuttle_common::models::project::AdminResponse),
-        (status = 500, description = "Server internal error.")
-    )
-)]
 async fn get_projects(
     State(RouterState { service, .. }): State<RouterState>,
 ) -> Result<AxumJson<Vec<ProjectResponse>>, Error> {
@@ -966,51 +778,6 @@ async fn get_projects(
 
     Ok(AxumJson(projects))
 }
-
-struct SecurityAddon;
-
-impl Modify for SecurityAddon {
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        if let Some(components) = openapi.components.as_mut() {
-            components.add_security_scheme(
-                "Gateway API Key",
-                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("Bearer"))),
-            )
-        }
-    }
-}
-
-#[derive(OpenApi)]
-#[openapi(
-    paths(
-        create_acme_account,
-        request_custom_domain_acme_certificate,
-        renew_custom_domain_acme_certificate,
-        renew_gateway_acme_certificate,
-        get_status,
-        get_projects_list,
-        get_project,
-        destroy_project,
-        create_project,
-        post_load,
-        delete_load,
-        get_projects,
-        revive_projects,
-        idle_cch_projects,
-        destroy_projects,
-        get_load_admin,
-        delete_load_admin
-    ),
-    modifiers(&SecurityAddon),
-    components(schemas(
-        shuttle_common::models::project::Response,
-        shuttle_common::models::stats::LoadResponse,
-        shuttle_common::models::admin::ProjectResponse,
-        shuttle_common::models::stats::LoadResponse,
-        shuttle_common::models::project::State
-    ))
-)]
-pub struct ApiDoc;
 
 #[derive(Clone)]
 pub(crate) struct RouterState {
@@ -1121,9 +888,6 @@ impl ApiBuilder {
             .route("/destroy", post(destroy_projects))
             .route("/idle-cch", post(idle_cch_projects))
             .route("/stats/load", get(get_load_admin).delete(delete_load_admin))
-            // TODO: The `/swagger-ui` responds with a 303 See Other response which is followed in
-            // browsers but leads to 404 Not Found. This must be investigated.
-            .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
             .layer(ScopedLayer::new(vec![Scope::Admin]));
 
         const CARGO_SHUTTLE_VERSION: &str = env!("CARGO_PKG_VERSION");

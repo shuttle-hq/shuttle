@@ -11,27 +11,16 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::EnumString;
 
-#[cfg(feature = "openapi")]
-use crate::ulid_type;
-#[cfg(feature = "openapi")]
-use utoipa::ToSchema;
-
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::Response))]
 pub struct Response {
-    #[cfg_attr(feature = "openapi", schema(schema_with = ulid_type))]
     pub id: String,
     pub name: String,
-    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::models::project::State))]
     pub state: State,
     pub idle_minutes: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::State))]
 pub enum State {
     Creating { recreate_count: usize },
     Attaching { recreate_count: usize },

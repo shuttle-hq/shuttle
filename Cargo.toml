@@ -108,8 +108,6 @@ tracing-subscriber = { version = "0.3.16", default-features = false, features = 
   "json"
 ] }
 ttl_cache = "0.5.1"
-utoipa = { version = "4.0.0", features = [ "uuid", "chrono" ] }
-utoipa-swagger-ui = { version = "4.0.0", features = ["axum"] }
 ulid = "1.0.0"
 url = "2.4.0"
 uuid = "1.2.2"

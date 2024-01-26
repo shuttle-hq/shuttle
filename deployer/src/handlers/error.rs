@@ -6,7 +6,6 @@ use axum::response::{IntoResponse, Response};
 use serde::{ser::SerializeMap, Serialize};
 use shuttle_common::models::error::ApiError;
 use tracing::error;
-use utoipa::ToSchema;
 
 #[derive(thiserror::Error, Debug, ToSchema)]
 pub enum Error {

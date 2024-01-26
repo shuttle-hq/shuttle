@@ -5,7 +5,7 @@ use wiremock::{
     Mock, MockServer, Request, ResponseTemplate,
 };
 
-pub async fn mocked_gateway_server() -> MockServer {
+pub async fn get_mocked_gateway_server() -> MockServer {
     let mock_server = MockServer::start().await;
 
     let projects = vec![

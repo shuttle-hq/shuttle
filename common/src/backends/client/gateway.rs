@@ -79,14 +79,14 @@ mod tests {
     use test_context::{test_context, AsyncTestContext};
 
     use crate::models::project::{Response, State};
-    use crate::test_utils::mocked_gateway_server;
+    use crate::test_utils::get_mocked_gateway_server;
 
     use super::{Client, ProjectsDal};
 
     #[async_trait]
     impl AsyncTestContext for Client {
         async fn setup() -> Self {
-            let server = mocked_gateway_server().await;
+            let server = get_mocked_gateway_server().await;
 
             Client::new(server.uri().parse().unwrap(), server.uri().parse().unwrap())
         }

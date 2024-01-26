@@ -12,7 +12,7 @@ use shuttle_proto::builder::{
 use tonic::transport::{Endpoint, Server};
 use tower::ServiceBuilder;
 
-pub async fn mocked_builder_client(
+pub async fn get_mocked_builder_client(
     builder: impl Builder,
 ) -> BuilderClient<
     shuttle_common::claims::ClaimService<

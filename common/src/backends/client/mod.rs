@@ -100,14 +100,14 @@ mod tests {
     use http::{Method, StatusCode};
 
     use crate::models;
-    use crate::test_utils::mocked_gateway_server;
+    use crate::test_utils::get_mocked_gateway_server;
 
     use super::{Error, ServicesApiClient};
 
     // Make sure we handle any unexpected responses correctly
     #[tokio::test]
     async fn api_errors() {
-        let server = mocked_gateway_server().await;
+        let server = get_mocked_gateway_server().await;
 
         let client = ServicesApiClient::new(server.uri().parse().unwrap());
 

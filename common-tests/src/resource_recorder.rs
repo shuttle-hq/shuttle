@@ -170,7 +170,7 @@ impl ResourceRecorder for MockedResourceRecorder {
 /// Start a mocked resource recorder and return the port it started on
 /// This mock will function like a normal resource recorder. However, it will always fail to delete metadata resources
 /// if any tests need to simulate a failure.
-pub async fn start_mocked_resource_recorder() -> u16 {
+pub async fn get_mocked_resource_recorder() -> u16 {
     let resource_recorder = MockedResourceRecorder {
         resources: Mutex::new(Vec::new()),
     };

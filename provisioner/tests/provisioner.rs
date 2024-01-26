@@ -4,8 +4,8 @@ use ctor::dtor;
 use helpers::{exec_mongosh, exec_psql, DbType, DockerInstance};
 use once_cell::sync::Lazy;
 use serde_json::Value;
-use shuttle_common::test_utils::mocked_gateway_server;
-use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
+use shuttle_common::test_utils::get_mocked_gateway_server;
+use shuttle_common_tests::resource_recorder::get_mocked_resource_recorder;
 use shuttle_proto::provisioner::shared;
 use shuttle_provisioner::ShuttleProvisioner;
 use tonic::transport::Uri;
@@ -18,7 +18,7 @@ static GATEWAY_URI: tokio::sync::OnceCell<Uri> = tokio::sync::OnceCell::const_ne
 async fn get_rr_uri() -> Uri {
     let uri = RR_URI
         .get_or_init(|| async {
-            let port = start_mocked_resource_recorder().await;
+            let port = get_mocked_resource_recorder().await;
 
             format!("http://localhost:{port}").parse().unwrap()
         })
@@ -30,7 +30,7 @@ async fn get_rr_uri() -> Uri {
 async fn get_gateway_uri() -> Uri {
     let uri = GATEWAY_URI
         .get_or_init(|| async {
-            let server = mocked_gateway_server().await;
+            let server = get_mocked_gateway_server().await;
 
             server.uri().parse().unwrap()
         })

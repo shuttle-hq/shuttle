@@ -215,7 +215,7 @@ pub mod resource_recorder {
         use async_trait::async_trait;
         use serde_json::json;
         use shuttle_common::{database, resource};
-        use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
+        use shuttle_common_tests::resource_recorder::get_mocked_resource_recorder;
         use test_context::{test_context, AsyncTestContext};
         use tonic::Request;
 
@@ -226,7 +226,7 @@ pub mod resource_recorder {
         #[async_trait]
         impl AsyncTestContext for Client {
             async fn setup() -> Self {
-                let port = start_mocked_resource_recorder().await;
+                let port = get_mocked_resource_recorder().await;
 
                 get_client(format!("http://localhost:{port}").parse().unwrap()).await
             }

@@ -9,7 +9,7 @@ This plugin allows services to connect to a Turso database. Turso is an edge-hos
 Add `shuttle-turso` to the dependencies for your service by running `cargo add shuttle-turso`.
 This resource will be provided by adding the `shuttle_turso::Turso` attribute to your Shuttle `main` decorated function.
 
-It returns a `libsql_client::Client`. When running locally it will instantiate a local SQLite database of the name of your service instead of connecting to your edge database.
+It returns a `libsql::Connection`. When running locally it will instantiate a local SQLite database of the name of your service instead of connecting to your edge database.
 
 If you want to connect to a remote database when running locally, you can specify the `local_addr` parameter. In that case, the token will be read from your `Secrets.dev.toml` file.
 
@@ -18,7 +18,7 @@ If you want to connect to a remote database when running locally, you can specif
 In the case of an Axum server, your main function will look like this:
 
 ```rust
-use libsql_client::client::Client;
+use libsql::Connection;
 use shuttle_axum::ShuttleAxum;
 
 #[shuttle_runtime::main]
@@ -26,7 +26,7 @@ async fn app(
     #[shuttle_turso::Turso(
         addr="libsql://my-turso-db-name.turso.io",
         token="{secrets.DB_TURSO_TOKEN}"
-    )] client: Client,
+    )] client: Connection,
 ) -> ShuttleAxum {}
 ```
 
@@ -34,6 +34,6 @@ async fn app(
 
 | Parameter  | Type          | Default | Description |
 | ---------- | ------------- | ------- | ----------- |
-| addr       | `str`         | `""`    | URL of the database to connect to. If `libsql://` is missing at the beginning, it will be automatically added. |
+| addr       | `str`         | `""`    | URL of the database to connect to. Should begin with either `libsql://` or `https://`. |
 | token      | `str`         | `""`    | The value of the token to authenticate against the Turso database. You can use string interpolation to read a secret from your `Secret.toml` file. |
 | local_addr | `Option<str>` | `None`  | The URL to use when running your service locally. If not provided, this will default to a local file named `<service name>.db` |

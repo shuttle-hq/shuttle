@@ -49,7 +49,6 @@ tracing-core = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 ttl_cache = { workspace = true, optional = true }
-utoipa = { workspace = true, optional = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 zeroize = { workspace = true }
@@ -90,7 +89,6 @@ claims = [
     "tracing-opentelemetry",
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
-openapi = ["utoipa/chrono", "utoipa/uuid"]
 models = ["async-trait", "http", "reqwest", "service", "thiserror"]
 persist = ["sqlx", "rand"]
 service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]

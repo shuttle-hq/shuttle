@@ -49,7 +49,7 @@ mod error;
 mod local;
 mod project;
 
-#[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 pub struct PaginationDetails {
     /// Page to fetch, starting from 0.
     pub page: Option<u32>,

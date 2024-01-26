@@ -73,7 +73,7 @@ pub struct StatusResponse {
     status: ComponentStatus,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 pub struct PaginationDetails {
     /// Page to fetch, starting from 0.
     pub page: Option<u32>,
@@ -245,7 +245,7 @@ async fn destroy_project(
     Ok(AxumJson(response))
 }
 
-#[derive(Deserialize, IntoParams)]
+#[derive(Deserialize)]
 struct DeleteProjectParams {
     // Was added in v0.30.0
     // We have not needed it since 0.34.1, but have to keep in for any old CLI users

@@ -10,7 +10,7 @@ use uuid::Uuid;
 use super::state::State;
 
 // We are using `Option` for the additional `git_*` fields for backward compat.
-#[derive(Clone, Debug, Default, Eq, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Deployment {
     pub id: Uuid,
     pub service_id: Ulid,

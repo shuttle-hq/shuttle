@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 use strum::EnumString;
 use tracing::{field::Visit, span, warn, Event, Level, Metadata, Subscriber};
 use tracing_subscriber::Layer;
-#[cfg(feature = "openapi")]
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::tracing::JsonVisitor;
@@ -18,7 +16,6 @@ use crate::tracing::JsonVisitor;
 /// Used to determine settings based on which backend crate does what
 #[derive(Clone, Debug, Default, EnumString, Eq, PartialEq, Deserialize, Serialize)]
 #[cfg_attr(feature = "display", derive(strum::Display))]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub enum Backend {
     /// Is considered an error
     #[default]
@@ -35,19 +32,14 @@ pub enum Backend {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[cfg_attr(feature = "openapi", schema(as = shuttle_common::log::LogItem))]
 pub struct LogItem {
     /// Deployment id
-    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
     pub id: Uuid,
 
     /// Internal service that produced this log
-    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::log::InternalLogOrigin))]
     pub internal_origin: Backend,
 
     /// Time log was captured
-    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]
     pub timestamp: DateTime<Utc>,
 
     /// The log line

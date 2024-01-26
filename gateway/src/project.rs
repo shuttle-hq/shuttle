@@ -932,10 +932,9 @@ impl ProjectCreating {
         // TODO: remove the config from the log message, add that into the span attributes as a
         // serialized JSON.
         debug!(
-            r"generated a container configuration:
-CreateContainerOpts: {create_container_options:#?}
-Config: {config:#?}
-"
+            ?create_container_options,
+            ?config,
+            "generated a container configuration"
         );
 
         (create_container_options, config)

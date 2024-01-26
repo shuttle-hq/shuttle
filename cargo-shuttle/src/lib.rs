@@ -1981,6 +1981,8 @@ impl Shuttle {
                 )
             })?;
 
+        println!("Deleted project");
+
         Ok(CommandOutcome::Ok)
     }
 

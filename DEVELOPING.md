@@ -110,20 +110,15 @@ You should now be ready to setup a local environment to test code changes to cor
 From the root of the Shuttle repo, build the required images with:
 
 ```bash
-USE_PANAMAX=disable make images
+make images
 ```
 
-> Note: The stack uses [panamax](https://github.com/panamax-rs/panamax) by default to mirror crates.io content.
-> We do this in order to avoid overloading upstream mirrors and hitting rate limits.
-> After syncing the cache, expect to see the panamax volume take about 100GiB of space.
-> This may not be desirable for local testing. Therefore `USE_PANAMAX=disable make images` is recommended.
-
-The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straight away.
+The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time).
 
 You can now start a local deployment of Shuttle and the required containers with:
 
 ```bash
-USE_PANAMAX=disable make up
+make up
 ```
 
 > Note: `make up` can also be run with `SHUTTLE_DETACH=disable`, which means docker-compose will not be run with `--detach`. This is often desirable for local testing.
@@ -151,28 +146,17 @@ See the files [apply-patches.sh](./scripts/apply-patches.sh) and [patches.toml](
 > These should not be included in commits/PRs.
 > The easiest way to get rid of them is to comment out all the patch lines in `.cargo/config.toml`, and refresh cargo/r-a.
 
-### Create an admin user
+### Create an admin user + login
 
 Before we can login to our local instance of Shuttle, we need to create a user.
-The following command inserts a user into the `auth` state with admin privileges:
+The following script inserts a user into the `auth` state with admin privileges,
+and sets and env var to override your default api key with the admin test key.
+A shell prompt prefix is added to show that this api key override is active.
 
 ```bash
-# the --key needs to be 16 alphanumeric characters
-docker compose -f docker-compose.rendered.yml -p shuttle-dev exec auth /usr/local/bin/shuttle-auth --db-connection-uri=postgres://postgres:postgres@control-db init-admin --name admin --key dh9z58jttoes3qvt
+source scripts/local-admin.sh
+# If you have already done this before you will get a "UNIQUE constraint failed" error. It can be ignored.
 ```
-
-> Note: if you have done this already for this container you will get a "UNIQUE constraint failed"
-> error, you can ignore this.
-
-Login to Shuttle service in a new terminal window from the root of the Shuttle directory:
-
-```bash
-# the --api-key should be the same one you inserted in the auth state
-cargo run -p cargo-shuttle -- login --api-key dh9z58jttoes3qvt
-```
-
-> Note: The above commands, along with other useful scripts, can be found in [scripts](./scripts).
-> The above lines can instead be done with `source scripts/local-admin.sh`.
 
 Finally, before gateway will be able to work with some projects, we need to create a user for it.
 The following command inserts a gateway user into the `auth` state with deployer privileges:
@@ -213,7 +197,7 @@ The steps outlined above starts all the services used by Shuttle locally (ie. bo
 
 ```bash
 # if you didn't do this already, make the images
-USE_PANAMAX=disable make images
+make images
 
 # then generate the local docker-compose file
 make docker-compose.rendered.yml

@@ -71,12 +71,6 @@ services:
   otel-collector:
     ports:
       - 4317:4317
-  panamax:
-    profiles:
-      - panamax
-  deck-chores:
-    profiles:
-      - panamax
   logger:
     ports:
       - 8010:8000

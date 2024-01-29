@@ -5,6 +5,9 @@ pub use prost;
 pub use prost_types;
 pub use tonic;
 
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;
+
 #[cfg(feature = "provisioner")]
 pub mod provisioner {
     use std::fmt::Display;
@@ -215,11 +218,11 @@ pub mod resource_recorder {
         use async_trait::async_trait;
         use serde_json::json;
         use shuttle_common::{database, resource};
-        use shuttle_common_tests::resource_recorder::get_mocked_resource_recorder;
         use test_context::{test_context, AsyncTestContext};
         use tonic::Request;
 
         use crate::generated::resource_recorder::{record_request, RecordRequest};
+        use crate::test_utils::resource_recorder::get_mocked_resource_recorder;
 
         use super::{get_client, Client, ResourceDal};
 

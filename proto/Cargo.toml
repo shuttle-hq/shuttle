@@ -13,6 +13,7 @@ async-trait = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 futures-core = "0.3.28"
 http = { workspace = true, optional = true }
+portpicker = { workspace = true, optional = true }
 prost = { workspace = true }
 prost-types = { workspace = true }
 tokio = { workspace = true, optional = true }
@@ -23,10 +24,11 @@ serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 test-context = { workspace = true }
-shuttle-common-tests = { workspace = true }
+portpicker = { workspace = true }
 
 [features]
 default = []
+test-utils = ["portpicker"]
 
 builder = []
 logger = [

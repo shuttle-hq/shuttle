@@ -1,15 +1,18 @@
 use std::{
     net::{Ipv4Addr, SocketAddr},
     sync::Mutex,
+    time::Duration,
 };
 
 use portpicker::pick_unused_port;
-use shuttle_proto::resource_recorder::{
+use tokio::time::sleep;
+use tonic::{async_trait, transport::Server, Request, Response, Status};
+
+use crate::generated::resource_recorder::{
     resource_recorder_server::{ResourceRecorder, ResourceRecorderServer},
     ProjectResourcesRequest, RecordRequest, Resource, ResourceIds, ResourceResponse,
     ResourcesResponse, ResultResponse, ServiceResourcesRequest,
 };
-use tonic::{async_trait, transport::Server, Request, Response, Status};
 
 struct MockedResourceRecorder {
     resources: Mutex<Vec<Resource>>,
@@ -183,6 +186,9 @@ pub async fn get_mocked_resource_recorder() -> u16 {
             .serve(resource_recorder_addr)
             .await
     });
+
+    // Give the server some time to start up
+    sleep(Duration::from_millis(100)).await;
 
     port
 }

@@ -52,20 +52,21 @@ mod needs_docker {
 
     #[tokio::test]
     async fn going_over_rds_quota() {
+        let rr_uri = get_rr_uri().await;
         let provisioner = ShuttleProvisioner::new(
             &PG.uri,
             &MONGODB.uri,
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
-            get_rr_uri().await,
+            rr_uri.clone(),
             get_gateway_uri().await,
         )
         .await
         .unwrap();
 
         // First record some resources
-        let mut r_r_client = resource_recorder::get_client(get_rr_uri().await).await;
+        let mut r_r_client = resource_recorder::get_client(rr_uri).await;
         r_r_client
             .record_resources(Request::new(RecordRequest {
                 project_id: "id1".to_string(),

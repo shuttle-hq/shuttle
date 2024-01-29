@@ -1,11 +1,9 @@
 use std::{
     net::{Ipv4Addr, SocketAddr},
     sync::Mutex,
-    time::Duration,
 };
 
 use portpicker::pick_unused_port;
-use tokio::time::sleep;
 use tonic::{async_trait, transport::Server, Request, Response, Status};
 
 use crate::generated::resource_recorder::{
@@ -186,9 +184,6 @@ pub async fn get_mocked_resource_recorder() -> u16 {
             .serve(resource_recorder_addr)
             .await
     });
-
-    // Give the server some time to start up
-    sleep(Duration::from_millis(100)).await;
 
     port
 }

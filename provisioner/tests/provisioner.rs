@@ -12,31 +12,17 @@ use tonic::transport::Uri;
 
 static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::Postgres));
 static MONGODB: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::MongoDb));
-static RR_URI: tokio::sync::OnceCell<Uri> = tokio::sync::OnceCell::const_new();
-static GATEWAY_URI: tokio::sync::OnceCell<Uri> = tokio::sync::OnceCell::const_new();
 
 async fn get_rr_uri() -> Uri {
-    let uri = RR_URI
-        .get_or_init(|| async {
-            let port = get_mocked_resource_recorder().await;
+    let port = get_mocked_resource_recorder().await;
 
-            format!("http://localhost:{port}").parse().unwrap()
-        })
-        .await;
-
-    uri.clone()
+    format!("http://localhost:{port}").parse().unwrap()
 }
 
 async fn get_gateway_uri() -> Uri {
-    let uri = GATEWAY_URI
-        .get_or_init(|| async {
-            let server = get_mocked_gateway_server().await;
+    let server = get_mocked_gateway_server().await;
 
-            server.uri().parse().unwrap()
-        })
-        .await;
-
-    uri.clone()
+    server.uri().parse().unwrap()
 }
 
 #[dtor]

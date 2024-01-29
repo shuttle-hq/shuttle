@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
 use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
+use shuttle_common::backends::ClaimExt;
 use shuttle_common::claims::{Scope, EXP_MINUTES};
-use shuttle_common::limits::ClaimExt;
 use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{

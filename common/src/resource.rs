@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::database;
 
 /// Common type to hold all the information we need for a generic resource
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Response {
     /// The type of this resource.
     pub r#type: Type,

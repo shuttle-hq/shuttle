@@ -219,6 +219,8 @@ services:
       - "--internal-pg-address=postgres"
       - "--fqdn=${DB_FQDN}"
       - "--auth-uri=http://auth:8000"
+      - "--gateway-uri=http://gateway:8001"
+      - "--resource-recorder-uri=http://resource-recorder:8000"
   resource-recorder:
     image: "${CONTAINER_REGISTRY}/resource-recorder:${RESOURCE_RECORDER_TAG}"
     depends_on:

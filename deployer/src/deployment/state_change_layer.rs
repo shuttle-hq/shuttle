@@ -147,7 +147,9 @@ mod tests {
     use flate2::{write::GzEncoder, Compression};
     use portpicker::pick_unused_port;
     use shuttle_common::claims::Claim;
-    use shuttle_common_tests::{builder::mocked_builder_client, logger::mocked_logger_client};
+    use shuttle_common_tests::{
+        builder::get_mocked_builder_client, logger::get_mocked_logger_client,
+    };
     use shuttle_proto::{
         builder::{builder_server::Builder, BuildRequest, BuildResponse},
         logger::{
@@ -807,8 +809,8 @@ mod tests {
     }
 
     async fn get_deployment_manager() -> DeploymentManager {
-        let logger_client = mocked_logger_client(RecorderMock::new()).await;
-        let builder_client = mocked_builder_client(RecorderMock::new()).await;
+        let logger_client = get_mocked_logger_client(RecorderMock::new()).await;
+        let builder_client = get_mocked_builder_client(RecorderMock::new()).await;
         DeploymentManager::builder()
             .build_log_recorder(RECORDER.clone())
             .active_deployment_getter(StubActiveDeploymentGetter)

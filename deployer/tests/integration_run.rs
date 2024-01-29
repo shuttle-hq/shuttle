@@ -8,7 +8,7 @@ use std::{
 use async_trait::async_trait;
 use portpicker::pick_unused_port;
 use shuttle_common::{claims::Claim, constants::EXECUTABLE_DIRNAME};
-use shuttle_common_tests::logger::{mocked_logger_client, MockedLogger};
+use shuttle_common_tests::logger::{get_mocked_logger_client, MockedLogger};
 use shuttle_proto::{
     logger::Batcher,
     provisioner::{
@@ -85,7 +85,7 @@ async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
             .unwrap();
     });
 
-    let logger_client = Batcher::wrap(mocked_logger_client(MockedLogger).await);
+    let logger_client = Batcher::wrap(get_mocked_logger_client(MockedLogger).await);
 
     RuntimeManager::new(format!("http://{}", provisioner_addr), logger_client, None)
 }

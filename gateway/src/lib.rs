@@ -295,7 +295,7 @@ pub mod tests {
     use shuttle_common::claims::{AccountTier, Claim};
     use shuttle_common::models::deployment::DeploymentRequest;
     use shuttle_common::models::{project, service};
-    use shuttle_common_tests::resource_recorder::start_mocked_resource_recorder;
+    use shuttle_proto::test_utils::resource_recorder::get_mocked_resource_recorder;
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::{query, SqlitePool};
     use test_context::AsyncTestContext;
@@ -534,7 +534,7 @@ pub mod tests {
             let bouncer = format!("127.0.0.1:{bouncer}").parse().unwrap();
             let auth: SocketAddr = format!("0.0.0.0:{auth_port}").parse().unwrap();
             let auth_uri: Uri = format!("http://{auth}").parse().unwrap();
-            let resource_recorder_port = start_mocked_resource_recorder().await;
+            let resource_recorder_port = get_mocked_resource_recorder().await;
 
             let auth_service = AuthService::new(auth);
             auth_service

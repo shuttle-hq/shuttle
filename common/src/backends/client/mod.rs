@@ -8,9 +8,11 @@ use thiserror::Error;
 use tracing::{trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-mod gateway;
+pub mod gateway;
+mod resource_recorder;
 
-pub use gateway::GatewayClient;
+pub use gateway::ProjectsDal;
+pub use resource_recorder::ResourceDal;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -22,6 +24,8 @@ pub enum Error {
     Http(#[from] hyper::http::Error),
     #[error("Request did not return correctly. Got status code: {0}")]
     RequestError(StatusCode),
+    #[error("GRpc request did not return correctly. Got status code: {0}")]
+    GrpcError(#[from] tonic::Status),
 }
 
 /// `Hyper` wrapper to make request to RESTful Shuttle services easy
@@ -96,14 +100,14 @@ mod tests {
     use http::{Method, StatusCode};
 
     use crate::models;
-    use crate::test_utils::mocked_gateway_server;
+    use crate::test_utils::get_mocked_gateway_server;
 
     use super::{Error, ServicesApiClient};
 
     // Make sure we handle any unexpected responses correctly
     #[tokio::test]
     async fn api_errors() {
-        let server = mocked_gateway_server().await;
+        let server = get_mocked_gateway_server().await;
 
         let client = ServicesApiClient::new(server.uri().parse().unwrap());
 

@@ -1,13 +1,30 @@
 mod helpers;
+
 use ctor::dtor;
 use helpers::{exec_mongosh, exec_psql, DbType, DockerInstance};
 use once_cell::sync::Lazy;
 use serde_json::Value;
-use shuttle_proto::provisioner::shared;
+use shuttle_common::test_utils::get_mocked_gateway_server;
+use shuttle_proto::{
+    provisioner::shared, test_utils::resource_recorder::get_mocked_resource_recorder,
+};
 use shuttle_provisioner::ShuttleProvisioner;
+use tonic::transport::Uri;
 
 static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::Postgres));
 static MONGODB: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::MongoDb));
+
+async fn get_rr_uri() -> Uri {
+    let port = get_mocked_resource_recorder().await;
+
+    format!("http://localhost:{port}").parse().unwrap()
+}
+
+async fn get_gateway_uri() -> Uri {
+    let server = get_mocked_gateway_server().await;
+
+    server.uri().parse().unwrap()
+}
 
 #[dtor]
 fn cleanup() {
@@ -16,7 +33,87 @@ fn cleanup() {
 }
 
 mod needs_docker {
+    use serde_json::json;
+    use shuttle_common::{
+        claims::{AccountTier, Claim},
+        limits::Limits,
+    };
+    use shuttle_common_tests::ClaimTestsExt;
+    use shuttle_proto::{
+        provisioner::{
+            aws_rds::Engine, database_request::DbType, provisioner_server::Provisioner, AwsRds,
+            DatabaseRequest,
+        },
+        resource_recorder::{self, record_request, RecordRequest},
+    };
+    use tonic::{Code, Request};
+
     use super::*;
+
+    #[tokio::test]
+    async fn going_over_rds_quota() {
+        let rr_uri = get_rr_uri().await;
+        let provisioner = ShuttleProvisioner::new(
+            &PG.uri,
+            &MONGODB.uri,
+            "fqdn".to_string(),
+            "pg".to_string(),
+            "mongodb".to_string(),
+            rr_uri.clone(),
+            get_gateway_uri().await,
+        )
+        .await
+        .unwrap();
+
+        // First record some resources
+        let mut r_r_client = resource_recorder::get_client(rr_uri).await;
+        r_r_client
+            .record_resources(Request::new(RecordRequest {
+                project_id: "id1".to_string(),
+                service_id: "service_id".to_string(),
+                resources: vec![
+                    record_request::Resource {
+                        r#type: "database::shared::postgres".to_string(),
+                        config: serde_json::to_vec(&json!({"public": true})).unwrap(),
+                        data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
+                    },
+                    // Make one RDS record that already exists
+                    record_request::Resource {
+                        r#type: "database::aws_rds::mariadb".to_string(),
+                        config: serde_json::to_vec(&json!({})).unwrap(),
+                        data: serde_json::to_vec(&json!({"username": "maria"})).unwrap(),
+                    },
+                ],
+            }))
+            .await
+            .unwrap();
+
+        let mut req = Request::new(DatabaseRequest {
+            project_name: "user-1-project-1".to_string(),
+            db_type: Some(DbType::AwsRds(AwsRds {
+                engine: Some(Engine::Postgres(Default::default())),
+            })),
+        });
+
+        // Add a claim that only allows for one RDS - the one that will be returned by r-r
+        req.extensions_mut().insert(
+            Claim::new(
+                "user-1".to_string(),
+                AccountTier::Basic.into(),
+                AccountTier::Basic,
+                Limits::new(1, 1),
+            )
+            .fill_token(),
+        );
+
+        let err = provisioner.provision_database(req).await.unwrap_err();
+
+        assert_eq!(
+            err.code(),
+            Code::PermissionDenied,
+            "quota has been reached so user should not be able to provision another RDS"
+        );
+    }
 
     #[tokio::test]
     async fn shared_db_role_does_not_exist() {
@@ -26,6 +123,8 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -54,6 +153,8 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -84,6 +185,8 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -105,6 +208,8 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -133,6 +238,8 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -163,6 +270,8 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();
@@ -187,6 +296,8 @@ mod needs_docker {
             "fqdn".to_string(),
             "pg".to_string(),
             "mongodb".to_string(),
+            get_rr_uri().await,
+            get_gateway_uri().await,
         )
         .await
         .unwrap();

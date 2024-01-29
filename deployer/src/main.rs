@@ -2,7 +2,7 @@ use std::process::exit;
 
 use clap::Parser;
 use shuttle_common::{
-    backends::tracing::setup_tracing,
+    backends::trace::setup_tracing,
     claims::{ClaimLayer, InjectPropagationLayer},
     log::{Backend, DeploymentLogLayer},
 };
@@ -27,7 +27,7 @@ async fn main() {
 
     let (persistence, _) = Persistence::new(
         &args.state,
-        &args.resource_recorder,
+        args.resource_recorder.clone(),
         &args.provisioner_address,
         Ulid::from_string(args.project_id.as_str())
             .expect("to get a valid ULID for project_id arg"),

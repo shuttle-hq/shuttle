@@ -222,7 +222,7 @@ pub struct Claim {
     /// Scopes this token can access
     pub scopes: Vec<Scope>,
     /// The original token that was parsed
-    pub(crate) token: Option<String>,
+    pub token: Option<String>,
     /// A struct that holds the account limits.
     pub limits: Limits,
     /// The account tier of the subject.

@@ -47,7 +47,7 @@ impl Logger for MockedLogger {
     }
 }
 
-pub async fn mocked_logger_client(
+pub async fn get_mocked_logger_client(
     logger: impl Logger,
 ) -> LoggerClient<
     shuttle_common::claims::ClaimService<

@@ -5,6 +5,9 @@ pub use prost;
 pub use prost_types;
 pub use tonic;
 
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;
+
 #[cfg(feature = "provisioner")]
 pub mod provisioner {
     use std::fmt::Display;
@@ -106,7 +109,12 @@ pub mod runtime {
 #[cfg(feature = "resource-recorder")]
 pub mod resource_recorder {
     use anyhow::Context;
+    use async_trait::async_trait;
+    use http::{header::AUTHORIZATION, Uri};
+    use shuttle_common::backends::client::{self, ResourceDal};
     use std::str::FromStr;
+
+    use self::resource_recorder_client::ResourceRecorderClient;
 
     pub use super::generated::resource_recorder::*;
 
@@ -146,6 +154,154 @@ pub mod resource_recorder {
             };
 
             Ok(response)
+        }
+    }
+
+    pub type Client = ResourceRecorderClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >;
+
+    /// Get a resource recorder client that is correctly configured for all services
+    pub async fn get_client(resource_recorder_uri: Uri) -> Client {
+        let channel = tonic::transport::Endpoint::from(resource_recorder_uri)
+            .connect()
+            .await
+            .expect("failed to connect to resource recorder");
+
+        let resource_recorder_service = tower::ServiceBuilder::new()
+            .layer(shuttle_common::claims::ClaimLayer)
+            .layer(shuttle_common::claims::InjectPropagationLayer)
+            .service(channel);
+
+        ResourceRecorderClient::new(resource_recorder_service)
+    }
+
+    #[async_trait]
+    impl ResourceDal for Client {
+        async fn get_project_resources(
+            &mut self,
+            project_id: &str,
+            token: &str,
+        ) -> Result<Vec<shuttle_common::resource::Response>, client::Error> {
+            let mut req = tonic::Request::new(ProjectResourcesRequest {
+                project_id: project_id.to_string(),
+            });
+
+            req.metadata_mut().insert(
+                AUTHORIZATION.as_str(),
+                format!("Bearer {token}")
+                    .parse()
+                    .expect("to construct a bearer token"),
+            );
+
+            let resp = (*self)
+                .get_project_resources(req)
+                .await?
+                .into_inner()
+                .clone();
+
+            let resources = resp
+                .resources
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error: anyhow::Error| tonic::Status::internal(error.to_string()))?;
+
+            Ok(resources)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use async_trait::async_trait;
+        use serde_json::json;
+        use shuttle_common::{database, resource};
+        use test_context::{test_context, AsyncTestContext};
+        use tonic::Request;
+
+        use crate::generated::resource_recorder::{record_request, RecordRequest};
+        use crate::test_utils::resource_recorder::get_mocked_resource_recorder;
+
+        use super::{get_client, Client, ResourceDal};
+
+        #[async_trait]
+        impl AsyncTestContext for Client {
+            async fn setup() -> Self {
+                let port = get_mocked_resource_recorder().await;
+
+                get_client(format!("http://localhost:{port}").parse().unwrap()).await
+            }
+
+            async fn teardown(mut self) {}
+        }
+
+        #[test_context(Client)]
+        #[tokio::test]
+        async fn get_project_resources(mut r_r_client: &mut Client) {
+            // First record some resources
+            r_r_client
+                .record_resources(Request::new(RecordRequest {
+                    project_id: "project_1".to_string(),
+                    service_id: "service_1".to_string(),
+                    resources: vec![
+                        record_request::Resource {
+                            r#type: "database::shared::postgres".to_string(),
+                            config: serde_json::to_vec(&json!({"public": true})).unwrap(),
+                            data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
+                        },
+                        record_request::Resource {
+                            r#type: "database::aws_rds::mariadb".to_string(),
+                            config: serde_json::to_vec(&json!({})).unwrap(),
+                            data: serde_json::to_vec(&json!({"username": "maria"})).unwrap(),
+                        },
+                    ],
+                }))
+                .await
+                .unwrap();
+
+            let resources = (&mut r_r_client as &mut dyn ResourceDal)
+                .get_project_resources("project_1", "user-1")
+                .await
+                .unwrap();
+
+            assert_eq!(
+                resources,
+                vec![
+                    resource::Response {
+                        r#type: resource::Type::Database(database::Type::Shared(
+                            database::SharedEngine::Postgres
+                        )),
+                        config: json!({"public": true}),
+                        data: json!({"username": "test"}),
+                    },
+                    resource::Response {
+                        r#type: resource::Type::Database(database::Type::AwsRds(
+                            database::AwsRdsEngine::MariaDB
+                        )),
+                        config: json!({}),
+                        data: json!({"username": "maria"}),
+                    }
+                ]
+            );
+
+            // Getting only RDS resources should filter correctly
+            let resources = (&mut r_r_client as &mut dyn ResourceDal)
+                .get_project_rds_resources("project_1", "user-1")
+                .await
+                .unwrap();
+
+            assert_eq!(
+                resources,
+                vec![resource::Response {
+                    r#type: resource::Type::Database(database::Type::AwsRds(
+                        database::AwsRdsEngine::MariaDB
+                    )),
+                    config: json!({}),
+                    data: json!({"username": "maria"}),
+                }]
+            );
         }
     }
 }

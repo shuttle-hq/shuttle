@@ -52,6 +52,7 @@ ttl_cache = { workspace = true, optional = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 zeroize = { workspace = true }
+wiremock = { workspace = true, optional = true }
 
 [features]
 backend = [
@@ -92,6 +93,7 @@ display = ["chrono/clock", "comfy-table", "crossterm"]
 models = ["async-trait", "http", "reqwest", "service", "thiserror"]
 persist = ["sqlx", "rand"]
 service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
+test-utils = ["wiremock"]
 tracing = ["dep:tracing"]
 wasm = [
     "chrono/clock",

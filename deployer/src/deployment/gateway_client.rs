@@ -1,7 +1,7 @@
 use axum::headers::{authorization::Bearer, Authorization};
 use hyper::Method;
 use shuttle_common::{
-    backends::client::{Error, GatewayClient},
+    backends::client::{gateway, Error},
     models::{self},
 };
 use uuid::Uuid;
@@ -17,7 +17,7 @@ pub trait BuildQueueClient: Clone + Send + Sync + 'static {
 }
 
 #[async_trait::async_trait]
-impl BuildQueueClient for GatewayClient {
+impl BuildQueueClient for gateway::Client {
     async fn get_slot(&self, deployment_id: Uuid) -> Result<bool, Error> {
         let body = models::stats::LoadRequest { id: deployment_id };
         let load: models::stats::LoadResponse = self

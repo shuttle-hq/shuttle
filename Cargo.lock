@@ -6183,14 +6183,19 @@ name = "shuttle-proto"
 version = "0.37.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "futures-core",
+ "http 0.2.11",
+ "portpicker",
  "prost 0.12.3",
  "prost-types",
  "serde_json",
  "shuttle-common",
+ "test-context",
  "tokio",
  "tonic 0.10.2",
+ "tower",
  "tracing",
 ]
 
@@ -6210,6 +6215,7 @@ dependencies = [
  "rand 0.8.5",
  "serde_json",
  "shuttle-common",
+ "shuttle-common-tests",
  "shuttle-proto",
  "sqlx",
  "thiserror",

@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use std::sync::Arc;
 use std::time::Duration;
 
 pub use args::Args;
@@ -11,6 +12,8 @@ pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_common::backends::auth::VerifyClaim;
+use shuttle_common::backends::client::gateway;
+use shuttle_common::backends::ClaimExt;
 use shuttle_common::claims::Scope;
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
@@ -19,10 +22,13 @@ use shuttle_proto::provisioner::{
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
 use shuttle_proto::provisioner::{ContainerRequest, ContainerResponse, Ping, Pong};
+use shuttle_proto::resource_recorder;
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
+use tokio::sync::Mutex;
 use tokio::time::sleep;
+use tonic::transport::Uri;
 use tonic::{Request, Response, Status};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 mod args;
 mod error;
@@ -38,6 +44,8 @@ pub struct ShuttleProvisioner {
     fqdn: String,
     internal_pg_address: String,
     internal_mongodb_address: String,
+    rr_client: Arc<Mutex<resource_recorder::Client>>,
+    gateway_client: gateway::Client,
 }
 
 impl ShuttleProvisioner {
@@ -47,6 +55,8 @@ impl ShuttleProvisioner {
         fqdn: String,
         internal_pg_address: String,
         internal_mongodb_address: String,
+        resource_recorder_uri: Uri,
+        gateway_uri: Uri,
     ) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
@@ -70,6 +80,10 @@ impl ShuttleProvisioner {
 
         let rds_client = aws_sdk_rds::Client::new(&aws_config);
 
+        let rr_client = resource_recorder::get_client(resource_recorder_uri).await;
+
+        let gateway_client = gateway::Client::new(gateway_uri.clone(), gateway_uri);
+
         Ok(Self {
             pool,
             rds_client,
@@ -77,6 +91,8 @@ impl ShuttleProvisioner {
             fqdn,
             internal_pg_address,
             internal_mongodb_address,
+            rr_client: Arc::new(Mutex::new(rr_client)),
+            gateway_client,
         })
     }
 
@@ -456,7 +472,7 @@ impl Provisioner for ShuttleProvisioner {
     ) -> Result<Response<DatabaseResponse>, Status> {
         request.verify(Scope::ResourcesWrite)?;
 
-        let can_provision_rds = request.verify_rds_access();
+        let claim = request.get_claim()?;
 
         let request = request.into_inner();
         if !ProjectName::is_valid(&request.project_name) {
@@ -470,7 +486,33 @@ impl Provisioner for ShuttleProvisioner {
                     .await?
             }
             DbType::AwsRds(AwsRds { engine }) => {
-                can_provision_rds?;
+                {
+                    let mut rr_client = self.rr_client.lock().await;
+
+                    let can_provision = match claim
+                        .can_provision_rds(&self.gateway_client, &mut *rr_client)
+                        .await
+                    {
+                        Ok(can_provision) => can_provision,
+                        Err(error) => {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to check current RDS subscription"
+                            );
+
+                            return Err(tonic::Status::internal(
+                                "failed to check current RDS subscription",
+                            ));
+                        }
+                    };
+
+                    if !can_provision {
+                        return Err(tonic::Status::permission_denied(
+                            "don't have permission to provision rds instances",
+                        ));
+                    }
+                }
+
                 self.request_aws_rds(&request.project_name, engine.expect("engine to be set"))
                     .await?
             }

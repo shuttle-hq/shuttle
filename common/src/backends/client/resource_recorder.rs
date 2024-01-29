@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use tracing::instrument;
 
 use crate::{database, resource};
 
@@ -41,6 +42,7 @@ impl<T> ResourceDal for &mut T
 where
     T: ResourceDal,
 {
+    #[instrument(skip_all, fields(shuttle.project_id = project_id))]
     async fn get_project_resources(
         &mut self,
         project_id: &str,

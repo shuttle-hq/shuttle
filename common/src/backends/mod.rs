@@ -1,3 +1,5 @@
+use tracing::instrument;
+
 use crate::claims::{Claim, Scope};
 
 use self::client::{ProjectsDal, ResourceDal};
@@ -9,7 +11,7 @@ mod future;
 pub mod headers;
 pub mod metrics;
 mod otlp_tracing_bridge;
-pub mod tracing;
+pub mod trace;
 
 #[allow(async_fn_in_trait)]
 pub trait ClaimExt {
@@ -34,6 +36,7 @@ impl ClaimExt for Claim {
         self.is_admin() || self.limits.project_limit() > current_count
     }
 
+    #[instrument(skip_all)]
     async fn can_provision_rds<G: ProjectsDal, R: ResourceDal>(
         &self,
         projects_dal: &G,

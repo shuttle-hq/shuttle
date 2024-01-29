@@ -2,7 +2,7 @@ use std::process::exit;
 
 use clap::Parser;
 use shuttle_common::{
-    backends::tracing::setup_tracing,
+    backends::trace::setup_tracing,
     claims::{ClaimLayer, InjectPropagationLayer},
     log::{Backend, DeploymentLogLayer},
 };

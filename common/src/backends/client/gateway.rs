@@ -1,5 +1,6 @@
 use headers::Authorization;
 use http::{Method, Uri};
+use tracing::instrument;
 
 use crate::models;
 
@@ -55,6 +56,7 @@ pub trait ProjectsDal {
 }
 
 impl ProjectsDal for Client {
+    #[instrument(skip_all)]
     async fn get_user_projects(
         &self,
         user_token: &str,

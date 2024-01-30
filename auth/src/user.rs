@@ -23,25 +23,43 @@ use stripe::{
 
 #[async_trait]
 pub trait UserManagement: Send + Sync {
+    /// Create a user with the given tier
     async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error>;
+
+    /// Upgrade a user to pro using the given checkout session
     async fn upgrade_to_pro(
         &self,
         name: &AccountName,
         checkout_session_metadata: CheckoutSession,
     ) -> Result<(), Error>;
+
+    /// Change the tier for a user
     async fn update_tier(&self, name: &AccountName, tier: AccountTier) -> Result<(), Error>;
+
+    /// Get a user by their account name
     async fn get_user(&self, name: AccountName) -> Result<User, Error>;
+
+    /// Get a user by their api key
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
+
+    /// Reset (remove) the key that belongs to an account
     async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
-    // TODO: add comments
+
+    /// Insert a subscription for an account
     async fn insert_subscription(
         &self,
-        id: &str,
         name: &AccountName,
-        r#type: &models::user::SubscriptionType,
-        quantity: i32,
+        subscription_id: &str,
+        subscription_type: &models::user::SubscriptionType,
+        subscription_quantity: i32,
     ) -> Result<(), Error>;
-    async fn delete_subscription(&self, id: &str, name: &AccountName) -> Result<(), Error>;
+
+    /// Delete a subscription from an account
+    async fn delete_subscription(
+        &self,
+        name: &AccountName,
+        subscription_id: &str,
+    ) -> Result<(), Error>;
 }
 
 #[derive(Clone)]
@@ -221,11 +239,13 @@ impl UserManagement for UserManager {
 
     async fn insert_subscription(
         &self,
-        id: &str,
         name: &AccountName,
-        r#type: &models::user::SubscriptionType,
-        quantity: i32,
+        subscription_id: &str,
+        subscription_type: &models::user::SubscriptionType,
+        subscription_quantity: i32,
     ) -> Result<(), Error> {
+        // Insert a new subscription. If the same type of subscription already exists, update the
+        // subscription id and quantity.
         query(
             r#"INSERT INTO subscriptions (subscription_id, account_name, type, quantity)
             VALUES ($1, $2, $3, $4)
@@ -233,23 +253,27 @@ impl UserManagement for UserManager {
             DO UPDATE SET subscription_id = EXCLUDED.subscription_id, quantity = EXCLUDED.quantity
         "#,
         )
-        .bind(id)
+        .bind(subscription_id)
         .bind(name)
-        .bind(r#type.to_string())
-        .bind(quantity)
+        .bind(subscription_type.to_string())
+        .bind(subscription_quantity)
         .execute(&self.pool)
         .await?;
 
         Ok(())
     }
 
-    async fn delete_subscription(&self, id: &str, name: &AccountName) -> Result<(), Error> {
+    async fn delete_subscription(
+        &self,
+        name: &AccountName,
+        subscription_id: &str,
+    ) -> Result<(), Error> {
         query(
             r#"DELETE FROM subscriptions
             WHERE subscription_id = $1 AND account_name = $2
         "#,
         )
-        .bind(id)
+        .bind(subscription_id)
         .bind(name)
         .execute(&self.pool)
         .await?;

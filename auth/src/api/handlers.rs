@@ -83,8 +83,8 @@ pub(crate) async fn post_subscription(
 ) -> Result<(), Error> {
     user_manager
         .insert_subscription(
-            &payload.id,
             &account_name,
+            &payload.id,
             &payload.r#type,
             payload.quantity,
         )
@@ -99,7 +99,7 @@ pub(crate) async fn delete_subscription(
     Path((account_name, subscription_id)): Path<(AccountName, String)>,
 ) -> Result<(), Error> {
     user_manager
-        .delete_subscription(&subscription_id, &account_name)
+        .delete_subscription(&account_name, &subscription_id)
         .await?;
 
     Ok(())

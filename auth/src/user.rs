@@ -40,7 +40,7 @@ pub trait UserManagement: Send + Sync {
         r#type: &models::user::SubscriptionType,
         quantity: i32,
     ) -> Result<(), Error>;
-    async fn delete_subscription(&self, id: String, name: AccountName) -> Result<(), Error>;
+    async fn delete_subscription(&self, id: &str, name: &AccountName) -> Result<(), Error>;
 }
 
 #[derive(Clone)]
@@ -242,10 +242,10 @@ impl UserManagement for UserManager {
         Ok(())
     }
 
-    async fn delete_subscription(&self, id: String, name: AccountName) -> Result<(), Error> {
+    async fn delete_subscription(&self, id: &str, name: &AccountName) -> Result<(), Error> {
         query(
     r#"DELETE FROM subscriptions
-            WHERE subscription_id = $1, account_name = $2
+            WHERE subscription_id = $1 AND account_name = $2
         "#,
         )
         .bind(id)

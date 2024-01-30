@@ -3,7 +3,7 @@ use std::{net::SocketAddr, sync::Arc};
 use axum::{
     extract::FromRef,
     middleware::from_extractor,
-    routing::{get, post, put},
+    routing::{get, post, put, delete},
     Router, Server,
 };
 use axum_sessions::{async_session::MemoryStore, SessionLayer};
@@ -23,7 +23,7 @@ use crate::{
 
 use super::handlers::{
     convert_cookie, convert_key, get_public_key, get_user, health_check, logout, post_subscription,
-    post_user, put_user_reset_key, refresh_token, update_user_tier,
+    post_user, put_user_reset_key, refresh_token, update_user_tier, delete_subscription,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -79,6 +79,7 @@ impl ApiBuilder {
             )
             .route("/users/reset-api-key", put(put_user_reset_key))
             .route("/subscribe/:account_name", post(post_subscription))
+            .route("/subscribe/:account_name/:subscription_id", delete(delete_subscription))
             .route_layer(from_extractor::<Metrics>())
             .layer(
                 TraceLayer::new(|request| {

@@ -162,6 +162,21 @@ impl TestApp {
         self.send_request(request).await
     }
 
+    pub async fn delete_subscription(
+        &self,
+        name: &str,
+        subscription_id: &str,
+    ) -> Response {
+        let request = Request::builder()
+            .uri(format!("/subscribe/{name}/{subscription_id}"))
+            .method("DELETE")
+            .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.send_request(request).await
+    }
+
     pub async fn claim_from_response(&self, res: Response) -> Claim {
         let body = hyper::body::to_bytes(res.into_body()).await.unwrap();
         let convert: Value = serde_json::from_slice(&body).unwrap();

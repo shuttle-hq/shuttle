@@ -266,6 +266,15 @@ mod needs_docker {
         assert_eq!(response.subscriptions[0].quantity, 4);
 
         // Send a request to delete an RDS subscription
+        let response = app
+            .delete_subscription("test-user", "sub_IOhso230rakstr023soI")
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Fetch the user and verify they have no subscriptions
+        let response = app.get_user_typed("test-user").await;
+
+        assert_eq!(response.subscriptions.len(), 0, "no subscriptions should exist");
     }
 
     #[tokio::test]

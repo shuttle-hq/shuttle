@@ -95,6 +95,16 @@ pub(crate) async fn post_subscription(
     Ok(())
 }
 
+pub(crate) async fn delete_subscription(
+    _: Admin,
+    State(user_manager): State<UserManagerState>,
+    Path((account_name, subscription_id)): Path<(AccountName, String)>,
+) -> Result<(), Error> {
+    user_manager.delete_subscription(&subscription_id, &account_name).await?;
+
+    Ok(())
+}
+
 pub(crate) async fn logout(mut session: WritableSession) {
     session.destroy();
 }

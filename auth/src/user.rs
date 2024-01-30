@@ -42,7 +42,7 @@ pub trait UserManagement: Send + Sync {
     /// Get a user by their api key
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
 
-    /// Reset (remove) the key that belongs to an account
+    /// Reset the key that belongs to an account
     async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
 
     /// Insert a subscription for an account

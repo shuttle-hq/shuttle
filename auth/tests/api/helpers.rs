@@ -154,7 +154,7 @@ impl TestApp {
         quantity: u32,
     ) -> Response {
         let request = Request::builder()
-            .uri(format!("/subscribe/{name}"))
+            .uri(format!("/users/{name}/subscribe"))
             .method("POST")
             .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
             .header(CONTENT_TYPE, "application/json")
@@ -173,7 +173,7 @@ impl TestApp {
 
     pub async fn delete_subscription(&self, name: &str, subscription_id: &str) -> Response {
         let request = Request::builder()
-            .uri(format!("/subscribe/{name}/{subscription_id}"))
+            .uri(format!("/users/{name}/subscribe/{subscription_id}"))
             .method("DELETE")
             .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
             .body(Body::empty())

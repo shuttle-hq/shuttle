@@ -72,9 +72,9 @@ impl ApiBuilder {
                 post(post_user).put(update_user_tier),
             )
             .route("/users/reset-api-key", put(put_user_reset_key))
-            .route("/subscribe/:account_name", post(post_subscription))
+            .route("/users/:account_name/subscribe", post(post_subscription))
             .route(
-                "/subscribe/:account_name/:subscription_id",
+                "/users/:account_name/subscribe/:subscription_id",
                 delete(delete_subscription),
             )
             .route_layer(from_extractor::<Metrics>())

@@ -127,7 +127,7 @@ where
             };
         }
 
-        if req_path.starts_with("/users") || req_path.starts_with("/subscribe") {
+        if req_path.starts_with("/users") {
             let target_url = self.auth_uri.to_string();
 
             let cx = Span::current().context();

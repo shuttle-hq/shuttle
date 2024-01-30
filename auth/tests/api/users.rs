@@ -241,7 +241,11 @@ mod needs_docker {
         // Fetch the user and verify they have an rds subscription.
         let response = app.get_user_typed("test-user").await;
 
-        assert_eq!(response.subscriptions.len(), 1, "there should be one subscription");
+        assert_eq!(
+            response.subscriptions.len(),
+            1,
+            "there should be one subscription"
+        );
         assert_eq!(
             response.subscriptions[0].r#type,
             models::user::SubscriptionType::Rds
@@ -258,7 +262,11 @@ mod needs_docker {
         // Fetch the user and verify their rds subscription quantity was incremented.
         let response = app.get_user_typed("test-user").await;
 
-        assert_eq!(response.subscriptions.len(), 1, "the old subscription should be updated");
+        assert_eq!(
+            response.subscriptions.len(),
+            1,
+            "the old subscription should be updated"
+        );
         assert_eq!(
             response.subscriptions[0].r#type,
             models::user::SubscriptionType::Rds
@@ -274,7 +282,11 @@ mod needs_docker {
         // Fetch the user and verify they have no subscriptions
         let response = app.get_user_typed("test-user").await;
 
-        assert_eq!(response.subscriptions.len(), 0, "no subscriptions should exist");
+        assert_eq!(
+            response.subscriptions.len(),
+            0,
+            "no subscriptions should exist"
+        );
     }
 
     #[tokio::test]

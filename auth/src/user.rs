@@ -10,7 +10,8 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::{
-    backends::headers::XShuttleAdminSecret, claims::AccountTier, models, ApiKey, Secret,
+    backends::headers::XShuttleAdminSecret, claims::AccountTier, limits::Limits, models, ApiKey,
+    Secret,
 };
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
 use tracing::{debug, error, trace, Span};
@@ -226,7 +227,7 @@ impl UserManagement for UserManager {
         quantity: i32,
     ) -> Result<(), Error> {
         query(
-        r#"INSERT INTO subscriptions (subscription_id, account_name, type, quantity)
+            r#"INSERT INTO subscriptions (subscription_id, account_name, type, quantity)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (account_name, type)
             DO UPDATE SET subscription_id = EXCLUDED.subscription_id, quantity = EXCLUDED.quantity
@@ -244,7 +245,7 @@ impl UserManagement for UserManager {
 
     async fn delete_subscription(&self, id: &str, name: &AccountName) -> Result<(), Error> {
         query(
-    r#"DELETE FROM subscriptions
+            r#"DELETE FROM subscriptions
             WHERE subscription_id = $1 AND account_name = $2
         "#,
         )
@@ -387,6 +388,21 @@ impl FromRow<'_, PgRow> for Subscription {
             created_at: row.try_get("created_at").unwrap(),
             updated_at: row.try_get("updated_at").unwrap(),
         })
+    }
+}
+
+impl From<User> for Limits {
+    fn from(user: User) -> Self {
+        let mut limit: Limits = user.account_tier.into();
+
+        limit.rds_quota = user
+            .subscriptions
+            .iter()
+            .find(|sub| matches!(sub.r#type, models::user::SubscriptionType::Rds))
+            .map(|sub| sub.quantity as u32)
+            .unwrap_or(0);
+
+        limit
     }
 }
 

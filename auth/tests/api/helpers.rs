@@ -162,11 +162,7 @@ impl TestApp {
         self.send_request(request).await
     }
 
-    pub async fn delete_subscription(
-        &self,
-        name: &str,
-        subscription_id: &str,
-    ) -> Response {
+    pub async fn delete_subscription(&self, name: &str, subscription_id: &str) -> Response {
         let request = Request::builder()
             .uri(format!("/subscribe/{name}/{subscription_id}"))
             .method("DELETE")

@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    user::{AccountName, Admin, Key, User},
+    user::{AccountName, Admin, Key},
 };
 use axum::{
     extract::{Path, State},
@@ -90,7 +90,14 @@ pub(crate) async fn post_subscription(
     Path(account_name): Path<AccountName>,
     payload: Json<SubscriptionRequest>,
 ) -> Result<(), Error> {
-    user_manager.insert_subscription(&payload.id, &account_name, &payload.r#type, payload.quantity).await?;
+    user_manager
+        .insert_subscription(
+            &payload.id,
+            &account_name,
+            &payload.r#type,
+            payload.quantity,
+        )
+        .await?;
 
     Ok(())
 }
@@ -100,7 +107,9 @@ pub(crate) async fn delete_subscription(
     State(user_manager): State<UserManagerState>,
     Path((account_name, subscription_id)): Path<(AccountName, String)>,
 ) -> Result<(), Error> {
-    user_manager.delete_subscription(&subscription_id, &account_name).await?;
+    user_manager
+        .delete_subscription(&subscription_id, &account_name)
+        .await?;
 
     Ok(())
 }
@@ -149,18 +158,16 @@ pub(crate) async fn convert_key(
     }): State<RouterState>,
     key: Key,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
-    let User {
-        name, account_tier, ..
-    } = user_manager
+    let user = user_manager
         .get_user_by_key(key.into())
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     let claim = Claim::new(
-        name.to_string(),
-        account_tier.into(),
-        account_tier,
-        account_tier,
+        user.name.to_string(),
+        user.account_tier.into(),
+        user.account_tier,
+        user,
     );
 
     let token = claim.into_token(key_manager.private_key())?;

@@ -4,9 +4,8 @@ use axum::{
     extract::FromRef,
     middleware::from_extractor,
     routing::{get, post, put},
-    Router,
+    Router, Server,
 };
-use hyper::Server;
 use shuttle_common::{
     backends::metrics::{Metrics, TraceLayer},
     request_span,

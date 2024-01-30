@@ -15,12 +15,11 @@ shuttle-common = { workspace = true, features = [
 anyhow = { workspace = true }
 async-stripe = { version = "0.25.1", default-features = false, features = ["checkout", "runtime-tokio-hyper-rustls"] }
 async-trait = { workspace = true }
-axum = { workspace = true, features = ["headers"] }
+axum = { workspace = true, features = ["headers", "tokio"] }
 base64 = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 http = { workspace = true }
-hyper = { workspace = true }
 jsonwebtoken = { workspace = true }
 opentelemetry = { workspace = true }
 pem = "2"

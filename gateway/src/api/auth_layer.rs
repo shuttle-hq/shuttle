@@ -32,9 +32,8 @@ const CACHE_MINUTES: u64 = 5;
 
 /// The idea of this layer is to do two things:
 /// 1. Forward all user related routes (`/login`, `/users/*`, etc) to our auth service
-/// 2. Upgrade all Authorization Bearer keys and session cookies to JWT tokens for internal
-/// communication inside and below gateway, fetching the JWT token from a ttl-cache if it isn't expired,
-/// and inserting it in the cache if it isn't there.
+/// 2. Upgrade all Authorization Bearer keys to JWT tokens for internal communication inside and below gateway, fetching
+/// the JWT token from a ttl-cache if it isn't expired, and inserting it in the cache if it isn't there.
 #[derive(Clone)]
 pub struct ShuttleAuthLayer {
     auth_uri: Uri,

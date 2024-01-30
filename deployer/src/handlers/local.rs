@@ -60,7 +60,7 @@ pub async fn set_jwt_bearer<B>(
 
         Ok(response)
     } else {
-        error!("No api-key bearer token or cookie found, make sure you are logged in.");
+        error!("No api-key bearer token found, make sure you are logged in.");
         Err(StatusCode::UNAUTHORIZED)
     }
 }

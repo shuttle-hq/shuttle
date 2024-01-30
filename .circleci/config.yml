@@ -123,15 +123,26 @@ commands:
           name: Install protoc and proto-gen
           environment:
             ARCH: "linux-x86_64"
-            VERSION: "22.2"
+            PROTOC_VERSION: "22.2"
+            PROTOGEN_VERSION: "v0.2.0"
           command: |
-            curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v$VERSION/protoc-$VERSION-$ARCH.zip" && \
-                sudo unzip -o "protoc-$VERSION-$ARCH.zip" bin/protoc "include/*" -d /usr/local && \
-                rm -f "protoc-$VERSION-$ARCH.zip"
-            curl -L https://github.com/EmbarkStudios/proto-gen/releases/download/v0.2.0/proto-gen-v0.2.0-x86_64-unknown-linux-musl.tar.gz \
-              | tar -xOz proto-gen-v0.2.0-x86_64-unknown-linux-musl/proto-gen \
+            curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOC_VERSION/protoc-$PROTOC_VERSION-$ARCH.zip && \
+              sudo unzip -o protoc-$PROTOC_VERSION-$ARCH.zip bin/protoc "include/*" -d /usr/local && \
+              rm -f protoc-$PROTOC_VERSION-$ARCH.zip
+            curl -L https://github.com/EmbarkStudios/proto-gen/releases/download/$PROTOGEN_VERSION/proto-gen-$PROTOGEN_VERSION-x86_64-unknown-linux-musl.tar.gz \
+              | tar -xOz proto-gen-$PROTOGEN_VERSION-x86_64-unknown-linux-musl/proto-gen \
               > ~/.cargo/bin/proto-gen
             chmod +x ~/.cargo/bin/proto-gen
+  install-cargo-make:
+    steps:
+      - run:
+          name: Install cargo-make
+          environment:
+            VERSION: "0.37.8"
+          command: |
+            curl -OL https://github.com/sagiegurari/cargo-make/releases/download/$VERSION/cargo-make-v$VERSION-x86_64-unknown-linux-musl.zip && \
+              unzip -o cargo-make-v$VERSION-x86_64-unknown-linux-musl.zip cargo-make-v0.37.8-x86_64-unknown-linux-musl/cargo-make -d ~/.cargo/bin && \
+              rm -f cargo-make-v$VERSION-x86_64-unknown-linux-musl.zip
   make-artifact:
     parameters:
       target:
@@ -176,21 +187,8 @@ jobs:
     steps:
       - checkout
       - restore-cargo-and-sccache
-      # Check this to make sure we do not include patched dependencies in the Cargo.lock
-      - run: |
-          [ -z "$(grep "\[\[patch.unused\]\]" Cargo.lock)" ] || \
-            ( echo "Please remove unused patches from Cargo.lock"; exit 1 )
-      - run: cargo fmt --all --check
-      - run: |
-          cargo clippy --tests \
-                       --all-targets \
-                       --all-features \
-                       --no-deps -- \
-                       --D warnings
-      # An out of date lockfile will be modified after the clippy command has run
-      - run: |
-          git diff --exit-code Cargo.lock || \
-            ( echo "Please commit an up to date Cargo.lock"; exit 1 )
+      - install-cargo-make
+      - run: cargo make ci-workspace
       - save-sccache
       - save-cargo-cache
   cargo-audit:

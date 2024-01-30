@@ -1,0 +1,56 @@
+# 1. cargo install cargo-make
+# 2. cargo make <task_name>
+# docs: https://github.com/sagiegurari/cargo-make#readme
+
+[config]
+default_to_workspace = false
+
+[env]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+TAG = { script = ["git describe --tags --abbrev=0"] }
+
+[tasks.ci-workspace]
+run_task = { name = [
+    "check-lockfile-patches",
+    "fmt",
+    "clippy",
+    "check-lockfile",
+] }
+
+[tasks.changelog]
+install_crate = "git-cliff"
+command = "git-cliff"
+args = ["-o", "CHANGELOG.md", "-t", "${TAG}"]
+
+[tasks.fmt]
+command = "cargo"
+args = ["fmt", "--all", "--check"]
+
+[tasks.clippy]
+command = "cargo"
+args = [
+    "clippy",
+    "--tests",
+    "--all-targets",
+    "--all-features",
+    "--no-deps",
+    "--",
+    "--D",
+    "warnings",
+]
+
+[tasks.check-lockfile-patches]
+script = '''
+if [ -n "$(grep "\[\[patch.unused\]\]" Cargo.lock)" ]; then
+    echo "Please remove unused patches from Cargo.lock"
+    exit 1
+fi
+'''
+
+[tasks.check-lockfile]
+script = '''
+if ! git diff --exit-code Cargo.lock; then
+    echo "Please commit an up to date Cargo.lock"
+    exit 1
+fi
+'''

@@ -97,8 +97,10 @@ where
     }
 
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+        let req_path = req.uri().path();
+
         // Pass through status page
-        if req.uri().path() == "/" {
+        if req_path == "/" {
             let future = self.inner.call(req);
 
             return Box::pin(async move {
@@ -117,7 +119,7 @@ where
         }
 
         // If /users/reset-api-key is called, invalidate the cached JWT.
-        if req.uri().path() == "/users/reset-api-key" {
+        if req_path == "/users/reset-api-key" {
             if let Some((cache_key, _)) =
                 cache_key_and_token_req(&req, self.gateway_admin_key.as_str())
             {
@@ -125,7 +127,7 @@ where
             };
         }
 
-        if req.uri().path().starts_with("/users") {
+        if req_path.starts_with("/users") || req_path.starts_with("/subscribe") {
             let target_url = self.auth_uri.to_string();
 
             let cx = Span::current().context();

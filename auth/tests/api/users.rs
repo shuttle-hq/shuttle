@@ -164,7 +164,15 @@ mod needs_docker {
         let mocked_subscription_obj: Value =
             serde_json::from_str(MOCKED_ACTIVE_SUBSCRIPTION).unwrap();
         assert_eq!(
-            actual_user.get("subscription_id").unwrap(),
+            actual_user
+                .get("subscriptions")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .first()
+                .unwrap()
+                .get("id")
+                .unwrap(),
             mocked_subscription_obj.get("id").unwrap()
         );
     }

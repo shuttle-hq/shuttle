@@ -237,8 +237,17 @@ mod needs_docker {
 
         // Create user first so one exists in the database.
         let response = app.post_user("test-user", "basic").await;
-
         assert_eq!(response.status(), StatusCode::OK);
+
+        // Extract the API key from the response so we can use it in a future request.
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let user: Value = serde_json::from_slice(&body).unwrap();
+        let basic_user_key = user["key"].as_str().unwrap();
+
+        // Make sure JWT does not allow any RDS instances
+        let claim = app.get_claim(basic_user_key).await;
+        assert_eq!(claim.sub, "test-user");
+        assert_eq!(claim.limits.rds_quota, 0);
 
         // Send a request to insert an RDS subscription for the test user.
         let response = app
@@ -259,6 +268,10 @@ mod needs_docker {
             models::user::SubscriptionType::Rds
         );
         assert_eq!(response.subscriptions[0].quantity, 1);
+
+        // Make sure JWT has the quota
+        let claim = app.get_claim(basic_user_key).await;
+        assert_eq!(claim.limits.rds_quota, 1);
 
         // Send another request to insert an RDS subscription for the user.
         // This uses a different subscription id to make sure we only keep record of one
@@ -281,6 +294,10 @@ mod needs_docker {
         );
         assert_eq!(response.subscriptions[0].quantity, 4);
 
+        // Make sure JWT has the new quota
+        let claim = app.get_claim(basic_user_key).await;
+        assert_eq!(claim.limits.rds_quota, 4);
+
         // Send a request to delete an RDS subscription
         let response = app
             .delete_subscription("test-user", "sub_IOhso230rakstr023soI")
@@ -295,6 +312,10 @@ mod needs_docker {
             0,
             "no subscriptions should exist"
         );
+
+        // Make sure JWT is reset correctly
+        let claim = app.get_claim(basic_user_key).await;
+        assert_eq!(claim.limits.rds_quota, 0);
     }
 
     #[tokio::test]

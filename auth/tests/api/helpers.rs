@@ -136,6 +136,16 @@ impl TestApp {
         self.send_request(request).await
     }
 
+    /// Get the claim of the user
+    pub async fn get_claim(&self, user_api_key: &str) -> Claim {
+        let response = self
+            .get_jwt_from_api_key(user_api_key, Some(ADMIN_KEY))
+            .await;
+
+        // Decode the JWT into a Claim.
+        self.claim_from_response(response).await
+    }
+
     pub async fn post_subscription(
         &self,
         name: &str,

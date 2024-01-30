@@ -49,11 +49,10 @@
 
 Shuttle is built for productivity, reliability and performance:
 
-- Zero-Configuration support for Rust using annotations
-- Automatic resource provisioning (databases, caches, subdomains, etc.) via [Infrastructure-From-Code](https://www.shuttle.rs/blog/2022/05/09/ifc)
-- First-class support for popular Rust frameworks ([Actix Web](https://docs.shuttle.rs/examples/actix), [Rocket](https://docs.shuttle.rs/examples/rocket), [Axum](https://docs.shuttle.rs/examples/axum), and [more](https://docs.shuttle.rs/examples/other))
+- Zero-Configuration support for Rust using macro annotations
+- Automatic resource provisioning (databases, etc.) via [Infrastructure-From-Code](https://www.shuttle.rs/blog/2022/05/09/ifc)
+- First-class support for popular Rust frameworks ([Axum](https://docs.shuttle.rs/examples/axum), [Actix Web](https://docs.shuttle.rs/examples/actix), [Rocket](https://docs.shuttle.rs/examples/rocket), and [more](https://docs.shuttle.rs/examples/other))
 - Support for deploying Discord bots using [Serenity](https://docs.shuttle.rs/examples/serenity)
-- Scalable hosting (with optional self-hosting in the future)
 
 📖 Check out our documentation to get started quickly: [docs.shuttle.rs](https://docs.shuttle.rs)
 
@@ -63,10 +62,9 @@ Shuttle is built for productivity, reliability and performance:
 
 ![star](https://i.imgur.com/kLWmThm.gif)
 
-## (NEW) Shuttle Console
+## Shuttle Console
 
-Your projects can now be viewed on the brand new [Shuttle Console](https://console.shuttle.rs/)!
-The CLI is still used for most tasks.
+In addition to the CLI, you can also view your projects on the [Shuttle Console](https://console.shuttle.rs/)!
 
 ![console-preview](https://i.imgur.com/1qdWipP.gif)
 *The GIF above visualizes the ease of adding resources to your project(s), along with how they are displayed in the console.*
@@ -105,7 +103,7 @@ Although a bit slower, you can also install directly with cargo:
 cargo install cargo-shuttle
 ```
 
-> If installing binstall or cargo-shuttle fails, try adding `--locked` to the install command
+> If installing cargo-binstall or cargo-shuttle fails, try adding `--locked` to the install command
 
 After installing, log in with:
 
@@ -117,7 +115,6 @@ To initialize your project, simply write:
 
 ```bash
 cargo shuttle init --template axum hello-world
-# Choose a unique project name!
 ```
 
 And to deploy it, write:
@@ -144,24 +141,23 @@ For the full documentation, visit [our docs](https://docs.shuttle.rs).
 
 ## Repositories
 
-| Name | Description |  |  |
-|-|-|-|-|
-| [shuttle](https://github.com/shuttle-hq/shuttle) 🚀 (This repo) | The core Shuttle product. Contains all crates that users interact with. | [Issues](https://github.com/shuttle-hq/shuttle/issues) | [PRs](https://github.com/shuttle-hq/shuttle/pulls)
-| [shuttle-examples](https://github.com/shuttle-hq/shuttle-examples) 👨‍🏫 | Officially maintained examples of projects that can be deployed on Shuttle. Also has a list of [community examples](https://github.com/shuttle-hq/shuttle-examples#community-examples). | [Issues](https://github.com/shuttle-hq/shuttle-examples/issues) | [PRs](https://github.com/shuttle-hq/shuttle-examples/pulls)
-| [shuttle-docs](https://github.com/shuttle-hq/shuttle-docs) 📃 | Documentation hosted on [docs.shuttle.rs](https://docs.shuttle.rs/). | [Issues](https://github.com/shuttle-hq/shuttle-docs/issues) | [PRs](https://github.com/shuttle-hq/shuttle-docs/pulls)
-| [www](https://github.com/shuttle-hq/www) 🌍 | Our website [shuttle.rs](https://www.shuttle.rs/), including the [blog](https://www.shuttle.rs/blog/tags/all) and [Launchpad newsletter](https://www.shuttle.rs/launchpad). | [Issues](https://github.com/shuttle-hq/www/issues) | [PRs](https://github.com/shuttle-hq/www/pulls)
-| [deploy-action](https://github.com/shuttle-hq/deploy-action) ⚙ | GitHub Action for continuous deployments. | [Issues](https://github.com/shuttle-hq/deploy-action/issues) | [PRs](https://github.com/shuttle-hq/deploy-action/pulls)
-| [awesome-shuttle](https://github.com/shuttle-hq/awesome-shuttle) 🌟 | An awesome list of Shuttle-hosted projects and resources that users can add to. | [Issues](https://github.com/shuttle-hq/awesome-shuttle/issues) | [PRs](https://github.com/shuttle-hq/awesome-shuttle/pulls)
+| Name | Description |
+|-|-|
+| [shuttle](https://github.com/shuttle-hq/shuttle) 🚀 (This repo) | The core Shuttle product. Contains all crates that users interact with. |
+| [shuttle-examples](https://github.com/shuttle-hq/shuttle-examples) 👨‍🏫 | Officially maintained examples of projects that can be deployed on Shuttle. Also has a list of [community examples](https://github.com/shuttle-hq/shuttle-examples#community-examples). |
+| [shuttle-docs](https://github.com/shuttle-hq/shuttle-docs) 📃 | Documentation hosted on [docs.shuttle.rs](https://docs.shuttle.rs/). |
+| [www](https://github.com/shuttle-hq/www) 🌍 | Our website [shuttle.rs](https://www.shuttle.rs/), including the [blog](https://www.shuttle.rs/blog/tags/all) and [Launchpad newsletter](https://www.shuttle.rs/launchpad). |
+| [deploy-action](https://github.com/shuttle-hq/deploy-action) ⚙ | GitHub Action for continuous deployments. |
+| [awesome-shuttle](https://github.com/shuttle-hq/awesome-shuttle) 🌟 | An awesome list of Shuttle-hosted projects and resources that users can add to. |
+| [shuttlings](https://github.com/shuttle-hq/shuttlings) ⚔️ | A collection of Rust code challenges. A great way to get started with using Rust and Shuttle. |
 
 ## Contributing to Shuttle
 
 Contributing to Shuttle is highly encouraged!
+Even if you are not planning to submit any code, joining our [Discord server](https://discord.gg/shuttle) and providing feedback helps us a lot!
 
 Check out our [contributing docs](./CONTRIBUTING.md) and find the appropriate repo above to contribute to.
-
 For development of this repo, check the [development docs](./DEVELOPING.md).
-
-Even if you are not planning to submit any code, joining our [Discord server](https://discord.gg/shuttle) and providing feedback helps us a lot!
 
 ### Algora Bounties 💰
 

@@ -146,13 +146,15 @@ pub fn delete_project() -> impl Task<ProjectContext, Output = Project> {
 
 pub struct TaskBuilder {
     project_name: Option<ProjectName>,
+    operation_name: Option<String>,
     service: Arc<GatewayService>,
     tasks: VecDeque<BoxedTask<ProjectContext, Project>>,
 }
 
 impl TaskBuilder {
-    pub fn new(service: Arc<GatewayService>) -> Self {
+    pub fn new(service: Arc<GatewayService>, operation_name: Option<String>) -> Self {
         Self {
+            operation_name,
             service,
             project_name: None,
             tasks: VecDeque::new(),
@@ -189,6 +191,7 @@ impl TaskBuilder {
                 service: self.service,
                 tasks: self.tasks,
                 tracing_context,
+                operation_name: self.operation_name,
             },
         ))
     }
@@ -434,6 +437,7 @@ pub struct ProjectTask {
     service: Arc<GatewayService>,
     tasks: VecDeque<BoxedTask<ProjectContext, Project>>,
     tracing_context: HashMap<String, String>,
+    operation_name: Option<String>,
 }
 
 /// A context for tasks which are scoped to a specific project.
@@ -492,8 +496,10 @@ impl Task<()> for ProjectTask {
         let span = info_span!(
             "polling project",
             shuttle.project.name = %project_ctx.project_name,
+            shuttle.operation_name = field::Empty,
             ctx.state = project_ctx.state.state(),
-            ctx.state_after = field::Empty
+            ctx.state_after = field::Empty,
+            ctx.operation_name = field::Empty
         );
         span.set_parent(parent_cx);
 
@@ -537,13 +543,29 @@ impl Task<()> for ProjectTask {
                 TaskResult::Done(_) => {
                     let _ = self.tasks.pop_front().unwrap();
                     if self.tasks.is_empty() {
+                        // Should coincide with the end of a project task started by
+                        // an API call or the ambulance.
+                        if let Some(operation) = &self.operation_name {
+                            Span::current().record("ctx.operation_name", operation);
+                            Span::current().record("shuttle.operation_name", operation);
+                        }
                         TaskResult::Done(())
                     } else {
                         TaskResult::Pending(())
                     }
                 }
-                TaskResult::Cancelled => TaskResult::Cancelled,
+                TaskResult::Cancelled => {
+                    if let Some(operation) = &self.operation_name {
+                        Span::current().record("ctx.operation_name", operation);
+                        Span::current().record("shuttle.operation_name", operation);
+                    }
+                    TaskResult::Cancelled
+                }
                 TaskResult::Err(err) => {
+                    if let Some(operation) = &self.operation_name {
+                        Span::current().record("ctx.operation_name", operation);
+                        Span::current().record("shuttle.operation_name", operation);
+                    }
                     error!(err = %err, "project task failure");
                     TaskResult::Err(err)
                 }

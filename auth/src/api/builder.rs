@@ -6,8 +6,6 @@ use axum::{
     routing::{delete, get, post, put},
     Router, Server,
 };
-use axum_sessions::{async_session::MemoryStore, SessionLayer};
-use rand::RngCore;
 use shuttle_common::{
     backends::metrics::{Metrics, TraceLayer},
     request_span,
@@ -18,12 +16,11 @@ use tracing::field;
 use crate::{
     secrets::{EdDsaManager, KeyManager},
     user::{UserManagement, UserManager},
-    COOKIE_EXPIRATION,
 };
 
 use super::handlers::{
-    convert_cookie, convert_key, delete_subscription, get_public_key, get_user, health_check,
-    logout, post_subscription, post_user, put_user_reset_key, refresh_token, update_user_tier,
+    convert_key, delete_subscription, get_public_key, get_user, health_check, post_subscription,
+    post_user, put_user_reset_key, refresh_token, update_user_tier,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -52,7 +49,6 @@ impl FromRef<RouterState> for KeyManagerState {
 pub struct ApiBuilder {
     router: Router<RouterState>,
     pool: Option<PgPool>,
-    session_layer: Option<SessionLayer<MemoryStore>>,
     stripe_client: Option<stripe::Client>,
     jwt_signing_private_key: Option<String>,
 }
@@ -67,8 +63,6 @@ impl ApiBuilder {
     pub fn new() -> Self {
         let router = Router::new()
             .route("/", get(health_check))
-            .route("/logout", post(logout))
-            .route("/auth/session", get(convert_cookie))
             .route("/auth/key", get(convert_key))
             .route("/auth/refresh", post(refresh_token))
             .route("/public-key", get(get_public_key))
@@ -99,7 +93,6 @@ impl ApiBuilder {
         Self {
             router,
             pool: None,
-            session_layer: None,
             stripe_client: None,
             jwt_signing_private_key: None,
         }
@@ -107,20 +100,6 @@ impl ApiBuilder {
 
     pub fn with_pg_pool(mut self, pool: PgPool) -> Self {
         self.pool = Some(pool);
-        self
-    }
-
-    pub fn with_sessions(mut self) -> Self {
-        let store = MemoryStore::new();
-        let mut secret = [0u8; 128];
-        rand::thread_rng().fill_bytes(&mut secret[..]);
-        self.session_layer = Some(
-            SessionLayer::new(store, &secret)
-                .with_cookie_name("shuttle.sid")
-                .with_session_ttl(Some(COOKIE_EXPIRATION))
-                .with_secure(true),
-        );
-
         self
     }
 
@@ -136,7 +115,6 @@ impl ApiBuilder {
 
     pub fn into_router(self) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
-        let session_layer = self.session_layer.expect("a session layer is required");
         let stripe_client = self.stripe_client.expect("a stripe client is required");
         let jwt_signing_private_key = self
             .jwt_signing_private_key
@@ -152,7 +130,7 @@ impl ApiBuilder {
             key_manager: Arc::new(Box::new(key_manager)),
         };
 
-        self.router.layer(session_layer).with_state(state)
+        self.router.with_state(state)
     }
 }
 

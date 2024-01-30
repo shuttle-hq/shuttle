@@ -31,7 +31,7 @@ static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
 const CACHE_MINUTES: u64 = 5;
 
 /// The idea of this layer is to do two things:
-/// 1. Forward all user related routes (`/login`, `/users/*`, etc) to our auth service
+/// 1. Forward all user related routes (`/users/*`) to our auth service
 /// 2. Upgrade all Authorization Bearer keys to JWT tokens for internal communication inside and below gateway, fetching
 /// the JWT token from a ttl-cache if it isn't expired, and inserting it in the cache if it isn't there.
 #[derive(Clone)]
@@ -116,11 +116,6 @@ where
             });
         }
 
-        let forward_to_auth = match req.uri().path() {
-            "/login" => true,
-            other => other.starts_with("/users"),
-        };
-
         // If /users/reset-api-key is called, invalidate the cached JWT.
         if req.uri().path() == "/users/reset-api-key" {
             if let Some((cache_key, _)) =
@@ -130,7 +125,7 @@ where
             };
         }
 
-        if forward_to_auth {
+        if req.uri().path().starts_with("/users") {
             let target_url = self.auth_uri.to_string();
 
             let cx = Span::current().context();

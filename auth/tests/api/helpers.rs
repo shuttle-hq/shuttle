@@ -2,11 +2,12 @@ use axum::{body::Body, response::Response, Router};
 use http::{header::CONTENT_TYPE, StatusCode};
 use hyper::http::{header::AUTHORIZATION, Request};
 use once_cell::sync::Lazy;
-use serde_json::Value;
+use serde_json::{json, Value};
 use shuttle_auth::{pgpool_init, ApiBuilder};
 use shuttle_common::{
     backends::headers::X_SHUTTLE_ADMIN_SECRET,
     claims::{AccountTier, Claim},
+    models::user,
 };
 use shuttle_common_tests::postgres::DockerInstance;
 use sqlx::query;
@@ -110,6 +111,13 @@ impl TestApp {
         self.send_request(request).await
     }
 
+    pub async fn get_user_typed(&self, name: &str) -> user::Response {
+        let response = self.get_user(name).await;
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+
+        serde_json::from_slice(&body).unwrap()
+    }
+
     /// If we don't provide a valid admin key, then the`user_api_key` parameter
     /// should be of an admin user.
     pub async fn get_jwt_from_api_key(
@@ -126,6 +134,31 @@ impl TestApp {
         }
 
         let request = request_builder.body(Body::empty()).unwrap();
+        self.send_request(request).await
+    }
+
+    pub async fn post_subscription(
+        &self,
+        name: &str,
+        subscription_id: &str,
+        subscription_type: &str,
+        quantity: u32,
+    ) -> Response {
+        let request = Request::builder()
+            .uri(format!("/subscribe/{name}"))
+            .method("POST")
+            .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&json!({
+                    "id": subscription_id,
+                    "type": subscription_type,
+                    "quantity": quantity
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+
         self.send_request(request).await
     }
 

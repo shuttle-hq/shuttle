@@ -22,8 +22,8 @@ use crate::{
 };
 
 use super::handlers::{
-    convert_cookie, convert_key, get_public_key, get_user, health_check, logout, post_user,
-    put_user_reset_key, refresh_token, update_user_tier,
+    convert_cookie, convert_key, get_public_key, get_user, health_check, logout, post_subscription,
+    post_user, put_user_reset_key, refresh_token, update_user_tier,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -78,6 +78,7 @@ impl ApiBuilder {
                 post(post_user).put(update_user_tier),
             )
             .route("/users/reset-api-key", put(put_user_reset_key))
+            .route("/subscribe/:account_name", post(post_subscription))
             .route_layer(from_extractor::<Metrics>())
             .layer(
                 TraceLayer::new(|request| {

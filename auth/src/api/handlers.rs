@@ -11,7 +11,7 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use shuttle_common::{
     claims::{AccountTier, Claim},
-    models::user,
+    models::user::{self, SubscriptionRequest},
 };
 use stripe::CheckoutSession;
 use tracing::instrument;
@@ -82,6 +82,17 @@ pub(crate) async fn put_user_reset_key(
     };
 
     user_manager.reset_key(account_name).await
+}
+
+pub(crate) async fn post_subscription(
+    _: Admin,
+    State(user_manager): State<UserManagerState>,
+    Path(account_name): Path<AccountName>,
+    payload: Json<SubscriptionRequest>,
+) -> Result<(), Error> {
+    user_manager.insert_subscription(&payload.id, &account_name, &payload.r#type, payload.quantity).await?;
+
+    Ok(())
 }
 
 pub(crate) async fn logout(mut session: WritableSession) {

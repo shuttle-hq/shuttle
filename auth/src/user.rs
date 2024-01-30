@@ -9,9 +9,10 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::{backends::headers::XShuttleAdminSecret, claims::AccountTier, ApiKey, Secret};
+use shuttle_common::{
+    backends::headers::XShuttleAdminSecret, claims::AccountTier, models, ApiKey, Secret,
+};
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
-use strum::EnumString;
 use tracing::{debug, error, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
@@ -31,6 +32,15 @@ pub trait UserManagement: Send + Sync {
     async fn get_user(&self, name: AccountName) -> Result<User, Error>;
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
     async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
+    // TODO: add comments
+    async fn insert_subscription(
+        &self,
+        id: &str,
+        name: &AccountName,
+        r#type: &models::user::SubscriptionType,
+        quantity: i32,
+    ) -> Result<(), Error>;
+    async fn delete_subscription(&self, id: String, name: AccountName) -> Result<(), Error>;
 }
 
 #[derive(Clone)]
@@ -100,7 +110,7 @@ impl UserManagement for UserManager {
             )
             .bind(&subscription_id)
             .bind(name)
-            .bind(ShuttleSubscriptionType::Pro.to_string())
+            .bind(models::user::SubscriptionType::Pro.to_string())
             .execute(&mut *transaction)
             .await?;
 
@@ -207,6 +217,44 @@ impl UserManagement for UserManager {
             Err(Error::UserNotFound)
         }
     }
+
+    async fn insert_subscription(
+        &self,
+        id: &str,
+        name: &AccountName,
+        r#type: &models::user::SubscriptionType,
+        quantity: i32,
+    ) -> Result<(), Error> {
+        query(
+        r#"INSERT INTO subscriptions (subscription_id, account_name, type, quantity)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (account_name, type)
+            DO UPDATE SET subscription_id = EXCLUDED.subscription_id, quantity = EXCLUDED.quantity
+        "#,
+        )
+        .bind(id)
+        .bind(name)
+        .bind(r#type.to_string())
+        .bind(quantity)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn delete_subscription(&self, id: String, name: AccountName) -> Result<(), Error> {
+        query(
+    r#"DELETE FROM subscriptions
+            WHERE subscription_id = $1, account_name = $2
+        "#,
+        )
+        .bind(id)
+        .bind(name)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -220,17 +268,10 @@ pub struct User {
 #[derive(Clone, Debug)]
 pub struct Subscription {
     pub id: stripe::SubscriptionId,
-    pub r#type: ShuttleSubscriptionType,
+    pub r#type: models::user::SubscriptionType,
     pub quantity: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug, EnumString, strum::Display)]
-#[strum(serialize_all = "lowercase")]
-pub enum ShuttleSubscriptionType {
-    Pro,
-    Rds,
 }
 
 impl User {
@@ -238,17 +279,10 @@ impl User {
         self.account_tier == AccountTier::Admin
     }
 
-    pub fn subscription_ids(&self) -> Vec<String> {
-        self.subscriptions
-            .iter()
-            .map(|sub| sub.id.to_string())
-            .collect()
-    }
-
     fn pro_subscription_id(&self) -> Option<&stripe::SubscriptionId> {
         self.subscriptions
             .iter()
-            .find(|sub| matches!(sub.r#type, ShuttleSubscriptionType::Pro))
+            .find(|sub| matches!(sub.r#type, models::user::SubscriptionType::Pro))
             .map(|sub| &sub.id)
     }
 
@@ -344,12 +378,11 @@ impl FromRow<'_, PgRow> for Subscription {
                 .ok()
                 .and_then(|inner| SubscriptionId::from_str(inner).ok())
                 .unwrap(),
-            r#type: ShuttleSubscriptionType::from_str(row.try_get("type").unwrap()).map_err(
-                |err| sqlx::Error::ColumnDecode {
+            r#type: models::user::SubscriptionType::from_str(row.try_get("type").unwrap())
+                .map_err(|err| sqlx::Error::ColumnDecode {
                     index: "type".to_string(),
                     source: Box::new(std::io::Error::new(ErrorKind::Other, err.to_string())),
-                },
-            )?,
+                })?,
             quantity: row.try_get("quantity").unwrap(),
             created_at: row.try_get("created_at").unwrap(),
             updated_at: row.try_get("updated_at").unwrap(),
@@ -383,13 +416,25 @@ where
     }
 }
 
-impl From<User> for shuttle_common::models::user::Response {
+impl From<User> for models::user::Response {
     fn from(user: User) -> Self {
         Self {
             name: user.name.to_string(),
             key: user.key.expose().as_ref().to_owned(),
             account_tier: user.account_tier.to_string(),
-            subscription_ids: user.subscription_ids(),
+            subscriptions: user.subscriptions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<Subscription> for models::user::Subscription {
+    fn from(subscription: Subscription) -> Self {
+        Self {
+            id: subscription.id.to_string(),
+            r#type: subscription.r#type,
+            quantity: subscription.quantity,
+            created_at: subscription.created_at,
+            updated_at: subscription.updated_at,
         }
     }
 }

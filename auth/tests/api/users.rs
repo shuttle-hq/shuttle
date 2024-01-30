@@ -12,6 +12,7 @@ mod needs_docker {
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
     use pretty_assertions::assert_eq;
     use serde_json::{self, Value};
+    use shuttle_common::models;
 
     #[tokio::test]
     async fn post_user() {
@@ -220,6 +221,51 @@ mod needs_docker {
             actual_user.get("account_tier").unwrap(),
             "pendingpaymentpro"
         );
+    }
+
+    #[tokio::test]
+    async fn insert_and_increment_and_delete_rds_subscription() {
+        let app = app().await;
+
+        // Create user first so one exists in the database.
+        let response = app.post_user("test-user", "basic").await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Send a request to insert an RDS subscription for the test user.
+        let response = app
+            .post_subscription("test-user", "sub_Eoarshy23pointInira", "rds", 1)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Fetch the user and verify they have an rds subscription.
+        let response = app.get_user_typed("test-user").await;
+
+        assert_eq!(response.subscriptions.len(), 1, "there should be one subscription");
+        assert_eq!(
+            response.subscriptions[0].r#type,
+            models::user::SubscriptionType::Rds
+        );
+        assert_eq!(response.subscriptions[0].quantity, 1);
+
+        // Send another request to insert an RDS subscription for the user.
+        // This uses a different subscription id to make sure we only keep record of one
+        let response = app
+            .post_subscription("test-user", "sub_IOhso230rakstr023soI", "rds", 4)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Fetch the user and verify their rds subscription quantity was incremented.
+        let response = app.get_user_typed("test-user").await;
+
+        assert_eq!(response.subscriptions.len(), 1, "the old subscription should be updated");
+        assert_eq!(
+            response.subscriptions[0].r#type,
+            models::user::SubscriptionType::Rds
+        );
+        assert_eq!(response.subscriptions[0].quantity, 4);
+
+        // Send a request to delete an RDS subscription
     }
 
     #[tokio::test]

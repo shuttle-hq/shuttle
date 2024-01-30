@@ -238,7 +238,14 @@ impl User {
         self.account_tier == AccountTier::Admin
     }
 
-    pub fn pro_subscription_id(&self) -> Option<&stripe::SubscriptionId> {
+    pub fn subscription_ids(&self) -> Vec<String> {
+        self.subscriptions
+            .iter()
+            .map(|sub| sub.id.to_string())
+            .collect()
+    }
+
+    fn pro_subscription_id(&self) -> Option<&stripe::SubscriptionId> {
         self.subscriptions
             .iter()
             .find(|sub| matches!(sub.r#type, ShuttleSubscriptionType::Pro))
@@ -382,10 +389,7 @@ impl From<User> for shuttle_common::models::user::Response {
             name: user.name.to_string(),
             key: user.key.expose().as_ref().to_owned(),
             account_tier: user.account_tier.to_string(),
-            // TODO: this just returns what was always returned, the id of the pro subscription.
-            // We will need to update this when we want to also return the rds subscription. We
-            // can return a vec of IDs, but it will be a breaking change for the console (I don't believe it is used anywhere else).
-            subscription_id: user.pro_subscription_id().map(|id| id.to_string()),
+            subscription_ids: user.subscription_ids(),
         }
     }
 }

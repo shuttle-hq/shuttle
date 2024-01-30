@@ -49,7 +49,6 @@ pub(crate) async fn app() -> TestApp {
 
     let router = ApiBuilder::new()
         .with_pg_pool(pg_pool)
-        .with_sessions()
         .with_stripe_client(stripe::Client::from_url(
             mock_server.uri().as_str(),
             STRIPE_TEST_KEY,

@@ -1,7 +1,7 @@
 use std::net::Ipv4Addr;
 
 use axum::{
-    headers::{authorization::Bearer, Authorization, Cookie, Header, HeaderMapExt},
+    headers::{authorization::Bearer, Authorization, Header, HeaderMapExt},
     http::Request,
     middleware::Next,
     response::Response,
@@ -32,17 +32,9 @@ pub async fn set_jwt_bearer<B>(
     mut request: Request<B>,
     next: Next<B>,
 ) -> Result<Response, StatusCode> {
-    let mut auth_details = None;
-
     if let Some(bearer) = request.headers().typed_get::<Authorization<Bearer>>() {
-        auth_details = Some(make_token_request("/auth/key", bearer));
-    }
+        let token_request = make_token_request("/auth/key", bearer);
 
-    if let Some(cookie) = request.headers().typed_get::<Cookie>() {
-        auth_details = Some(make_token_request("/auth/session", cookie));
-    }
-
-    if let Some(token_request) = auth_details {
         let response = PROXY_CLIENT
             .call(
                 Ipv4Addr::LOCALHOST.into(),
@@ -68,7 +60,7 @@ pub async fn set_jwt_bearer<B>(
 
         Ok(response)
     } else {
-        error!("No api-key bearer token or cookie found, make sure you are logged in.");
+        error!("No api-key bearer token found, make sure you are logged in.");
         Err(StatusCode::UNAUTHORIZED)
     }
 }

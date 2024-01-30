@@ -2,7 +2,7 @@ use std::{convert::Infallible, fmt::Debug, net::Ipv4Addr, sync::Arc, time::Durat
 
 use axum::{
     body::{boxed, HttpBody},
-    headers::{authorization::Bearer, Authorization, Cookie, Header, HeaderMapExt},
+    headers::{authorization::Bearer, Authorization, Header, HeaderMapExt},
     response::Response,
 };
 use futures::future::BoxFuture;
@@ -31,10 +31,9 @@ static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
 const CACHE_MINUTES: u64 = 5;
 
 /// The idea of this layer is to do two things:
-/// 1. Forward all user related routes (`/login`, `/logout`, `/users/*`, etc) to our auth service
-/// 2. Upgrade all Authorization Bearer keys and session cookies to JWT tokens for internal
-/// communication inside and below gateway, fetching the JWT token from a ttl-cache if it isn't expired,
-/// and inserting it in the cache if it isn't there.
+/// 1. Forward all user related routes (`/users/*`) to our auth service
+/// 2. Upgrade all Authorization Bearer keys to JWT tokens for internal communication inside and below gateway, fetching
+/// the JWT token from a ttl-cache if it isn't expired, and inserting it in the cache if it isn't there.
 #[derive(Clone)]
 pub struct ShuttleAuthLayer {
     auth_uri: Uri,
@@ -117,11 +116,6 @@ where
             });
         }
 
-        let forward_to_auth = match req.uri().path() {
-            "/login" | "/logout" => true,
-            other => other.starts_with("/users"),
-        };
-
         // If /users/reset-api-key is called, invalidate the cached JWT.
         if req.uri().path() == "/users/reset-api-key" {
             if let Some((cache_key, _)) =
@@ -131,16 +125,7 @@ where
             };
         }
 
-        // If logout is called, invalidate the cached JWT for the callers cookie.
-        if req.uri().path() == "/logout" {
-            if let Ok(Some(cookie)) = req.headers().typed_try_get::<Cookie>() {
-                if let Some(cache_key) = cookie.get("shuttle.sid").map(|id| id.to_string()) {
-                    self.cache_manager.invalidate(&cache_key);
-                }
-            };
-        }
-
-        if forward_to_auth {
+        if req.uri().path().starts_with("/users") {
             let target_url = self.auth_uri.to_string();
 
             let cx = Span::current().context();
@@ -289,15 +274,6 @@ fn cache_key_and_token_req(
             let cache_key = bearer.token().trim().to_string();
             let token_request = make_token_request("/auth/key", bearer, Some(gateway_admin_key));
             (cache_key, token_request)
-        })
-        .or_else(|| {
-            req.headers().typed_get::<Cookie>().and_then(|cookie| {
-                cookie.get("shuttle.sid").map(|id| {
-                    let cache_key = id.to_string();
-                    let token_request = make_token_request("/auth/session", cookie.clone(), None);
-                    (cache_key, token_request)
-                })
-            })
         })
 }
 

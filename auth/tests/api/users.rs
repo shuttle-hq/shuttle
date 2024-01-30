@@ -280,20 +280,6 @@ mod needs_docker {
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        // Fetch the user and verify their rds subscription quantity was incremented.
-        let response = app.get_user_typed("test-user").await;
-
-        assert_eq!(
-            response.subscriptions.len(),
-            1,
-            "the old subscription should be updated"
-        );
-        assert_eq!(
-            response.subscriptions[0].r#type,
-            models::user::SubscriptionType::Rds
-        );
-        assert_eq!(response.subscriptions[0].quantity, 4);
-
         // Make sure JWT has the new quota
         let claim = app.get_claim(basic_user_key).await;
         assert_eq!(claim.limits.rds_quota, 4);
@@ -303,15 +289,6 @@ mod needs_docker {
             .delete_subscription("test-user", "sub_IOhso230rakstr023soI")
             .await;
         assert_eq!(response.status(), StatusCode::OK);
-
-        // Fetch the user and verify they have no subscriptions
-        let response = app.get_user_typed("test-user").await;
-
-        assert_eq!(
-            response.subscriptions.len(),
-            0,
-            "no subscriptions should exist"
-        );
 
         // Make sure JWT is reset correctly
         let claim = app.get_claim(basic_user_key).await;

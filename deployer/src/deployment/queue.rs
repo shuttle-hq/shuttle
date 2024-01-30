@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use flate2::read::GzDecoder;
 use opentelemetry::global;
+use shuttle_common::persistence::deployment::DeploymentUpdater;
 use shuttle_common::{
     claims::Claim,
     constants::{EXECUTABLE_DIRNAME, STORAGE_DIRNAME},
@@ -33,7 +34,6 @@ use uuid::Uuid;
 use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
-use crate::persistence::DeploymentUpdater;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn task(

@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use axum::{middleware::from_extractor, Extension, Router};
+use axum::{middleware::from_extractor, routing::get, Extension, Router};
 use futures::Future;
 use http::Uri;
 use shuttle_common::{
@@ -14,7 +14,10 @@ use tracing::field;
 
 use crate::service::GatewayService;
 
+use self::handlers::get_service;
+
 pub mod authz;
+pub mod handlers;
 
 #[derive(Clone)]
 pub struct DeployerApiState {
@@ -40,7 +43,6 @@ impl Builder {
 
     pub fn with_jwt_guarded_routes(mut self, auth_uri: Uri) -> Self {
         let auth_public_key = AuthPublicKey::new(auth_uri.clone());
-        // TODO add routes
         self.router = self
             .router
             // TODO add more routes
@@ -48,7 +50,12 @@ impl Builder {
         self
     }
 
-    pub fn with_admin_secret_guarded_routes(self) -> Self {
+    pub fn with_admin_secret_guarded_routes(mut self) -> Self {
+        self.router = self.router.route(
+            "/projects/:project_name/services/:service_name",
+            get(get_service),
+        );
+
         self
     }
 

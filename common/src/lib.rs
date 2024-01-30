@@ -21,6 +21,8 @@ pub mod secrets;
 pub use secrets::{Secret, SecretStore};
 #[cfg(feature = "claims")]
 pub mod limits;
+#[cfg(feature = "persist")]
+pub mod persistence;
 #[cfg(feature = "tracing")]
 pub mod tracing;
 #[cfg(feature = "wasm")]

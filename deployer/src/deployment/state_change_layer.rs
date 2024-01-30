@@ -25,10 +25,9 @@ use uuid::Uuid;
 
 use shuttle_common::{
     log::{Backend, ColoredLevel, LogRecorder},
+    persistence::state::{DeploymentState, State, StateRecorder},
     LogItem,
 };
-
-use crate::persistence::{DeploymentState, State, StateRecorder};
 
 /// Tracing subscriber layer which keeps track of a deployment's state.
 /// Logs a special line when entering a span tagged with deployment id and state.
@@ -135,18 +134,19 @@ mod tests {
         time::Duration,
     };
 
-    use crate::{
-        persistence::{
-            resource::ResourceManager, DeploymentState, DeploymentUpdater, StateRecorder,
-        },
-        RuntimeManager,
-    };
+    use crate::{persistence::resource::ResourceManager, RuntimeManager};
     use async_trait::async_trait;
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use portpicker::pick_unused_port;
-    use shuttle_common::claims::Claim;
+    use shuttle_common::{
+        claims::Claim,
+        persistence::{
+            deployment::DeploymentUpdater,
+            state::{DeploymentState, State, StateRecorder},
+        },
+    };
     use shuttle_common_tests::{
         builder::get_mocked_builder_client, logger::get_mocked_logger_client,
     };
@@ -170,12 +170,8 @@ mod tests {
     use ulid::Ulid;
     use uuid::Uuid;
 
-    use crate::{
-        deployment::{
-            gateway_client::BuildQueueClient, ActiveDeploymentsGetter, Built, DeploymentManager,
-            Queued,
-        },
-        persistence::State,
+    use crate::deployment::{
+        gateway_client::BuildQueueClient, ActiveDeploymentsGetter, Built, DeploymentManager, Queued,
     };
 
     use super::{LogItem, StateChangeLayer};

@@ -1,4 +1,4 @@
-use shuttle_common::models::service;
+use super::super::models::service;
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
 use ulid::Ulid;
 

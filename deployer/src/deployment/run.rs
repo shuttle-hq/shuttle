@@ -15,6 +15,7 @@ use shuttle_common::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
+    persistence::deployment::DeploymentUpdater,
     resource, SecretStore,
 };
 use shuttle_proto::{
@@ -37,7 +38,7 @@ use uuid::Uuid;
 use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
-    persistence::{resource::ResourceManager, DeploymentUpdater},
+    persistence::resource::ResourceManager,
     RuntimeManager,
 };
 

@@ -13,6 +13,8 @@ pub enum Error {
     Streaming(#[from] axum::Error),
     #[error("Persistence failure: {0}")]
     Persistence(#[from] sqlx::Error),
+    #[error("{0}")]
+    ProxyFqdnMissing(String),
     #[error("{0}, try running `cargo shuttle deploy`")]
     NotFound(String),
     #[error("Invalid project name: {0}")]

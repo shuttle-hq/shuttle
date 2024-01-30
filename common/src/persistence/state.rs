@@ -45,7 +45,7 @@ impl Default for State {
     }
 }
 
-impl From<State> for shuttle_common::deployment::State {
+impl From<State> for super::super::deployment::State {
     fn from(state: State) -> Self {
         match state {
             State::Queued => Self::Queued,
@@ -61,18 +61,18 @@ impl From<State> for shuttle_common::deployment::State {
     }
 }
 
-impl From<shuttle_common::deployment::State> for State {
-    fn from(state: shuttle_common::deployment::State) -> Self {
+impl From<super::super::deployment::State> for State {
+    fn from(state: super::super::deployment::State) -> Self {
         match state {
-            shuttle_common::deployment::State::Queued => Self::Queued,
-            shuttle_common::deployment::State::Building => Self::Building,
-            shuttle_common::deployment::State::Built => Self::Built,
-            shuttle_common::deployment::State::Loading => Self::Loading,
-            shuttle_common::deployment::State::Running => Self::Running,
-            shuttle_common::deployment::State::Completed => Self::Completed,
-            shuttle_common::deployment::State::Stopped => Self::Stopped,
-            shuttle_common::deployment::State::Crashed => Self::Crashed,
-            shuttle_common::deployment::State::Unknown => Self::Unknown,
+            super::super::deployment::State::Queued => Self::Queued,
+            super::super::deployment::State::Building => Self::Building,
+            super::super::deployment::State::Built => Self::Built,
+            super::super::deployment::State::Loading => Self::Loading,
+            super::super::deployment::State::Running => Self::Running,
+            super::super::deployment::State::Completed => Self::Completed,
+            super::super::deployment::State::Stopped => Self::Stopped,
+            super::super::deployment::State::Crashed => Self::Crashed,
+            super::super::deployment::State::Unknown => Self::Unknown,
         }
     }
 }
@@ -89,7 +89,7 @@ pub trait StateRecorder: Clone + Send + Sync + 'static {
 mod tests {
     use std::str::FromStr;
 
-    use crate::persistence::State;
+    use super::State;
 
     #[test]
     fn test_state_deser() {

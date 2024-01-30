@@ -34,11 +34,12 @@ use shuttle_common::{
         error::axum::CustomErrorPath,
         project::ProjectName,
     },
+    persistence::{deployment::Deployment, state::State},
     request_span, LogItem,
 };
 use shuttle_proto::logger::LogsRequest;
 
-use crate::persistence::{Deployment, Persistence, State};
+use crate::persistence::Persistence;
 use crate::{
     deployment::{Built, DeploymentManager, Queued},
     persistence::resource::ResourceManager,

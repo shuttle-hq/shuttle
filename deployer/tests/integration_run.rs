@@ -7,7 +7,9 @@ use std::{
 
 use async_trait::async_trait;
 use portpicker::pick_unused_port;
-use shuttle_common::{claims::Claim, constants::EXECUTABLE_DIRNAME};
+use shuttle_common::{
+    claims::Claim, constants::EXECUTABLE_DIRNAME, persistence::deployment::DeploymentUpdater,
+};
 use shuttle_common_tests::logger::{get_mocked_logger_client, MockedLogger};
 use shuttle_proto::{
     logger::Batcher,
@@ -29,10 +31,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use shuttle_deployer::{
-    deployment::Built,
-    error,
-    persistence::{resource::ResourceManager, DeploymentUpdater},
-    RuntimeManager,
+    deployment::Built, error, persistence::resource::ResourceManager, RuntimeManager,
 };
 
 const RESOURCES_PATH: &str = "tests/resources";

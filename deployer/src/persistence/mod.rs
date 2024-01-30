@@ -7,6 +7,11 @@ use error::{Error, Result};
 use hyper::Uri;
 use shuttle_common::{
     claims::{Claim, ClaimLayer, InjectPropagationLayer},
+    persistence::{
+        deployment::{Deployment, DeploymentRunnable, DeploymentUpdater},
+        service::Service,
+        state::{DeploymentState, State, StateRecorder},
+    },
     resource::Type,
 };
 use shuttle_proto::{
@@ -28,23 +33,13 @@ use tracing::{error, info, instrument, trace};
 use ulid::Ulid;
 use uuid::Uuid;
 
-pub mod deployment;
 mod error;
 pub mod resource;
-pub mod service;
-mod state;
 mod user;
 
-pub use self::deployment::{Deployment, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
-pub use self::service::Service;
-pub use self::state::DeploymentState;
-pub use self::state::{State, StateRecorder};
+use self::resource::{Resource, ResourceManager};
 pub use self::user::User;
-use self::{
-    deployment::DeploymentRunnable,
-    resource::{Resource, ResourceManager},
-};
 use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 
@@ -664,10 +659,6 @@ mod tests {
     use rand::Rng;
 
     use super::*;
-    use crate::persistence::{
-        deployment::{Deployment, DeploymentRunnable},
-        state::State,
-    };
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_updates() {

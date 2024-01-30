@@ -3,7 +3,10 @@ use std::{
     sync::Arc,
 };
 
-use shuttle_common::log::LogRecorder;
+use shuttle_common::{
+    log::LogRecorder,
+    persistence::{deployment::DeploymentUpdater, state::State},
+};
 use shuttle_proto::{builder::builder_client::BuilderClient, logger::logger_client::LoggerClient};
 use tokio::{
     sync::{mpsc, Mutex},
@@ -19,10 +22,7 @@ mod run;
 pub mod state_change_layer;
 
 use self::gateway_client::BuildQueueClient;
-use crate::{
-    persistence::{resource::ResourceManager, DeploymentUpdater, State},
-    RuntimeManager,
-};
+use crate::{persistence::resource::ResourceManager, RuntimeManager};
 pub use queue::Queued;
 pub use run::{ActiveDeploymentsGetter, Built};
 

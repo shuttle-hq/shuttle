@@ -29,6 +29,7 @@ pub mod acme;
 pub mod api;
 pub mod args;
 pub mod auth;
+pub mod deployer;
 pub mod project;
 pub mod proxy;
 pub mod service;
@@ -529,7 +530,9 @@ pub mod tests {
             let user = control + 1;
             let bouncer = user + 1;
             let auth_port = bouncer + 1;
+            let deployer_api = auth_port + 1;
             let control = format!("127.0.0.1:{control}").parse().unwrap();
+            let deployer_api = format!("127.0.0.1:{deployer_api}").parse().unwrap();
             let user = format!("127.0.0.1:{user}").parse().unwrap();
             let bouncer = format!("127.0.0.1:{bouncer}").parse().unwrap();
             let auth: SocketAddr = format!("0.0.0.0:{auth_port}").parse().unwrap();
@@ -563,6 +566,7 @@ pub mod tests {
                 control,
                 user,
                 bouncer,
+                deployer_api,
                 use_tls: UseTls::Disable,
                 context: ContextArgs {
                     docker_host,

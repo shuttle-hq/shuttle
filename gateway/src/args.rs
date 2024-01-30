@@ -36,6 +36,9 @@ pub struct StartArgs {
     /// Address to bind the user proxy to
     #[arg(long, default_value = "127.0.0.1:8000")]
     pub user: SocketAddr,
+    /// Address to bind the deployer API to
+    #[arg(long, default_value = "127.0.0.1:8002")]
+    pub deployer_api: SocketAddr,
     /// Allows to disable the use of TLS in the user proxy service (DANGEROUS)
     #[arg(long, default_value = "enable")]
     pub use_tls: UseTls,

@@ -8,6 +8,7 @@ use shuttle_gateway::acme::{AcmeClient, CustomDomain};
 use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
 use shuttle_gateway::args::StartArgs;
 use shuttle_gateway::args::{Args, Commands, UseTls};
+use shuttle_gateway::deployer::api::Builder as DeployerApiBuilder;
 use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::tls::make_tls_acceptor;
@@ -146,6 +147,13 @@ async fn start(
         .with_posthog_client(posthog_client)
         .binding_to(args.control);
 
+    let deployer_api_builder = DeployerApiBuilder::default()
+        .with_binding(args.deployer_api)
+        .with_service(Arc::clone(&gateway))
+        .with_default_traces()
+        .with_jwt_guarded_routes(args.context.auth_uri.clone())
+        .with_admin_secret_guarded_routes();
+
     let mut user_builder = UserServiceBuilder::new()
         .with_service(Arc::clone(&gateway))
         .with_task_sender(sender)
@@ -199,12 +207,14 @@ async fn start(
         .serve();
 
     let user_handle = user_builder.serve();
+    let deployer_api_handle = deployer_api_builder.serve();
 
     debug!("starting up all services");
 
     tokio::select!(
         _ = worker_handle => info!("worker handle finished"),
         _ = api_handle => error!("api handle finished"),
+        _ = deployer_api_handle => error!("deployer api handle finished"),
         _ = user_handle => error!("user handle finished"),
         _ = ambulance_handle => error!("ambulance handle finished"),
     );

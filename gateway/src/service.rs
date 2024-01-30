@@ -250,7 +250,7 @@ impl GatewayContextProvider {
 
 pub struct GatewayService {
     provider: GatewayContextProvider,
-    db: SqlitePool,
+    pub db: SqlitePool,
     task_router: TaskRouter,
     pub state_location: PathBuf,
 

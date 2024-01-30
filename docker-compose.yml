@@ -136,6 +136,7 @@ services:
       - "--state=/var/lib/shuttle"
       - "start"
       - "--control=0.0.0.0:8001"
+      - "--deployer-api=0.0.0.0:8002"
       - "--user=0.0.0.0:8000"
       - "--bouncer=0.0.0.0:7999"
       - "--image=${CONTAINER_REGISTRY}/deployer:${DEPLOYER_TAG}"

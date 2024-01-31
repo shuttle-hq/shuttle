@@ -184,6 +184,38 @@ async fn non_interactive_init_with_from_local_path() {
     drop(temp_dir);
 }
 
+#[tokio::test]
+async fn non_interactive_init_from_local_path_with_workspace() {
+    let temp_dir = Builder::new().prefix("basic-init-from").tempdir().unwrap();
+    // Sleep to give time for the directory to finish creating
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    let temp_dir_path = temp_dir.path().to_owned();
+
+    let args = ShuttleArgs::parse_from([
+        "cargo-shuttle",
+        "init",
+        "--api-key",
+        "dh9z58jttoes3qvt",
+        "--force-name",
+        "--name",
+        "my-project",
+        "--from",
+        "../examples", // cargo runs the test from the cargo-shuttle folder.
+        "--subfolder",
+        "rocket/workspace",
+        temp_dir_path.to_str().unwrap(),
+    ]);
+    Shuttle::new().unwrap().run(args, true).await.unwrap();
+
+    let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
+    assert!(!cargo_toml.contains("name = "));
+    assert!(cargo_toml.contains("[workspace]"));
+    let shuttle_toml = read_to_string(temp_dir_path.join("Shuttle.toml")).unwrap();
+    assert!(shuttle_toml.contains("name = \"my-project\""));
+
+    drop(temp_dir);
+}
+
 #[test]
 fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();

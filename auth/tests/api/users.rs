@@ -2,10 +2,10 @@ mod needs_docker {
     use crate::{
         helpers::{self, app},
         stripe::{
-            MOCKED_ACTIVE_SUBSCRIPTION, MOCKED_CANCELLEDPRO_CHECKOUT_SESSION,
+            MOCKED_ACTIVE_SUBSCRIPTION, MOCKED_CANCELLEDPRO_CHECKOUT_SUBSCRIPTION_ID,
             MOCKED_CANCELLEDPRO_SUBSCRIPTION_ACTIVE, MOCKED_CANCELLEDPRO_SUBSCRIPTION_CANCELLED,
-            MOCKED_COMPLETED_CHECKOUT_SESSION, MOCKED_INCOMPLETE_CHECKOUT_SESSION,
-            MOCKED_OVERDUE_PAYMENT_CHECKOUT_SESSION, MOCKED_PAST_DUE_SUBSCRIPTION,
+            MOCKED_COMPLETED_CHECKOUT_SUBSCRIPTION_ID,
+            MOCKED_OVERDUE_PAYMENT_CHECKOUT_SUBSCRIPTION_ID, MOCKED_PAST_DUE_SUBSCRIPTION,
         },
     };
     use axum::body::Body;
@@ -129,7 +129,12 @@ mod needs_docker {
 
         // PUT /users/test-user/pro with a completed checkout session to upgrade a user to pro.
         let response = app
-            .put_user("test-user", "pro", MOCKED_COMPLETED_CHECKOUT_SESSION)
+            .post_subscription(
+                "test-user",
+                MOCKED_COMPLETED_CHECKOUT_SUBSCRIPTION_ID,
+                "pro",
+                1,
+            )
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -186,14 +191,12 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         // Test upgrading to pro without a checkout session object.
-        let response = app.put_user("test-user", "pro", "").await;
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let response = app.post_subscription("test-user", "", "pro", 1).await;
+        assert_eq!(response.status(), StatusCode::OK);
 
         // Test upgrading to pro with an incomplete checkout session object.
-        let response = app
-            .put_user("test-user", "pro", MOCKED_INCOMPLETE_CHECKOUT_SESSION)
-            .await;
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let response = app.post_subscription("test-user", "null", "pro", 1).await;
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -206,7 +209,12 @@ mod needs_docker {
 
         // Test upgrading to pro with a checkout session that points to a due session.
         let response = app
-            .put_user("test-user", "pro", MOCKED_OVERDUE_PAYMENT_CHECKOUT_SESSION)
+            .post_subscription(
+                "test-user",
+                MOCKED_OVERDUE_PAYMENT_CHECKOUT_SUBSCRIPTION_ID,
+                "pro",
+                1,
+            )
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -329,12 +337,19 @@ mod needs_docker {
 
         // Upgrade user to pro
         let response = app
-            .put_user("test-user", "pro", MOCKED_CANCELLEDPRO_CHECKOUT_SESSION)
+            .post_subscription(
+                "test-user",
+                MOCKED_CANCELLEDPRO_CHECKOUT_SUBSCRIPTION_ID,
+                "pro",
+                1,
+            )
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
         // Cancel subscription, this will be called by the console.
-        let response = app.put_user("test-user", "cancelledpro", "").await;
+        let response = app
+            .delete_subscription("test-user", MOCKED_CANCELLEDPRO_CHECKOUT_SUBSCRIPTION_ID)
+            .await;
         assert_eq!(response.status(), StatusCode::OK);
 
         // Fetch the user to trigger a sync of the account tier to cancelled. The account should not

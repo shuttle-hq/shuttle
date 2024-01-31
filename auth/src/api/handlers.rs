@@ -11,7 +11,6 @@ use shuttle_common::{
     claims::{AccountTier, Claim},
     models::user::{self, SubscriptionRequest},
 };
-use stripe::CheckoutSession;
 use tracing::instrument;
 
 use super::{
@@ -39,31 +38,6 @@ pub(crate) async fn post_user(
     let user = user_manager.create_user(account_name, account_tier).await?;
 
     Ok(Json(user.into()))
-}
-
-#[instrument(skip(user_manager, account_name, account_tier), fields(account.name = %account_name, account.tier = %account_tier))]
-pub(crate) async fn update_user_tier(
-    _: Admin,
-    State(user_manager): State<UserManagerState>,
-    Path((account_name, account_tier)): Path<(AccountName, AccountTier)>,
-    payload: Option<Json<CheckoutSession>>,
-) -> Result<(), Error> {
-    if account_tier == AccountTier::Pro {
-        match payload {
-            Some(Json(checkout_session)) => {
-                user_manager
-                    .upgrade_to_pro(&account_name, checkout_session)
-                    .await?;
-            }
-            None => return Err(Error::MissingCheckoutSession),
-        }
-    } else {
-        user_manager
-            .update_tier(&account_name, account_tier)
-            .await?;
-    };
-
-    Ok(())
 }
 
 pub(crate) async fn put_user_reset_key(

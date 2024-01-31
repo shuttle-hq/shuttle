@@ -83,23 +83,6 @@ impl TestApp {
         self.send_request(request).await
     }
 
-    pub async fn put_user(
-        &self,
-        name: &str,
-        tier: &str,
-        checkout_session: &'static str,
-    ) -> Response {
-        let request = Request::builder()
-            .uri(format!("/users/{name}/{tier}"))
-            .method("PUT")
-            .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
-            .header(CONTENT_TYPE, "application/json")
-            .body(Body::from(checkout_session))
-            .unwrap();
-
-        self.send_request(request).await
-    }
-
     pub async fn get_user(&self, name: &str) -> Response {
         let request = Request::builder()
             .uri(format!("/users/{name}"))

@@ -17,21 +17,12 @@ use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
 use tracing::{debug, error, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
-use stripe::{
-    CheckoutSession, CheckoutSessionStatus, Expandable, SubscriptionId, SubscriptionStatus,
-};
+use stripe::{SubscriptionId, SubscriptionStatus};
 
 #[async_trait]
 pub trait UserManagement: Send + Sync {
     /// Create a user with the given tier
     async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error>;
-
-    /// Upgrade a user to pro using the given checkout session
-    async fn upgrade_to_pro(
-        &self,
-        name: &AccountName,
-        checkout_session_metadata: CheckoutSession,
-    ) -> Result<(), Error>;
 
     /// Change the tier for a user
     async fn update_tier(&self, name: &AccountName, tier: AccountTier) -> Result<(), Error>;
@@ -81,69 +72,6 @@ impl UserManagement for UserManager {
             .await?;
 
         Ok(User::new(name, key, tier, vec![]))
-    }
-
-    // Update user tier to pro and update the subscription id.
-    async fn upgrade_to_pro(
-        &self,
-        name: &AccountName,
-        checkout_session_metadata: CheckoutSession,
-    ) -> Result<(), Error> {
-        // Update the user tier and store the subscription id. We expect the checkout session to be
-        // completed when it is sent. In case of incomplete checkout sessions, auth backend will not
-        // fulfill the request.
-        if checkout_session_metadata
-            .status
-            .filter(|inner| inner == &CheckoutSessionStatus::Complete)
-            .is_some()
-        {
-            // Extract the checkout session status if any, otherwise return with error.
-            let subscription_id = checkout_session_metadata
-                .subscription
-                .map(|s| match s {
-                    Expandable::Id(id) => id.to_string(),
-                    Expandable::Object(obj) => obj.id.to_string(),
-                })
-                .ok_or(Error::MissingSubscriptionId)?;
-
-            // Update the user account tier and insert or update their pro subscription.
-            let mut transaction = self.pool.begin().await?;
-
-            let rows_affected = query("UPDATE users SET account_tier = $1 WHERE account_name = $2")
-                .bind(AccountTier::Pro.to_string())
-                .bind(name)
-                .execute(&mut *transaction)
-                .await?
-                .rows_affected();
-
-            // Insert a new pro subscription. If a pro subscription already exists, update the
-            // subscription id.
-            // NOTE: we do not increase the quantity if a pro subscription exists, because it
-            // should never be increased.
-            query(
-                r#"INSERT INTO subscriptions (subscription_id, account_name, type)
-                    VALUES ($1, $2, $3)
-                    ON CONFLICT (account_name, type)
-                    DO UPDATE SET subscription_id = EXCLUDED.subscription_id
-                "#,
-            )
-            .bind(&subscription_id)
-            .bind(name)
-            .bind(models::user::SubscriptionType::Pro.to_string())
-            .execute(&mut *transaction)
-            .await?;
-
-            transaction.commit().await?;
-
-            // In case no rows were updated, this means the account doesn't exist.
-            if rows_affected > 0 {
-                Ok(())
-            } else {
-                Err(Error::UserNotFound)
-            }
-        } else {
-            Err(Error::IncompleteCheckoutSession)
-        }
     }
 
     // Update tier leaving the subscription_id untouched.
@@ -244,9 +172,20 @@ impl UserManagement for UserManager {
         subscription_type: &models::user::SubscriptionType,
         subscription_quantity: i32,
     ) -> Result<(), Error> {
+        let mut transaction = self.pool.begin().await?;
+
+        if *subscription_type == models::user::SubscriptionType::Pro {
+            query("UPDATE users SET account_tier = $1 WHERE account_name = $2")
+                .bind(AccountTier::Pro.to_string())
+                .bind(name)
+                .execute(&mut *transaction)
+                .await?
+                .rows_affected();
+        }
+
         // Insert a new subscription. If the same type of subscription already exists, update the
         // subscription id and quantity.
-        query(
+        let rows_affected = query(
             r#"INSERT INTO subscriptions (subscription_id, account_name, type, quantity)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (account_name, type)
@@ -257,10 +196,18 @@ impl UserManagement for UserManager {
         .bind(name)
         .bind(subscription_type.to_string())
         .bind(subscription_quantity)
-        .execute(&self.pool)
-        .await?;
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected();
 
-        Ok(())
+        transaction.commit().await?;
+
+        // In case no rows were updated, this means the account doesn't exist.
+        if rows_affected > 0 {
+            Ok(())
+        } else {
+            Err(Error::UserNotFound)
+        }
     }
 
     async fn delete_subscription(
@@ -268,15 +215,27 @@ impl UserManagement for UserManager {
         name: &AccountName,
         subscription_id: &str,
     ) -> Result<(), Error> {
-        query(
-            r#"DELETE FROM subscriptions
-            WHERE subscription_id = $1 AND account_name = $2
-        "#,
+        let subscription: Subscription = sqlx::query_as(
+            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE account_name = $1 AND subscription_id = $2",
         )
-        .bind(subscription_id)
         .bind(name)
-        .execute(&self.pool)
+        .bind(subscription_id)
+        .fetch_one(&self.pool)
         .await?;
+
+        if subscription.r#type == models::user::SubscriptionType::Pro {
+            self.update_tier(name, AccountTier::CancelledPro).await?;
+        } else {
+            query(
+                r#"DELETE FROM subscriptions
+                WHERE subscription_id = $1 AND account_name = $2
+            "#,
+            )
+            .bind(subscription_id)
+            .bind(name)
+            .execute(&self.pool)
+            .await?;
+        }
 
         Ok(())
     }

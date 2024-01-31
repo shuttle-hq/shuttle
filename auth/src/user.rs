@@ -417,16 +417,18 @@ impl FromRow<'_, PgRow> for Subscription {
 
 impl From<User> for Limits {
     fn from(user: User) -> Self {
-        let mut limit: Limits = user.account_tier.into();
+        let mut limits: Limits = user.account_tier.into();
 
-        limit.rds_quota = user
+        let rds_quota = user
             .subscriptions
             .iter()
             .find(|sub| matches!(sub.r#type, models::user::SubscriptionType::Rds))
             .map(|sub| sub.quantity as u32)
             .unwrap_or(0);
 
-        limit
+        limits.rds_quota(rds_quota);
+
+        limits
     }
 }
 

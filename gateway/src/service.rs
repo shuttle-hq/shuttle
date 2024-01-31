@@ -411,6 +411,17 @@ impl GatewayService {
         Ok(ready_count)
     }
 
+    /// The number of cch projects that are currently in the ready state
+    pub async fn count_ready_cch_projects(&self) -> Result<u32, Error> {
+        let ready_count: u32 =
+            query("SELECT COUNT(*) FROM projects, JSON_EACH(project_state) WHERE key = 'ready' AND project_name LIKE 'cch23-%'")
+                .fetch_one(&self.db)
+                .await?
+                .get::<_, usize>(0);
+
+        Ok(ready_count)
+    }
+
     pub async fn find_project(
         &self,
         project_name: &ProjectName,
@@ -986,15 +997,20 @@ impl GatewayService {
         is_cch_project: bool,
         account_tier: &AccountTier,
     ) -> Result<(), Error> {
-        let current_container_count = self.count_ready_projects().await?;
+        // If this control file exists, block routing to cch23 projects.
+        // Used for emergency load mitigation
+        const CCH_CONTROL_FILE: &str = "/var/lib/shuttle/BLOCK_CCH23_PROJECT_TRAFFIC";
+        const CCH_CONCURRENT_LIMIT: u32 = 20;
 
-        let has_capacity = if is_cch_project
-            && std::fs::metadata("/var/lib/shuttle/BLOCK_CCH23_PROJECT_TRAFFIC").is_ok()
+        if is_cch_project
+            && (std::fs::metadata(CCH_CONTROL_FILE).is_ok()
+                || self.count_ready_cch_projects().await? >= CCH_CONCURRENT_LIMIT)
         {
-            // If this control file exists, block routing to cch23 projects.
-            // Used for emergency load mitigation
             return Err(Error::from_kind(ErrorKind::CapacityLimit));
-        } else if current_container_count < self.cch_container_limit {
+        }
+
+        let current_container_count = self.count_ready_projects().await?;
+        let has_capacity = if current_container_count < self.cch_container_limit {
             true
         } else if current_container_count < self.soft_container_limit {
             !is_cch_project

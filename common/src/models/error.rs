@@ -134,7 +134,7 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "Service not ready"),
             ErrorKind::DeleteProjectFailed => (StatusCode::INTERNAL_SERVER_ERROR, "Deleting project failed"),
-            ErrorKind::CapacityLimit => (StatusCode::SERVICE_UNAVAILABLE, "Our server is at capacity and cannot serve your request at this time"),
+            ErrorKind::CapacityLimit => (StatusCode::SERVICE_UNAVAILABLE, "Our server is at capacity and cannot serve your request at this time. Please try again in a few minutes."),
         };
         Self {
             message: error_message.to_string(),

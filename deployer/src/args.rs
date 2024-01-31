@@ -11,7 +11,7 @@ use tonic::transport::Endpoint;
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
 pub struct Args {
-    /// Uri to the `.sqlite` file used to store state
+    /// Uri to the deployer state
     #[clap(long, default_value = "./deployer.sqlite")]
     pub state: String,
 
@@ -69,5 +69,9 @@ pub struct Args {
 
     /// Add an auth layer to deployer for local development
     #[arg(long)]
-    pub local: bool,
+    pub local_auth_layer: bool,
+
+    /// Flag that determines whether this deployer uses remote persistence
+    #[arg(long)]
+    pub is_remote_persistence: bool,
 }

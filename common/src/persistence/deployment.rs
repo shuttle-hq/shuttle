@@ -1,13 +1,12 @@
 use std::{net::SocketAddr, str::FromStr};
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
 use tracing::error;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use super::state::State;
+use super::state::{DeploymentState, State};
 
 // We are using `Option` for the additional `git_*` fields for backward compat.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -70,7 +69,8 @@ impl From<Deployment> for super::super::models::deployment::Response {
 }
 
 /// Update the details of a deployment
-#[async_trait]
+#[allow(async_fn_in_trait)]
+#[async_trait::async_trait]
 pub trait DeploymentUpdater: Clone + Send + Sync + 'static {
     type Err: std::error::Error + Send;
 
@@ -79,6 +79,31 @@ pub trait DeploymentUpdater: Clone + Send + Sync + 'static {
 
     /// Set if a deployment is build on shuttle-next
     async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<(), Self::Err>;
+
+    /// Update the state
+    async fn set_state(&self, state: DeploymentState) -> Result<(), Self::Err>;
+
+    async fn update_deployment(&self, state: DeploymentState) -> Result<(), Self::Err>;
+}
+
+#[async_trait::async_trait]
+pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
+    type Err: std::error::Error + Send;
+
+    async fn get_active_deployments(
+        &self,
+        service_id: &Ulid,
+    ) -> std::result::Result<Vec<Uuid>, Self::Err>;
+}
+
+#[async_trait::async_trait]
+pub trait AddressGetter: Clone + Send + Sync + 'static {
+    type Err: std::error::Error + Send;
+
+    async fn get_address_for_service(
+        &self,
+        service_name: &str,
+    ) -> std::result::Result<Option<std::net::SocketAddr>, Self::Err>;
 }
 
 #[derive(Debug, PartialEq, Eq)]

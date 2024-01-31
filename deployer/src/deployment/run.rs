@@ -5,7 +5,6 @@ use std::{
     sync::Arc,
 };
 
-use async_trait::async_trait;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
@@ -15,7 +14,7 @@ use shuttle_common::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
-    persistence::deployment::DeploymentUpdater,
+    persistence::deployment::{ActiveDeploymentsGetter, DeploymentUpdater},
     resource, SecretStore,
 };
 use shuttle_proto::{
@@ -205,16 +204,6 @@ fn start_crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
         error = &error as &dyn std::error::Error,
         "{}", DEPLOYER_END_MSG_STARTUP_ERR
     );
-}
-
-#[async_trait]
-pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
-    type Err: std::error::Error + Send;
-
-    async fn get_active_deployments(
-        &self,
-        service_id: &Ulid,
-    ) -> std::result::Result<Vec<Uuid>, Self::Err>;
 }
 
 #[derive(Clone, Debug)]

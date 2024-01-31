@@ -34,7 +34,7 @@ use shuttle_common::{
         error::axum::CustomErrorPath,
         project::ProjectName,
     },
-    persistence::{deployment::Deployment, state::State},
+    persistence::{deployment::Deployment, state::State, DeployerPersistenceApi},
     request_span, LogItem,
 };
 use shuttle_proto::logger::LogsRequest;

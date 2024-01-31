@@ -1,7 +1,10 @@
 use axum::headers::{authorization::Bearer, Authorization};
 use hyper::Method;
 use shuttle_common::{
-    backends::client::{gateway, Error},
+    backends::client::{
+        gateway::{self},
+        Error,
+    },
     models::{self},
 };
 use uuid::Uuid;

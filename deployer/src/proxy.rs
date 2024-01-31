@@ -3,7 +3,6 @@ use std::{
     net::{IpAddr, SocketAddr},
 };
 
-use async_trait::async_trait;
 use axum::headers::HeaderMapExt;
 use fqdn::FQDN;
 use hyper::{
@@ -15,7 +14,7 @@ use hyper_reverse_proxy::{ProxyError, ReverseProxy};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderExtractor;
-use shuttle_common::backends::headers::XShuttleProject;
+use shuttle_common::{backends::headers::XShuttleProject, persistence::deployment::AddressGetter};
 use tracing::{error, field, instrument, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -141,14 +140,6 @@ pub async fn handle(
                 .unwrap())
         }
     }
-}
-
-#[async_trait]
-pub trait AddressGetter: Clone + Send + Sync + 'static {
-    async fn get_address_for_service(
-        &self,
-        service_name: &str,
-    ) -> crate::handlers::Result<Option<SocketAddr>>;
 }
 
 #[instrument(skip(req))]

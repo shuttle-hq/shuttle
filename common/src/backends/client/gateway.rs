@@ -5,6 +5,21 @@ use tracing::instrument;
 use crate::models;
 
 use super::{Error, ServicesApiClient};
+#[cfg(feature = "persist")]
+use crate::persistence::{
+    deployment::{
+        ActiveDeploymentsGetter, AddressGetter, Deployment, DeploymentRunnable, DeploymentUpdater,
+    },
+    service::Service,
+    state::DeploymentState,
+    DeployerPersistenceApi,
+};
+#[cfg(feature = "persist")]
+use std::net::SocketAddr;
+#[cfg(feature = "persist")]
+use ulid::Ulid;
+#[cfg(feature = "persist")]
+use uuid::Uuid;
 
 /// Wrapper struct to make API calls to gateway easier
 #[derive(Clone)]
@@ -52,6 +67,113 @@ pub trait ProjectsDal {
             .collect();
 
         Ok(ids)
+    }
+}
+
+#[cfg(feature = "persist")]
+#[async_trait::async_trait]
+impl DeploymentUpdater for Client {
+    type Err = Error;
+
+    async fn set_address(&self, _id: &Uuid, _address: &SocketAddr) -> Result<(), Error> {
+        todo!()
+    }
+
+    async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Error> {
+        todo!()
+    }
+
+    async fn set_state(&self, _state: DeploymentState) -> Result<(), Error> {
+        todo!()
+    }
+
+    async fn update_deployment(&self, _state: DeploymentState) -> Result<(), Error> {
+        todo!()
+    }
+}
+
+#[cfg(feature = "persist")]
+#[async_trait::async_trait]
+impl ActiveDeploymentsGetter for Client {
+    type Err = Error;
+
+    async fn get_active_deployments(
+        &self,
+        _service_id: &ulid::Ulid,
+    ) -> std::result::Result<Vec<Uuid>, Error> {
+        todo!()
+    }
+}
+
+#[cfg(feature = "persist")]
+#[async_trait::async_trait]
+impl AddressGetter for Client {
+    type Err = Error;
+
+    async fn get_address_for_service(
+        &self,
+        _service_name: &str,
+    ) -> std::result::Result<Option<std::net::SocketAddr>, Error> {
+        todo!()
+    }
+}
+
+#[cfg(feature = "persist")]
+#[async_trait::async_trait]
+impl DeployerPersistenceApi for Client {
+    type MasterErr = Error;
+
+    async fn insert_deployment(
+        &self,
+        _deployment: impl Into<&Deployment> + Send,
+    ) -> Result<(), Error> {
+        todo!()
+    }
+
+    async fn get_deployment(&self, _id: &Uuid) -> Result<Option<Deployment>, Error> {
+        todo!()
+    }
+
+    async fn get_deployments(
+        &self,
+        _service_id: &Ulid,
+        _offset: u32,
+        _limit: u32,
+    ) -> Result<Vec<Deployment>, Error> {
+        todo!()
+    }
+
+    async fn get_active_deployment(&self, _service_id: &Ulid) -> Result<Option<Deployment>, Error> {
+        todo!()
+    }
+
+    async fn cleanup_invalid_states(&self) -> Result<(), Error> {
+        todo!()
+    }
+
+    async fn get_service_by_name(&self, _name: &str) -> Result<Option<Service>, Error> {
+        todo!()
+    }
+
+    async fn get_or_create_service(&self, _name: &str) -> Result<Service, Error> {
+        todo!()
+    }
+
+    async fn delete_service(&self, _id: &Ulid) -> Result<(), Error> {
+        todo!()
+    }
+    async fn get_all_services(&self) -> Result<Vec<Service>, Error> {
+        todo!()
+    }
+
+    async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>, Error> {
+        todo!()
+    }
+    async fn get_runnable_deployment(
+        &self,
+        _id: &Uuid,
+    ) -> Result<Option<DeploymentRunnable>, Error> {
+        todo!()
     }
 }
 

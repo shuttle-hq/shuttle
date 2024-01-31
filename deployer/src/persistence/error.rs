@@ -16,6 +16,12 @@ pub enum Error {
     ParseError(String),
     #[error("Provisioner request failed: {0}")]
     Provisioner(tonic::Status),
+    #[error("SQLite persistence error: {0}")]
+    LocalPersistence(#[from] shuttle_common::persistence::Error),
+    #[error("Remote persistence error: {0}")]
+    RemotePersistence(#[from] shuttle_common::backends::client::Error),
+    #[error("Persistence mode error: {0}")]
+    Mode(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

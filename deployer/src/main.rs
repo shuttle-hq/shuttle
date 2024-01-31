@@ -27,6 +27,7 @@ async fn main() {
 
     let (persistence, _) = Persistence::new(
         &args.state,
+        args.is_remote_persistence,
         args.resource_recorder.clone(),
         &args.provisioner_address,
         Ulid::from_string(args.project_id.as_str())

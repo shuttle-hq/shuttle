@@ -5,7 +5,10 @@ use std::{
 
 use shuttle_common::{
     log::LogRecorder,
-    persistence::{deployment::DeploymentUpdater, state::State},
+    persistence::{
+        deployment::{ActiveDeploymentsGetter, DeploymentUpdater},
+        state::State,
+    },
 };
 use shuttle_proto::{builder::builder_client::BuilderClient, logger::logger_client::LoggerClient};
 use tokio::{
@@ -24,7 +27,7 @@ pub mod state_change_layer;
 use self::gateway_client::BuildQueueClient;
 use crate::{persistence::resource::ResourceManager, RuntimeManager};
 pub use queue::Queued;
-pub use run::{ActiveDeploymentsGetter, Built};
+pub use run::Built;
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;

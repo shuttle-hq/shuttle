@@ -6,9 +6,11 @@ use hyper::{
     service::{make_service_fn, service_fn},
 };
 pub use persistence::Persistence;
-use proxy::AddressGetter;
 pub use runtime_manager::RuntimeManager;
-use shuttle_common::log::LogRecorder;
+use shuttle_common::{
+    log::LogRecorder,
+    persistence::{deployment::AddressGetter, DeployerPersistenceApi},
+};
 use shuttle_proto::{builder::builder_client::BuilderClient, logger::logger_client::LoggerClient};
 use tokio::sync::Mutex;
 use tracing::{error, info};
@@ -87,8 +89,8 @@ pub async fn start(
         args.auth_uri,
     );
 
-    if args.local {
-        // If the --local flag is passed, setup an auth layer in deployer
+    if args.local_auth_layer {
+        // If the --local_auth_layer flag is passed, setup an auth layer in deployer
         builder = builder.with_local_admin_layer()
     } else {
         builder = builder.with_admin_secret_layer(args.admin_secret)

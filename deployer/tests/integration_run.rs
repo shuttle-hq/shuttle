@@ -8,7 +8,9 @@ use std::{
 use async_trait::async_trait;
 use portpicker::pick_unused_port;
 use shuttle_common::{
-    claims::Claim, constants::EXECUTABLE_DIRNAME, persistence::deployment::DeploymentUpdater,
+    claims::Claim,
+    constants::EXECUTABLE_DIRNAME,
+    persistence::{deployment::DeploymentUpdater, state::DeploymentState},
 };
 use shuttle_common_tests::logger::{get_mocked_logger_client, MockedLogger};
 use shuttle_proto::{
@@ -158,6 +160,14 @@ impl DeploymentUpdater for StubDeploymentUpdater {
     }
 
     async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
+        Ok(())
+    }
+
+    async fn set_state(&self, _state: DeploymentState) -> Result<(), Self::Err> {
+        Ok(())
+    }
+
+    async fn update_deployment(&self, _state: DeploymentState) -> Result<(), Self::Err> {
         Ok(())
     }
 }

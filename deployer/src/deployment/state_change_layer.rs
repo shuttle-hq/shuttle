@@ -392,6 +392,14 @@ mod tests {
         async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
             Ok(())
         }
+
+        async fn set_state(&self, _state: DeploymentState) -> Result<(), Self::Err> {
+            Ok(())
+        }
+
+        async fn update_deployment(&self, _state: DeploymentState) -> Result<(), Self::Err> {
+            Ok(())
+        }
     }
 
     #[derive(Clone)]

@@ -49,7 +49,7 @@ pub fn generate_project(
     let crate_name_set = set_crate_name(&path, name)
         .context("Failed to set crate name. No Cargo.toml in template?")?;
     // if the crate name was not updated, set it in Shuttle.toml instead
-    edit_shuttle_toml(&path, (!crate_name_set).then(|| name))
+    edit_shuttle_toml(&path, (!crate_name_set).then_some(name))
         .context("Failed to edit Shuttle.toml")?;
     create_ignore_file(&path, if no_git { ".ignore" } else { ".gitignore" })
         .context("Failed to create .gitignore file")?;
@@ -224,7 +224,7 @@ fn set_crate_name(path: &Path, name: &str) -> Result<bool> {
     let mut doc = toml_str.parse::<Document>()?;
 
     // if the crate is a workspace, don't set the package name
-    if !doc.get("workspace").is_none() {
+    if doc.get("workspace").is_some() {
         return Ok(false);
     }
 

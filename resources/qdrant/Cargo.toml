@@ -10,4 +10,4 @@ keywords = ["shuttle-service", "qdrant"]
 async-trait = "0.1.56"
 qdrant-client = "1.7.0"
 serde = { version = "1.0.148", features = ["derive"] }
-shuttle-service = { path = "../../service", version = "0.37.0" }
+shuttle-service = { path = "../../service", version = "0.38.0" }

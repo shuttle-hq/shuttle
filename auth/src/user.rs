@@ -426,7 +426,7 @@ impl From<User> for Limits {
             .map(|sub| sub.quantity as u32)
             .unwrap_or(0);
 
-        limits.rds_quota(rds_quota);
+        limits.set_rds_quota(rds_quota);
 
         limits
     }

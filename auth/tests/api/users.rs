@@ -247,7 +247,7 @@ mod needs_docker {
         // Make sure JWT does not allow any RDS instances
         let claim = app.get_claim(basic_user_key).await;
         assert_eq!(claim.sub, "test-user");
-        assert_eq!(claim.limits.rds_quota, 0);
+        assert_eq!(claim.limits.rds_quota(), 0);
 
         // Send a request to insert an RDS subscription for the test user.
         let response = app
@@ -271,7 +271,7 @@ mod needs_docker {
 
         // Make sure JWT has the quota
         let claim = app.get_claim(basic_user_key).await;
-        assert_eq!(claim.limits.rds_quota, 1);
+        assert_eq!(claim.limits.rds_quota(), 1);
 
         // Send another request to insert an RDS subscription for the user.
         // This uses a different subscription id to make sure we only keep record of one
@@ -282,7 +282,7 @@ mod needs_docker {
 
         // Make sure JWT has the new quota
         let claim = app.get_claim(basic_user_key).await;
-        assert_eq!(claim.limits.rds_quota, 4);
+        assert_eq!(claim.limits.rds_quota(), 4);
 
         // Send a request to delete an RDS subscription
         let response = app
@@ -292,7 +292,7 @@ mod needs_docker {
 
         // Make sure JWT is reset correctly
         let claim = app.get_claim(basic_user_key).await;
-        assert_eq!(claim.limits.rds_quota, 0);
+        assert_eq!(claim.limits.rds_quota(), 0);
     }
 
     #[tokio::test]

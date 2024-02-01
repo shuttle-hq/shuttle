@@ -179,8 +179,7 @@ impl UserManagement for UserManager {
                 .bind(AccountTier::Pro.to_string())
                 .bind(name)
                 .execute(&mut *transaction)
-                .await?
-                .rows_affected();
+                .await?;
         }
 
         // Insert a new subscription. If the same type of subscription already exists, update the

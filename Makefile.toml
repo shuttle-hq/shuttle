@@ -7,7 +7,7 @@ default_to_workspace = false
 
 [env]
 CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
-TAG = { script = ["git describe --tags --abbrev=0"] }
+# TAG = { script = ["git describe --tags --abbrev=0"] }
 
 [tasks.ci-workspace]
 run_task = { name = [

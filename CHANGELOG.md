@@ -7,7 +7,44 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [0.37.0](https://github.com/shuttle-hq/shuttle/compare/v0.36.0..0.37.0) - 2024-01-23
+## [0.38.0](https://github.com/shuttle-hq/shuttle/compare/v0.37.0..v0.38.0) - 2024-02-01
+
+### Features
+
+- *(shuttle-turso)* [**breaking**] Replace `libsql-client` crate with the new and improved `libsql` crate ([#1531](https://github.com/shuttle-hq/shuttle/issues/1531)) - ([bd895d9](https://github.com/shuttle-hq/shuttle/commit/bd895d9d640b83303d8645bdfa7cc226165589e0))
+- Have `auth` handle new subscriptions ([#1597](https://github.com/shuttle-hq/shuttle/issues/1597)) - ([bcd0966](https://github.com/shuttle-hq/shuttle/commit/bcd096604f42171d16854543295301d6d58503e9))
+- Limit concurrent active cch23 projects ([#1589](https://github.com/shuttle-hq/shuttle/issues/1589)) - ([c5ddea0](https://github.com/shuttle-hq/shuttle/commit/c5ddea00829ff2a3c75676c97a52ef684e12a255))
+- Write a wrapper for the provisioner to call gw and r-r clients ([#1585](https://github.com/shuttle-hq/shuttle/issues/1585)) - ([4a2ab9e](https://github.com/shuttle-hq/shuttle/commit/4a2ab9ef75e9147cddffc4ea1570a3a34753321f))
+
+### Bug Fixes
+
+- *(cargo-shuttle)* Set name in Shuttle.toml when cloning a workspace ([#1599](https://github.com/shuttle-hq/shuttle/issues/1599)) - ([e0e94c9](https://github.com/shuttle-hq/shuttle/commit/e0e94c920b6ba5b09351524326b911f4268ee51d))
+- *(gateway)* Rename scope field to shuttle.project.name ([#1538](https://github.com/shuttle-hq/shuttle/issues/1538)) - ([c25c187](https://github.com/shuttle-hq/shuttle/commit/c25c18730e259618cf1f74d1dc7b3f3e64ecf1a7))
+- *(otel)* Increase trace_buffer for dd exporter ([#1587](https://github.com/shuttle-hq/shuttle/issues/1587)) - ([50e6a4c](https://github.com/shuttle-hq/shuttle/commit/50e6a4cc7002f025d81177fa14e1305920e92bbb))
+- Qdrant docker image name ([#1539](https://github.com/shuttle-hq/shuttle/issues/1539)) - ([41f9159](https://github.com/shuttle-hq/shuttle/commit/41f9159387cefc3d87acd161c5a63a7a8cdfc0aa))
+- Remove common_tests dep from common ([#1537](https://github.com/shuttle-hq/shuttle/issues/1537)) - ([66d5d9b](https://github.com/shuttle-hq/shuttle/commit/66d5d9b34f0969834899575a88335ad3b2a4b4be))
+
+### Documentation
+
+- *(shuttle-turso)* Update docs for turso libsql change ([#1591](https://github.com/shuttle-hq/shuttle/issues/1591)) - ([fcec01f](https://github.com/shuttle-hq/shuttle/commit/fcec01f509c3510f504c86d82cc5dfc4c1633be9))
+- Update README ([#1594](https://github.com/shuttle-hq/shuttle/issues/1594)) - ([69864f8](https://github.com/shuttle-hq/shuttle/commit/69864f8cd4628452c312b4b5f56b41e9f3549f3b))
+
+### Miscellaneous Tasks
+
+- Bump examples - ([f60f7b0](https://github.com/shuttle-hq/shuttle/commit/f60f7b094496183c737ee682d75e7315665e3bb4))
+- V0.38.0 - ([242cd7f](https://github.com/shuttle-hq/shuttle/commit/242cd7ff8d7ceb3eebd090ce1a8b1a808076504b))
+- Disable unused builder service until it is needed ([#1542](https://github.com/shuttle-hq/shuttle/issues/1542)) - ([f210c8f](https://github.com/shuttle-hq/shuttle/commit/f210c8fbfa4fde2546b3142d4c4a7463f8195ada))
+- Remove utoipa openAPI docs ([#1588](https://github.com/shuttle-hq/shuttle/issues/1588)) - ([ece23c7](https://github.com/shuttle-hq/shuttle/commit/ece23c7e7af8bfbde9f2b5932054f5189d6b30ec))
+- Remove panamax and deck-chores ([#1540](https://github.com/shuttle-hq/shuttle/issues/1540)) - ([ed81509](https://github.com/shuttle-hq/shuttle/commit/ed8150915118cafc4e712016670a39b057efcf4d))
+- Remove shuttle-poise ([#1541](https://github.com/shuttle-hq/shuttle/issues/1541)) - ([c5e2d4b](https://github.com/shuttle-hq/shuttle/commit/c5e2d4b2ff8e4e71c038a35ff8fe049113465d72))
+
+### Miscellaneous
+
+- Remove session ([#1596](https://github.com/shuttle-hq/shuttle/issues/1596)) - ([4dd7971](https://github.com/shuttle-hq/shuttle/commit/4dd7971816bb5b2482c2b7bc61745e7de55bb925))
+- Add operation_name field for task polling ([#1590](https://github.com/shuttle-hq/shuttle/issues/1590)) - ([625a015](https://github.com/shuttle-hq/shuttle/commit/625a0151e68a1e70361aedd7a659a9de0b1f5fc2))
+- Small nitpicks ([#1544](https://github.com/shuttle-hq/shuttle/issues/1544)) - ([9a75f16](https://github.com/shuttle-hq/shuttle/commit/9a75f1640e177a8eda81318e44a89e7ba3e30e3a))
+
+## [0.37.0](https://github.com/shuttle-hq/shuttle/compare/v0.36.0..v0.37.0) - 2024-01-23
 
 ### Features
 
@@ -34,8 +71,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous Tasks
 
-- Examples 0.37.0 - ([4870949](https://github.com/shuttle-hq/shuttle/commit/487094990db855ebc7a1f1c880c049f6b6065b2e))
-- Bump versions - ([3061778](https://github.com/shuttle-hq/shuttle/commit/30617781a737e24663f0dec45cdc457a1b03dfee))
+- V0.37.0 ([#1535](https://github.com/shuttle-hq/shuttle/issues/1535)) - ([9c1199c](https://github.com/shuttle-hq/shuttle/commit/9c1199c950f24804d23eb8ff631d92d3b289d667))
 - Update wiremock to resolve cargo audit ([#1534](https://github.com/shuttle-hq/shuttle/issues/1534)) - ([43e0c12](https://github.com/shuttle-hq/shuttle/commit/43e0c12f3b01c555d8ee80f2114172c56e5ebbdb))
 - Use default ubuntu image ([#1524](https://github.com/shuttle-hq/shuttle/issues/1524)) - ([d9ad017](https://github.com/shuttle-hq/shuttle/commit/d9ad0179a5d3b3ff0194b81c1558e181addcf592))
 - Upgrade h2 to resolve cargo audit ([#1530](https://github.com/shuttle-hq/shuttle/issues/1530)) - ([84c52c5](https://github.com/shuttle-hq/shuttle/commit/84c52c59a9a6c92879ad1fd06e3ede6d97d0cb86))
@@ -44,7 +80,6 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous
 
-- Merge remote-tracking branch 'upstream/main' into chore/v0.37.0 - ([5c0c12e](https://github.com/shuttle-hq/shuttle/commit/5c0c12eccffe086f5763737cf6033d8a1d9fe9c4))
 - Improve shuttle-runtime out-of-date hint ([#1533](https://github.com/shuttle-hq/shuttle/issues/1533)) - ([be2198c](https://github.com/shuttle-hq/shuttle/commit/be2198cd75f6636d7faa68d17b77c84265225759))
 - Set shuttle.project.name in more places ([#1526](https://github.com/shuttle-hq/shuttle/issues/1526)) - ([ab179c3](https://github.com/shuttle-hq/shuttle/commit/ab179c3c6a5d91b4d5697ab8aa366918657def29))
 

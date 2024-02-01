@@ -6,7 +6,7 @@ Axum 0.6 is supported by using these feature flags:
 
 ```toml,ignore
 axum = "0.6.0"
-shuttle-axum = { version = "0.37.0", default-features = false, features = ["axum-0-6"] }
+shuttle-axum = { version = "0.38.0", default-features = false, features = ["axum-0-6"] }
 ```
 
 ### Example

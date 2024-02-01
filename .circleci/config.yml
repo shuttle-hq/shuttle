@@ -108,7 +108,7 @@ commands:
   apply-patches:
     steps:
       - run:
-          name: Patch crates
+          name: Patch local crates
           command: ./scripts/apply-patches.sh
   install-rust:
     steps:
@@ -144,6 +144,17 @@ commands:
               unzip cargo-make-v$VERSION-x86_64-unknown-linux-musl.zip && \
               mv cargo-make-v0.37.8-x86_64-unknown-linux-musl/cargo-make ~/.cargo/bin && \
               rm -rf cargo-make-v$VERSION-x86_64-unknown-linux-musl*
+  install-cargo-audit:
+    steps:
+      - run:
+          name: Install cargo-audit
+          environment:
+            VERSION: "v0.18.3"
+          command: |
+            curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$VERSION/cargo-audit-x86_64-unknown-linux-musl-$VERSION.tgz \
+              | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$VERSION/cargo-audit \
+              > ~/.cargo/bin/cargo-audit \
+              && chmod +x ~/.cargo/bin/cargo-audit
   make-artifact:
     parameters:
       target:
@@ -196,17 +207,9 @@ jobs:
     executor: docker-rust
     steps:
       - checkout
-      - run:
-          name: Install cargo-audit
-          command: |
-            CARGO_AUDIT_VERSION='v0.18.3'
-            ls ~/.cargo/bin/cargo-audit \
-              || curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$CARGO_AUDIT_VERSION/cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION.tgz \
-              | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION/cargo-audit \
-              > ~/.cargo/bin/cargo-audit \
-              && chmod +x ~/.cargo/bin/cargo-audit
-      - run: |
-          cargo audit -D warnings
+      - install-cargo-make
+      - install-cargo-audit
+      - run: cargo make audit
   test-standalone:
     parameters:
       path:

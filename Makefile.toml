@@ -41,6 +41,11 @@ args = [
     "warnings",
 ]
 
+[tasks.audit]
+install_crate = { crate_name = "cargo-audit", binary = "cargo", test_arg = ["audit", "-V"], min_version = "0.18.3" }
+command = "cargo"
+args = ["audit", "-D", "warnings"]
+
 [tasks.check-lockfile-patches]
 script = '''
 if [ -n "$(grep "\[\[patch.unused\]\]" Cargo.lock)" ]; then
@@ -61,7 +66,7 @@ fi
 # To generate: cargo make proto
 # To validate: cargo make proto validate
 # Requires `protoc` to be installed
-install_crate = { crate_name = "proto-gen@0.2.0", binary = "proto-gen", test_arg = "-V" }
+install_crate = { crate_name = "proto-gen", binary = "proto-gen", test_arg = "-V", version = "0.2.0" }
 script = '''
 OP="generate"
 if [ "$1" = "validate" ]; then

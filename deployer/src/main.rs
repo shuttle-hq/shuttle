@@ -8,7 +8,7 @@ use shuttle_common::{
 };
 use shuttle_deployer::{start, start_proxy, Args, Persistence, RuntimeManager, StateChangeLayer};
 use shuttle_proto::{
-    builder::builder_client::BuilderClient,
+    // builder::builder_client::BuilderClient,
     logger::{logger_client::LoggerClient, Batcher},
 };
 use tokio::select;
@@ -46,18 +46,19 @@ async fn main() {
     let logger_client = LoggerClient::new(channel);
     let logger_batcher = Batcher::wrap(logger_client.clone());
 
-    let builder_client = match args.builder_uri.connect().await {
-        Ok(channel) => Some(BuilderClient::new(
-            ServiceBuilder::new()
-                .layer(ClaimLayer)
-                .layer(InjectPropagationLayer)
-                .service(channel),
-        )),
-        Err(err) => {
-            error!("Couldn't connect to the shuttle-builder: {err}");
-            None
-        }
-    };
+    let builder_client = None;
+    // let builder_client = match args.builder_uri.connect().await {
+    //     Ok(channel) => Some(BuilderClient::new(
+    //         ServiceBuilder::new()
+    //             .layer(ClaimLayer)
+    //             .layer(InjectPropagationLayer)
+    //             .service(channel),
+    //     )),
+    //     Err(err) => {
+    //         error!("Couldn't connect to the shuttle-builder: {err}");
+    //         None
+    //     }
+    // };
 
     setup_tracing(
         tracing_subscriber::registry()

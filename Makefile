@@ -147,7 +147,7 @@ cargo-clean:
 
 images: the-shuttle-images postgres otel
 
-the-shuttle-images: shuttle-auth shuttle-builder shuttle-deployer shuttle-gateway shuttle-logger shuttle-provisioner shuttle-resource-recorder
+the-shuttle-images: shuttle-auth shuttle-deployer shuttle-gateway shuttle-logger shuttle-provisioner shuttle-resource-recorder # shuttle-builder
 
 shuttle-%:
 	$(DOCKER_BUILD) \

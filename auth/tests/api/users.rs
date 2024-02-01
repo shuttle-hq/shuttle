@@ -127,7 +127,7 @@ mod needs_docker {
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let expected_user: Value = serde_json::from_slice(&body).unwrap();
 
-        // PUT /users/test-user/pro with a completed checkout session to upgrade a user to pro.
+        // PUT /users/test-user/pro with a completed subscription id to upgrade a user to pro.
         let response = app
             .post_subscription(
                 "test-user",
@@ -139,12 +139,12 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         // Next we're going to fetch the user, which will trigger a sync of the users tier. It will
-        // fetch the subscription from stripe using the subscription ID from the previous checkout
-        // session. This should return an active subscription, meaning the users tier should remain
+        // fetch the subscription from stripe using the previous subscription ID. This should return
+        // an active subscription, meaning the users tier should remain
         // pro.
         let response = app
             .get_user_with_mocked_stripe(
-                "sub_1Nw8xOD8t1tt0S3DtwAuOVp6",
+                MOCKED_COMPLETED_CHECKOUT_SUBSCRIPTION_ID,
                 MOCKED_ACTIVE_SUBSCRIPTION,
                 "test-user",
             )
@@ -183,23 +183,6 @@ mod needs_docker {
     }
 
     #[tokio::test]
-    async fn unsuccessful_upgrade_to_pro() {
-        let app = app().await;
-
-        // POST user first so one exists in the database.
-        let response = app.post_user("test-user", "basic").await;
-        assert_eq!(response.status(), StatusCode::OK);
-
-        // Test upgrading to pro without a checkout session object.
-        let response = app.post_subscription("test-user", "", "pro", 1).await;
-        assert_eq!(response.status(), StatusCode::OK);
-
-        // Test upgrading to pro with an incomplete checkout session object.
-        let response = app.post_subscription("test-user", "null", "pro", 1).await;
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
     async fn downgrade_in_case_subscription_due_payment() {
         let app = app().await;
 
@@ -207,7 +190,7 @@ mod needs_docker {
         let response = app.post_user("test-user", "basic").await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        // Test upgrading to pro with a checkout session that points to a due session.
+        // Test upgrading to pro with a subscription id that points to a due session.
         let response = app
             .post_subscription(
                 "test-user",
@@ -218,11 +201,11 @@ mod needs_docker {
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        // The auth service should call stripe to fetch the subscription with the sub id from the
-        // checkout session, and return a subscription that is pending payment.
+        // The auth service should call stripe to fetch the subscription with the sub id, and return a subscription
+        // that is pending payment.
         let response = app
             .get_user_with_mocked_stripe(
-                "sub_1NwObED8t1tt0S3Dq0IYOEsa",
+                MOCKED_OVERDUE_PAYMENT_CHECKOUT_SUBSCRIPTION_ID,
                 MOCKED_PAST_DUE_SUBSCRIPTION,
                 "test-user",
             )
@@ -357,7 +340,7 @@ mod needs_docker {
         // "cancel_at_period_end" end flag.
         let response = app
             .get_user_with_mocked_stripe(
-                "sub_123",
+                MOCKED_CANCELLEDPRO_CHECKOUT_SUBSCRIPTION_ID,
                 MOCKED_CANCELLEDPRO_SUBSCRIPTION_ACTIVE,
                 "test-user",
             )
@@ -373,7 +356,7 @@ mod needs_docker {
         // cancelled.
         let response = app
             .get_user_with_mocked_stripe(
-                "sub_123",
+                MOCKED_CANCELLEDPRO_CHECKOUT_SUBSCRIPTION_ID,
                 MOCKED_CANCELLEDPRO_SUBSCRIPTION_CANCELLED,
                 "test-user",
             )

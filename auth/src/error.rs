@@ -21,12 +21,8 @@ pub enum Error {
     Database(#[from] sqlx::Error),
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
-    #[error("Missing checkout session.")]
-    MissingCheckoutSession,
     #[error("Incomplete checkout session.")]
     Stripe(#[from] StripeError),
-    #[error("Missing subscription ID from the checkout session.")]
-    MissingSubscriptionId,
 }
 
 impl Serialize for Error {
@@ -48,7 +44,6 @@ impl IntoResponse for Error {
             Error::Forbidden => StatusCode::FORBIDDEN,
             Error::Unauthorized | Error::KeyMissing => StatusCode::UNAUTHORIZED,
             Error::Database(_) | Error::UserNotFound => StatusCode::NOT_FOUND,
-            Error::MissingCheckoutSession | Error::MissingSubscriptionId => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 

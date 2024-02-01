@@ -652,10 +652,6 @@ jobs:
     steps:
       - checkout
       - run:
-          name: "Install Protobuf"
-          command: |
-            choco install -y protoc
-      - run:
           name: Install Rust
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe

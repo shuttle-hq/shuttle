@@ -18,9 +18,11 @@ run_task = { name = [
 ] }
 
 [tasks.changelog]
+# Provide the version to generate for
+# Example: cargo make changelog 0.37.0
 install_crate = "git-cliff"
 command = "git-cliff"
-args = ["-o", "CHANGELOG.md", "-t", "${TAG}"]
+args = ["-o", "CHANGELOG.md", "-t", "${@}"]
 
 [tasks.fmt]
 command = "cargo"
@@ -53,4 +55,26 @@ if ! git diff --exit-code Cargo.lock; then
     echo "Please commit an up to date Cargo.lock"
     exit 1
 fi
+'''
+
+[tasks.proto]
+# To generate: cargo make proto
+# To validate: cargo make proto validate
+# Requires `protoc` to be installed
+install_crate = { crate_name = "proto-gen@0.2.0", binary = "proto-gen", test_arg = "-V" }
+script = '''
+OP="generate"
+if [ "$1" = "validate" ]; then
+    OP="validate"
+fi
+proto-gen \
+    --generate-transport --build-client --build-server --format \
+    $OP \
+    -d proto \
+    -o proto/src/generated \
+    -f proto/builder.proto \
+    -f proto/logger.proto \
+    -f proto/provisioner.proto \
+    -f proto/resource-recorder.proto \
+    -f proto/runtime.proto
 '''

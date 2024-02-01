@@ -46,19 +46,22 @@ pub fn generate_project(
     };
 
     // Prepare the template by changing its default contents.
-    set_crate_name(&path, name).context("Failed to set crate name. No Cargo.toml in template?")?;
-    edit_shuttle_toml(&path).context("Failed to edit Shuttle.toml")?;
-    create_gitignore_file(&path).context("Failed to create .gitignore file")?;
+    let crate_name_set = set_crate_name(&path, name)
+        .context("Failed to set crate name. No Cargo.toml in template?")?;
+    // if the crate name was not updated, set it in Shuttle.toml instead
+    edit_shuttle_toml(&path, (!crate_name_set).then_some(name))
+        .context("Failed to edit Shuttle.toml")?;
+    create_ignore_file(&path, if no_git { ".ignore" } else { ".gitignore" })
+        .context("Failed to create .gitignore file")?;
 
     copy_dirs(&path, &dest, GitDir::Ignore)
         .context("Failed to copy the prepared template to the destination")?;
 
     drop(temp_dir);
 
-    // Initialize a Git repository in the destination directory if there
-    // is no existing Git repository present in the surrounding folders.
-    // only if no-git argument is not passed otherwise initialize git repo
     if !no_git {
+        // Initialize a Git repository in the destination directory if there
+        // is no existing Git repository present in the surrounding folders.
         let no_git_repo = gix::discover(&dest).is_err();
         if no_git_repo {
             gix::init(&dest).context("Failed to initialize project repository")?;
@@ -181,6 +184,9 @@ fn copy_dirs(src: &Path, dest: &Path, git_policy: GitDir) -> Result<()> {
         let entry_dest = dest.join(&entry_name);
 
         if entry_type.is_dir() {
+            if entry_name == "target" {
+                continue;
+            }
             if git_policy == GitDir::Ignore && entry_name == ".git" {
                 continue;
             }
@@ -211,10 +217,16 @@ enum GitDir {
     Copy,
 }
 
-fn set_crate_name(path: &Path, name: &str) -> Result<()> {
+/// Returns whether the crate name was modified or not
+fn set_crate_name(path: &Path, name: &str) -> Result<bool> {
     let path = path.join("Cargo.toml");
     let toml_str = read_to_string(&path)?;
     let mut doc = toml_str.parse::<Document>()?;
+
+    // if the crate is a workspace, don't set the package name
+    if doc.get("workspace").is_some() {
+        return Ok(false);
+    }
 
     // change the name
     doc["package"]["name"] = value(name);
@@ -222,29 +234,37 @@ fn set_crate_name(path: &Path, name: &str) -> Result<()> {
     // write the file back out
     std::fs::write(&path, doc.to_string())?;
 
-    Ok(())
+    Ok(true)
 }
 
-fn edit_shuttle_toml(path: &Path) -> Result<()> {
+/// Remove or set the "name" field in Shuttle.toml based on what is needed.
+fn edit_shuttle_toml(path: &Path, set_name: Option<&str>) -> Result<()> {
     let path = path.join("Shuttle.toml");
-    if !path.exists() {
-        // Do nothing if template has no Shuttle.toml
+
+    if set_name.is_none() && !path.exists() {
+        // Do nothing if template has no Shuttle.toml and the name should not be set
         return Ok(());
     }
-    let toml_str = read_to_string(&path)?;
+
+    let toml_str = read_to_string(&path).unwrap_or_default();
     let mut doc = toml_str.parse::<Document>()?;
 
-    // The Shuttle.toml project name override will likely already be in use,
-    // so that field is not wanted in a newly cloned template.
+    if let Some(name) = set_name {
+        // The name was not set elsewhere, so set it here
+        doc["name"] = value(name);
+    } else {
+        // The name was set elsewhere, so remove it from here.
+        // The name in the template will likely already be in use,
+        // so that field is not wanted in a newly cloned template.
 
-    // remove the name
-    doc.remove("name");
+        doc.remove("name");
 
-    if doc.len() == 0 {
-        // if "name" was the only property in the doc, delete the file
-        let _ = std::fs::remove_file(&path);
+        if doc.len() == 0 {
+            // if "name" was the only property in the doc, delete the file
+            let _ = std::fs::remove_file(&path);
 
-        return Ok(());
+            return Ok(());
+        }
     }
 
     // write the file back out
@@ -253,9 +273,9 @@ fn edit_shuttle_toml(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Adds any missing recommended gitignore rules
-fn create_gitignore_file(path: &Path) -> Result<()> {
-    let path = path.join(".gitignore");
+/// Adds any missing recommended ignore rules to .gitignore or .ignore depending on if git is used.
+fn create_ignore_file(path: &Path, name: &str) -> Result<()> {
+    let path = path.join(name);
     let mut contents = std::fs::read_to_string(&path).unwrap_or_default();
 
     for rule in ["/target", ".shuttle-storage", "Secrets*.toml"] {

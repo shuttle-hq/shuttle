@@ -1,6 +1,6 @@
 # 1. cargo install cargo-make
 # 2. cargo make <task_name>
-# docs: https://github.com/sagiegurari/cargo-make#readme
+# docs: https://sagiegurari.github.io/cargo-make/
 
 [config]
 default_to_workspace = false
@@ -16,13 +16,6 @@ run_task = { name = [
     "clippy",
     "check-lockfile",
 ] }
-
-[tasks.changelog]
-# Provide the version to generate for
-# Example: cargo make changelog 0.37.0
-install_crate = { crate_name = "git-cliff", binary = "git-cliff", test_arg = ["-V"], min_version = "1.4.0" }
-command = "git-cliff"
-args = ["-o", "CHANGELOG.md", "-t", "${@}"]
 
 [tasks.fmt]
 command = "cargo"
@@ -83,3 +76,10 @@ proto-gen \
     -f proto/resource-recorder.proto \
     -f proto/runtime.proto
 '''
+
+[tasks.changelog]
+# Provide the version to generate for
+# Example: cargo make changelog 0.37.0
+install_crate = { crate_name = "git-cliff", binary = "git-cliff", test_arg = ["-V"], min_version = "1.4.0" }
+command = "git-cliff"
+args = ["-o", "CHANGELOG.md", "-t", "${@}"]

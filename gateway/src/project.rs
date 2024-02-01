@@ -1505,8 +1505,6 @@ impl Service {
         jwt: String,
         admin_secret: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        trace!(jwt, "getting last deploy");
-
         let running_id = self.get_running_deploy(&jwt, &admin_secret).await?;
 
         trace!(?running_id, "starting deploy");
@@ -1549,15 +1547,17 @@ impl Service {
 
         let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await??;
 
-        let body = hyper::body::to_bytes(resp.into_body()).await?;
+        if resp.status() == 200 {
+            let body = hyper::body::to_bytes(resp.into_body()).await?;
 
-        let service: service::Summary = serde_json::from_slice(&body)?;
+            let service: service::Summary = serde_json::from_slice(&body)?;
 
-        if let Some(deployment) = service.deployment {
-            Ok(Some(deployment.id))
-        } else {
-            Ok(None)
+            if let Some(deployment) = service.deployment {
+                return Ok(Some(deployment.id));
+            }
         }
+
+        Ok(None)
     }
 }
 

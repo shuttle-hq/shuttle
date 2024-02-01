@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-qdrant"
-version = "0.37.1"
+version = "0.38.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Shuttle plugin for connecting to a Qdrant database"

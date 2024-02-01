@@ -20,7 +20,7 @@ run_task = { name = [
 [tasks.changelog]
 # Provide the version to generate for
 # Example: cargo make changelog 0.37.0
-install_crate = "git-cliff"
+install_crate = { crate_name = "git-cliff", binary = "git-cliff", test_arg = ["-V"], min_version = "1.4.0" }
 command = "git-cliff"
 args = ["-o", "CHANGELOG.md", "-t", "${@}"]
 

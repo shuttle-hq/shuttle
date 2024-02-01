@@ -3,7 +3,7 @@ use std::{net::SocketAddr, sync::Arc};
 use axum::{
     extract::FromRef,
     middleware::from_extractor,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Router, Server,
 };
 use shuttle_common::{
@@ -19,8 +19,8 @@ use crate::{
 };
 
 use super::handlers::{
-    convert_key, get_public_key, get_user, health_check, post_user, put_user_reset_key,
-    refresh_token, update_user_tier,
+    convert_key, delete_subscription, get_public_key, get_user, health_check, post_subscription,
+    post_user, put_user_reset_key, refresh_token,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -67,11 +67,13 @@ impl ApiBuilder {
             .route("/auth/refresh", post(refresh_token))
             .route("/public-key", get(get_public_key))
             .route("/users/:account_name", get(get_user))
-            .route(
-                "/users/:account_name/:account_tier",
-                post(post_user).put(update_user_tier),
-            )
+            .route("/users/:account_name/:account_tier", post(post_user))
             .route("/users/reset-api-key", put(put_user_reset_key))
+            .route("/users/:account_name/subscribe", post(post_subscription))
+            .route(
+                "/users/:account_name/subscribe/:subscription_id",
+                delete(delete_subscription),
+            )
             .route_layer(from_extractor::<Metrics>())
             .layer(
                 TraceLayer::new(|request| {

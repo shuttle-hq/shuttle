@@ -26,7 +26,6 @@ pem = "2"
 ring = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sqlx = { workspace = true, features = ["postgres", "json", "migrate", "chrono"] }
-strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }

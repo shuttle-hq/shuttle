@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    user::{AccountName, Admin, Key, User},
+    user::{AccountName, Admin, Key},
 };
 use axum::{
     extract::{Path, State},
@@ -9,9 +9,8 @@ use axum::{
 use http::StatusCode;
 use shuttle_common::{
     claims::{AccountTier, Claim},
-    models::user,
+    models::user::{self, SubscriptionRequest},
 };
-use stripe::CheckoutSession;
 use tracing::instrument;
 
 use super::{
@@ -41,31 +40,6 @@ pub(crate) async fn post_user(
     Ok(Json(user.into()))
 }
 
-#[instrument(skip(user_manager, account_name, account_tier), fields(account.name = %account_name, account.tier = %account_tier))]
-pub(crate) async fn update_user_tier(
-    _: Admin,
-    State(user_manager): State<UserManagerState>,
-    Path((account_name, account_tier)): Path<(AccountName, AccountTier)>,
-    payload: Option<Json<CheckoutSession>>,
-) -> Result<(), Error> {
-    if account_tier == AccountTier::Pro {
-        match payload {
-            Some(Json(checkout_session)) => {
-                user_manager
-                    .upgrade_to_pro(&account_name, checkout_session)
-                    .await?;
-            }
-            None => return Err(Error::MissingCheckoutSession),
-        }
-    } else {
-        user_manager
-            .update_tier(&account_name, account_tier)
-            .await?;
-    };
-
-    Ok(())
-}
-
 pub(crate) async fn put_user_reset_key(
     State(user_manager): State<UserManagerState>,
     key: Key,
@@ -73,6 +47,36 @@ pub(crate) async fn put_user_reset_key(
     let account_name = user_manager.get_user_by_key(key.into()).await?.name;
 
     user_manager.reset_key(account_name).await
+}
+
+pub(crate) async fn post_subscription(
+    _: Admin,
+    State(user_manager): State<UserManagerState>,
+    Path(account_name): Path<AccountName>,
+    payload: Json<SubscriptionRequest>,
+) -> Result<(), Error> {
+    user_manager
+        .insert_subscription(
+            &account_name,
+            &payload.id,
+            &payload.r#type,
+            payload.quantity,
+        )
+        .await?;
+
+    Ok(())
+}
+
+pub(crate) async fn delete_subscription(
+    _: Admin,
+    State(user_manager): State<UserManagerState>,
+    Path((account_name, subscription_id)): Path<(AccountName, String)>,
+) -> Result<(), Error> {
+    user_manager
+        .delete_subscription(&account_name, &subscription_id)
+        .await?;
+
+    Ok(())
 }
 
 // Dummy health-check returning 200 if the auth server is up.
@@ -89,18 +93,16 @@ pub(crate) async fn convert_key(
     }): State<RouterState>,
     key: Key,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
-    let User {
-        name, account_tier, ..
-    } = user_manager
+    let user = user_manager
         .get_user_by_key(key.into())
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     let claim = Claim::new(
-        name.to_string(),
-        account_tier.into(),
-        account_tier,
-        account_tier,
+        user.name.to_string(),
+        user.account_tier.into(),
+        user.account_tier,
+        user,
     );
 
     let token = claim.into_token(key_manager.private_key())?;

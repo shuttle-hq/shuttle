@@ -2,11 +2,12 @@ use axum::{body::Body, response::Response, Router};
 use http::{header::CONTENT_TYPE, StatusCode};
 use hyper::http::{header::AUTHORIZATION, Request};
 use once_cell::sync::Lazy;
-use serde_json::Value;
+use serde_json::{json, Value};
 use shuttle_auth::{pgpool_init, ApiBuilder};
 use shuttle_common::{
     backends::headers::X_SHUTTLE_ADMIN_SECRET,
     claims::{AccountTier, Claim},
+    models::user,
 };
 use shuttle_common_tests::postgres::DockerInstance;
 use sqlx::query;
@@ -82,23 +83,6 @@ impl TestApp {
         self.send_request(request).await
     }
 
-    pub async fn put_user(
-        &self,
-        name: &str,
-        tier: &str,
-        checkout_session: &'static str,
-    ) -> Response {
-        let request = Request::builder()
-            .uri(format!("/users/{name}/{tier}"))
-            .method("PUT")
-            .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
-            .header(CONTENT_TYPE, "application/json")
-            .body(Body::from(checkout_session))
-            .unwrap();
-
-        self.send_request(request).await
-    }
-
     pub async fn get_user(&self, name: &str) -> Response {
         let request = Request::builder()
             .uri(format!("/users/{name}"))
@@ -107,6 +91,13 @@ impl TestApp {
             .unwrap();
 
         self.send_request(request).await
+    }
+
+    pub async fn get_user_typed(&self, name: &str) -> user::Response {
+        let response = self.get_user(name).await;
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+
+        serde_json::from_slice(&body).unwrap()
     }
 
     /// If we don't provide a valid admin key, then the`user_api_key` parameter
@@ -125,6 +116,52 @@ impl TestApp {
         }
 
         let request = request_builder.body(Body::empty()).unwrap();
+        self.send_request(request).await
+    }
+
+    /// Get the claim of the user
+    pub async fn get_claim(&self, user_api_key: &str) -> Claim {
+        let response = self
+            .get_jwt_from_api_key(user_api_key, Some(ADMIN_KEY))
+            .await;
+
+        // Decode the JWT into a Claim.
+        self.claim_from_response(response).await
+    }
+
+    pub async fn post_subscription(
+        &self,
+        name: &str,
+        subscription_id: &str,
+        subscription_type: &str,
+        quantity: u32,
+    ) -> Response {
+        let request = Request::builder()
+            .uri(format!("/users/{name}/subscribe"))
+            .method("POST")
+            .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&json!({
+                    "id": subscription_id,
+                    "type": subscription_type,
+                    "quantity": quantity
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+
+        self.send_request(request).await
+    }
+
+    pub async fn delete_subscription(&self, name: &str, subscription_id: &str) -> Response {
+        let request = Request::builder()
+            .uri(format!("/users/{name}/subscribe/{subscription_id}"))
+            .method("DELETE")
+            .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
+            .body(Body::empty())
+            .unwrap();
+
         self.send_request(request).await
     }
 

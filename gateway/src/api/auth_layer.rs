@@ -15,8 +15,9 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use shuttle_common::backends::{
-    auth::ConvertResponse, cache::CacheManagement, headers::XShuttleAdminSecret,
+use shuttle_common::{
+    backends::{auth::ConvertResponse, cache::CacheManagement, headers::XShuttleAdminSecret},
+    ApiKey,
 };
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
@@ -97,8 +98,10 @@ where
     }
 
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+        let req_path = req.uri().path();
+
         // Pass through status page
-        if req.uri().path() == "/" {
+        if req_path == "/" {
             let future = self.inner.call(req);
 
             return Box::pin(async move {
@@ -117,15 +120,16 @@ where
         }
 
         // If /users/reset-api-key is called, invalidate the cached JWT.
-        if req.uri().path() == "/users/reset-api-key" {
-            if let Some((cache_key, _)) =
-                cache_key_and_token_req(&req, self.gateway_admin_key.as_str())
-            {
+        if req_path == "/users/reset-api-key" {
+            if let Some((cache_key, _)) = cache_key_and_token_req(
+                req.headers().typed_get::<Authorization<Bearer>>(),
+                self.gateway_admin_key.as_str(),
+            ) {
                 self.cache_manager.invalidate(&cache_key);
             };
         }
 
-        if req.uri().path().starts_with("/users") {
+        if req_path.starts_with("/users") {
             let target_url = self.auth_uri.to_string();
 
             let cx = Span::current().context();
@@ -164,10 +168,33 @@ where
             // https://github.com/tower-rs/tower/blob/master/guides/building-a-middleware-from-scratch.md
             let mut this = self.clone();
 
+            let bearer = req.headers().typed_get::<Authorization<Bearer>>();
+
+            // If this is not a valid api key, then assume it must be a JWT token key. Therefore use it as is
+            if !bearer
+                .clone()
+                .map(|key| ApiKey::parse(key.token()).is_ok())
+                .unwrap_or_default()
+            {
+                return Box::pin(async move {
+                    match this.inner.call(req).await {
+                        Ok(response) => Ok(response),
+                        Err(error) => {
+                            error!(?error, "unexpected internal error from gateway");
+
+                            Ok(Response::builder()
+                                .status(StatusCode::SERVICE_UNAVAILABLE)
+                                .body(boxed(Body::empty()))
+                                .unwrap())
+                        }
+                    }
+                });
+            }
+
             Box::pin(async move {
                 // Only if there is something to upgrade
                 if let Some((cache_key, token_request)) =
-                    cache_key_and_token_req(&req, this.gateway_admin_key.as_str())
+                    cache_key_and_token_req(bearer, this.gateway_admin_key.as_str())
                 {
                     let target_url = this.auth_uri.to_string();
 
@@ -265,16 +292,14 @@ where
 }
 
 fn cache_key_and_token_req(
-    req: &Request<Body>,
+    bearer: Option<Authorization<Bearer>>,
     gateway_admin_key: &str,
 ) -> Option<(String, Request<Body>)> {
-    req.headers()
-        .typed_get::<Authorization<Bearer>>()
-        .map(|bearer| {
-            let cache_key = bearer.token().trim().to_string();
-            let token_request = make_token_request("/auth/key", bearer, Some(gateway_admin_key));
-            (cache_key, token_request)
-        })
+    bearer.map(|bearer| {
+        let cache_key = bearer.token().trim().to_string();
+        let token_request = make_token_request("/auth/key", bearer, Some(gateway_admin_key));
+        (cache_key, token_request)
+    })
 }
 
 fn make_token_request(

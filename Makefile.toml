@@ -1,0 +1,85 @@
+# 1. cargo install cargo-make
+# 2. cargo make <task_name>
+# docs: https://sagiegurari.github.io/cargo-make/
+
+[config]
+default_to_workspace = false
+
+[env]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+# TAG = { script = ["git describe --tags --abbrev=0"] }
+
+[tasks.ci-workspace]
+run_task = { name = [
+    "check-lockfile-patches",
+    "fmt",
+    "clippy",
+    "check-lockfile",
+] }
+
+[tasks.fmt]
+command = "cargo"
+args = ["fmt", "--all", "--check"]
+
+[tasks.clippy]
+command = "cargo"
+args = [
+    "clippy",
+    "--tests",
+    "--all-targets",
+    "--all-features",
+    "--no-deps",
+    "--",
+    "--D",
+    "warnings",
+]
+
+[tasks.audit]
+install_crate = { crate_name = "cargo-audit", binary = "cargo", test_arg = ["audit", "-V"], min_version = "0.18.3" }
+command = "cargo"
+args = ["audit", "-D", "warnings"]
+
+[tasks.check-lockfile-patches]
+script = '''
+if [ -n "$(grep "\[\[patch.unused\]\]" Cargo.lock)" ]; then
+    echo "Please remove unused patches from Cargo.lock"
+    exit 1
+fi
+'''
+
+[tasks.check-lockfile]
+script = '''
+if ! git diff --exit-code Cargo.lock; then
+    echo "Please commit an up to date Cargo.lock"
+    exit 1
+fi
+'''
+
+[tasks.proto]
+# To generate: cargo make proto
+# To validate: cargo make proto validate
+# Requires `protoc` to be installed
+install_crate = { crate_name = "proto-gen", binary = "proto-gen", test_arg = "-V", version = "0.2.0" }
+script = '''
+OP="generate"
+if [ "$1" = "validate" ]; then
+    OP="validate"
+fi
+proto-gen \
+    --generate-transport --build-client --build-server --format \
+    $OP \
+    -d proto \
+    -o proto/src/generated \
+    -f proto/builder.proto \
+    -f proto/logger.proto \
+    -f proto/provisioner.proto \
+    -f proto/resource-recorder.proto \
+    -f proto/runtime.proto
+'''
+
+[tasks.changelog]
+# Provide the version to generate for
+# Example: cargo make changelog 0.37.0
+install_crate = { crate_name = "git-cliff", binary = "git-cliff", test_arg = ["-V"], min_version = "1.4.0" }
+command = "git-cliff"
+args = ["-o", "CHANGELOG.md", "-t", "${@}"]

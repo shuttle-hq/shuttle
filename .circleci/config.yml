@@ -108,7 +108,7 @@ commands:
   apply-patches:
     steps:
       - run:
-          name: Patch crates
+          name: Patch local crates
           command: ./scripts/apply-patches.sh
   install-rust:
     steps:
@@ -123,15 +123,38 @@ commands:
           name: Install protoc and proto-gen
           environment:
             ARCH: "linux-x86_64"
-            VERSION: "22.2"
+            PROTOC_VERSION: "22.2"
+            PROTOGEN_VERSION: "v0.2.0"
           command: |
-            curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v$VERSION/protoc-$VERSION-$ARCH.zip" && \
-                sudo unzip -o "protoc-$VERSION-$ARCH.zip" bin/protoc "include/*" -d /usr/local && \
-                rm -f "protoc-$VERSION-$ARCH.zip"
-            curl -L https://github.com/EmbarkStudios/proto-gen/releases/download/v0.2.0/proto-gen-v0.2.0-x86_64-unknown-linux-musl.tar.gz \
-              | tar -xOz proto-gen-v0.2.0-x86_64-unknown-linux-musl/proto-gen \
+            curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOC_VERSION/protoc-$PROTOC_VERSION-$ARCH.zip && \
+              sudo unzip -o protoc-$PROTOC_VERSION-$ARCH.zip bin/protoc "include/*" -d /usr/local && \
+              rm -f protoc-$PROTOC_VERSION-$ARCH.zip
+            curl -L https://github.com/EmbarkStudios/proto-gen/releases/download/$PROTOGEN_VERSION/proto-gen-$PROTOGEN_VERSION-x86_64-unknown-linux-musl.tar.gz \
+              | tar -xOz proto-gen-$PROTOGEN_VERSION-x86_64-unknown-linux-musl/proto-gen \
               > ~/.cargo/bin/proto-gen
             chmod +x ~/.cargo/bin/proto-gen
+  install-cargo-make:
+    steps:
+      - run:
+          name: Install cargo-make
+          environment:
+            VERSION: "0.37.8"
+          command: |
+            curl -OL https://github.com/sagiegurari/cargo-make/releases/download/$VERSION/cargo-make-v$VERSION-x86_64-unknown-linux-musl.zip && \
+              unzip cargo-make-v$VERSION-x86_64-unknown-linux-musl.zip && \
+              mv cargo-make-v0.37.8-x86_64-unknown-linux-musl/cargo-make ~/.cargo/bin && \
+              rm -rf cargo-make-v$VERSION-x86_64-unknown-linux-musl*
+  install-cargo-audit:
+    steps:
+      - run:
+          name: Install cargo-audit
+          environment:
+            VERSION: "v0.18.3"
+          command: |
+            curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$VERSION/cargo-audit-x86_64-unknown-linux-musl-$VERSION.tgz \
+              | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$VERSION/cargo-audit \
+              > ~/.cargo/bin/cargo-audit \
+              && chmod +x ~/.cargo/bin/cargo-audit
   make-artifact:
     parameters:
       target:
@@ -176,38 +199,17 @@ jobs:
     steps:
       - checkout
       - restore-cargo-and-sccache
-      # Check this to make sure we do not include patched dependencies in the Cargo.lock
-      - run: |
-          [ -z "$(grep "\[\[patch.unused\]\]" Cargo.lock)" ] || \
-            ( echo "Please remove unused patches from Cargo.lock"; exit 1 )
-      - run: cargo fmt --all --check
-      - run: |
-          cargo clippy --tests \
-                       --all-targets \
-                       --all-features \
-                       --no-deps -- \
-                       --D warnings
-      # An out of date lockfile will be modified after the clippy command has run
-      - run: |
-          git diff --exit-code Cargo.lock || \
-            ( echo "Please commit an up to date Cargo.lock"; exit 1 )
+      - install-cargo-make
+      - run: cargo make ci-workspace
       - save-sccache
       - save-cargo-cache
   cargo-audit:
     executor: docker-rust
     steps:
       - checkout
-      - run:
-          name: Install cargo-audit
-          command: |
-            CARGO_AUDIT_VERSION='v0.18.3'
-            ls ~/.cargo/bin/cargo-audit \
-              || curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$CARGO_AUDIT_VERSION/cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION.tgz \
-              | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$CARGO_AUDIT_VERSION/cargo-audit \
-              > ~/.cargo/bin/cargo-audit \
-              && chmod +x ~/.cargo/bin/cargo-audit
-      - run: |
-          cargo audit -D warnings
+      - install-cargo-make
+      - install-cargo-audit
+      - run: cargo make audit
   test-standalone:
     parameters:
       path:
@@ -264,6 +266,7 @@ jobs:
     steps:
       - install-rust
       - install-protoc
+      - install-cargo-make
       - checkout
       - run: git submodule update --init
       - restore-cargo-and-sccache:
@@ -652,10 +655,6 @@ jobs:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - checkout
-      - run:
-          name: "Install Protobuf"
-          command: |
-            choco install -y protoc
       - run:
           name: Install Rust
           command: |

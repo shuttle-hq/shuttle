@@ -42,11 +42,17 @@ impl Serialize for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        error!(error = &self as &dyn std::error::Error, "request error");
-
         let code = match self {
             Error::NotFound(_) => StatusCode::NOT_FOUND,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
+            _ => {
+                // We only want to emit error events for internal errors, not e.g. 404s.
+                error!(
+                    error = &self as &dyn std::error::Error,
+                    "control plane request error"
+                );
+
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
         };
 
         ApiError {

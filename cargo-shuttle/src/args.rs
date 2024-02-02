@@ -280,6 +280,9 @@ pub struct RunArgs {
     /// Use release mode for building the project
     #[arg(long, short = 'r')]
     pub release: bool,
+    /// Use quite mode for running the project
+    #[arg(long, short = 'q')]
+    pub quite: bool,
 }
 
 #[derive(Parser, Clone, Debug, Default)]

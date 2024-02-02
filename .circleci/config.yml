@@ -266,6 +266,7 @@ jobs:
     steps:
       - install-rust
       - install-protoc
+      - install-cargo-make
       - checkout
       - run: git submodule update --init
       - restore-cargo-and-sccache:

@@ -30,6 +30,7 @@ pub fn get_resource_tables(
             let title = match x.r#type {
                 Type::Database(_) => "Databases",
                 Type::Secrets => "Secrets",
+                Type::Persist => "Persist",
                 Type::Custom => "Custom",
             };
 
@@ -52,6 +53,10 @@ pub fn get_resource_tables(
 
         if let Some(secrets) = resource_groups.get("Secrets") {
             output.push(get_secrets_table(secrets, service_name, raw));
+        };
+
+        if let Some(persist) = resource_groups.get("Persist") {
+            output.push(format!("This persist instance is linked to {service_name}\nShuttle Persist: {service_name}\n"));
         };
 
         output.join("\n")

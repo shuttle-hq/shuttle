@@ -37,6 +37,7 @@ impl Response {
 pub enum Type {
     Database(database::Type),
     Secrets,
+    Persist,
     Custom,
 }
 
@@ -52,6 +53,7 @@ impl FromStr for Type {
         } else {
             match s {
                 "secrets" => Ok(Self::Secrets),
+                "persist" => Ok(Self::Persist),
                 "custom" => Ok(Self::Custom),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
@@ -64,6 +66,7 @@ impl Display for Type {
         match self {
             Type::Database(db_type) => write!(f, "database::{db_type}"),
             Type::Secrets => write!(f, "secrets"),
+            Type::Persist => write!(f, "persist"),
             Type::Custom => write!(f, "custom"),
         }
     }

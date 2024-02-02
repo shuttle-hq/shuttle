@@ -2,6 +2,7 @@ use async_posthog::ClientOptions;
 use clap::Parser;
 use futures::prelude::*;
 
+use opentelemetry::trace::Status;
 use shuttle_common::backends::trace::setup_tracing;
 use shuttle_common::log::Backend;
 use shuttle_gateway::acme::{AcmeClient, CustomDomain};
@@ -54,7 +55,13 @@ async fn main() -> io::Result<()> {
     }
 
     {
-        error_span!("oops", error.message = "Oops", error.stack = "", error.kind = "FakeError");
+        error_span!(
+            "oops",
+            error.message = "Oops",
+            error.stack = "",
+            error.kind = "FakeError",
+            // otel.status = Status::error("")
+        );
     }
 
     let db_path = args.state.join("gateway.sqlite");

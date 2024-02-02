@@ -37,20 +37,17 @@ struct VisitErrorRepr<'a> {
 
 impl<'a> valuable::Visit for VisitErrorRepr<'a> {
     fn visit_value(&mut self, value: Value<'_>) {
-        match value {
-            valuable::Value::String(s) => self
-                .errors
-                .push((self.field.to_string().into(), s.to_string().into())),
-            _ => {}
+        if let valuable::Value::String(s) = value {
+            self.errors
+                .push((self.field.to_string().into(), s.to_string().into()))
         }
     }
 }
 
 impl valuable::Visit for VisitError {
     fn visit_value(&mut self, value: valuable::Value<'_>) {
-        match value {
-            valuable::Value::Structable(v) => v.visit(self),
-            _ => {}
+        if let valuable::Value::Structable(v) = value {
+            v.visit(self)
         }
     }
 
@@ -60,11 +57,10 @@ impl valuable::Visit for VisitError {
                 field: format!("{}.{}", self.field, field.name()),
                 errors: &mut self.errors,
             };
-            match named_values.get_by_name(field.name()) {
-                Some(Value::String(s)) => {
-                    s.visit(&mut visit);
-                }
-                _ => {}
+            if let Some(Value::String(s)) = named_values.get_by_name(field.name()) {
+                println!("Visiting {s}");
+                s.visit(&mut visit);
+                println!("Errors are now {:?}", self.errors);
             }
         }
     }
@@ -258,29 +254,243 @@ const fn severity_of_level(level: &Level) -> Severity {
     }
 }
 
+// struct ErrorSpanRecord<'a> {
+//     field: String,
+//     builder: &'a mut SpanBuilder,
+// }
+//
+// fn record(builder: &mut SpanBuilder, attribute: KeyValue) {
+//     debug_assert!(builder.attributes.is_some());
+//     if let Some(v) = builder.attributes.as_mut() {
+//         v.push(KeyValue::new(attribute.key, attribute.value));
+//     }
+// }
+//
+// struct ErrorSpanAttributeVisitor<'a> {
+//     field: String,
+//     builder: &'a mut SpanBuilder,
+// }
+// impl<'a> valuable::Visit for ErrorSpanAttributeVisitor<'a> {
+//     fn visit_value(&mut self, value: Value<'_>) {
+//         if let valuable::Value::String(s) = value {
+//             record(
+//                 self.builder,
+//                 KeyValue::new(self.field.to_string(), s.to_string()),
+//             )
+//         }
+//     }
+// }
+//
+// impl<'a> valuable::Visit for ErrorSpanRecord<'a> {
+//     fn visit_value(&mut self, value: valuable::Value<'_>) {
+//         if let valuable::Value::Structable(v) = value {
+//             v.visit(self)
+//         }
+//     }
+//
+//     fn visit_named_fields(&mut self, named_values: &valuable::NamedValues<'_>) {
+//         for field in ERROR_FIELDS {
+//             let mut visit = ErrorSpanAttributeVisitor {
+//                 field: format!("{}.{}", self.field, field.name()),
+//                 builder: self.builder,
+//             };
+//             if let Some(Value::String(s)) = named_values.get_by_name(field.name()) {
+//                 s.visit(&mut visit);
+//             }
+//         }
+//     }
+// }
+//
+// /// Visitor to record the fields from the event record.
+// struct ErrorEventVisitor<'a> {
+//     builder: &'a mut SpanBuilder,
+// }
+//
+// pub fn build_source_chain(error: &(dyn std::error::Error + 'static)) -> String {
+//     let chain = {
+//         let mut chain: Vec<StringValue> = Vec::new();
+//         let mut next_err = error.source();
+//
+//         while let Some(err) = next_err {
+//             chain.push(err.to_string().into());
+//             next_err = err.source();
+//         }
+//         opentelemetry::Value::Array(chain.into())
+//     };
+//
+//     chain.to_string()
+// }
+//
+// impl<'a> tracing::field::Visit for ErrorEventVisitor<'a> {
+//     fn record_error(
+//         &mut self,
+//         _field: &tracing_core::Field,
+//         value: &(dyn std::error::Error + 'static),
+//     ) {
+//         // TODO: do we want to do something with the field's name ?
+//         let error_msg = value.to_string();
+//
+//         record(self.builder, KeyValue::new("error.message", error_msg));
+//         record(
+//             self.builder,
+//             KeyValue::new("error.stack", build_source_chain(value)),
+//         );
+//         record(
+//             self.builder,
+//             KeyValue::new("error.type", "Error".to_string()),
+//         );
+//     }
+//
+//     fn record_value(&mut self, field: &tracing_core::Field, value: valuable::Value<'_>) {
+//         // Should we try to "duck-type" every kind of error ? Probably not since we want a single
+//         // error field, I think this is fine as a convention.
+//         if field.name() == "error" {
+//             self.builder.status = Status::error("");
+//             // if let Some(attr) = self.builder.attributes.as_mut() {
+//             //     if let Some(key_val) = attr.last() {
+//             //         if key_val.key.as_str() == "error" {
+//             //             attr.pop();
+//             //         }
+//             //     }
+//             // }
+//             let mut visit = ErrorSpanRecord {
+//                 field: field.name().to_string(),
+//                 builder: self.builder,
+//             };
+//             valuable::visit(&value, &mut visit);
+//             println!("Builder is now {:?}", self.builder);
+//         }
+//     }
+//
+//     fn record_debug(&mut self, _field: &tracing_core::Field, _value: &dyn std::fmt::Debug) {
+//         // Don't do anything when recording a debug field. This is taken care of by other layers.
+//     }
+// }
+//
+// pub struct ErrorTracingLayer<S> {
+//     _registry: marker::PhantomData<S>,
+// }
+//
+// impl<S> ErrorTracingLayer<S>
+// where
+//     S: Subscriber + for<'span> LookupSpan<'span>,
+// {
+//     pub fn new() -> Self {
+//         ErrorTracingLayer {
+//             _registry: marker::PhantomData,
+//         }
+//     }
+// }
+//
+// impl<S> Layer<S> for ErrorTracingLayer<S>
+// where
+//     S: Subscriber + for<'span> LookupSpan<'span>,
+// {
+//     fn on_new_span(
+//         &self,
+//         attrs: &tracing_core::span::Attributes<'_>,
+//         id: &tracing_core::span::Id,
+//         ctx: tracing_subscriber::layer::Context<'_, S>,
+//     ) {
+//         let span = ctx.span(id).expect("Span not found, this is a bug");
+//         let mut extensions = span.extensions_mut();
+//
+//         extensions.insert(ErrorData { had_error: false });
+//
+//         if let Some(otel_data) = extensions.get_mut::<OtelData>() {
+//             let prev_length = otel_data
+//                 .builder
+//                 .attributes
+//                 .as_ref()
+//                 .map(|v| v.len())
+//                 .unwrap_or(0);
+//             let mut visitor = ErrorEventVisitor {
+//                 builder: &mut otel_data.builder,
+//             };
+//             attrs.record(&mut visitor);
+//             // if otel_data
+//             //     .builder
+//             //     .attributes
+//             //     .as_ref()
+//             //     .map(|v| v.len())
+//             //     .unwrap_or(0)
+//             //     != prev_length
+//             // {
+//             //     let ext = extensions
+//             //         .get_mut::<ErrorData>()
+//             //         .expect("We've just inserted it");
+//             //     ext.had_error = true;
+//             //     println!("{:?}", ext);
+//             // }
+//         }
+//     }
+//
+//     fn on_record(
+//         &self,
+//         id: &tracing_core::span::Id,
+//         values: &tracing_core::span::Record<'_>,
+//         ctx: tracing_subscriber::layer::Context<'_, S>,
+//     ) {
+//         let span = ctx.span(id).expect("Span not found, this is a bug");
+//         let mut extensions = span.extensions_mut();
+//         if let Some(ErrorData { had_error: true }) = extensions.get_mut::<ErrorData>() {
+//             println!("already recorded an error, aborting");
+//             return;
+//         }
+//         if let Some(otel_data) = extensions.get_mut::<OtelData>() {
+//             let prev_length = otel_data
+//                 .builder
+//                 .attributes
+//                 .as_ref()
+//                 .map(|v| v.len())
+//                 .unwrap_or(0);
+//             let mut visitor = ErrorEventVisitor {
+//                 builder: &mut otel_data.builder,
+//             };
+//             values.record(&mut visitor);
+//             if otel_data
+//                 .builder
+//                 .attributes
+//                 .as_ref()
+//                 .map(|v| v.len())
+//                 .unwrap_or(0)
+//                 != prev_length
+//             {
+//                 let ext = extensions
+//                     .get_mut::<ErrorData>()
+//                     .expect("We've just inserted it");
+//                 ext.had_error = true;
+//                 println!("{:?}", ext);
+//             }
+//         }
+//     }
+// }
+//
+// #[derive(Debug)]
+// struct ErrorData {
+//     had_error: bool,
+// }
+
+/// OLD WAY
+type ErrorRepr = Vec<(String, String)>;
+
 struct ErrorSpanRecord<'a> {
     field: String,
-    builder: &'a mut SpanBuilder,
+    error: &'a mut ErrorRepr,
 }
 
-fn record(builder: &mut SpanBuilder, attribute: KeyValue) {
-    debug_assert!(builder.attributes.is_some());
-    if let Some(v) = builder.attributes.as_mut() {
-        v.push(KeyValue::new(attribute.key, attribute.value));
-    }
-}
-
-struct ErrorSpanAttributeVisitor<'a> {
+struct ErorrSpanAttributeVisitor<'a> {
     field: String,
-    builder: &'a mut SpanBuilder,
+    error: &'a mut ErrorRepr,
 }
-impl<'a> valuable::Visit for ErrorSpanAttributeVisitor<'a> {
+
+impl<'a> valuable::Visit for ErorrSpanAttributeVisitor<'a> {
     fn visit_value(&mut self, value: Value<'_>) {
         if let valuable::Value::String(s) = value {
-            record(
-                self.builder,
-                KeyValue::new(self.field.to_string(), s.to_string()),
-            )
+            self.error.push((self.field.to_string(), s.to_string()));
+            if self.field == "error.type" {
+                self.error.push(("error.kind".into(), s.to_string()));
+            }
         }
     }
 }
@@ -294,9 +504,9 @@ impl<'a> valuable::Visit for ErrorSpanRecord<'a> {
 
     fn visit_named_fields(&mut self, named_values: &valuable::NamedValues<'_>) {
         for field in ERROR_FIELDS {
-            let mut visit = ErrorSpanAttributeVisitor {
+            let mut visit = ErorrSpanAttributeVisitor {
                 field: format!("{}.{}", self.field, field.name()),
-                builder: self.builder,
+                error: self.error,
             };
             if let Some(Value::String(s)) = named_values.get_by_name(field.name()) {
                 s.visit(&mut visit);
@@ -306,68 +516,51 @@ impl<'a> valuable::Visit for ErrorSpanRecord<'a> {
 }
 
 /// Visitor to record the fields from the event record.
-struct ErrorEventVisitor<'a> {
-    builder: &'a mut SpanBuilder,
+struct ErrorEventVisitor {
+    error: ErrorRepr,
 }
 
-pub fn build_source_chain(error: &(dyn std::error::Error + 'static)) -> String {
-    let chain = {
-        let mut chain: Vec<StringValue> = Vec::new();
-        let mut next_err = error.source();
-
-        while let Some(err) = next_err {
-            chain.push(err.to_string().into());
-            next_err = err.source();
-        }
-        opentelemetry::Value::Array(chain.into())
-    };
-
-    chain.to_string()
-}
-
-impl<'a> tracing::field::Visit for ErrorEventVisitor<'a> {
+impl tracing::field::Visit for ErrorEventVisitor {
     fn record_error(
         &mut self,
-        _field: &tracing_core::Field,
+        field: &tracing_core::Field,
         value: &(dyn std::error::Error + 'static),
     ) {
-        // TODO: do we want to do something with the field's name ?
+        println!("called for {field}");
+        let chain = {
+            let mut chain: Vec<StringValue> = Vec::new();
+            let mut next_err = value.source();
+
+            while let Some(err) = next_err {
+                chain.push(err.to_string().into());
+                next_err = err.source();
+            }
+            opentelemetry::Value::Array(chain.into())
+        };
+
         let error_msg = value.to_string();
 
-        record(self.builder, KeyValue::new("error.message", error_msg));
-        record(
-            self.builder,
-            KeyValue::new("error.stack", build_source_chain(value)),
-        );
-        record(
-            self.builder,
-            KeyValue::new("error.type", "Error".to_string()),
-        );
+        self.error.push(("error.message".to_string(), error_msg));
+        self.error
+            .push(("error.stack".to_string(), chain.to_string()));
+        self.error
+            .push(("error.type".to_string(), "error".to_string()));
     }
 
     fn record_value(&mut self, field: &tracing_core::Field, value: valuable::Value<'_>) {
         // Should we try to "duck-type" every kind of error ? Probably not since we want a single
         // error field, I think this is fine as a convention.
         if field.name() == "error" {
-            self.builder.status = Status::error("");
-            // if let Some(attr) = self.builder.attributes.as_mut() {
-            //     if let Some(key_val) = attr.last() {
-            //         if key_val.key.as_str() == "error" {
-            //             attr.pop();
-            //         }
-            //     }
-            // }
             let mut visit = ErrorSpanRecord {
                 field: field.name().to_string(),
-                builder: self.builder,
+                error: &mut self.error,
             };
             valuable::visit(&value, &mut visit);
-            println!("Builder is now {:?}", self.builder);
         }
     }
 
-    fn record_debug(&mut self, _field: &tracing_core::Field, _value: &dyn std::fmt::Debug) {
-        // Don't do anything when recording a debug field. This is taken care of by other layers.
+    fn record_debug(&mut self, field: &tracing_core::Field, value: &dyn std::fmt::Debug) {
+        // Don't do anything when recording a debug field
     }
 }
 
@@ -398,34 +591,19 @@ where
     ) {
         let span = ctx.span(id).expect("Span not found, this is a bug");
         let mut extensions = span.extensions_mut();
-
-        extensions.insert(ErrorData { had_error: false });
-
         if let Some(otel_data) = extensions.get_mut::<OtelData>() {
-            let prev_length = otel_data
+            let mut visitor = ErrorEventVisitor { error: vec![] };
+            attrs.record(&mut visitor);
+            let builder_attrs = otel_data
                 .builder
                 .attributes
-                .as_ref()
-                .map(|v| v.len())
-                .unwrap_or(0);
-            let mut visitor = ErrorEventVisitor {
-                builder: &mut otel_data.builder,
-            };
-            attrs.record(&mut visitor);
-            // if otel_data
-            //     .builder
-            //     .attributes
-            //     .as_ref()
-            //     .map(|v| v.len())
-            //     .unwrap_or(0)
-            //     != prev_length
-            // {
-            //     let ext = extensions
-            //         .get_mut::<ErrorData>()
-            //         .expect("We've just inserted it");
-            //     ext.had_error = true;
-            //     println!("{:?}", ext);
-            // }
+                .get_or_insert(Vec::with_capacity(3));
+            if !visitor.error.is_empty() {
+                otel_data.builder.status = Status::error("");
+                builder_attrs.extend(visitor.error.into_iter().map(|(k, v)| KeyValue::new(k, v)));
+            }
+        } else {
+            println!("couldn't find the otel data :(")
         }
     }
 
@@ -437,40 +615,17 @@ where
     ) {
         let span = ctx.span(id).expect("Span not found, this is a bug");
         let mut extensions = span.extensions_mut();
-        if let Some(ErrorData { had_error: true }) = extensions.get_mut::<ErrorData>() {
-            println!("already recorded an error, aborting");
-            return;
-        }
         if let Some(otel_data) = extensions.get_mut::<OtelData>() {
-            let prev_length = otel_data
-                .builder
-                .attributes
-                .as_ref()
-                .map(|v| v.len())
-                .unwrap_or(0);
-            let mut visitor = ErrorEventVisitor {
-                builder: &mut otel_data.builder,
-            };
+            let mut visitor = ErrorEventVisitor { error: vec![] };
             values.record(&mut visitor);
-            if otel_data
-                .builder
-                .attributes
-                .as_ref()
-                .map(|v| v.len())
-                .unwrap_or(0)
-                != prev_length
-            {
-                let ext = extensions
-                    .get_mut::<ErrorData>()
-                    .expect("We've just inserted it");
-                ext.had_error = true;
-                println!("{:?}", ext);
+            if let Some(v) = otel_data.builder.attributes.as_mut() {
+                println!("Values are {:?}", values);
+                println!("Recording {:?}", visitor.error);
+                if !visitor.error.is_empty() {
+                    otel_data.builder.status = Status::error("");
+                    v.extend(visitor.error.into_iter().map(|(k, v)| KeyValue::new(k, v)))
+                }
             }
         }
     }
-}
-
-#[derive(Debug)]
-struct ErrorData {
-    had_error: bool,
 }

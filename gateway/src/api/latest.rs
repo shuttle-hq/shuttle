@@ -35,10 +35,11 @@ use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
-use tracing::{error, field, instrument, trace};
+use tracing::{error, field, instrument, trace, Span};
 use ttl_cache::TtlCache;
 use ulid::Ulid;
 use uuid::Uuid;
+use valuable::Valuable;
 use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
 use x509_parser::pem::parse_x509_pem;
@@ -47,7 +48,7 @@ use x509_parser::time::ASN1Time;
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
 use crate::api::tracing::project_name_tracing_layer;
 use crate::auth::{ScopedUser, User};
-use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
+use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating, ProjectError};
 use crate::service::GatewayService;
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
@@ -767,6 +768,13 @@ async fn renew_gateway_acme_certificate(
     ))
 }
 
+async fn error() -> String {
+    let err = ProjectError::internal("Test error :(");
+    let span = Span::current();
+    span.record("error", err.as_value());
+    "Hello world".to_string()
+}
+
 async fn get_projects(
     State(RouterState { service, .. }): State<RouterState>,
 ) -> Result<AxumJson<Vec<ProjectResponse>>, Error> {
@@ -884,6 +892,7 @@ impl ApiBuilder {
     pub fn with_default_routes(mut self) -> Self {
         let admin_routes = Router::new()
             .route("/projects", get(get_projects))
+            .route("/error", get(error))
             .route("/revive", post(revive_projects))
             .route("/destroy", post(destroy_projects))
             .route("/idle-cch", post(idle_cch_projects))

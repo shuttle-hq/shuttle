@@ -19,7 +19,7 @@ use hyper::Client;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
-use shuttle_common::backends::otlp_tracing_bridge::build_source_chain;
+// use shuttle_common::backends::otlp_tracing_bridge::build_source_chain;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use shuttle_common::models::project::ProjectName;
 use strum::Display;
@@ -115,7 +115,7 @@ impl Valuable for Error {
                         &self
                             .source
                             .as_ref()
-                            .map(|e| build_source_chain(e.as_ref()))
+                            .map(|e| e.to_string())
                             .unwrap_or_default(),
                     ),
                     Value::String(&self.kind.to_string()),

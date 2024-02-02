@@ -192,6 +192,7 @@ macro_rules! request_span {
             // A bunch of extra things for metrics
             // Should be able to make this clearer once `Valuable` support lands in tracing
             request.path = path,
+            error = tracing::field::Empty,
             $($field)*
         )
         }

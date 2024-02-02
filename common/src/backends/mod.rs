@@ -10,7 +10,7 @@ pub mod client;
 mod future;
 pub mod headers;
 pub mod metrics;
-mod otlp_tracing_bridge;
+pub mod otlp_tracing_bridge;
 pub mod trace;
 
 #[allow(async_fn_in_trait)]

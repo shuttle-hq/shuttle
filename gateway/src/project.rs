@@ -32,6 +32,7 @@ use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument, trace, warn};
 use ulid::Ulid;
 use uuid::Uuid;
+use valuable::{Fields, NamedValues, StructDef, Structable, Valuable, Value};
 
 use crate::service::ContainerSettings;
 use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
@@ -167,8 +168,9 @@ impl ContainerInspectResponseExt for ContainerInspectResponse {
 
 impl From<DockerError> for Error {
     fn from(err: DockerError) -> Self {
-        error!(error = %err, "internal Docker error");
-        Self::source(ErrorKind::Internal, err)
+        let error = Self::source(ErrorKind::Internal, err);
+        error!(error = error.as_value(), "internal Docker error");
+        error
     }
 }
 
@@ -478,7 +480,7 @@ where
             Self::Starting(starting) => match starting.clone().next(ctx).await {
                 Err(error) => {
                     error!(
-                        error = &error as &dyn std::error::Error,
+                        error = error.as_value(),
                         shuttle.container_id = starting.container.id,
                         "project failed to start. Will restart it"
                     );
@@ -512,7 +514,7 @@ where
 
         if let Ok(Self::Errored(errored)) = &mut new {
             errored.ctx = Some(Box::new(previous));
-            error!(error = ?errored, "state for project errored");
+            error!(error = errored.as_value(), "state for project errored");
         }
 
         let new_state = new.as_ref().unwrap().state();
@@ -1737,7 +1739,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, strum::Display)]
 pub enum ProjectErrorKind {
     Internal,
     NoNetwork,
@@ -1769,6 +1771,32 @@ impl ProjectError {
     }
 }
 
+impl Structable for ProjectError {
+    fn definition(&self) -> StructDef<'_> {
+        StructDef::new_static(
+            "ProjectError",
+            Fields::Named(shuttle_common::backends::otlp_tracing_bridge::ERROR_FIELDS),
+        )
+    }
+}
+
+impl Valuable for ProjectError {
+    fn as_value(&self) -> valuable::Value<'_> {
+        Value::Structable(self)
+    }
+
+    fn visit(&self, visit: &mut dyn valuable::Visit) {
+        visit.visit_named_fields(&NamedValues::new(
+            shuttle_common::backends::otlp_tracing_bridge::ERROR_FIELDS,
+            &[
+                Value::String(&self.message),
+                Value::String(""),
+                Value::String(&self.kind.to_string()),
+            ],
+        ))
+    }
+}
+
 impl std::fmt::Display for ProjectError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)
@@ -1779,12 +1807,16 @@ impl std::error::Error for ProjectError {}
 
 impl From<DockerError> for ProjectError {
     fn from(err: DockerError) -> Self {
-        error!(error = %err, "an internal DockerError had to yield a ProjectError");
-        Self {
+        let project_error = Self {
             kind: ProjectErrorKind::Internal,
             message: format!("{}", err),
             ctx: None,
-        }
+        };
+        error!(
+            error = project_error.as_value(),
+            "an internal DockerError had to yield a ProjectError"
+        );
+        project_error
     }
 }
 

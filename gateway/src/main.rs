@@ -8,6 +8,7 @@ use shuttle_gateway::acme::{AcmeClient, CustomDomain};
 use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
 use shuttle_gateway::args::StartArgs;
 use shuttle_gateway::args::{Args, Commands, UseTls};
+use shuttle_gateway::project::ProjectError;
 use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::tls::make_tls_acceptor;
@@ -16,12 +17,13 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::{Sqlite, SqlitePool};
 use std::io::{self, Cursor};
+use valuable::Valuable;
 
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, info_span, trace, warn, Instrument};
+use tracing::{debug, error, error_span, info, info_span, trace, warn, Instrument};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> io::Result<()> {
@@ -38,6 +40,22 @@ async fn main() -> io::Result<()> {
     let posthog_client = async_posthog::client(ph_client_options);
 
     setup_tracing(tracing_subscriber::registry(), Backend::Gateway, None);
+
+    let err = ProjectError::internal("Test error :(");
+    // Test log tracing: WORKING
+    {
+        error!(error = err.as_value());
+    }
+
+    // Test span tracing
+    {
+        let span = info_span!("test_error_span", error = tracing::field::Empty);
+        span.record("error", err.as_value());
+    }
+
+    {
+        error_span!("oops", error.message = "Oops", error.stack = "", error.kind = "FakeError");
+    }
 
     let db_path = args.state.join("gateway.sqlite");
     let db_uri = db_path.to_str().unwrap();

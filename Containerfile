@@ -3,6 +3,7 @@
 
 # Base image for builds and cache
 ARG RUSTUP_TOOLCHAIN
+ARG RUSTFLAGS='--cfg tracing_unstable'
 FROM docker.io/lukemathwalker/cargo-chef:latest-rust-${RUSTUP_TOOLCHAIN}-bookworm as cargo-chef
 WORKDIR /build
 
@@ -26,7 +27,7 @@ RUN find . \( \
     -name "*.pem" \
     \) -type f -exec install -D \{\} /build/\{\} \;
 WORKDIR /build
-RUN cargo chef prepare --recipe-path /recipe.json
+RUN RUSTFLAGS=${RUSTFLAGS} cargo chef prepare --recipe-path /recipe.json
 # TODO upstream: Reduce the cooking by allowing multiple --bin args to prepare, or like this https://github.com/LukeMathWalker/cargo-chef/issues/181
 
 
@@ -34,15 +35,16 @@ RUN cargo chef prepare --recipe-path /recipe.json
 # This step is skipped if the recipe is unchanged from previous build (no dependencies changed).
 FROM cargo-chef AS chef-builder
 ARG CARGO_PROFILE
+ARG RUSTFLAGS
 COPY --from=chef-planner /recipe.json /
 # https://i.imgflip.com/2/74bvex.jpg
-RUN cargo chef cook \
+RUN RUSTFLAGS=${RUSTFLAGS} cargo chef cook \
     --all-features \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
     --recipe-path /recipe.json
 COPY --from=chef-planner /build .
 # Building all at once to share build artifacts in the "cook" layer
-RUN cargo build \
+RUN RUSTFLAGS=${RUSTFLAGS} cargo build \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
     --bin shuttle-auth \
     --bin shuttle-builder \

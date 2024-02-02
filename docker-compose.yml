@@ -45,6 +45,7 @@ services:
     volumes:
       - auth-vol:/var/lib/shuttle-auth
     environment:
+      - RUST_BACKTRACE=${RUST_BACKTRACE}
       - RUST_LOG=${RUST_LOG}
       - SHUTTLE_ENV=${SHUTTLE_ENV}
     command:
@@ -88,6 +89,7 @@ services:
     volumes:
       - builder-store-vol:/nix/store
     environment:
+      - RUST_BACKTRACE=${RUST_BACKTRACE}
       - RUST_LOG=${RUST_LOG}
       - SHUTTLE_ENV=${SHUTTLE_ENV}
     command:
@@ -131,6 +133,7 @@ services:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     environment:
       - RUST_LOG=${RUST_LOG}
+      - RUST_BACKTRACE=${RUST_BACKTRACE}
       - SHUTTLE_ENV=${SHUTTLE_ENV}
     command:
       - "--state=/var/lib/shuttle"
@@ -178,6 +181,7 @@ services:
       user-net:
       default:
     environment:
+      - RUST_BACKTRACE=${RUST_BACKTRACE}
       - RUST_LOG=${RUST_LOG}
       - SHUTTLE_ENV=${SHUTTLE_ENV}
     command:
@@ -191,6 +195,7 @@ services:
       - mongodb
       - auth
     environment:
+      - RUST_BACKTRACE=${RUST_BACKTRACE}
       - RUST_LOG=${RUST_LOG}
       - SHUTTLE_ENV=${SHUTTLE_ENV}
     networks:
@@ -226,6 +231,7 @@ services:
     depends_on:
       - auth
     environment:
+      - RUST_BACKTRACE=${RUST_BACKTRACE}
       - RUST_LOG=${RUST_LOG}
       - SHUTTLE_ENV=${SHUTTLE_ENV}
     networks:

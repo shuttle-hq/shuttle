@@ -19,11 +19,13 @@ use hyper::Client;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
+use shuttle_common::backends::otlp_tracing_bridge::build_source_chain;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use shuttle_common::models::project::ProjectName;
 use strum::Display;
 use tokio::sync::mpsc::error::SendError;
-use tracing::error;
+use tracing::{error, Span};
+use valuable::{Fields, NamedValues, StructDef, Structable, Valuable, Value};
 
 pub mod acme;
 pub mod api;
@@ -52,7 +54,7 @@ static AUTH_CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 ///
 /// All [`Error`] have an [`ErrorKind`] and an (optional) source.
 
-/// [`Error] is safe to be used as error variants to axum endpoints
+/// [`Error`] is safe to be used as error variants to axum endpoints
 /// return types as their [`IntoResponse`] implementation does not
 /// leak any sensitive information.
 #[derive(Debug)]
@@ -88,6 +90,41 @@ impl Error {
     }
 }
 
+impl Structable for Error {
+    fn definition(&self) -> StructDef<'_> {
+        StructDef::new_static(
+            "Error",  // We can't get a dynamic name out of it
+            Fields::Named(shuttle_common::backends::otlp_tracing_bridge::ERROR_FIELDS),
+        )
+    }
+}
+
+impl Valuable for Error {
+    fn as_value(&self) -> valuable::Value<'_> {
+        Value::Structable(self)
+    }
+
+    fn visit(&self, visit: &mut dyn valuable::Visit) {
+        let api_error: ApiError = ApiError::from(self.kind());
+        if api_error.status().is_server_error() {
+            visit.visit_named_fields(&NamedValues::new(
+                shuttle_common::backends::otlp_tracing_bridge::ERROR_FIELDS,
+                &[
+                    Value::String(&api_error.message),
+                    Value::String(
+                        &self
+                            .source
+                            .as_ref()
+                            .map(|e| build_source_chain(e.as_ref()))
+                            .unwrap_or_default(),
+                    ),
+                    Value::String(&self.kind.to_string()),
+                ],
+            ))
+        }
+    }
+}
+
 impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Self {
         Self::from_kind(kind)
@@ -114,7 +151,9 @@ impl From<AcmeClientError> for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        error!(error = %self, "request had an error");
+        let span = Span::current();
+        span.record("error", self.as_value());
+        // error!(error = self.as_value(), "request had an error");
 
         let error: ApiError = self.kind.into();
 

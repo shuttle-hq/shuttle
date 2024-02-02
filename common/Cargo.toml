@@ -44,13 +44,14 @@ tokio = { workspace = true, optional = true }
 tonic = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
-tracing = { workspace = true, features = ["std"], optional = true }
+tracing = { workspace = true, features = ["std", "valuable"], optional = true }
 tracing-core = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 ttl_cache = { workspace = true, optional = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
+valuable = { workspace = true }
 zeroize = { workspace = true }
 wiremock = { workspace = true, optional = true }
 

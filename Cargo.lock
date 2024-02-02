@@ -5843,6 +5843,7 @@ dependencies = [
  "ttl_cache",
  "url",
  "uuid",
+ "valuable",
  "wiremock",
  "zeroize",
 ]
@@ -5975,6 +5976,7 @@ dependencies = [
  "ttl_cache",
  "ulid",
  "uuid",
+ "valuable",
  "x509-parser",
 ]
 

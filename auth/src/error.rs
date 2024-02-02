@@ -43,8 +43,15 @@ impl IntoResponse for Error {
         let code = match self {
             Error::Forbidden => StatusCode::FORBIDDEN,
             Error::Unauthorized | Error::KeyMissing => StatusCode::UNAUTHORIZED,
-            Error::Database(_) | Error::UserNotFound => StatusCode::NOT_FOUND,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Database(sqlx::Error::RowNotFound) | Error::UserNotFound => {
+                StatusCode::NOT_FOUND
+            }
+            _ => {
+                // We only want to emit error events for internal errors, not e.g. 404s.
+                tracing::error!(error = %self, "control plane request error");
+
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
         };
 
         ApiError {

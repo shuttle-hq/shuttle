@@ -114,9 +114,12 @@ impl From<AcmeClientError> for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        error!(error = %self, "request had an error");
-
         let error: ApiError = self.kind.into();
+
+        if error.status_code >= 500 {
+            // We only want to emit error events for internal errors, not e.g. 404s.
+            error!(error = error.message, "control plane request error");
+        }
 
         error.into_response()
     }

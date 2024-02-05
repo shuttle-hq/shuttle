@@ -610,8 +610,6 @@ impl StateRecorder for Persistence {
 
 #[cfg(test)]
 mod tests {
-    use std::net::{Ipv4Addr, SocketAddr};
-
     use chrono::{Duration, TimeZone, Utc};
     use rand::Rng;
 
@@ -634,7 +632,6 @@ mod tests {
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap(),
             ..Default::default()
         };
-        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 12345);
 
         p.insert_deployment(&deployment).await.unwrap();
         assert_eq!(p.get_deployment(&id).await.unwrap().unwrap(), deployment);
@@ -653,7 +650,7 @@ mod tests {
 
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
-        assert_eq!(update.address, Some(address));
+        assert_eq!(update.address, None);
         assert!(update.is_next);
         assert_ne!(
             update.last_update,
@@ -672,12 +669,7 @@ mod tests {
                 service_id,
                 state: State::Running,
                 last_update: Utc::now(),
-                address: None,
-                is_next: false,
-                git_commit_id: None,
-                git_commit_msg: None,
-                git_branch: None,
-                git_dirty: None,
+                ..Default::default()
             })
             .collect();
 
@@ -710,7 +702,6 @@ mod tests {
             service_id: xyz_id,
             state: State::Crashed,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 29, 35).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -719,7 +710,6 @@ mod tests {
             service_id: xyz_id,
             state: State::Stopped,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 49, 35).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -728,7 +718,6 @@ mod tests {
             service_id,
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 39, 39).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -737,7 +726,6 @@ mod tests {
             service_id: xyz_id,
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 48, 29).unwrap(),
-            address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
             is_next: true,
             ..Default::default()
         };
@@ -769,7 +757,6 @@ mod tests {
             service_id: other_id,
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -778,7 +765,6 @@ mod tests {
             service_id,
             state: State::Crashed,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(), // second
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -787,7 +773,6 @@ mod tests {
             service_id,
             state: State::Stopped,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 1).unwrap(), // first
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -796,7 +781,6 @@ mod tests {
             service_id,
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 3).unwrap(), // third
-            address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
             is_next: true,
             ..Default::default()
         };
@@ -833,7 +817,6 @@ mod tests {
             service_id,
             state: State::Crashed,
             last_update: time,
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -842,7 +825,6 @@ mod tests {
             service_id,
             state: State::Stopped,
             last_update: time.checked_add_signed(Duration::seconds(1)).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -851,7 +833,6 @@ mod tests {
             service_id,
             state: State::Running,
             last_update: time.checked_add_signed(Duration::seconds(2)).unwrap(),
-            address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
             is_next: false,
             ..Default::default()
         };
@@ -860,7 +841,6 @@ mod tests {
             service_id,
             state: State::Queued,
             last_update: time.checked_add_signed(Duration::seconds(3)).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -869,7 +849,6 @@ mod tests {
             service_id,
             state: State::Building,
             last_update: time.checked_add_signed(Duration::seconds(4)).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -878,7 +857,6 @@ mod tests {
             service_id,
             state: State::Built,
             last_update: time.checked_add_signed(Duration::seconds(5)).unwrap(),
-            address: None,
             is_next: true,
             ..Default::default()
         };
@@ -887,7 +865,6 @@ mod tests {
             service_id,
             state: State::Loading,
             last_update: time.checked_add_signed(Duration::seconds(6)).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -948,7 +925,6 @@ mod tests {
                 service_id,
                 state: State::Built,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -957,7 +933,6 @@ mod tests {
                 service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -966,7 +941,6 @@ mod tests {
                 service_id: bar_id,
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
-                address: None,
                 is_next: true,
                 ..Default::default()
             },
@@ -975,7 +949,6 @@ mod tests {
                 service_id: service_id2,
                 state: State::Crashed,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
-                address: None,
                 is_next: true,
                 ..Default::default()
             },
@@ -984,7 +957,6 @@ mod tests {
                 service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -1069,7 +1041,6 @@ mod tests {
                 service_id,
                 state: State::Built,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -1078,7 +1049,6 @@ mod tests {
                 service_id,
                 state: State::Stopped,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -1087,7 +1057,6 @@ mod tests {
                 service_id,
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -1096,7 +1065,6 @@ mod tests {
                 service_id,
                 state: State::Crashed,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -1105,7 +1073,6 @@ mod tests {
                 service_id,
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
-                address: None,
                 is_next: true,
                 ..Default::default()
             },

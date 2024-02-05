@@ -4,10 +4,7 @@ use std::{
 };
 
 use shuttle_common::log::LogRecorder;
-use shuttle_proto::{
-    builder::builder_client::BuilderClient,
-    logger::{self},
-};
+use shuttle_proto::{builder, logger};
 use tokio::{
     sync::{mpsc, Mutex},
     task::JoinSet,
@@ -41,13 +38,7 @@ pub struct DeploymentManagerBuilder<LR, ADG, DU, RM, QC> {
     deployment_updater: Option<DU>,
     resource_manager: Option<RM>,
     queue_client: Option<QC>,
-    builder_client: Option<
-        BuilderClient<
-            shuttle_common::claims::ClaimService<
-                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-            >,
-        >,
-    >,
+    builder_client: Option<builder::Client>,
 }
 
 impl<LR, ADG, DU, RM, QC> DeploymentManagerBuilder<LR, ADG, DU, RM, QC>
@@ -70,16 +61,7 @@ where
         self
     }
 
-    pub fn builder_client(
-        mut self,
-        builder_client: Option<
-            BuilderClient<
-                shuttle_common::claims::ClaimService<
-                    shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-                >,
-            >,
-        >,
-    ) -> Self {
+    pub fn builder_client(mut self, builder_client: Option<builder::Client>) -> Self {
         self.builder_client = builder_client;
 
         self

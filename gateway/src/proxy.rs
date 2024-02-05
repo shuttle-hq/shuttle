@@ -160,7 +160,7 @@ impl UserProxy {
             .call(self.remote_addr.ip(), &target_url, req)
             .await
             .map_err(|e| {
-                error!(error=?e, "gw prox client error");
+                error!(error = ?e, "gateway proxy client error");
                 Error::from_kind(ErrorKind::ProjectUnavailable)
             })?;
 

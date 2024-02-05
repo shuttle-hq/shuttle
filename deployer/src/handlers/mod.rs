@@ -194,22 +194,22 @@ pub async fn get_service(
     Extension(persistence): Extension<Persistence>,
     CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Summary>> {
-    if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let deployment = persistence
-            .get_active_deployment(&service.id)
-            .await?
-            .map(Into::into);
+    let service = persistence
+        .get_service_by_name(&service_name)
+        .await?
+        .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
 
-        let response = shuttle_common::models::service::Summary {
-            name: service.name,
-            deployment,
-            uri: "".to_owned(),
-        };
+    let deployment = persistence
+        .get_active_deployment(&service.id)
+        .await?
+        .map(Into::into);
+    let response = shuttle_common::models::service::Summary {
+        name: service.name,
+        deployment,
+        uri: "".to_owned(),
+    };
 
-        Ok(Json(response))
-    } else {
-        Err(Error::NotFound("service not found".to_string()))
-    }
+    Ok(Json(response))
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name))]
@@ -218,29 +218,30 @@ pub async fn get_service_resources(
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
 ) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
-    if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let resources = persistence
-            .get_resources(&service.id, claim)
-            .await?
-            .resources
-            .into_iter()
-            .map(shuttle_common::resource::Response::try_from)
-            // We ignore and trace the errors for resources with corrupted data, returning just the
-            // valid resources.
-            // TODO: investigate how the resource data can get corrupted.
-            .filter_map(|resource| {
-                resource
-                    .map_err(|err| {
-                        error!(error = ?err, "failed to parse resource data");
-                    })
-                    .ok()
-            })
-            .collect();
+    let service = persistence
+        .get_service_by_name(&service_name)
+        .await?
+        .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
 
-        Ok(Json(resources))
-    } else {
-        Err(Error::NotFound("service not found".to_string()))
-    }
+    let resources = persistence
+        .get_resources(&service.id, claim)
+        .await?
+        .resources
+        .into_iter()
+        .map(shuttle_common::resource::Response::try_from)
+        // We ignore and trace the errors for resources with corrupted data, returning just the
+        // valid resources.
+        // TODO: investigate how the resource data can get corrupted.
+        .filter_map(|resource| {
+            resource
+                .map_err(|err| {
+                    error!(error = ?err, "failed to parse resource data");
+                })
+                .ok()
+        })
+        .collect();
+
+    Ok(Json(resources))
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name, %resource_type))]
@@ -357,9 +358,11 @@ pub async fn stop_service(
     Extension(deployment_manager): Extension<DeploymentManager>,
     CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Summary>> {
-    let Some(service) = persistence.get_service_by_name(&service_name).await? else {
-        return Err(Error::NotFound("service not found".to_string()));
-    };
+    let service = persistence
+        .get_service_by_name(&service_name)
+        .await?
+        .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
+
     let running_deployment = persistence.get_active_deployment(&service.id).await?;
     let Some(ref deployment) = running_deployment else {
         return Err(Error::NotFound("no running deployment found".to_string()));
@@ -381,20 +384,20 @@ pub async fn get_deployments(
     CustomErrorPath(project_name): CustomErrorPath<String>,
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<Json<Vec<shuttle_common::models::deployment::Response>>> {
-    if let Some(service) = persistence.get_service_by_name(&project_name).await? {
-        let limit = limit.unwrap_or(u32::MAX);
-        let page = page.unwrap_or(0);
-        let deployments = persistence
-            .get_deployments(&service.id, page * limit, limit)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
+    let Some(service) = persistence.get_service_by_name(&project_name).await? else {
+        return Ok(Json(vec![]));
+    };
 
-        Ok(Json(deployments))
-    } else {
-        Ok(Json(vec![]))
-    }
+    let limit = limit.unwrap_or(u32::MAX);
+    let page = page.unwrap_or(0);
+    let deployments = persistence
+        .get_deployments(&service.id, page * limit, limit)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+
+    Ok(Json(deployments))
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, %deployment_id))]

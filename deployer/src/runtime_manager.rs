@@ -12,7 +12,7 @@ use shuttle_common::{
     log::Backend,
 };
 use shuttle_proto::{
-    logger::{logger_client::LoggerClient, Batcher, LogItem, LogLine},
+    logger::{self, Batcher, LogItem, LogLine},
     runtime::{runtime_client::RuntimeClient, StopRequest},
 };
 use shuttle_service::{runner, Environment};
@@ -41,26 +41,14 @@ type Runtimes = Arc<
 pub struct RuntimeManager {
     runtimes: Runtimes,
     provisioner_address: String,
-    logger_client: Batcher<
-        LoggerClient<
-            shuttle_common::claims::ClaimService<
-                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-            >,
-        >,
-    >,
+    logger_client: Batcher<logger::Client>,
     auth_uri: Option<String>,
 }
 
 impl RuntimeManager {
     pub fn new(
         provisioner_address: String,
-        logger_client: Batcher<
-            LoggerClient<
-                shuttle_common::claims::ClaimService<
-                    shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-                >,
-            >,
-        >,
+        logger_client: Batcher<logger::Client>,
         auth_uri: Option<String>,
     ) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {

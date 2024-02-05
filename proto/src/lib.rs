@@ -341,6 +341,7 @@ pub mod logger {
     use std::time::Duration;
 
     use chrono::{NaiveDateTime, TimeZone, Utc};
+    use http::Uri;
     use prost::bytes::Bytes;
     use tokio::{select, sync::mpsc, time::interval};
     use tonic::{
@@ -355,7 +356,30 @@ pub mod logger {
         DeploymentId,
     };
 
+    use self::logger_client::LoggerClient;
+
     pub use super::generated::logger::*;
+
+    pub type Client = LoggerClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >;
+
+    /// Get a logger client that is correctly configured for all services
+    pub async fn get_client(logger_uri: Uri) -> Client {
+        let channel = tonic::transport::Endpoint::from(logger_uri)
+            .connect()
+            .await
+            .expect("failed to connect to logger");
+
+        let logger_service = tower::ServiceBuilder::new()
+            .layer(shuttle_common::claims::ClaimLayer)
+            .layer(shuttle_common::claims::InjectPropagationLayer)
+            .service(channel);
+
+        LoggerClient::new(logger_service)
+    }
 
     impl From<LogItemCommon> for LogItem {
         fn from(value: LogItemCommon) -> Self {

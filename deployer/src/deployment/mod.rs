@@ -4,7 +4,10 @@ use std::{
 };
 
 use shuttle_common::log::LogRecorder;
-use shuttle_proto::{builder::builder_client::BuilderClient, logger::logger_client::LoggerClient};
+use shuttle_proto::{
+    builder::builder_client::BuilderClient,
+    logger::{self},
+};
 use tokio::{
     sync::{mpsc, Mutex},
     task::JoinSet,
@@ -31,13 +34,7 @@ const RUN_BUFFER_SIZE: usize = 100;
 
 pub struct DeploymentManagerBuilder<LR, ADG, DU, RM, QC> {
     build_log_recorder: Option<LR>,
-    logs_fetcher: Option<
-        LoggerClient<
-            shuttle_common::claims::ClaimService<
-                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-            >,
-        >,
-    >,
+    logs_fetcher: Option<logger::Client>,
     active_deployment_getter: Option<ADG>,
     artifacts_path: Option<PathBuf>,
     runtime_manager: Option<Arc<Mutex<RuntimeManager>>>,
@@ -67,14 +64,7 @@ where
         self
     }
 
-    pub fn log_fetcher(
-        mut self,
-        logs_fetcher: LoggerClient<
-            shuttle_common::claims::ClaimService<
-                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-            >,
-        >,
-    ) -> Self {
+    pub fn log_fetcher(mut self, logs_fetcher: logger::Client) -> Self {
         self.logs_fetcher = Some(logs_fetcher);
 
         self
@@ -195,11 +185,7 @@ pub struct DeploymentManager {
     queue_send: QueueSender,
     run_send: RunSender,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
-    logs_fetcher: LoggerClient<
-        shuttle_common::claims::ClaimService<
-            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-        >,
-    >,
+    logs_fetcher: logger::Client,
     _join_set: Arc<Mutex<JoinSet<()>>>,
     builds_path: PathBuf,
 }
@@ -259,13 +245,7 @@ impl DeploymentManager {
         self.builds_path.as_path()
     }
 
-    pub fn logs_fetcher(
-        &self,
-    ) -> &LoggerClient<
-        shuttle_common::claims::ClaimService<
-            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-        >,
-    > {
+    pub fn logs_fetcher(&self) -> &logger::Client {
         &self.logs_fetcher
     }
 }

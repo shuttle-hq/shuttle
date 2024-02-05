@@ -21,7 +21,7 @@ pub struct Args {
 
     /// Address to connect to the logger service
     #[clap(long, default_value = "http://logger:8000")]
-    pub logger_uri: Endpoint,
+    pub logger_uri: Uri,
 
     /// FQDN where the proxy can be reached at
     #[clap(long)]

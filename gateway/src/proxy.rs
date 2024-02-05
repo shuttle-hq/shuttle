@@ -159,7 +159,10 @@ impl UserProxy {
         let proxy = PROXY_CLIENT
             .call(self.remote_addr.ip(), &target_url, req)
             .await
-            .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
+            .map_err(|e| {
+                error!(error=?e, "gw prox client error");
+                Error::from_kind(ErrorKind::ProjectUnavailable)
+            })?;
 
         let (parts, body) = proxy.into_parts();
         let body = <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();

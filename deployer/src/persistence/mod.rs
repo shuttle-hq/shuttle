@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -24,7 +23,7 @@ use sqlx::{
 use tokio::task::JoinHandle;
 use tonic::{transport::Endpoint, Request};
 use tower::ServiceBuilder;
-use tracing::{error, info, instrument, trace};
+use tracing::{error, info, trace};
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -46,7 +45,6 @@ use self::{
     resource::{Resource, ResourceManager},
 };
 use crate::deployment::ActiveDeploymentsGetter;
-use crate::proxy::AddressGetter;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -210,7 +208,7 @@ impl Persistence {
             .bind(deployment.service_id.to_string())
             .bind(deployment.state)
             .bind(deployment.last_update)
-            .bind(deployment.address.map(|socket| socket.to_string()))
+            .bind(Option::<String>::None)
             .bind(deployment.is_next)
             .bind(deployment.git_commit_id.as_ref())
             .bind(deployment.git_commit_msg.as_ref())
@@ -562,54 +560,8 @@ impl ResourceManager for Persistence {
 }
 
 #[async_trait::async_trait]
-impl AddressGetter for Persistence {
-    #[instrument(skip_all, fields(shuttle.service.name = service_name, shuttle.project.name = service_name))]
-    async fn get_address_for_service(
-        &self,
-        service_name: &str,
-    ) -> crate::handlers::Result<Option<std::net::SocketAddr>> {
-        let address_str = sqlx::query_as::<_, (String,)>(
-            r#"SELECT d.address
-                FROM deployments AS d
-                JOIN services AS s ON d.service_id = s.id
-                WHERE s.name = ? AND d.state = ?
-                ORDER BY d.last_update
-                DESC"#,
-        )
-        .bind(service_name)
-        .bind(State::Running)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Error::from)
-        .map_err(crate::handlers::Error::Persistence)?;
-
-        if let Some((address_str,)) = address_str {
-            SocketAddr::from_str(&address_str).map(Some).map_err(|err| {
-                crate::handlers::Error::Convert {
-                    from: "String".to_string(),
-                    to: "SocketAddr".to_string(),
-                    message: err.to_string(),
-                }
-            })
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-#[async_trait::async_trait]
 impl DeploymentUpdater for Persistence {
     type Err = Error;
-
-    async fn set_address(&self, id: &Uuid, address: &SocketAddr) -> Result<()> {
-        sqlx::query("UPDATE deployments SET address = ? WHERE id = ?")
-            .bind(address.to_string())
-            .bind(id)
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(Error::from)
-    }
 
     async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<()> {
         sqlx::query("UPDATE deployments SET is_next = ? WHERE id = ?")
@@ -697,7 +649,6 @@ mod tests {
         .await
         .unwrap();
 
-        p.set_address(&id, &address).await.unwrap();
         p.set_is_next(&id, true).await.unwrap();
 
         let update = p.get_deployment(&id).await.unwrap().unwrap();
@@ -1103,46 +1054,6 @@ mod tests {
             .await
             .unwrap()
             .is_none());
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn address_getter() {
-        let (p, _) = Persistence::new_in_memory().await;
-        let service_id = add_service_named(&p.pool, "service-name").await.unwrap();
-        let service_other_id = add_service_named(&p.pool, "other-name").await.unwrap();
-
-        sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update, address) VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)",
-        )
-        // This running item should match
-        .bind(Uuid::new_v4())
-        .bind(service_id.to_string())
-        .bind(State::Running)
-        .bind(Utc::now())
-        .bind("10.0.0.5:12356")
-        // A stopped item should not match
-        .bind(Uuid::new_v4())
-        .bind(service_id.to_string())
-        .bind(State::Stopped)
-        .bind(Utc::now())
-        .bind("10.0.0.5:9876")
-        // Another service should not match
-        .bind(Uuid::new_v4())
-        .bind(service_other_id.to_string())
-        .bind(State::Running)
-        .bind(Utc::now())
-        .bind("10.0.0.5:5678")
-        .execute(&p.pool)
-        .await
-        .unwrap();
-
-        assert_eq!(
-            SocketAddr::from(([10, 0, 0, 5], 12356)),
-            p.get_address_for_service("service-name")
-                .await
-                .unwrap()
-                .unwrap(),
-        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

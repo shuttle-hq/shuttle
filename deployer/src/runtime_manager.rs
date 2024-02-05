@@ -80,6 +80,7 @@ impl RuntimeManager {
     ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
         trace!("making new client");
 
+        // the port to run the runtime's gRPC server on
         let port = portpicker::pick_unused_port().context("failed to find available port")?;
         let is_next = alpha_runtime_path.is_none();
 

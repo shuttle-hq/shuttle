@@ -590,7 +590,7 @@ impl GatewayService {
             let project_id = row.get::<String, _>("project_id");
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
-                let mut creating = ProjectCreating::new_with_random_initial_key(
+                let creating = ProjectCreating::new_with_random_initial_key(
                     project_name.clone(),
                     Ulid::from_string(project_id.as_str()).map_err(|err| {
                         Error::custom(
@@ -600,16 +600,6 @@ impl GatewayService {
                     })?,
                     idle_minutes,
                 );
-                // Restore previous custom domain, if any
-                match self.find_custom_domain_for_project(&project_id).await {
-                    Ok(custom_domain) => {
-                        creating = creating.with_fqdn(custom_domain.fqdn.to_string());
-                    }
-                    Err(error) if error.kind() == ErrorKind::CustomDomainNotFound => {
-                        // no previous custom domain
-                    }
-                    Err(error) => return Err(error),
-                }
                 let project = Project::Creating(creating);
                 self.update_project(&project_name, &project).await?;
                 Ok(FindProjectPayload {
@@ -782,7 +772,7 @@ impl GatewayService {
             .map_err(|_| Error::from_kind(ErrorKind::Internal))
     }
 
-    async fn find_custom_domain_for_project(
+    async fn _find_custom_domain_for_project(
         &self,
         project_id: &str,
     ) -> Result<CustomDomain, Error> {
@@ -1527,10 +1517,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let Project::Creating(creating) = recreated_project.state else {
-            panic!("Project should be Creating");
-        };
-        assert_eq!(creating.fqdn(), &Some(domain.to_string()));
+        assert!(matches!(recreated_project.state, Project::Creating(_)));
 
         Ok(())
     }

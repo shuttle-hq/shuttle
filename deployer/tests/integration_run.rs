@@ -154,10 +154,6 @@ struct StubDeploymentUpdater;
 impl DeploymentUpdater for StubDeploymentUpdater {
     type Err = std::io::Error;
 
-    async fn set_address(&self, _id: &Uuid, _address: &SocketAddr) -> Result<(), Self::Err> {
-        Ok(())
-    }
-
     async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
         Ok(())
     }
@@ -186,7 +182,6 @@ async fn can_be_killed() {
         .handle(
             StubResourceManager,
             runtime_manager.clone(),
-            StubDeploymentUpdater,
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
@@ -228,7 +223,6 @@ async fn self_stop() {
         .handle(
             StubResourceManager,
             runtime_manager.clone(),
-            StubDeploymentUpdater,
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
@@ -269,7 +263,6 @@ async fn panic_in_bind() {
         .handle(
             StubResourceManager,
             runtime_manager.clone(),
-            StubDeploymentUpdater,
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
@@ -299,7 +292,6 @@ async fn panic_in_main() {
         .handle(
             StubResourceManager,
             runtime_manager.clone(),
-            StubDeploymentUpdater,
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),

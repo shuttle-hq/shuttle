@@ -603,20 +603,13 @@ async fn request_custom_domain_acme_certificate(
         .project(project_name.clone())
         .and_then(task::destroy())
         .and_then(task::run_until_done())
-        .and_then(task::run({
-            let fqdn = fqdn.to_string();
-            move |ctx| {
-                let fqdn = fqdn.clone();
-                async move {
-                    let creating = ProjectCreating::new_with_random_initial_key(
-                        ctx.project_name,
-                        project_id,
-                        idle_minutes,
-                    )
-                    .with_fqdn(fqdn);
-                    TaskResult::Done(Project::Creating(creating))
-                }
-            }
+        .and_then(task::run(move |ctx| async move {
+            let creating = ProjectCreating::new_with_random_initial_key(
+                ctx.project_name,
+                project_id,
+                idle_minutes,
+            );
+            TaskResult::Done(Project::Creating(creating))
         }))
         .and_then(task::run_until_done())
         .and_then(task::start_idle_deploys())

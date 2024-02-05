@@ -55,7 +55,7 @@ pub fn get_resource_tables(
             output.push(get_secrets_table(secrets, service_name, raw));
         };
 
-        if let Some(persist) = resource_groups.get("Persist") {
+        if resource_groups.get("Persist").is_some() {
             output.push(format!("This persist instance is linked to {service_name}\nShuttle Persist: {service_name}\n"));
         };
 

@@ -12,12 +12,36 @@ pub mod test_utils;
 pub mod provisioner {
     use std::fmt::Display;
 
+    use http::Uri;
     use shuttle_common::{
         database::{self, AwsRdsEngine, SharedEngine},
         DatabaseInfo,
     };
 
+    use self::provisioner_client::ProvisionerClient;
+
     pub use super::generated::provisioner::*;
+
+    pub type Client = ProvisionerClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >;
+
+    /// Get a provisioner client that is correctly configured for all services
+    pub async fn get_client(provisioner_uri: Uri) -> Client {
+        let channel = tonic::transport::Endpoint::from(provisioner_uri)
+            .connect()
+            .await
+            .expect("failed to connect to provisioner");
+
+        let provisioner_service = tower::ServiceBuilder::new()
+            .layer(shuttle_common::claims::ClaimLayer)
+            .layer(shuttle_common::claims::InjectPropagationLayer)
+            .service(channel);
+
+        ProvisionerClient::new(provisioner_service)
+    }
 
     impl From<DatabaseResponse> for DatabaseInfo {
         fn from(response: DatabaseResponse) -> Self {

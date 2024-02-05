@@ -5,12 +5,9 @@ use std::str::FromStr;
 use chrono::Utc;
 use error::{Error, Result};
 use hyper::Uri;
-use shuttle_common::{
-    claims::{Claim, ClaimLayer, InjectPropagationLayer},
-    resource::Type,
-};
+use shuttle_common::{claims::Claim, resource::Type};
 use shuttle_proto::{
-    provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest},
+    provisioner::{self, DatabaseRequest},
     resource_recorder::{
         self, record_request, RecordRequest, ResourceIds, ResourceResponse, ResourcesResponse,
         ResultResponse, ServiceResourcesRequest,
@@ -22,8 +19,7 @@ use sqlx::{
     QueryBuilder,
 };
 use tokio::task::JoinHandle;
-use tonic::{transport::Endpoint, Request};
-use tower::ServiceBuilder;
+use tonic::Request;
 use tracing::{error, info, instrument, trace};
 use ulid::Ulid;
 use uuid::Uuid;
@@ -55,13 +51,7 @@ pub struct Persistence {
     pool: SqlitePool,
     state_send: tokio::sync::mpsc::UnboundedSender<DeploymentState>,
     resource_recorder_client: Option<resource_recorder::Client>,
-    provisioner_client: Option<
-        ProvisionerClient<
-            shuttle_common::claims::ClaimService<
-                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-            >,
-        >,
-    >,
+    provisioner_client: Option<provisioner::Client>,
     project_id: Ulid,
 }
 
@@ -73,7 +63,7 @@ impl Persistence {
     pub async fn new(
         path: &str,
         resource_recorder_uri: Uri,
-        provisioner_address: &Uri,
+        provisioner_uri: Uri,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
         if !Path::new(path).exists() {
@@ -103,13 +93,7 @@ impl Persistence {
 
         let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
 
-        Self::configure(
-            pool,
-            resource_recorder_uri,
-            provisioner_address.to_string(),
-            project_id,
-        )
-        .await
+        Self::configure(pool, resource_recorder_uri, provisioner_uri, project_id).await
     }
 
     #[cfg(test)]
@@ -139,22 +123,11 @@ impl Persistence {
     async fn configure(
         pool: SqlitePool,
         resource_recorder_uri: Uri,
-        provisioner_address: String,
+        provisioner_uri: Uri,
         project_id: Ulid,
     ) -> (Self, JoinHandle<()>) {
-        let channel = Endpoint::from_shared(provisioner_address)
-            .expect("to have a valid string endpoint for the provisioner")
-            .connect()
-            .await
-            .expect("failed to connect to provisioner");
-
-        let provisioner_service = ServiceBuilder::new()
-            .layer(ClaimLayer)
-            .layer(InjectPropagationLayer)
-            .service(channel);
-
         let resource_recorder_client = resource_recorder::get_client(resource_recorder_uri).await;
-        let provisioner_client = ProvisionerClient::new(provisioner_service);
+        let provisioner_client = provisioner::get_client(provisioner_uri).await;
 
         let (state_send, handle) = Self::from_pool(pool.clone()).await;
 

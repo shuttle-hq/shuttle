@@ -28,7 +28,7 @@ async fn main() {
     let (persistence, _) = Persistence::new(
         &args.state,
         args.resource_recorder.clone(),
-        &args.provisioner_address,
+        args.provisioner_address.clone(),
         Ulid::from_string(args.project_id.as_str())
             .expect("to get a valid ULID for project_id arg"),
     )

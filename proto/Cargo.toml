@@ -30,14 +30,15 @@ portpicker = { workspace = true }
 default = []
 test-utils = ["portpicker"]
 
-builder = []
+builder = ["http", "tower"]
 logger = [
     "shuttle-common/service",
     "chrono",
+    "http",
     "tracing",
     "tokio/macros",
     "tokio/time",
 ]
-provisioner = []
+provisioner = ["http", "tower"]
 resource-recorder = ["anyhow", "async-trait", "http", "serde_json", "shuttle-common/backend", "tower"]
-runtime = []
+runtime = ["anyhow", "tokio", "tower", "tracing"]

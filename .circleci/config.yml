@@ -59,6 +59,17 @@ commands:
       - run:
           name: Sccache stats
           command: sccache --show-stats
+      - run:
+          name: Prune old sccache items
+          # Delete files that have not been accessed in 5 days
+          command: |
+            du -sh ~/.cache/sccache
+            find ~/.cache/sccache -atime +5 | wc -l
+            find ~/.cache/sccache -atime +5 -delete
+            du -sh ~/.cache/sccache
+      - run:
+          name: Sccache stats
+          command: sccache --show-stats
       - save_cache:
           name: Save sccache cache
           # We use {{ .Branch }}-{{ .Revision }} to upload a fresh cache for each commit on a branch.
@@ -113,7 +124,7 @@ commands:
   install-rust:
     steps:
       - run:
-          name: Install Rust
+          name: Install Rust and wasm32-wasi
           # Note: Let CI use our MSRV, rather than latest
           command: which cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75.0
       - run: rustup target add wasm32-wasi
@@ -201,6 +212,8 @@ jobs:
       - restore-cargo-and-sccache
       - install-cargo-make
       - run: cargo make ci-workspace
+      - install-protoc
+      - run: cargo make proto validate
       - save-sccache
       - save-cargo-cache
   cargo-audit:
@@ -215,28 +228,13 @@ jobs:
       path:
         description: "Path to crate external from workspace"
         type: string
-      features:
-        description: "Features to enable"
-        type: string
-        default: --all-features
     executor: docker-rust
     steps:
       - checkout
       - restore-cargo-and-sccache
+      - install-cargo-make
       - apply-patches
-      - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
-      - run: |
-          cargo clippy --tests \
-                       --all-targets \
-                       << parameters.features >> \
-                       --manifest-path << parameters.path >>/Cargo.toml \
-                       --no-deps -- \
-                       --D warnings
-      - run: |
-          cargo test << parameters.features >> \
-                     --manifest-path << parameters.path >>/Cargo.toml \
-                     -- \
-                     --nocapture
+      - run: cargo make ci-standalone << parameters.path >>
       - save-sccache
   test-workspace-member:
     parameters:
@@ -248,7 +246,8 @@ jobs:
       - install-rust
       - checkout
       - restore-cargo-and-sccache
-      - run: cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
+      - install-cargo-make
+      - run: cargo make test-member << parameters.crate >>
       - save-sccache
   test-workspace-member-with-integration:
     parameters:
@@ -265,27 +264,14 @@ jobs:
     resource_class: << parameters.resource_class >>
     steps:
       - install-rust
-      - install-protoc
       - install-cargo-make
       - checkout
       - run: git submodule update --init
       - restore-cargo-and-sccache:
           sccache-size: << parameters.sccache-size >>
       - apply-patches
-      - run:
-          name: Run unit tests
-          command: cargo test -p << parameters.crate >> --all-features --lib -- --nocapture
-      - run:
-          name: Run integration tests
-          command: |
-            set +o pipefail
-            path=$(echo "<< parameters.crate >>" | sed "s/shuttle-\(.*\)/\1/")
-            if [ -f "$path/integration.sh" ]; then
-              bash "$path/integration.sh"
-            else
-              echo "nothing to test here, adjust CI file or add an integration script"
-              exit 1
-            fi
+      - run: cargo make test-member << parameters.crate >>
+      - run: cargo make test-member-integration << parameters.crate >>
       - save-sccache
   test-workspace-member-with-integration-docker:
     parameters:
@@ -303,25 +289,15 @@ jobs:
     resource_class: << parameters.resource_class >>
     steps:
       - install-rust
-      - install-protoc
+      - install-cargo-make
       - checkout
       - run: git submodule update --init
       - restore-cargo-and-sccache:
           sccache-size: << parameters.sccache-size >>
       - apply-patches
-      - run:
-          name: Run integration tests that need docker
-          command: |
-            set +o pipefail
-            path=$(echo "<< parameters.crate >>" | sed "s/shuttle-\(.*\)/\1/")
-            if [ -f "$path/integration_docker.sh" ]; then
-              bash "$path/integration_docker.sh"
-            else
-              echo "nothing to test here, adjust CI file or add an integration script"
-              exit 1
-            fi
+      - run: cargo make test-member-integration-docker << parameters.crate >>
       - save-sccache
-  e2e-test:
+  e2e-test: # outdated
     executor: machine-ubuntu
     resource_class: medium
     steps:
@@ -717,51 +693,19 @@ workflows:
                 - resources/persist
                 - resources/qdrant
                 - resources/secrets
+                - resources/shared-db
                 - resources/turso
                 - services/shuttle-actix-web
+                - services/shuttle-axum
                 - services/shuttle-next
                 - services/shuttle-poem
                 - services/shuttle-rocket
                 - services/shuttle-salvo
+                - services/shuttle-serenity
                 - services/shuttle-thruster
                 - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
-      - test-standalone:
-          # Has mutually exclusive features, so we run checks for each feature separately
-          name: "resources/shared-db: << matrix.features >>"
-          matrix:
-            alias: test-standalone-shared-db
-            parameters:
-              path:
-                - resources/shared-db
-              features:
-                - "-F mongodb"
-                - "-F postgres"
-                - "-F postgres,sqlx"
-                - "-F postgres,sqlx-native-tls"
-      - test-standalone:
-          # Has mutually exclusive features, so we run checks for each feature separately
-          name: "services/shuttle-axum: << matrix.features >>"
-          matrix:
-            alias: test-standalone-services-shuttle-axum
-            parameters:
-              path:
-                - services/shuttle-axum
-              features:
-                - "-F axum"
-                - "-F axum-0-6 --no-default-features"
-      - test-standalone:
-          # Has mutually exclusive features, so we run checks for each feature separately
-          name: "services/shuttle-serenity: << matrix.features >>"
-          matrix:
-            alias: test-standalone-services-shuttle-serenity
-            parameters:
-              path:
-                - services/shuttle-serenity
-              features:
-                - "-F serenity"
-                - "-F serenity-0-11-rustls_backend --no-default-features"
       - test-workspace-member:
           name: << matrix.crate >>
           matrix:
@@ -779,7 +723,6 @@ workflows:
               resource_class:
                 - medium
               crate:
-                - shuttle-proto
                 - shuttle-resource-recorder
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
@@ -829,19 +772,19 @@ workflows:
           filters:
             branches:
               only: main
-      - e2e-test:
-          requires:
-            - test-standalone
-            - test-standalone-shared-db
-            - test-workspace-member
-            - test-workspace-member-with-integration-medium
-            - test-workspace-member-with-integration-large
-            - test-workspace-member-with-integration-xlarge
-            - test-workspace-member-with-integration-docker-medium
-            - test-workspace-member-with-integration-docker-large
-          filters:
-            branches:
-              only: production
+      # - e2e-test:
+      #     requires:
+      #       - test-standalone
+      #       - test-standalone-shared-db
+      #       - test-workspace-member
+      #       - test-workspace-member-with-integration-medium
+      #       - test-workspace-member-with-integration-large
+      #       - test-workspace-member-with-integration-xlarge
+      #       - test-workspace-member-with-integration-docker-medium
+      #       - test-workspace-member-with-integration-docker-large
+      #     filters:
+      #       branches:
+      #         only: production
   unstable:
     jobs:
       - approve-deploy-images-unstable:

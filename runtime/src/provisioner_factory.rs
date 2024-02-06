@@ -2,22 +2,16 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use async_trait::async_trait;
 use shuttle_common::{
-    claims::{Claim, ClaimService, InjectPropagation},
-    constants::STORAGE_DIRNAME,
-    database,
-    secrets::Secret,
-    DatabaseInfo,
+    claims::Claim, constants::STORAGE_DIRNAME, database, secrets::Secret, DatabaseInfo,
 };
-use shuttle_proto::provisioner::{
-    provisioner_client::ProvisionerClient, ContainerRequest, ContainerResponse, DatabaseRequest,
-};
+use shuttle_proto::provisioner::{self, ContainerRequest, ContainerResponse, DatabaseRequest};
 use shuttle_service::{DeploymentMetadata, Environment, Factory};
-use tonic::{transport::Channel, Request};
+use tonic::Request;
 
 /// A factory (service locator) which goes through the provisioner crate
 pub struct ProvisionerFactory {
     service_name: String,
-    provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
+    provisioner_client: provisioner::Client,
     secrets: BTreeMap<String, Secret<String>>,
     env: Environment,
     claim: Option<Claim>,
@@ -25,7 +19,7 @@ pub struct ProvisionerFactory {
 
 impl ProvisionerFactory {
     pub(crate) fn new(
-        provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
+        provisioner_client: provisioner::Client,
         service_name: String,
         secrets: BTreeMap<String, Secret<String>>,
         env: Environment,

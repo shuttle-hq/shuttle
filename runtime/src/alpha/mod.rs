@@ -16,12 +16,12 @@ use shuttle_common::{
         auth::{AuthPublicKey, JwtAuthenticationLayer},
         trace::ExtractPropagationLayer,
     },
-    claims::{Claim, ClaimLayer, InjectPropagationLayer},
+    claims::Claim,
     resource,
     secrets::Secret,
 };
 use shuttle_proto::{
-    provisioner::provisioner_client::ProvisionerClient,
+    provisioner,
     runtime::{
         runtime_server::{Runtime, RuntimeServer},
         LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
@@ -38,7 +38,6 @@ use tonic::{
     transport::{Endpoint, Server},
     Request, Response, Status,
 };
-use tower::ServiceBuilder;
 
 use crate::__internals::{print_version, ProvisionerFactory, ResourceTracker};
 
@@ -205,19 +204,8 @@ where
         } = request.into_inner();
         println!("loading alpha service at {path}");
 
-        let channel = self
-            .provisioner_address
-            .clone()
-            .connect()
-            .await
-            .context("failed to connect to provisioner")
-            .map_err(|err| Status::internal(err.to_string()))?;
-        let channel = ServiceBuilder::new()
-            .layer(ClaimLayer)
-            .layer(InjectPropagationLayer)
-            .service(channel);
-
-        let provisioner_client = ProvisionerClient::new(channel);
+        let provisioner_client =
+            provisioner::get_client(self.provisioner_address.uri().clone()).await;
 
         // TODO: merge new & old secrets
 

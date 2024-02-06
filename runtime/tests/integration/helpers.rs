@@ -6,24 +6,20 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
-use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
         ContainerRequest, ContainerResponse, DatabaseDeletionResponse, DatabaseRequest,
         DatabaseResponse, Ping, Pong,
     },
-    runtime::runtime_client::RuntimeClient,
+    runtime,
 };
 use shuttle_service::{builder::build_workspace, runner, Environment};
 use tokio::process::Child;
-use tonic::{
-    transport::{Channel, Server},
-    Request, Response, Status,
-};
+use tonic::{transport::Server, Request, Response, Status};
 
 pub struct TestRuntime {
-    pub runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+    pub runtime_client: runtime::Client,
     pub bin_path: String,
     pub service_name: String,
     pub runtime_address: SocketAddr,

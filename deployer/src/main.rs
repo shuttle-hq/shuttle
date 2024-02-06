@@ -1,15 +1,13 @@
 use clap::Parser;
 use shuttle_common::{
     backends::trace::setup_tracing,
-    claims::{ClaimLayer, InjectPropagationLayer},
     log::{Backend, DeploymentLogLayer},
 };
 use shuttle_deployer::{start, Args, Persistence, RuntimeManager, StateChangeLayer};
 use shuttle_proto::{
     // builder::builder_client::BuilderClient,
-    logger::{logger_client::LoggerClient, Batcher},
+    logger::{self, Batcher},
 };
-use tower::ServiceBuilder;
 use tracing::trace;
 use tracing_subscriber::prelude::*;
 use ulid::Ulid;
@@ -25,22 +23,13 @@ async fn main() {
     let (persistence, _) = Persistence::new(
         &args.state,
         args.resource_recorder.clone(),
-        &args.provisioner_address,
+        args.provisioner_address.clone(),
         Ulid::from_string(args.project_id.as_str())
             .expect("to get a valid ULID for project_id arg"),
     )
     .await;
 
-    let channel = ServiceBuilder::new()
-        .layer(ClaimLayer)
-        .layer(InjectPropagationLayer)
-        .service(
-            args.logger_uri
-                .connect()
-                .await
-                .expect("failed to connect to logger"),
-        );
-    let logger_client = LoggerClient::new(channel);
+    let logger_client = logger::get_client(args.logger_uri.clone()).await;
     let logger_batcher = Batcher::wrap(logger_client.clone());
 
     let builder_client = None;

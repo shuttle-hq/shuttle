@@ -7,33 +7,19 @@ use std::{
 use anyhow::Context;
 use chrono::Utc;
 use prost_types::Timestamp;
-use shuttle_common::{
-    claims::{ClaimService, InjectPropagation},
-    log::Backend,
-};
+use shuttle_common::log::Backend;
 use shuttle_proto::{
-    logger::{logger_client::LoggerClient, Batcher, LogItem, LogLine},
-    runtime::{runtime_client::RuntimeClient, StopRequest},
+    logger::{self, Batcher, LogItem, LogLine},
+    runtime::{self, StopRequest},
 };
 use shuttle_service::{runner, Environment};
 use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
-use tonic::transport::Channel;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
-type Runtimes = Arc<
-    std::sync::Mutex<
-        HashMap<
-            Uuid,
-            (
-                process::Child,
-                RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
-            ),
-        >,
-    >,
->;
+type Runtimes = Arc<std::sync::Mutex<HashMap<Uuid, (process::Child, runtime::Client)>>>;
 
 /// Manager that can start up multiple runtimes. This is needed so that two runtimes can be up when a new deployment is made:
 /// One runtime for the new deployment being loaded; another for the currently active deployment
@@ -41,26 +27,14 @@ type Runtimes = Arc<
 pub struct RuntimeManager {
     runtimes: Runtimes,
     provisioner_address: String,
-    logger_client: Batcher<
-        LoggerClient<
-            shuttle_common::claims::ClaimService<
-                shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-            >,
-        >,
-    >,
+    logger_client: Batcher<logger::Client>,
     auth_uri: Option<String>,
 }
 
 impl RuntimeManager {
     pub fn new(
         provisioner_address: String,
-        logger_client: Batcher<
-            LoggerClient<
-                shuttle_common::claims::ClaimService<
-                    shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
-                >,
-            >,
-        >,
+        logger_client: Batcher<logger::Client>,
         auth_uri: Option<String>,
     ) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
@@ -77,7 +51,7 @@ impl RuntimeManager {
         project_path: &Path,
         service_name: String,
         alpha_runtime_path: Option<PathBuf>,
-    ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
+    ) -> anyhow::Result<runtime::Client> {
         trace!("making new client");
 
         // the port to run the runtime's gRPC server on

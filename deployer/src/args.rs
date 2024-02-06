@@ -3,7 +3,6 @@ use std::{net::SocketAddr, path::PathBuf};
 use clap::Parser;
 use hyper::Uri;
 use shuttle_common::models::project::ProjectName;
-use tonic::transport::Endpoint;
 
 /// Program to handle the deploys for a single project
 /// Handling includes, building, testing, and running each service
@@ -20,7 +19,7 @@ pub struct Args {
 
     /// Address to connect to the logger service
     #[clap(long, default_value = "http://logger:8000")]
-    pub logger_uri: Endpoint,
+    pub logger_uri: Uri,
 
     /// Address to bind API to
     #[clap(long, default_value = "0.0.0.0:8001")]
@@ -52,7 +51,7 @@ pub struct Args {
 
     /// Address to reach the builder service at
     #[clap(long, default_value = "http://builder:8000")]
-    pub builder_uri: Endpoint,
+    pub builder_uri: Uri,
 
     /// Uri to folder to store all artifacts
     #[clap(long, default_value = "/tmp")]

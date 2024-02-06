@@ -156,9 +156,9 @@ feature_flags = array "--all-features"
 if eq ${path} "resources/shared-db"
     feature_flags = array "-F mongodb" "-F postgres" "-F postgres,sqlx" "-F postgres,sqlx-native-tls"
 elseif eq ${path} "services/shuttle-axum"
-    feature_flags = array "-F axum" "-F axum-0-6 --no-default-features"
+    feature_flags = array "-F axum" "-F axum-0-6"
 elseif eq ${path} "services/shuttle-serenity"
-    feature_flags = array "-F serenity" "-F serenity-0-11-rustls_backend --no-default-features"
+    feature_flags = array "-F serenity" "-F serenity-0-11-rustls_backend"
 end
 
 echo
@@ -173,8 +173,10 @@ for f in ${feature_flags}
     println -s bold "### Feature flags:"
     println -s bold "    ${f}"
     echo
-    run cargo clippy --tests --all-targets ${f} --manifest-path ${manifest} --no-deps -- --D warnings
-    run cargo test ${f} --manifest-path ${manifest} -- --nocapture
+    # In the default case, --all-features overrides --no-default-features.
+    # --no-default-features is used for enabling special sets of feature flags.
+    run cargo clippy --tests --all-targets --no-default-features ${f} --manifest-path ${manifest} --no-deps -- --D warnings
+    run cargo test --no-default-features ${f} --manifest-path ${manifest} -- --nocapture
 end
 
 

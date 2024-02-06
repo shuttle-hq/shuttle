@@ -113,7 +113,7 @@ commands:
   install-rust:
     steps:
       - run:
-          name: Install Rust
+          name: Install Rust and wasm32-wasi
           # Note: Let CI use our MSRV, rather than latest
           command: which cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75.0
       - run: rustup target add wasm32-wasi
@@ -259,12 +259,8 @@ jobs:
       - restore-cargo-and-sccache:
           sccache-size: << parameters.sccache-size >>
       - apply-patches
-      - run:
-          name: Run unit tests
-          command: cargo make test-member << parameters.crate >>
-      - run:
-          name: Run integration tests
-          command: cargo make test-member-integration << parameters.crate >>
+      - run: cargo make test-member << parameters.crate >>
+      - run: cargo make test-member-integration << parameters.crate >>
       - save-sccache
   test-workspace-member-with-integration-docker:
     parameters:
@@ -288,9 +284,7 @@ jobs:
       - restore-cargo-and-sccache:
           sccache-size: << parameters.sccache-size >>
       - apply-patches
-      - run:
-          name: Run integration tests that need docker
-          command: cargo make test-member-integration-docker << parameters.crate >>
+      - run: cargo make test-member-integration-docker << parameters.crate >>
       - save-sccache
   e2e-test: # outdated
     executor: machine-ubuntu

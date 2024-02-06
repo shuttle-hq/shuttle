@@ -54,7 +54,7 @@ services:
       - "--stripe-secret-key=${STRIPE_SECRET_KEY}"
       - "--jwt-signing-private-key=${AUTH_JWTSIGNING_PRIVATE_KEY}"
     healthcheck:
-      test: curl --fail http://localhost:8000/ || exit 1
+      test: curl -f -s http://localhost:8000
       interval: 1m
       timeout: 10s
       retries: 5
@@ -150,7 +150,7 @@ services:
       - "--use-tls=${USE_TLS}"
       - "--admin-key=${GATEWAY_ADMIN_KEY}"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001"]
+      test: curl -f -s http://localhost:8001
       interval: 1m
       timeout: 15s
       retries: 15

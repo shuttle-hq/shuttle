@@ -21,7 +21,7 @@ use shuttle_common::{
     secrets::Secret,
 };
 use shuttle_proto::{
-    provisioner::{self},
+    provisioner,
     runtime::{
         runtime_server::{Runtime, RuntimeServer},
         LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,

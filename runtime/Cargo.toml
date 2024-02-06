@@ -34,7 +34,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
-tower = { workspace = true }
 tracing-subscriber = { workspace = true, optional = true }
 wasi-common = { version = "13.0.0", optional = true }
 wasmtime = { version = "13.0.0", optional = true }

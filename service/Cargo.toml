@@ -29,7 +29,6 @@ serde = { workspace = true, features = ["derive"] }
 strfmt = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true }
-tower = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 
@@ -48,4 +47,4 @@ builder = [
     "toml",
     "tracing",
 ]
-runner = ["shuttle-proto/runtime", "tokio/process", "dunce", "tower"]
+runner = ["shuttle-proto/runtime", "tokio/process", "dunce"]

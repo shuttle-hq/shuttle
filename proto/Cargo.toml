@@ -41,4 +41,4 @@ logger = [
 ]
 provisioner = ["http", "tower"]
 resource-recorder = ["anyhow", "async-trait", "http", "serde_json", "shuttle-common/backend", "tower"]
-runtime = ["tower"]
+runtime = ["anyhow", "tokio", "tower", "tracing"]

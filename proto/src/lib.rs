@@ -12,12 +12,36 @@ pub mod test_utils;
 pub mod provisioner {
     use std::fmt::Display;
 
+    use http::Uri;
     use shuttle_common::{
         database::{self, AwsRdsEngine, SharedEngine},
         DatabaseInfo,
     };
 
+    use self::provisioner_client::ProvisionerClient;
+
     pub use super::generated::provisioner::*;
+
+    pub type Client = ProvisionerClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >;
+
+    /// Get a provisioner client that is correctly configured for all services
+    pub async fn get_client(provisioner_uri: Uri) -> Client {
+        let channel = tonic::transport::Endpoint::from(provisioner_uri)
+            .connect()
+            .await
+            .expect("failed to connect to provisioner");
+
+        let provisioner_service = tower::ServiceBuilder::new()
+            .layer(shuttle_common::claims::ClaimLayer)
+            .layer(shuttle_common::claims::InjectPropagationLayer)
+            .service(channel);
+
+        ProvisionerClient::new(provisioner_service)
+    }
 
     impl From<DatabaseResponse> for DatabaseInfo {
         fn from(response: DatabaseResponse) -> Self {
@@ -103,7 +127,53 @@ pub mod provisioner {
 
 #[cfg(feature = "runtime")]
 pub mod runtime {
+    use std::time::Duration;
+
+    use anyhow::Context;
+    use tonic::transport::Endpoint;
+    use tracing::{info, trace};
+
+    use self::runtime_client::RuntimeClient;
+
     pub use super::generated::runtime::*;
+
+    pub type Client = RuntimeClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >;
+
+    /// Get a runtime client that is correctly configured
+    pub async fn get_client(port: &str) -> anyhow::Result<Client> {
+        info!("connecting runtime client");
+        let conn = Endpoint::new(format!("http://127.0.0.1:{port}"))
+            .context("creating runtime client endpoint")?
+            .connect_timeout(Duration::from_secs(5));
+
+        // Wait for the spawned process to open the control port.
+        // Connecting instantly does not give it enough time.
+        let channel = tokio::time::timeout(Duration::from_millis(7000), async move {
+            let mut ms = 5;
+            loop {
+                if let Ok(channel) = conn.connect().await {
+                    break channel;
+                }
+                trace!("waiting for runtime control port to open");
+                // exponential backoff
+                tokio::time::sleep(Duration::from_millis(ms)).await;
+                ms *= 2;
+            }
+        })
+        .await
+        .context("runtime control port did not open in time")?;
+
+        let runtime_service = tower::ServiceBuilder::new()
+            .layer(shuttle_common::claims::ClaimLayer)
+            .layer(shuttle_common::claims::InjectPropagationLayer)
+            .service(channel);
+
+        Ok(RuntimeClient::new(runtime_service))
+    }
 }
 
 #[cfg(feature = "resource-recorder")]
@@ -308,7 +378,32 @@ pub mod resource_recorder {
 
 #[cfg(feature = "builder")]
 pub mod builder {
+    use http::Uri;
+
+    use self::builder_client::BuilderClient;
+
     pub use super::generated::builder::*;
+
+    pub type Client = BuilderClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >;
+
+    /// Get a builder client that is correctly configured for all services
+    pub async fn get_client(builder_uri: Uri) -> Client {
+        let channel = tonic::transport::Endpoint::from(builder_uri)
+            .connect()
+            .await
+            .expect("failed to connect to builder");
+
+        let builder_service = tower::ServiceBuilder::new()
+            .layer(shuttle_common::claims::ClaimLayer)
+            .layer(shuttle_common::claims::InjectPropagationLayer)
+            .service(channel);
+
+        BuilderClient::new(builder_service)
+    }
 }
 
 #[cfg(feature = "logger")]
@@ -317,6 +412,7 @@ pub mod logger {
     use std::time::Duration;
 
     use chrono::{NaiveDateTime, TimeZone, Utc};
+    use http::Uri;
     use prost::bytes::Bytes;
     use tokio::{select, sync::mpsc, time::interval};
     use tonic::{
@@ -331,7 +427,30 @@ pub mod logger {
         DeploymentId,
     };
 
+    use self::logger_client::LoggerClient;
+
     pub use super::generated::logger::*;
+
+    pub type Client = LoggerClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >;
+
+    /// Get a logger client that is correctly configured for all services
+    pub async fn get_client(logger_uri: Uri) -> Client {
+        let channel = tonic::transport::Endpoint::from(logger_uri)
+            .connect()
+            .await
+            .expect("failed to connect to logger");
+
+        let logger_service = tower::ServiceBuilder::new()
+            .layer(shuttle_common::claims::ClaimLayer)
+            .layer(shuttle_common::claims::InjectPropagationLayer)
+            .service(channel);
+
+        LoggerClient::new(logger_service)
+    }
 
     impl From<LogItemCommon> for LogItem {
         fn from(value: LogItemCommon) -> Self {

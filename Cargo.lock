@@ -6102,7 +6102,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tonic 0.10.2",
- "tower",
  "tracing-subscriber",
  "uuid",
  "wasi-common",
@@ -6125,7 +6124,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "toml 0.8.8",
- "tower",
  "tracing",
 ]
 

@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
-    claims::{Claim, ClaimService, InjectPropagation},
+    claims::Claim,
     constants::EXECUTABLE_DIRNAME,
     deployment::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
@@ -20,15 +20,14 @@ use shuttle_common::{
 use shuttle_proto::{
     resource_recorder::record_request,
     runtime::{
-        runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
-        SubscribeStopResponse,
+        self, LoadRequest, StartRequest, StopReason, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
 use tokio::{
     sync::Mutex,
     task::{JoinHandle, JoinSet},
 };
-use tonic::{transport::Channel, Code};
+use tonic::Code;
 use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
@@ -313,7 +312,7 @@ async fn load(
     service_id: Ulid,
     executable_path: PathBuf,
     mut resource_manager: impl ResourceManager,
-    mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+    mut runtime_client: runtime::Client,
     claim: Claim,
     mut secrets: HashMap<String, String>,
 ) -> Result<()> {
@@ -414,7 +413,7 @@ async fn load(
 async fn run(
     id: Uuid,
     service_name: String,
-    mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+    mut runtime_client: runtime::Client,
     address: SocketAddr,
     deployment_updater: impl DeploymentUpdater,
     cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,

@@ -127,7 +127,53 @@ pub mod provisioner {
 
 #[cfg(feature = "runtime")]
 pub mod runtime {
+    use std::time::Duration;
+
+    use anyhow::Context;
+    use tonic::transport::Endpoint;
+    use tracing::{info, trace};
+
+    use self::runtime_client::RuntimeClient;
+
     pub use super::generated::runtime::*;
+
+    pub type Client = RuntimeClient<
+        shuttle_common::claims::ClaimService<
+            shuttle_common::claims::InjectPropagation<tonic::transport::Channel>,
+        >,
+    >;
+
+    /// Get a runtime client that is correctly configured
+    pub async fn get_client(port: &str) -> anyhow::Result<Client> {
+        info!("connecting runtime client");
+        let conn = Endpoint::new(format!("http://127.0.0.1:{port}"))
+            .context("creating runtime client endpoint")?
+            .connect_timeout(Duration::from_secs(5));
+
+        // Wait for the spawned process to open the control port.
+        // Connecting instantly does not give it enough time.
+        let channel = tokio::time::timeout(Duration::from_millis(7000), async move {
+            let mut ms = 5;
+            loop {
+                if let Ok(channel) = conn.connect().await {
+                    break channel;
+                }
+                trace!("waiting for runtime control port to open");
+                // exponential backoff
+                tokio::time::sleep(Duration::from_millis(ms)).await;
+                ms *= 2;
+            }
+        })
+        .await
+        .context("runtime control port did not open in time")?;
+
+        let runtime_service = tower::ServiceBuilder::new()
+            .layer(shuttle_common::claims::ClaimLayer)
+            .layer(shuttle_common::claims::InjectPropagationLayer)
+            .service(channel);
+
+        Ok(RuntimeClient::new(runtime_service))
+    }
 }
 
 #[cfg(feature = "resource-recorder")]

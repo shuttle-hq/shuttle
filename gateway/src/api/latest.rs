@@ -872,7 +872,10 @@ impl ApiBuilder {
                     request,
                     account.name = field::Empty,
                     request.params.project_name = field::Empty,
-                    request.params.account_name = field::Empty
+                    request.params.account_name = field::Empty,
+                    error.message = field::Empty,
+                    error.stack = field::Empty,
+                    "error.type" = field::Empty,
                 )
             })
             .with_propagation()

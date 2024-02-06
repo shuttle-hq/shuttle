@@ -119,6 +119,24 @@ impl IntoResponse for Error {
         if error.status_code >= 500 {
             // We only want to emit error events for internal errors, not e.g. 404s.
             error!(error = error.message, "control plane request error");
+            // With these fields set here and in the request span, error tracking will work for
+            // logs in Datadog, as long as we remap error.kind to error.type in logs configuration.
+            // Note that we don't set the stacktrace, but it also won't be available for a lot of
+            // errors. We could consider just using a source trace for the stack field.
+            error!(
+                error.message = %error.message,
+                error.stack = "stacktrace",
+                "error.type" = "ApiError",
+                "control plane dd error"
+            );
+            // After recording these fields, errors will be displayed with error message, type and
+            // stacktrace in Datadog APM queries span info, but the error still won't register in
+            // APM error tracking.
+            // Note: something is overwriting the error.message field to be the status code, this
+            // is not the case for the logs, just the span error.message.
+            tracing::Span::current().record("error.message", &error.message);
+            tracing::Span::current().record("error.stack", &error.message);
+            tracing::Span::current().record("error.type", "ApiError");
         }
 
         error.into_response()

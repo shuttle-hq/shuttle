@@ -109,3 +109,27 @@ mod _sqlx {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn to_string_and_back() {
+        let inputs = [
+            Type::Database(database::Type::AwsRds(database::AwsRdsEngine::Postgres)),
+            Type::Database(database::Type::AwsRds(database::AwsRdsEngine::MySql)),
+            Type::Database(database::Type::AwsRds(database::AwsRdsEngine::MariaDB)),
+            Type::Database(database::Type::Shared(database::SharedEngine::Postgres)),
+            Type::Database(database::Type::Shared(database::SharedEngine::MongoDb)),
+            Type::Secrets,
+            Type::Persist,
+            Type::Custom,
+        ];
+
+        for input in inputs {
+            let actual = Type::from_str(&input.to_string()).unwrap();
+            assert_eq!(input, actual, ":{} should map back to itself", input);
+        }
+    }
+}

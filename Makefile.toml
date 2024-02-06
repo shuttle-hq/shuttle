@@ -158,7 +158,7 @@ if eq ${path} "resources/shared-db"
 elseif eq ${path} "services/shuttle-axum"
     feature_flags = array "-F axum" "-F axum-0-6"
 elseif eq ${path} "services/shuttle-serenity"
-    feature_flags = array "-F serenity" "-F serenity-0-11-rustls_backend"
+    feature_flags = array "-F serenity,rustls_backend" "-F serenity,native_tls_backend" "-F serenity-0-11-rustls_backend" "-F serenity-0-11-native_tls_backend"
 end
 
 echo

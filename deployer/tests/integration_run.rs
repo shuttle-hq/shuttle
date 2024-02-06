@@ -29,10 +29,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use shuttle_deployer::{
-    deployment::Built,
-    error,
-    persistence::{resource::ResourceManager, DeploymentUpdater},
-    RuntimeManager,
+    deployment::Built, error, persistence::resource::ResourceManager, RuntimeManager,
 };
 
 const RESOURCES_PATH: &str = "tests/resources";
@@ -144,18 +141,6 @@ impl ResourceManager for StubResourceManager {
             message: "dummy impl".to_string(),
             resource: None,
         })
-    }
-}
-
-#[derive(Clone)]
-struct StubDeploymentUpdater;
-
-#[async_trait]
-impl DeploymentUpdater for StubDeploymentUpdater {
-    type Err = std::io::Error;
-
-    async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
-        Ok(())
     }
 }
 

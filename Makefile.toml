@@ -1,6 +1,7 @@
 # 1. cargo install cargo-make
 # 2. cargo make <task_name>
-# docs: https://sagiegurari.github.io/cargo-make/
+# cargo make docs: https://sagiegurari.github.io/cargo-make/
+# duckscript docs: https://github.com/sagiegurari/duckscript/blob/master/docs/sdk.md
 
 [config]
 default_to_workspace = false

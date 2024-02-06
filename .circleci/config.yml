@@ -59,6 +59,17 @@ commands:
       - run:
           name: Sccache stats
           command: sccache --show-stats
+      - run:
+          name: Prune old sccache items
+          # Delete files that have not been accessed in 5 days
+          command: |
+            du -sh ~/.cache/sccache
+            find ~/.cache/sccache -atime +5 | wc -l
+            find ~/.cache/sccache -atime +5 -delete
+            du -sh ~/.cache/sccache
+      - run:
+          name: Sccache stats
+          command: sccache --show-stats
       - save_cache:
           name: Save sccache cache
           # We use {{ .Branch }}-{{ .Revision }} to upload a fresh cache for each commit on a branch.

@@ -1,27 +1,21 @@
-use std::convert::Infallible;
 use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
 use axum::extract::{ConnectInfo, Path, State};
 use axum::headers::{HeaderMapExt, Host};
-use axum::middleware;
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use axum::routing::any;
 use axum_server::accept::DefaultAcceptor;
 use axum_server::tls_rustls::RustlsAcceptor;
 use fqdn::{fqdn, FQDN};
-use futures::future::{ready, Ready};
 use futures::prelude::*;
 use http::header::SERVER;
 use http::{HeaderValue, StatusCode};
 use hyper::body::{Body, HttpBody};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
-use hyper::server::conn::AddrStream;
 use hyper::{Client, Request};
 use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
@@ -30,12 +24,11 @@ use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::XShuttleProject;
 use shuttle_common::models::error::InvalidProjectName;
 use tokio::sync::mpsc::Sender;
-use tower::{Service, ServiceBuilder};
 use tower_sanitize_path::SanitizePath;
 use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::acme::{AcmeClient, ChallengeResponderLayer, CustomDomain};
+use crate::acme::{AcmeClient, CustomDomain};
 use crate::service::GatewayService;
 use crate::task::BoxedTask;
 use crate::{Error, ErrorKind};
@@ -43,50 +36,6 @@ use crate::{Error, ErrorKind};
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
 static SERVER_HEADER: Lazy<HeaderValue> = Lazy::new(|| "shuttle.rs".parse().unwrap());
-
-pub trait AsResponderTo<R> {
-    fn as_responder_to(&self, req: R) -> Self;
-
-    fn into_make_service(self) -> ResponderMakeService<Self>
-    where
-        Self: Sized,
-    {
-        ResponderMakeService { inner: self }
-    }
-}
-
-pub struct ResponderMakeService<S> {
-    inner: S,
-}
-
-// impl<'r, S> Service<&'r AddrStream> for ResponderMakeService<S>
-// where
-//     S: AsResponderTo<&'r AddrStream>,
-// {
-//     type Response = S;
-//     type Error = Infallible;
-//     type Future = Ready<Result<Self::Response, Self::Error>>;
-
-//     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-//         Poll::Ready(Ok(()))
-//     }
-
-//     fn call(&mut self, req: &'r AddrStream) -> Self::Future {
-//         ready(Ok(self.inner.as_responder_to(req)))
-//     }
-// }
-
-impl<S, R> AsResponderTo<R> for SanitizePath<S>
-where
-    S: AsResponderTo<R> + Clone,
-{
-    fn as_responder_to(&self, req: R) -> Self {
-        let responder = self.clone();
-        responder.inner().as_responder_to(req);
-
-        responder
-    }
-}
 
 pub struct ProxyState {
     gateway: Arc<GatewayService>,
@@ -167,35 +116,10 @@ async fn proxy(
     Ok(Response::from_parts(parts, body))
 }
 
-// impl Service<Request<Body>> for UserProxy {
-//     type Response = Response;
-//     type Error = Error;
-//     type Future =
-//         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
-
-//     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-//         Poll::Ready(Ok(()))
-//     }
-
-//     fn call(&mut self, req: Request<Body>) -> Self::Future {
-//         let task_sender = self.task_sender.clone();
-//         self.clone()
-//             .proxy(task_sender, req)
-//             .or_else(|err: Error| future::ready(Ok(err.into_response())))
-//             .boxed()
-//     }
-// }
-
 #[derive(Clone)]
 pub struct Bouncer {
     gateway: Arc<GatewayService>,
     public: FQDN,
-}
-
-impl<'r> AsResponderTo<&'r AddrStream> for Bouncer {
-    fn as_responder_to(&self, _req: &'r AddrStream) -> Self {
-        self.clone()
-    }
 }
 
 async fn bounce(State(state): State<Arc<Bouncer>>, req: Request<Body>) -> Result<Response, Error> {
@@ -225,21 +149,6 @@ async fn bounce(State(state): State<Arc<Bouncer>>, req: Request<Body>) -> Result
 
     Ok(resp.body(body).unwrap())
 }
-
-// impl Service<Request<Body>> for Bouncer {
-//     type Response = Response;
-//     type Error = Error;
-//     type Future =
-//         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
-
-//     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-//         Poll::Ready(Ok(()))
-//     }
-
-//     fn call(&mut self, req: Request<Body>) -> Self::Future {
-//         self.clone().bounce(req).boxed()
-//     }
-// }
 
 pub struct UserServiceBuilder {
     service: Option<Arc<GatewayService>>,

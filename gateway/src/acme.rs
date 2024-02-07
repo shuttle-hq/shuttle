@@ -1,16 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 use std::time::Duration;
 
-use axum::body::boxed;
-use axum::extract::State;
-use axum::middleware::Next;
-use axum::response::Response;
 use fqdn::FQDN;
-use futures::future::BoxFuture;
-use hyper::server::conn::AddrStream;
-use hyper::{Body, Request};
 use instant_acme::{
     Account, AccountCredentials, Authorization, AuthorizationStatus, Challenge, ChallengeType,
     Identifier, KeyAuthorization, LetsEncrypt, NewAccount, NewOrder, Order, OrderStatus,
@@ -19,11 +11,7 @@ use rcgen::{Certificate, CertificateParams, DistinguishedName};
 use shuttle_common::models::project::ProjectName;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
-use tower::{Layer, Service};
 use tracing::{error, trace, warn};
-
-use crate::proxy::AsResponderTo;
-use crate::Error;
 
 const MAX_RETRIES: usize = 15;
 const MAX_RETRIES_CERTIFICATE_FETCHING: usize = 5;
@@ -330,128 +318,3 @@ pub enum AcmeClientError {
 }
 
 impl std::error::Error for AcmeClientError {}
-
-#[derive(Clone)]
-pub struct ChallengeResponderLayer {
-    client: AcmeClient,
-}
-
-impl ChallengeResponderLayer {
-    pub fn new(client: AcmeClient) -> Self {
-        Self { client }
-    }
-}
-
-impl<S> Layer<S> for ChallengeResponderLayer {
-    type Service = ChallengeResponder<S>;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        ChallengeResponder {
-            client: self.client.clone(),
-            inner,
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct ChallengeResponder<S> {
-    client: AcmeClient,
-    inner: S,
-}
-
-impl<'r, S> AsResponderTo<&'r AddrStream> for ChallengeResponder<S>
-where
-    S: AsResponderTo<&'r AddrStream>,
-{
-    fn as_responder_to(&self, req: &'r AddrStream) -> Self {
-        Self {
-            client: self.client.clone(),
-            inner: self.inner.as_responder_to(req),
-        }
-    }
-}
-
-impl<S> Service<Request<Body>> for ChallengeResponder<S>
-where
-    S: Service<Request<Body>, Response = Response, Error = Error> + Send + 'static,
-    S::Future: Send + 'static,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
-        if !req.uri().path().starts_with("/.well-known/acme-challenge/") {
-            let future = self.inner.call(req);
-            return Box::pin(async move {
-                let response: Response = future.await?;
-                Ok(response)
-            });
-        }
-
-        let token = match req
-            .uri()
-            .path()
-            .strip_prefix("/.well-known/acme-challenge/")
-        {
-            Some(token) => token.to_string(),
-            None => {
-                return Box::pin(async {
-                    Ok(Response::builder()
-                        .status(404)
-                        .body(boxed(Body::empty()))
-                        .unwrap())
-                })
-            }
-        };
-
-        trace!(token, "responding to certificate challenge");
-
-        let client = self.client.clone();
-
-        Box::pin(async move {
-            let (status, body) = match client.get_http01_challenge_authorization(&token).await {
-                Some(key) => (200, Body::from(key)),
-                None => (404, Body::empty()),
-            };
-
-            Ok(Response::builder()
-                .status(status)
-                .body(boxed(body))
-                .unwrap())
-        })
-    }
-}
-
-// pub async fn bouncer_middleware<B>(
-//     State(client): State<AcmeClient>,
-//     req: Request<B>,
-//     next: Next<B>,
-// ) -> Response {
-//     if !req.uri().path().starts_with("/.well-known/acme-challenge/") {
-//         return next.run(req).await;
-//     }
-
-//     let token = match req
-//         .uri()
-//         .path()
-//         .strip_prefix("/.well-known/acme-challenge/")
-//     {
-//         Some(token) => token.to_string(),
-//         None => {
-//             return Response::builder()
-//                 .status(404)
-//                 .body(boxed(Body::empty()))
-//                 .unwrap()
-//         }
-//     };
-
-//     Response::builder()
-//         .status(status)
-//         .body(boxed(body))
-//         .unwrap()
-// }

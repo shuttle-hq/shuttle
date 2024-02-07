@@ -4,6 +4,8 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use axum::body::boxed;
+use axum::extract::State;
+use axum::middleware::Next;
 use axum::response::Response;
 use fqdn::FQDN;
 use futures::future::BoxFuture;
@@ -49,7 +51,7 @@ impl AcmeClient {
         self.0.lock().await.insert(token, key);
     }
 
-    async fn get_http01_challenge_authorization(&self, token: &str) -> Option<String> {
+    pub async fn get_http01_challenge_authorization(&self, token: &str) -> Option<String> {
         self.0
             .lock()
             .await
@@ -329,6 +331,7 @@ pub enum AcmeClientError {
 
 impl std::error::Error for AcmeClientError {}
 
+#[derive(Clone)]
 pub struct ChallengeResponderLayer {
     client: AcmeClient,
 }
@@ -350,6 +353,7 @@ impl<S> Layer<S> for ChallengeResponderLayer {
     }
 }
 
+#[derive(Clone)]
 pub struct ChallengeResponder<S> {
     client: AcmeClient,
     inner: S,
@@ -367,9 +371,9 @@ where
     }
 }
 
-impl<ReqBody, S> Service<Request<ReqBody>> for ChallengeResponder<S>
+impl<S> Service<Request<Body>> for ChallengeResponder<S>
 where
-    S: Service<Request<ReqBody>, Response = Response, Error = Error> + Send + 'static,
+    S: Service<Request<Body>, Response = Response, Error = Error> + Send + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
@@ -380,7 +384,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
         if !req.uri().path().starts_with("/.well-known/acme-challenge/") {
             let future = self.inner.call(req);
             return Box::pin(async move {
@@ -422,3 +426,32 @@ where
         })
     }
 }
+
+// pub async fn bouncer_middleware<B>(
+//     State(client): State<AcmeClient>,
+//     req: Request<B>,
+//     next: Next<B>,
+// ) -> Response {
+//     if !req.uri().path().starts_with("/.well-known/acme-challenge/") {
+//         return next.run(req).await;
+//     }
+
+//     let token = match req
+//         .uri()
+//         .path()
+//         .strip_prefix("/.well-known/acme-challenge/")
+//     {
+//         Some(token) => token.to_string(),
+//         None => {
+//             return Response::builder()
+//                 .status(404)
+//                 .body(boxed(Body::empty()))
+//                 .unwrap()
+//         }
+//     };
+
+//     Response::builder()
+//         .status(status)
+//         .body(boxed(body))
+//         .unwrap()
+// }

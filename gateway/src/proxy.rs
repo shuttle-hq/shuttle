@@ -6,16 +6,18 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use axum::extract::ConnectInfo;
+use axum::extract::{ConnectInfo, Path, State};
 use axum::headers::{HeaderMapExt, Host};
+use axum::middleware;
 use axum::response::{IntoResponse, Response};
+use axum::routing::any;
 use axum_server::accept::DefaultAcceptor;
 use axum_server::tls_rustls::RustlsAcceptor;
 use fqdn::{fqdn, FQDN};
 use futures::future::{ready, Ready};
 use futures::prelude::*;
 use http::header::SERVER;
-use http::HeaderValue;
+use http::{HeaderValue, StatusCode};
 use hyper::body::{Body, HttpBody};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
@@ -74,12 +76,6 @@ pub struct ResponderMakeService<S> {
 //     }
 // }
 
-#[derive(Clone)]
-pub struct UserProxy {
-    gateway: Arc<GatewayService>,
-    public: FQDN,
-}
-
 impl<S, R> AsResponderTo<R> for SanitizePath<S>
 where
     S: AsResponderTo<R> + Clone,
@@ -92,10 +88,15 @@ where
     }
 }
 
-async fn proxy(
-    self1: UserProxy,
+pub struct ProxyState {
+    gateway: Arc<GatewayService>,
     task_sender: Sender<BoxedTask>,
-    remote_addr: SocketAddr,
+    public: FQDN,
+}
+
+async fn proxy(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<Arc<ProxyState>>,
     mut req: Request<Body>,
 ) -> Result<Response, Error> {
     let span = debug_span!("proxy", http.method = %req.method(), http.host = field::Empty, http.uri = %req.uri(), http.status_code = field::Empty, shuttle.project.name = field::Empty);
@@ -110,7 +111,7 @@ async fn proxy(
     span.record("http.host", fqdn.to_string());
 
     let project_name =
-        if fqdn.is_subdomain_of(&self1.public) && fqdn.depth() - self1.public.depth() == 1 {
+        if fqdn.is_subdomain_of(&state.public) && fqdn.depth() - state.public.depth() == 1 {
             fqdn.labels()
                 .next()
                 .unwrap()
@@ -118,7 +119,7 @@ async fn proxy(
                 .parse()
                 .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName(InvalidProjectName)))?
         } else if let Ok(CustomDomain { project_name, .. }) =
-            self1.gateway.project_details_for_custom_domain(&fqdn).await
+            state.gateway.project_details_for_custom_domain(&fqdn).await
         {
             project_name
         } else {
@@ -128,9 +129,9 @@ async fn proxy(
     req.headers_mut()
         .typed_insert(XShuttleProject(project_name.to_string()));
 
-    let project = self1
+    let project = state
         .gateway
-        .find_or_start_project(&project_name, task_sender)
+        .find_or_start_project(&project_name, state.task_sender.clone())
         .await?;
 
     // Record current project for tracing purposes
@@ -150,7 +151,7 @@ async fn proxy(
     });
 
     let mut res = PROXY_CLIENT
-        .call(remote_addr.ip(), &target_url, req)
+        .call(addr.ip(), &target_url, req)
         .await
         .map_err(|e| {
             error!(error = ?e, "gateway proxy client error");
@@ -197,50 +198,48 @@ impl<'r> AsResponderTo<&'r AddrStream> for Bouncer {
     }
 }
 
-impl Bouncer {
-    async fn bounce(self, req: Request<Body>) -> Result<Response, Error> {
-        let mut resp = Response::builder();
+async fn bounce(State(state): State<Arc<Bouncer>>, req: Request<Body>) -> Result<Response, Error> {
+    let mut resp = Response::builder();
 
-        let host = req.headers().typed_get::<Host>().unwrap();
-        let hostname = host.hostname();
-        let fqdn = fqdn!(hostname);
+    let host = req.headers().typed_get::<Host>().unwrap();
+    let hostname = host.hostname();
+    let fqdn = fqdn!(hostname);
 
-        let path = req.uri();
+    let path = req.uri();
 
-        if fqdn.is_subdomain_of(&self.public)
-            || self
-                .gateway
-                .project_details_for_custom_domain(&fqdn)
-                .await
-                .is_ok()
-        {
-            resp = resp
-                .status(301)
-                .header("Location", format!("https://{hostname}{path}"));
-        } else {
-            resp = resp.status(404);
-        }
-
-        let body = <Body as HttpBody>::map_err(Body::empty(), axum::Error::new).boxed_unsync();
-
-        Ok(resp.body(body).unwrap())
+    if fqdn.is_subdomain_of(&state.public)
+        || state
+            .gateway
+            .project_details_for_custom_domain(&fqdn)
+            .await
+            .is_ok()
+    {
+        resp = resp
+            .status(301)
+            .header("Location", format!("https://{hostname}{path}"));
+    } else {
+        resp = resp.status(404);
     }
+
+    let body = <Body as HttpBody>::map_err(Body::empty(), axum::Error::new).boxed_unsync();
+
+    Ok(resp.body(body).unwrap())
 }
 
-impl Service<Request<Body>> for Bouncer {
-    type Response = Response;
-    type Error = Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+// impl Service<Request<Body>> for Bouncer {
+//     type Response = Response;
+//     type Error = Error;
+//     type Future =
+//         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
+//     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+//         Poll::Ready(Ok(()))
+//     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
-        self.clone().bounce(req).boxed()
-    }
-}
+//     fn call(&mut self, req: Request<Body>) -> Self::Future {
+//         self.clone().bounce(req).boxed()
+//     }
+// }
 
 pub struct UserServiceBuilder {
     service: Option<Arc<GatewayService>>,
@@ -314,22 +313,24 @@ impl UserServiceBuilder {
             .user_binds_to
             .expect("a socket address to bind to is required");
 
-        let san = SanitizePath::sanitize_paths(axum::Router::new().route(
-            "/*",
-            |ConnectInfo(addr): ConnectInfo<SocketAddr>, req: Request<Body>| async move {
-                UserProxy {
+        let san = SanitizePath::sanitize_paths(
+            axum::Router::new()
+                .route("/*any", any(proxy))
+                .with_state(Arc::new(ProxyState {
                     gateway: service.clone(),
                     task_sender,
                     public: public.clone(),
-                }
-                .proxy(task_sender, req)
-            },
-        ));
+                })),
+        );
         let user_proxy = axum::ServiceExt::into_make_service_with_connect_info::<SocketAddr>(san);
 
-        let bouncer = self.bouncer_binds_to.as_ref().map(|_| Bouncer {
-            gateway: service.clone(),
-            public: public.clone(),
+        let bouncer = self.bouncer_binds_to.as_ref().map(|_| {
+            axum::Router::new()
+                .route("/*any", any(bounce))
+                .with_state(Arc::new(Bouncer {
+                    gateway: service.clone(),
+                    public: public.clone(),
+                }))
         });
 
         let mut futs = Vec::new();
@@ -342,9 +343,21 @@ impl UserServiceBuilder {
                 .acme
                 .expect("TLS cannot be enabled without an ACME client");
 
-            let bouncer = ServiceBuilder::new()
-                .layer(ChallengeResponderLayer::new(acme))
-                .service(bouncer);
+            let bouncer = axum::Router::new()
+                .route(
+                    "/.well-known/acme-challenge/*rest",
+                    any(
+                        |Path(token): Path<String>, State(client): State<AcmeClient>| async move {
+                            trace!(token, "responding to certificate challenge");
+                            match client.get_http01_challenge_authorization(&token).await {
+                                Some(key) => Ok(key),
+                                None => Err(StatusCode::NOT_FOUND),
+                            }
+                        },
+                    ),
+                )
+                .with_state(acme)
+                .merge(bouncer);
 
             let bouncer = axum_server::Server::bind(bouncer_binds_to)
                 .serve(bouncer.into_make_service())

@@ -224,7 +224,7 @@ impl UserServiceBuilder {
 
         let san = SanitizePath::sanitize_paths(
             axum::Router::new()
-                .route("/*any", any(proxy))
+                .fallback(proxy) // catch all routes
                 .with_state(Arc::new(ProxyState {
                     gateway: service.clone(),
                     task_sender,
@@ -235,7 +235,7 @@ impl UserServiceBuilder {
 
         let bouncer = self.bouncer_binds_to.as_ref().map(|_| {
             axum::Router::new()
-                .route("/*any", any(bounce))
+                .fallback(bounce) // catch all routes
                 .with_state(Arc::new(Bouncer {
                     gateway: service.clone(),
                     public: public.clone(),

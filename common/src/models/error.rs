@@ -110,7 +110,7 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::ProjectHasRunningDeployment => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorKind::ProjectHasBuildingDeployment => StatusCode::BAD_REQUEST,
             ErrorKind::ProjectCorrupted => StatusCode::BAD_REQUEST,
-            ErrorKind::ProjectHasResources() => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorKind::ProjectHasResources(_) => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorKind::InvalidProjectName(_) => StatusCode::BAD_REQUEST,
             ErrorKind::InvalidOperation => StatusCode::BAD_REQUEST,
             ErrorKind::ProjectAlreadyExists => StatusCode::BAD_REQUEST,

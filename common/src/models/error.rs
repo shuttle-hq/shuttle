@@ -30,8 +30,6 @@ impl Display for ApiError {
 }
 
 
-impl std::error::Error for ApiError {}
-
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ErrorKind {
     #[error("Request is missing a key")]
@@ -111,7 +109,7 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::ProjectHasRunningDeployment => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorKind::ProjectHasBuildingDeployment => StatusCode::BAD_REQUEST,
             ErrorKind::ProjectCorrupted => StatusCode::BAD_REQUEST,
-            ErrorKind::ProjectHasResources(resources) => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorKind::ProjectHasResources(_) => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorKind::InvalidProjectName(_) => StatusCode::BAD_REQUEST,
             ErrorKind::InvalidOperation => StatusCode::BAD_REQUEST,
             ErrorKind::ProjectAlreadyExists => StatusCode::BAD_REQUEST,

@@ -29,7 +29,6 @@ impl Display for ApiError {
     }
 }
 
-impl std::error::Error for ApiError {}
 
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ErrorKind {
@@ -39,9 +38,9 @@ pub enum ErrorKind {
     BadHost,
     #[error("Request has an invalid key")]
     KeyMalformed,
-    #[error("Request is missing a key")]
+    #[error("Unauthorized")]
     Unauthorized,
-    #[error["You cannot create more projects. Delete some projects first."]]
+    #[error("Forbidden")]
     Forbidden,
     #[error("User not found")]
     UserNotFound,
@@ -110,13 +109,7 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::ProjectHasRunningDeployment => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorKind::ProjectHasBuildingDeployment => StatusCode::BAD_REQUEST,
             ErrorKind::ProjectCorrupted => StatusCode::BAD_REQUEST,
-            ErrorKind::ProjectHasResources(resources) => {
-                let resources = resources.join(", ");
-                return Self {
-                    message: format!("Could not automatically delete the following resources: {}. Please reach out to Shuttle support for help.", resources),
-                    status_code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
-                };
-            }
+            ErrorKind::ProjectHasResources(resources) => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorKind::InvalidProjectName(_) => StatusCode::BAD_REQUEST,
             ErrorKind::InvalidOperation => StatusCode::BAD_REQUEST,
             ErrorKind::ProjectAlreadyExists => StatusCode::BAD_REQUEST,

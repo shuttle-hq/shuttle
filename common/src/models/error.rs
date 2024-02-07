@@ -58,6 +58,7 @@ pub enum ErrorKind {
     /// by the caller, which means they can modify the project.
     #[error("{0}")]
     OwnProjectAlreadyExists(String),
+    // "not ready" is matched against in cargo-shuttle for giving further instructions on project deletion
     #[error("Project not ready. Try running `cargo shuttle project restart`.")]
     ProjectNotReady,
     #[error("Project returned invalid response")]
@@ -103,7 +104,6 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::UserNotFound => StatusCode::NOT_FOUND,
             ErrorKind::UserAlreadyExists => StatusCode::BAD_REQUEST,
             ErrorKind::ProjectNotFound(_) => StatusCode::NOT_FOUND,
-            // "not ready" is matched against in cargo-shuttle for giving further instructions on project deletion
             ErrorKind::ProjectNotReady => StatusCode::SERVICE_UNAVAILABLE,
             ErrorKind::ProjectUnavailable => StatusCode::BAD_GATEWAY,
             ErrorKind::TooManyProjects => StatusCode::FORBIDDEN,

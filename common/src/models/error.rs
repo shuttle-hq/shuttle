@@ -103,8 +103,8 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::UserNotFound => StatusCode::NOT_FOUND,
             ErrorKind::UserAlreadyExists => StatusCode::BAD_REQUEST,
             ErrorKind::ProjectNotFound(_) => StatusCode::NOT_FOUND,
-            ErrorKind::ProjectNotReady => StatusCode::SERVICE_UNAVAILABLE,
             // "not ready" is matched against in cargo-shuttle for giving further instructions on project deletion
+            ErrorKind::ProjectNotReady => StatusCode::SERVICE_UNAVAILABLE,
             ErrorKind::ProjectUnavailable => StatusCode::BAD_GATEWAY,
             ErrorKind::TooManyProjects => StatusCode::FORBIDDEN,
             ErrorKind::ProjectHasRunningDeployment => StatusCode::INTERNAL_SERVER_ERROR,

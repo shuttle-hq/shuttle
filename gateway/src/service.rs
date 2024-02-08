@@ -23,6 +23,7 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
 use shuttle_common::claims::AccountTier;
+use shuttle_common::constants::SHUTTLE_IDLE_DOCS_URL;
 use shuttle_common::models::project::{ProjectName, State};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
@@ -208,48 +209,8 @@ impl ContainerSettings {
     }
 }
 
-pub struct GatewayContextProvider {
-    docker: Docker,
-    settings: ContainerSettings,
-    gateway_api_key: String,
-    deploys_api_key: String,
-    auth_key_uri: Uri,
-    docker_stats_source: DockerStatsSource,
-}
-
-impl GatewayContextProvider {
-    pub fn new(
-        docker: Docker,
-        settings: ContainerSettings,
-        gateway_api_key: String,
-        deploys_api_key: String,
-        auth_key_uri: Uri,
-        docker_stats_source: DockerStatsSource,
-    ) -> Self {
-        Self {
-            docker,
-            settings,
-            gateway_api_key,
-            deploys_api_key,
-            auth_key_uri,
-            docker_stats_source,
-        }
-    }
-
-    pub fn context(&self) -> GatewayContext {
-        GatewayContext {
-            docker: self.docker.clone(),
-            settings: self.settings.clone(),
-            gateway_api_key: self.gateway_api_key.clone(),
-            deploys_api_key: self.deploys_api_key.clone(),
-            auth_key_uri: self.auth_key_uri.clone(),
-            docker_stats_source: self.docker_stats_source.clone(),
-        }
-    }
-}
-
 pub struct GatewayService {
-    provider: GatewayContextProvider,
+    context: GatewayContext,
     db: SqlitePool,
     task_router: TaskRouter,
     pub state_location: PathBuf,
@@ -308,18 +269,18 @@ impl GatewayService {
 
         let container_settings = ContainerSettings::builder().from_args(&args).await;
 
-        let provider = GatewayContextProvider::new(
+        let provider = GatewayContext {
             docker,
-            container_settings,
-            args.admin_key,
-            args.deploys_api_key,
-            format!("{}auth/key", args.auth_uri).parse().unwrap(),
+            settings: container_settings,
+            gateway_api_key: args.admin_key,
+            deploys_api_key: args.deploys_api_key,
+            auth_key_uri: format!("{}auth/key", args.auth_uri).parse().unwrap(),
             docker_stats_source,
-        );
+        };
 
         let task_router = TaskRouter::default();
         Ok(Self {
-            provider,
+            context: provider,
             db,
             task_router,
             state_location,
@@ -590,7 +551,7 @@ impl GatewayService {
             let project_id = row.get::<String, _>("project_id");
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
-                let mut creating = ProjectCreating::new_with_random_initial_key(
+                let creating = ProjectCreating::new_with_random_initial_key(
                     project_name.clone(),
                     Ulid::from_string(project_id.as_str()).map_err(|err| {
                         Error::custom(
@@ -600,16 +561,6 @@ impl GatewayService {
                     })?,
                     idle_minutes,
                 );
-                // Restore previous custom domain, if any
-                match self.find_custom_domain_for_project(&project_id).await {
-                    Ok(custom_domain) => {
-                        creating = creating.with_fqdn(custom_domain.fqdn.to_string());
-                    }
-                    Err(error) if error.kind() == ErrorKind::CustomDomainNotFound => {
-                        // no previous custom domain
-                    }
-                    Err(error) => return Err(error),
-                }
                 let project = Project::Creating(creating);
                 self.update_project(&project_name, &project).await?;
                 Ok(FindProjectPayload {
@@ -640,8 +591,7 @@ impl GatewayService {
                         format!("project '{project_name}' is already {state}. Try using `cargo shuttle project restart` instead.")
                     }
                     State::Stopped => {
-                        format!("project '{project_name}' is idled. Find out more about idle projects here: \
-				 https://docs.shuttle.rs/getting-started/idle-projects")
+                        format!("project '{project_name}' is idled. Find out more about idle projects here: {SHUTTLE_IDLE_DOCS_URL}")
                     }
                     State::Errored { message } => {
                         format!("project '{project_name}' is in an errored state.\nproject message: {message}")
@@ -782,14 +732,14 @@ impl GatewayService {
             .map_err(|_| Error::from_kind(ErrorKind::Internal))
     }
 
-    async fn find_custom_domain_for_project(
+    pub async fn find_custom_domain_for_project(
         &self,
-        project_id: &str,
-    ) -> Result<CustomDomain, Error> {
+        project_name: &str,
+    ) -> Result<Option<CustomDomain>, Error> {
         let custom_domain = query(
-            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains AS cd JOIN projects AS p ON cd.project_id = p.project_id WHERE p.project_id = ?1",
+            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains AS cd JOIN projects AS p ON cd.project_id = p.project_id WHERE p.project_name = ?1",
         )
-        .bind(project_id)
+        .bind(project_name)
         .fetch_optional(&self.db)
         .await?
         .map(|row| CustomDomain {
@@ -797,8 +747,8 @@ impl GatewayService {
             project_name: row.try_get("project_name").unwrap(),
             certificate: row.get("certificate"),
             private_key: row.get("private_key"),
-        })
-        .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
+        });
+
         Ok(custom_domain)
     }
 
@@ -910,8 +860,8 @@ impl GatewayService {
         }
     }
 
-    pub fn context(&self) -> GatewayContext {
-        self.provider.context()
+    pub fn context(&self) -> &GatewayContext {
+        &self.context
     }
 
     /// Create a builder for a new [ProjectTask]
@@ -1527,10 +1477,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let Project::Creating(creating) = recreated_project.state else {
-            panic!("Project should be Creating");
-        };
-        assert_eq!(creating.fqdn(), &Some(domain.to_string()));
+        assert!(matches!(recreated_project.state, Project::Creating(_)));
 
         Ok(())
     }

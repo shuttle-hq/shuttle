@@ -74,9 +74,6 @@ impl From<Deployment> for shuttle_common::models::deployment::Response {
 pub trait DeploymentUpdater: Clone + Send + Sync + 'static {
     type Err: std::error::Error + Send;
 
-    /// Set the address for a deployment
-    async fn set_address(&self, id: &Uuid, address: &SocketAddr) -> Result<(), Self::Err>;
-
     /// Set if a deployment is build on shuttle-next
     async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<(), Self::Err>;
 }

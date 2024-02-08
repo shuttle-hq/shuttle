@@ -1,7 +1,6 @@
 use std::{net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
-use fqdn::FQDN;
 use hyper::Uri;
 use shuttle_common::models::project::ProjectName;
 
@@ -22,17 +21,9 @@ pub struct Args {
     #[clap(long, default_value = "http://logger:8000")]
     pub logger_uri: Uri,
 
-    /// FQDN where the proxy can be reached at
-    #[clap(long)]
-    pub proxy_fqdn: FQDN,
-
     /// Address to bind API to
     #[clap(long, default_value = "0.0.0.0:8001")]
     pub api_address: SocketAddr,
-
-    /// Address to bind proxy to
-    #[clap(long, default_value = "0.0.0.0:8000")]
-    pub proxy_address: SocketAddr,
 
     /// Address to reach gateway's control plane at
     #[clap(long, default_value = "http://gateway:8001")]

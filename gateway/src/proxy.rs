@@ -13,6 +13,8 @@ use axum_server::tls_rustls::RustlsAcceptor;
 use fqdn::{fqdn, FQDN};
 use futures::future::{ready, Ready};
 use futures::prelude::*;
+use http::header::SERVER;
+use http::HeaderValue;
 use hyper::body::{Body, HttpBody};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
@@ -37,6 +39,7 @@ use crate::{Error, ErrorKind};
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
+static SERVER_HEADER: Lazy<HeaderValue> = Lazy::new(|| "shuttle.rs".parse().unwrap());
 
 pub trait AsResponderTo<R> {
     fn as_responder_to(&self, req: R) -> Self;
@@ -156,12 +159,16 @@ impl UserProxy {
             propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
         });
 
-        let proxy = PROXY_CLIENT
+        let mut res = PROXY_CLIENT
             .call(self.remote_addr.ip(), &target_url, req)
             .await
-            .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
+            .map_err(|e| {
+                error!(error = ?e, "gateway proxy client error");
+                Error::from_kind(ErrorKind::ProjectUnavailable)
+            })?;
 
-        let (parts, body) = proxy.into_parts();
+        res.headers_mut().insert(SERVER, SERVER_HEADER.clone());
+        let (parts, body) = res.into_parts();
         let body = <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();
 
         span.record("http.status_code", parts.status.as_u16());

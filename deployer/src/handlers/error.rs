@@ -4,10 +4,10 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
 use serde::{ser::SerializeMap, Serialize};
-use shuttle_common::models::error::ApiError;
+use shuttle_common::models::error::{emit_datadog_error, ApiError};
 use tracing::error;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, strum::IntoStaticStr)]
 pub enum Error {
     #[error("Streaming error: {0}")]
     Streaming(#[from] axum::Error),
@@ -46,10 +46,7 @@ impl IntoResponse for Error {
             Error::NotFound(_) => StatusCode::NOT_FOUND,
             _ => {
                 // We only want to emit error events for internal errors, not e.g. 404s.
-                error!(
-                    error = &self as &dyn std::error::Error,
-                    "control plane request error"
-                );
+                emit_datadog_error(&self, (&self).into());
 
                 StatusCode::INTERNAL_SERVER_ERROR
             }

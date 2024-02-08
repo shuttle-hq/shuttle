@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 
-use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
@@ -9,6 +8,40 @@ use tracing::{error, warn};
 pub struct ApiError {
     pub message: String,
     pub status_code: u16,
+}
+
+pub fn emit_datadog_error<E: std::error::Error + Display>(error: E, error_type: &str) {
+    // Create an error source chain, including the top-level error.
+    let source_chain = {
+        let mut chain: String = error.to_string();
+        let mut next_err = error.source();
+
+        while let Some(err) = next_err {
+            chain.push_str(&format!("\n{}", err.to_string()));
+            next_err = err.source();
+        }
+
+        chain
+    };
+
+    // With these fields set here and in the request span, error tracking will work for
+    // logs in Datadog, as long as we remap error.kind to error.type in logs configuration.
+    // Note that we don't set the stacktrace, but it also won't be available for a lot of
+    // errors. We could consider just using a source trace for the stack field.
+    tracing::error!(
+        error.message = %error,
+        error.stack = &source_chain,
+        "error.type" = error_type,
+        "control plane dd error"
+    );
+    // After recording these fields, errors will be displayed with error message, type and
+    // stacktrace in Datadog APM queries span info, and the span will register in APM error
+    // tracking.
+    // Note: something is overwriting the error.message field to be the status code, this
+    // is not the case for the logs, just the span error.message.
+    tracing::Span::current().record("error.message", error.to_string());
+    tracing::Span::current().record("error.stack", &source_chain);
+    tracing::Span::current().record("error.type", error_type);
 }
 
 impl ApiError {
@@ -22,8 +55,8 @@ impl Display for ApiError {
         write!(
             f,
             "{}\nMessage: {}",
-            self.status().to_string().bold(),
-            self.message.to_string().red()
+            self.status().to_string(),
+            self.message.to_string()
         )
     }
 }

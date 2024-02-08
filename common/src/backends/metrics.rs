@@ -318,5 +318,52 @@ mod tests {
             assert_eq!(&body[..], b"hello ferries");
             request_span.assert();
         }
+        {
+            let router: Router<()> = Router::new()
+                .route("/hello", get(hello))
+                .route_layer(from_extractor::<Metrics>())
+                .layer(
+                    TraceLayer::new(|request| {
+                        request_span!(
+                            request,
+                            error.message = field::Empty,
+                            error.stack = field::Empty,
+                            "error.type" = field::Empty,
+                        )
+                    })
+                    .without_propagation()
+                    .build(),
+                );
+
+            let request_span = assertion_registry
+                .build()
+                .with_name("request")
+                .with_span_field("http.uri")
+                .with_span_field("http.method")
+                .with_span_field("http.status_code")
+                .with_span_field("request.path")
+                .with_span_field("error.message")
+                .with_span_field("error.stack")
+                .with_span_field("error.type")
+                .was_closed()
+                .finalize();
+
+            let response = router
+                .oneshot(
+                    Request::builder()
+                        .uri("/hello")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let body = body::to_bytes(response.into_body()).await.unwrap();
+
+            assert_eq!(&body[..], b"hello");
+            request_span.assert();
+        }
     }
 }

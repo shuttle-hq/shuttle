@@ -4,10 +4,10 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
 use serde::{ser::SerializeMap, Serialize};
-use shuttle_common::models::error::ApiError;
+use shuttle_common::models::error::{emit_datadog_error, ApiError};
 use stripe::StripeError;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, strum::IntoStaticStr)]
 pub enum Error {
     #[error("User could not be found")]
     UserNotFound,
@@ -48,8 +48,7 @@ impl IntoResponse for Error {
             }
             _ => {
                 // We only want to emit error events for internal errors, not e.g. 404s.
-                tracing::error!(error = %self, "control plane request error");
-
+                emit_datadog_error(&self, (&self).into());
                 StatusCode::INTERNAL_SERVER_ERROR
             }
         };

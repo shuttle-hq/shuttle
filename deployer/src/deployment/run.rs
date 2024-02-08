@@ -381,13 +381,15 @@ async fn load(
             let resources = response
                 .resources
                 .into_iter()
-                .map(|res| {
-                    let resource: resource::Response = serde_json::from_slice(&res).unwrap();
-                    record_request::Resource {
-                        r#type: resource.r#type.to_string(),
-                        config: resource.config.to_string().into_bytes(),
-                        data: resource.data.to_string().into_bytes(),
-                    }
+                .filter_map(|res| {
+                    // filter out resources with invalid types
+                    serde_json::from_slice::<resource::Response>(&res)
+                        .ok()
+                        .map(|r| record_request::Resource {
+                            r#type: r.r#type.to_string(),
+                            config: r.config.to_string().into_bytes(),
+                            data: r.data.to_string().into_bytes(),
+                        })
                 })
                 .collect();
             resource_manager

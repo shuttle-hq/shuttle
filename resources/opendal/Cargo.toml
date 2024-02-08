@@ -13,5 +13,4 @@ serde = { version = "1.0.148", features = ["derive"] }
 shuttle-service = { path = "../../service", version = "0.38.0", default-features = false }
 
 [dev-dependencies]
-tempfile = "3.3.0"
 tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros"] }

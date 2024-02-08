@@ -81,7 +81,6 @@ pub enum Type {
     Persist,
     Turso,
     Metadata,
-    Opendal,
     Custom,
 }
 
@@ -94,7 +93,6 @@ impl From<Type> for CommonResourceType {
             Type::Persist => Self::Persist,
             Type::Turso => Self::Turso,
             Type::Metadata => Self::Metadata,
-            Type::Opendal => Self::Opendal,
             Type::Custom => Self::Custom,
         }
     }
@@ -108,7 +106,6 @@ impl From<CommonResourceType> for Type {
             CommonResourceType::StaticFolder => Self::StaticFolder,
             CommonResourceType::Persist => Self::Persist,
             CommonResourceType::Turso => Self::Turso,
-            CommonResourceType::Opendal => Self::Opendal,
             CommonResourceType::Metadata => Self::Metadata,
             CommonResourceType::Custom => Self::Custom,
         }
@@ -123,7 +120,6 @@ impl Display for Type {
             Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
             Type::Turso => write!(f, "turso"),
-            Type::Opendal => write!(f, "opendal"),
             Type::Metadata => write!(f, "metadata"),
             Type::Custom => write!(f, "custom"),
         }
@@ -146,7 +142,6 @@ impl FromStr for Type {
                 "persist" => Ok(Self::Persist),
                 "turso" => Ok(Self::Turso),
                 "metadata" => Ok(Self::Metadata),
-                "opendal" => Ok(Self::Opendal),
                 "custom" => Ok(Self::Custom),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }

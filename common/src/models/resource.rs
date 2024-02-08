@@ -34,7 +34,6 @@ pub fn get_resource_tables(
                 Type::Persist => "Persist",
                 Type::Turso => "Turso",
                 Type::Metadata => "Metadata",
-                Type::Opendal => "Opendal",
                 Type::Custom => "Custom",
             };
 

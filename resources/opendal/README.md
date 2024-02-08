@@ -34,4 +34,8 @@ async fn app(
 |-----------|-------|------------|--------------------------------------------------|
 | scheme    | `str` | `"memory"` | The scheme of the storage service to connect to. |
 
-All secrets are loaded from your `Secret.toml` file. Visit the [OpenDAL Documentation](https://opendal.apache.org/docs/rust/opendal/services/index.html) for more information on how to setup the secrets for the storage service you want to connect to.
+All secrets are loaded from your `Secret.toml` file. 
+
+For instance, when using `s3`, you can configure the scheme to `s3` and specify the secrets: `bucket`, `access_key_id`, and `secret_access_key`.
+
+Visit the [OpenDAL Documentation](https://opendal.apache.org/docs/rust/opendal/services/index.html) for more information on how to setup the secrets for the storage service you want to connect to.

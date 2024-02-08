@@ -27,6 +27,7 @@ pub enum Type {
     Persist,
     Turso,
     Metadata,
+    Opendal,
     Custom,
 }
 
@@ -46,6 +47,7 @@ impl FromStr for Type {
                 "metadata" => Ok(Self::Metadata),
                 "persist" => Ok(Self::Persist),
                 "turso" => Ok(Self::Turso),
+                "opendal" => Ok(Self::Opendal),
                 "custom" => Ok(Self::Custom),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
@@ -76,6 +78,7 @@ impl Display for Type {
             Type::Persist => write!(f, "persist"),
             Type::Turso => write!(f, "turso"),
             Type::Metadata => write!(f, "metadata"),
+            Type::Opendal => write!(f, "opendal"),
             Type::Custom => write!(f, "custom"),
         }
     }

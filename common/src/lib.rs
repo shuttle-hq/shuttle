@@ -109,7 +109,10 @@ pub struct DatabaseInfo {
     role_password: Secret<String>,
     database_name: String,
     port: String,
+    // aliases to parse older versions of this struct
+    #[serde(alias = "address_private")]
     hostname_shuttle: String,
+    #[serde(alias = "address_public")]
     hostname_public: String,
 }
 

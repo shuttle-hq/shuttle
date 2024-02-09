@@ -13,9 +13,11 @@ pub struct ApiError {
 pub fn emit_datadog_error<E: std::error::Error + Display>(error: E, error_type: &str) {
     // Create an error source chain, including the top-level error.
     let source_chain = {
-        let mut chain: String = error.to_string();
+        // Datadog expects there to be at least two lines in the stack field for the apm error
+        // tracking feature to work, so we ensure there always is.
+        let mut chain: String = format!("Error source chain:\n{error}");
         let mut next_err = error.source();
-
+        // TODO: skip the first error?
         while let Some(err) = next_err {
             chain.push_str(&format!("\n{}", err.to_string()));
             next_err = err.source();
@@ -32,7 +34,7 @@ pub fn emit_datadog_error<E: std::error::Error + Display>(error: E, error_type: 
         error.message = %error,
         error.stack = &source_chain,
         "error.type" = error_type,
-        "control plane dd error"
+        "internal error"
     );
     // After recording these fields, errors will be displayed with error message, type and
     // stacktrace in Datadog APM queries span info, and the span will register in APM error

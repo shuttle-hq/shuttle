@@ -26,19 +26,20 @@ pub fn emit_datadog_error<E: std::error::Error + Display>(error: E, error_type: 
         chain
     };
 
-    // With these fields set here and in the request span, error tracking will work for
-    // logs in Datadog, as long as we remap error.kind to error.type in logs configuration.
-    // Note that we don't set the stacktrace, but it also won't be available for a lot of
-    // errors. We could consider just using a source trace for the stack field.
+    // With these fields set in the error event, error tracking will work for logs in Datadog, as
+    // long as we remap error.kind to error.type in Datadog logs configuration. Note that we don't
+    // set the stacktrace, but it also won't be available for a lot of errors. We use an error
+    // source chain instead.
     tracing::error!(
         error.message = %error,
         error.stack = &source_chain,
         "error.type" = error_type,
         "internal error"
     );
+
     // After recording these fields, errors will be displayed with error message, type and
     // stacktrace in Datadog APM queries span info, and the span will register in APM error
-    // tracking.
+    // tracking. The fields first have to be set on the span this function is called from.
     // Note: something is overwriting the error.message field to be the status code, this
     // is not the case for the logs, just the span error.message.
     tracing::Span::current().record("error.message", error.to_string());

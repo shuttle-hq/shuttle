@@ -1102,6 +1102,7 @@ impl GatewayContext {
     }
 }
 
+#[derive(Clone)]
 pub struct FindProjectPayload {
     pub project_id: String,
     pub state: Project,

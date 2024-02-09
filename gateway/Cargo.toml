@@ -18,6 +18,7 @@ async-trait = { workspace = true }
 axum = { workspace = true, features = ["default", "headers"] }
 axum-server = { version = "0.5.1", features = ["tls-rustls"] }
 bollard = { workspace = true }
+cached = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 fqdn = { workspace = true }

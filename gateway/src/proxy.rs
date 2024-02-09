@@ -9,6 +9,7 @@ use axum::response::Response;
 use axum::routing::any;
 use axum_server::accept::DefaultAcceptor;
 use axum_server::tls_rustls::RustlsAcceptor;
+use cached::{Cached, TimedCache};
 use fqdn::{fqdn, FQDN};
 use futures::prelude::*;
 use http::header::SERVER;
@@ -23,13 +24,15 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::XShuttleProject;
 use shuttle_common::models::error::InvalidProjectName;
+use shuttle_common::models::project::ProjectName;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::Mutex;
 use tower_sanitize_path::SanitizePath;
 use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::{AcmeClient, CustomDomain};
-use crate::service::GatewayService;
+use crate::service::{FindProjectPayload, GatewayService};
 use crate::task::BoxedTask;
 use crate::{Error, ErrorKind};
 
@@ -41,6 +44,7 @@ pub struct ProxyState {
     gateway: Arc<GatewayService>,
     task_sender: Sender<BoxedTask>,
     public: FQDN,
+    project_cache: Mutex<TimedCache<ProjectName, FindProjectPayload>>,
 }
 
 async fn proxy(
@@ -78,10 +82,21 @@ async fn proxy(
     req.headers_mut()
         .typed_insert(XShuttleProject(project_name.to_string()));
 
-    let project = state
-        .gateway
-        .find_or_start_project(&project_name, state.task_sender.clone())
-        .await?;
+    // cache project lookups to not overload the db during rapid requests
+    let project = if let Some(p) = {
+        let mut l = state.project_cache.lock().await;
+        l.cache_get(&project_name).cloned()
+    } {
+        p
+    } else {
+        let project = state
+            .gateway
+            .find_or_start_project(&project_name, state.task_sender.clone())
+            .await?;
+        let mut l = state.project_cache.lock().await;
+        l.cache_set(project_name.clone(), project.clone());
+        project
+    };
 
     // Record current project for tracing purposes
     span.record("shuttle.project.name", &project_name.to_string());
@@ -229,6 +244,7 @@ impl UserServiceBuilder {
                     gateway: service.clone(),
                     task_sender,
                     public: public.clone(),
+                    project_cache: Mutex::new(TimedCache::with_lifespan_and_capacity(1, 512)),
                 })),
         );
         let user_proxy = axum::ServiceExt::into_make_service_with_connect_info::<SocketAddr>(san);

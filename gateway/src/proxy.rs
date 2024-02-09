@@ -96,7 +96,7 @@ async fn proxy(
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
         state.project_cache.insert(
             project_name.as_str(),
-            ip.clone(),
+            ip,
             std::time::Duration::from_millis(1000),
         );
         ip

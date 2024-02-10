@@ -10,6 +10,12 @@ pub struct ApiError {
     pub status_code: u16,
 }
 
+#[derive(Default, Deserialize, Serialize, Debug)]
+pub struct DatadogError {
+    pub message: String,
+    pub r#type: String,
+    pub stack: String,
+}
 pub fn emit_datadog_error<E: std::error::Error + Display>(error: E, error_type: &str) {
     // Create an error source chain, including the top-level error.
     let source_chain = {
@@ -19,13 +25,19 @@ pub fn emit_datadog_error<E: std::error::Error + Display>(error: E, error_type: 
         let mut next_err = error.source();
         // TODO: skip the first error?
         while let Some(err) = next_err {
-            chain.push_str(&format!("\n{}", err.to_string()));
+            chain.push_str(&format!("\n{}", err));
             next_err = err.source();
         }
 
         chain
     };
 
+    let dd_error = DatadogError {
+        message: error.to_string(),
+        r#type: error_type.to_string(),
+        stack: source_chain.clone(),
+    };
+    let dd_error_str = serde_json::to_string(&dd_error).unwrap();
     // With these fields set in the error event, error tracking will work for logs in Datadog, as
     // long as we remap error.kind to error.type in Datadog logs configuration. Note that we don't
     // set the stacktrace, but it also won't be available for a lot of errors. We use an error
@@ -34,17 +46,9 @@ pub fn emit_datadog_error<E: std::error::Error + Display>(error: E, error_type: 
         error.message = %error,
         error.stack = &source_chain,
         "error.type" = error_type,
+        dd_error = dd_error_str,
         "internal error"
     );
-
-    // After recording these fields, errors will be displayed with error message, type and
-    // stacktrace in Datadog APM queries span info, and the span will register in APM error
-    // tracking. The fields first have to be set on the span this function is called from.
-    // Note: something is overwriting the error.message field to be the status code, this
-    // is not the case for the logs, just the span error.message.
-    tracing::Span::current().record("error.message", error.to_string());
-    tracing::Span::current().record("error.stack", &source_chain);
-    tracing::Span::current().record("error.type", error_type);
 }
 
 impl ApiError {
@@ -55,12 +59,7 @@ impl ApiError {
 
 impl Display for ApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}\nMessage: {}",
-            self.status().to_string(),
-            self.message.to_string()
-        )
+        write!(f, "{}\nMessage: {}", self.status(), self.message)
     }
 }
 

@@ -116,7 +116,7 @@ impl IntoResponse for Error {
         let error_type = self.kind.to_string();
         let error: ApiError = self.kind.into();
 
-        if &error.status_code >= &500 {
+        if error.status_code >= 500 {
             emit_datadog_error(&error, &error_type);
         }
 

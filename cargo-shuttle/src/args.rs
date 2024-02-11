@@ -318,6 +318,8 @@ pub enum InitTemplateArg {
     ActixWeb,
     /// Axum web framework
     Axum,
+    /// Loco web framework
+    Loco,
     /// Poem web framework
     Poem,
     /// Poise Discord framework
@@ -370,6 +372,7 @@ impl InitTemplateArg {
         let path = match self {
             ActixWeb => "actix-web/hello-world",
             Axum => "axum/hello-world",
+            Loco => "loco/hello-world",
             Poem => "poem/hello-world",
             Poise => "poise/hello-world",
             Rocket => "rocket/hello-world",

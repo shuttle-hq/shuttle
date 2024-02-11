@@ -113,11 +113,15 @@ impl From<AcmeClientError> for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        let error_type = self.kind.to_string();
+        // let error_type = self.kind.to_string();
         let error: ApiError = self.kind.into();
 
         if error.status_code >= 500 {
-            emit_datadog_error(&error, &error_type);
+            // emit_datadog_error(&error, &error_type);
+            tracing::error!(
+                error = &error as &dyn std::error::Error,
+                "control plane request error"
+            );
         }
 
         error.into_response()

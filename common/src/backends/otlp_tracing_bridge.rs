@@ -184,25 +184,25 @@ where
 
         let mut visitor = ErrorVisitor::default();
         event.record(&mut visitor);
-        let error = visitor.error;
 
-        println!("looking for span");
+        let DatadogError {
+            message,
+            r#type,
+            stack,
+        } = visitor.error;
+
         if let Some(span) = ctx.lookup_current() {
-            println!("found span in event lookup");
-            let mut extensions = span.extensions_mut();
-            if let Some(otel_data) = extensions.get_mut::<OtelData>() {
-                println!("found otel data in span span");
+            if let Some(otel_data) = span.extensions_mut().get_mut::<OtelData>() {
                 let error_fields = [
-                    KeyValue::new("error.message", error.message),
-                    KeyValue::new("error.type", error.r#type),
-                    KeyValue::new("error.stack", error.stack),
+                    KeyValue::new("error.message", message),
+                    KeyValue::new("error.type", r#type),
+                    KeyValue::new("error.stack", stack),
                 ];
                 let builder_attrs = otel_data
                     .builder
                     .attributes
                     .get_or_insert(Vec::with_capacity(3));
                 builder_attrs.extend(error_fields);
-                println!("otel data after insert: {:?}", builder_attrs);
             }
         };
     }
@@ -222,15 +222,23 @@ struct ErrorVisitor {
 impl ErrorVisitor {
     const ID_IDENT: &'static str = "error";
 
+    /// We only care about error events with the [ID_IDENT] field.
     fn is_valid(metadata: &Metadata) -> bool {
-        metadata.is_event() && metadata.fields().field(Self::ID_IDENT).is_some()
+        metadata.is_event()
+            && metadata.fields().field(Self::ID_IDENT).is_some()
+            && metadata.level() == &Level::ERROR
     }
 }
 
 impl Visit for ErrorVisitor {
-    fn record_debug(&mut self, _field: &Field, _value: &dyn std::fmt::Debug) {}
+    fn record_debug(&mut self, _field: &Field, _value: &dyn std::fmt::Debug) {
+        // This visitor is only concerned with recording errors, do nothing for debug fields.
+    }
     fn record_error(&mut self, _field: &Field, value: &(dyn std::error::Error + 'static)) {
-        let chain = {
+        // Create an error source chain, including the top-level error.
+        let source_chain = {
+            // Datadog expects there to be at least two lines in the stack field for the apm error
+            // tracking feature to work, so we ensure there always is.
             let mut chain: String = format!("Error source chain:\n{}", value.to_string());
             let mut next_err = value.source();
             // TODO: skip the first error?
@@ -246,6 +254,6 @@ impl Visit for ErrorVisitor {
 
         self.error.message = error_msg;
         self.error.r#type = "error".to_string();
-        self.error.stack = chain;
+        self.error.stack = source_chain;
     }
 }

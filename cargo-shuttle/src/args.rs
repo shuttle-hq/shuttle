@@ -116,6 +116,15 @@ pub enum Command {
         #[arg(long)]
         /// Don't display timestamps and log origin tags
         raw: bool,
+        /// Views First N line of the logs
+        #[arg(long)]
+        head: Option<u32>,
+        /// Views Last N line of the logs
+        #[arg(long)]
+        tail: Option<u32>,
+        /// Views all line of the logs
+        #[arg(long)]
+        all: bool,
     },
     /// List or manage projects on Shuttle
     #[command(subcommand)]

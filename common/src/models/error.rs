@@ -3,7 +3,6 @@ use std::fmt::{Display, Formatter};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiError {
@@ -11,9 +10,9 @@ pub struct ApiError {
     pub status_code: u16,
 }
 
-pub fn emit_datadog_error<E: std::error::Error + Display>(error: E, error_type: &str) {
+pub fn emit_datadog_error(error: &(dyn std::error::Error + 'static), _error_type: &str) {
     // Create an error source chain, including the top-level error.
-    let source_chain = {
+    let _source_chain = {
         // Datadog expects there to be at least two lines in the stack field for the apm error
         // tracking feature to work, so we ensure there always is.
         let mut chain: String = format!("Error source chain:\n{error}");
@@ -32,18 +31,18 @@ pub fn emit_datadog_error<E: std::error::Error + Display>(error: E, error_type: 
     // set the stacktrace, but it also won't be available for a lot of errors. We use an error
     // source chain instead.
     tracing::error!(
-        error.message = %error,
-        error.stack = &source_chain,
-        "error.type" = error_type,
+        error = error,
+        // error.stack = &source_chain,
+        // "error.type" = error_type,
         "internal error"
     );
 
-    let span = tracing::Span::current();
-
-    // Set the error fields in the otel span as well for APM error tracking.
-    span.set_attribute("error.message", error.to_string());
-    span.set_attribute("error.type", error_type.to_string());
-    span.set_attribute("error.stack", source_chain);
+    // let span = tracing::Span::current();
+    //
+    // // Set the error fields in the otel span as well for APM error tracking.
+    // span.set_attribute("error.message", error.to_string());
+    // span.set_attribute("error.type", error_type.to_string());
+    // span.set_attribute("error.stack", source_chain);
 }
 
 impl ApiError {

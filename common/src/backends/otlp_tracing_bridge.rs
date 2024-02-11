@@ -6,9 +6,11 @@
 use opentelemetry::{
     logs::{LogRecord, Logger, LoggerProvider, Severity, TraceContext},
     trace::{SpanContext, TraceFlags, TraceState},
+    KeyValue, StringValue,
 };
+use serde::Deserialize;
 use std::borrow::Cow;
-use tracing_core::{Level, Subscriber};
+use tracing_core::{field::Visit, Field, Level, Metadata, Subscriber};
 use tracing_opentelemetry::OtelData;
 use tracing_subscriber::{registry::LookupSpan, Layer};
 
@@ -148,5 +150,102 @@ const fn severity_of_level(level: &Level) -> Severity {
         Level::INFO => Severity::Info,
         Level::WARN => Severity::Warn,
         Level::ERROR => Severity::Error,
+    }
+}
+
+pub struct ErrorTracingLayer<S> {
+    _registry: std::marker::PhantomData<S>,
+}
+
+impl<S> ErrorTracingLayer<S>
+where
+    S: Subscriber + for<'span> LookupSpan<'span>,
+{
+    pub fn new() -> Self {
+        ErrorTracingLayer {
+            _registry: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<S> Layer<S> for ErrorTracingLayer<S>
+where
+    S: Subscriber + for<'span> LookupSpan<'span>,
+{
+    fn on_event(
+        &self,
+        event: &tracing_core::Event<'_>,
+        ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        // We only care about events that have the error field set.
+        if *event.metadata().level() != Level::ERROR || !ErrorVisitor::is_valid(event.metadata()) {
+            return;
+        }
+
+        let mut visitor = ErrorVisitor::default();
+        event.record(&mut visitor);
+        let error = visitor.error;
+
+        println!("looking for span");
+        if let Some(span) = ctx.lookup_current() {
+            println!("found span in event lookup");
+            let mut extensions = span.extensions_mut();
+            if let Some(otel_data) = extensions.get_mut::<OtelData>() {
+                println!("found otel data in span span");
+                let error_fields = [
+                    KeyValue::new("error.message", error.message),
+                    KeyValue::new("error.type", error.r#type),
+                    KeyValue::new("error.stack", error.stack),
+                ];
+                let builder_attrs = otel_data
+                    .builder
+                    .attributes
+                    .get_or_insert(Vec::with_capacity(3));
+                builder_attrs.extend(error_fields);
+                println!("otel data after insert: {:?}", builder_attrs);
+            }
+        };
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct DatadogError {
+    pub message: String,
+    pub r#type: String,
+    pub stack: String,
+}
+#[derive(Default)]
+struct ErrorVisitor {
+    error: DatadogError,
+}
+
+impl ErrorVisitor {
+    const ID_IDENT: &'static str = "error";
+
+    fn is_valid(metadata: &Metadata) -> bool {
+        metadata.is_event() && metadata.fields().field(Self::ID_IDENT).is_some()
+    }
+}
+
+impl Visit for ErrorVisitor {
+    fn record_debug(&mut self, _field: &Field, _value: &dyn std::fmt::Debug) {}
+    fn record_error(&mut self, _field: &Field, value: &(dyn std::error::Error + 'static)) {
+        let chain = {
+            let mut chain: String = format!("Error source chain:\n{}", value.to_string());
+            let mut next_err = value.source();
+            // TODO: skip the first error?
+            while let Some(err) = next_err {
+                chain.push_str(&format!("\n{}", err));
+                next_err = err.source();
+            }
+
+            chain
+        };
+
+        let error_msg = value.to_string();
+
+        self.error.message = error_msg;
+        self.error.r#type = "error".to_string();
+        self.error.stack = chain;
     }
 }

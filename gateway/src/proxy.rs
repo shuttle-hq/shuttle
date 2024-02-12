@@ -24,12 +24,13 @@ use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::cache::{CacheManagement, CacheManager};
 use shuttle_common::backends::headers::XShuttleProject;
 use shuttle_common::models::error::InvalidProjectName;
+use shuttle_common::models::project::ProjectName;
 use tokio::sync::mpsc::Sender;
 use tower_sanitize_path::SanitizePath;
 use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::acme::{AcmeClient, CustomDomain};
+use crate::acme::AcmeClient;
 use crate::service::GatewayService;
 use crate::task::BoxedTask;
 use crate::{Error, ErrorKind};
@@ -43,6 +44,7 @@ pub struct ProxyState {
     task_sender: Sender<BoxedTask>,
     public: FQDN,
     project_cache: CacheManager<IpAddr>,
+    domain_cache: CacheManager<ProjectName>,
 }
 
 async fn proxy(
@@ -69,12 +71,20 @@ async fn proxy(
                 .to_owned()
                 .parse()
                 .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName(InvalidProjectName)))?
-        } else if let Ok(CustomDomain { project_name, .. }) =
-            state.gateway.project_details_for_custom_domain(&fqdn).await
-        {
-            project_name
+        } else if let Some(project) = { state.domain_cache.get(fqdn.to_string().as_str()) } {
+            project
         } else {
-            return Err(Error::from_kind(ErrorKind::CustomDomainNotFound));
+            let project_name = state
+                .gateway
+                .project_details_for_custom_domain(&fqdn)
+                .await?
+                .project_name;
+            state.domain_cache.insert(
+                fqdn.to_string().as_str(),
+                project_name.clone(),
+                std::time::Duration::from_millis(5000),
+            );
+            project_name
         };
 
     // Record current project for tracing purposes
@@ -238,7 +248,8 @@ impl UserServiceBuilder {
                     gateway: service.clone(),
                     task_sender,
                     public: public.clone(),
-                    project_cache: CacheManager::new(512),
+                    project_cache: CacheManager::new(1024),
+                    domain_cache: CacheManager::new(256),
                 })),
         );
         let user_proxy = axum::ServiceExt::into_make_service_with_connect_info::<SocketAddr>(san);

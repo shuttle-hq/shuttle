@@ -220,9 +220,9 @@ impl Shuttle {
                 latest,
                 follow,
                 raw,
-                head ,
+                head,
                 tail,
-                all
+                all,
             } => self.logs(id, latest, follow, raw, head, tail, all).await,
             Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
                 self.deployments_list(page, limit, raw).await
@@ -741,19 +741,16 @@ impl Shuttle {
         latest: bool,
         follow: bool,
         raw: bool,
-        head : Option<u32>,
-        tail : Option<u32>,
-        all : bool
+        head: Option<u32>,
+        tail: Option<u32>,
+        all: bool,
     ) -> Result<CommandOutcome> {
-        
-        let mut count = 0;
-        let mut mode =("tail",1000);
-        if let Some(num) = head { count += 1; mode = ("head",num) }
-        if let Some(num) = tail { count += 1; mode = ("tail",num) }
-        if all { count += 1; mode = ("all",0) }
-
-        if count > 1 {
-            bail!("Error: Only one of 'head', 'tail', or 'all' can be used at a time.")
+        let mode: (&str, u32);
+        match (head, tail, all) {
+            (Some(num), _, _) => mode = ("head", num),
+            (_, Some(num), _) => mode = ("tail", num),
+            (_, _, all) if all => mode = ("all", 0),
+            _ => mode = ("tail", 1000),
         }
 
         let client = self.client.as_ref().unwrap();

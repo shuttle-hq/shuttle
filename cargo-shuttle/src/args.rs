@@ -117,13 +117,13 @@ pub enum Command {
         /// Don't display timestamps and log origin tags
         raw: bool,
         /// Views First N line of the logs
-        #[arg(long)]
+        #[arg(long, group = "output_mode")]
         head: Option<u32>,
         /// Views Last N line of the logs
-        #[arg(long)]
+        #[arg(long, group = "output_mode")]
         tail: Option<u32>,
         /// Views all line of the logs
-        #[arg(long)]
+        #[arg(long, group = "output_mode")]
         all: bool,
     },
     /// List or manage projects on Shuttle

@@ -17,9 +17,9 @@ endif
 
 BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 
-# the rust version used by our containers, and as an override for our deployers
-# ensuring all user crates are compiled with the same rustc toolchain
-RUSTUP_TOOLCHAIN=1.75.0
+# The Rust version used by our containers
+# Can be updated to the latest stable
+RUSTUP_TOOLCHAIN=1.76.0
 
 TAG?=$(shell git describe --tags --abbrev=0)
 AUTH_TAG?=$(TAG)

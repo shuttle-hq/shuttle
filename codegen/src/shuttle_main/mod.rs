@@ -244,56 +244,65 @@ impl ToTokens for Loader {
             };
 
         // variables for string interpolating secrets into the attribute macros
-        let (vars, drop_vars): (Option<Stmt>, Option<Stmt>) = if needs_vars {
-            (
-                Some(parse_quote!(
-                    let __vars = std::collections::HashMap::from_iter(
-                        factory
-                            .get_secrets()
-                            .await?
-                            .into_iter()
-                            .map(|(key, value)| (format!("secrets.{}", key), value.expose().clone()))
-                    );
-                )),
-                Some(parse_quote!(
-                    std::mem::drop(__vars);
-                )),
-            )
+        let vars: Option<Stmt> = if needs_vars {
+            Some(parse_quote!(
+                let __vars = std::collections::HashMap::from_iter(
+                    factory
+                        .get_secrets()
+                        .await?
+                        .into_iter()
+                        .map(|(key, value)| (format!("secrets.{}", key), value.expose().clone()))
+                );
+            ))
         } else {
-            (None, None)
+            None
         };
 
-        let loader = quote! {
+        let loader_runner = quote! {
             async fn loader(
                 mut #factory_ident: ::shuttle_runtime::__internals::ProvisionerFactory,
                 mut #resource_tracker_ident: ::shuttle_runtime::__internals::ResourceTracker,
-            ) -> #return_type {
+            ) -> Vec<String> {
                 use ::shuttle_runtime::__internals::Context;
                 #extra_imports
 
                 #vars
 
+                let mut v = vec![];
                 #(
-                    let #fn_inputs: #fn_inputs_types =
-                        ::shuttle_runtime::__internals::get_resource::<_, _, #fn_inputs_types>(
-                            #fn_inputs_builder::default()#fn_inputs_builder_options,
+                    let b = #fn_inputs_builder::default()
+                        #fn_inputs_builder_options // `vars` are used here
+                        .into_resource_config(
                             &mut #factory_ident,
                             &mut #resource_tracker_ident,
                         )
                         .await
-                        .context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?
+                        .context(format!("failed to construct config for {}", stringify!(#fn_inputs_builder)))?
+                    let j = serde_json::to_string(&b)
+                        .context(format!("failed to serialize config for {}", stringify!(#fn_inputs_builder)))?
+                    v.push(j);
+                )*
+                v
+            }
+
+            async fn runner(
+                resources: Vec<String>,
+            ) -> #return_type {
+                let mut iter = resources.into_iter();
+                #(
+                    let #fn_inputs: #fn_inputs_types =
+                        serde_json::from_str(&iter.next().unwrap())
+                        .context(format!("failed to deserialize output for {}", stringify!(#fn_inputs_builder)))?
                         .into_resource()
                         .await
                         .context(format!("failed to initialize {}", stringify!(#fn_inputs_builder)))?;
                 )*
 
-                #drop_vars
-
                 #fn_ident(#(#fn_inputs),*).await
             }
         };
 
-        loader.to_tokens(tokens);
+        loader_runner.to_tokens(tokens);
     }
 }
 

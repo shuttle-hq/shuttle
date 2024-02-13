@@ -4,48 +4,44 @@ use std::{
     net::{Ipv4Addr, SocketAddr},
     ops::DerefMut,
     str::FromStr,
-    sync::{Arc, Mutex},
+    sync::Mutex,
     time::Duration,
 };
 
 use anyhow::Context;
 use async_trait::async_trait;
 use core::future::Future;
-use shuttle_common::{
-    backends::{
-        auth::{AuthPublicKey, JwtAuthenticationLayer},
-        trace::ExtractPropagationLayer,
-    },
-    claims::Claim,
-    resource,
-    secrets::Secret,
+use shuttle_common::{backends::trace::ExtractPropagationLayer, secrets::Secret};
+use shuttle_proto::runtime::{
+    runtime_server::{Runtime, RuntimeServer},
+    LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest, StopResponse,
+    SubscribeStopRequest, SubscribeStopResponse,
 };
-use shuttle_proto::{
-    provisioner,
-    runtime::{
-        runtime_server::{Runtime, RuntimeServer},
-        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
-        StopResponse, SubscribeStopRequest, SubscribeStopResponse,
-    },
-};
-use shuttle_service::{Environment, Factory, Service};
+use shuttle_service::{Factory, Service};
 use tokio::sync::{
     broadcast::{self, Sender},
     mpsc, oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::{
-    transport::{Endpoint, Server},
-    Request, Response, Status,
-};
+use tonic::{transport::Server, Request, Response, Status};
 
-use crate::__internals::{print_version, ProvisionerFactory, ResourceTracker};
+use crate::__internals::{print_version, ProvisionerFactory};
 
-use self::args::Args;
+use crate::args::args;
 
-mod args;
+// uses custom macro instead of clap to reduce dependency weight
+args! {
+    pub struct Args {
+        // The port to open the gRPC control layer on.
+        // The address to expose for the service is given in the StartRequest.
+        "--port" => pub port: u16,
+    }
+}
 
-pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
+pub async fn start(
+    loader: impl Loader<ProvisionerFactory> + Send + 'static,
+    runner: impl Runner + Send + 'static,
+) {
     // `--version` overrides any other arguments.
     if std::env::args().any(|arg| arg == "--version") {
         print_version();
@@ -108,16 +104,12 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     // where to serve the gRPC control layer
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
-    let provisioner_address = args.provisioner_address;
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
-        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
-            args.auth_uri,
-        )))
         .layer(ExtractPropagationLayer);
 
     let router = {
-        let alpha = Alpha::new(provisioner_address, loader, args.env);
+        let alpha = Alpha::new(loader, runner);
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
@@ -129,27 +121,23 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     };
 }
 
-pub struct Alpha<L, S> {
+pub struct Alpha<L, R> {
     // Mutexes are for interior mutability
     stopped_tx: Sender<(StopReason, String)>,
-    provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     loader: Mutex<Option<L>>,
-    service: Mutex<Option<S>>,
-    env: Environment,
+    runner: Mutex<Option<R>>,
 }
 
-impl<L, S> Alpha<L, S> {
-    pub fn new(provisioner_address: Endpoint, loader: L, env: Environment) -> Self {
+impl<L, R> Alpha<L, R> {
+    pub fn new(loader: L, runner: R) -> Self {
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
             stopped_tx,
             kill_tx: Mutex::new(None),
-            provisioner_address,
             loader: Mutex::new(Some(loader)),
-            service: Mutex::new(None),
-            env,
+            runner: Mutex::new(Some(runner)),
         }
     }
 }
@@ -159,99 +147,141 @@ pub trait Loader<Fac>
 where
     Fac: Factory,
 {
-    type Service: Service;
-
-    async fn load(
-        self,
-        factory: Fac,
-        resource_tracker: ResourceTracker,
-    ) -> Result<Self::Service, shuttle_service::Error>;
+    // TODO: Make this sync?
+    async fn load(self, factory: Fac) -> Result<Vec<Vec<u8>>, shuttle_service::Error>;
 }
 
 #[async_trait]
-impl<F, O, Fac, S> Loader<Fac> for F
+impl<F, O, Fac> Loader<Fac> for F
 where
-    F: FnOnce(Fac, ResourceTracker) -> O + Send,
-    O: Future<Output = Result<S, shuttle_service::Error>> + Send,
+    F: FnOnce(Fac) -> O + Send,
+    O: Future<Output = Result<Vec<Vec<u8>>, shuttle_service::Error>> + Send,
     Fac: Factory + 'static,
-    S: Service,
 {
-    type Service = S;
-
-    async fn load(
-        self,
-        factory: Fac,
-        resource_tracker: ResourceTracker,
-    ) -> Result<Self::Service, shuttle_service::Error> {
-        (self)(factory, resource_tracker).await
+    async fn load(self, factory: Fac) -> Result<Vec<Vec<u8>>, shuttle_service::Error> {
+        (self)(factory).await
     }
 }
 
 #[async_trait]
-impl<L, S> Runtime for Alpha<L, S>
+pub trait Runner {
+    type Service: Service;
+
+    async fn run(self, resources: Vec<Vec<u8>>) -> Result<Self::Service, shuttle_service::Error>;
+}
+
+#[async_trait]
+impl<F, O, S> Runner for F
 where
-    L: Loader<ProvisionerFactory, Service = S> + Send + 'static,
-    S: Service + Send + 'static,
+    F: FnOnce(Vec<Vec<u8>>) -> O + Send,
+    O: Future<Output = Result<S, shuttle_service::Error>> + Send,
+    S: Service,
+{
+    type Service = S;
+
+    async fn run(self, resources: Vec<Vec<u8>>) -> Result<Self::Service, shuttle_service::Error> {
+        (self)(resources).await
+    }
+}
+
+#[async_trait]
+impl<L, R, S> Runtime for Alpha<L, R>
+where
+    L: Loader<ProvisionerFactory> + Send + 'static,
+    R: Runner<Service = S> + Send + 'static,
+    S: Service + 'static,
 {
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
-        let claim = request.extensions().get::<Claim>().cloned();
-
         let LoadRequest {
-            path,
-            resources,
             secrets,
-            service_name,
+            project_name,
+            env,
+            ..
         } = request.into_inner();
-        println!("loading alpha service at {path}");
-
-        let provisioner_client =
-            provisioner::get_client(self.provisioner_address.uri().clone()).await;
-
-        // TODO: merge new & old secrets
-
-        let past_resources = resources
-            .into_iter()
-            .map(resource::Response::from_bytes)
-            .collect();
-        let new_resources = Arc::new(Mutex::new(Vec::new()));
-        let resource_tracker = ResourceTracker::new(past_resources, new_resources.clone());
 
         // Sorts secrets by key
         let secrets = BTreeMap::from_iter(secrets.into_iter().map(|(k, v)| (k, Secret::new(v))));
 
-        let factory =
-            ProvisionerFactory::new(provisioner_client, service_name, secrets, self.env, claim);
+        let factory = ProvisionerFactory {
+            project_name,
+            secrets,
+            env: env.parse().unwrap(),
+        };
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
         // send to new thread to catch panics
-        let service = match tokio::spawn(loader.load(factory, resource_tracker)).await {
+        let v = match tokio::spawn(loader.load(factory)).await {
             Ok(res) => match res {
-                Ok(service) => service,
+                Ok(v) => v,
                 Err(error) => {
                     println!("loading service failed: {error:#}");
-
-                    let message = LoadResponse {
+                    return Ok(Response::new(LoadResponse {
                         success: false,
                         message: error.to_string(),
-                        resources: new_resources
-                            .lock()
-                            .expect("to get lock on new resources")
-                            .iter()
-                            .map(resource::Response::to_bytes)
-                            .collect(),
-                    };
-                    return Ok(Response::new(message));
+                        resources: vec![],
+                    }));
                 }
             },
             Err(error) => {
-                let resources = new_resources
-                    .lock()
-                    .expect("to get lock on new resources")
-                    .iter()
-                    .map(resource::Response::to_bytes)
-                    .collect();
+                if error.is_panic() {
+                    let panic = error.into_panic();
+                    let msg = match panic.downcast_ref::<String>() {
+                        Some(msg) => msg.to_string(),
+                        None => match panic.downcast_ref::<&str>() {
+                            Some(msg) => msg.to_string(),
+                            None => "<no panic message>".to_string(),
+                        },
+                    };
+                    println!("loading service panicked: {msg}");
+                    return Ok(Response::new(LoadResponse {
+                        success: false,
+                        message: msg,
+                        resources: vec![],
+                    }));
+                } else {
+                    println!("loading service crashed: {error:#}");
+                    return Ok(Response::new(LoadResponse {
+                        success: false,
+                        message: error.to_string(),
+                        resources: vec![],
+                    }));
+                }
+            }
+        };
 
+        Ok(Response::new(LoadResponse {
+            success: true,
+            message: String::new(),
+            resources: v,
+        }))
+    }
+
+    async fn start(
+        &self,
+        request: Request<StartRequest>,
+    ) -> Result<Response<StartResponse>, Status> {
+        let StartRequest { ip, resources } = request.into_inner();
+        let service_address = SocketAddr::from_str(&ip)
+            .context("invalid socket address")
+            .map_err(|err| Status::invalid_argument(err.to_string()))?;
+
+        let runner = self.runner.lock().unwrap().deref_mut().take().unwrap();
+
+        // send to new thread to catch panics
+        let service = match tokio::spawn(runner.run(resources)).await {
+            Ok(res) => match res {
+                Ok(service) => service,
+                Err(error) => {
+                    println!("starting service failed: {error:#}");
+
+                    return Ok(Response::new(StartResponse {
+                        success: false,
+                        message: error.to_string(),
+                    }));
+                }
+            },
+            Err(error) => {
                 if error.is_panic() {
                     let panic = error.into_panic();
                     let msg = match panic.downcast_ref::<String>() {
@@ -263,51 +293,19 @@ where
                     };
 
                     println!("loading service panicked: {msg}");
-
-                    let message = LoadResponse {
+                    return Ok(Response::new(StartResponse {
                         success: false,
                         message: msg,
-                        resources,
-                    };
-                    return Ok(Response::new(message));
+                    }));
                 } else {
                     println!("loading service crashed: {error:#}");
-                    let message = LoadResponse {
+                    return Ok(Response::new(StartResponse {
                         success: false,
                         message: error.to_string(),
-                        resources,
-                    };
-                    return Ok(Response::new(message));
+                    }));
                 }
             }
         };
-
-        *self.service.lock().unwrap() = Some(service);
-
-        let message = LoadResponse {
-            success: true,
-            message: String::new(),
-            resources: new_resources
-                .lock()
-                .expect("to get lock on new resources")
-                .iter()
-                .map(resource::Response::to_bytes)
-                .collect(),
-        };
-        Ok(Response::new(message))
-    }
-
-    async fn start(
-        &self,
-        request: Request<StartRequest>,
-    ) -> Result<Response<StartResponse>, Status> {
-        let service = self.service.lock().unwrap().deref_mut().take();
-        let service = service.unwrap();
-
-        let StartRequest { ip, .. } = request.into_inner();
-        let service_address = SocketAddr::from_str(&ip)
-            .context("invalid socket address")
-            .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
         println!("Starting on {service_address}");
 
@@ -373,7 +371,10 @@ where
             }
         });
 
-        let message = StartResponse { success: true };
+        let message = StartResponse {
+            success: true,
+            ..Default::default()
+        };
 
         Ok(Response::new(message))
     }

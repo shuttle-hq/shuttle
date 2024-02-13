@@ -4,7 +4,7 @@ use std::{
 };
 
 use shuttle_common::log::LogRecorder;
-use shuttle_proto::{builder, logger};
+use shuttle_proto::{builder, logger, provisioner};
 use tokio::{
     sync::{mpsc, Mutex},
     task::JoinSet,
@@ -39,6 +39,7 @@ pub struct DeploymentManagerBuilder<LR, ADG, DU, RM, QC> {
     resource_manager: Option<RM>,
     queue_client: Option<QC>,
     builder_client: Option<builder::Client>,
+    provisioner_client: Option<provisioner::Client>,
 }
 
 impl<LR, ADG, DU, RM, QC> DeploymentManagerBuilder<LR, ADG, DU, RM, QC>
@@ -63,6 +64,12 @@ where
 
     pub fn builder_client(mut self, builder_client: Option<builder::Client>) -> Self {
         self.builder_client = builder_client;
+
+        self
+    }
+
+    pub fn provisioner_client(mut self, provisioner_client: Option<provisioner::Client>) -> Self {
+        self.provisioner_client = provisioner_client;
 
         self
     }
@@ -122,6 +129,9 @@ where
             .expect("a deployment updater to be set");
         let resource_manager = self.resource_manager.expect("a resource manager to be set");
         let logs_fetcher = self.logs_fetcher.expect("a logs fetcher to be set");
+        let provisioner_client = self
+            .provisioner_client
+            .expect("a provisioner client to be set");
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -148,6 +158,7 @@ where
             active_deployment_getter,
             resource_manager,
             builds_path.clone(),
+            provisioner_client,
         ));
 
         DeploymentManager {
@@ -199,6 +210,7 @@ impl DeploymentManager {
             resource_manager: None,
             queue_client: None,
             builder_client: None,
+            provisioner_client: None,
         }
     }
 

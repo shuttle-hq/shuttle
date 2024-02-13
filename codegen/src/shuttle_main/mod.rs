@@ -262,13 +262,13 @@ impl ToTokens for Loader {
             async fn loader(
                 mut #factory_ident: ::shuttle_runtime::__internals::ProvisionerFactory,
                 mut #resource_tracker_ident: ::shuttle_runtime::__internals::ResourceTracker,
-            ) -> Vec<String> {
+            ) -> Vec<Vec<u8>> {
                 use ::shuttle_runtime::__internals::Context;
                 #extra_imports
 
                 #vars
 
-                let mut v = vec![];
+                let mut v = Vec::new();
                 #(
                     let b = #fn_inputs_builder::default()
                         #fn_inputs_builder_options // `vars` are used here
@@ -278,7 +278,7 @@ impl ToTokens for Loader {
                         )
                         .await
                         .context(format!("failed to construct config for {}", stringify!(#fn_inputs_builder)))?
-                    let j = serde_json::to_string(&b)
+                    let j = serde_json::to_vec(&b)
                         .context(format!("failed to serialize config for {}", stringify!(#fn_inputs_builder)))?
                     v.push(j);
                 )*
@@ -286,12 +286,12 @@ impl ToTokens for Loader {
             }
 
             async fn runner(
-                resources: Vec<String>,
+                resources: Vec<Vec<u8>>,
             ) -> #return_type {
                 let mut iter = resources.into_iter();
                 #(
                     let #fn_inputs: #fn_inputs_types =
-                        serde_json::from_str(&iter.next().unwrap())
+                        ::serde_json::from_slice(&iter.next().expect("resource list to have correct length"))
                         .context(format!("failed to deserialize output for {}", stringify!(#fn_inputs_builder)))?
                         .into_resource()
                         .await

@@ -205,7 +205,7 @@
 
 // Public API
 pub use shuttle_codegen::main;
-pub use shuttle_service::{CustomError, Error, Factory, IntoResource, ResourceBuilder, Service};
+pub use shuttle_service::{CustomError, Error, Factory, IntoResource, IntoResourceConfig, Service};
 
 // Useful re-exports
 pub use async_trait::async_trait;
@@ -216,7 +216,6 @@ mod args;
 #[cfg(feature = "next")]
 mod next;
 mod provisioner_factory;
-mod resource_tracker;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -229,7 +228,6 @@ pub mod __internals {
     #[cfg(feature = "next")]
     pub use crate::next::{AxumWasm, NextArgs};
     pub use crate::provisioner_factory::ProvisionerFactory;
-    pub use crate::resource_tracker::{get_resource, ResourceTracker};
 
     // Dependencies required by the codegen
     pub use anyhow::Context;

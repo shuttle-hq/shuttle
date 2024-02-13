@@ -23,8 +23,6 @@ pub enum State {
 pub struct DeploymentMetadata {
     pub env: Environment,
     pub project_name: String,
-    /// Typically your crate name
-    pub service_name: String,
     /// Path to a folder that persists between deployments
     pub storage_path: PathBuf,
 }

@@ -11,7 +11,7 @@ Users can connect OpenDAL to access data from a variety of storage services, inc
 Add `shuttle-opendal` to the dependencies for your service by running `cargo add shuttle-opendal`.
 This resource will be provided by adding the `shuttle_opendal::Opendal` attribute to your Shuttle `main` decorated function.
 
-It returns a `opendal::OpenDAL` for you to connect the storage service.
+It returns a `opendal::Operator` for you to connect the storage service.
 
 ### Example
 

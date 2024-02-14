@@ -47,11 +47,11 @@ impl From<Error> for shuttle_service::Error {
 #[async_trait]
 impl ResourceBuilder for Opendal {
     const TYPE: Type = Type::Custom;
-    type Config = Self;
+    type Config = ();
     type Output = OpendalOutput;
 
     fn config(&self) -> &Self::Config {
-        self
+        &()
     }
 
     async fn output(

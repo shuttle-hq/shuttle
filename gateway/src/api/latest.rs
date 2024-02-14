@@ -398,7 +398,7 @@ async fn override_get_delete_service(
         .find_custom_domain_for_project(&project_name)
         .await
         .unwrap_or_default() // use project name if domain lookup fails
-        .map(|c| c.fqdn.to_string())
+        .map(|c| format!("https://{}", c.fqdn.to_string()))
         .unwrap_or_else(|| format!("https://{project_name}.{public}"));
     let body = hyper::body::to_bytes(res.body_mut()).await.unwrap();
     let mut json: service::Summary =

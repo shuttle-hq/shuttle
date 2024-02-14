@@ -92,6 +92,7 @@ claims = [
 display = ["chrono/clock", "comfy-table", "crossterm"]
 models = ["async-trait", "http", "reqwest", "service", "thiserror"]
 persist = ["sqlx", "rand"]
+sqlx = ["dep:sqlx", "sqlx/sqlite"]
 service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
 test-utils = ["wiremock"]
 tracing = ["dep:tracing"]

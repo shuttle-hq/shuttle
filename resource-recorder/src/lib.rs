@@ -12,7 +12,6 @@ use tonic::{Request, Response, Status};
 
 pub mod args;
 mod dal;
-mod r#type;
 
 pub use dal::Sqlite;
 use tracing::error;
@@ -67,8 +66,9 @@ where
                 request
                     .resources
                     .into_iter()
-                    .map(TryInto::<Resource>::try_into)
-                    .collect::<Result<_, _>>()?,
+                    // ignore resources with invalid types
+                    .filter_map(|r| TryInto::<Resource>::try_into(r).ok())
+                    .collect(),
             )
             .await?;
 

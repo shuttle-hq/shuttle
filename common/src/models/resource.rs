@@ -30,10 +30,7 @@ pub fn get_resource_tables(
             let title = match x.r#type {
                 Type::Database(_) => "Databases",
                 Type::Secrets => "Secrets",
-                Type::StaticFolder => "Static Folder",
                 Type::Persist => "Persist",
-                Type::Turso => "Turso",
-                Type::Metadata => "Metadata",
                 Type::Custom => "Custom",
             };
 
@@ -58,16 +55,8 @@ pub fn get_resource_tables(
             output.push(get_secrets_table(secrets, service_name, raw));
         };
 
-        if let Some(static_folders) = resource_groups.get("Static Folder") {
-            output.push(get_static_folder_table(static_folders, service_name, raw));
-        };
-
-        if let Some(persist) = resource_groups.get("Persist") {
-            output.push(get_persist_table(persist, service_name, raw));
-        };
-
-        if let Some(custom) = resource_groups.get("Custom") {
-            output.push(get_custom_resources_table(custom, service_name, raw));
+        if resource_groups.get("Persist").is_some() {
+            output.push(format!("This persist instance is linked to {service_name}\nShuttle Persist: {service_name}\n"));
         };
 
         output.join("\n")
@@ -170,82 +159,4 @@ fn get_secrets_table(secrets: &[&Response], service_name: &str, raw: bool) -> St
     }
 
     format!("These secrets can be accessed by {service_name}\n{table}\n")
-}
-
-fn get_static_folder_table(static_folders: &[&Response], service_name: &str, raw: bool) -> String {
-    let mut table = Table::new();
-
-    if raw {
-        table
-            .load_preset(NOTHING)
-            .set_header(vec![Cell::new("Folders").set_alignment(CellAlignment::Left)]);
-    } else {
-        table
-            .load_preset(UTF8_FULL)
-            .apply_modifier(UTF8_ROUND_CORNERS)
-            .set_header(vec![Cell::new("Folders")
-                .set_alignment(CellAlignment::Center)
-                .add_attribute(Attribute::Bold)]);
-    }
-
-    for folder in static_folders {
-        let path = serde_json::from_value::<String>(folder.config.clone()).unwrap();
-
-        table.add_row(vec![path]);
-    }
-
-    format!("These static folders can be accessed by {service_name}\n{table}\n")
-}
-
-fn get_persist_table(persist_instances: &[&Response], service_name: &str, raw: bool) -> String {
-    let mut table = Table::new();
-
-    if raw {
-        table.load_preset(NOTHING).set_header(vec![
-            Cell::new("Instances").set_alignment(CellAlignment::Left)
-        ]);
-    } else {
-        table
-            .load_preset(UTF8_FULL)
-            .apply_modifier(UTF8_ROUND_CORNERS)
-            .set_header(vec![Cell::new("Instances")
-                .set_alignment(CellAlignment::Center)
-                .add_attribute(Attribute::Bold)]);
-    }
-
-    for _ in persist_instances {
-        table.add_row(vec!["Instance"]);
-    }
-
-    format!("These persist instances are linked to {service_name}\n{table}\n")
-}
-
-fn get_custom_resources_table(
-    custom_resource_instances: &[&Response],
-    service_name: &str,
-    raw: bool,
-) -> String {
-    let mut table = Table::new();
-
-    if raw {
-        table.load_preset(NOTHING).set_header(vec![
-            Cell::new("Instances").set_alignment(CellAlignment::Left)
-        ]);
-    } else {
-        table
-            .load_preset(UTF8_FULL)
-            .apply_modifier(UTF8_ROUND_CORNERS)
-            .set_header(vec![Cell::new("Instances")
-                .set_alignment(CellAlignment::Center)
-                .add_attribute(Attribute::Bold)]);
-    }
-
-    for (idx, _) in custom_resource_instances.iter().enumerate() {
-        // TODO: add some information that would make the custom resources identifiable.
-        // This requires changing the backend resource list response to include a resource identifier
-        // that can be used to query for more info related to a resource.
-        table.add_row(vec![format!("custom-resource-{}", idx.to_string())]);
-    }
-
-    format!("These custom resource instances are linked to {service_name}\n{table}\n")
 }

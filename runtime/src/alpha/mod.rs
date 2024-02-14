@@ -105,6 +105,7 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         );
     }
 
+    // where to serve the gRPC control layer
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
     let provisioner_address = args.provisioner_address;

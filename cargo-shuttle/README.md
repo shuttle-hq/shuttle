@@ -122,6 +122,7 @@ Currently, `cargo shuttle init` supports the following frameworks:
 
 - `--template actix-web`: for [actix web](https://actix.rs/) framework
 - `--template axum`: for [axum](https://github.com/tokio-rs/axum) framework
+- `--template loco`: for [loco](https://github.com/loco-rs/loco) framework
 - `--template poem`: for [poem](https://github.com/poem-web/poem) framework
 - `--template poise`: for [poise](https://github.com/serenity-rs/poise) discord bot framework
 - `--template rocket`: for [rocket](https://rocket.rs/) framework

@@ -6,26 +6,22 @@ license.workspace = true
 description = "Service with instances created per project for handling the compilation, loading, and execution of Shuttle services"
 
 [dependencies]
-shuttle-common = { workspace = true, features = ["backend", "models"] }
+shuttle-common = { workspace = true, features = ["backend", "models", "sqlx"] }
 shuttle-proto = { workspace = true, features = ["resource-recorder"] }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["headers", "json", "query", "ws"] }
-bytes = { workspace = true }
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 flate2 = { workspace = true }
-fqdn = { workspace = true }
-futures = { workspace = true }
 home = { workspace = true }
 hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
 hyper-reverse-proxy = { workspace = true }
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }
-opentelemetry-http = { workspace = true }
 prost-types = { workspace = true }
 portpicker = { workspace = true }
 rmp-serde = { workspace = true }
@@ -45,7 +41,6 @@ tokio = { workspace = true, features = ["fs", "process", "rt-multi-thread"] }
 toml = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true, features = ["make"] }
-tower-http = { workspace = true, features = ["auth", "trace"] }
 tracing = { workspace = true, features = ["default"] }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = [

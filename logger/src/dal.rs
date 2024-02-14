@@ -8,7 +8,7 @@ use sqlx::{
     migrate::Migrator,
     postgres::PgConnectOptions,
     types::chrono::{DateTime, Utc},
-    FromRow, PgPool, QueryBuilder,
+    Executor, FromRow, PgPool, QueryBuilder,
 };
 use thiserror::Error;
 use tokio::sync::broadcast::{self, Sender};
@@ -57,6 +57,11 @@ impl Postgres {
             .run(&pool)
             .await
             .expect("to run migrations successfully");
+
+        // Perform cleaning of old logs on startup
+        pool.execute("DELETE FROM logs WHERE tx_timestamp < (NOW() - INTERVAL '1 month')")
+            .await
+            .expect("to clean old logs successfully");
 
         let (tx, mut rx) = broadcast::channel::<(Vec<Log>, Span)>(1000);
         let pool_spawn = pool.clone();

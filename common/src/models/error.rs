@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tracing::{error, warn};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -30,114 +31,101 @@ impl Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
-#[derive(Debug, Clone, PartialEq, strum::Display)]
+#[derive(Debug, Clone, PartialEq, Error)]
 pub enum ErrorKind {
+    #[error("Request is missing a key")]
     KeyMissing,
+    #[error("The 'Host' header is invalid")]
     BadHost,
+    #[error("Request has an invalid key")]
     KeyMalformed,
+    #[error("Unauthorized")]
     Unauthorized,
+    #[error("Forbidden")]
     Forbidden,
+    #[error("User not found")]
     UserNotFound,
+    #[error("User already exists")]
     UserAlreadyExists,
+    #[error("Project '{0}' not found. Make sure you are the owner of this project name. Run `cargo shuttle project start` to create a new project.")]
     ProjectNotFound(String),
+    #[error("{0:?}")]
     InvalidProjectName(InvalidProjectName),
+    #[error("A project with the same name already exists")]
     ProjectAlreadyExists,
     /// Contains a message describing a running state of the project.
     /// Used if the project already exists but is owned
     /// by the caller, which means they can modify the project.
+    #[error("{0}")]
     OwnProjectAlreadyExists(String),
+    // "not ready" is matched against in cargo-shuttle for giving further instructions on project deletion
+    #[error("Project not ready. Try running `cargo shuttle project restart`.")]
     ProjectNotReady,
+    #[error("Project returned invalid response")]
     ProjectUnavailable,
+    #[error("You cannot create more projects. Delete some projects first.")]
     TooManyProjects,
+    #[error("Could not automatically delete the following resources: {0:?}. Please reach out to Shuttle support for help.")]
     ProjectHasResources(Vec<String>),
+    #[error("Could not automatically stop the running deployment for the project. Please reach out to Shuttle support for help.")]
     ProjectHasRunningDeployment,
+    #[error("Project currently has a deployment that is busy building. Use `cargo shuttle deployment list` to see it and wait for it to finish")]
     ProjectHasBuildingDeployment,
+    #[error("Tried to get project into a ready state for deletion but failed. Please reach out to Shuttle support for help.")]
     ProjectCorrupted,
+    #[error("Custom domain not found")]
     CustomDomainNotFound,
+    #[error("Invalid custom domain")]
     InvalidCustomDomain,
+    #[error("Custom domain already in use")]
     CustomDomainAlreadyExists,
+    #[error("The requested operation is invalid")]
     InvalidOperation,
+    #[error("Internal server error")]
     Internal,
+    #[error("Service not ready")]
     NotReady,
+    #[error("We're experiencing a high workload right now, please try again in a little bit")]
     ServiceUnavailable,
+    #[error("Deleting project failed")]
     DeleteProjectFailed,
+    #[error("Our server is at capacity and cannot serve your request at this time. Please try again in a few minutes.")]
     CapacityLimit,
 }
 
 impl From<ErrorKind> for ApiError {
     fn from(kind: ErrorKind) -> Self {
-        let (status, error_message) = match kind {
-            ErrorKind::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
-            ErrorKind::KeyMissing => (StatusCode::UNAUTHORIZED, "Request is missing a key"),
-            ErrorKind::ServiceUnavailable => (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "We're experiencing a high workload right now, please try again in a little bit",
-            ),
-            ErrorKind::KeyMalformed => (StatusCode::BAD_REQUEST, "Request has an invalid key"),
-            ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "The 'Host' header is invalid"),
-            ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "User not found"),
-            ErrorKind::UserAlreadyExists => (StatusCode::BAD_REQUEST, "User already exists"),
-            ErrorKind::ProjectNotFound(project_name) => {
-                return Self {
-                    message: format!("Project '{}' not found. Make sure you are the owner of this project name. Run `cargo shuttle project start` to create a new project.", project_name),
-                    status_code: StatusCode::NOT_FOUND.as_u16(),
-                }
-            },
-            ErrorKind::ProjectNotReady => (
-                StatusCode::SERVICE_UNAVAILABLE,
-                // "not ready" is matched against in cargo-shuttle for giving further instructions on project deletion
-                "Project not ready. Try running `cargo shuttle project restart`.",
-            ),
-            ErrorKind::ProjectUnavailable => {
-                (StatusCode::BAD_GATEWAY, "Project returned invalid response")
-            },
-            ErrorKind::TooManyProjects => {
-                (StatusCode::FORBIDDEN, "You cannot create more projects. Delete some projects first.")
-            },
-            ErrorKind::ProjectHasRunningDeployment => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Could not automatically stop the running deployment for the project. Please reach out to Shuttle support for help."
-            ),
-            ErrorKind::ProjectHasBuildingDeployment => (
-                StatusCode::BAD_REQUEST,
-                "Project currently has a deployment that is busy building. Use `cargo shuttle deployment list` to see it and wait for it to finish"
-            ),
-            ErrorKind::ProjectCorrupted => (
-                StatusCode::BAD_REQUEST,
-                "Tried to get project into a ready state for deletion but failed. Please reach out to Shuttle support for help."
-            ),
-            ErrorKind::ProjectHasResources(resources) => {
-                let resources = resources.join(", ");
-                return Self {
-                    message: format!("Could not automatically delete the following resources: {}. Please reach out to Shuttle support for help.", resources),
-                    status_code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
-                }
-            }
-            ErrorKind::InvalidProjectName(err) => {
-                return Self {
-                    message: err.to_string(),
-                    status_code: StatusCode::BAD_REQUEST.as_u16(),
-                }
-            }
-            ErrorKind::InvalidOperation => (StatusCode::BAD_REQUEST, "The requested operation is invalid"),
-            ErrorKind::ProjectAlreadyExists => (StatusCode::BAD_REQUEST, "A project with the same name already exists"),
-            ErrorKind::OwnProjectAlreadyExists(message) => {
-                return Self {
-                    message,
-                    status_code: StatusCode::BAD_REQUEST.as_u16(),
-                }
-            }
-            ErrorKind::InvalidCustomDomain => (StatusCode::BAD_REQUEST, "Invalid custom domain"),
-            ErrorKind::CustomDomainNotFound => (StatusCode::NOT_FOUND, "Custom domain not found"),
-            ErrorKind::CustomDomainAlreadyExists => (StatusCode::BAD_REQUEST, "Custom domain already in use"),
-            ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
-            ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
-            ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "Service not ready"),
-            ErrorKind::DeleteProjectFailed => (StatusCode::INTERNAL_SERVER_ERROR, "Deleting project failed"),
-            ErrorKind::CapacityLimit => (StatusCode::SERVICE_UNAVAILABLE, "Our server is at capacity and cannot serve your request at this time. Please try again in a few minutes."),
+        let status = match kind {
+            ErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorKind::KeyMissing => StatusCode::UNAUTHORIZED,
+            ErrorKind::ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorKind::KeyMalformed => StatusCode::BAD_REQUEST,
+            ErrorKind::BadHost => StatusCode::BAD_REQUEST,
+            ErrorKind::UserNotFound => StatusCode::NOT_FOUND,
+            ErrorKind::UserAlreadyExists => StatusCode::BAD_REQUEST,
+            ErrorKind::ProjectNotFound(_) => StatusCode::NOT_FOUND,
+            ErrorKind::ProjectNotReady => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorKind::ProjectUnavailable => StatusCode::BAD_GATEWAY,
+            ErrorKind::TooManyProjects => StatusCode::FORBIDDEN,
+            ErrorKind::ProjectHasRunningDeployment => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorKind::ProjectHasBuildingDeployment => StatusCode::BAD_REQUEST,
+            ErrorKind::ProjectCorrupted => StatusCode::BAD_REQUEST,
+            ErrorKind::ProjectHasResources(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorKind::InvalidProjectName(_) => StatusCode::BAD_REQUEST,
+            ErrorKind::InvalidOperation => StatusCode::BAD_REQUEST,
+            ErrorKind::ProjectAlreadyExists => StatusCode::BAD_REQUEST,
+            ErrorKind::OwnProjectAlreadyExists(_) => StatusCode::BAD_REQUEST,
+            ErrorKind::InvalidCustomDomain => StatusCode::BAD_REQUEST,
+            ErrorKind::CustomDomainNotFound => StatusCode::NOT_FOUND,
+            ErrorKind::CustomDomainAlreadyExists => StatusCode::BAD_REQUEST,
+            ErrorKind::Unauthorized => StatusCode::UNAUTHORIZED,
+            ErrorKind::Forbidden => StatusCode::FORBIDDEN,
+            ErrorKind::NotReady => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorKind::DeleteProjectFailed => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorKind::CapacityLimit => StatusCode::SERVICE_UNAVAILABLE,
         };
         Self {
-            message: error_message.to_string(),
+            message: kind.to_string(),
             status_code: status.as_u16(),
         }
     }

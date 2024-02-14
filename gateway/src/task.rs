@@ -467,7 +467,7 @@ impl Task<()> for ProjectTask {
             return TaskResult::Done(());
         }
 
-        let ctx = self.service.context();
+        let ctx = self.service.context().clone();
 
         let project = match self.service.find_project(&self.project_name).await {
             Ok(project) => project,

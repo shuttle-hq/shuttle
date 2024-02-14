@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -20,7 +19,7 @@ use sqlx::{
 };
 use tokio::task::JoinHandle;
 use tonic::Request;
-use tracing::{error, info, instrument, trace};
+use tracing::{error, info, trace};
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -42,7 +41,6 @@ use self::{
     resource::{Resource, ResourceManager},
 };
 use crate::deployment::ActiveDeploymentsGetter;
-use crate::proxy::AddressGetter;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -183,7 +181,7 @@ impl Persistence {
             .bind(deployment.service_id.to_string())
             .bind(deployment.state)
             .bind(deployment.last_update)
-            .bind(deployment.address.map(|socket| socket.to_string()))
+            .bind(Option::<String>::None)
             .bind(deployment.is_next)
             .bind(deployment.git_commit_id.as_ref())
             .bind(deployment.git_commit_msg.as_ref())
@@ -535,54 +533,8 @@ impl ResourceManager for Persistence {
 }
 
 #[async_trait::async_trait]
-impl AddressGetter for Persistence {
-    #[instrument(skip_all, fields(shuttle.service.name = service_name, shuttle.project.name = service_name))]
-    async fn get_address_for_service(
-        &self,
-        service_name: &str,
-    ) -> crate::handlers::Result<Option<std::net::SocketAddr>> {
-        let address_str = sqlx::query_as::<_, (String,)>(
-            r#"SELECT d.address
-                FROM deployments AS d
-                JOIN services AS s ON d.service_id = s.id
-                WHERE s.name = ? AND d.state = ?
-                ORDER BY d.last_update
-                DESC"#,
-        )
-        .bind(service_name)
-        .bind(State::Running)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Error::from)
-        .map_err(crate::handlers::Error::Persistence)?;
-
-        if let Some((address_str,)) = address_str {
-            SocketAddr::from_str(&address_str).map(Some).map_err(|err| {
-                crate::handlers::Error::Convert {
-                    from: "String".to_string(),
-                    to: "SocketAddr".to_string(),
-                    message: err.to_string(),
-                }
-            })
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-#[async_trait::async_trait]
 impl DeploymentUpdater for Persistence {
     type Err = Error;
-
-    async fn set_address(&self, id: &Uuid, address: &SocketAddr) -> Result<()> {
-        sqlx::query("UPDATE deployments SET address = ? WHERE id = ?")
-            .bind(address.to_string())
-            .bind(id)
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(Error::from)
-    }
 
     async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<()> {
         sqlx::query("UPDATE deployments SET is_next = ? WHERE id = ?")
@@ -631,8 +583,6 @@ impl StateRecorder for Persistence {
 
 #[cfg(test)]
 mod tests {
-    use std::net::{Ipv4Addr, SocketAddr};
-
     use chrono::{Duration, TimeZone, Utc};
     use rand::Rng;
 
@@ -655,7 +605,6 @@ mod tests {
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap(),
             ..Default::default()
         };
-        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 12345);
 
         p.insert_deployment(&deployment).await.unwrap();
         assert_eq!(p.get_deployment(&id).await.unwrap().unwrap(), deployment);
@@ -670,12 +619,11 @@ mod tests {
         .await
         .unwrap();
 
-        p.set_address(&id, &address).await.unwrap();
         p.set_is_next(&id, true).await.unwrap();
 
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
-        assert_eq!(update.address, Some(address));
+        assert_eq!(update.address, None);
         assert!(update.is_next);
         assert_ne!(
             update.last_update,
@@ -694,12 +642,7 @@ mod tests {
                 service_id,
                 state: State::Running,
                 last_update: Utc::now(),
-                address: None,
-                is_next: false,
-                git_commit_id: None,
-                git_commit_msg: None,
-                git_branch: None,
-                git_dirty: None,
+                ..Default::default()
             })
             .collect();
 
@@ -732,7 +675,6 @@ mod tests {
             service_id: xyz_id,
             state: State::Crashed,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 29, 35).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -741,7 +683,6 @@ mod tests {
             service_id: xyz_id,
             state: State::Stopped,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 49, 35).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -750,7 +691,6 @@ mod tests {
             service_id,
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 39, 39).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -759,7 +699,6 @@ mod tests {
             service_id: xyz_id,
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 48, 29).unwrap(),
-            address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
             is_next: true,
             ..Default::default()
         };
@@ -791,7 +730,6 @@ mod tests {
             service_id: other_id,
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -800,7 +738,6 @@ mod tests {
             service_id,
             state: State::Crashed,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(), // second
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -809,7 +746,6 @@ mod tests {
             service_id,
             state: State::Stopped,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 1).unwrap(), // first
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -818,7 +754,6 @@ mod tests {
             service_id,
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 3).unwrap(), // third
-            address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
             is_next: true,
             ..Default::default()
         };
@@ -855,7 +790,6 @@ mod tests {
             service_id,
             state: State::Crashed,
             last_update: time,
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -864,7 +798,6 @@ mod tests {
             service_id,
             state: State::Stopped,
             last_update: time.checked_add_signed(Duration::seconds(1)).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -873,7 +806,6 @@ mod tests {
             service_id,
             state: State::Running,
             last_update: time.checked_add_signed(Duration::seconds(2)).unwrap(),
-            address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
             is_next: false,
             ..Default::default()
         };
@@ -882,7 +814,6 @@ mod tests {
             service_id,
             state: State::Queued,
             last_update: time.checked_add_signed(Duration::seconds(3)).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -891,7 +822,6 @@ mod tests {
             service_id,
             state: State::Building,
             last_update: time.checked_add_signed(Duration::seconds(4)).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -900,7 +830,6 @@ mod tests {
             service_id,
             state: State::Built,
             last_update: time.checked_add_signed(Duration::seconds(5)).unwrap(),
-            address: None,
             is_next: true,
             ..Default::default()
         };
@@ -909,7 +838,6 @@ mod tests {
             service_id,
             state: State::Loading,
             last_update: time.checked_add_signed(Duration::seconds(6)).unwrap(),
-            address: None,
             is_next: false,
             ..Default::default()
         };
@@ -970,7 +898,6 @@ mod tests {
                 service_id,
                 state: State::Built,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -979,7 +906,6 @@ mod tests {
                 service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -988,7 +914,6 @@ mod tests {
                 service_id: bar_id,
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
-                address: None,
                 is_next: true,
                 ..Default::default()
             },
@@ -997,7 +922,6 @@ mod tests {
                 service_id: service_id2,
                 state: State::Crashed,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
-                address: None,
                 is_next: true,
                 ..Default::default()
             },
@@ -1006,7 +930,6 @@ mod tests {
                 service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -1079,46 +1002,6 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn address_getter() {
-        let (p, _) = Persistence::new_in_memory().await;
-        let service_id = add_service_named(&p.pool, "service-name").await.unwrap();
-        let service_other_id = add_service_named(&p.pool, "other-name").await.unwrap();
-
-        sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update, address) VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)",
-        )
-        // This running item should match
-        .bind(Uuid::new_v4())
-        .bind(service_id.to_string())
-        .bind(State::Running)
-        .bind(Utc::now())
-        .bind("10.0.0.5:12356")
-        // A stopped item should not match
-        .bind(Uuid::new_v4())
-        .bind(service_id.to_string())
-        .bind(State::Stopped)
-        .bind(Utc::now())
-        .bind("10.0.0.5:9876")
-        // Another service should not match
-        .bind(Uuid::new_v4())
-        .bind(service_other_id.to_string())
-        .bind(State::Running)
-        .bind(Utc::now())
-        .bind("10.0.0.5:5678")
-        .execute(&p.pool)
-        .await
-        .unwrap();
-
-        assert_eq!(
-            SocketAddr::from(([10, 0, 0, 5], 12356)),
-            p.get_address_for_service("service-name")
-                .await
-                .unwrap()
-                .unwrap(),
-        );
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
     async fn active_deployment_getter() {
         let (p, _) = Persistence::new_in_memory().await;
         let service_id = add_service_named(&p.pool, "service-name").await.unwrap();
@@ -1131,7 +1014,6 @@ mod tests {
                 service_id,
                 state: State::Built,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -1140,7 +1022,6 @@ mod tests {
                 service_id,
                 state: State::Stopped,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -1149,7 +1030,6 @@ mod tests {
                 service_id,
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -1158,7 +1038,6 @@ mod tests {
                 service_id,
                 state: State::Crashed,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
-                address: None,
                 is_next: false,
                 ..Default::default()
             },
@@ -1167,7 +1046,6 @@ mod tests {
                 service_id,
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
-                address: None,
                 is_next: true,
                 ..Default::default()
             },

@@ -1,5 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use std::convert::{identity, Infallible};
+use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
@@ -13,7 +13,6 @@ use bollard::network::{ConnectNetworkOptions, DisconnectNetworkOptions};
 use bollard::service::MountTypeEnum;
 use bollard::system::EventsOptions;
 use bollard::volume::RemoveVolumeOptions;
-use fqdn::FQDN;
 use futures::prelude::*;
 use http::header::AUTHORIZATION;
 use http::uri::InvalidUri;
@@ -146,12 +145,6 @@ pub trait ContainerInspectResponseExt {
     fn args(&self) -> Result<&Vec<String>, ProjectError> {
         let container = self.container();
         Ok(safe_unwrap!(container.args))
-    }
-
-    fn fqdn(&self) -> Result<FQDN, ProjectError> {
-        self.find_arg_and_then("--proxy-fqdn", identity)?
-            .parse()
-            .map_err(|_| ProjectError::internal("invalid value for --proxy-fqdn"))
     }
 
     fn initial_key(&self) -> Result<String, ProjectError> {
@@ -732,8 +725,6 @@ pub struct ProjectCreating {
     project_id: Ulid,
     /// The admin secret with which the start deployer
     initial_key: String,
-    /// Override the default fqdn (`${project_name}.${public}`)
-    fqdn: Option<String>,
     /// Override the default image (specified in the args to this gateway)
     image: Option<String>,
     /// Configuration will be extracted from there if specified (will
@@ -758,7 +749,6 @@ impl ProjectCreating {
             project_name,
             project_id,
             initial_key,
-            fqdn: None,
             image: None,
             from: None,
             recreate_count: 0,
@@ -779,7 +769,6 @@ impl ProjectCreating {
             project_name,
             project_id,
             initial_key,
-            fqdn: None,
             image: None,
             from: Some(container),
             recreate_count,
@@ -789,11 +778,6 @@ impl ProjectCreating {
 
     pub fn from(mut self, from: ContainerInspectResponse) -> Self {
         self.from = Some(from);
-        self
-    }
-
-    pub fn with_fqdn(mut self, fqdn: String) -> Self {
-        self.fqdn = Some(fqdn);
         self
     }
 
@@ -817,10 +801,6 @@ impl ProjectCreating {
 
     pub fn initial_key(&self) -> &str {
         &self.initial_key
-    }
-
-    pub fn fqdn(&self) -> &Option<String> {
-        &self.fqdn
     }
 
     fn container_name<C: DockerContext>(&self, ctx: &C) -> String {
@@ -850,7 +830,6 @@ impl ProjectCreating {
             builder_host,
             auth_uri,
             resource_recorder_uri,
-            fqdn: public,
             extra_hosts,
             ..
         } = ctx.container_settings();
@@ -858,7 +837,6 @@ impl ProjectCreating {
         let Self {
             initial_key,
             project_name,
-            fqdn,
             image,
             idle_minutes,
             ..
@@ -892,10 +870,6 @@ impl ProjectCreating {
                         format!("0.0.0.0:{RUNTIME_API_PORT}"),
                         "--provisioner-address",
                         format!("http://{provisioner_host}:8000"),
-                        "--proxy-address",
-                        "0.0.0.0:8000",
-                        "--proxy-fqdn",
-                        fqdn.clone().unwrap_or(format!("{project_name}.{public}")),
                         "--artifacts-path",
                         "/opt/shuttle",
                         "--state",
@@ -2021,7 +1995,6 @@ pub mod tests {
                 project_name: "my-project-test".parse().unwrap(),
                 project_id: Ulid::new(),
                 initial_key: "test".to_string(),
-                fqdn: None,
                 image: None,
                 from: None,
                 recreate_count: 0,

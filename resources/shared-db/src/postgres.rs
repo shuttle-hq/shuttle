@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    /* database, resource::Type, */ DatabaseResource, DbInput, Error, Factory, IntoResource,
+    database, resource::{Type, Response}, DatabaseResource, DbInput, Error, Factory, IntoResource,
     IntoResourceInput,
 };
 
@@ -20,33 +20,15 @@ impl Postgres {
 
 #[async_trait]
 impl IntoResourceInput for Postgres {
-    type Input = DbInput;
+    type Input = Response;
     type Output = Wrapper;
 
     async fn into_resource_input(self, _factory: &dyn Factory) -> Result<Self::Input, Error> {
-        Ok(self.0)
-        // let info = match factory.get_metadata().env {
-        //     shuttle_service::Environment::Deployment => DatabaseResource::Info(
-        //         factory
-        //             .get_db_connection(database::Type::Shared(database::SharedEngine::Postgres))
-        //             .await?,
-        //     ),
-        //     shuttle_service::Environment::Local => {
-        //         if let Some(local_uri) = self.0.local_uri {
-        //             DatabaseResource::ConnectionString(local_uri)
-        //         } else {
-        //             DatabaseResource::Info(
-        //                 factory
-        //                     .get_db_connection(database::Type::Shared(
-        //                         database::SharedEngine::Postgres,
-        //                     ))
-        //                     .await?,
-        //             )
-        //         }
-        //     }
-        // };
-
-        // Ok(Wrapper(info))
+        Ok(Response {
+            r#type: database::Type::Shared(database::SharedEngine::Postgres),
+            config: self.0,
+            data: Default::default(), // null
+        })
     }
 }
 

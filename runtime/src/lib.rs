@@ -28,8 +28,8 @@
 //!
 //! ```toml
 //! axum = "0.7.3"
-//! shuttle-axum = "0.38.0"
-//! shuttle-runtime = "0.38.0"
+//! shuttle-axum = "0.39.0"
+//! shuttle-runtime = "0.39.0"
 //! tokio = "1.28.2"
 //! ```
 //!
@@ -112,7 +112,7 @@
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.38.0", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.39.0", features = ["postgres"] }
 //! sqlx = "0.7.1"
 //! ```
 //!

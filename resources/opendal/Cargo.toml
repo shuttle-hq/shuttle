@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-opendal"
-version = "0.38.0"
+version = "0.39.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Plugin to obtain a client connected to Apache OpenDAL"
@@ -10,7 +10,7 @@ keywords = ["shuttle-service", "opendal"]
 async-trait = "0.1.56"
 opendal = {version = "0.45"}
 serde = { version = "1.0.148", features = ["derive"] }
-shuttle-service = { path = "../../service", version = "0.38.0", default-features = false }
+shuttle-service = { path = "../../service", version = "0.39.0", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros"] }

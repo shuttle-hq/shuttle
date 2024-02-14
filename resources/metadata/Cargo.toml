@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-metadata"
-version = "0.38.0"
+version = "0.39.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Plugin to get Shuttle service information"
@@ -8,4 +8,4 @@ keywords = ["shuttle-service", "metadata"]
 
 [dependencies]
 async-trait = "0.1.56"
-shuttle-service = { path = "../../service", version = "0.38.0" }
+shuttle-service = { path = "../../service", version = "0.39.0" }

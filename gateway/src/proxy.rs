@@ -1,192 +1,138 @@
-use std::convert::Infallible;
 use std::future::Future;
 use std::io;
-use std::net::SocketAddr;
-use std::pin::Pin;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
+use axum::extract::{ConnectInfo, Path, State};
 use axum::headers::{HeaderMapExt, Host};
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
+use axum::routing::any;
 use axum_server::accept::DefaultAcceptor;
 use axum_server::tls_rustls::RustlsAcceptor;
 use fqdn::{fqdn, FQDN};
-use futures::future::{ready, Ready};
 use futures::prelude::*;
+use http::header::SERVER;
+use http::{HeaderValue, StatusCode};
 use hyper::body::{Body, HttpBody};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
-use hyper::server::conn::AddrStream;
 use hyper::{Client, Request};
 use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
+use shuttle_common::backends::cache::{CacheManagement, CacheManager};
 use shuttle_common::backends::headers::XShuttleProject;
 use shuttle_common::models::error::InvalidProjectName;
+use shuttle_common::models::project::ProjectName;
 use tokio::sync::mpsc::Sender;
-use tower::{Service, ServiceBuilder};
 use tower_sanitize_path::SanitizePath;
 use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::acme::{AcmeClient, ChallengeResponderLayer, CustomDomain};
+use crate::acme::AcmeClient;
 use crate::service::GatewayService;
 use crate::task::BoxedTask;
 use crate::{Error, ErrorKind};
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
+static SERVER_HEADER: Lazy<HeaderValue> = Lazy::new(|| "shuttle.rs".parse().unwrap());
 
-pub trait AsResponderTo<R> {
-    fn as_responder_to(&self, req: R) -> Self;
-
-    fn into_make_service(self) -> ResponderMakeService<Self>
-    where
-        Self: Sized,
-    {
-        ResponderMakeService { inner: self }
-    }
-}
-
-pub struct ResponderMakeService<S> {
-    inner: S,
-}
-
-impl<'r, S> Service<&'r AddrStream> for ResponderMakeService<S>
-where
-    S: AsResponderTo<&'r AddrStream>,
-{
-    type Response = S;
-    type Error = Infallible;
-    type Future = Ready<Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: &'r AddrStream) -> Self::Future {
-        ready(Ok(self.inner.as_responder_to(req)))
-    }
-}
-
-#[derive(Clone)]
-pub struct UserProxy {
+pub struct ProxyState {
     gateway: Arc<GatewayService>,
     task_sender: Sender<BoxedTask>,
-    remote_addr: SocketAddr,
     public: FQDN,
+    project_cache: CacheManager<IpAddr>,
+    domain_cache: CacheManager<ProjectName>,
 }
 
-impl<'r> AsResponderTo<&'r AddrStream> for UserProxy {
-    fn as_responder_to(&self, addr_stream: &'r AddrStream) -> Self {
-        let mut responder = self.clone();
-        responder.remote_addr = addr_stream.remote_addr();
-        responder
-    }
-}
+async fn proxy(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<Arc<ProxyState>>,
+    mut req: Request<Body>,
+) -> Result<Response, Error> {
+    let span = debug_span!("proxy", http.method = %req.method(), http.host = field::Empty, http.uri = %req.uri(), http.status_code = field::Empty, shuttle.project.name = field::Empty);
+    trace!(?req, "serving proxy request");
 
-impl<S, R> AsResponderTo<R> for SanitizePath<S>
-where
-    S: AsResponderTo<R> + Clone,
-{
-    fn as_responder_to(&self, req: R) -> Self {
-        let responder = self.clone();
-        responder.inner().as_responder_to(req);
+    let fqdn = req
+        .headers()
+        .typed_get::<Host>()
+        .map(|host| fqdn!(host.hostname()))
+        .ok_or_else(|| Error::from_kind(ErrorKind::BadHost))?;
 
-        responder
-    }
-}
+    span.record("http.host", fqdn.to_string());
 
-impl UserProxy {
-    async fn proxy(
-        self,
-        task_sender: Sender<BoxedTask>,
-        mut req: Request<Body>,
-    ) -> Result<Response, Error> {
-        let span = debug_span!("proxy", http.method = %req.method(), http.host = field::Empty, http.uri = %req.uri(), http.status_code = field::Empty, shuttle.project.name = field::Empty);
-        trace!(?req, "serving proxy request");
-
-        let fqdn = req
-            .headers()
-            .typed_get::<Host>()
-            .map(|host| fqdn!(host.hostname()))
-            .ok_or_else(|| Error::from_kind(ErrorKind::BadHost))?;
-
-        span.record("http.host", fqdn.to_string());
-
-        let project_name = if fqdn.is_subdomain_of(&self.public)
-            && fqdn.depth() - self.public.depth() == 1
-        {
+    let project_name =
+        if fqdn.is_subdomain_of(&state.public) && fqdn.depth() - state.public.depth() == 1 {
             fqdn.labels()
                 .next()
                 .unwrap()
                 .to_owned()
                 .parse()
                 .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName(InvalidProjectName)))?
-        } else if let Ok(CustomDomain { project_name, .. }) =
-            self.gateway.project_details_for_custom_domain(&fqdn).await
-        {
-            project_name
+        } else if let Some(project) = { state.domain_cache.get(fqdn.to_string().as_str()) } {
+            project
         } else {
-            return Err(Error::from_kind(ErrorKind::CustomDomainNotFound));
+            let project_name = state
+                .gateway
+                .project_details_for_custom_domain(&fqdn)
+                .await?
+                .project_name;
+            state.domain_cache.insert(
+                fqdn.to_string().as_str(),
+                project_name.clone(),
+                std::time::Duration::from_millis(5000),
+            );
+            project_name
         };
 
-        req.headers_mut()
-            .typed_insert(XShuttleProject(project_name.to_string()));
+    // Record current project for tracing purposes
+    span.record("shuttle.project.name", &project_name.to_string());
 
-        let project = self
+    req.headers_mut()
+        .typed_insert(XShuttleProject(project_name.to_string()));
+
+    // cache project ip lookups to not overload the db during rapid requests
+    let target_ip = if let Some(ip) = { state.project_cache.get(project_name.as_str()) } {
+        ip
+    } else {
+        let ip = state
             .gateway
-            .find_or_start_project(&project_name, task_sender)
-            .await?;
-
-        // Record current project for tracing purposes
-        span.record("shuttle.project.name", &project_name.to_string());
-
-        let target_ip = project
+            .find_or_start_project(&project_name, state.task_sender.clone())
+            .await?
             .state
             .target_ip()?
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
+        state.project_cache.insert(
+            project_name.as_str(),
+            ip,
+            std::time::Duration::from_millis(1000),
+        );
+        ip
+    };
+    let target_url = format!("http://{}:{}", target_ip, 8000);
 
-        let target_url = format!("http://{}:{}", target_ip, 8000);
+    let cx = span.context();
+    global::get_text_map_propagator(|propagator| {
+        propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
+    });
 
-        let cx = span.context();
+    let mut res = PROXY_CLIENT
+        .call(addr.ip(), &target_url, req)
+        .await
+        .map_err(|e| {
+            error!(error = ?e, "gateway proxy client error");
+            Error::from_kind(ErrorKind::ProjectUnavailable)
+        })?;
 
-        global::get_text_map_propagator(|propagator| {
-            propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
-        });
+    res.headers_mut().insert(SERVER, SERVER_HEADER.clone());
+    let (parts, body) = res.into_parts();
+    let body = <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();
 
-        let proxy = PROXY_CLIENT
-            .call(self.remote_addr.ip(), &target_url, req)
-            .await
-            .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
+    span.record("http.status_code", parts.status.as_u16());
 
-        let (parts, body) = proxy.into_parts();
-        let body = <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();
-
-        span.record("http.status_code", parts.status.as_u16());
-
-        Ok(Response::from_parts(parts, body))
-    }
-}
-
-impl Service<Request<Body>> for UserProxy {
-    type Response = Response;
-    type Error = Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let task_sender = self.task_sender.clone();
-        self.clone()
-            .proxy(task_sender, req)
-            .or_else(|err: Error| future::ready(Ok(err.into_response())))
-            .boxed()
-    }
+    Ok(Response::from_parts(parts, body))
 }
 
 #[derive(Clone)]
@@ -195,55 +141,32 @@ pub struct Bouncer {
     public: FQDN,
 }
 
-impl<'r> AsResponderTo<&'r AddrStream> for Bouncer {
-    fn as_responder_to(&self, _req: &'r AddrStream) -> Self {
-        self.clone()
-    }
-}
+async fn bounce(State(state): State<Arc<Bouncer>>, req: Request<Body>) -> Result<Response, Error> {
+    let mut resp = Response::builder();
 
-impl Bouncer {
-    async fn bounce(self, req: Request<Body>) -> Result<Response, Error> {
-        let mut resp = Response::builder();
+    let host = req.headers().typed_get::<Host>().unwrap();
+    let hostname = host.hostname();
+    let fqdn = fqdn!(hostname);
 
-        let host = req.headers().typed_get::<Host>().unwrap();
-        let hostname = host.hostname();
-        let fqdn = fqdn!(hostname);
+    let path = req.uri();
 
-        let path = req.uri();
-
-        if fqdn.is_subdomain_of(&self.public)
-            || self
-                .gateway
-                .project_details_for_custom_domain(&fqdn)
-                .await
-                .is_ok()
-        {
-            resp = resp
-                .status(301)
-                .header("Location", format!("https://{hostname}{path}"));
-        } else {
-            resp = resp.status(404);
-        }
-
-        let body = <Body as HttpBody>::map_err(Body::empty(), axum::Error::new).boxed_unsync();
-
-        Ok(resp.body(body).unwrap())
-    }
-}
-
-impl Service<Request<Body>> for Bouncer {
-    type Response = Response;
-    type Error = Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+    if fqdn.is_subdomain_of(&state.public)
+        || state
+            .gateway
+            .project_details_for_custom_domain(&fqdn)
+            .await
+            .is_ok()
+    {
+        resp = resp
+            .status(301)
+            .header("Location", format!("https://{hostname}{path}"));
+    } else {
+        resp = resp.status(404);
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
-        self.clone().bounce(req).boxed()
-    }
+    let body = <Body as HttpBody>::map_err(Body::empty(), axum::Error::new).boxed_unsync();
+
+    Ok(resp.body(body).unwrap())
 }
 
 pub struct UserServiceBuilder {
@@ -318,17 +241,26 @@ impl UserServiceBuilder {
             .user_binds_to
             .expect("a socket address to bind to is required");
 
-        let user_proxy = SanitizePath::sanitize_paths(UserProxy {
-            gateway: service.clone(),
-            task_sender,
-            remote_addr: "127.0.0.1:80".parse().unwrap(),
-            public: public.clone(),
-        })
-        .into_make_service();
+        let san = SanitizePath::sanitize_paths(
+            axum::Router::new()
+                .fallback(proxy) // catch all routes
+                .with_state(Arc::new(ProxyState {
+                    gateway: service.clone(),
+                    task_sender,
+                    public: public.clone(),
+                    project_cache: CacheManager::new(1024),
+                    domain_cache: CacheManager::new(256),
+                })),
+        );
+        let user_proxy = axum::ServiceExt::into_make_service_with_connect_info::<SocketAddr>(san);
 
-        let bouncer = self.bouncer_binds_to.as_ref().map(|_| Bouncer {
-            gateway: service.clone(),
-            public: public.clone(),
+        let bouncer = self.bouncer_binds_to.as_ref().map(|_| {
+            axum::Router::new()
+                .fallback(bounce) // catch all routes
+                .with_state(Arc::new(Bouncer {
+                    gateway: service.clone(),
+                    public: public.clone(),
+                }))
         });
 
         let mut futs = Vec::new();
@@ -341,9 +273,21 @@ impl UserServiceBuilder {
                 .acme
                 .expect("TLS cannot be enabled without an ACME client");
 
-            let bouncer = ServiceBuilder::new()
-                .layer(ChallengeResponderLayer::new(acme))
-                .service(bouncer);
+            let bouncer = axum::Router::new()
+                .route(
+                    "/.well-known/acme-challenge/*rest",
+                    any(
+                        |Path(token): Path<String>, State(client): State<AcmeClient>| async move {
+                            trace!(token, "responding to certificate challenge");
+                            match client.get_http01_challenge_authorization(&token).await {
+                                Some(key) => Ok(key),
+                                None => Err(StatusCode::NOT_FOUND),
+                            }
+                        },
+                    ),
+                )
+                .with_state(acme)
+                .merge(bouncer);
 
             let bouncer = axum_server::Server::bind(bouncer_binds_to)
                 .serve(bouncer.into_make_service())

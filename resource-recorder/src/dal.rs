@@ -1,9 +1,10 @@
 use std::{fmt, path::Path, str::FromStr, time::SystemTime};
 
-use crate::{r#type::Type, Error};
+use crate::Error;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use prost_types::Timestamp;
+use shuttle_common::resource::Type;
 use shuttle_proto::resource_recorder::{self, record_request};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
@@ -255,7 +256,11 @@ impl TryFrom<record_request::Resource> for Resource {
     type Error = String;
 
     fn try_from(value: record_request::Resource) -> Result<Self, Self::Error> {
-        Ok(Self::new(value.r#type.parse()?, value.data, value.config))
+        let r#type = value.r#type.parse()?;
+        if let Type::Custom = r#type {
+            return Err("Custom resources can not be saved in resource-recorder".into());
+        }
+        Ok(Self::new(r#type, value.data, value.config))
     }
 }
 

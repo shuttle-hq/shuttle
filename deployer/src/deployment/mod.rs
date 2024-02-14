@@ -135,7 +135,7 @@ where
         set.spawn(queue::task(
             queue_recv,
             run_send_clone,
-            deployment_updater.clone(),
+            deployment_updater,
             build_log_recorder,
             queue_client,
             self.builder_client,
@@ -145,7 +145,6 @@ where
         set.spawn(run::task(
             run_recv,
             runtime_manager.clone(),
-            deployment_updater,
             active_deployment_getter,
             resource_manager,
             builds_path.clone(),

@@ -1,17 +1,11 @@
-use std::{convert::Infallible, net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
-use fqdn::FQDN;
-use hyper::{
-    server::conn::AddrStream,
-    service::{make_service_fn, service_fn},
-};
 pub use persistence::Persistence;
-use proxy::AddressGetter;
 pub use runtime_manager::RuntimeManager;
 use shuttle_common::log::LogRecorder;
 use shuttle_proto::{builder, logger};
 use tokio::sync::Mutex;
-use tracing::{error, info};
+use tracing::info;
 use ulid::Ulid;
 
 mod args;
@@ -19,7 +13,6 @@ pub mod deployment;
 pub mod error;
 pub mod handlers;
 pub mod persistence;
-mod proxy;
 mod runtime_manager;
 
 pub use crate::args::Args;
@@ -71,7 +64,6 @@ pub async fn start(
     let mut builder = handlers::RouterBuilder::new(
         persistence,
         deployment_manager,
-        args.proxy_fqdn,
         args.project,
         project_id,
         args.auth_uri,
@@ -92,31 +84,4 @@ pub async fn start(
         .serve(router.into_make_service())
         .await
         .unwrap_or_else(|_| panic!("Failed to bind to address: {}", args.api_address));
-}
-
-pub async fn start_proxy(
-    proxy_address: SocketAddr,
-    fqdn: FQDN,
-    address_getter: impl AddressGetter,
-) {
-    let make_service = make_service_fn(move |socket: &AddrStream| {
-        let remote_address = socket.remote_addr();
-        let address_getter = address_getter.clone();
-        let fqdn = fqdn.clone();
-
-        async move {
-            Ok::<_, Infallible>(service_fn(move |req| {
-                proxy::handle(remote_address, fqdn.clone(), req, address_getter.clone())
-            }))
-        }
-    });
-
-    let server = hyper::Server::bind(&proxy_address).serve(make_service);
-
-    info!("Starting proxy server on: {}", proxy_address);
-
-    if let Err(e) = server.await {
-        error!(error = %e, "proxy died, killing process...");
-        std::process::exit(1);
-    }
 }

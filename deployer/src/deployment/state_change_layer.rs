@@ -383,10 +383,6 @@ mod tests {
     impl DeploymentUpdater for StubDeploymentUpdater {
         type Err = std::io::Error;
 
-        async fn set_address(&self, _id: &Uuid, _address: &SocketAddr) -> Result<(), Self::Err> {
-            Ok(())
-        }
-
         async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
             Ok(())
         }

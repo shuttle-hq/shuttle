@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use axum::body::Bytes;
 use axum::extract::{
     ws::{self, WebSocket},
     FromRequest,
@@ -12,9 +13,7 @@ use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
 use axum::routing::{delete, get, post, Router};
 use axum::Json;
-use bytes::Bytes;
 use chrono::{SecondsFormat, Utc};
-use fqdn::FQDN;
 use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
 use shuttle_service::builder::clean_crate;
@@ -47,7 +46,6 @@ pub use {self::error::Error, self::error::Result, self::local::set_jwt_bearer};
 
 mod error;
 mod local;
-mod project;
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct PaginationDetails {
@@ -60,7 +58,7 @@ pub struct PaginationDetails {
 #[derive(Clone)]
 pub struct RouterBuilder {
     router: Router,
-    project_name: ProjectName,
+    _project_name: ProjectName,
     auth_uri: Uri,
 }
 
@@ -68,7 +66,6 @@ impl RouterBuilder {
     pub fn new(
         persistence: Persistence,
         deployment_manager: DeploymentManager,
-        proxy_fqdn: FQDN,
         project_name: ProjectName,
         project_id: Ulid,
         auth_uri: Uri,
@@ -125,14 +122,13 @@ impl RouterBuilder {
             )
             .layer(Extension(persistence))
             .layer(Extension(deployment_manager))
-            .layer(Extension(proxy_fqdn))
             .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
                 auth_uri.clone(),
             )));
 
         Self {
             router,
-            project_name,
+            _project_name: project_name,
             auth_uri,
         }
     }
@@ -176,8 +172,6 @@ impl RouterBuilder {
                 .with_propagation()
                 .build(),
             )
-            .route_layer(from_extractor::<project::ProjectNameGuard>())
-            .layer(Extension(self.project_name))
     }
 }
 
@@ -198,25 +192,24 @@ pub async fn get_services(
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name))]
 pub async fn get_service(
     Extension(persistence): Extension<Persistence>,
-    Extension(proxy_fqdn): Extension<FQDN>,
     CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Summary>> {
-    if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let deployment = persistence
-            .get_active_deployment(&service.id)
-            .await?
-            .map(Into::into);
+    let service = persistence
+        .get_service_by_name(&service_name)
+        .await?
+        .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
 
-        let response = shuttle_common::models::service::Summary {
-            uri: format!("https://{proxy_fqdn}"),
-            name: service.name,
-            deployment,
-        };
+    let deployment = persistence
+        .get_active_deployment(&service.id)
+        .await?
+        .map(Into::into);
+    let response = shuttle_common::models::service::Summary {
+        name: service.name,
+        deployment,
+        uri: "".to_owned(),
+    };
 
-        Ok(Json(response))
-    } else {
-        Err(Error::NotFound("service not found".to_string()))
-    }
+    Ok(Json(response))
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name))]
@@ -225,29 +218,30 @@ pub async fn get_service_resources(
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
 ) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
-    if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let resources = persistence
-            .get_resources(&service.id, claim)
-            .await?
-            .resources
-            .into_iter()
-            .map(shuttle_common::resource::Response::try_from)
-            // We ignore and trace the errors for resources with corrupted data, returning just the
-            // valid resources.
-            // TODO: investigate how the resource data can get corrupted.
-            .filter_map(|resource| {
-                resource
-                    .map_err(|err| {
-                        error!(error = ?err, "failed to parse resource data");
-                    })
-                    .ok()
-            })
-            .collect();
+    let service = persistence
+        .get_service_by_name(&service_name)
+        .await?
+        .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
 
-        Ok(Json(resources))
-    } else {
-        Err(Error::NotFound("service not found".to_string()))
-    }
+    let resources = persistence
+        .get_resources(&service.id, claim)
+        .await?
+        .resources
+        .into_iter()
+        .map(shuttle_common::resource::Response::try_from)
+        // We ignore and trace the errors for resources with corrupted data, returning just the
+        // valid resources.
+        // TODO: investigate how the resource data can get corrupted.
+        .filter_map(|resource| {
+            resource
+                .map_err(|err| {
+                    error!(error = ?err, "failed to parse resource data");
+                })
+                .ok()
+        })
+        .collect();
+
+    Ok(Json(resources))
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name, %resource_type))]
@@ -362,12 +356,13 @@ pub async fn create_service(
 pub async fn stop_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Extension(proxy_fqdn): Extension<FQDN>,
     CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Summary>> {
-    let Some(service) = persistence.get_service_by_name(&service_name).await? else {
-        return Err(Error::NotFound("service not found".to_string()));
-    };
+    let service = persistence
+        .get_service_by_name(&service_name)
+        .await?
+        .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
+
     let running_deployment = persistence.get_active_deployment(&service.id).await?;
     let Some(ref deployment) = running_deployment else {
         return Err(Error::NotFound("no running deployment found".to_string()));
@@ -377,7 +372,7 @@ pub async fn stop_service(
     let response = shuttle_common::models::service::Summary {
         name: service.name,
         deployment: running_deployment.map(Into::into),
-        uri: format!("https://{proxy_fqdn}"),
+        uri: "".to_owned(),
     };
 
     Ok(Json(response))
@@ -389,20 +384,20 @@ pub async fn get_deployments(
     CustomErrorPath(project_name): CustomErrorPath<String>,
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<Json<Vec<shuttle_common::models::deployment::Response>>> {
-    if let Some(service) = persistence.get_service_by_name(&project_name).await? {
-        let limit = limit.unwrap_or(u32::MAX);
-        let page = page.unwrap_or(0);
-        let deployments = persistence
-            .get_deployments(&service.id, page * limit, limit)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
+    let Some(service) = persistence.get_service_by_name(&project_name).await? else {
+        return Ok(Json(vec![]));
+    };
 
-        Ok(Json(deployments))
-    } else {
-        Ok(Json(vec![]))
-    }
+    let limit = limit.unwrap_or(u32::MAX);
+    let page = page.unwrap_or(0);
+    let deployments = persistence
+        .get_deployments(&service.id, page * limit, limit)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+
+    Ok(Json(deployments))
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, %deployment_id))]

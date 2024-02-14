@@ -1,17 +1,14 @@
-use std::process::exit;
-
 use clap::Parser;
 use shuttle_common::{
     backends::trace::setup_tracing,
     log::{Backend, DeploymentLogLayer},
 };
-use shuttle_deployer::{start, start_proxy, Args, Persistence, RuntimeManager, StateChangeLayer};
+use shuttle_deployer::{start, Args, Persistence, RuntimeManager, StateChangeLayer};
 use shuttle_proto::{
     // builder::builder_client::BuilderClient,
     logger::{self, Batcher},
 };
-use tokio::select;
-use tracing::{error, trace};
+use tracing::trace;
 use tracing_subscriber::prelude::*;
 use ulid::Ulid;
 
@@ -70,14 +67,13 @@ async fn main() {
         Some(args.auth_uri.to_string()),
     );
 
-    select! {
-        _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
-            error!("Proxy stopped.")
-        },
-        _ = start(persistence, runtime_manager, logger_batcher, logger_client, builder_client, args) => {
-            error!("Deployment service stopped.")
-        },
-    }
-
-    exit(1);
+    start(
+        persistence,
+        runtime_manager,
+        logger_batcher,
+        logger_client,
+        builder_client,
+        args,
+    )
+    .await
 }

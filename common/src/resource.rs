@@ -18,15 +18,26 @@ pub struct Response {
     pub data: Value,
 }
 
+impl Response {
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes()
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).expect("to turn resource into a vec")
+    }
+
+    pub fn from_bytes(bytes: Vec<u8>) -> Self {
+        serde_json::from_slice(&bytes).expect("to turn bytes into a resource")
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Type {
     Database(database::Type),
     Secrets,
-    StaticFolder,
     Persist,
-    Turso,
-    Metadata,
     Custom,
 }
 
@@ -42,28 +53,11 @@ impl FromStr for Type {
         } else {
             match s {
                 "secrets" => Ok(Self::Secrets),
-                "static_folder" => Ok(Self::StaticFolder),
-                "metadata" => Ok(Self::Metadata),
                 "persist" => Ok(Self::Persist),
-                "turso" => Ok(Self::Turso),
                 "custom" => Ok(Self::Custom),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }
-    }
-}
-
-impl Response {
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.to_bytes()
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        serde_json::to_vec(self).expect("to turn resource into a vec")
-    }
-
-    pub fn from_bytes(bytes: Vec<u8>) -> Self {
-        serde_json::from_slice(&bytes).expect("to turn bytes into a resource")
     }
 }
 
@@ -72,11 +66,70 @@ impl Display for Type {
         match self {
             Type::Database(db_type) => write!(f, "database::{db_type}"),
             Type::Secrets => write!(f, "secrets"),
-            Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
-            Type::Turso => write!(f, "turso"),
-            Type::Metadata => write!(f, "metadata"),
             Type::Custom => write!(f, "custom"),
+        }
+    }
+}
+
+// this can be removed when deployers AND r-r no longer hold resources in sqlite state
+#[cfg(feature = "sqlx")]
+mod _sqlx {
+    use std::{borrow::Cow, str::FromStr};
+
+    use sqlx::{
+        sqlite::{SqliteArgumentValue, SqliteValueRef},
+        Database, Sqlite,
+    };
+
+    use super::Type;
+
+    impl<DB: Database> sqlx::Type<DB> for Type
+    where
+        str: sqlx::Type<DB>,
+    {
+        fn type_info() -> <DB as Database>::TypeInfo {
+            <str as sqlx::Type<DB>>::type_info()
+        }
+    }
+
+    impl<'q> sqlx::Encode<'q, Sqlite> for Type {
+        fn encode_by_ref(&self, args: &mut Vec<SqliteArgumentValue<'q>>) -> sqlx::encode::IsNull {
+            args.push(SqliteArgumentValue::Text(Cow::Owned(self.to_string())));
+
+            sqlx::encode::IsNull::No
+        }
+    }
+
+    impl<'r> sqlx::Decode<'r, Sqlite> for Type {
+        fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+            let value = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
+
+            Self::from_str(value).map_err(Into::into)
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn to_string_and_back() {
+        let inputs = [
+            Type::Database(database::Type::AwsRds(database::AwsRdsEngine::Postgres)),
+            Type::Database(database::Type::AwsRds(database::AwsRdsEngine::MySql)),
+            Type::Database(database::Type::AwsRds(database::AwsRdsEngine::MariaDB)),
+            Type::Database(database::Type::Shared(database::SharedEngine::Postgres)),
+            Type::Database(database::Type::Shared(database::SharedEngine::MongoDb)),
+            Type::Secrets,
+            Type::Persist,
+            Type::Custom,
+        ];
+
+        for input in inputs {
+            let actual = Type::from_str(&input.to_string()).unwrap();
+            assert_eq!(input, actual, ":{} should map back to itself", input);
         }
     }
 }

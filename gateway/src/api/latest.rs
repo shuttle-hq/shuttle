@@ -14,7 +14,7 @@ use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::{Method, StatusCode, Uri};
+use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
@@ -24,6 +24,7 @@ use shuttle_common::backends::ClaimExt;
 use shuttle_common::claims::{Scope, EXP_MINUTES};
 use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
+use shuttle_common::models::service;
 use shuttle_common::models::{
     admin::ProjectResponse,
     project::{self, ProjectName},
@@ -48,11 +49,11 @@ use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
 use crate::api::tracing::project_name_tracing_layer;
 use crate::auth::{ScopedUser, User};
 use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
-use crate::service::GatewayService;
+use crate::service::{ContainerSettings, GatewayService};
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{Error, AUTH_CLIENT};
+use crate::{DockerContext, Error, AUTH_CLIENT};
 
 use super::auth_layer::ShuttleAuthLayer;
 use super::project_caller::ProjectCaller;
@@ -363,35 +364,67 @@ async fn delete_project(
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %scoped_user.scope))]
-async fn route_project(
-    State(RouterState {
-        service,
-        sender,
-        posthog_client,
-        ..
-    }): State<RouterState>,
+async fn override_create_service(
+    state: State<RouterState>,
     scoped_user: ScopedUser,
-    method: Method,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    let project_name = scoped_user.scope.clone();
-    let uri_path = req.uri().path().to_string();
+    let account_name = scoped_user.user.claim.sub.clone();
+    let posthog_client = state.posthog_client.clone();
+    tokio::spawn(async move {
+        let event = async_posthog::Event::new("shuttle_api_start_deployment", &account_name);
 
-    // Check if it matches route: "/projects/:project_name/services/:project_name"
-    if method == Method::POST
-        && uri_path == format!("/projects/{}/services/{}", project_name, project_name)
-    {
-        let account_name = scoped_user.user.claim.sub.clone();
+        if let Err(err) = posthog_client.capture(event).await {
+            error!(error = %err, "failed to send event to posthog")
+        };
+    });
 
-        tokio::spawn(async move {
-            let event = async_posthog::Event::new("shuttle_api_start_deployment", &account_name);
+    route_project(state, scoped_user, req).await
+}
 
-            if let Err(err) = posthog_client.capture(event).await {
-                error!(error = %err, "failed to send event to posthog")
-            };
-        });
-    }
+#[instrument(skip_all, fields(shuttle.project.name = %scoped_user.scope))]
+async fn override_get_delete_service(
+    state: State<RouterState>,
+    scoped_user: ScopedUser,
+    req: Request<Body>,
+) -> Result<Response<Body>, Error> {
+    let project_name = scoped_user.scope.to_string();
+    let service = state.service.clone();
+    let ctx = state.service.context().clone();
+    let ContainerSettings { fqdn: public, .. } = ctx.container_settings();
+    let mut res = route_project(state, scoped_user, req).await?;
 
+    // inject the (most relevant) URI that this project is being served on
+    let uri = service
+        .find_custom_domain_for_project(&project_name)
+        .await
+        .unwrap_or_default() // use project name if domain lookup fails
+        .map(|c| c.fqdn.to_string())
+        .unwrap_or_else(|| format!("https://{project_name}.{public}"));
+    let body = hyper::body::to_bytes(res.body_mut()).await.unwrap();
+    let mut json: service::Summary =
+        serde_json::from_slice(body.as_bytes()).expect("valid service response from deployer");
+    json.uri = uri;
+
+    let bytes = serde_json::to_vec(&json).unwrap();
+    let len = res
+        .headers_mut()
+        .entry("content-length")
+        .or_insert(0.into());
+    *len = bytes.len().into();
+    *res.body_mut() = bytes.into();
+
+    Ok(res)
+}
+
+#[instrument(skip_all, fields(shuttle.project.name = %scoped_user.scope))]
+async fn route_project(
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
+    scoped_user: ScopedUser,
+    req: Request<Body>,
+) -> Result<Response<Body>, Error> {
     let project_name = scoped_user.scope;
     let is_cch_project = project_name.is_cch_project();
 
@@ -603,20 +636,13 @@ async fn request_custom_domain_acme_certificate(
         .project(project_name.clone())
         .and_then(task::destroy())
         .and_then(task::run_until_done())
-        .and_then(task::run({
-            let fqdn = fqdn.to_string();
-            move |ctx| {
-                let fqdn = fqdn.clone();
-                async move {
-                    let creating = ProjectCreating::new_with_random_initial_key(
-                        ctx.project_name,
-                        project_id,
-                        idle_minutes,
-                    )
-                    .with_fqdn(fqdn);
-                    TaskResult::Done(Project::Creating(creating))
-                }
-            }
+        .and_then(task::run(move |ctx| async move {
+            let creating = ProjectCreating::new_with_random_initial_key(
+                ctx.project_name,
+                project_id,
+                idle_minutes,
+            );
+            TaskResult::Done(Project::Creating(creating))
         }))
         .and_then(task::run_until_done())
         .and_then(task::start_idle_deploys())
@@ -904,6 +930,13 @@ impl ApiBuilder {
                 delete(delete_project.layer(ScopedLayer::new(vec![Scope::ProjectWrite]))),
             )
             .route("/projects/name/:project_name", get(check_project_name))
+            .route(
+                // catch these deployer endpoints for extra metrics or processing before/after being proxied
+                "/projects/:project_name/services/:service_name",
+                post(override_create_service)
+                    .get(override_get_delete_service)
+                    .delete(override_get_delete_service),
+            )
             .route("/projects/:project_name/*any", any(route_project))
             .route_layer(middleware::from_fn(project_name_tracing_layer));
 

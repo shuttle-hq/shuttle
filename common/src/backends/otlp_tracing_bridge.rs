@@ -178,7 +178,7 @@ where
         event: &tracing_core::Event<'_>,
         ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        // We only care about error events that have the error field set.
+        // We only care about error events.
         if !ErrorVisitor::is_valid(event.metadata()) {
             return;
         }
@@ -221,13 +221,9 @@ struct ErrorVisitor {
 }
 
 impl ErrorVisitor {
-    const ID_IDENT: &'static str = "error";
-
     /// We only care about error events with the [ID_IDENT] field.
     fn is_valid(metadata: &Metadata) -> bool {
-        metadata.is_event()
-            && metadata.fields().field(Self::ID_IDENT).is_some()
-            && metadata.level() == &Level::ERROR
+        metadata.is_event() && metadata.level() == &Level::ERROR
     }
 }
 

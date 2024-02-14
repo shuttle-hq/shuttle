@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
 use serde::{ser::SerializeMap, Serialize};
-use shuttle_common::models::error::{emit_datadog_error, ApiError};
+use shuttle_common::models::error::ApiError;
 use tracing::error;
 
 #[derive(thiserror::Error, Debug, strum::IntoStaticStr)]
@@ -46,7 +46,10 @@ impl IntoResponse for Error {
             Error::NotFound(_) => StatusCode::NOT_FOUND,
             _ => {
                 // We only want to emit error events for internal errors, not e.g. 404s.
-                emit_datadog_error(&self, (&self).into());
+                error!(
+                    error = &self as &dyn std::error::Error,
+                    "control plane request error"
+                );
 
                 StatusCode::INTERNAL_SERVER_ERROR
             }

@@ -163,7 +163,9 @@ pub struct OnResponseStatusCode;
 
 impl tower_http::trace::OnResponse<BoxBody> for OnResponseStatusCode {
     fn on_response(self, response: &Response<BoxBody>, latency: Duration, span: &Span) {
-        span.record("http.status_code", response.status().as_u16());
+        // We use set_attribute here because span.record would overwrite the error.message field in
+        // Datadog.
+        span.set_attribute("http.status_code", response.status().as_u16() as i64);
         debug!(
             latency = format_args!("{} ns", latency.as_nanos()),
             "finished processing request"

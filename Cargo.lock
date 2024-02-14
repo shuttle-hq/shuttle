@@ -5740,7 +5740,6 @@ dependencies = [
  "shuttle-common",
  "shuttle-common-tests",
  "sqlx",
- "strum 0.25.0",
  "thiserror",
  "tokio",
  "tower",

@@ -11,41 +11,6 @@ pub struct ApiError {
     pub status_code: u16,
 }
 
-pub fn emit_datadog_error(error: &(dyn std::error::Error + 'static), _error_type: &str) {
-    // Create an error source chain, including the top-level error.
-    let _source_chain = {
-        // Datadog expects there to be at least two lines in the stack field for the apm error
-        // tracking feature to work, so we ensure there always is.
-        let mut chain: String = format!("Error source chain:\n{error}");
-        let mut next_err = error.source();
-        // TODO: skip the first error?
-        while let Some(err) = next_err {
-            chain.push_str(&format!("\n{}", err));
-            next_err = err.source();
-        }
-
-        chain
-    };
-
-    // With these fields set in the error event, error tracking will work for logs in Datadog, as
-    // long as we remap error.kind to error.type in Datadog logs configuration. Note that we don't
-    // set the stacktrace, but it also won't be available for a lot of errors. We use an error
-    // source chain instead.
-    tracing::error!(
-        error = error,
-        // error.stack = &source_chain,
-        // "error.type" = error_type,
-        "internal error"
-    );
-
-    // let span = tracing::Span::current();
-    //
-    // // Set the error fields in the otel span as well for APM error tracking.
-    // span.set_attribute("error.message", error.to_string());
-    // span.set_attribute("error.type", error_type.to_string());
-    // span.set_attribute("error.stack", source_chain);
-}
-
 impl ApiError {
     pub fn status(&self) -> StatusCode {
         StatusCode::from_u16(self.status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
@@ -53,6 +18,9 @@ impl ApiError {
 }
 
 impl Display for ApiError {
+    // TODO: styling was removed, create pretty print method in cargo-shuttle?
+    // In that case, we could change this display to only be the message.
+    // Or at least only one line.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}\nMessage: {}", self.status(), self.message)
     }

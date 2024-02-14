@@ -19,7 +19,7 @@ use hyper::Client;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
-use shuttle_common::models::error::{emit_datadog_error, ApiError, ErrorKind};
+use shuttle_common::models::error::{ApiError, ErrorKind};
 use shuttle_common::models::project::ProjectName;
 use strum::Display;
 use tokio::sync::mpsc::error::SendError;
@@ -113,11 +113,9 @@ impl From<AcmeClientError> for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        // let error_type = self.kind.to_string();
         let error: ApiError = self.kind.into();
 
         if error.status_code >= 500 {
-            // emit_datadog_error(&error, &error_type);
             tracing::error!(
                 error = &error as &dyn std::error::Error,
                 "control plane request error"

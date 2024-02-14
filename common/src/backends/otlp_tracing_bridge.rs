@@ -6,9 +6,8 @@
 use opentelemetry::{
     logs::{LogRecord, Logger, LoggerProvider, Severity, TraceContext},
     trace::{SpanContext, TraceFlags, TraceState},
-    KeyValue, StringValue,
+    KeyValue,
 };
-use serde::Deserialize;
 use std::borrow::Cow;
 use tracing_core::{field::Visit, Field, Level, Metadata, Subscriber};
 use tracing_opentelemetry::OtelData;
@@ -68,6 +67,8 @@ impl<'a> tracing::field::Visit for EventVisitor<'a> {
             self.log_record.attributes = Some(vec);
         }
     }
+
+    // TODO: Remaining field types from AnyValue : Bytes, ListAny, Boolean
 }
 
 pub struct OpenTelemetryTracingBridge<P, L>
@@ -177,8 +178,8 @@ where
         event: &tracing_core::Event<'_>,
         ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        // We only care about events that have the error field set.
-        if *event.metadata().level() != Level::ERROR || !ErrorVisitor::is_valid(event.metadata()) {
+        // We only care about error events that have the error field set.
+        if !ErrorVisitor::is_valid(event.metadata()) {
             return;
         }
 
@@ -239,7 +240,7 @@ impl Visit for ErrorVisitor {
         let source_chain = {
             // Datadog expects there to be at least two lines in the stack field for the apm error
             // tracking feature to work, so we ensure there always is.
-            let mut chain: String = format!("Error source chain:\n{}", value.to_string());
+            let mut chain: String = format!("Error source chain:\n{}", value);
             let mut next_err = value.source();
             // TODO: skip the first error?
             while let Some(err) = next_err {

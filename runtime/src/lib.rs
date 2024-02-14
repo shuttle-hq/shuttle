@@ -205,7 +205,9 @@
 
 // Public API
 pub use shuttle_codegen::main;
-pub use shuttle_service::{CustomError, Error, Factory, IntoResource, IntoResourceConfig, Service};
+pub use shuttle_service::{
+    CustomError, DbInput, Error, Factory, IntoResource, IntoResourceInput, Service,
+};
 
 // Useful re-exports
 pub use async_trait::async_trait;
@@ -233,6 +235,7 @@ pub mod __internals {
     pub use anyhow::Context;
     #[cfg(feature = "setup-tracing")]
     pub use colored;
+    pub use serde_json;
     pub use strfmt::strfmt;
     #[cfg(feature = "setup-tracing")]
     pub use tracing_subscriber;

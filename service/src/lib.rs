@@ -35,7 +35,7 @@ pub trait Factory: Send + Sync {
 ///
 /// TODO: New docs
 ///
-/// You can add your own implementation of this trait along with [`IntoResource<R>`] to customize the
+/// You can add your own implementation of this trait along with [`IntoResource`] to customize the
 /// input type `R` that gets into the Shuttle main function on an existing resource.
 ///
 /// You can also make your own plugin, for example to generalise the connection logic to a third-party service.
@@ -45,20 +45,22 @@ pub trait Factory: Send + Sync {
 /// of custom resources, please [get in touch](https://discord.gg/shuttle) and detail your use case. We'll be interested to see what you
 /// want to provision and how to do it on your behalf on the fly.
 #[async_trait]
-pub trait IntoResourceConfig: Default {
-    /// The output from requesting this resource.
-    type Config: Serialize + DeserializeOwned;
+pub trait IntoResourceInput: Default {
+    /// The input for requesting this resource.
+    type Input: Serialize + DeserializeOwned;
+    /// The output from provisioning this resource.
+    /// For custom resources that don't provision anything from Shuttle,
+    /// this should be the same type as [`IntoResourceInput::Input`].
+    /// This type must implement [`IntoResource`] for the desired final resource type.
+    type Output: Serialize + DeserializeOwned;
 
     /// Construct this resource config with the help of secrets and metadata and by calling methods in the [`Factory`].
     ///
     /// The config is serialized and later passed to [`IntoResource::into_resource`].
-    async fn into_resource_config(
-        self,
-        factory: &dyn Factory,
-    ) -> Result<Self::Config, crate::Error>;
+    async fn into_resource_input(self, factory: &dyn Factory) -> Result<Self::Input, crate::Error>;
 }
 
-/// Implement this on an [`IntoResourceConfig::Config`] type to turn the
+/// Implement this on an [`IntoResourceInput::Output`] type to turn the
 /// base resource into the end type exposed to the Shuttle main function.
 #[async_trait]
 pub trait IntoResource<R>: Serialize + DeserializeOwned {
@@ -68,7 +70,7 @@ pub trait IntoResource<R>: Serialize + DeserializeOwned {
     async fn into_resource(self) -> Result<R, crate::Error>;
 }
 
-// Base impl for [`IntoResourceConfig::Config`] types that don't need to convert into anything else
+// Base impl for [`IntoResourceInput::Output`] types that don't need to convert into anything else
 #[async_trait]
 impl<R: Serialize + DeserializeOwned + Send> IntoResource<R> for R {
     async fn into_resource(self) -> Result<R, crate::Error> {

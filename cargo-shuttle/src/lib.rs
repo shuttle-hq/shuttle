@@ -63,7 +63,6 @@ use strum::IntoEnumIterator;
 use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
-use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 use tonic::Status;
 use tracing::{debug, error, trace, warn};
@@ -932,9 +931,7 @@ impl Shuttle {
     async fn spin_local_runtime(
         run_args: &RunArgs,
         service: &BuiltService,
-        provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
         idx: u16,
-        provisioner_port: u16,
     ) -> Result<Option<(Child, runtime::Client)>> {
         let crate_directory = service.crate_directory();
         let secrets_path = if crate_directory.join("Secrets.dev.toml").exists() {
@@ -1039,19 +1036,11 @@ impl Shuttle {
 
         // Child process and gRPC client for sending requests to it
         let (mut runtime, mut runtime_client) = runner::start(
-            service.is_wasm,
-            Environment::Local,
-            &format!("http://localhost:{provisioner_port}"),
-            None,
             portpicker::pick_unused_port().expect("unable to find available port for gRPC server"),
             runtime_executable,
             service.workspace_path.as_path(),
         )
-        .await
-        .map_err(|err| {
-            provisioner_server.abort();
-            err
-        })?;
+        .await?;
 
         let service_name = service.service_name()?;
         let deployment_id: Uuid = Default::default();
@@ -1076,22 +1065,16 @@ impl Shuttle {
         });
 
         let load_request = tonic::Request::new(LoadRequest {
-            path: service
-                .executable_path
-                .clone()
-                .into_os_string()
-                .into_string()
-                .expect("to convert path to string"),
-            service_name: service_name.to_string(),
-            resources: Default::default(),
+            project_name: service_name.to_string(),
+            env: Environment::Local.to_string(),
             secrets,
+            ..Default::default()
         });
 
         trace!("loading service");
         let response = runtime_client
             .load(load_request)
             .or_else(|err| async {
-                provisioner_server.abort();
                 runtime.kill().await?;
                 Err(err)
             })
@@ -1103,16 +1086,15 @@ impl Shuttle {
             return Ok(None);
         }
 
-        let resources = response
-            .resources
-            .into_iter()
-            .map(resource::Response::from_bytes)
-            .collect();
+        let resources = response.resources;
 
-        println!(
-            "{}",
-            get_resource_tables(&resources, service_name.as_str(), false, false)
-        );
+        // TODO: PROVISIONING
+        let _ = LocalProvisioner::new()?;
+
+        // println!(
+        //     "{}",
+        //     get_resource_tables(&resources, service_name.as_str(), false, false)
+        // );
 
         let addr = SocketAddr::new(
             if run_args.external {
@@ -1133,13 +1115,13 @@ impl Shuttle {
 
         let start_request = StartRequest {
             ip: addr.to_string(),
+            resources,
         };
 
         trace!(?start_request, "starting service");
         let response = runtime_client
             .start(tonic::Request::new(start_request))
             .or_else(|err| async {
-                provisioner_server.abort();
                 runtime.kill().await?;
                 Err(err)
             })
@@ -1172,7 +1154,6 @@ impl Shuttle {
     async fn add_runtime_info(
         runtime: Option<(Child, runtime::Client)>,
         existing_runtimes: &mut Vec<(Child, runtime::Client)>,
-        extra_servers: &[&JoinHandle<Result<(), tonic::transport::Error>>],
     ) -> Result<(), Status> {
         match runtime {
             Some(inner) => {
@@ -1181,10 +1162,6 @@ impl Shuttle {
             }
             None => {
                 trace!("Runtime error: No runtime process. Crashed during startup?");
-                for server in extra_servers {
-                    server.abort();
-                }
-
                 for rt_info in existing_runtimes {
                     let mut errored_out = false;
                     // Stopping all runtimes gracefully first, but if this errors out the function kills the runtime forcefully.
@@ -1229,24 +1206,11 @@ impl Shuttle {
         build_workspace(working_directory, run_args.release, tx, false).await
     }
 
-    async fn setup_local_provisioner(
-    ) -> Result<(JoinHandle<Result<(), tonic::transport::Error>>, u16)> {
-        let provisioner = LocalProvisioner::new()?;
-        let provisioner_port =
-            portpicker::pick_unused_port().expect("unable to find available port for provisioner");
-        let provisioner_server = provisioner.start(SocketAddr::new(
-            Ipv4Addr::LOCALHOST.into(),
-            provisioner_port,
-        ));
-
-        Ok((provisioner_server, provisioner_port))
-    }
-
     #[cfg(target_family = "unix")]
     async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
         debug!("starting local run");
         let services = self.pre_local_run(&run_args).await?;
-        let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
+
         let mut sigterm_notif =
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
                 .expect("Can not get the SIGTERM signal receptor");
@@ -1264,10 +1228,10 @@ impl Shuttle {
             // We must cover the case of starting multiple workspace services and receiving a signal in parallel.
             // This must stop all the existing runtimes and creating new ones.
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
+                res = Shuttle::spin_local_runtime(&run_args, service, i as u16) => {
                     match res {
                         Ok(runtime) => {
-                            Shuttle::add_runtime_info(runtime, &mut runtimes, &[&provisioner_server]).await?;
+                            Shuttle::add_runtime_info(runtime, &mut runtimes).await?;
                         },
                         Err(e) => println!("Runtime error: {e:?}"),
                     }
@@ -1295,7 +1259,6 @@ impl Shuttle {
         // If prior signal received is set to true we must stop all the existing runtimes and
         // exit the `local_run`.
         if signal_received {
-            provisioner_server.abort();
             for (mut rt, mut rt_client) in runtimes {
                 Shuttle::stop_runtime(&mut rt, &mut rt_client)
                     .await
@@ -1333,7 +1296,6 @@ impl Shuttle {
                     println!(
                         "cargo-shuttle received SIGTERM. Killing all the runtimes..."
                     );
-                    provisioner_server.abort();
                     Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
                         trace!(status = ?err, "stopping the runtime errored out");
                     });
@@ -1343,7 +1305,6 @@ impl Shuttle {
                     println!(
                         "cargo-shuttle received SIGINT. Killing all the runtimes..."
                     );
-                    provisioner_server.abort();
                     Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
                         trace!(status = ?err, "stopping the runtime errored out");
                     });

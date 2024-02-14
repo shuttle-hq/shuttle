@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
+use std::{collections::HashMap, io::stdout, time::Duration};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -22,16 +22,12 @@ use shuttle_common::{
     Secret,
 };
 use shuttle_proto::provisioner::{
-    provisioner_server::{Provisioner, ProvisionerServer},
-    ContainerRequest, ContainerResponse, DatabaseDeletionResponse, DatabaseRequest,
-    DatabaseResponse, Ping, Pong,
+    provisioner_server::Provisioner, ContainerRequest, ContainerResponse, DatabaseDeletionResponse,
+    DatabaseRequest, DatabaseResponse, Ping, Pong,
 };
 use shuttle_service::database::Type;
-use tokio::{task::JoinHandle, time::sleep};
-use tonic::{
-    transport::{self, Server},
-    Request, Response, Status,
-};
+use tokio::time::sleep;
+use tonic::{Request, Response, Status};
 use tracing::{error, trace};
 
 /// A provisioner for local runs
@@ -44,15 +40,6 @@ impl LocalProvisioner {
     pub fn new() -> Result<Self> {
         Ok(Self {
             docker: Docker::connect_with_local_defaults()?,
-        })
-    }
-
-    pub fn start(self, address: SocketAddr) -> JoinHandle<Result<(), transport::Error>> {
-        tokio::spawn(async move {
-            Server::builder()
-                .add_service(ProvisionerServer::new(self))
-                .serve(address)
-                .await
         })
     }
 

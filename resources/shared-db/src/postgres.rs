@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    database, resource::Type, DatabaseResource, DbInput, Error, Factory, IntoResource,
-    ResourceBuilder,
+    /* database, resource::Type, */ DatabaseResource, DbInput, Error, Factory, IntoResource,
+    IntoResourceInput,
 };
 
 /// Shuttle managed Postgres DB in a shared cluster
@@ -19,40 +19,34 @@ impl Postgres {
 }
 
 #[async_trait]
-impl ResourceBuilder for Postgres {
-    const TYPE: Type = Type::Database(database::Type::Shared(database::SharedEngine::Postgres));
-
-    type Config = DbInput;
-
+impl IntoResourceInput for Postgres {
+    type Input = DbInput;
     type Output = Wrapper;
 
-    fn config(&self) -> &Self::Config {
-        &self.0
-    }
+    async fn into_resource_input(self, _factory: &dyn Factory) -> Result<Self::Input, Error> {
+        Ok(self.0)
+        // let info = match factory.get_metadata().env {
+        //     shuttle_service::Environment::Deployment => DatabaseResource::Info(
+        //         factory
+        //             .get_db_connection(database::Type::Shared(database::SharedEngine::Postgres))
+        //             .await?,
+        //     ),
+        //     shuttle_service::Environment::Local => {
+        //         if let Some(local_uri) = self.0.local_uri {
+        //             DatabaseResource::ConnectionString(local_uri)
+        //         } else {
+        //             DatabaseResource::Info(
+        //                 factory
+        //                     .get_db_connection(database::Type::Shared(
+        //                         database::SharedEngine::Postgres,
+        //                     ))
+        //                     .await?,
+        //             )
+        //         }
+        //     }
+        // };
 
-    async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, Error> {
-        let info = match factory.get_metadata().env {
-            shuttle_service::Environment::Deployment => DatabaseResource::Info(
-                factory
-                    .get_db_connection(database::Type::Shared(database::SharedEngine::Postgres))
-                    .await?,
-            ),
-            shuttle_service::Environment::Local => {
-                if let Some(local_uri) = self.0.local_uri {
-                    DatabaseResource::ConnectionString(local_uri)
-                } else {
-                    DatabaseResource::Info(
-                        factory
-                            .get_db_connection(database::Type::Shared(
-                                database::SharedEngine::Postgres,
-                            ))
-                            .await?,
-                    )
-                }
-            }
-        };
-
-        Ok(Wrapper(info))
+        // Ok(Wrapper(info))
     }
 }
 

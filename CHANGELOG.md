@@ -7,6 +7,38 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
+## [0.39.0](https://github.com/shuttle-hq/shuttle/compare/v0.38.0..0.39.0) - 2024-02-14
+
+### Features
+
+- *(cargo-shuttle)* Add loco to init command ([#1620](https://github.com/shuttle-hq/shuttle/issues/1620)) - ([df98061](https://github.com/shuttle-hq/shuttle/commit/df98061640da33713719429ee1137ab405d251fa))
+- *(deployer, gateway)* Remove deployer proxy ([#1612](https://github.com/shuttle-hq/shuttle/issues/1612)) - ([d42cc56](https://github.com/shuttle-hq/shuttle/commit/d42cc5622b3767036f5ba5450a8e211492f71e83))
+- *(gateway)* Allow multiple hostnames, proxy caching ([#1616](https://github.com/shuttle-hq/shuttle/issues/1616)) - ([2112f24](https://github.com/shuttle-hq/shuttle/commit/2112f249ca98628cb86871b27540eb7b56b9bbb5))
+- *(logger)* Clean old logs on startup ([#1619](https://github.com/shuttle-hq/shuttle/issues/1619)) - ([c0d29d1](https://github.com/shuttle-hq/shuttle/commit/c0d29d1ec144e66bbd25da08d4bba3e1a81cd682))
+- Add OpenDAL resource support ([#1617](https://github.com/shuttle-hq/shuttle/issues/1617)) - ([963fdab](https://github.com/shuttle-hq/shuttle/commit/963fdab9ba4809b6bc74ca73e007fc9dabac1664))
+- Disable trace_layer on_failure ([#1608](https://github.com/shuttle-hq/shuttle/issues/1608)) - ([8c6e931](https://github.com/shuttle-hq/shuttle/commit/8c6e931efbb17272baeab54727815a2165c4c7ef))
+
+### Bug Fixes
+
+- *(gateway)* Don't try to deserialize non-200 res to service summary ([#1607](https://github.com/shuttle-hq/shuttle/issues/1607)) - ([9a92094](https://github.com/shuttle-hq/shuttle/commit/9a9209404ed7624f33bfb1ee4f66fa2c67fb98e7))
+- *(shuttle-qdrant)* V0.38.0 ([#1606](https://github.com/shuttle-hq/shuttle/issues/1606)) - ([328b2f8](https://github.com/shuttle-hq/shuttle/commit/328b2f8739cc7d35a7777abe9b804bf892461e27))
+- Remove obsolete resources ([#1543](https://github.com/shuttle-hq/shuttle/issues/1543)) - ([61b4e1d](https://github.com/shuttle-hq/shuttle/commit/61b4e1d04f8b9aa2567fb4b13e0dbd9d388fb786))
+- Alias updated field names from 0.37.0 ([#1618](https://github.com/shuttle-hq/shuttle/issues/1618)) - ([1a67ad9](https://github.com/shuttle-hq/shuttle/commit/1a67ad9ada784089925e814cef77a689b745c132))
+
+### Refactor
+
+- ApiError and ErrorKind to use thiserror ([#1615](https://github.com/shuttle-hq/shuttle/issues/1615)) - ([c7767cb](https://github.com/shuttle-hq/shuttle/commit/c7767cba85b7b31f564a970355110560fbcb66c6))
+- Uniform client wrappers ([#1614](https://github.com/shuttle-hq/shuttle/issues/1614)) - ([5b5eb69](https://github.com/shuttle-hq/shuttle/commit/5b5eb69c7754285b348b7be4163f38bee2464547))
+
+### Miscellaneous Tasks
+
+- Bump examples - ([651f44f](https://github.com/shuttle-hq/shuttle/commit/651f44fa20cf97f04c6551ea6c6f7a3ea43870aa))
+- V0.39.0 - ([ab9d996](https://github.com/shuttle-hq/shuttle/commit/ab9d9968b8f84f5de506c9cfb80026f020223a2b))
+- Rust 1.76 ([#1622](https://github.com/shuttle-hq/shuttle/issues/1622)) - ([031f3e1](https://github.com/shuttle-hq/shuttle/commit/031f3e170c47aadcd5239a383a152a394642c028))
+- Bump git2 to resolve vulnerability ([#1621](https://github.com/shuttle-hq/shuttle/issues/1621)) - ([5720837](https://github.com/shuttle-hq/shuttle/commit/57208374b5691ed8945b9fbc24cc7b7abef76c5b))
+- Move more tasks to cargo make ([#1613](https://github.com/shuttle-hq/shuttle/issues/1613)) - ([e29cb41](https://github.com/shuttle-hq/shuttle/commit/e29cb4173e54bbac6b11a507823af4fcf0ed45d3))
+- Add cargo-make tasks for some maintenance and ci tasks ([#1595](https://github.com/shuttle-hq/shuttle/issues/1595)) - ([a51c70c](https://github.com/shuttle-hq/shuttle/commit/a51c70c8ea607d7c3c2291bf12396a168dc97ba0))
+
 ## [0.38.0](https://github.com/shuttle-hq/shuttle/compare/v0.37.0..v0.38.0) - 2024-02-01
 
 ### Features
@@ -31,8 +63,7 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous Tasks
 
-- Bump examples - ([f60f7b0](https://github.com/shuttle-hq/shuttle/commit/f60f7b094496183c737ee682d75e7315665e3bb4))
-- V0.38.0 - ([242cd7f](https://github.com/shuttle-hq/shuttle/commit/242cd7ff8d7ceb3eebd090ce1a8b1a808076504b))
+- V0.38.0 ([#1598](https://github.com/shuttle-hq/shuttle/issues/1598)) - ([c9b916e](https://github.com/shuttle-hq/shuttle/commit/c9b916e8113e6046c90d654a2176c5feb0e6bec9))
 - Disable unused builder service until it is needed ([#1542](https://github.com/shuttle-hq/shuttle/issues/1542)) - ([f210c8f](https://github.com/shuttle-hq/shuttle/commit/f210c8fbfa4fde2546b3142d4c4a7463f8195ada))
 - Remove utoipa openAPI docs ([#1588](https://github.com/shuttle-hq/shuttle/issues/1588)) - ([ece23c7](https://github.com/shuttle-hq/shuttle/commit/ece23c7e7af8bfbde9f2b5932054f5189d6b30ec))
 - Remove panamax and deck-chores ([#1540](https://github.com/shuttle-hq/shuttle/issues/1540)) - ([ed81509](https://github.com/shuttle-hq/shuttle/commit/ed8150915118cafc4e712016670a39b057efcf4d))

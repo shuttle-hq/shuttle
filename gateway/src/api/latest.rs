@@ -48,9 +48,8 @@ use x509_parser::time::ASN1Time;
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
 use crate::api::tracing::project_name_tracing_layer;
 use crate::auth::{ScopedUser, User};
-use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
 use crate::service::{ContainerSettings, GatewayService};
-use crate::task::{self, BoxedTask, TaskResult};
+use crate::task::{self, BoxedTask};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{DockerContext, Error, AUTH_CLIENT};
@@ -603,9 +602,7 @@ async fn create_acme_account(
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, %fqdn))]
 async fn request_custom_domain_acme_certificate(
-    State(RouterState {
-        service, sender, ..
-    }): State<RouterState>,
+    State(RouterState { service, .. }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     CustomErrorPath((project_name, fqdn)): CustomErrorPath<(ProjectName, String)>,
@@ -617,36 +614,6 @@ async fn request_custom_domain_acme_certificate(
 
     let (certs, private_key) = service
         .create_custom_domain_certificate(&fqdn, &acme_client, &project_name, credentials)
-        .await?;
-
-    let project = service.find_project(&project_name).await?;
-    let project_id = project
-        .state
-        .container()
-        .unwrap()
-        .project_id()
-        .map_err(|_| Error::custom(ErrorKind::Internal, "Missing project_id from the container"))?;
-
-    let container = project.state.container().unwrap();
-    let idle_minutes = container.idle_minutes();
-
-    // Destroy and recreate the project with the new domain.
-    service
-        .new_task()
-        .project(project_name.clone())
-        .and_then(task::destroy())
-        .and_then(task::run_until_done())
-        .and_then(task::run(move |ctx| async move {
-            let creating = ProjectCreating::new_with_random_initial_key(
-                ctx.project_name,
-                project_id,
-                idle_minutes,
-            );
-            TaskResult::Done(Project::Creating(creating))
-        }))
-        .and_then(task::run_until_done())
-        .and_then(task::start_idle_deploys())
-        .send(&sender)
         .await?;
 
     let mut buf = Vec::new();
@@ -1035,6 +1002,7 @@ pub mod tests {
     use tower::Service;
 
     use super::*;
+    use crate::project::Project;
     use crate::project::ProjectError;
     use crate::service::GatewayService;
     use crate::tests::{RequestBuilderExt, TestGateway, TestProject, World};

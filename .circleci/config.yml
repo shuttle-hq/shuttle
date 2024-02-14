@@ -695,6 +695,7 @@ workflows:
                 - resources/secrets
                 - resources/shared-db
                 - resources/turso
+                - resources/opendal
                 - services/shuttle-actix-web
                 - services/shuttle-axum
                 - services/shuttle-next
@@ -945,6 +946,7 @@ workflows:
                 - resources/secrets
                 - resources/shared-db
                 - resources/turso
+                - resources/opendal
           name: publish-<< matrix.path >>
           requires:
             - publish-service

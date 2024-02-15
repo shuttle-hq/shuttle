@@ -107,11 +107,17 @@ impl Postgres {
 
                         if let Err(error) = query.execute(&pool_spawn).instrument(parent_span).await
                         {
-                            error!(error = %error, "failed to insert logs");
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to insert logs"
+                            );
                         };
                     }
                     Err(err) => {
-                        error!(error = %err, "failed to receive message in database receiver");
+                        error!(
+                            error = &err as &dyn std::error::Error,
+                            "failed to receive message in database receiver"
+                        );
                     }
                 }
             }

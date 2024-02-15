@@ -157,8 +157,11 @@ where
                             }
                         }
                     }
-                    Err(err) => {
-                        error!(error = %err, "failed to receive logs in logs stream");
+                    Err(error) => {
+                        error!(
+                            error = &error as &dyn std::error::Error,
+                            "failed to receive logs in logs stream"
+                        );
                     }
                 }
             }

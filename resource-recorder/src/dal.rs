@@ -30,7 +30,10 @@ impl fmt::Display for DalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let msg = match self {
             DalError::Sqlx(error) => {
-                error!(error = error.to_string(), "database request failed");
+                error!(
+                    error = error as &dyn std::error::Error,
+                    "database request failed"
+                );
 
                 "failed to interact with recorder"
             }

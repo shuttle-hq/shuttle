@@ -96,7 +96,11 @@ pub async fn task(
                                         let response = inner.into_inner();
                                         info!(id = %queued.id, "shuttle-builder finished building the deployment: image length is {} bytes, is_wasm flag is {} and there are {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
                                     },
-                                    Err(err) => error!(id = %queued.id, "shuttle-builder errored while building: {}", err)
+                                    Err(err) => error!(
+                                        id = %queued.id,
+                                        error = &err as &dyn std::error::Error,
+                                        "shuttle-builder errored while building"
+                                    )
                                 };
                             });
                         }
@@ -126,7 +130,7 @@ pub async fn task(
             Some(res) = tasks.join_next() => {
                 match res {
                     Ok(_) => (),
-                    Err(err) => error!(error = %err, "an error happened while joining a builder task"),
+                    Err(err) => error!(error = &err as &dyn std::error::Error, "an error happened while joining a builder task"),
                 }
             }
             else => break
@@ -395,20 +399,24 @@ async fn run_pre_deploy_tests(
     tokio::spawn(async move {
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await.unwrap() {
-            let _ = tx
-                .send(line)
-                .await
-                .map_err(|e| error!(error = %e, "failed to send line"));
+            let _ = tx.send(line).await.map_err(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to send line"
+                )
+            });
         }
     });
     let reader = tokio::io::BufReader::new(handle.stderr.take().unwrap());
     tokio::spawn(async move {
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await.unwrap() {
-            let _ = tx2
-                .send(line)
-                .await
-                .map_err(|e| error!(error = %e, "failed to send line"));
+            let _ = tx2.send(line).await.map_err(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to send line"
+                )
+            });
         }
     });
     let status = handle.wait().await.map_err(TestError::Run)?;

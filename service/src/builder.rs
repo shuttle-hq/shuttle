@@ -291,7 +291,10 @@ async fn compile(
     tokio::spawn(async move {
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await.unwrap() {
-            let _ = tx.send(line).await.map_err(|e| error!("{e}"));
+            let _ = tx
+                .send(line)
+                .await
+                .map_err(|error| error!(error = &error as &dyn std::error::Error));
         }
     });
     let status = handle.wait().await?;

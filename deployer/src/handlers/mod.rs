@@ -235,7 +235,10 @@ pub async fn get_service_resources(
         .filter_map(|resource| {
             resource
                 .map_err(|err| {
-                    error!(error = ?err, "failed to parse resource data");
+                    error!(
+                        error = err.as_ref() as &dyn std::error::Error,
+                        "failed to parse resource data"
+                    );
                 })
                 .ok()
         })
@@ -477,7 +480,10 @@ pub async fn get_logs(
                 .collect(),
         )),
         Err(error) => {
-            error!(error = %error, "failed to retrieve logs for deployment");
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to retrieve logs for deployment"
+            );
             Err(anyhow!("failed to retrieve logs for deployment").into())
         }
     }
@@ -600,7 +606,7 @@ where
         state: &S,
     ) -> std::result::Result<Self, Self::Rejection> {
         let bytes = Bytes::from_request(req, state).await.map_err(|_| {
-            error!("failed to collect body bytes, is the body too large?");
+            info!("failed to collect body bytes, is the body too large?");
             StatusCode::PAYLOAD_TOO_LARGE
         })?;
 

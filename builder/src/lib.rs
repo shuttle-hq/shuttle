@@ -89,7 +89,8 @@ impl Service {
                 Err(err) => {
                     error!(
                         deployment_id,
-                        "unexpected stdout/stderr stream close: {}", err
+                        error = &err as &dyn std::error::Error,
+                        "unexpected stdout/stderr stream close"
                     );
                 }
             }

@@ -531,7 +531,10 @@ impl Task<()> for ProjectTask {
                 {
                     Ok(_) => {}
                     Err(err) => {
-                        error!(err = %err, "could not update project state");
+                        error!(
+                            error = &err as &dyn std::error::Error,
+                            "could not update project state"
+                        );
                         return TaskResult::Err(err);
                     }
                 }
@@ -566,7 +569,10 @@ impl Task<()> for ProjectTask {
                         Span::current().record("ctx.operation_name", operation);
                         Span::current().record("shuttle.operation_name", operation);
                     }
-                    error!(err = %err, "project task failure");
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        "project task failure"
+                    );
                     TaskResult::Err(err)
                 }
             }

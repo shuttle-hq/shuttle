@@ -30,7 +30,10 @@ impl FromRow<'_, SqliteRow> for Deployment {
             match SocketAddr::from_str(&address_str) {
                 Ok(address) => Some(address),
                 Err(err) => {
-                    error!(error = %err, "failed to parse address from DB");
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        "failed to parse address from DB"
+                    );
                     None
                 }
             }

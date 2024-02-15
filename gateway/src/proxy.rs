@@ -121,8 +121,8 @@ async fn proxy(
     let mut res = PROXY_CLIENT
         .call(addr.ip(), &target_url, req)
         .await
-        .map_err(|e| {
-            error!(error = ?e, "gateway proxy client error");
+        .map_err(|err| {
+            error!(error = ?err, "gateway proxy client error");
             Error::from_kind(ErrorKind::ProjectUnavailable)
         })?;
 

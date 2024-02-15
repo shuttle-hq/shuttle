@@ -321,7 +321,10 @@ async fn load(
         .filter_map(|resource| {
             resource
                 .map_err(|err| {
-                    error!(error = ?err, "failed to parse resource data");
+                    error!(
+                        error = err.as_ref() as &dyn std::error::Error,
+                        "failed to parse resource data"
+                    );
                 })
                 .ok()
         })

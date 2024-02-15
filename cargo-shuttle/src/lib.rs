@@ -745,13 +745,12 @@ impl Shuttle {
         tail: Option<u32>,
         all: bool,
     ) -> Result<CommandOutcome> {
-        let mode: (&str, u32);
-        match (head, tail, all) {
-            (Some(num), _, _) => mode = ("head", num),
-            (_, Some(num), _) => mode = ("tail", num),
-            (_, _, all) if all => mode = ("all", 0),
-            _ => mode = ("tail", 1000),
-        }
+        let mode = match (head, tail, all) {
+            (Some(num), _, _) => ("head", num),
+            (_, Some(num), _) => ("tail", num),
+            (_, _, all) if all => ("all", 0),
+            _ => ("tail", 1000),
+        };
 
         let client = self.client.as_ref().unwrap();
         let id = if let Some(id) = id {

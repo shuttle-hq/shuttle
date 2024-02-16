@@ -82,6 +82,8 @@ where
         .with(fmt_layer)
         .with(appender_tracing_layer)
         .with(otel_layer)
+        // The error layer needs to go after the otel_layer, because it needs access to the
+        // otel_data extension that is set on the span in the otel_layer.
         .with(ErrorTracingLayer::new())
         .init();
 }

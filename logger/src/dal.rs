@@ -1,3 +1,4 @@
+use core::fmt;
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
@@ -20,8 +21,26 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[derive(Error, Debug)]
 pub enum DalError {
-    #[error("database request failed: {0}")]
     Sqlx(#[from] sqlx::Error),
+}
+
+// We are not using the `thiserror`'s `#[error]` syntax to prevent sensitive details from bubbling up to the users.
+// Instead we are logging it as an error which we can inspect.
+impl fmt::Display for DalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let msg = match self {
+            DalError::Sqlx(error) => {
+                error!(
+                    error = error as &dyn std::error::Error,
+                    "database request failed"
+                );
+
+                "failed to interact with logger"
+            }
+        };
+
+        write!(f, "{msg}")
+    }
 }
 
 #[async_trait]

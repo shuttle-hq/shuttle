@@ -33,8 +33,6 @@ pub trait Factory: Send + Sync {
 ///
 /// ## Creating your own Shuttle plugin
 ///
-/// TODO: New docs
-///
 /// You can add your own implementation of this trait along with [`IntoResource`] to customize the
 /// input type `R` that gets into the Shuttle main function on an existing resource.
 ///
@@ -47,16 +45,21 @@ pub trait Factory: Send + Sync {
 #[async_trait]
 pub trait IntoResourceInput: Default {
     /// The input for requesting this resource.
+    ///
+    /// If the input is a [`shuttle_common::resource::ProvisionResourceRequest`],
+    /// then the resource will be provisioned and the [`IntoResourceInput::Output`]
+    /// will be a [`shuttle_common::resource::ShuttleResourceOutput<T>`] with the resource's associated output type.
     type Input: Serialize + DeserializeOwned;
+
     /// The output from provisioning this resource.
+    ///
     /// For custom resources that don't provision anything from Shuttle,
     /// this should be the same type as [`IntoResourceInput::Input`].
-    /// This type must implement [`IntoResource`] for the desired final resource type.
+    ///
+    /// This type must implement [`IntoResource`] for the desired final resource type `R`.
     type Output: Serialize + DeserializeOwned;
 
-    /// Construct this resource config with the help of secrets and metadata and by calling methods in the [`Factory`].
-    ///
-    /// The config is serialized and later passed to [`IntoResource::into_resource`].
+    /// Construct this resource config. The [`Factory`] provides access to secrets and metadata.
     async fn into_resource_input(self, factory: &dyn Factory) -> Result<Self::Input, crate::Error>;
 }
 

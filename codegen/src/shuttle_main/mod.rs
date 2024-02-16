@@ -287,11 +287,7 @@ impl ToTokens for Loader {
                             &iter.next().expect("resource list to have correct length")
                         )
                         .context(format!("failed to deserialize output for {}", stringify!(#fn_inputs_builder)))?;
-                    let y =
-                        x
-                        .into_resource();
-                    let #fn_inputs: #fn_inputs_types =
-                        y
+                    let #fn_inputs: #fn_inputs_types = x.into_resource()
                         .await
                         .context(format!("failed to initialize {}", stringify!(#fn_inputs_builder)))?;
                 )*

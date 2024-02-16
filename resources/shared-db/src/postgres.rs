@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    database, resource::{Type, Response}, DatabaseResource, DbInput, Error, Factory, IntoResource,
-    IntoResourceInput,
+    database,
+    resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
+    DatabaseResource, DbInput, Error, Factory, IntoResource, IntoResourceInput,
 };
 
 /// Shuttle managed Postgres DB in a shared cluster
@@ -20,15 +21,15 @@ impl Postgres {
 
 #[async_trait]
 impl IntoResourceInput for Postgres {
-    type Input = Response;
-    type Output = Wrapper;
+    type Input = ProvisionResourceRequest;
+    type Output = ShuttleResourceOutput<Wrapper>;
 
     async fn into_resource_input(self, _factory: &dyn Factory) -> Result<Self::Input, Error> {
-        Ok(Response {
-            r#type: database::Type::Shared(database::SharedEngine::Postgres),
-            config: self.0,
-            data: Default::default(), // null
-        })
+        Ok(ProvisionResourceRequest::new(
+            Type::Database(database::Type::Shared(database::SharedEngine::Postgres)),
+            serde_json::to_value(&self.0).unwrap(),
+            serde_json::Value::Null,
+        ))
     }
 }
 

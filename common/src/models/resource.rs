@@ -31,7 +31,6 @@ pub fn get_resource_tables(
                 Type::Database(_) => "Databases",
                 Type::Secrets => "Secrets",
                 Type::Persist => "Persist",
-                Type::Custom => "Custom",
             };
 
             let elements: &mut Vec<_> = acc.entry(title).or_default();

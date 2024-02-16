@@ -113,11 +113,11 @@ impl From<AcmeClientError> for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        let error: ApiError = self.kind.into();
+        let error: ApiError = self.kind.clone().into();
 
         if error.status_code >= 500 {
             tracing::error!(
-                error = &error as &dyn std::error::Error,
+                error = &self as &dyn std::error::Error,
                 "control plane request error"
             );
         }

@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 
+use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -18,11 +19,13 @@ impl ApiError {
 }
 
 impl Display for ApiError {
-    // TODO: styling was removed, create pretty print method in cargo-shuttle?
-    // In that case, we could change this display to only be the message.
-    // Or at least only one line.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}\nMessage: {}", self.status(), self.message)
+        write!(
+            f,
+            "{}\nMessage: {}",
+            self.status().to_string().bold(),
+            self.message.to_string().red()
+        )
     }
 }
 

@@ -485,9 +485,8 @@ impl Provisioner for ShuttleProvisioner {
             .await
             .map_err(|_| Status::internal("can not verify project ownership"))?
         {
-            let msg = "the request lacks the authorizations";
-            let status = Status::permission_denied(msg);
-            error!(error = &status as &dyn std::error::Error, msg);
+            let status = Status::permission_denied("the request lacks the authorizations");
+            error!(error = &status as &dyn std::error::Error);
             return Err(status);
         }
 
@@ -553,9 +552,8 @@ impl Provisioner for ShuttleProvisioner {
             .await
             .map_err(|_| Status::internal("can not verify project ownership"))?
         {
-            let msg = "the request lacks the authorizations";
-            let status = Status::permission_denied(msg);
-            error!(error = &status as &dyn std::error::Error, msg);
+            let status = Status::permission_denied("the request lacks the authorizations");
+            error!(error = &status as &dyn std::error::Error);
             return Err(status);
         }
 

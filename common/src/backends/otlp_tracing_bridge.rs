@@ -238,7 +238,7 @@ impl Visit for ErrorVisitor {
             // tracking feature to work, so we ensure there always is.
             let mut chain: String = format!("Error source chain:\n{}", value);
             let mut next_err = value.source();
-            // TODO: skip the first error?
+
             while let Some(err) = next_err {
                 chain.push_str(&format!("\n{}", err));
                 next_err = err.source();
@@ -250,7 +250,7 @@ impl Visit for ErrorVisitor {
         let error_msg = value.to_string();
 
         self.error.message = error_msg;
-        self.error.r#type = "error".to_string();
+        self.error.r#type = "Error".to_string();
         self.error.stack = source_chain;
     }
 }

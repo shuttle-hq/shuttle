@@ -25,6 +25,12 @@ pub trait ClaimExt {
         projects_dal: &G,
         resource_dal: &mut R,
     ) -> Result<bool, client::Error>;
+    /// Verify if the claim subject has ownership of a project.
+    async fn owns_project<G: ProjectsDal>(
+        &self,
+        projects_dal: &G,
+        project_name: &str,
+    ) -> Result<bool, client::Error>;
 }
 
 impl ClaimExt for Claim {
@@ -56,5 +62,16 @@ impl ClaimExt for Claim {
         }
 
         Ok(self.limits.rds_quota > (rds_count as u32))
+    }
+
+    #[instrument(skip_all)]
+    async fn owns_project<G: ProjectsDal>(
+        &self,
+        projects_dal: &G,
+        project_name: &str,
+    ) -> Result<bool, client::Error> {
+        let token = self.token.as_ref().expect("token to be set");
+        let projects = projects_dal.get_user_projects(token).await?;
+        Ok(projects.iter().any(|project| project.name == project_name))
     }
 }

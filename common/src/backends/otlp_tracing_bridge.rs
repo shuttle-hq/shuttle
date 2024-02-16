@@ -221,7 +221,7 @@ struct ErrorVisitor {
 }
 
 impl ErrorVisitor {
-    /// We only care about error events with the [ID_IDENT] field.
+    /// We only care about error events.
     fn is_valid(metadata: &Metadata) -> bool {
         metadata.is_event() && metadata.level() == &Level::ERROR
     }

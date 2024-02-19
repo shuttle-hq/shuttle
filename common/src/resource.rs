@@ -16,7 +16,7 @@ pub struct ProvisionResourceRequest {
     /// Use `Self::version` and `Self::r#type` to know how to parse this data.
     pub config: Value,
 
-    /// Arbirtrary extra data to include in this resource
+    /// Arbitrary extra data to include in this resource
     pub custom: Value,
 }
 
@@ -31,7 +31,8 @@ impl ProvisionResourceRequest {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+/// Helper for deserializing
+#[derive(Deserialize)]
 #[serde(untagged)] // Try deserializing as a Shuttle resource, fall back to a custom value
 pub enum ResourceInput {
     Shuttle(ProvisionResourceRequest),
@@ -44,7 +45,7 @@ pub struct ShuttleResourceOutput<T> {
     /// The resource used when creating this resource.
     pub output: T,
 
-    /// Arbirtrary extra data in this resource
+    /// Arbitrary extra data in this resource
     pub custom: Value,
 }
 
@@ -81,6 +82,8 @@ pub enum Type {
     Database(database::Type),
     Secrets,
     Persist,
+    #[cfg(feature = "local-provisioner")]
+    Container,
 }
 
 impl FromStr for Type {
@@ -96,6 +99,8 @@ impl FromStr for Type {
             match s {
                 "secrets" => Ok(Self::Secrets),
                 "persist" => Ok(Self::Persist),
+                #[cfg(feature = "local-provisioner")]
+                "container" => Ok(Self::Container),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }
@@ -108,6 +113,8 @@ impl Display for Type {
             Type::Database(db_type) => write!(f, "database::{db_type}"),
             Type::Secrets => write!(f, "secrets"),
             Type::Persist => write!(f, "persist"),
+            #[cfg(feature = "local-provisioner")]
+            Type::Container => write!(f, "container"),
         }
     }
 }
@@ -164,6 +171,8 @@ mod test {
             Type::Database(database::Type::Shared(database::SharedEngine::MongoDb)),
             Type::Secrets,
             Type::Persist,
+            #[cfg(feature = "local-provisioner")]
+            Type::Container,
         ];
 
         for input in inputs {

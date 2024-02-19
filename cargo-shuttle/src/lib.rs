@@ -20,9 +20,9 @@ use clap_mangen::Man;
 
 use shuttle_common::{
     constants::{
-        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXECUTABLE_DIRNAME, SHUTTLE_CLI_DOCS_URL,
-        SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL,
-        STORAGE_DIRNAME,
+        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION,
+        SHUTTLE_CLI_DOCS_URL, SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL,
+        SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
     },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
@@ -34,14 +34,17 @@ use shuttle_common::{
         project,
         resource::get_resource_tables,
     },
-    resource, semvers_are_compatible, ApiKey, LogItem, VersionInfo,
+    resource::{self, ResourceInput},
+    semvers_are_compatible, ApiKey, DatabaseInfo, LogItem, VersionInfo,
 };
-use shuttle_proto::runtime;
-use shuttle_proto::runtime::{LoadRequest, StartRequest, StopRequest};
-use shuttle_service::runner;
+use shuttle_proto::{
+    provisioner::{provisioner_server::Provisioner, DatabaseRequest},
+    runtime::{self, LoadRequest, StartRequest, StopRequest},
+};
+use shuttle_service::ContainerRequest;
 use shuttle_service::{
     builder::{build_workspace, BuiltService},
-    Environment,
+    runner, Environment,
 };
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -64,7 +67,7 @@ use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::time::{sleep, Duration};
-use tonic::Status;
+use tonic::{Request, Status};
 use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
@@ -1067,7 +1070,7 @@ impl Shuttle {
         let load_request = tonic::Request::new(LoadRequest {
             project_name: service_name.to_string(),
             env: Environment::Local.to_string(),
-            secrets,
+            secrets: secrets.clone(),
             ..Default::default()
         });
 
@@ -1086,15 +1089,71 @@ impl Shuttle {
             return Ok(None);
         }
 
-        let resources = response.resources;
+        // Actual resource requests from the runtime
+        let mut resources = response.resources;
+        // Mocked resource responses for displaying the tables
+        let mut shuttle_resources: Vec<resource::Response> = Vec::new();
+        let prov = LocalProvisioner::new()?;
+        for r in resources.iter_mut() {
+            match serde_json::from_slice::<ResourceInput>(r.as_slice())
+                .context("deserializing resource config")?
+            {
+                ResourceInput::Shuttle(shuttle_resource) => {
+                    if shuttle_resource.version != RESOURCE_SCHEMA_VERSION {
+                        bail!("
+                            Shuttle resource request with incompatible version found. Expected {}, found {}. \
+                            Make sure that cargo-shuttle and the Shuttle resource are up to date.
+                            ",
+                            RESOURCE_SCHEMA_VERSION,
+                            shuttle_resource.version
+                        );
+                    }
+                    match shuttle_resource.r#type {
+                        resource::Type::Database(db_type) => {
+                            let res: DatabaseInfo = prov
+                                .provision_database(Request::new(DatabaseRequest {
+                                    project_name: service_name.to_string(),
+                                    db_type: Some(db_type.into()),
+                                }))
+                                .await?
+                                .into_inner()
+                                .into();
+                            shuttle_resources.push(resource::Response {
+                                r#type: shuttle_resource.r#type,
+                                config: Default::default(),
+                                data: serde_json::to_value(&res).unwrap(),
+                            });
+                            *r = serde_json::to_vec(&res).unwrap();
+                        }
+                        resource::Type::Secrets => {
+                            shuttle_resources.push(resource::Response {
+                                r#type: shuttle_resource.r#type,
+                                config: Default::default(),
+                                data: serde_json::to_value(&secrets).unwrap(),
+                            });
+                            *r = serde_json::to_vec(&secrets).unwrap();
+                        }
+                        resource::Type::Persist => {
+                            shuttle_resources.push(resource::Response {
+                                r#type: shuttle_resource.r#type,
+                                config: Default::default(),
+                                data: Default::default(),
+                            });
+                        }
+                        resource::Type::Container => {
+                            let config:  = 
+                            let res = prov.provision_arbitrary_container(Request::new(ContainerRequest { project_name: service_name.clone(), container_type: (), image: (), port: (), env: () }))
+                        }
+                    }
+                }
+                ResourceInput::Custom(_) => (),
+            }
+        }
 
-        // TODO: PROVISIONING
-        let _ = LocalProvisioner::new()?;
-
-        // println!(
-        //     "{}",
-        //     get_resource_tables(&resources, service_name.as_str(), false, false)
-        // );
+        println!(
+            "{}",
+            get_resource_tables(&shuttle_resources, service_name.as_str(), false, false)
+        );
 
         let addr = SocketAddr::new(
             if run_args.external {

@@ -85,6 +85,8 @@ impl AsRef<str> for ApiKey {
     }
 }
 
+////// Resource Input/Output types
+
 /// The input given to Shuttle DB resources
 #[derive(Deserialize, Serialize, Default)]
 pub struct DbInput {

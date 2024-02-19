@@ -112,7 +112,10 @@ impl UserManagement for UserManager {
 
         // Sync the user tier based on the subscription validity, if any.
         if let Err(err) = user.sync_tier(self).await {
-            error!("failed syncing account");
+            error!(
+                error = &err as &dyn std::error::Error,
+                "failed syncing account"
+            );
             return Err(err);
         } else {
             debug!("synced account");

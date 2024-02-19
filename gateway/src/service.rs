@@ -396,8 +396,11 @@ impl GatewayService {
                 state: r
                     .try_get::<SqlxJson<Project>, _>("project_state")
                     .map(|p| p.0)
-                    .unwrap_or_else(|e| {
-                        error!(error = ?e, "Failed to deser `project_state`");
+                    .unwrap_or_else(|err| {
+                        error!(
+                            error = &err as &dyn std::error::Error,
+                            "Failed to deser `project_state`"
+                        );
                         Project::Errored(ProjectError::internal(
                             "Error when trying to deserialize state of project.",
                         ))
@@ -447,8 +450,11 @@ impl GatewayService {
                     // This can be invalid JSON if it refers to an outdated Project state
                     row.try_get::<SqlxJson<Project>, _>("project_state")
                         .map(|p| p.0)
-                        .unwrap_or_else(|e| {
-                            error!(error = ?e, "Failed to deser `project_state`");
+                        .unwrap_or_else(|err| {
+                            error!(
+                                error = &err as &dyn std::error::Error,
+                                "Failed to deser `project_state`"
+                            );
                             Project::Errored(ProjectError::internal(
                                 "Error when trying to deserialize state of project.",
                             ))
@@ -542,8 +548,11 @@ impl GatewayService {
             let project = row
                 .try_get::<SqlxJson<Project>, _>("project_state")
                 .map(|p| p.0)
-                .unwrap_or_else(|e| {
-                    error!(error = ?e, "Failed to deser `project_state`");
+                .unwrap_or_else(|err| {
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        "Failed to deser `project_state`"
+                    );
                     Project::Errored(ProjectError::internal(
                         "Error when trying to deserialize state of project.",
                     ))
@@ -1002,16 +1011,26 @@ impl DockerContext for GatewayContext {
     async fn get_stats(&self, container_id: &str) -> Result<u64, Error> {
         match self.docker_stats_source {
             DockerStatsSource::CgroupV1 => {
-                let cpu_usage: u64 =
-                tokio::fs::read_to_string(format!("{DOCKER_STATS_PATH_CGROUP_V1}/{container_id}/cpuacct.usage"))
-                .await.map_err(|e| {
-                    error!(error = %e, shuttle.container.id = container_id, "failed to read docker stats file for container");
+                let cpu_usage: u64 = tokio::fs::read_to_string(format!(
+                    "{DOCKER_STATS_PATH_CGROUP_V1}/{container_id}/cpuacct.usage"
+                ))
+                .await
+                .map_err(|err| {
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        shuttle.container.id = container_id,
+                        "failed to read docker stats file for container"
+                    );
                     ProjectError::internal("failed to read docker stats file for container")
                 })?
                 .trim()
                 .parse()
-                .map_err(|e| {
-                    error!(error = %e, shuttle.container.id = container_id, "failed to parse cpu usage stat");
+                .map_err(|err| {
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        shuttle.container.id = container_id,
+                        "failed to parse cpu usage stat"
+                    );
 
                     ProjectError::internal("failed to parse cpu usage to u64")
                 })?;
@@ -1022,28 +1041,49 @@ impl DockerContext for GatewayContext {
                 let cpu_usage: u64 = tokio::fs::read_to_string(format!(
                     "{DOCKER_STATS_PATH_CGROUP_V2}/docker-{container_id}.scope/cpu.stat"
                 ))
-                    .await
-                    .map_err(|e| {
-                        error!(error = %e, shuttle.container.id = container_id, "failed to read docker stats file for container");
-                        ProjectError::internal("failed to read docker stats file for container")
-                    })?
-                    .lines()
-                    .next()
-                    .ok_or_else(|| {
-                        error!(shuttle.container.id = container_id, "failed to read first line of docker stats file for container");
-                        ProjectError::internal("failed to read first line of docker stats file for container")
-                    })?
-                    .split(' ')
-                    .nth(1)
-                    .ok_or_else(|| {
-                        error!(shuttle.container.id = container_id, "failed to split docker stats line for container");
-                        ProjectError::internal("failed to split docker stats line for container")
-                    })?
-                    .parse::<u64>()
-                    .map_err(|e| {
-                        error!(error = %e, shuttle.container.id = container_id, "failed to parse cpu usage stat");
-                        ProjectError::internal("failed to parse cpu usage to u64")
-                    })?;
+                .await
+                .map_err(|err| {
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        shuttle.container.id = container_id,
+                        "failed to read docker stats file for container"
+                    );
+                    ProjectError::internal("failed to read docker stats file for container")
+                })?
+                .lines()
+                .next()
+                .ok_or_else(|| {
+                    let err = ProjectError::internal(
+                        "failed to read first line of docker stats file for container",
+                    );
+                    error!(
+                        shuttle.container.id = container_id,
+                        error = &err as &dyn std::error::Error,
+                    );
+
+                    err
+                })?
+                .split(' ')
+                .nth(1)
+                .ok_or_else(|| {
+                    let err =
+                        ProjectError::internal("failed to split docker stats line for container");
+                    error!(
+                        shuttle.container.id = container_id,
+                        error = &err as &dyn std::error::Error,
+                    );
+
+                    err
+                })?
+                .parse::<u64>()
+                .map_err(|err| {
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        shuttle.container.id = container_id,
+                        "failed to parse cpu usage stat"
+                    );
+                    ProjectError::internal("failed to parse cpu usage to u64")
+                })?;
                 Ok(cpu_usage * 1_000)
             }
             DockerStatsSource::Bollard => {

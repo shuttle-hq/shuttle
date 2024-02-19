@@ -150,8 +150,10 @@ impl RuntimeManager {
             match process.start_kill() {
                 Ok(_) => info!(deployment_id = %id, "initiated runtime process killing"),
                 Err(err) => error!(
-                    deployment_id = %id, "failed to start the killing of the runtime: {}",
-                    err
+                    deployment_id = %id,
+                    error = &err as &dyn std::error::Error,
+                    "failed to start the killing of the runtime",
+
                 ),
             }
         }

@@ -129,7 +129,10 @@ pub async fn task(
                 match res {
                     Ok(_) => (),
                     Err(err) => {
-                        error!(error = %err, "an error happened while joining a deployment run task")
+                        error!(
+                            error = &err as &dyn std::error::Error,
+                            "an error happened while joining a deployment run task"
+                        )
                     }
                 }
 
@@ -318,7 +321,10 @@ async fn load(
         .filter_map(|resource| {
             resource
                 .map_err(|err| {
-                    error!(error = ?err, "failed to parse resource data");
+                    error!(
+                        error = err.as_ref() as &dyn std::error::Error,
+                        "failed to parse resource data"
+                    );
                 })
                 .ok()
         })
@@ -333,7 +339,10 @@ async fn load(
                         secrets = combined;
                     }
                     Err(err) => {
-                        error!(error = ?err, "failed to parse old secrets data");
+                        error!(
+                            error = &err as &dyn std::error::Error,
+                            "failed to parse old secrets data"
+                        );
                     }
                 }
             }
@@ -387,13 +396,21 @@ async fn load(
             if response.success {
                 Ok(())
             } else {
-                error!(error = %response.message, "failed to load service");
-                Err(Error::Load(response.message))
+                let error = Error::Load(response.message);
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to load service"
+                );
+                Err(error)
             }
         }
         Err(error) => {
-            error!(%error, "failed to load service");
-            Err(Error::Load(error.to_string()))
+            let error = Error::Load(error.to_string());
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to load service"
+            );
+            Err(error)
         }
     }
 }
@@ -451,11 +468,13 @@ async fn run(
             }));
         }
         Err(ref status) => {
-            error!(%status, "failed to start service");
-            start_crashed_cleanup(
-                &id,
-                Error::Start("runtime failed to start deployment".to_string()),
+            let error = Error::Start("runtime failed to start deployment".to_string());
+            error!(
+                %status,
+                error = &error as &dyn std::error::Error,
+                "failed to start service"
             );
+            start_crashed_cleanup(&id, error);
         }
     }
 }

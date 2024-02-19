@@ -48,8 +48,10 @@ impl IntoResponse for Error {
             }
             _ => {
                 // We only want to emit error events for internal errors, not e.g. 404s.
-                tracing::error!(error = %self, "control plane request error");
-
+                tracing::error!(
+                    error = &self as &(dyn std::error::Error),
+                    "control plane request error"
+                );
                 StatusCode::INTERNAL_SERVER_ERROR
             }
         };

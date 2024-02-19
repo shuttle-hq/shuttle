@@ -19,7 +19,7 @@ use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
 
 use crate::log::Backend;
 
-use super::otlp_tracing_bridge;
+use super::otlp_tracing_bridge::{self, ErrorTracingLayer};
 
 const OTLP_ADDRESS: &str = "http://otel-collector:4317";
 
@@ -80,8 +80,11 @@ where
     subscriber
         .with(filter_layer)
         .with(fmt_layer)
-        .with(otel_layer)
         .with(appender_tracing_layer)
+        .with(otel_layer)
+        // The error layer needs to go after the otel_layer, because it needs access to the
+        // otel_data extension that is set on the span in the otel_layer.
+        .with(ErrorTracingLayer::new())
         .init();
 }
 

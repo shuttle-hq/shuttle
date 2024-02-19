@@ -72,12 +72,18 @@ impl AcmeClient {
         let account = Account::create(&account, &acme_server)
             .await
             .map_err(|error| {
-                error!(%error, "got error while creating acme account");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "got error while creating acme account"
+                );
                 AcmeClientError::AccountCreation
             })?;
 
         let credentials = serde_json::to_value(account.credentials()).map_err(|error| {
-            error!(%error, "got error while extracting credentials from acme account");
+            error!(
+                error = &error as &dyn std::error::Error,
+                "got error while extracting credentials from acme account"
+            );
             AcmeClientError::Serializing
         })?;
 
@@ -101,12 +107,18 @@ impl AcmeClient {
             })
             .await
             .map_err(|error| {
-                error!(%error, "failed to order certificate");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to order certificate"
+                );
                 AcmeClientError::OrderCreation
             })?;
 
         let authorizations = order.authorizations().await.map_err(|error| {
-            error!(%error, "failed to get authorizations information");
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to get authorizations information"
+            );
             AcmeClientError::AuthorizationCreation
         })?;
 
@@ -123,17 +135,26 @@ impl AcmeClient {
             let mut params = CertificateParams::new(vec![identifier.to_owned()]);
             params.distinguished_name = DistinguishedName::new();
             Certificate::from_params(params).map_err(|error| {
-                error!(%error, "failed to create certificate");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to create certificate"
+                );
                 AcmeClientError::CertificateCreation
             })?
         };
         let signing_request = certificate.serialize_request_der().map_err(|error| {
-            error!(%error, "failed to create certificate signing request");
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to create certificate signing request"
+            );
             AcmeClientError::CertificateSigning
         })?;
 
         order.finalize(&signing_request).await.map_err(|error| {
-            error!(%error, "failed to finalize certificate request");
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to finalize certificate request"
+            );
             AcmeClientError::OrderFinalizing
         })?;
 
@@ -142,7 +163,10 @@ impl AcmeClient {
         let mut retries = MAX_RETRIES_CERTIFICATE_FETCHING;
         while res.is_none() && retries > 0 {
             res = order.certificate().await.map_err(|error| {
-                error!(%error, "failed to fetch the certificate chain");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to fetch the certificate chain"
+                );
                 AcmeClientError::CertificateCreation
             })?;
             retries -= 1;
@@ -164,8 +188,12 @@ impl AcmeClient {
             .iter()
             .find(|c| c.r#type == ty)
             .ok_or_else(|| {
-                error!("http-01 challenge not found");
-                AcmeClientError::MissingChallenge
+                let error = AcmeClientError::MissingChallenge;
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "http-01 challenge not found"
+                );
+                error
             })
     }
 
@@ -176,7 +204,10 @@ impl AcmeClient {
         let state = loop {
             sleep(delay).await;
             let state = order.refresh().await.map_err(|error| {
-                error!(%error, "got error while fetching state");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "got error while fetching state"
+                );
                 AcmeClientError::FetchingState
             })?;
 
@@ -192,8 +223,14 @@ impl AcmeClient {
                     if tries < MAX_RETRIES {
                         trace!(?state, tries, attempt_in=?delay, "order not yet ready");
                     } else {
-                        error!(?state, tries, "order not ready in {MAX_RETRIES} tries");
-                        return Err(AcmeClientError::ChallengeTimeout);
+                        let error = AcmeClientError::ChallengeTimeout;
+                        error!(
+                            error = &error as &dyn std::error::Error,
+                            ?state,
+                            tries,
+                            "order not ready in {MAX_RETRIES} tries"
+                        );
+                        return Err(error);
                     }
                 }
                 _ => unreachable!(),
@@ -245,7 +282,10 @@ impl AcmeClient {
             .set_challenge_ready(&challenge.url)
             .await
             .map_err(|error| {
-                error!(%error, "failed to mark challenge as ready");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to mark challenge as ready"
+                );
                 AcmeClientError::SetReadyFailed
             })?;
 
@@ -269,7 +309,10 @@ impl AcmeClient {
             .set_challenge_ready(&challenge.url)
             .await
             .map_err(|error| {
-                error!(%error, "failed to mark challenge as ready");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to mark challenge as ready"
+                );
                 AcmeClientError::SetReadyFailed
             })?;
 

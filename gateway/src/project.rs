@@ -160,7 +160,10 @@ impl ContainerInspectResponseExt for ContainerInspectResponse {
 
 impl From<DockerError> for Error {
     fn from(err: DockerError) -> Self {
-        error!(error = %err, "internal Docker error");
+        error!(
+            error = &err as &dyn std::error::Error,
+            "internal Docker error"
+        );
         Self::source(ErrorKind::Internal, err)
     }
 }
@@ -1412,7 +1415,10 @@ impl ProjectReady {
 
     pub async fn start_last_deploy(&mut self, jwt: String, admin_secret: String) {
         if let Err(error) = self.service.start_last_deploy(jwt, admin_secret).await {
-            error!(error, "failed to start last running deploy");
+            error!(
+                error = error.as_ref() as &dyn std::error::Error,
+                "failed to start last running deploy"
+            );
         };
     }
 }
@@ -1753,7 +1759,10 @@ impl std::error::Error for ProjectError {}
 
 impl From<DockerError> for ProjectError {
     fn from(err: DockerError) -> Self {
-        error!(error = %err, "an internal DockerError had to yield a ProjectError");
+        error!(
+            error = &err as &dyn std::error::Error,
+            "an internal DockerError had to yield a ProjectError"
+        );
         Self {
             kind: ProjectErrorKind::Internal,
             message: format!("{}", err),
@@ -1776,7 +1785,10 @@ impl From<InvalidUri> for ProjectError {
 
 impl From<hyper::Error> for ProjectError {
     fn from(err: hyper::Error) -> Self {
-        error!(error = %err, "failed to check project's health");
+        error!(
+            error = &err as &dyn std::error::Error,
+            "failed to check project's health"
+        );
 
         Self {
             kind: ProjectErrorKind::Internal,

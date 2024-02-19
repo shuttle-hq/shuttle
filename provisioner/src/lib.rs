@@ -478,6 +478,18 @@ impl Provisioner for ShuttleProvisioner {
         if !ProjectName::is_valid(&request.project_name) {
             return Err(Status::invalid_argument("invalid project name"));
         }
+
+        // Check project ownership.
+        if !claim
+            .owns_project(&self.gateway_client, &request.project_name)
+            .await
+            .map_err(|_| Status::internal("can not verify project ownership"))?
+        {
+            let status = Status::permission_denied("the request lacks the authorizations");
+            error!(error = &status as &dyn std::error::Error);
+            return Err(status);
+        }
+
         let db_type = request.db_type.unwrap();
 
         let reply = match db_type {
@@ -527,11 +539,24 @@ impl Provisioner for ShuttleProvisioner {
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         request.verify(Scope::ResourcesWrite)?;
+        let claim = request.get_claim()?;
 
         let request = request.into_inner();
         if !ProjectName::is_valid(&request.project_name) {
             return Err(Status::invalid_argument("invalid project name"));
         }
+
+        // Check project ownership.
+        if !claim
+            .owns_project(&self.gateway_client, &request.project_name)
+            .await
+            .map_err(|_| Status::internal("can not verify project ownership"))?
+        {
+            let status = Status::permission_denied("the request lacks the authorizations");
+            error!(error = &status as &dyn std::error::Error);
+            return Err(status);
+        }
+
         let db_type = request.db_type.unwrap();
 
         let reply = match db_type {

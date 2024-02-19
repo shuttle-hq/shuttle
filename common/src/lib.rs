@@ -95,6 +95,7 @@ pub struct DbInput {
 
 /// The output produced by Shuttle DB resources
 #[derive(Deserialize, Serialize)]
+#[serde(tag = "type", content = "content")]
 pub enum DatabaseResource {
     ConnectionString(String),
     Info(DatabaseInfo),

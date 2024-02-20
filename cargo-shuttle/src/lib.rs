@@ -220,7 +220,10 @@ impl Shuttle {
                 latest,
                 follow,
                 raw,
-            } => self.logs(id, latest, follow, raw).await,
+                head,
+                tail,
+                all,
+            } => self.logs(id, latest, follow, raw, head, tail, all).await,
             Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
                 self.deployments_list(page, limit, raw).await
             }
@@ -738,7 +741,17 @@ impl Shuttle {
         latest: bool,
         follow: bool,
         raw: bool,
+        head: Option<u32>,
+        tail: Option<u32>,
+        all: bool,
     ) -> Result<CommandOutcome> {
+        let mode = match (head, tail, all) {
+            (Some(num), _, _) => ("head", num),
+            (_, Some(num), _) => ("tail", num),
+            (_, _, all) if all => ("all", 0),
+            _ => ("tail", 1000),
+        };
+
         let client = self.client.as_ref().unwrap();
         let id = if let Some(id) = id {
             id

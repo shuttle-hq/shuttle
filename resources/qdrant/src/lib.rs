@@ -34,9 +34,17 @@ impl Qdrant {
     }
 }
 
+/// Conditionally request a Shuttle resource
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MaybeRequest {
+    Request(ProvisionResourceRequest),
+    NotRequest(QdrantClientConfigWrap),
+}
+
 #[async_trait]
 impl IntoResourceInput for Qdrant {
-    type Input = ProvisionResourceRequest;
+    type Input = MaybeRequest;
     // The response can be a provisioned container, depending on local/deployment and config.
     type Output = Wrapper;
 
@@ -44,40 +52,36 @@ impl IntoResourceInput for Qdrant {
         let md = factory.get_metadata();
         match md.env {
             Environment::Deployment => match self.cloud_url {
-                Some(cloud_url) => Ok(ProvisionResourceRequest::new(
-                    Type::Container,
-                    serde_json::Value::Null, // deployment provisioner will ignore config for type==Container
-                    serde_json::to_value(&QdrantClientConfigWrap {
+                Some(cloud_url) => Ok(MaybeRequest::NotRequest(
+                    QdrantClientConfigWrap {
                         url: cloud_url,
                         api_key: self.api_key,
-                    })
-                    .unwrap(),
-                )),
+                    }),
+                ),
                 None => Err(Error::Custom(CustomError::msg(
                     "missing `cloud_url` parameter",
                 ))),
             },
             Environment::Local => match self.local_url {
-                Some(local_url) => Ok(ProvisionResourceRequest::new(
-                    Type::Container,
-                    serde_json::Value::Null, // local provisioner will ignore request if config is null
-                    serde_json::to_value(&QdrantClientConfigWrap {
+                Some(local_url) => Ok(MaybeRequest::NotRequest(
+                    QdrantClientConfigWrap {
                         url: local_url,
                         api_key: self.api_key,
-                    })
-                    .unwrap(),
-                )),
-                None => Ok(ProvisionResourceRequest::new(
-                    Type::Container,
-                    serde_json::to_value(&ContainerRequest {
-                        project_name: md.project_name,
-                        container_type: "qdrant".to_string(),
-                        image: "docker.io/qdrant/qdrant:v1.7.4".to_string(),
-                        port: "6334/tcp".to_string(),
-                        env: vec![],
-                    })
-                    .unwrap(),
-                    serde_json::Value::Null,
+                    }),
+                ),
+                None => Ok(MaybeRequest::Request(
+                    ProvisionResourceRequest::new(
+                        Type::Container,
+                        serde_json::to_value(&ContainerRequest {
+                            project_name: md.project_name,
+                            container_type: "qdrant".to_string(),
+                            image: "docker.io/qdrant/qdrant:v1.7.4".to_string(),
+                            port: "6334/tcp".to_string(),
+                            env: vec![],
+                        })
+                        .unwrap(),
+                        serde_json::Value::Null,
+                    )
                 )),
             },
         }
@@ -85,8 +89,11 @@ impl IntoResourceInput for Qdrant {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Wrapper(ShuttleResourceOutput<Option<ContainerResponse>>);
+#[serde(untagged)]
+pub enum Wrapper {
+    One(ShuttleResourceOutput<ContainerResponse>),
+    Two(QdrantClientConfigWrap),
+}
 
 /// Scrappy wrapper over `QdrantClientConfig` to implement Clone and serde
 /// for use in ResourceBuilder
@@ -99,12 +106,14 @@ pub struct QdrantClientConfigWrap {
 #[async_trait]
 impl IntoResource<QdrantClient> for Wrapper {
     async fn into_resource(self) -> Result<QdrantClient, Error> {
-        let c = match self.0.output {
-            Some(container) => QdrantClientConfigWrap {
-                url: format!("http://localhost:{}", container.host_port),
-                api_key: None,
-            },
-            None => serde_json::from_value(self.0.custom).map_err(|e| Error::Custom(e.into()))?,
+        let c = match self {
+            Self::One(output) => {
+                QdrantClientConfigWrap {
+                    url: format!("http://localhost:{}", output.output.host_port),
+                    api_key: None,
+                }
+            }
+            Self::Two(i) => i,
         };
         Ok(QdrantClientConfig::from_url(&c.url)
             .with_api_key(c.api_key)

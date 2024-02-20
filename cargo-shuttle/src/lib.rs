@@ -1047,14 +1047,12 @@ impl Shuttle {
         let service_name = service.service_name()?;
         let deployment_id: Uuid = Default::default();
 
-        // Clones to send to spawn
-        let service_name_clone = service_name.clone().to_string();
-
         let child_stdout = runtime
             .stdout
             .take()
             .context("child process did not have a handle to stdout")?;
         let mut reader = BufReader::new(child_stdout).lines();
+        let service_name_clone = service_name.clone();
         tokio::spawn(async move {
             while let Some(line) = reader.next_line().await.unwrap() {
                 let log_item = LogItem::new(
@@ -1162,10 +1160,6 @@ impl Shuttle {
                             });
                         }
                         resource::Type::Container => {
-                            // ignore the request when using local url
-                            if shuttle_resource.config == serde_json::Value::Null {
-                                continue;
-                            }
                             let config = serde_json::from_value(shuttle_resource.config)
                                 .context("deserializing resource config")?;
                             let res = prov.start_container(config).await?;
@@ -1241,7 +1235,7 @@ impl Shuttle {
             })
             .await?
             .into_inner();
-        trace!(response = ?response,  "client stop response: ");
+        trace!(response = ?response, "client stop response: ");
         Ok(())
     }
 

@@ -19,11 +19,11 @@ use futures::StreamExt;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     database::{AwsRdsEngine, SharedEngine},
-    Secret,
+    ContainerRequest, ContainerResponse, Secret,
 };
 use shuttle_proto::provisioner::{
-    provisioner_server::Provisioner, ContainerRequest, ContainerResponse, DatabaseDeletionResponse,
-    DatabaseRequest, DatabaseResponse, Ping, Pong,
+    provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+    Ping, Pong,
 };
 use shuttle_service::database::Type;
 use tokio::time::sleep;
@@ -203,7 +203,10 @@ impl LocalProvisioner {
         Ok(res)
     }
 
-    async fn start_container(&self, req: ContainerRequest) -> Result<ContainerResponse, Status> {
+    pub async fn start_container(
+        &self,
+        req: ContainerRequest,
+    ) -> Result<ContainerResponse, Status> {
         let ContainerRequest {
             project_name,
             container_type,
@@ -333,15 +336,6 @@ impl Provisioner for LocalProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("local runner should not try to delete databases");
-    }
-
-    async fn provision_arbitrary_container(
-        &self,
-        request: Request<ContainerRequest>,
-    ) -> Result<Response<ContainerResponse>, Status> {
-        Ok(Response::new(
-            self.start_container(request.into_inner()).await?,
-        ))
     }
 
     async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {

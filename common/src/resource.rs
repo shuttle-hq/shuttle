@@ -39,10 +39,10 @@ pub enum ResourceInput {
     Custom(Value),
 }
 
-/// Returned when provisioning a Shuttle resource.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Returned when provisioning a Shuttle resource
+#[derive(Serialize, Deserialize)]
 pub struct ShuttleResourceOutput<T> {
-    /// The resource used when creating this resource.
+    /// The resource used when creating this resource
     pub output: T,
 
     /// Arbitrary extra data in this resource
@@ -82,7 +82,7 @@ pub enum Type {
     Database(database::Type),
     Secrets,
     Persist,
-    #[cfg(feature = "local-provisioner")]
+    /// Local provisioner only
     Container,
 }
 
@@ -99,7 +99,6 @@ impl FromStr for Type {
             match s {
                 "secrets" => Ok(Self::Secrets),
                 "persist" => Ok(Self::Persist),
-                #[cfg(feature = "local-provisioner")]
                 "container" => Ok(Self::Container),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
@@ -113,7 +112,6 @@ impl Display for Type {
             Type::Database(db_type) => write!(f, "database::{db_type}"),
             Type::Secrets => write!(f, "secrets"),
             Type::Persist => write!(f, "persist"),
-            #[cfg(feature = "local-provisioner")]
             Type::Container => write!(f, "container"),
         }
     }
@@ -171,7 +169,6 @@ mod test {
             Type::Database(database::Type::Shared(database::SharedEngine::MongoDb)),
             Type::Secrets,
             Type::Persist,
-            #[cfg(feature = "local-provisioner")]
             Type::Container,
         ];
 

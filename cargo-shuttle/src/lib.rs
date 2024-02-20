@@ -34,14 +34,13 @@ use shuttle_common::{
         project,
         resource::get_resource_tables,
     },
-    resource::{self, ResourceInput},
-    semvers_are_compatible, ApiKey, DatabaseInfo, LogItem, VersionInfo,
+    resource::{self, ResourceInput, ShuttleResourceOutput},
+    semvers_are_compatible, ApiKey, DatabaseResource, DbInput, LogItem, VersionInfo,
 };
 use shuttle_proto::{
     provisioner::{provisioner_server::Provisioner, DatabaseRequest},
     runtime::{self, LoadRequest, StartRequest, StopRequest},
 };
-use shuttle_service::ContainerRequest;
 use shuttle_service::{
     builder::{build_workspace, BuiltService},
     runner, Environment,
@@ -1067,6 +1066,10 @@ impl Shuttle {
             }
         });
 
+        //
+        // LOADING PHASE
+        //
+
         let load_request = tonic::Request::new(LoadRequest {
             project_name: service_name.to_string(),
             env: Environment::Local.to_string(),
@@ -1089,6 +1092,10 @@ impl Shuttle {
             return Ok(None);
         }
 
+        //
+        // PROVISIONING PHASE
+        //
+
         // Actual resource requests from the runtime
         let mut resources = response.resources;
         // Mocked resource responses for displaying the tables
@@ -1096,7 +1103,7 @@ impl Shuttle {
         let prov = LocalProvisioner::new()?;
         for r in resources.iter_mut() {
             match serde_json::from_slice::<ResourceInput>(r.as_slice())
-                .context("deserializing resource config")?
+                .context("deserializing resource input")?
             {
                 ResourceInput::Shuttle(shuttle_resource) => {
                     if shuttle_resource.version != RESOURCE_SCHEMA_VERSION {
@@ -1110,39 +1117,63 @@ impl Shuttle {
                     }
                     match shuttle_resource.r#type {
                         resource::Type::Database(db_type) => {
-                            let res: DatabaseInfo = prov
-                                .provision_database(Request::new(DatabaseRequest {
-                                    project_name: service_name.to_string(),
-                                    db_type: Some(db_type.into()),
-                                }))
-                                .await?
-                                .into_inner()
-                                .into();
+                            let config: DbInput = serde_json::from_value(shuttle_resource.config)
+                                .context("deserializing resource config")?;
+                            let res = match config.local_uri {
+                                Some(local_uri) => DatabaseResource::ConnectionString(local_uri),
+                                None => DatabaseResource::Info(
+                                    prov.provision_database(Request::new(DatabaseRequest {
+                                        project_name: service_name.to_string(),
+                                        db_type: Some(db_type.into()),
+                                    }))
+                                    .await?
+                                    .into_inner()
+                                    .into(),
+                                ),
+                            };
                             shuttle_resources.push(resource::Response {
                                 r#type: shuttle_resource.r#type,
-                                config: Default::default(),
+                                config: serde_json::Value::Null,
                                 data: serde_json::to_value(&res).unwrap(),
                             });
-                            *r = serde_json::to_vec(&res).unwrap();
+                            *r = serde_json::to_vec(&ShuttleResourceOutput {
+                                output: res,
+                                custom: shuttle_resource.custom,
+                            })
+                            .unwrap();
                         }
                         resource::Type::Secrets => {
                             shuttle_resources.push(resource::Response {
                                 r#type: shuttle_resource.r#type,
-                                config: Default::default(),
-                                data: serde_json::to_value(&secrets).unwrap(),
+                                config: serde_json::Value::Null,
+                                data: serde_json::to_value(secrets.clone()).unwrap(),
                             });
-                            *r = serde_json::to_vec(&secrets).unwrap();
+                            *r = serde_json::to_vec(&ShuttleResourceOutput {
+                                output: secrets.clone(),
+                                custom: shuttle_resource.custom,
+                            })
+                            .unwrap();
                         }
                         resource::Type::Persist => {
                             shuttle_resources.push(resource::Response {
                                 r#type: shuttle_resource.r#type,
-                                config: Default::default(),
-                                data: Default::default(),
+                                config: serde_json::Value::Null,
+                                data: serde_json::Value::Null,
                             });
                         }
                         resource::Type::Container => {
-                            let config:  = 
-                            let res = prov.provision_arbitrary_container(Request::new(ContainerRequest { project_name: service_name.clone(), container_type: (), image: (), port: (), env: () }))
+                            // ignore the request when using local url
+                            if shuttle_resource.config == serde_json::Value::Null {
+                                continue;
+                            }
+                            let config = serde_json::from_value(shuttle_resource.config)
+                                .context("deserializing resource config")?;
+                            let res = prov.start_container(config).await?;
+                            *r = serde_json::to_vec(&ShuttleResourceOutput {
+                                output: res,
+                                custom: shuttle_resource.custom,
+                            })
+                            .unwrap();
                         }
                     }
                 }
@@ -1154,6 +1185,10 @@ impl Shuttle {
             "{}",
             get_resource_tables(&shuttle_resources, service_name.as_str(), false, false)
         );
+
+        //
+        // START PHASE
+        //
 
         let addr = SocketAddr::new(
             if run_args.external {

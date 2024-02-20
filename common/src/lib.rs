@@ -169,6 +169,26 @@ impl DatabaseInfo {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ContainerRequest {
+    pub project_name: String,
+    /// Type of container, used in the container name. ex "qdrant"
+    pub container_type: String,
+    /// ex. "qdrant/qdrant:latest"
+    pub image: String,
+    /// The internal port that the container should expose. ex. "6334/tcp"
+    pub port: String,
+    /// list of "KEY=value" strings
+    pub env: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ContainerResponse {
+    /// The port that the container exposes to the host.
+    /// Is a string for parity with the Docker respose.
+    pub host_port: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VersionInfo {
     /// Version of gateway

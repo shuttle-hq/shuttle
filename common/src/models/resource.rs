@@ -31,6 +31,8 @@ pub fn get_resource_tables(
                 Type::Database(_) => "Databases",
                 Type::Secrets => "Secrets",
                 Type::Persist => "Persist",
+                // ignore variants that don't represent Shuttle-hosted resources
+                Type::Container => return acc,
             };
 
             let elements: &mut Vec<_> = acc.entry(title).or_default();

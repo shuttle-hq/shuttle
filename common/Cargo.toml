@@ -90,7 +90,6 @@ claims = [
     "tracing-opentelemetry",
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
-local-provisioner = []
 models = ["async-trait", "http", "reqwest", "service", "thiserror"]
 persist = ["sqlx", "rand"]
 sqlx = ["dep:sqlx", "sqlx/sqlite"]

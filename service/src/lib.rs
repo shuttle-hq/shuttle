@@ -6,11 +6,10 @@ use serde::{de::DeserializeOwned, Serialize};
 pub use shuttle_common::{
     database,
     deployment::{DeploymentMetadata, Environment},
-    resource,
+    resource::{self, ShuttleResourceOutput},
     secrets::Secret,
-    DatabaseInfo, DatabaseResource, DbInput, SecretStore,
+    ContainerRequest, ContainerResponse, DatabaseInfo, DatabaseResource, DbInput, SecretStore,
 };
-pub use shuttle_proto::provisioner::{ContainerRequest, ContainerResponse};
 
 pub use crate::error::{CustomError, Error};
 
@@ -23,7 +22,7 @@ pub mod runner;
 /// An interface for the provisioner used in [`IntoResourceConfig::Config`].
 pub trait Factory: Send + Sync {
     /// Get the secrets associated with this service
-    fn get_secrets(&self) -> Result<BTreeMap<String, Secret<String>>, crate::Error>;
+    fn get_secrets(&self) -> BTreeMap<String, Secret<String>>;
 
     /// Get the metadata for this deployment
     fn get_metadata(&self) -> DeploymentMetadata;
@@ -73,11 +72,17 @@ pub trait IntoResource<R>: Serialize + DeserializeOwned {
     async fn into_resource(self) -> Result<R, crate::Error>;
 }
 
-// Base impl for [`IntoResourceInput::Output`] types that don't need to convert into anything else
+// Base impls for [`IntoResourceInput::Output`] types that don't need to convert into anything else
 #[async_trait]
 impl<R: Serialize + DeserializeOwned + Send> IntoResource<R> for R {
     async fn into_resource(self) -> Result<R, crate::Error> {
         Ok(self)
+    }
+}
+#[async_trait]
+impl<R: Serialize + DeserializeOwned + Send> IntoResource<R> for ShuttleResourceOutput<R> {
+    async fn into_resource(self) -> Result<R, crate::Error> {
+        Ok(self.output)
     }
 }
 

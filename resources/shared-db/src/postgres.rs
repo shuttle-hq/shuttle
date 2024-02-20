@@ -22,7 +22,7 @@ impl Postgres {
 #[async_trait]
 impl IntoResourceInput for Postgres {
     type Input = ProvisionResourceRequest;
-    type Output = ShuttleResourceOutput<Wrapper>;
+    type Output = Wrapper;
 
     async fn into_resource_input(self, _factory: &dyn Factory) -> Result<Self::Input, Error> {
         Ok(ProvisionResourceRequest::new(
@@ -35,12 +35,12 @@ impl IntoResourceInput for Postgres {
 
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Wrapper(DatabaseResource);
+pub struct Wrapper(ShuttleResourceOutput<DatabaseResource>);
 
 #[async_trait]
 impl IntoResource<String> for Wrapper {
     async fn into_resource(self) -> Result<String, Error> {
-        Ok(match self.0 {
+        Ok(match self.0.output {
             DatabaseResource::ConnectionString(s) => s.clone(),
             DatabaseResource::Info(info) => info.connection_string_shuttle(),
         })

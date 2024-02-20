@@ -13,8 +13,8 @@ pub struct ProvisionerFactory {
 
 #[async_trait]
 impl Factory for ProvisionerFactory {
-    fn get_secrets(&self) -> Result<BTreeMap<String, Secret<String>>, shuttle_service::Error> {
-        Ok(self.secrets.clone())
+    fn get_secrets(&self) -> BTreeMap<String, Secret<String>> {
+        self.secrets.clone()
     }
 
     fn get_metadata(&self) -> DeploymentMetadata {

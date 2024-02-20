@@ -21,7 +21,7 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 .build()
                 .unwrap()
                 .block_on(async {
-                    ::shuttle_runtime::__internals::start(loader, runner).await;
+                    ::shuttle_runtime::__internals::start(__loader, __runner).await;
                 })
         }
 
@@ -243,7 +243,6 @@ impl ToTokens for Loader {
                 let __vars = std::collections::HashMap::from_iter(
                     factory
                         .get_secrets()
-                        .await?
                         .into_iter()
                         .map(|(key, value)| (format!("secrets.{}", key), value.expose().clone()))
                 );
@@ -253,7 +252,7 @@ impl ToTokens for Loader {
         };
 
         let loader_runner = quote! {
-            async fn loader(
+            async fn __loader(
                 #factory_ident: ::shuttle_runtime::__internals::ProvisionerFactory,
             ) -> Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
@@ -263,7 +262,8 @@ impl ToTokens for Loader {
 
                 let mut v = Vec::new();
                 #(
-                    let b: <#fn_inputs_builder as IntoResourceInput>::Input = #fn_inputs_builder::default()
+                    let b: <#fn_inputs_builder as IntoResourceInput>::Input =
+                        #fn_inputs_builder::default()
                         #fn_inputs_builder_options // `vars` are used here
                         .into_resource_input(&#factory_ident)
                         .await
@@ -275,7 +275,7 @@ impl ToTokens for Loader {
                 Ok(v)
             }
 
-            async fn runner(
+            async fn __runner(
                 resources: Vec<Vec<u8>>,
             ) -> #return_type {
                 use ::shuttle_runtime::__internals::Context;
@@ -283,7 +283,8 @@ impl ToTokens for Loader {
 
                 let mut iter = resources.into_iter();
                 #(
-                    let x: <#fn_inputs_builder as IntoResourceInput>::Output = ::shuttle_runtime::__internals::serde_json::from_slice(
+                    let x: <#fn_inputs_builder as IntoResourceInput>::Output =
+                        ::shuttle_runtime::__internals::serde_json::from_slice(
                             &iter.next().expect("resource list to have correct length")
                         )
                         .context(format!("failed to deserialize output for {}", stringify!(#fn_inputs_builder)))?;

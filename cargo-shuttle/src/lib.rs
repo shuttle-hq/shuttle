@@ -819,7 +819,7 @@ impl Shuttle {
             }
         } else {
             let logs = client
-                .get_logs(self.ctx.project_name(), &id,mode)
+                .get_logs(self.ctx.project_name(), &id, mode)
                 .await
                 .map_err(|err| {
                     suggestions::logs::get_logs_failure(err, "Fetching the deployment failed")

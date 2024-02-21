@@ -55,6 +55,11 @@ pub struct PaginationDetails {
     pub limit: Option<u32>,
 }
 
+#[derive(Deserialize)]
+struct LogSize{
+    head : Option<String>,
+    tail : Option<String>
+}
 #[derive(Clone)]
 pub struct RouterBuilder {
     router: Router,
@@ -459,6 +464,7 @@ pub async fn get_logs(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
+    Query(LogSize{head,tail}) : Query<LogSize>
 ) -> Result<Json<Vec<LogItem>>> {
     let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),

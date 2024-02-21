@@ -174,8 +174,13 @@ impl Client {
         self.delete(path).await
     }
 
-    pub async fn get_logs(&self, project: &str, deployment_id: &Uuid) -> Result<Vec<LogItem>> {
-        let path = format!("/projects/{project}/deployments/{deployment_id}/logs");
+    pub async fn get_logs(&self, project: &str, deployment_id: &Uuid, mode : (&str,u32)) -> Result<Vec<LogItem>> {
+
+        let path = match mode.0{
+            "head" => format!("/projects/{project}/deployments/{deployment_id}/logs?head={}",mode.1),
+            "tail" => format!("/projects/{project}/deployments/{deployment_id}/logs?tail={}",mode.1),
+            _ =>  format!("/projects/{project}/deployments/{deployment_id}/logs"),
+        };
 
         self.get(path)
             .await

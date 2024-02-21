@@ -6,30 +6,32 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::{bail, Context};
 use async_trait::async_trait;
 use opentelemetry::global;
 use shuttle_common::{
     claims::Claim,
-    constants::EXECUTABLE_DIRNAME,
+    constants::{EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION},
     deployment::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
-    resource, SecretStore,
+    resource::{self, ResourceInput},
+    DatabaseResource, DbInput, SecretStore,
 };
 use shuttle_proto::{
-    provisioner,
+    provisioner::{self, DatabaseRequest},
     resource_recorder::record_request,
     runtime::{
         self, LoadRequest, StartRequest, StopReason, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
-use shuttle_service::Environment;
+use shuttle_service::{Environment, ShuttleResourceOutput};
 use tokio::{
     sync::Mutex,
     task::{JoinHandle, JoinSet},
 };
-use tonic::Code;
+use tonic::{Code, Request};
 use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
@@ -278,9 +280,10 @@ impl Built {
             .await
             .map_err(Error::Runtime)?;
 
-        kill_old_deployments.await?;
+        kill_old_deployments.await?; // TODO: Move to between load and provision? Or even after provision?
+
         // Execute loaded service
-        let (old, res) = load(
+        let (old_resources, resources, new_secrets) = load(
             self.service_name.clone(),
             self.service_id,
             resource_manager.clone(),
@@ -290,16 +293,18 @@ impl Built {
         )
         .await?;
 
-        let res = provision(
+        let resources = provision(
             self.service_name.clone(),
             self.service_id,
             provisioner_client,
-            resource_manager.clone(),
+            resource_manager,
             self.claim,
-            old,
-            res,
+            old_resources,
+            resources,
+            new_secrets,
         )
-        .await?;
+        .await
+        .map_err(Error::Provision)?;
 
         let handler = tokio::spawn(run(
             self.id,
@@ -307,7 +312,7 @@ impl Built {
             runtime_client,
             address,
             cleanup,
-            res,
+            resources,
         ));
 
         Ok(handler)
@@ -321,8 +326,127 @@ async fn provision(
     mut resource_manager: impl ResourceManager,
     claim: Claim,
     old_resources: Vec<resource::Response>,
-    resources: Vec<Vec<u8>>,
-) -> Result<Vec<Vec<u8>>> {
+    mut resources: Vec<Vec<u8>>,
+    new_secrets: HashMap<String, String>,
+) -> anyhow::Result<Vec<Vec<u8>>> {
+    let mut resources_to_save: Vec<record_request::Resource> = Vec::new();
+    for r in resources.iter_mut() {
+        match serde_json::from_slice::<ResourceInput>(r.as_slice())
+            .context("deserializing resource input")?
+        {
+            ResourceInput::Shuttle(shuttle_resource) => {
+                macro_rules! log {
+                    ($msg:expr) => {
+                        info!("[Resource][{}] {}", shuttle_resource.r#type, $msg);
+                    };
+                }
+                macro_rules! get_cached_output_or_provision {
+                    ($output_type:ty, $provision_logic:expr) => {{
+                        let output = old_resources
+                            .iter()
+                            .find(|resource| {
+                                resource.r#type == shuttle_resource.r#type
+                                    && resource.config == shuttle_resource.config
+                            })
+                            .and_then(|resource| {
+                                let cached_output = resource.data.clone();
+                                log!("Found cached output");
+                                match serde_json::from_value::<$output_type>(cached_output) {
+                                    Ok(output) => Some(output),
+                                    Err(_) => {
+                                        log!("Failed to validate cached output");
+                                        None
+                                    }
+                                }
+                            });
+                        match output {
+                            Some(o) => o,
+                            None => {
+                                log!("Provisioning...");
+                                $provision_logic
+                            }
+                        }
+                    }};
+                }
+
+                if shuttle_resource.version != RESOURCE_SCHEMA_VERSION {
+                    bail!("
+                        Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
+                        Make sure that this deployer and the Shuttle resource are up to date.
+                        ",
+                        shuttle_resource.r#type,
+                        RESOURCE_SCHEMA_VERSION,
+                        shuttle_resource.version
+                    );
+                }
+
+                // TODO?: Make the version integer be part of the cached output
+
+                match shuttle_resource.r#type {
+                    resource::Type::Database(db_type) => {
+                        // no config fields are used yet, but verify the format anyways
+                        let _config: DbInput =
+                            serde_json::from_value(shuttle_resource.config.clone())
+                                .context("deserializing resource config")?;
+
+                        let output = get_cached_output_or_provision!(DatabaseResource, {
+                            let mut req = Request::new(DatabaseRequest {
+                                project_name: service_name.to_string(),
+                                db_type: Some(db_type.into()),
+                                // other relevant config fields would go here
+                            });
+                            req.extensions_mut().insert(claim.clone());
+                            let res = provisioner_client
+                                .provision_database(req)
+                                .await?
+                                .into_inner();
+                            DatabaseResource::Info(res.into())
+                        });
+
+                        resources_to_save.push(record_request::Resource {
+                            r#type: shuttle_resource.r#type.to_string(),
+                            // Send only the config fields that affect provisioning
+                            // For now, this is "null" for all database types
+                            config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
+                            data: serde_json::to_vec(&output).unwrap(),
+                        });
+                        *r = serde_json::to_vec(&ShuttleResourceOutput {
+                            output,
+                            custom: shuttle_resource.custom,
+                        })
+                        .unwrap();
+                    }
+                    resource::Type::Secrets => {
+                        resources_to_save.push(record_request::Resource {
+                            r#type: shuttle_resource.r#type.to_string(),
+                            config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
+                            data: serde_json::to_vec(&new_secrets).unwrap(),
+                        });
+                        *r = serde_json::to_vec(&ShuttleResourceOutput {
+                            output: new_secrets.clone(),
+                            custom: shuttle_resource.custom,
+                        })
+                        .unwrap();
+                    }
+                    resource::Type::Persist => todo!(),
+                    resource::Type::Container => {
+                        bail!("Containers can't be requested during deployment");
+                    }
+                }
+            }
+            ResourceInput::Custom(_) => (),
+        }
+    }
+
+    // TODO: Move this to Provisioner and make it save after every resource is provisioned
+    if resource_manager
+        .insert_resources(resources_to_save, &service_id, claim.clone())
+        .await
+        .is_err()
+    {
+        bail!("failed saving resources to resource-recorder")
+    }
+
     Ok(resources)
 }
 
@@ -333,7 +457,11 @@ async fn load(
     mut runtime_client: runtime::Client,
     claim: Claim,
     mut new_secrets: HashMap<String, String>,
-) -> Result<(Vec<resource::Response>, Vec<Vec<u8>>)> {
+) -> Result<(
+    Vec<resource::Response>,
+    Vec<Vec<u8>>,
+    HashMap<String, String>,
+)> {
     info!("Loading resources");
 
     let prev_resources = resource_manager
@@ -377,15 +505,15 @@ async fn load(
         })
         .collect::<Vec<_>>();
 
-    let load_request = tonic::Request::new(LoadRequest {
-        project_name: service_name.clone(),
-        secrets: new_secrets,
-        env: Environment::Deployment.to_string(),
-        ..Default::default()
-    });
-
     debug!(shuttle.project.name = %service_name, "loading service");
-    let response = runtime_client.load(load_request).await;
+    let response = runtime_client
+        .load(Request::new(LoadRequest {
+            project_name: service_name.clone(),
+            secrets: new_secrets.clone(),
+            env: Environment::Deployment.to_string(),
+            ..Default::default()
+        }))
+        .await;
 
     debug!(shuttle.project.name = %service_name, "service loaded");
     match response {
@@ -396,13 +524,8 @@ async fn load(
                 info!("successfully loaded service");
             }
 
-            // resource_manager
-            //     .insert_resources(resources, &service_id, claim.clone())
-            //     .await
-            //     .expect("to add resource to persistence");
-
             if response.success {
-                Ok((prev_resources, response.resources))
+                Ok((prev_resources, response.resources, new_secrets))
             } else {
                 let error = Error::Load(response.message);
                 error!(

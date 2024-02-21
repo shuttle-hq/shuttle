@@ -1106,9 +1106,10 @@ impl Shuttle {
                 ResourceInput::Shuttle(shuttle_resource) => {
                     if shuttle_resource.version != RESOURCE_SCHEMA_VERSION {
                         bail!("
-                            Shuttle resource request with incompatible version found. Expected {}, found {}. \
+                            Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
                             Make sure that cargo-shuttle and the Shuttle resource are up to date.
                             ",
+                            shuttle_resource.r#type,
                             RESOURCE_SCHEMA_VERSION,
                             shuttle_resource.version
                         );

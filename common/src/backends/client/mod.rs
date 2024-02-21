@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use headers::{ContentType, Header, HeaderMapExt};
 use http::{Method, Request, StatusCode, Uri};
 use hyper::{body, client::HttpConnector, Body, Client};
@@ -36,7 +37,6 @@ pub struct ServicesApiClient {
 }
 
 impl ServicesApiClient {
-    /// Make a new client that connects to the given endpoint
     fn new(base: Uri) -> Self {
         Self {
             client: Client::new(),
@@ -44,7 +44,6 @@ impl ServicesApiClient {
         }
     }
 
-    /// Make a get request to a path on the service
     pub async fn request<B: Serialize, T: DeserializeOwned, H: Header>(
         &self,
         method: Method,
@@ -52,6 +51,19 @@ impl ServicesApiClient {
         body: Option<B>,
         extra_header: Option<H>,
     ) -> Result<T, Error> {
+        let bytes = self.request_raw(method, path, body, extra_header).await?;
+        let json = serde_json::from_slice(&bytes)?;
+
+        Ok(json)
+    }
+
+    pub async fn request_raw<B: Serialize, H: Header>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<B>,
+        extra_header: Option<H>,
+    ) -> Result<Bytes, Error> {
         let uri = format!("{}{path}", self.base);
         trace!(uri, "calling inner service");
 
@@ -59,15 +71,14 @@ impl ServicesApiClient {
         let headers = req
             .headers_mut()
             .expect("new request to have mutable headers");
-
-        headers.typed_insert(ContentType::json());
-
         if let Some(extra_header) = extra_header {
             headers.typed_insert(extra_header);
         }
+        if body.is_some() {
+            headers.typed_insert(ContentType::json());
+        }
 
         let cx = Span::current().context();
-
         global::get_text_map_propagator(|propagator| {
             propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut().unwrap()))
         });
@@ -79,18 +90,15 @@ impl ServicesApiClient {
         };
 
         let resp = self.client.request(req?).await?;
-
         trace!(response = ?resp, "Load response");
 
         if resp.status() != StatusCode::OK {
             return Err(Error::RequestError(resp.status()));
         }
 
-        let body = resp.into_body();
-        let bytes = body::to_bytes(body).await?;
-        let json = serde_json::from_slice(&bytes)?;
+        let bytes = body::to_bytes(resp.into_body()).await?;
 
-        Ok(json)
+        Ok(bytes)
     }
 }
 

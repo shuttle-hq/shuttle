@@ -59,9 +59,6 @@ pub trait Dal {
     /// Get the resources that belong to a project
     async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, DalError>;
 
-    /// Get the resources that belong to a service
-    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, DalError>;
-
     /// Get a resource
     async fn get_resource(
         &self,
@@ -175,15 +172,6 @@ impl Dal for Sqlite {
     async fn get_project_resources(&self, project_id: Ulid) -> Result<Vec<Resource>, DalError> {
         let result = sqlx::query_as(r#"SELECT * FROM resources WHERE project_id = ?"#)
             .bind(project_id.to_string())
-            .fetch_all(&self.pool)
-            .await?;
-
-        Ok(result)
-    }
-
-    async fn get_service_resources(&self, service_id: Ulid) -> Result<Vec<Resource>, DalError> {
-        let result = sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
-            .bind(service_id.to_string())
             .fetch_all(&self.pool)
             .await?;
 

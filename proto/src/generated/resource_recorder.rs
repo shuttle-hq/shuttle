@@ -219,7 +219,7 @@ pub mod resource_recorder_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Get the resources belonging to a service
+        /// Discontinued
         pub async fn get_service_resources(
             &mut self,
             request: impl tonic::IntoRequest<super::ServiceResourcesRequest>,
@@ -304,7 +304,7 @@ pub mod resource_recorder_server {
             &self,
             request: tonic::Request<super::ProjectResourcesRequest>,
         ) -> std::result::Result<tonic::Response<super::ResourcesResponse>, tonic::Status>;
-        /// Get the resources belonging to a service
+        /// Discontinued
         async fn get_service_resources(
             &self,
             request: tonic::Request<super::ServiceResourcesRequest>,

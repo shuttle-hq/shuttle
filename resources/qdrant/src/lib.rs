@@ -91,8 +91,8 @@ impl IntoResourceInput for Qdrant {
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Wrapper {
-    One(ShuttleResourceOutput<ContainerResponse>),
-    Two(QdrantClientConfigWrap),
+    Container(ShuttleResourceOutput<ContainerResponse>),
+    Config(QdrantClientConfigWrap),
 }
 
 /// Scrappy wrapper over `QdrantClientConfig` to implement Clone and serde
@@ -106,17 +106,17 @@ pub struct QdrantClientConfigWrap {
 #[async_trait]
 impl IntoResource<QdrantClient> for Wrapper {
     async fn into_resource(self) -> Result<QdrantClient, Error> {
-        let c = match self {
-            Self::One(output) => {
+        let config = match self {
+            Self::Container(output) => {
                 QdrantClientConfigWrap {
                     url: format!("http://localhost:{}", output.output.host_port),
                     api_key: None,
                 }
             }
-            Self::Two(i) => i,
+            Self::Config(c) => c,
         };
-        Ok(QdrantClientConfig::from_url(&c.url)
-            .with_api_key(c.api_key)
+        Ok(QdrantClientConfig::from_url(&config.url)
+            .with_api_key(config.api_key)
             .build()?)
     }
 }

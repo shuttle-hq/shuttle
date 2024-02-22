@@ -10,10 +10,10 @@ pub struct LoadRequest {
     #[prost(map = "string, string", tag = "20")]
     pub secrets:
         ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    /// deprecated
+    #[deprecated]
     #[prost(string, tag = "2")]
     pub path: ::prost::alloc::string::String,
-    /// deprecated
+    #[deprecated]
     #[prost(bytes = "vec", repeated, tag = "10")]
     pub resources: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }

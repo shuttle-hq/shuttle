@@ -144,11 +144,11 @@ _install_rust_and_cargo() {
     *) echo "Please answer yes or no." ;;
     esac
   done
-  echo "rustup installed! Installing with cargo"
-  _install_cargo
+  echo "rustup installed!"
 }
 
-_install_cargo() {
+_install_with_cargo() {
+  echo "Installing with cargo..."
   cargo install --locked cargo-shuttle
 }
 
@@ -164,36 +164,36 @@ _install_unsupported() {
   if ! command -v cargo &>/dev/null; then
     if ! command -v rustup &>/dev/null; then
       _install_rust_and_cargo
+      _install_with_cargo
       return 0
     else
       echo "rustup was found, but cargo wasn't. Something is up with your install"
       exit 1
-    fi
-  else
-    while true; do
+    fi    
+  fi
+
+  while true; do
+    read -r -p "Do you wish to attempt to install the pre-built binary? [Y/N] " yn </dev/tty
+    case $yn in
+    [Yy]*)
+      echo "Installing pre-built binary..."
+      _install_binary
+      break
+      ;;
+    [Nn]*)
       read -r -p "Do you wish to attempt an install with cargo? [Y/N] " yn </dev/tty
       case $yn in
       [Yy]*)
-        echo "Installing with cargo..."
-        _install_cargo
+        _install_with_cargo
         break
         ;;
-      [Nn]*)
-        read -r -p "Do you wish to attempt to install the pre-built binary? [Y/N] " yn </dev/tty
-        case $yn in
-        [Yy]*)
-          echo "Installing pre-built binary..."
-          _install_binary
-          break
-          ;;
-        [Nn]*) exit ;;
-        *) echo "Please answer yes or no." ;;
-        esac
-        ;;
+      [Nn]*) exit ;;
       *) echo "Please answer yes or no." ;;
       esac
-    done
-  fi
+      ;;
+    *) echo "Please answer yes or no." ;;
+    esac
+  done
 }
 
 if command -v cargo-shuttle &>/dev/null; then

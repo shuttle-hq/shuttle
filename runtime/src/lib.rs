@@ -206,7 +206,7 @@
 // Public API
 pub use shuttle_codegen::main;
 pub use shuttle_service::{
-    CustomError, DbInput, Error, Factory, IntoResource, IntoResourceInput, Service,
+    CustomError, DbInput, Error, IntoResource, IntoResourceInput, ResourceFactory, Service,
 };
 
 // Useful re-exports
@@ -217,7 +217,6 @@ mod alpha;
 mod args;
 #[cfg(feature = "next")]
 mod next;
-mod provisioner_factory;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -229,7 +228,6 @@ pub mod __internals {
     pub use crate::alpha::{start, Alpha};
     #[cfg(feature = "next")]
     pub use crate::next::{AxumWasm, NextArgs};
-    pub use crate::provisioner_factory::ProvisionerFactory;
 
     // Dependencies required by the codegen
     pub use anyhow::Context;

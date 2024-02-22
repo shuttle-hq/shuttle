@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error},
     resource::{ProvisionResourceRequest, Type},
-    ContainerRequest, ContainerResponse, Environment, Factory, IntoResource, IntoResourceInput,
-    ShuttleResourceOutput,
+    ContainerRequest, ContainerResponse, Environment, IntoResource, IntoResourceInput,
+    ResourceFactory, ShuttleResourceOutput,
 };
 
 /// A Qdrant vector database
@@ -48,7 +48,7 @@ impl IntoResourceInput for Qdrant {
     // The response can be a provisioned container, depending on local/deployment and config.
     type Output = Wrapper;
 
-    async fn into_resource_input(self, factory: &dyn Factory) -> Result<Self::Input, Error> {
+    async fn into_resource_input(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
         let md = factory.get_metadata();
         match md.env {
             Environment::Deployment => match self.cloud_url {

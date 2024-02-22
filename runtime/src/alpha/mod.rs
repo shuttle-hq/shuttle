@@ -17,7 +17,7 @@ use shuttle_proto::runtime::{
     LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest, StopResponse,
     SubscribeStopRequest, SubscribeStopResponse,
 };
-use shuttle_service::{Factory, Service};
+use shuttle_service::{ResourceFactory, Service};
 use tokio::sync::{
     broadcast::{self, Sender},
     mpsc, oneshot,
@@ -25,7 +25,7 @@ use tokio::sync::{
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
 
-use crate::__internals::{print_version, ProvisionerFactory};
+use crate::__internals::print_version;
 
 use crate::args::args;
 
@@ -38,10 +38,7 @@ args! {
     }
 }
 
-pub async fn start(
-    loader: impl Loader<ProvisionerFactory> + Send + 'static,
-    runner: impl Runner + Send + 'static,
-) {
+pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + Send + 'static) {
     // `--version` overrides any other arguments.
     if std::env::args().any(|arg| arg == "--version") {
         print_version();
@@ -143,22 +140,17 @@ impl<L, R> Alpha<L, R> {
 }
 
 #[async_trait]
-pub trait Loader<Fac>
-where
-    Fac: Factory,
-{
-    // TODO: Make this sync?
-    async fn load(self, factory: Fac) -> Result<Vec<Vec<u8>>, shuttle_service::Error>;
+pub trait Loader {
+    async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, shuttle_service::Error>;
 }
 
 #[async_trait]
-impl<F, O, Fac> Loader<Fac> for F
+impl<F, O> Loader for F
 where
-    F: FnOnce(Fac) -> O + Send,
+    F: FnOnce(ResourceFactory) -> O + Send,
     O: Future<Output = Result<Vec<Vec<u8>>, shuttle_service::Error>> + Send,
-    Fac: Factory + 'static,
 {
-    async fn load(self, factory: Fac) -> Result<Vec<Vec<u8>>, shuttle_service::Error> {
+    async fn load(self, factory: ResourceFactory) -> Result<Vec<Vec<u8>>, shuttle_service::Error> {
         (self)(factory).await
     }
 }
@@ -187,7 +179,7 @@ where
 #[async_trait]
 impl<L, R, S> Runtime for Alpha<L, R>
 where
-    L: Loader<ProvisionerFactory> + Send + 'static,
+    L: Loader + Send + 'static,
     R: Runner<Service = S> + Send + 'static,
     S: Service + 'static,
 {
@@ -202,11 +194,7 @@ where
         // Sorts secrets by key
         let secrets = BTreeMap::from_iter(secrets.into_iter().map(|(k, v)| (k, Secret::new(v))));
 
-        let factory = ProvisionerFactory {
-            project_name,
-            secrets,
-            env: env.parse().unwrap(),
-        };
+        let factory = ResourceFactory::new(project_name, secrets, env.parse().unwrap());
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 

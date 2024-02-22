@@ -232,7 +232,7 @@ impl ToTokens for Loader {
             (
                 parse_quote!(factory),
                 Some(parse_quote!(
-                    use ::shuttle_runtime::{Factory, IntoResource, IntoResourceInput};
+                    use ::shuttle_runtime::{ResourceFactory, IntoResource, IntoResourceInput};
                 )),
             )
         };
@@ -253,7 +253,7 @@ impl ToTokens for Loader {
 
         let loader_runner = quote! {
             async fn __loader(
-                #factory_ident: ::shuttle_runtime::__internals::ProvisionerFactory,
+                #factory_ident: ::shuttle_runtime::ResourceFactory,
             ) -> Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
                 #extra_imports

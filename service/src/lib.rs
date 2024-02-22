@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
+use shuttle_common::constants::STORAGE_DIRNAME;
 pub use shuttle_common::{
     database,
     deployment::{DeploymentMetadata, Environment},
@@ -18,15 +20,6 @@ pub mod builder;
 pub mod error;
 #[cfg(feature = "runner")]
 pub mod runner;
-
-/// An interface for the provisioner used in [`IntoResourceConfig::Config`].
-pub trait Factory: Send + Sync {
-    /// Get the secrets associated with this service
-    fn get_secrets(&self) -> BTreeMap<String, Secret<String>>;
-
-    /// Get the metadata for this deployment
-    fn get_metadata(&self) -> DeploymentMetadata;
-}
 
 /// Allows implementing plugins for the Shuttle main function.
 ///
@@ -58,8 +51,44 @@ pub trait IntoResourceInput: Default {
     /// This type must implement [`IntoResource`] for the desired final resource type `R`.
     type Output: Serialize + DeserializeOwned;
 
-    /// Construct this resource config. The [`Factory`] provides access to secrets and metadata.
-    async fn into_resource_input(self, factory: &dyn Factory) -> Result<Self::Input, crate::Error>;
+    /// Construct this resource config. The [`ResourceFactory`] provides access to secrets and metadata.
+    async fn into_resource_input(
+        self,
+        factory: &ResourceFactory,
+    ) -> Result<Self::Input, crate::Error>;
+}
+
+/// A factory for getting metadata when building resources
+pub struct ResourceFactory {
+    pub(crate) project_name: String,
+    pub(crate) secrets: BTreeMap<String, Secret<String>>,
+    pub(crate) env: Environment,
+}
+
+impl ResourceFactory {
+    pub fn new(
+        project_name: String,
+        secrets: BTreeMap<String, Secret<String>>,
+        env: Environment,
+    ) -> Self {
+        Self {
+            project_name,
+            secrets,
+            env,
+        }
+    }
+
+    pub fn get_secrets(&self) -> BTreeMap<String, Secret<String>> {
+        self.secrets.clone()
+    }
+
+    pub fn get_metadata(&self) -> DeploymentMetadata {
+        DeploymentMetadata {
+            env: self.env,
+            project_name: self.project_name.to_string(),
+            storage_path: PathBuf::from(STORAGE_DIRNAME),
+        }
+    }
 }
 
 /// Implement this on an [`IntoResourceInput::Output`] type to turn the

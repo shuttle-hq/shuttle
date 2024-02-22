@@ -39,9 +39,7 @@ pub async fn start(
         .deployment_updater(persistence.clone())
         .resource_manager(persistence.clone())
         .builder_client(builder_client)
-        .provisioner_client(Some(
-            provisioner::get_client(args.provisioner_address).await,
-        ))
+        .provisioner_client(provisioner::get_client(args.provisioner_address).await)
         .queue_client(gateway::Client::new(
             args.gateway_uri.clone(),
             args.gateway_uri,

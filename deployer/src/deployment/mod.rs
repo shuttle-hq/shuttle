@@ -68,8 +68,8 @@ where
         self
     }
 
-    pub fn provisioner_client(mut self, provisioner_client: Option<provisioner::Client>) -> Self {
-        self.provisioner_client = provisioner_client;
+    pub fn provisioner_client(mut self, provisioner_client: provisioner::Client) -> Self {
+        self.provisioner_client = Some(provisioner_client);
 
         self
     }

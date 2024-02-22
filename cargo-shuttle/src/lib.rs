@@ -1094,91 +1094,13 @@ impl Shuttle {
         // PROVISIONING PHASE
         //
 
-        // Actual resource requests from the runtime
         let mut resources = response.resources;
-        // Mocked resource responses for displaying the tables
-        let mut shuttle_resources: Vec<resource::Response> = Vec::new();
-        let prov = LocalProvisioner::new()?;
-        for r in resources.iter_mut() {
-            match serde_json::from_slice::<ResourceInput>(r.as_slice())
-                .context("deserializing resource input")?
-            {
-                ResourceInput::Shuttle(shuttle_resource) => {
-                    if shuttle_resource.version != RESOURCE_SCHEMA_VERSION {
-                        bail!("
-                            Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
-                            Make sure that cargo-shuttle and the Shuttle resource are up to date.
-                            ",
-                            shuttle_resource.r#type,
-                            RESOURCE_SCHEMA_VERSION,
-                            shuttle_resource.version
-                        );
-                    }
-                    match shuttle_resource.r#type {
-                        resource::Type::Database(db_type) => {
-                            let config: DbInput = serde_json::from_value(shuttle_resource.config)
-                                .context("deserializing resource config")?;
-                            let res = match config.local_uri {
-                                Some(local_uri) => DatabaseResource::ConnectionString(local_uri),
-                                None => DatabaseResource::Info(
-                                    prov.provision_database(Request::new(DatabaseRequest {
-                                        project_name: service_name.to_string(),
-                                        db_type: Some(db_type.into()),
-                                    }))
-                                    .await?
-                                    .into_inner()
-                                    .into(),
-                                ),
-                            };
-                            shuttle_resources.push(resource::Response {
-                                r#type: shuttle_resource.r#type,
-                                config: serde_json::Value::Null,
-                                data: serde_json::to_value(&res).unwrap(),
-                            });
-                            *r = serde_json::to_vec(&ShuttleResourceOutput {
-                                output: res,
-                                custom: shuttle_resource.custom,
-                            })
-                            .unwrap();
-                        }
-                        resource::Type::Secrets => {
-                            shuttle_resources.push(resource::Response {
-                                r#type: shuttle_resource.r#type,
-                                config: serde_json::Value::Null,
-                                data: serde_json::to_value(secrets.clone()).unwrap(),
-                            });
-                            *r = serde_json::to_vec(&ShuttleResourceOutput {
-                                output: secrets.clone(),
-                                custom: shuttle_resource.custom,
-                            })
-                            .unwrap();
-                        }
-                        resource::Type::Persist => {
-                            shuttle_resources.push(resource::Response {
-                                r#type: shuttle_resource.r#type,
-                                config: serde_json::Value::Null,
-                                data: serde_json::Value::Null,
-                            });
-                        }
-                        resource::Type::Container => {
-                            let config = serde_json::from_value(shuttle_resource.config)
-                                .context("deserializing resource config")?;
-                            let res = prov.start_container(config).await?;
-                            *r = serde_json::to_vec(&ShuttleResourceOutput {
-                                output: res,
-                                custom: shuttle_resource.custom,
-                            })
-                            .unwrap();
-                        }
-                    }
-                }
-                ResourceInput::Custom(_) => (),
-            }
-        }
+        let mocked_responses =
+            Shuttle::local_provision_phase(&mut resources, &secrets, service_name.as_str()).await?;
 
         println!(
             "{}",
-            get_resource_tables(&shuttle_resources, service_name.as_str(), false, false)
+            get_resource_tables(&mocked_responses, service_name.as_str(), false, false)
         );
 
         //
@@ -1219,6 +1141,106 @@ impl Shuttle {
 
         trace!(response = ?response,  "client response: ");
         Ok(Some((runtime, runtime_client)))
+    }
+
+    /// Mutates the resource list by overwriting the contents of each entry
+    /// with the output if any provisioning was made
+    async fn local_provision_phase(
+        resources: &mut Vec<Vec<u8>>,
+        secrets: &HashMap<String, String>,
+        project_name: &str,
+    ) -> Result<Vec<resource::Response>> {
+        // for displaying the tables
+        let mut mocked_responses: Vec<resource::Response> = Vec::new();
+        let prov = LocalProvisioner::new()?;
+
+        // Go through each item in the resources, and
+        //  1. parse and check if it's a valid Shuttle resource request
+        //  2. if valid, based on the resource type, do some of the following:
+        //   2a. verify the related config struct (if one is expected)
+        //   2b. provision the resource (if applicable)
+        //   2c. add a mocked resource response to show to the user (if relevant)
+        //   2d. overwrite the request's vec entry with the output of the provisioning (if provisioned)
+        for r in resources.iter_mut() {
+            match serde_json::from_slice::<ResourceInput>(r.as_slice())
+                .context("deserializing resource input")?
+            {
+                ResourceInput::Shuttle(shuttle_resource) => {
+                    if shuttle_resource.version != RESOURCE_SCHEMA_VERSION {
+                        bail!("
+                            Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
+                            Make sure that cargo-shuttle and the Shuttle resource are up to date.
+                            ",
+                            shuttle_resource.r#type,
+                            RESOURCE_SCHEMA_VERSION,
+                            shuttle_resource.version
+                        );
+                    }
+                    match shuttle_resource.r#type {
+                        resource::Type::Database(db_type) => {
+                            let config: DbInput = serde_json::from_value(shuttle_resource.config)
+                                .context("deserializing resource config")?;
+                            let res = match config.local_uri {
+                                Some(local_uri) => DatabaseResource::ConnectionString(local_uri),
+                                None => DatabaseResource::Info(
+                                    prov.provision_database(Request::new(DatabaseRequest {
+                                        project_name: project_name.to_string(),
+                                        db_type: Some(db_type.into()),
+                                    }))
+                                    .await?
+                                    .into_inner()
+                                    .into(),
+                                ),
+                            };
+                            mocked_responses.push(resource::Response {
+                                r#type: shuttle_resource.r#type,
+                                config: serde_json::Value::Null,
+                                data: serde_json::to_value(&res).unwrap(),
+                            });
+                            *r = serde_json::to_vec(&ShuttleResourceOutput {
+                                output: res,
+                                custom: shuttle_resource.custom,
+                            })
+                            .unwrap();
+                        }
+                        resource::Type::Secrets => {
+                            // We already know the secrets at this stage, they are not provisioned like other resources
+                            mocked_responses.push(resource::Response {
+                                r#type: shuttle_resource.r#type,
+                                config: serde_json::Value::Null,
+                                data: serde_json::to_value(secrets.clone()).unwrap(),
+                            });
+                            *r = serde_json::to_vec(&ShuttleResourceOutput {
+                                output: secrets.clone(),
+                                custom: shuttle_resource.custom,
+                            })
+                            .unwrap();
+                        }
+                        resource::Type::Persist => {
+                            // only show that this resource is "connected"
+                            mocked_responses.push(resource::Response {
+                                r#type: shuttle_resource.r#type,
+                                config: serde_json::Value::Null,
+                                data: serde_json::Value::Null,
+                            });
+                        }
+                        resource::Type::Container => {
+                            let config = serde_json::from_value(shuttle_resource.config)
+                                .context("deserializing resource config")?;
+                            let res = prov.start_container(config).await?;
+                            *r = serde_json::to_vec(&ShuttleResourceOutput {
+                                output: res,
+                                custom: shuttle_resource.custom,
+                            })
+                            .unwrap();
+                        }
+                    }
+                }
+                ResourceInput::Custom(_) => (),
+            }
+        }
+
+        Ok(mocked_responses)
     }
 
     async fn stop_runtime(

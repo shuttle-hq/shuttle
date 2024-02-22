@@ -1095,8 +1095,12 @@ impl Shuttle {
         //
 
         let mut resources = response.resources;
-        let mocked_responses =
-            Shuttle::local_provision_phase(&mut resources, &secrets, service_name.as_str()).await?;
+        let mocked_responses = Shuttle::local_provision_phase(
+            resources.as_mut_slice(),
+            secrets,
+            service_name.as_str(),
+        )
+        .await?;
 
         println!(
             "{}",
@@ -1146,8 +1150,8 @@ impl Shuttle {
     /// Mutates the resource list by overwriting the contents of each entry
     /// with the output if any provisioning was made
     async fn local_provision_phase(
-        resources: &mut Vec<Vec<u8>>,
-        secrets: &HashMap<String, String>,
+        resources: &mut [Vec<u8>],
+        secrets: HashMap<String, String>,
         project_name: &str,
     ) -> Result<Vec<resource::Response>> {
         // for displaying the tables

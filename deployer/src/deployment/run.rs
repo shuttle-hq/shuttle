@@ -319,21 +319,21 @@ impl Built {
             })
             .collect::<Vec<_>>();
 
-        let resources = load(
+        let mut resources = load(
             self.service_name.clone(),
             runtime_client.clone(),
             &new_secrets,
         )
         .await?;
 
-        let resources = provision(
-            self.service_name.clone(),
+        provision(
+            self.service_name.as_str(),
             self.service_id,
             provisioner_client,
             resource_manager,
             self.claim,
             prev_resources,
-            resources,
+            resources.as_mut_slice(),
             new_secrets,
         )
         .await
@@ -352,16 +352,17 @@ impl Built {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn provision(
-    project_name: String,
+    project_name: &str,
     service_id: Ulid,
     mut provisioner_client: provisioner::Client,
     mut resource_manager: impl ResourceManager,
     claim: Claim,
     prev_resources: Vec<resource::Response>,
-    mut resources: Vec<Vec<u8>>,
+    resources: &mut [Vec<u8>],
     new_secrets: HashMap<String, String>,
-) -> anyhow::Result<Vec<Vec<u8>>> {
+) -> anyhow::Result<()> {
     let mut resources_to_save: Vec<record_request::Resource> = Vec::new();
 
     // Go through each item in the resources, and
@@ -458,6 +459,7 @@ async fn provision(
                         .unwrap();
                     }
                     resource::Type::Secrets => {
+                        // We already know the secrets at this stage, they are not provisioned like other resources
                         resources_to_save.push(record_request::Resource {
                             r#type: shuttle_resource.r#type.to_string(),
                             config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
@@ -469,7 +471,14 @@ async fn provision(
                         })
                         .unwrap();
                     }
-                    resource::Type::Persist => todo!(),
+                    resource::Type::Persist => {
+                        // this resource is still tracked until EOL, even though we don't provision it
+                        resources_to_save.push(record_request::Resource {
+                            r#type: shuttle_resource.r#type.to_string(),
+                            config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
+                            data: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
+                        });
+                    }
                     resource::Type::Container => {
                         bail!("Containers can't be requested during deployment");
                     }
@@ -488,7 +497,7 @@ async fn provision(
         bail!("failed saving resources to resource-recorder")
     }
 
-    Ok(resources)
+    Ok(())
 }
 
 async fn load(

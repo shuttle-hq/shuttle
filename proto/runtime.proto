@@ -22,7 +22,8 @@ message LoadRequest {
   // Secrets that belong to this deployment
   map<string, string> secrets = 20;
 
-  string path = 2 [deprecated = true];
+  // deprecated for alpha, but still used in next
+  string path = 2;
   repeated bytes resources = 10 [deprecated = true];
 }
 

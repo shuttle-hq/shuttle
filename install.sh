@@ -133,7 +133,7 @@ _install_binary() {
 }
 
 _install_rust_and_cargo() {
-  while true; do
+  while ! command -v cargo &>/dev/null; do
     read -r -p "Do you wish to attempt to install Rust and Cargo via rustup? [Y/N] " yn </dev/tty
     case $yn in
     [Yy]*)

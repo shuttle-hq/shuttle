@@ -9,6 +9,7 @@ use std::{
 use anyhow::{bail, Context};
 use async_trait::async_trait;
 use opentelemetry::global;
+use serde::de::DeserializeOwned;
 use shuttle_common::{
     claims::Claim,
     constants::{EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION},
@@ -16,7 +17,7 @@ use shuttle_common::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
-    resource::{self, ResourceInput},
+    resource::{self, ProvisionResourceRequest, ResourceInput},
     DatabaseResource, DbInput, SecretStore,
 };
 use shuttle_proto::{
@@ -319,6 +320,12 @@ impl Built {
     }
 }
 
+macro_rules! log {
+    ($msg:expr) => {
+        info!("[Resource][{}] {}", shuttle_resource.r#type, $msg);
+    };
+}
+
 async fn provision(
     service_name: String,
     service_id: Ulid,
@@ -335,40 +342,6 @@ async fn provision(
             .context("deserializing resource input")?
         {
             ResourceInput::Shuttle(shuttle_resource) => {
-                macro_rules! log {
-                    ($msg:expr) => {
-                        info!("[Resource][{}] {}", shuttle_resource.r#type, $msg);
-                    };
-                }
-                macro_rules! get_cached_output_or_provision {
-                    ($output_type:ty, $provision_logic:expr) => {{
-                        let output = old_resources
-                            .iter()
-                            .find(|resource| {
-                                resource.r#type == shuttle_resource.r#type
-                                    && resource.config == shuttle_resource.config
-                            })
-                            .and_then(|resource| {
-                                let cached_output = resource.data.clone();
-                                log!("Found cached output");
-                                match serde_json::from_value::<$output_type>(cached_output) {
-                                    Ok(output) => Some(output),
-                                    Err(_) => {
-                                        log!("Failed to validate cached output");
-                                        None
-                                    }
-                                }
-                            });
-                        match output {
-                            Some(o) => o,
-                            None => {
-                                log!("Provisioning...");
-                                $provision_logic
-                            }
-                        }
-                    }};
-                }
-
                 if shuttle_resource.version != RESOURCE_SCHEMA_VERSION {
                     bail!("
                         Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
@@ -389,19 +362,26 @@ async fn provision(
                             serde_json::from_value(shuttle_resource.config.clone())
                                 .context("deserializing resource config")?;
 
-                        let output = get_cached_output_or_provision!(DatabaseResource, {
-                            let mut req = Request::new(DatabaseRequest {
-                                project_name: service_name.to_string(),
-                                db_type: Some(db_type.into()),
-                                // other relevant config fields would go here
-                            });
-                            req.extensions_mut().insert(claim.clone());
-                            let res = provisioner_client
-                                .provision_database(req)
-                                .await?
-                                .into_inner();
-                            DatabaseResource::Info(res.into())
-                        });
+                        let output: DatabaseResource = get_cached_output_or_provision(
+                            &shuttle_resource,
+                            &old_resources,
+                            || {
+                                Box::new(async {
+                                    let mut req = Request::new(DatabaseRequest {
+                                        project_name: service_name.to_string(),
+                                        db_type: Some(db_type.into()),
+                                        // other relevant config fields would go here
+                                    });
+                                    req.extensions_mut().insert(claim.clone());
+                                    let res = provisioner_client
+                                        .provision_database(req)
+                                        .await?
+                                        .into_inner();
+                                    Ok(DatabaseResource::Info(res.into()))
+                                })
+                            },
+                        )
+                        .await?;
 
                         resources_to_save.push(record_request::Resource {
                             r#type: shuttle_resource.r#type.to_string(),
@@ -448,6 +428,35 @@ async fn provision(
     }
 
     Ok(resources)
+}
+async fn get_cached_output_or_provision<T: DeserializeOwned>(
+    shuttle_resource: &ProvisionResourceRequest,
+    old_resources: &Vec<resource::Response>,
+    provision_logic: impl FnMut() -> (dyn Future<Output = anyhow::Result<T>> + Send + 'static),
+) -> anyhow::Result<T> {
+    let output: Option<T> = old_resources
+        .iter()
+        .find(|resource| {
+            resource.r#type == shuttle_resource.r#type && resource.config == shuttle_resource.config
+        })
+        .and_then(|resource| {
+            let cached_output = resource.data.clone();
+            log!("Found cached output");
+            match serde_json::from_value(cached_output) {
+                Ok(output) => Some(output),
+                Err(_) => {
+                    log!("Failed to validate cached output");
+                    None
+                }
+            }
+        });
+    match output {
+        Some(o) => Ok(o),
+        None => {
+            log!("Provisioning...");
+            provision_logic().await
+        }
+    }
 }
 
 async fn load(

@@ -243,7 +243,7 @@ impl Built {
     #[allow(clippy::too_many_arguments)]
     pub async fn handle(
         self,
-        resource_manager: impl ResourceManager,
+        mut resource_manager: impl ResourceManager,
         runtime_manager: Arc<Mutex<RuntimeManager>>,
         kill_old_deployments: impl Future<Output = Result<()>>,
         cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
@@ -282,14 +282,47 @@ impl Built {
 
         kill_old_deployments.await?; // TODO: Move to between load and provision? Or even after provision?
 
-        // Execute loaded service
-        let (old_resources, resources, new_secrets) = load(
+        info!("Loading resources");
+
+        let mut new_secrets = self.secrets;
+        let prev_resources = resource_manager
+            .get_resources(&self.service_id, self.claim.clone())
+            .await
+            .map_err(|err| Error::Load(err.to_string()))?
+            .resources
+            .into_iter()
+            .map(resource::Response::try_from)
+            // Ignore and trace the errors for resources with corrupted data, returning just the valid resources.
+            // TODO: investigate how the resource data can get corrupted.
+            .filter_map(|resource| {
+                resource
+                    .map_err(|err| {
+                        error!(error = ?err, "failed to parse resource data");
+                    })
+                    .ok()
+            })
+            // inject old secrets into the secrets added in this deployment
+            .inspect(|r| {
+                if r.r#type == shuttle_common::resource::Type::Secrets {
+                    match serde_json::from_value::<SecretStore>(r.data.clone()) {
+                        Ok(ss) => {
+                            // Combine old and new, but insert old first so that new ones override.
+                            let mut combined = HashMap::from_iter(ss.into_iter());
+                            combined.extend(new_secrets.clone().into_iter());
+                            new_secrets = combined;
+                        }
+                        Err(err) => {
+                            error!(error = ?err, "failed to parse old secrets data");
+                        }
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let resources = load(
             self.service_name.clone(),
-            self.service_id,
-            resource_manager.clone(),
             runtime_client.clone(),
-            self.claim.clone(),
-            self.secrets,
+            &new_secrets,
         )
         .await?;
 
@@ -299,7 +332,7 @@ impl Built {
             provisioner_client,
             resource_manager,
             self.claim,
-            old_resources,
+            prev_resources,
             resources,
             new_secrets,
         )
@@ -320,16 +353,24 @@ impl Built {
 }
 
 async fn provision(
-    service_name: String,
+    project_name: String,
     service_id: Ulid,
     mut provisioner_client: provisioner::Client,
     mut resource_manager: impl ResourceManager,
     claim: Claim,
-    old_resources: Vec<resource::Response>,
+    prev_resources: Vec<resource::Response>,
     mut resources: Vec<Vec<u8>>,
     new_secrets: HashMap<String, String>,
 ) -> anyhow::Result<Vec<Vec<u8>>> {
     let mut resources_to_save: Vec<record_request::Resource> = Vec::new();
+
+    // Go through each item in the resources, and
+    //  1. parse and check if it's a valid Shuttle resource request
+    //  2. if valid, based on the resource type, do some of the following:
+    //   2a. verify the related config struct (if one is expected)
+    //   2b. provision the resource (if applicable)
+    //   2c. add a mocked resource response to show to the user (if relevant)
+    //   2d. overwrite the request's vec entry with the output of the provisioning (if provisioned)
     for r in resources.iter_mut() {
         match serde_json::from_slice::<ResourceInput>(r.as_slice())
             .context("deserializing resource input")?
@@ -342,7 +383,7 @@ async fn provision(
                 }
                 macro_rules! get_cached_output_or_provision {
                     ($output_type:ty, $provision_logic:expr) => {{
-                        let output = old_resources
+                        let output = prev_resources
                             .iter()
                             .find(|resource| {
                                 resource.r#type == shuttle_resource.r#type
@@ -391,7 +432,7 @@ async fn provision(
 
                         let output = get_cached_output_or_provision!(DatabaseResource, {
                             let mut req = Request::new(DatabaseRequest {
-                                project_name: service_name.to_string(),
+                                project_name: project_name.to_string(),
                                 db_type: Some(db_type.into()),
                                 // other relevant config fields would go here
                             });
@@ -452,59 +493,9 @@ async fn provision(
 
 async fn load(
     service_name: String,
-    service_id: Ulid,
-    mut resource_manager: impl ResourceManager,
     mut runtime_client: runtime::Client,
-    claim: Claim,
-    mut new_secrets: HashMap<String, String>,
-) -> Result<(
-    Vec<resource::Response>,
-    Vec<Vec<u8>>,
-    HashMap<String, String>,
-)> {
-    info!("Loading resources");
-
-    let prev_resources = resource_manager
-        .get_resources(&service_id, claim.clone())
-        .await
-        .map_err(|err| Error::Load(err.to_string()))?
-        .resources
-        .into_iter()
-        .map(resource::Response::try_from)
-        // We ignore and trace the errors for resources with corrupted data, returning just the
-        // valid resources.
-        // TODO: investigate how the resource data can get corrupted.
-        .filter_map(|resource| {
-            resource
-                .map_err(|err| {
-                    error!(
-                        error = err.as_ref() as &dyn std::error::Error,
-                        "failed to parse resource data"
-                    );
-                })
-                .ok()
-        })
-        // inject old secrets into the secrets added in this deployment
-        .inspect(|r| {
-            if r.r#type == shuttle_common::resource::Type::Secrets {
-                match serde_json::from_value::<SecretStore>(r.data.clone()) {
-                    Ok(ss) => {
-                        // Combine old and new, but insert old first so that new ones override.
-                        let mut combined = HashMap::from_iter(ss.into_iter());
-                        combined.extend(new_secrets.clone().into_iter());
-                        new_secrets = combined;
-                    }
-                    Err(err) => {
-                        error!(
-                            error = &err as &dyn std::error::Error,
-                            "failed to parse old secrets data"
-                        );
-                    }
-                }
-            }
-        })
-        .collect::<Vec<_>>();
-
+    new_secrets: &HashMap<String, String>,
+) -> Result<Vec<Vec<u8>>> {
     debug!(shuttle.project.name = %service_name, "loading service");
     let response = runtime_client
         .load(Request::new(LoadRequest {
@@ -525,7 +516,7 @@ async fn load(
             }
 
             if response.success {
-                Ok((prev_resources, response.resources, new_secrets))
+                Ok(response.resources)
             } else {
                 let error = Error::Load(response.message);
                 error!(

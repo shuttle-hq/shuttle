@@ -144,7 +144,6 @@ _install_rust_and_cargo() {
     *) echo "Please answer yes or no." ;;
     esac
   done
-  echo "rustup installed!"
 }
 
 _install_with_cargo() {

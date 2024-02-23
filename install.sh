@@ -164,8 +164,6 @@ _install_unsupported() {
   if ! command -v cargo &>/dev/null; then
     if ! command -v rustup &>/dev/null; then
       _install_rust_and_cargo
-      _install_with_cargo
-      return 0
     else
       echo "rustup was found, but cargo wasn't. Something is up with your install"
       exit 1

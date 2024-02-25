@@ -35,7 +35,7 @@ use shuttle_common::{
     },
     request_span, LogItem,
 };
-use shuttle_proto::logger::LogsRequest;
+use shuttle_proto::logger::{LogsRequest, LogsRequestMode};
 
 use crate::persistence::{Deployment, Persistence, State};
 use crate::{
@@ -57,8 +57,8 @@ pub struct PaginationDetails {
 
 #[derive(Deserialize)]
 struct LogSize {
-    head: Option<String>,
-    tail: Option<String>,
+    head: Option<u32>,
+    tail: Option<u32>,
 }
 #[derive(Clone)]
 pub struct RouterBuilder {
@@ -466,8 +466,16 @@ pub async fn get_logs(
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
     Query(LogSize { head, tail }): Query<LogSize>,
 ) -> Result<Json<Vec<LogItem>>> {
-    let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
+    let (mode, len) = match (head, tail) {
+        (Some(len), None) => ("head", len),
+        (None, Some(len)) => ("tail", len),
+        (None, None) => ("all", 0),
+        _ => ("tail", 1000),
+    };
+    let mut logs_request: tonic::Request<LogsRequestMode> = tonic::Request::new(LogsRequestMode {
         deployment_id: deployment_id.to_string(),
+        mode: mode.to_string(),
+        len: len,
     });
 
     logs_request.extensions_mut().insert(claim);

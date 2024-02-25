@@ -11,7 +11,7 @@ use shuttle_common_tests::JwtScopesLayer;
 use shuttle_logger::{Postgres, Service};
 use shuttle_proto::logger::{
     logger_client::LoggerClient, logger_server::LoggerServer, LogItem, LogLine, LogsRequest,
-    StoreLogsRequest,
+    LogsRequestMode, StoreLogsRequest,
 };
 use sqlx::__rt::timeout;
 use tokio::task::JoinHandle;
@@ -84,8 +84,10 @@ mod needs_docker {
 
             // Get logs
             let logs = client
-                .get_logs(Request::new(LogsRequest {
+                .get_logs(Request::new(LogsRequestMode {
                     deployment_id: deployment_id.into(),
+                    mode: "tail".to_string(),
+                    len: 1000,
                 }))
                 .await
                 .unwrap()

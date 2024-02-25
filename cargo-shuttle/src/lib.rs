@@ -745,7 +745,7 @@ impl Shuttle {
         tail: Option<u32>,
         all: bool,
     ) -> Result<CommandOutcome> {
-        let mode = match (head, tail, all) {
+        let (mode, len) = match (head, tail, all) {
             (Some(num), _, _) => ("head", num),
             (_, Some(num), _) => ("tail", num),
             (_, _, all) if all => ("all", 0),
@@ -819,7 +819,7 @@ impl Shuttle {
             }
         } else {
             let logs = client
-                .get_logs(self.ctx.project_name(), &id, mode)
+                .get_logs(self.ctx.project_name(), &id, mode, len)
                 .await
                 .map_err(|err| {
                     suggestions::logs::get_logs_failure(err, "Fetching the deployment failed")

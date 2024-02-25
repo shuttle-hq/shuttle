@@ -18,6 +18,16 @@ pub struct LogsRequest {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LogsRequestMode {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub mode: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "3")]
+    pub len: u32,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogsResponse {
     #[prost(message, repeated, tag = "1")]
     pub log_items: ::prost::alloc::vec::Vec<LogLine>,
@@ -145,7 +155,7 @@ pub mod logger_client {
         /// Get stored logs
         pub async fn get_logs(
             &mut self,
-            request: impl tonic::IntoRequest<super::LogsRequest>,
+            request: impl tonic::IntoRequest<super::LogsRequestMode>,
         ) -> std::result::Result<tonic::Response<super::LogsResponse>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::new(

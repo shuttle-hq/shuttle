@@ -178,17 +178,12 @@ impl Client {
         &self,
         project: &str,
         deployment_id: &Uuid,
-        mode: (&str, u32),
+        mode: &str,
+        len: u32,
     ) -> Result<Vec<LogItem>> {
-        let path = match mode.0 {
-            "head" => format!(
-                "/projects/{project}/deployments/{deployment_id}/logs?head={}",
-                mode.1
-            ),
-            "tail" => format!(
-                "/projects/{project}/deployments/{deployment_id}/logs?tail={}",
-                mode.1
-            ),
+        let path = match mode {
+            "head" => format!("/projects/{project}/deployments/{deployment_id}/logs?head={len}"),
+            "tail" => format!("/projects/{project}/deployments/{deployment_id}/logs?tail={len}"),
             _ => format!("/projects/{project}/deployments/{deployment_id}/logs"),
         };
 

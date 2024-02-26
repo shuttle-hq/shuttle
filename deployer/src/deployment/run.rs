@@ -320,21 +320,21 @@ impl Built {
             })
             .collect::<Vec<_>>();
 
-        let mut resources = load(
+        let resources = load(
             self.service_name.clone(),
             runtime_client.clone(),
             &new_secrets,
         )
         .await?;
 
-        provision(
+        let resources = provision(
             self.service_name.as_str(),
             self.service_id,
             provisioner_client,
             resource_manager,
             self.claim,
             prev_resources,
-            resources.as_mut_slice(),
+            resources,
             new_secrets,
         )
         .await
@@ -386,9 +386,9 @@ async fn provision(
     mut resource_manager: impl ResourceManager,
     claim: Claim,
     prev_resources: Vec<resource::Response>,
-    resources: &mut [Vec<u8>],
+    mut resources: Vec<Vec<u8>>,
     new_secrets: HashMap<String, String>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<Vec<u8>>> {
     let mut resources_to_save: Vec<record_request::Resource> = Vec::new();
 
     // Go through each item in the resources, and
@@ -496,7 +496,7 @@ async fn provision(
         bail!("failed saving resources to resource-recorder")
     }
 
-    Ok(())
+    Ok(resources)
 }
 
 async fn load(

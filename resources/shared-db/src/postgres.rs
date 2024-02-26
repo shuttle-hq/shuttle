@@ -22,7 +22,7 @@ impl Postgres {
 #[async_trait]
 impl ResourceInputBuilder for Postgres {
     type Input = ProvisionResourceRequest;
-    type Output = Wrapper;
+    type Output = OutputWrapper;
 
     async fn build(self, _factory: &ResourceFactory) -> Result<Self::Input, Error> {
         Ok(ProvisionResourceRequest::new(
@@ -35,10 +35,10 @@ impl ResourceInputBuilder for Postgres {
 
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Wrapper(ShuttleResourceOutput<DatabaseResource>);
+pub struct OutputWrapper(ShuttleResourceOutput<DatabaseResource>);
 
 #[async_trait]
-impl IntoResource<String> for Wrapper {
+impl IntoResource<String> for OutputWrapper {
     async fn into_resource(self) -> Result<String, Error> {
         Ok(match self.0.output {
             DatabaseResource::ConnectionString(s) => s.clone(),
@@ -49,7 +49,7 @@ impl IntoResource<String> for Wrapper {
 
 #[cfg(feature = "sqlx")]
 #[async_trait]
-impl IntoResource<sqlx::PgPool> for Wrapper {
+impl IntoResource<sqlx::PgPool> for OutputWrapper {
     async fn into_resource(self) -> Result<sqlx::PgPool, Error> {
         let connection_string: String = self.into_resource().await.unwrap();
 

@@ -46,7 +46,7 @@ pub enum MaybeRequest {
 impl ResourceInputBuilder for Qdrant {
     type Input = MaybeRequest;
     // The response can be a provisioned container, depending on local/deployment and config.
-    type Output = Wrapper;
+    type Output = OutputWrapper;
 
     async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
         let md = factory.get_metadata();
@@ -90,7 +90,7 @@ impl ResourceInputBuilder for Qdrant {
 
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Wrapper {
+pub enum OutputWrapper {
     Container(ShuttleResourceOutput<ContainerResponse>),
     Config(QdrantClientConfigWrap),
 }
@@ -104,7 +104,7 @@ pub struct QdrantClientConfigWrap {
 }
 
 #[async_trait]
-impl IntoResource<QdrantClient> for Wrapper {
+impl IntoResource<QdrantClient> for OutputWrapper {
     async fn into_resource(self) -> Result<QdrantClient, Error> {
         let config = match self {
             Self::Container(output) => {

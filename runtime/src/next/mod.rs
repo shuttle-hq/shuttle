@@ -16,8 +16,8 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::{
-    LoadRequest, LoadResponse, Runtime, StartRequest, StartResponse, StopReason, StopRequest,
-    StopResponse, SubscribeStopRequest, SubscribeStopResponse,
+    runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason,
+    StopRequest, StopResponse, SubscribeStopRequest, SubscribeStopResponse,
 };
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;

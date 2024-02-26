@@ -462,34 +462,34 @@ async fn provision(
                     r#type: shuttle_resource.r#type.to_string(),
                     // Send only the config fields that affect provisioning
                     // For now, this is "null" for all database types
-                    config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
-                    data: serde_json::to_vec(&output).unwrap(),
+                    config: serde_json::to_vec(&serde_json::Value::Null).expect("to serialize struct"),
+                    data: serde_json::to_vec(&output).expect("to serialize struct"),
                 });
                 *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                     output,
                     custom: shuttle_resource.custom,
                 })
-                .unwrap();
+                .expect("to serialize struct");
             }
             resource::Type::Secrets => {
                 // We already know the secrets at this stage, they are not provisioned like other resources
                 resources_to_save.push(record_request::Resource {
                     r#type: shuttle_resource.r#type.to_string(),
-                    config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
-                    data: serde_json::to_vec(&new_secrets).unwrap(),
+                    config: serde_json::to_vec(&serde_json::Value::Null).expect("to serialize struct"),
+                    data: serde_json::to_vec(&new_secrets).expect("to serialize struct"),
                 });
                 *bytes = serde_json::to_vec(&ShuttleResourceOutput {
                     output: new_secrets.clone(),
                     custom: shuttle_resource.custom,
                 })
-                .unwrap();
+                .expect("to serialize struct");
             }
             resource::Type::Persist => {
                 // this resource is still tracked until EOL, even though we don't provision it
                 resources_to_save.push(record_request::Resource {
                     r#type: shuttle_resource.r#type.to_string(),
-                    config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
-                    data: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
+                    config: serde_json::to_vec(&serde_json::Value::Null).expect("to serialize struct"),
+                    data: serde_json::to_vec(&serde_json::Value::Null).expect("to serialize struct"),
                 });
             }
             resource::Type::Container => {

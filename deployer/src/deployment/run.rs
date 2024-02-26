@@ -9,6 +9,7 @@ use std::{
 use anyhow::{bail, Context};
 use async_trait::async_trait;
 use opentelemetry::global;
+use serde::de::DeserializeOwned;
 use shuttle_common::{
     claims::Claim,
     constants::{EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION},
@@ -16,7 +17,7 @@ use shuttle_common::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
-    resource::{self, ResourceInput},
+    resource::{self, ProvisionResourceRequest, ResourceInput},
     DatabaseResource, DbInput, SecretStore,
 };
 use shuttle_proto::{
@@ -352,6 +353,31 @@ impl Built {
     }
 }
 
+fn log(ty: resource::Type, msg: &str) {
+    info!("[Resource][{}] {}", ty, msg);
+}
+fn get_cached_output<T: DeserializeOwned>(
+    shuttle_resource: &ProvisionResourceRequest,
+    prev_resources: &[resource::Response],
+) -> Option<T> {
+    prev_resources
+        .iter()
+        .find(|resource| {
+            resource.r#type == shuttle_resource.r#type && resource.config == shuttle_resource.config
+        })
+        .and_then(|resource| {
+            let cached_output = resource.data.clone();
+            log(shuttle_resource.r#type, "Found cached output");
+            match serde_json::from_value::<T>(cached_output) {
+                Ok(output) => Some(output),
+                Err(_) => {
+                    log(shuttle_resource.r#type, "Failed to validate cached output");
+                    None
+                }
+            }
+        })
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn provision(
     project_name: &str,
@@ -377,40 +403,6 @@ async fn provision(
             .context("deserializing resource input")?
         {
             ResourceInput::Shuttle(shuttle_resource) => {
-                macro_rules! log {
-                    ($msg:expr) => {
-                        info!("[Resource][{}] {}", shuttle_resource.r#type, $msg);
-                    };
-                }
-                macro_rules! get_cached_output_or_provision {
-                    ($output_type:ty, $provision_logic:expr) => {{
-                        let output = prev_resources
-                            .iter()
-                            .find(|resource| {
-                                resource.r#type == shuttle_resource.r#type
-                                    && resource.config == shuttle_resource.config
-                            })
-                            .and_then(|resource| {
-                                let cached_output = resource.data.clone();
-                                log!("Found cached output");
-                                match serde_json::from_value::<$output_type>(cached_output) {
-                                    Ok(output) => Some(output),
-                                    Err(_) => {
-                                        log!("Failed to validate cached output");
-                                        None
-                                    }
-                                }
-                            });
-                        match output {
-                            Some(o) => o,
-                            None => {
-                                log!("Provisioning...");
-                                $provision_logic
-                            }
-                        }
-                    }};
-                }
-
                 if shuttle_resource.version != RESOURCE_SCHEMA_VERSION {
                     bail!("
                         Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
@@ -431,19 +423,26 @@ async fn provision(
                             serde_json::from_value(shuttle_resource.config.clone())
                                 .context("deserializing resource config")?;
 
-                        let output = get_cached_output_or_provision!(DatabaseResource, {
-                            let mut req = Request::new(DatabaseRequest {
-                                project_name: project_name.to_string(),
-                                db_type: Some(db_type.into()),
-                                // other relevant config fields would go here
-                            });
-                            req.extensions_mut().insert(claim.clone());
-                            let res = provisioner_client
-                                .provision_database(req)
-                                .await?
-                                .into_inner();
-                            DatabaseResource::Info(res.into())
-                        });
+                        let output =
+                            get_cached_output(&shuttle_resource, prev_resources.as_slice());
+                        let output = match output {
+                            Some(o) => o,
+                            None => {
+                                log(shuttle_resource.r#type, "Provisioning...");
+                                // ###
+                                let mut req = Request::new(DatabaseRequest {
+                                    project_name: project_name.to_string(),
+                                    db_type: Some(db_type.into()),
+                                    // other relevant config fields would go here
+                                });
+                                req.extensions_mut().insert(claim.clone());
+                                let res = provisioner_client
+                                    .provision_database(req)
+                                    .await?
+                                    .into_inner();
+                                DatabaseResource::Info(res.into())
+                            }
+                        };
 
                         resources_to_save.push(record_request::Resource {
                             r#type: shuttle_resource.r#type.to_string(),

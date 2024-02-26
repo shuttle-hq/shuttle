@@ -1072,6 +1072,12 @@ impl Shuttle {
             project_name: service_name.to_string(),
             env: Environment::Local.to_string(),
             secrets: secrets.clone(),
+            path: service
+                .executable_path
+                .clone()
+                .into_os_string()
+                .into_string()
+                .expect("to convert path to string"),
             ..Default::default()
         });
 

@@ -9,7 +9,8 @@ keywords = ["shuttle-service", "rds"]
 [dependencies]
 async-trait = "0.1.56"
 paste = "1.0.7"
-serde = { version = "1.0.148", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 shuttle-service = { path = "../../service", version = "0.39.0", default-features = false }
 sqlx = { version = "0.7.1", optional = true }
 

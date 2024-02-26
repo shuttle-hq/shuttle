@@ -2,7 +2,11 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use shuttle_service::{DatabaseResource, Error, IntoResource};
+use shuttle_service::{
+    database,
+    resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
+    DatabaseResource, DbInput, Error, IntoResource, ResourceInputBuilder, ResourceFactory,
+};
 
 macro_rules! aws_engine {
     ($feature:expr, $struct_ident:ident) => {
@@ -10,7 +14,7 @@ macro_rules! aws_engine {
             #[cfg(feature = $feature)]
             #[derive(Default)]
             #[doc = "Shuttle managed AWS RDS " $struct_ident " instance"]
-            pub struct $struct_ident(shuttle_service::DbInput);
+            pub struct $struct_ident(DbInput);
 
             #[cfg(feature = $feature)]
             impl $struct_ident {
@@ -24,41 +28,20 @@ macro_rules! aws_engine {
 
             #[cfg(feature = $feature)]
             #[async_trait::async_trait]
-            impl shuttle_service::ResourceBuilder for $struct_ident {
-                const TYPE: shuttle_service::resource::Type = shuttle_service::resource::Type::Database(
-                    shuttle_service::database::Type::AwsRds(
-                        shuttle_service::database::AwsRdsEngine::$struct_ident
-                    )
-                );
-
-                type Config = shuttle_service::DbInput;
+            impl ResourceInputBuilder for $struct_ident {
+                type Input = ProvisionResourceRequest;
                 type Output = OutputWrapper;
 
-                fn config(&self) -> &Self::Config {
-                    &self.0
-                }
-
-                async fn output(self, factory: &mut dyn shuttle_service::Factory) -> Result<Self::Output, shuttle_service::Error> {
-                    let info = match factory.get_metadata().env {
-                        shuttle_service::Environment::Deployment => shuttle_service::DatabaseResource::Info(
-                            factory
-                                .get_db_connection(shuttle_service::database::Type::AwsRds(shuttle_service::database::AwsRdsEngine::$struct_ident))
-                                .await?
+                async fn build(self, _factory: &ResourceFactory) -> Result<Self::Input, Error> {
+                    Ok(ProvisionResourceRequest::new(
+                        Type::Database(
+                            database::Type::AwsRds(
+                                database::AwsRdsEngine::$struct_ident
+                            )
                         ),
-                        shuttle_service::Environment::Local => {
-                            if let Some(local_uri) = self.0.local_uri {
-                                shuttle_service::DatabaseResource::ConnectionString(local_uri)
-                            } else {
-                                shuttle_service::DatabaseResource::Info(
-                                    factory
-                                        .get_db_connection(shuttle_service::database::Type::AwsRds(shuttle_service::database::AwsRdsEngine::$struct_ident))
-                                        .await?
-                                )
-                            }
-                        }
-                    };
-
-                    Ok(OutputWrapper(info))
+                        serde_json::to_value(&self.0).unwrap(),
+                        serde_json::Value::Null,
+                    ))
                 }
             }
         }
@@ -73,12 +56,12 @@ aws_engine!("mariadb", MariaDB);
 
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct OutputWrapper(DatabaseResource);
+pub struct OutputWrapper(ShuttleResourceOutput<DatabaseResource>);
 
 #[async_trait]
 impl IntoResource<String> for OutputWrapper {
     async fn into_resource(self) -> Result<String, Error> {
-        Ok(match self.0 {
+        Ok(match self.0.output {
             DatabaseResource::ConnectionString(s) => s.clone(),
             DatabaseResource::Info(info) => info.connection_string_shuttle(),
         })

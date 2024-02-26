@@ -346,11 +346,19 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader(
-                mut _factory: ::shuttle_runtime::__internals::ProvisionerFactory,
-                mut _resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
+            async fn __loader(
+                _factory: ::shuttle_runtime::ResourceFactory,
+            ) -> Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
+                use ::shuttle_runtime::__internals::Context;
+                let mut v = Vec::new();
+                Ok(v)
+            }
+
+            async fn __runner(
+                resources: Vec<Vec<u8>>,
             ) -> ShuttleSimple {
                 use ::shuttle_runtime::__internals::Context;
+                let mut iter = resources.into_iter();
                 simple().await
             }
         };
@@ -417,32 +425,54 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader(
-                mut factory: ::shuttle_runtime::__internals::ProvisionerFactory,
-                mut resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
-            ) -> ShuttleComplex {
+            async fn __loader(
+                factory: ::shuttle_runtime::ResourceFactory,
+            ) -> Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
-                use ::shuttle_runtime::{Factory, IntoResource};
-                let pool: sqlx::PgPool = ::shuttle_runtime::__internals::get_resource::<_, _, sqlx::PgPool>(
-                    shuttle_shared_db::Postgres::default(),
-                    &mut factory,
-                    &mut resource_tracker,
-                )
-                .await
-                .context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?
-                .into_resource()
-                .await
-                .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Postgres)))?;
-                let redis: something::Redis = ::shuttle_runtime::__internals::get_resource::<_, _, something::Redis>(
-                    shuttle_shared_db::Redis::default(),
-                    &mut factory,
-                    &mut resource_tracker,
-                )
-                .await
-                .context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?
-                .into_resource()
-                .await
-                .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Redis)))?;
+                use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
+                let mut v = Vec::new();
+                let b: <shuttle_shared_db::Postgres as ResourceInputBuilder>::Input =
+                    shuttle_shared_db::Postgres::default()
+                    .build(&factory)
+                    .await
+                    .context(format!("failed to construct config for {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let j = ::shuttle_runtime::__internals::serde_json::to_vec(&b)
+                    .context(format!("failed to serialize config for {}", stringify!(shuttle_shared_db::Postgres)))?;
+                v.push(j);
+                let b: <shuttle_shared_db::Redis as ResourceInputBuilder>::Input =
+                    shuttle_shared_db::Redis::default()
+                    .build(&factory)
+                    .await
+                    .context(format!("failed to construct config for {}", stringify!(shuttle_shared_db::Redis)))?;
+                let j = ::shuttle_runtime::__internals::serde_json::to_vec(&b)
+                    .context(format!("failed to serialize config for {}", stringify!(shuttle_shared_db::Redis)))?;
+                v.push(j);
+                Ok(v)
+            }
+
+            async fn __runner(
+                resources: Vec<Vec<u8>>,
+            ) -> ShuttleComplex {
+
+                use ::shuttle_runtime::__internals::Context;
+                use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
+                let mut iter = resources.into_iter();
+                let x: <shuttle_shared_db::Postgres as ResourceInputBuilder>::Output =
+                    ::shuttle_runtime::__internals::serde_json::from_slice(
+                        &iter.next().expect("resource list to have correct length")
+                    )
+                    .context(format!("failed to deserialize output for {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let pool: sqlx::PgPool = x.into_resource()
+                    .await
+                    .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let x: <shuttle_shared_db::Redis as ResourceInputBuilder>::Output =
+                    ::shuttle_runtime::__internals::serde_json::from_slice(
+                        &iter.next().expect("resource list to have correct length")
+                    )
+                    .context(format!("failed to deserialize output for {}", stringify!(shuttle_shared_db::Redis)))?;
+                let redis: something::Redis = x.into_resource()
+                    .await
+                    .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Redis)))?;
 
                 __shuttle_complex(pool, redis).await
             }
@@ -540,24 +570,38 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader(
-                mut factory: ::shuttle_runtime::__internals::ProvisionerFactory,
-                mut resource_tracker: ::shuttle_runtime::__internals::ResourceTracker,
+            async fn __loader(
+                factory: ::shuttle_runtime::ResourceFactory,
+            ) -> Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
+                use ::shuttle_runtime::__internals::Context;
+                use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
+                let __vars = std::collections::HashMap::from_iter(factory.get_secrets().into_iter().map(|(key, value)| (format!("secrets.{}", key), value.expose().clone())));
+                let mut v = Vec::new();
+                let b: <shuttle_shared_db::Postgres as ResourceInputBuilder>::Input =
+                    shuttle_shared_db::Postgres::default()
+                    .size(&::shuttle_runtime::__internals::strfmt("10Gb", &__vars)?).public(false)
+                    .build(&factory)
+                    .await
+                    .context(format!("failed to construct config for {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let j = ::shuttle_runtime::__internals::serde_json::to_vec(&b)
+                    .context(format!("failed to serialize config for {}", stringify!(shuttle_shared_db::Postgres)))?;
+                v.push(j);
+                Ok(v)
+            }
+            async fn __runner(
+                resources: Vec<Vec<u8>>,
             ) -> ShuttleComplex {
                 use ::shuttle_runtime::__internals::Context;
-                use ::shuttle_runtime::{Factory, IntoResource};
-                let __vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value.expose().clone())));
-                let pool: sqlx::PgPool = ::shuttle_runtime::__internals::get_resource::<_, _, sqlx::PgPool>(
-                    shuttle_shared_db::Postgres::default().size(&::shuttle_runtime::__internals::strfmt("10Gb", &__vars)?).public(false),
-                    &mut factory,
-                    &mut resource_tracker,
-                )
-                .await
-                .context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?
-                .into_resource()
-                .await
-                .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Postgres)))?;
-                std::mem::drop(__vars);
+                use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
+                let mut iter = resources.into_iter();
+                let x: <shuttle_shared_db::Postgres as ResourceInputBuilder>::Output =
+                    ::shuttle_runtime::__internals::serde_json::from_slice(
+                        &iter.next().expect("resource list to have correct length")
+                    )
+                    .context(format!("failed to deserialize output for {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let pool: sqlx::PgPool = x.into_resource()
+                    .await
+                    .context(format!("failed to initialize {}", stringify!(shuttle_shared_db::Postgres)))?;
 
                 complex(pool).await
             }

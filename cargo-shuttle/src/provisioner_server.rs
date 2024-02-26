@@ -209,13 +209,13 @@ impl LocalProvisioner {
     ) -> Result<ContainerResponse, Status> {
         let ContainerRequest {
             project_name,
-            container_type,
+            container_name,
             env,
             image,
             port,
         } = req;
 
-        let container_name = format!("shuttle_{project_name}_{container_type}");
+        let container_name = format!("shuttle_{project_name}_{container_name}");
 
         let container = self
             .get_container(&container_name, &image, &port, Some(env))
@@ -223,7 +223,7 @@ impl LocalProvisioner {
 
         let host_port = self.get_container_first_host_port(&container, &port);
 
-        self.start_container_if_not_running(&container, &container_type, &container_name)
+        self.start_container_if_not_running(&container, &container_name, &container_name)
             .await;
 
         Ok(ContainerResponse { host_port })

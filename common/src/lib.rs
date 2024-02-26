@@ -169,11 +169,12 @@ impl DatabaseInfo {
     }
 }
 
+/// Used to request a container from the local run provisioner
 #[derive(Serialize, Deserialize)]
 pub struct ContainerRequest {
     pub project_name: String,
     /// Type of container, used in the container name. ex "qdrant"
-    pub container_type: String,
+    pub container_name: String,
     /// ex. "qdrant/qdrant:latest"
     pub image: String,
     /// The internal port that the container should expose. ex. "6334/tcp"
@@ -182,6 +183,7 @@ pub struct ContainerRequest {
     pub env: Vec<String>,
 }
 
+/// Response from requesting a container from the local run provisioner
 #[derive(Serialize, Deserialize)]
 pub struct ContainerResponse {
     /// The port that the container exposes to the host.

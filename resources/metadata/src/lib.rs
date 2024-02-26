@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use shuttle_service::{Error, ResourceFactory, ResourceInputBuilder};
 pub use shuttle_service::{DeploymentMetadata as Metadata, Environment, SecretStore};
+use shuttle_service::{Error, ResourceFactory, ResourceInputBuilder};
 
 #[derive(Default)]
 pub struct ShuttleMetadata;

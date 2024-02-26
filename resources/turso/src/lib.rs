@@ -3,7 +3,7 @@ use libsql::{Connection, Database};
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
-    Environment, IntoResource, ResourceInputBuilder, ResourceFactory,
+    Environment, IntoResource, ResourceFactory, ResourceInputBuilder,
 };
 use url::Url;
 

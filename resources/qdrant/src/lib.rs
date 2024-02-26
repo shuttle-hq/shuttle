@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error},
     resource::{ProvisionResourceRequest, Type},
-    ContainerRequest, ContainerResponse, Environment, IntoResource, ResourceInputBuilder,
-    ResourceFactory, ShuttleResourceOutput,
+    ContainerRequest, ContainerResponse, Environment, IntoResource, ResourceFactory,
+    ResourceInputBuilder, ShuttleResourceOutput,
 };
 
 /// A Qdrant vector database
@@ -52,37 +52,31 @@ impl ResourceInputBuilder for Qdrant {
         let md = factory.get_metadata();
         match md.env {
             Environment::Deployment => match self.cloud_url {
-                Some(cloud_url) => Ok(MaybeRequest::NotRequest(
-                    QdrantClientConfigWrap {
-                        url: cloud_url,
-                        api_key: self.api_key,
-                    }),
-                ),
+                Some(cloud_url) => Ok(MaybeRequest::NotRequest(QdrantClientConfigWrap {
+                    url: cloud_url,
+                    api_key: self.api_key,
+                })),
                 None => Err(Error::Custom(CustomError::msg(
                     "missing `cloud_url` parameter",
                 ))),
             },
             Environment::Local => match self.local_url {
-                Some(local_url) => Ok(MaybeRequest::NotRequest(
-                    QdrantClientConfigWrap {
-                        url: local_url,
-                        api_key: self.api_key,
-                    }),
-                ),
-                None => Ok(MaybeRequest::Request(
-                    ProvisionResourceRequest::new(
-                        Type::Container,
-                        serde_json::to_value(&ContainerRequest {
-                            project_name: md.project_name,
-                            container_type: "qdrant".to_string(),
-                            image: "docker.io/qdrant/qdrant:v1.7.4".to_string(),
-                            port: "6334/tcp".to_string(),
-                            env: vec![],
-                        })
-                        .unwrap(),
-                        serde_json::Value::Null,
-                    )
-                )),
+                Some(local_url) => Ok(MaybeRequest::NotRequest(QdrantClientConfigWrap {
+                    url: local_url,
+                    api_key: self.api_key,
+                })),
+                None => Ok(MaybeRequest::Request(ProvisionResourceRequest::new(
+                    Type::Container,
+                    serde_json::to_value(&ContainerRequest {
+                        project_name: md.project_name,
+                        container_type: "qdrant".to_string(),
+                        image: "docker.io/qdrant/qdrant:v1.7.4".to_string(),
+                        port: "6334/tcp".to_string(),
+                        env: vec![],
+                    })
+                    .unwrap(),
+                    serde_json::Value::Null,
+                ))),
             },
         }
     }
@@ -107,12 +101,10 @@ pub struct QdrantClientConfigWrap {
 impl IntoResource<QdrantClient> for OutputWrapper {
     async fn into_resource(self) -> Result<QdrantClient, Error> {
         let config = match self {
-            Self::Container(output) => {
-                QdrantClientConfigWrap {
-                    url: format!("http://localhost:{}", output.output.host_port),
-                    api_key: None,
-                }
-            }
+            Self::Container(output) => QdrantClientConfigWrap {
+                url: format!("http://localhost:{}", output.output.host_port),
+                api_key: None,
+            },
             Self::Config(c) => c,
         };
         Ok(QdrantClientConfig::from_url(&config.url)

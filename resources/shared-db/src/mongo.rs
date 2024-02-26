@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use shuttle_service::{
     database,
     resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
-    DatabaseResource, DbInput, Error, IntoResource, ResourceInputBuilder, ResourceFactory,
+    DatabaseResource, DbInput, Error, IntoResource, ResourceFactory, ResourceInputBuilder,
 };
 
 /// Shuttle managed MongoDB in a shared cluster
@@ -58,7 +58,8 @@ impl IntoResource<mongodb::Database> for OutputWrapper {
         client_options.min_pool_size = Some(1);
         client_options.max_pool_size = Some(5);
 
-        let client = mongodb::Client::with_options(client_options).map_err(shuttle_service::CustomError::new)?;
+        let client = mongodb::Client::with_options(client_options)
+            .map_err(shuttle_service::CustomError::new)?;
 
         // Return a handle to the database defined at the end of the connection string,
         // which is the users provisioned database

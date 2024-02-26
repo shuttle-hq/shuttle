@@ -6,7 +6,7 @@ use opendal::{Operator, Scheme};
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
-    IntoResource, ResourceInputBuilder, ResourceFactory,
+    IntoResource, ResourceFactory, ResourceInputBuilder,
 };
 
 #[derive(Serialize)]
@@ -73,7 +73,7 @@ impl IntoResource<Operator> for OpendalOutput {
 #[cfg(test)]
 mod test {
     use super::*;
-    use shuttle_service::{Environment};
+    use shuttle_service::Environment;
 
     #[tokio::test]
     async fn opendal_fs() {

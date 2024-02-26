@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use shuttle_service::{
     database,
     resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
-    DatabaseResource, DbInput, Error, IntoResource, ResourceInputBuilder, ResourceFactory,
+    DatabaseResource, DbInput, Error, IntoResource, ResourceFactory, ResourceInputBuilder,
 };
 
 /// Shuttle managed Postgres DB in a shared cluster

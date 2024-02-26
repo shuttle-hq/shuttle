@@ -64,8 +64,9 @@ impl Provisioner for ProvisionerMock {
     }
 }
 
-async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
-    let provisioner_addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
+async fn spawn_provisioner_server() -> Option<u16> {
+    let port = pick_unused_port().unwrap();
+    let provisioner_addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
     tokio::spawn(async move {
         Server::builder()
@@ -75,6 +76,10 @@ async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
             .unwrap();
     });
 
+    Some(port)
+}
+
+async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
     let logger_client = Batcher::wrap(get_mocked_logger_client(MockedLogger).await);
 
     RuntimeManager::new(logger_client)
@@ -144,6 +149,7 @@ async fn can_be_killed() {
     let id = built.id;
     let runtime_manager = get_runtime_manager().await;
     let (cleanup_send, cleanup_recv) = oneshot::channel();
+    let port = spawn_provisioner_server().await.unwrap();
 
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
@@ -163,7 +169,7 @@ async fn can_be_killed() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
-            provisioner::get_client("http://localhost:123".parse().unwrap()).await,
+            provisioner::get_client(format!("http://localhost:{port}").parse().unwrap()).await,
         )
         .await
         .unwrap();
@@ -186,6 +192,7 @@ async fn self_stop() {
     let (built, path) = make_and_built("sleep-async").await;
     let runtime_manager = get_runtime_manager().await;
     let (cleanup_send, cleanup_recv) = oneshot::channel();
+    let port = spawn_provisioner_server().await.unwrap();
 
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
@@ -205,7 +212,7 @@ async fn self_stop() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
-            provisioner::get_client("http://localhost:123".parse().unwrap()).await,
+            provisioner::get_client(format!("http://localhost:{port}").parse().unwrap()).await,
         )
         .await
         .unwrap();
@@ -219,12 +226,80 @@ async fn self_stop() {
     drop(runtime_manager);
 }
 
+// Test for panics in the resource builder functions
+#[tokio::test]
+#[should_panic(expected = "Load(\"load panic\")")]
+async fn panic_in_load() {
+    let (built, path) = make_and_built("load-panic").await;
+    let runtime_manager = get_runtime_manager().await;
+    let port = spawn_provisioner_server().await.unwrap();
+
+    let handle_cleanup = |_result| panic!("service should never be started");
+
+    let x = built
+        .handle(
+            StubResourceManager,
+            runtime_manager.clone(),
+            kill_old_deployments(),
+            handle_cleanup,
+            path.as_path(),
+            provisioner::get_client(format!("http://localhost:{port}").parse().unwrap()).await,
+        )
+        .await;
+    println!("{:?}", x);
+
+    x.unwrap();
+}
+
+// Test for panics in the main function
+#[tokio::test]
+async fn panic_in_main() {
+    let (built, path) = make_and_built("main-panic").await;
+    let runtime_manager = get_runtime_manager().await;
+    let (cleanup_send, cleanup_recv) = oneshot::channel();
+    let port = spawn_provisioner_server().await.unwrap();
+
+    let handle_cleanup = |response: Option<SubscribeStopResponse>| {
+        let response = response.unwrap();
+        match (
+            StopReason::try_from(response.reason).unwrap(),
+            response.message,
+        ) {
+            (StopReason::Crash, mes) if mes.contains("panic in main") => {
+                cleanup_send.send(()).unwrap()
+            }
+            (_, mes) => panic!("expected stop due to crash: {mes}"),
+        }
+    };
+
+    built
+        .handle(
+            StubResourceManager,
+            runtime_manager.clone(),
+            kill_old_deployments(),
+            handle_cleanup,
+            path.as_path(),
+            provisioner::get_client(format!("http://localhost:{port}").parse().unwrap()).await,
+        )
+        .await
+        .unwrap();
+
+    tokio::select! {
+        _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service handle stopped after panic"),
+        Ok(()) = cleanup_recv => {}
+    }
+
+    // Prevent the runtime manager from dropping earlier, which will kill the processes it manages
+    drop(runtime_manager);
+}
+
 // Test for panics in Service::bind
 #[tokio::test]
 async fn panic_in_bind() {
     let (built, path) = make_and_built("bind-panic").await;
     let runtime_manager = get_runtime_manager().await;
     let (cleanup_send, cleanup_recv) = oneshot::channel();
+    let port = spawn_provisioner_server().await.unwrap();
 
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
@@ -246,7 +321,7 @@ async fn panic_in_bind() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
-            provisioner::get_client("http://localhost:123".parse().unwrap()).await,
+            provisioner::get_client(format!("http://localhost:{port}").parse().unwrap()).await,
         )
         .await
         .unwrap();
@@ -258,30 +333,6 @@ async fn panic_in_bind() {
 
     // Prevent the runtime manager from dropping earlier, which will kill the processes it manages
     drop(runtime_manager);
-}
-
-// Test for panics in the main function
-#[tokio::test]
-#[should_panic(expected = "Load(\"main panic\")")]
-async fn panic_in_main() {
-    let (built, path) = make_and_built("main-panic").await;
-    let runtime_manager = get_runtime_manager().await;
-
-    let handle_cleanup = |_result| panic!("service should never be started");
-
-    let x = built
-        .handle(
-            StubResourceManager,
-            runtime_manager.clone(),
-            kill_old_deployments(),
-            handle_cleanup,
-            path.as_path(),
-            provisioner::get_client("http://localhost:123".parse().unwrap()).await,
-        )
-        .await;
-    println!("{:?}", x);
-
-    x.unwrap();
 }
 
 async fn make_and_built(crate_name: &str) -> (Built, PathBuf) {

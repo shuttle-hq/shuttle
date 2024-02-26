@@ -15,7 +15,7 @@ use shuttle_common::{
     constants::{EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION},
     deployment::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
-        DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_RESPONSE,
+        DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_FAILED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
     resource::{self, ProvisionResourceRequest, ResourceInput},
     DatabaseResource, DbInput, SecretStore,
@@ -592,6 +592,8 @@ async fn run(
         Ok(response) => {
             if response.into_inner().success {
                 info!("{}", DEPLOYER_RUNTIME_START_RESPONSE);
+            } else {
+                info!("{}", DEPLOYER_RUNTIME_START_FAILED);
             }
 
             // Wait for stop reason

@@ -256,13 +256,17 @@ where
 
         let runner = self.runner.lock().unwrap().deref_mut().take().unwrap();
 
+        let stopped_tx = self.stopped_tx.clone();
+
         // send to new thread to catch panics
         let service = match tokio::spawn(runner.run(resources)).await {
             Ok(res) => match res {
                 Ok(service) => service,
                 Err(error) => {
                     println!("starting service failed: {error:#}");
-
+                    let _ = stopped_tx
+                        .send((StopReason::Crash, error.to_string()))
+                        .map_err(|e| println!("{e}"));
                     return Ok(Response::new(StartResponse {
                         success: false,
                         message: error.to_string(),
@@ -281,17 +285,22 @@ where
                     };
 
                     println!("loading service panicked: {msg}");
+                    let _ = stopped_tx
+                        .send((StopReason::Crash, msg.to_string()))
+                        .map_err(|e| println!("{e}"));
                     return Ok(Response::new(StartResponse {
                         success: false,
                         message: msg,
                     }));
-                } else {
-                    println!("loading service crashed: {error:#}");
-                    return Ok(Response::new(StartResponse {
-                        success: false,
-                        message: error.to_string(),
-                    }));
                 }
+                println!("loading service crashed: {error:#}");
+                let _ = stopped_tx
+                    .send((StopReason::Crash, error.to_string()))
+                    .map_err(|e| println!("{e}"));
+                return Ok(Response::new(StartResponse {
+                    success: false,
+                    message: error.to_string(),
+                }));
             }
         };
 
@@ -299,8 +308,6 @@ where
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
-
-        let stopped_tx = self.stopped_tx.clone();
 
         let handle = tokio::runtime::Handle::current();
 
@@ -329,7 +336,6 @@ where
                                 };
 
                                 println!("service panicked: {msg}");
-
                                 let _ = stopped_tx
                                     .send((StopReason::Crash, msg))
                                     .map_err(|e| println!("{e}"));

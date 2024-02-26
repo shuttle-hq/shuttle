@@ -10,7 +10,7 @@ keywords = ["shuttle-service", "opendal"]
 async-trait = "0.1.56"
 opendal = "0.45"
 serde = { version = "1", features = ["derive"] }
-shuttle-service = { path = "../../service", version = "0.39.0", default-features = false }
+shuttle-service = { path = "../../service", version = "0.39.0" }
 
 [dev-dependencies]
 tokio = { version = "1.28.2", features = ["rt-multi-thread", "macros"] }

@@ -73,7 +73,7 @@ impl IntoResource<Operator> for OpendalOutput {
 #[cfg(test)]
 mod test {
     use super::*;
-    use shuttle_service::Environment;
+    use shuttle_service::Secret;
 
     #[tokio::test]
     async fn opendal_fs() {
@@ -81,13 +81,13 @@ mod test {
             Default::default(),
             [("root", "/tmp")]
                 .into_iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .map(|(k, v)| (k.to_string(), Secret::new(v.to_string())))
                 .collect(),
             Default::default(),
         );
 
         let odal = Opendal::default().scheme("fs");
-        let output = odal.output(&factory).await.unwrap();
+        let output = odal.build(&factory).await.unwrap();
         assert_eq!(output.scheme, "fs");
 
         let op: Operator = output.into_resource().await.unwrap();
@@ -105,16 +105,16 @@ mod test {
                 ("region", "us-east-1"),
             ]
             .into_iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| (k.to_string(), Secret::new(v.to_string())))
             .collect(),
             Default::default(),
         );
 
         let odal = Opendal::default().scheme("s3");
-        let output = odal.output(&factory).await.unwrap();
+        let output = odal.build(&factory).await.unwrap();
         assert_eq!(output.scheme, "s3");
-        assert_eq!(output.cfg.get("access_key_id").unwrap().expose(), "ak");
-        assert_eq!(output.cfg.get("secret_access_key").unwrap().expose(), "sk");
+        assert_eq!(output.cfg.get("access_key_id").unwrap(), "ak");
+        assert_eq!(output.cfg.get("secret_access_key").unwrap(), "sk");
 
         let op: Operator = output.into_resource().await.unwrap();
         assert_eq!(op.info().scheme(), Scheme::S3)

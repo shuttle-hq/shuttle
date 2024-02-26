@@ -27,7 +27,7 @@ impl ResourceInputBuilder for MongoDb {
     async fn build(self, _factory: &ResourceFactory) -> Result<Self::Input, Error> {
         Ok(ProvisionResourceRequest::new(
             Type::Database(database::Type::Shared(database::SharedEngine::MongoDb)),
-            serde_json::to_value(&self.0).unwrap(),
+            serde_json::to_value(self.0).unwrap(),
             serde_json::Value::Null,
         ))
     }

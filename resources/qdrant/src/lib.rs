@@ -67,7 +67,7 @@ impl ResourceInputBuilder for Qdrant {
                 })),
                 None => Ok(MaybeRequest::Request(ProvisionResourceRequest::new(
                     Type::Container,
-                    serde_json::to_value(&ContainerRequest {
+                    serde_json::to_value(ContainerRequest {
                         project_name: md.project_name,
                         container_type: "qdrant".to_string(),
                         image: "docker.io/qdrant/qdrant:v1.7.4".to_string(),

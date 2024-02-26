@@ -8,4 +8,4 @@ keywords = ["shuttle-service", "metadata"]
 
 [dependencies]
 async-trait = "0.1.56"
-shuttle-service = { path = "../../service", version = "0.39.0", default-features = false }
+shuttle-service = { path = "../../service", version = "0.39.0" }

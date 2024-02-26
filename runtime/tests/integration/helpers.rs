@@ -6,47 +6,43 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
+use shuttle_common_tests::provisioner::get_mocked_provisioner_client;
 use shuttle_proto::{
     provisioner::{
-        provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+        provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseRequest,
+        DatabaseResponse, Ping, Pong,
     },
     runtime,
 };
 use shuttle_service::{builder::build_workspace, runner};
 use tokio::process::Child;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status};
 
 pub struct TestRuntime {
     pub runtime_client: runtime::Client,
     pub bin_path: String,
-    pub service_name: String,
     pub runtime_address: SocketAddr,
     pub secrets: HashMap<String, String>,
     pub runtime: Child,
 }
 
-pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<TestRuntime> {
-    let provisioner_address = SocketAddr::new(
-        Ipv4Addr::LOCALHOST.into(),
-        portpicker::pick_unused_port().unwrap(),
-    );
+pub async fn spawn_runtime(project_path: &str) -> Result<TestRuntime> {
     let runtime_port = portpicker::pick_unused_port().unwrap();
     let runtime_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), runtime_port);
 
     let (tx, _) = tokio::sync::mpsc::channel::<String>(256);
-    let runtimes = build_workspace(Path::new(&project_path), false, tx, false).await?;
+    let runtimes = build_workspace(Path::new(project_path), false, tx, false).await?;
     let service = runtimes[0].clone();
 
     let secrets: HashMap<String, String> = Default::default();
 
-    start_provisioner(DummyProvisioner, provisioner_address);
+    get_mocked_provisioner_client(DummyProvisioner).await;
 
     // TODO: update this to work with shuttle-next projects, see cargo-shuttle local run
     let runtime_executable = service.executable_path.clone();
 
     let (runtime, runtime_client) =
-        runner::start(runtime_port, runtime_executable, Path::new(&project_path)).await?;
+        runner::start(runtime_port, runtime_executable, Path::new(project_path)).await?;
 
     Ok(TestRuntime {
         runtime_client,
@@ -55,7 +51,6 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
             .into_os_string()
             .into_string()
             .expect("to convert path to string"),
-        service_name: service_name.to_string(),
         runtime_address,
         secrets,
         runtime,
@@ -65,15 +60,6 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
 /// A dummy provisioner for tests, a provisioner connection is required
 /// to start a project runtime.
 pub struct DummyProvisioner;
-
-fn start_provisioner(provisioner: DummyProvisioner, address: SocketAddr) {
-    tokio::spawn(async move {
-        Server::builder()
-            .add_service(ProvisionerServer::new(provisioner))
-            .serve(address)
-            .await
-    });
-}
 
 #[async_trait]
 impl Provisioner for DummyProvisioner {

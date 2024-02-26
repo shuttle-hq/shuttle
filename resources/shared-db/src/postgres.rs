@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use shuttle_service::{
     database,
     resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
-    DatabaseResource, DbInput, Error, IntoResource, IntoResourceInput, ResourceFactory,
+    DatabaseResource, DbInput, Error, IntoResource, ResourceInputBuilder, ResourceFactory,
 };
 
 /// Shuttle managed Postgres DB in a shared cluster
@@ -20,11 +20,11 @@ impl Postgres {
 }
 
 #[async_trait]
-impl IntoResourceInput for Postgres {
+impl ResourceInputBuilder for Postgres {
     type Input = ProvisionResourceRequest;
     type Output = Wrapper;
 
-    async fn into_resource_input(self, _factory: &ResourceFactory) -> Result<Self::Input, Error> {
+    async fn build(self, _factory: &ResourceFactory) -> Result<Self::Input, Error> {
         Ok(ProvisionResourceRequest::new(
             Type::Database(database::Type::Shared(database::SharedEngine::Postgres)),
             serde_json::to_value(&self.0).unwrap(),

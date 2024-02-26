@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error},
     resource::{ProvisionResourceRequest, Type},
-    ContainerRequest, ContainerResponse, Environment, IntoResource, IntoResourceInput,
+    ContainerRequest, ContainerResponse, Environment, IntoResource, ResourceInputBuilder,
     ResourceFactory, ShuttleResourceOutput,
 };
 
@@ -43,12 +43,12 @@ pub enum MaybeRequest {
 }
 
 #[async_trait]
-impl IntoResourceInput for Qdrant {
+impl ResourceInputBuilder for Qdrant {
     type Input = MaybeRequest;
     // The response can be a provisioned container, depending on local/deployment and config.
     type Output = Wrapper;
 
-    async fn into_resource_input(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
+    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, Error> {
         let md = factory.get_metadata();
         match md.env {
             Environment::Deployment => match self.cloud_url {

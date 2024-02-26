@@ -35,27 +35,24 @@ pub mod runner;
 /// of custom resources, please [get in touch](https://discord.gg/shuttle) and detail your use case. We'll be interested to see what you
 /// want to provision and how to do it on your behalf on the fly.
 #[async_trait]
-pub trait IntoResourceInput: Default {
+pub trait ResourceInputBuilder: Default {
     /// The input for requesting this resource.
     ///
     /// If the input is a [`shuttle_common::resource::ProvisionResourceRequest`],
-    /// then the resource will be provisioned and the [`IntoResourceInput::Output`]
+    /// then the resource will be provisioned and the [`ResourceInputBuilder::Output`]
     /// will be a [`shuttle_common::resource::ShuttleResourceOutput<T>`] with the resource's associated output type.
     type Input: Serialize + DeserializeOwned;
 
     /// The output from provisioning this resource.
     ///
     /// For custom resources that don't provision anything from Shuttle,
-    /// this should be the same type as [`IntoResourceInput::Input`].
+    /// this should be the same type as [`ResourceInputBuilder::Input`].
     ///
     /// This type must implement [`IntoResource`] for the desired final resource type `R`.
     type Output: Serialize + DeserializeOwned;
 
     /// Construct this resource config. The [`ResourceFactory`] provides access to secrets and metadata.
-    async fn into_resource_input(
-        self,
-        factory: &ResourceFactory,
-    ) -> Result<Self::Input, crate::Error>;
+    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, crate::Error>;
 }
 
 /// A factory for getting metadata when building resources
@@ -91,7 +88,7 @@ impl ResourceFactory {
     }
 }
 
-/// Implement this on an [`IntoResourceInput::Output`] type to turn the
+/// Implement this on an [`ResourceInputBuilder::Output`] type to turn the
 /// base resource into the end type exposed to the Shuttle main function.
 #[async_trait]
 pub trait IntoResource<R>: Serialize + DeserializeOwned {
@@ -101,7 +98,7 @@ pub trait IntoResource<R>: Serialize + DeserializeOwned {
     async fn into_resource(self) -> Result<R, crate::Error>;
 }
 
-// Base impls for [`IntoResourceInput::Output`] types that don't need to convert into anything else
+// Base impls for [`ResourceInputBuilder::Output`] types that don't need to convert into anything else
 #[async_trait]
 impl<R: Serialize + DeserializeOwned + Send> IntoResource<R> for R {
     async fn into_resource(self) -> Result<R, crate::Error> {

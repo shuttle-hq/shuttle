@@ -3,7 +3,7 @@ use async_trait::async_trait;
 pub use shuttle_service::SecretStore;
 use shuttle_service::{
     resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
-    Error, Factory, IntoResourceInput, ResourceFactory
+    Error, Factory, ResourceInputBuilder, ResourceFactory
 };
 
 /// Secrets plugin that provides service secrets
@@ -11,11 +11,11 @@ use shuttle_service::{
 pub struct Secrets;
 
 #[async_trait]
-impl IntoResourceInput for Secrets {
+impl ResourceInputBuilder for Secrets {
     type Input = ProvisionResourceRequest;
     type Output = ShuttleResourceOutput<SecretStore>;
 
-    async fn into_resource_input(self, _factory: &ResourceFactory) -> Result<Self::Input, crate::Error> {
+    async fn build(self, _factory: &ResourceFactory) -> Result<Self::Input, crate::Error> {
         Ok(ProvisionResourceRequest::new(
             Type::Secrets,
             serde_json::Value::Null,

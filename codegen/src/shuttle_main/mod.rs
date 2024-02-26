@@ -232,7 +232,7 @@ impl ToTokens for Loader {
             (
                 parse_quote!(factory),
                 Some(parse_quote!(
-                    use ::shuttle_runtime::{ResourceFactory, IntoResource, IntoResourceInput};
+                    use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
                 )),
             )
         };
@@ -262,10 +262,10 @@ impl ToTokens for Loader {
 
                 let mut v = Vec::new();
                 #(
-                    let b: <#fn_inputs_builder as IntoResourceInput>::Input =
+                    let b: <#fn_inputs_builder as ResourceInputBuilder>::Input =
                         #fn_inputs_builder::default()
                         #fn_inputs_builder_options // `vars` are used here
-                        .into_resource_input(&#factory_ident)
+                        .build(&#factory_ident)
                         .await
                         .context(format!("failed to construct config for {}", stringify!(#fn_inputs_builder)))?;
                     let j = ::shuttle_runtime::__internals::serde_json::to_vec(&b)
@@ -283,7 +283,7 @@ impl ToTokens for Loader {
 
                 let mut iter = resources.into_iter();
                 #(
-                    let x: <#fn_inputs_builder as IntoResourceInput>::Output =
+                    let x: <#fn_inputs_builder as ResourceInputBuilder>::Output =
                         ::shuttle_runtime::__internals::serde_json::from_slice(
                             &iter.next().expect("resource list to have correct length")
                         )

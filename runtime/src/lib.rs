@@ -206,7 +206,7 @@
 // Public API
 pub use shuttle_codegen::main;
 pub use shuttle_service::{
-    CustomError, DbInput, Error, IntoResource, IntoResourceInput, ResourceFactory, Service,
+    CustomError, DbInput, Error, IntoResource, ResourceFactory, ResourceInputBuilder, Service,
 };
 
 // Useful re-exports

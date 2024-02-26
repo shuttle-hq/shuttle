@@ -3,8 +3,7 @@ use libsql::{Connection, Database};
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
-    resource::Type,
-    Environment, Factory, IntoResource, ResourceBuilder,
+    Environment, IntoResource, ResourceInputBuilder, ResourceFactory,
 };
 use url::Url;
 
@@ -74,19 +73,11 @@ impl Turso {
 }
 
 #[async_trait]
-impl ResourceBuilder for Turso {
-    const TYPE: Type = Type::Custom;
-    type Config = Self;
+impl ResourceInputBuilder for Turso {
+    type Input = TursoOutput;
     type Output = TursoOutput;
 
-    fn config(&self) -> &Self::Config {
-        self
-    }
-
-    async fn output(
-        self,
-        factory: &mut dyn Factory,
-    ) -> Result<Self::Output, shuttle_service::Error> {
+    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, ShuttleError> {
         let md = factory.get_metadata();
         match md.env {
             Environment::Deployment => {
@@ -109,7 +100,7 @@ impl ResourceBuilder for Turso {
                         let db_file = std::env::current_dir() // Should be root of the project's workspace
                             .and_then(dunce::canonicalize)
                             .map(|cd| {
-                                let mut p = cd.join(md.service_name);
+                                let mut p = cd.join(md.project_name);
                                 p.set_extension("db");
                                 p
                             })

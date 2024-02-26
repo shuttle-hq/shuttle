@@ -57,9 +57,9 @@ pub trait ResourceInputBuilder: Default {
 
 /// A factory for getting metadata when building resources
 pub struct ResourceFactory {
-    pub(crate) project_name: String,
-    pub(crate) secrets: BTreeMap<String, Secret<String>>,
-    pub(crate) env: Environment,
+    project_name: String,
+    secrets: BTreeMap<String, Secret<String>>,
+    env: Environment,
 }
 
 impl ResourceFactory {

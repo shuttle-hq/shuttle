@@ -11,6 +11,6 @@ impl ResourceInputBuilder for ShuttleMetadata {
     type Output = Metadata;
 
     async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, crate::Error> {
-        Ok(factory.get_metadata().clone())
+        Ok(factory.get_metadata())
     }
 }

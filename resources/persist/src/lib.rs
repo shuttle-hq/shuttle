@@ -7,7 +7,7 @@ use std::{
 use async_trait::async_trait;
 use bincode::{deserialize_from, serialize_into, Error as BincodeError};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use shuttle_service::{resource::Type, DeploymentMetadata, Factory, ResourceBuilder};
+use shuttle_service::{DeploymentMetadata, ResourceFactory, ResourceInputBuilder};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -123,21 +123,13 @@ impl PersistInstance {
 }
 
 #[async_trait]
-impl ResourceBuilder for Persist {
-    const TYPE: Type = Type::Persist;
-    type Config = ();
+impl ResourceInputBuilder for Persist {
+    type Input = PersistInstance;
     type Output = PersistInstance;
 
-    fn config(&self) -> &Self::Config {
-        &()
-    }
-
-    async fn output(
-        self,
-        factory: &mut dyn Factory,
-    ) -> Result<Self::Output, shuttle_service::Error> {
+    async fn build(self, factory: &ResourceFactory) -> Result<Self::Input, shuttle_service::Error> {
         let DeploymentMetadata {
-            service_name,
+            project_name,
             storage_path,
             ..
         } = factory.get_metadata();
@@ -145,7 +137,7 @@ impl ResourceBuilder for Persist {
         PersistInstance::new(
             storage_path
                 .join(PathBuf::from("shuttle-persist"))
-                .join(PathBuf::from(service_name)), // separate persist directories per service
+                .join(PathBuf::from(project_name)), // separate persist directories per service
         )
         .map_err(|e| shuttle_service::Error::Custom(e.into()))
     }

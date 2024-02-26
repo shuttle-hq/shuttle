@@ -8,8 +8,8 @@ keywords = ["shuttle-service", "opendal"]
 
 [dependencies]
 async-trait = "0.1.56"
-opendal = {version = "0.45"}
-serde = { version = "1.0.148", features = ["derive"] }
+opendal = "0.45"
+serde = { version = "1", features = ["derive"] }
 shuttle-service = { path = "../../service", version = "0.39.0", default-features = false }
 
 [dev-dependencies]

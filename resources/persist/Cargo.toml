@@ -9,6 +9,6 @@ keywords = ["shuttle-service", "persistence"]
 [dependencies]
 async-trait = "0.1.56"
 bincode = "1.2.1"
-serde = { version = "1.0.0", features = ["derive"] }
-shuttle-service = { path = "../../service", version = "0.39.0" }
+serde = { version = "1", features = ["derive"] }
+shuttle-service = { path = "../../service", version = "0.39.0", default-features = false }
 thiserror = "1.0.32"

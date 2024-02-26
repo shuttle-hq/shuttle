@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 use async_trait::async_trait;
 use opentelemetry::global;
 use serde::de::DeserializeOwned;
@@ -399,26 +399,31 @@ async fn provision(
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
 
-    // Mutate resource bytes with provisioning output if relevant
     for (bytes, shuttle_resource) in
         resources
             .iter_mut()
             .zip(values)
+            // ignore non-Shuttle resource items
             .filter_map(|(bytes, value)| match value {
                 ResourceInput::Shuttle(shuttle_resource) => Some((bytes, shuttle_resource)),
                 ResourceInput::Custom(_) => None,
             })
+            .map(|(bytes, shuttle_resource)| {
+                if shuttle_resource.version == RESOURCE_SCHEMA_VERSION {
+                    Ok((bytes, shuttle_resource))
+                } else {
+                    Err(anyhow!("
+                        Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
+                        Make sure that this deployer and the Shuttle resource are up to date.
+                        ",
+                        shuttle_resource.r#type,
+                        RESOURCE_SCHEMA_VERSION,
+                        shuttle_resource.version
+                    ))
+                }
+            }).collect::<anyhow::Result<Vec<_>>>()?.into_iter()
     {
-        if shuttle_resource.version != RESOURCE_SCHEMA_VERSION {
-            bail!("
-            Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
-            Make sure that this deployer and the Shuttle resource are up to date.
-            ",
-            shuttle_resource.r#type,
-            RESOURCE_SCHEMA_VERSION,
-            shuttle_resource.version
-        );
-        }
+        // Mutate resource bytes with provisioning output if relevant
 
         // TODO?: Make the version integer be part of the cached output
 

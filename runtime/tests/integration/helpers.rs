@@ -6,17 +6,16 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
-use shuttle_common_tests::provisioner::get_mocked_provisioner_client;
 use shuttle_proto::{
     provisioner::{
-        provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseRequest,
-        DatabaseResponse, Ping, Pong,
+        provisioner_server::{Provisioner, ProvisionerServer},
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
     },
     runtime,
 };
 use shuttle_service::{builder::build_workspace, runner};
 use tokio::process::Child;
-use tonic::{Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Status};
 
 pub struct TestRuntime {
     pub runtime_client: runtime::Client,
@@ -36,7 +35,13 @@ pub async fn spawn_runtime(project_path: &str) -> Result<TestRuntime> {
 
     let secrets: HashMap<String, String> = Default::default();
 
-    get_mocked_provisioner_client(DummyProvisioner).await;
+    start_provisioner(
+        DummyProvisioner,
+        SocketAddr::new(
+            Ipv4Addr::LOCALHOST.into(),
+            portpicker::pick_unused_port().unwrap(),
+        ),
+    );
 
     // TODO: update this to work with shuttle-next projects, see cargo-shuttle local run
     let runtime_executable = service.executable_path.clone();
@@ -60,6 +65,15 @@ pub async fn spawn_runtime(project_path: &str) -> Result<TestRuntime> {
 /// A dummy provisioner for tests, a provisioner connection is required
 /// to start a project runtime.
 pub struct DummyProvisioner;
+
+fn start_provisioner(provisioner: DummyProvisioner, address: SocketAddr) {
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(ProvisionerServer::new(provisioner))
+            .serve(address)
+            .await
+    });
+}
 
 #[async_trait]
 impl Provisioner for DummyProvisioner {

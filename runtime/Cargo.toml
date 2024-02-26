@@ -42,7 +42,6 @@ wasmtime-wasi = { version = "13.0.0", optional = true }
 [dev-dependencies]
 portpicker = "0.1.1"
 futures = { workspace = true }
-shuttle-common-tests = { workspace = true }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
 uuid = { workspace = true }
 

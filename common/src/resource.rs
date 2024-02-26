@@ -42,7 +42,8 @@ pub enum ResourceInput {
 /// Returned when provisioning a Shuttle resource
 #[derive(Serialize, Deserialize)]
 pub struct ShuttleResourceOutput<T> {
-    /// The resource used when creating this resource
+    /// The output type for this Shuttle resource,
+    /// contains the data from the provisioner response
     pub output: T,
 
     /// Arbitrary extra data in this resource

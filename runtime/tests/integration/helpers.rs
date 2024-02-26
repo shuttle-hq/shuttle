@@ -9,12 +9,11 @@ use async_trait::async_trait;
 use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        ContainerRequest, ContainerResponse, DatabaseDeletionResponse, DatabaseRequest,
-        DatabaseResponse, Ping, Pong,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
     },
     runtime,
 };
-use shuttle_service::{builder::build_workspace, runner, Environment};
+use shuttle_service::{builder::build_workspace, runner};
 use tokio::process::Child;
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -46,16 +45,8 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
     // TODO: update this to work with shuttle-next projects, see cargo-shuttle local run
     let runtime_executable = service.executable_path.clone();
 
-    let (runtime, runtime_client) = runner::start(
-        service.is_wasm,
-        Environment::Local,
-        &format!("http://{}", provisioner_address),
-        None,
-        runtime_port,
-        runtime_executable,
-        Path::new(&project_path),
-    )
-    .await?;
+    let (runtime, runtime_client) =
+        runner::start(runtime_port, runtime_executable, Path::new(&project_path)).await?;
 
     Ok(TestRuntime {
         runtime_client,
@@ -91,13 +82,6 @@ impl Provisioner for DummyProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseResponse>, Status> {
         panic!("did not expect any runtime test to use dbs")
-    }
-
-    async fn provision_arbitrary_container(
-        &self,
-        _req: tonic::Request<ContainerRequest>,
-    ) -> Result<tonic::Response<ContainerResponse>, tonic::Status> {
-        panic!("did not expect any runtime test to use container")
     }
 
     async fn delete_database(

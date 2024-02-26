@@ -12,9 +12,9 @@ use shuttle_common_tests::logger::{get_mocked_logger_client, MockedLogger};
 use shuttle_proto::{
     logger::Batcher,
     provisioner::{
+        self,
         provisioner_server::{Provisioner, ProvisionerServer},
-        ContainerRequest, ContainerResponse, DatabaseDeletionResponse, DatabaseRequest,
-        DatabaseResponse, Ping, Pong,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
     },
     resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     runtime::{StopReason, SubscribeStopResponse},
@@ -56,13 +56,6 @@ impl Provisioner for ProvisionerMock {
         panic!("no run tests should delete a db");
     }
 
-    async fn provision_arbitrary_container(
-        &self,
-        _req: tonic::Request<ContainerRequest>,
-    ) -> Result<tonic::Response<ContainerResponse>, tonic::Status> {
-        panic!("no run tests should request container")
-    }
-
     async fn health_check(
         &self,
         _request: tonic::Request<Ping>,
@@ -84,7 +77,7 @@ async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
 
     let logger_client = Batcher::wrap(get_mocked_logger_client(MockedLogger).await);
 
-    RuntimeManager::new(format!("http://{}", provisioner_addr), logger_client, None)
+    RuntimeManager::new(logger_client)
 }
 
 #[derive(Clone)]
@@ -170,6 +163,7 @@ async fn can_be_killed() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
+            provisioner::get_client("http://localhost:123".parse().unwrap()).await,
         )
         .await
         .unwrap();
@@ -211,6 +205,7 @@ async fn self_stop() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
+            provisioner::get_client("http://localhost:123".parse().unwrap()).await,
         )
         .await
         .unwrap();
@@ -251,6 +246,7 @@ async fn panic_in_bind() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
+            provisioner::get_client("http://localhost:123".parse().unwrap()).await,
         )
         .await
         .unwrap();
@@ -280,6 +276,7 @@ async fn panic_in_main() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
+            provisioner::get_client("http://localhost:123".parse().unwrap()).await,
         )
         .await;
     println!("{:?}", x);

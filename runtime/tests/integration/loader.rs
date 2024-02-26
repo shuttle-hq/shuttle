@@ -1,4 +1,5 @@
 use shuttle_proto::runtime::{LoadRequest, StartRequest, StopReason, SubscribeStopRequest};
+use shuttle_service::Environment;
 
 use crate::helpers::{spawn_runtime, TestRuntime};
 
@@ -17,7 +18,8 @@ async fn bind_panic() {
 
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
-        service_name,
+        env: Environment::Local.to_string(),
+        project_name: service_name,
         resources: Default::default(),
         secrets,
     });
@@ -32,6 +34,7 @@ async fn bind_panic() {
 
     let start_request = StartRequest {
         ip: runtime_address.to_string(),
+        resources: Default::default(),
     };
 
     runtime_client
@@ -66,7 +69,8 @@ async fn bind_panic_owned() {
 
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
-        service_name,
+        env: Environment::Local.to_string(),
+        project_name: service_name,
         resources: Default::default(),
         secrets,
     });
@@ -81,6 +85,7 @@ async fn bind_panic_owned() {
 
     let start_request = StartRequest {
         ip: runtime_address.to_string(),
+        resources: Default::default(),
     };
 
     runtime_client
@@ -113,7 +118,8 @@ async fn loader_panic() {
 
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
-        service_name,
+        env: Environment::Local.to_string(),
+        project_name: service_name,
         resources: Default::default(),
         secrets,
     });
@@ -144,7 +150,8 @@ async fn loader_panic_owned() {
 
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
-        service_name,
+        env: Environment::Local.to_string(),
+        project_name: service_name,
         resources: Default::default(),
         secrets,
     });

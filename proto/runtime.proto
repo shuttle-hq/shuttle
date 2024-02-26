@@ -24,7 +24,8 @@ message LoadRequest {
 
   // deprecated for alpha, but still used in next
   string path = 2;
-  repeated bytes resources = 10 [deprecated = true];
+  // deprecated
+  repeated bytes resources = 10;
 }
 
 message LoadResponse {

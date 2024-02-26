@@ -13,7 +13,7 @@ pub struct LoadRequest {
     /// deprecated for alpha, but still used in next
     #[prost(string, tag = "2")]
     pub path: ::prost::alloc::string::String,
-    #[deprecated]
+    /// deprecated
     #[prost(bytes = "vec", repeated, tag = "10")]
     pub resources: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }

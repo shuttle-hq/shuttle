@@ -391,99 +391,105 @@ async fn provision(
 ) -> anyhow::Result<Vec<Vec<u8>>> {
     let mut resources_to_save: Vec<record_request::Resource> = Vec::new();
 
-    // Go through each item in the resources, and
-    //  1. parse and check if it's a valid Shuttle resource request
-    //  2. if valid, based on the resource type, do some of the following:
-    //   2a. verify the related config struct (if one is expected)
-    //   2b. provision the resource (if applicable)
-    //   2c. add a mocked resource response to show to the user (if relevant)
-    //   2d. overwrite the request's vec entry with the output of the provisioning (if provisioned)
-    for r in resources.iter_mut() {
-        match serde_json::from_slice::<ResourceInput>(r.as_slice())
-            .context("deserializing resource input")?
-        {
-            ResourceInput::Shuttle(shuttle_resource) => {
-                if shuttle_resource.version != RESOURCE_SCHEMA_VERSION {
-                    bail!("
-                        Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
-                        Make sure that this deployer and the Shuttle resource are up to date.
-                        ",
-                        shuttle_resource.r#type,
-                        RESOURCE_SCHEMA_VERSION,
-                        shuttle_resource.version
-                    );
-                }
+    // Fail early if any bytes is invalid json
+    let values = resources
+        .iter()
+        .map(|bytes| {
+            serde_json::from_slice::<ResourceInput>(bytes).context("deserializing resource input")
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
 
-                // TODO?: Make the version integer be part of the cached output
+    // Mutate resource bytes with provisioning output if relevant
+    for (bytes, shuttle_resource) in
+        resources
+            .iter_mut()
+            .zip(values)
+            .filter_map(|(bytes, value)| match value {
+                ResourceInput::Shuttle(shuttle_resource) => Some((bytes, shuttle_resource)),
+                ResourceInput::Custom(_) => None,
+            })
+    {
+        if shuttle_resource.version != RESOURCE_SCHEMA_VERSION {
+            bail!("
+            Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
+            Make sure that this deployer and the Shuttle resource are up to date.
+            ",
+            shuttle_resource.r#type,
+            RESOURCE_SCHEMA_VERSION,
+            shuttle_resource.version
+        );
+        }
 
-                match shuttle_resource.r#type {
-                    resource::Type::Database(db_type) => {
-                        // no config fields are used yet, but verify the format anyways
-                        let _config: DbInput =
-                            serde_json::from_value(shuttle_resource.config.clone())
-                                .context("deserializing resource config")?;
+        // TODO?: Make the version integer be part of the cached output
 
-                        let output =
-                            get_cached_output(&shuttle_resource, prev_resources.as_slice());
-                        let output = match output {
-                            Some(o) => o,
-                            None => {
-                                log(shuttle_resource.r#type, "Provisioning...");
-                                // ###
-                                let mut req = Request::new(DatabaseRequest {
-                                    project_name: project_name.to_string(),
-                                    db_type: Some(db_type.into()),
-                                    // other relevant config fields would go here
-                                });
-                                req.extensions_mut().insert(claim.clone());
-                                let res = provisioner_client
-                                    .provision_database(req)
-                                    .await?
-                                    .into_inner();
-                                DatabaseResource::Info(res.into())
-                            }
-                        };
+        // Based on the resource type, do some of the following:
+        //   - verify the related config struct (if one is expected)
+        //   - provision the resource (if applicable)
+        //   - add a mocked resource response to show to the user (if relevant)
+        //   - overwrite the request's vec entry with the output of the provisioning (if provisioned)
+        match shuttle_resource.r#type {
+            resource::Type::Database(db_type) => {
+                // no config fields are used yet, but verify the format anyways
+                let _config: DbInput = serde_json::from_value(shuttle_resource.config.clone())
+                    .context("deserializing resource config")?;
 
-                        resources_to_save.push(record_request::Resource {
-                            r#type: shuttle_resource.r#type.to_string(),
-                            // Send only the config fields that affect provisioning
-                            // For now, this is "null" for all database types
-                            config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
-                            data: serde_json::to_vec(&output).unwrap(),
+                let output = get_cached_output(&shuttle_resource, prev_resources.as_slice());
+                let output = match output {
+                    Some(o) => o,
+                    None => {
+                        log(shuttle_resource.r#type, "Provisioning...");
+                        // ###
+                        let mut req = Request::new(DatabaseRequest {
+                            project_name: project_name.to_string(),
+                            db_type: Some(db_type.into()),
+                            // other relevant config fields would go here
                         });
-                        *r = serde_json::to_vec(&ShuttleResourceOutput {
-                            output,
-                            custom: shuttle_resource.custom,
-                        })
-                        .unwrap();
+                        req.extensions_mut().insert(claim.clone());
+                        let res = provisioner_client
+                            .provision_database(req)
+                            .await?
+                            .into_inner();
+                        DatabaseResource::Info(res.into())
                     }
-                    resource::Type::Secrets => {
-                        // We already know the secrets at this stage, they are not provisioned like other resources
-                        resources_to_save.push(record_request::Resource {
-                            r#type: shuttle_resource.r#type.to_string(),
-                            config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
-                            data: serde_json::to_vec(&new_secrets).unwrap(),
-                        });
-                        *r = serde_json::to_vec(&ShuttleResourceOutput {
-                            output: new_secrets.clone(),
-                            custom: shuttle_resource.custom,
-                        })
-                        .unwrap();
-                    }
-                    resource::Type::Persist => {
-                        // this resource is still tracked until EOL, even though we don't provision it
-                        resources_to_save.push(record_request::Resource {
-                            r#type: shuttle_resource.r#type.to_string(),
-                            config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
-                            data: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
-                        });
-                    }
-                    resource::Type::Container => {
-                        bail!("Containers can't be requested during deployment");
-                    }
-                }
+                };
+
+                resources_to_save.push(record_request::Resource {
+                    r#type: shuttle_resource.r#type.to_string(),
+                    // Send only the config fields that affect provisioning
+                    // For now, this is "null" for all database types
+                    config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
+                    data: serde_json::to_vec(&output).unwrap(),
+                });
+                *bytes = serde_json::to_vec(&ShuttleResourceOutput {
+                    output,
+                    custom: shuttle_resource.custom,
+                })
+                .unwrap();
             }
-            ResourceInput::Custom(_) => (),
+            resource::Type::Secrets => {
+                // We already know the secrets at this stage, they are not provisioned like other resources
+                resources_to_save.push(record_request::Resource {
+                    r#type: shuttle_resource.r#type.to_string(),
+                    config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
+                    data: serde_json::to_vec(&new_secrets).unwrap(),
+                });
+                *bytes = serde_json::to_vec(&ShuttleResourceOutput {
+                    output: new_secrets.clone(),
+                    custom: shuttle_resource.custom,
+                })
+                .unwrap();
+            }
+            resource::Type::Persist => {
+                // this resource is still tracked until EOL, even though we don't provision it
+                resources_to_save.push(record_request::Resource {
+                    r#type: shuttle_resource.r#type.to_string(),
+                    config: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
+                    data: serde_json::to_vec(&serde_json::Value::Null).unwrap(),
+                });
+            }
+            resource::Type::Container => {
+                bail!("Containers can't be requested during deployment");
+            }
         }
     }
 

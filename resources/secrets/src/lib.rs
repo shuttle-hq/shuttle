@@ -3,7 +3,7 @@ use async_trait::async_trait;
 pub use shuttle_service::SecretStore;
 use shuttle_service::{
     resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
-    Error, Factory, ResourceInputBuilder, ResourceFactory
+    Error, ResourceInputBuilder, ResourceFactory
 };
 
 /// Secrets plugin that provides service secrets

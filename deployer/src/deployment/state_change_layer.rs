@@ -129,7 +129,6 @@ impl Visit for NewStateVisitor {
 mod tests {
     use std::{
         fs::read_dir,
-        net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
         sync::{Arc, Mutex},
         time::Duration,
@@ -145,10 +144,10 @@ mod tests {
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
-    use portpicker::pick_unused_port;
     use shuttle_common::claims::Claim;
     use shuttle_common_tests::{
         builder::get_mocked_builder_client, logger::get_mocked_logger_client,
+        provisioner::get_mocked_provisioner_client,
     };
     use shuttle_proto::{
         builder::{builder_server::Builder, BuildRequest, BuildResponse},
@@ -157,14 +156,14 @@ mod tests {
             StoreLogsRequest, StoreLogsResponse,
         },
         provisioner::{
-            provisioner_server::{Provisioner, ProvisionerServer},
-            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+            provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseRequest,
+            DatabaseResponse, Ping, Pong,
         },
         resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     };
     use tokio::{select, sync::mpsc, time::sleep};
     use tokio_stream::wrappers::ReceiverStream;
-    use tonic::{transport::Server, Request, Response, Status};
+    use tonic::{Request, Response, Status};
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     use ulid::Ulid;
     use uuid::Uuid;
@@ -354,17 +353,6 @@ mod tests {
     async fn get_runtime_manager(
         logger_client: Batcher<logger::Client>,
     ) -> Arc<tokio::sync::Mutex<RuntimeManager>> {
-        let provisioner_addr =
-            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
-        tokio::spawn(async move {
-            let mock = ProvisionerMock;
-            Server::builder()
-                .add_service(ProvisionerServer::new(mock))
-                .serve(provisioner_addr)
-                .await
-                .unwrap();
-        });
-
         RuntimeManager::new(logger_client)
     }
 
@@ -803,6 +791,7 @@ mod tests {
             .runtime(get_runtime_manager(Batcher::wrap(logger_client)).await)
             .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)
+            .provisioner_client(get_mocked_provisioner_client(ProvisionerMock).await)
             .build()
     }
 

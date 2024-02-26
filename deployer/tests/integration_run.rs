@@ -1,20 +1,16 @@
-use std::{
-    net::{Ipv4Addr, SocketAddr},
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use portpicker::pick_unused_port;
 use shuttle_common::{claims::Claim, constants::EXECUTABLE_DIRNAME};
-use shuttle_common_tests::logger::{get_mocked_logger_client, MockedLogger};
+use shuttle_common_tests::{
+    logger::{get_mocked_logger_client, MockedLogger},
+    provisioner::get_mocked_provisioner_client,
+};
 use shuttle_proto::{
     logger::Batcher,
     provisioner::{
-        self,
-        provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
+        provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseRequest,
+        DatabaseResponse, Ping, Pong,
     },
     resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     runtime::{StopReason, SubscribeStopResponse},
@@ -24,7 +20,6 @@ use tokio::{
     sync::{oneshot, Mutex},
     time::sleep,
 };
-use tonic::transport::Server;
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -62,21 +57,6 @@ impl Provisioner for ProvisionerMock {
     ) -> Result<tonic::Response<Pong>, tonic::Status> {
         panic!("no run tests should do a health check");
     }
-}
-
-async fn spawn_provisioner_server() -> Option<u16> {
-    let port = pick_unused_port().unwrap();
-    let provisioner_addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-
-    tokio::spawn(async move {
-        Server::builder()
-            .add_service(ProvisionerServer::new(ProvisionerMock))
-            .serve(provisioner_addr)
-            .await
-            .unwrap();
-    });
-
-    Some(port)
 }
 
 async fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
@@ -149,7 +129,6 @@ async fn can_be_killed() {
     let id = built.id;
     let runtime_manager = get_runtime_manager().await;
     let (cleanup_send, cleanup_recv) = oneshot::channel();
-    let port = spawn_provisioner_server().await.unwrap();
 
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
@@ -169,7 +148,7 @@ async fn can_be_killed() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
-            provisioner::get_client(format!("http://localhost:{port}").parse().unwrap()).await,
+            get_mocked_provisioner_client(ProvisionerMock).await,
         )
         .await
         .unwrap();
@@ -192,7 +171,6 @@ async fn self_stop() {
     let (built, path) = make_and_built("sleep-async").await;
     let runtime_manager = get_runtime_manager().await;
     let (cleanup_send, cleanup_recv) = oneshot::channel();
-    let port = spawn_provisioner_server().await.unwrap();
 
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
@@ -212,7 +190,7 @@ async fn self_stop() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
-            provisioner::get_client(format!("http://localhost:{port}").parse().unwrap()).await,
+            get_mocked_provisioner_client(ProvisionerMock).await,
         )
         .await
         .unwrap();
@@ -232,7 +210,6 @@ async fn self_stop() {
 async fn panic_in_load() {
     let (built, path) = make_and_built("load-panic").await;
     let runtime_manager = get_runtime_manager().await;
-    let port = spawn_provisioner_server().await.unwrap();
 
     let handle_cleanup = |_result| panic!("service should never be started");
 
@@ -243,7 +220,7 @@ async fn panic_in_load() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
-            provisioner::get_client(format!("http://localhost:{port}").parse().unwrap()).await,
+            get_mocked_provisioner_client(ProvisionerMock).await,
         )
         .await;
     println!("{:?}", x);
@@ -257,7 +234,6 @@ async fn panic_in_main() {
     let (built, path) = make_and_built("main-panic").await;
     let runtime_manager = get_runtime_manager().await;
     let (cleanup_send, cleanup_recv) = oneshot::channel();
-    let port = spawn_provisioner_server().await.unwrap();
 
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
@@ -279,7 +255,7 @@ async fn panic_in_main() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
-            provisioner::get_client(format!("http://localhost:{port}").parse().unwrap()).await,
+            get_mocked_provisioner_client(ProvisionerMock).await,
         )
         .await
         .unwrap();
@@ -299,7 +275,6 @@ async fn panic_in_bind() {
     let (built, path) = make_and_built("bind-panic").await;
     let runtime_manager = get_runtime_manager().await;
     let (cleanup_send, cleanup_recv) = oneshot::channel();
-    let port = spawn_provisioner_server().await.unwrap();
 
     let handle_cleanup = |response: Option<SubscribeStopResponse>| {
         let response = response.unwrap();
@@ -321,7 +296,7 @@ async fn panic_in_bind() {
             kill_old_deployments(),
             handle_cleanup,
             path.as_path(),
-            provisioner::get_client(format!("http://localhost:{port}").parse().unwrap()).await,
+            get_mocked_provisioner_client(ProvisionerMock).await,
         )
         .await
         .unwrap();

@@ -7,6 +7,7 @@
 default_to_workspace = false
 
 [env]
+RUST_BACKTRACE = 0
 CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 # TAG = { script = ["git describe --tags --abbrev=0"] }
 

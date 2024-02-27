@@ -355,6 +355,8 @@ impl Built {
 fn log(ty: resource::Type, msg: &str) {
     info!("[Resource][{}] {}", ty, msg);
 }
+
+/// If an old resource with matching type + config and valid data exists, return it
 fn get_cached_output<T: DeserializeOwned>(
     shuttle_resource: &ProvisionResourceRequest,
     prev_resources: &[resource::Response],
@@ -424,7 +426,7 @@ async fn provision(
     {
         // Mutate resource bytes with provisioning output if relevant
 
-        // TODO?: Make the version integer be part of the cached output
+        // TODO (when moved to provisioner): Make the version integer be part of the cached output
 
         // Based on the resource type, do some of the following:
         //   - verify the related config struct (if one is expected)

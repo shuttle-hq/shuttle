@@ -57,7 +57,7 @@ CONTAINER_REGISTRY=public.ecr.aws/shuttle
 # make sure we only ever go to production with `--tls=enable`
 USE_TLS=enable
 CARGO_PROFILE=release
-RUST_LOG?=nbuild_core=warn,shuttle=debug,info
+RUST_LOG?=shuttle=debug,info
 else
 DOCKER_COMPOSE_FILES=docker-compose.yml docker-compose.dev.yml
 STACK?=shuttle-dev
@@ -67,7 +67,7 @@ CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 USE_TLS?=disable
 # default for local run
 CARGO_PROFILE?=debug
-RUST_LOG?=nbuild_core=warn,shuttle=debug,info
+RUST_LOG?=shuttle=debug,info
 DEV_SUFFIX=-dev
 DEPLOYS_API_KEY?=gateway4deployes
 GATEWAY_ADMIN_KEY?=dh9z58jttoes3qvt

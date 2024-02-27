@@ -32,7 +32,6 @@ use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
 use crate::persistence::DeploymentUpdater;
 
-#[allow(clippy::too_many_arguments)]
 pub async fn task(
     mut recv: QueueReceiver,
     run_send: RunSender,

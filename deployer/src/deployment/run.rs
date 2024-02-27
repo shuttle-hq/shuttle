@@ -233,7 +233,6 @@ impl Built {
         skip(self, resource_manager, runtime_manager, kill_old_deployments, cleanup),
         fields(deployment_id = %self.id, state = %State::Loading)
     )]
-    #[allow(clippy::too_many_arguments)]
     pub async fn handle(
         self,
         resource_manager: impl ResourceManager,

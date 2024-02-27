@@ -27,7 +27,6 @@ RUN find . \( \
     \) -type f -exec install -D \{\} /build/\{\} \;
 WORKDIR /build
 RUN cargo chef prepare --recipe-path /recipe.json
-# TODO upstream: Reduce the cooking by allowing multiple --bin args to prepare, or like this https://github.com/LukeMathWalker/cargo-chef/issues/181
 
 
 # Builds crate according to cargo chef recipe.
@@ -39,13 +38,19 @@ COPY --from=chef-planner /recipe.json /
 RUN cargo chef cook \
     --all-features \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
-    --recipe-path /recipe.json
+    --recipe-path /recipe.json \
+    --bin shuttle-auth \
+    --bin shuttle-deployer \
+    --bin shuttle-gateway \
+    --bin shuttle-logger \
+    --bin shuttle-provisioner \
+    --bin shuttle-resource-recorder \
+    --bin shuttle-next
 COPY --from=chef-planner /build .
 # Building all at once to share build artifacts in the "cook" layer
 RUN cargo build \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
     --bin shuttle-auth \
-    # --bin shuttle-builder \
     --bin shuttle-deployer \
     --bin shuttle-gateway \
     --bin shuttle-logger \

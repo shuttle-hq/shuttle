@@ -256,6 +256,9 @@ impl Built {
         let executable_path = project_path
             .join(EXECUTABLE_DIRNAME)
             .join(self.id.to_string());
+        let cached_resources_path = project_path
+            .join(EXECUTABLE_DIRNAME)
+            .join(format!("{}.resources", self.id));
 
         // Let the runtime expose its user HTTP port on port 8000
         let address = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 8000);
@@ -281,60 +284,80 @@ impl Built {
 
         info!("Loading resources");
 
-        let mut new_secrets = self.secrets;
-        let prev_resources = resource_manager
-            .get_resources(&self.service_id, self.claim.clone())
-            .await
-            .map_err(|err| Error::Load(err.to_string()))?
-            .resources
-            .into_iter()
-            .map(resource::Response::try_from)
-            // Ignore and trace the errors for resources with corrupted data, returning just the valid resources.
-            // TODO: investigate how the resource data can get corrupted.
-            .filter_map(|resource| {
-                resource
-                    .map_err(|err| {
-                        error!(error = ?err, "failed to parse resource data");
-                    })
-                    .ok()
-            })
-            // inject old secrets into the secrets added in this deployment
-            .inspect(|r| {
-                if r.r#type == shuttle_common::resource::Type::Secrets {
-                    match serde_json::from_value::<SecretStore>(r.data.clone()) {
-                        Ok(ss) => {
-                            // Combine old and new, but insert old first so that new ones override.
-                            let mut combined = HashMap::from_iter(ss.into_iter());
-                            combined.extend(new_secrets.clone().into_iter());
-                            new_secrets = combined;
-                        }
-                        Err(err) => {
-                            error!(error = ?err, "failed to parse old secrets data");
+        // Check for cached resources for this deployment id. This only happens on wakeup from idle.
+        let resources = if let Some(bytes) = std::fs::read(&cached_resources_path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(bytes.as_slice()).ok())
+        {
+            bytes
+        }
+        // Default case for handling resources and provisioning
+        else {
+            let mut new_secrets = self.secrets;
+            let prev_resources = resource_manager
+                .get_resources(&self.service_id, self.claim.clone())
+                .await
+                .map_err(|err| Error::Load(err.to_string()))?
+                .resources
+                .into_iter()
+                .map(resource::Response::try_from)
+                // Ignore and trace the errors for resources with corrupted data, returning just the valid resources.
+                // TODO: investigate how the resource data can get corrupted.
+                .filter_map(|resource| {
+                    resource
+                        .map_err(|err| {
+                            error!(error = ?err, "failed to parse resource data");
+                        })
+                        .ok()
+                })
+                // inject old secrets into the secrets added in this deployment
+                .inspect(|r| {
+                    if r.r#type == shuttle_common::resource::Type::Secrets {
+                        match serde_json::from_value::<SecretStore>(r.data.clone()) {
+                            Ok(ss) => {
+                                // Combine old and new, but insert old first so that new ones override.
+                                let mut combined = HashMap::from_iter(ss.into_iter());
+                                combined.extend(new_secrets.clone().into_iter());
+                                new_secrets = combined;
+                            }
+                            Err(err) => {
+                                error!(error = ?err, "failed to parse old secrets data");
+                            }
                         }
                     }
-                }
-            })
-            .collect::<Vec<_>>();
+                })
+                .collect::<Vec<_>>();
 
-        let resources = load(
-            self.service_name.clone(),
-            runtime_client.clone(),
-            &new_secrets,
-        )
-        .await?;
+            let resources = load(
+                self.service_name.clone(),
+                runtime_client.clone(),
+                &new_secrets,
+            )
+            .await?;
 
-        let resources = provision(
-            self.service_name.as_str(),
-            self.service_id,
-            provisioner_client,
-            resource_manager,
-            self.claim,
-            prev_resources,
-            resources,
-            new_secrets,
-        )
-        .await
-        .map_err(Error::Provision)?;
+            let resources = provision(
+                self.service_name.as_str(),
+                self.service_id,
+                provisioner_client,
+                resource_manager,
+                self.claim,
+                prev_resources,
+                resources,
+                new_secrets,
+            )
+            .await
+            .map_err(Error::Provision)?;
+
+            // cache the final resources output for use in wakeups
+            // this should only happen on deployment, and not on wakeups
+            std::fs::write(
+                &cached_resources_path,
+                serde_json::to_vec(&resources).expect("resources to serialize"),
+            )
+            .map_err(|_| Error::Load("Failed to save resource cache".into()))?;
+
+            resources
+        };
 
         kill_old_deployments.await?;
 

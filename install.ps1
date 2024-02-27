@@ -14,6 +14,9 @@ Please file an issue if you encounter any problems!
 "@
 
     $Arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE", [EnvironmentVariableTarget]::Machine)
+    $TempDir = $Env:TEMP
+    $RepoUrl = "https://github.com/shuttle-hq/shuttle"
+    $CargoHome = if ($null -ne $Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
 
     if (Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo-binstall.exe) {
         Write-Host "Installing cargo-shuttle using cargo binstall"
@@ -59,10 +62,6 @@ Please file an issue if you encounter any problems!
 			return
 		}
     }
-
-    $RepoUrl = "https://github.com/shuttle-hq/shuttle"
-    $CargoHome = if ($null -ne $Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
-    $TempDir = $Env:TEMP
 
     if (($Arch -eq "AMD64") -and (Get-Command -CommandType Application -ErrorAction SilentlyContinue tar.exe)) {
         (Invoke-WebRequest "$RepoUrl/releases/latest" -Headers @{ "Accept" = "application/json" }).Content -match '"tag_name":"([^"]*)"' | Out-Null

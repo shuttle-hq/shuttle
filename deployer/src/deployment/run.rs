@@ -160,7 +160,6 @@ async fn kill_old_deployments(
     let mut guard = runtime_manager.lock().await;
 
     for old_id in active_deployment_getter
-        .clone()
         .get_active_deployments(&service_id)
         .await
         .map_err(|e| Error::OldCleanup(Box::new(e)))?
@@ -281,8 +280,6 @@ impl Built {
             .await
             .map_err(Error::Runtime)?;
 
-        kill_old_deployments.await?; // TODO: Move to between load and provision? Or even after provision?
-
         info!("Loading resources");
 
         let mut new_secrets = self.secrets;
@@ -339,6 +336,8 @@ impl Built {
         )
         .await
         .map_err(Error::Provision)?;
+
+        kill_old_deployments.await?;
 
         let handler = tokio::spawn(run(
             self.id,

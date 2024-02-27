@@ -107,7 +107,6 @@ proto-gen \
     $OP \
     -d proto \
     -o proto/src/generated \
-    -f proto/builder.proto \
     -f proto/logger.proto \
     -f proto/provisioner.proto \
     -f proto/resource-recorder.proto \

@@ -15,7 +15,7 @@ async fn main() -> io::Result<()> {
 
     trace!(args = ?args, "parsed args");
 
-    setup_tracing(tracing_subscriber::registry(), Backend::Auth, None);
+    setup_tracing(tracing_subscriber::registry(), Backend::Auth);
 
     let pool = pgpool_init(args.db_connection_uri.as_str())
         .await

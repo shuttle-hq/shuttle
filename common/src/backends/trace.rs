@@ -23,7 +23,7 @@ use super::otlp_tracing_bridge::{self, ErrorTracingLayer};
 
 const OTLP_ADDRESS: &str = "http://otel-collector:4317";
 
-pub fn setup_tracing<S>(subscriber: S, backend: Backend, env_filter_directive: Option<&'static str>)
+pub fn setup_tracing<S>(subscriber: S, backend: Backend)
 where
     S: Subscriber + for<'a> LookupSpan<'a> + Send + Sync,
 {
@@ -31,7 +31,7 @@ where
 
     let shuttle_env = std::env::var("SHUTTLE_ENV").unwrap_or("".to_string());
     let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new(env_filter_directive.unwrap_or("info")))
+        .or_else(|_| EnvFilter::try_new("info"))
         .unwrap();
 
     let fmt_layer = fmt::layer().compact();

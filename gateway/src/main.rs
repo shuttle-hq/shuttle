@@ -37,7 +37,7 @@ async fn main() -> io::Result<()> {
 
     let posthog_client = async_posthog::client(ph_client_options);
 
-    setup_tracing(tracing_subscriber::registry(), Backend::Gateway, None);
+    setup_tracing(tracing_subscriber::registry(), Backend::Gateway);
 
     let db_path = args.state.join("gateway.sqlite");
     let db_uri = db_path.to_str().unwrap();

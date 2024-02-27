@@ -112,7 +112,6 @@ _install_mac() {
 }
 
 _install_binary() {
-  echo "Installing pre-built binary..."
   case "$OSTYPE" in
   linux*) target="x86_64-unknown-linux-musl" ;;
   darwin*) target="x86_64-apple-darwin" ;;
@@ -133,28 +132,22 @@ _install_binary() {
   fi
 }
 
-_install_cargo() {
-  echo "Attempting install with cargo"
-  if ! command -v cargo &>/dev/null; then
-    echo "cargo not found! Attempting to install Rust and cargo via rustup"
-    if command -v rustup &>/dev/null; then
-      echo "rustup was found, but cargo wasn't. Something is up with your install"
-      exit 1
-    fi
-    while true; do
-      read -r -p "cargo not found! Do you wish to attempt to install Rust and cargo via rustup? [Y/N] " yn </dev/tty
-      case $yn in
-      [Yy]*)
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s
-        source "$HOME/.cargo/env"
-        ;;
-      [Nn]*) exit ;;
-      *) echo "Please answer yes or no." ;;
-      esac
-    done
-    echo "rustup installed! Attempting cargo install"
-  fi
+_install_rust_and_cargo() {
+  while ! command -v cargo &>/dev/null; do
+    read -r -p "Do you wish to attempt to install Rust and Cargo via rustup? [Y/N] " yn </dev/tty
+    case $yn in
+    [Yy]*)
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s
+      source "$HOME/.cargo/env"
+      ;;
+    [Nn]*) exit ;;
+    *) echo "Please answer yes or no." ;;
+    esac
+  done
+}
 
+_install_with_cargo() {
+  echo "Installing with cargo..."
   cargo install --locked cargo-shuttle
 }
 
@@ -167,19 +160,28 @@ _install_unsupported() {
     return 0
   fi
 
+  if ! command -v cargo &>/dev/null; then
+    if ! command -v rustup &>/dev/null; then
+      _install_rust_and_cargo
+    else
+      echo "rustup was found, but cargo wasn't. Something is up with your install"
+      exit 1
+    fi    
+  fi
+
   while true; do
     read -r -p "Do you wish to attempt to install the pre-built binary? [Y/N] " yn </dev/tty
     case $yn in
     [Yy]*)
+      echo "Installing pre-built binary..."
       _install_binary
       break
       ;;
     [Nn]*)
-      read -r -p "Do you wish to attempt an install with 'cargo'? [Y/N] " yn </dev/tty
+      read -r -p "Do you wish to attempt an install with cargo? [Y/N] " yn </dev/tty
       case $yn in
       [Yy]*)
-        echo "Installing with 'cargo'..."
-        _install_cargo
+        _install_with_cargo
         break
         ;;
       [Nn]*) exit ;;

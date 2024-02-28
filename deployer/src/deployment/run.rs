@@ -150,7 +150,7 @@ pub async fn task(
     }
 }
 
-#[instrument(skip(active_deployment_getter, deployment_id, runtime_manager))]
+#[instrument(skip_all)]
 async fn kill_old_deployments(
     service_id: Ulid,
     deployment_id: Uuid,
@@ -230,16 +230,14 @@ pub struct Built {
     pub project_id: Ulid,
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
-    pub claim: Claim,
+    /// must be set if this run will perform requests to backends
+    pub claim: Option<Claim>,
     pub secrets: HashMap<String, String>,
 }
 
 impl Built {
-    #[instrument(
-        name = "Loading resources",
-        skip(self, resource_manager, runtime_manager, kill_old_deployments, cleanup, provisioner_client),
-        fields(deployment_id = %self.id, state = %State::Loading)
-    )]
+    #[instrument(name = "Loading resources", skip_all, fields(deployment_id = %self.id, state = %State::Loading))]
+    #[allow(clippy::too_many_arguments)]
     pub async fn handle(
         self,
         mut resource_manager: impl ResourceManager,
@@ -282,20 +280,25 @@ impl Built {
             .await
             .map_err(Error::Runtime)?;
 
-        info!("Loading resources");
-
         // Check for cached resources for this deployment id. This only happens on wakeup from idle.
         let resources = if let Some(bytes) = std::fs::read(&cached_resources_path)
             .ok()
             .and_then(|bytes| serde_json::from_slice(bytes.as_slice()).ok())
         {
+            info!("Using cached resources");
+
             bytes
         }
         // Default case for handling resources and provisioning
         else {
+            info!("Loading resources");
+            let claim = self
+                .claim
+                .expect("claim must be present when loading resources");
+
             let mut new_secrets = self.secrets;
             let prev_resources = resource_manager
-                .get_resources(&self.service_id, self.claim.clone())
+                .get_resources(&self.service_id, claim.clone())
                 .await
                 .map_err(|err| Error::Load(err.to_string()))?
                 .resources
@@ -340,7 +343,7 @@ impl Built {
                 self.service_id,
                 provisioner_client,
                 resource_manager,
-                self.claim,
+                claim,
                 prev_resources,
                 resources,
                 new_secrets,

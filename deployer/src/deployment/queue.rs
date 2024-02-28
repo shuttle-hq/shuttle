@@ -245,7 +245,7 @@ impl Queued {
             project_id: self.project_id,
             tracing_context: Default::default(),
             is_next,
-            claim: self.claim,
+            claim: Some(self.claim),
             secrets,
         };
 

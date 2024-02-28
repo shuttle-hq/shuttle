@@ -143,7 +143,7 @@ impl Dal for Postgres {
                     .await?
             }
             "tail" => {
-                sqlx::query_as("SELECT * FROM (SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp DESC limit $2) ORDER BY tx_timestamp")
+                sqlx::query_as("SELECT * FROM (SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp DESC limit $2) AS TAIL_TABLE ORDER BY tx_timestamp")
                     .bind(deployment_id)
                     .bind(len as i64)
                     .fetch_all(&self.pool)

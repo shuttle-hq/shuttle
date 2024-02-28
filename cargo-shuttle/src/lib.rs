@@ -735,6 +735,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn logs(
         &self,
         id: Option<Uuid>,

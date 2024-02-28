@@ -138,14 +138,14 @@ impl Dal for Postgres {
             "head" => {
                 sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp limit $2")
                     .bind(deployment_id)
-                    .bind(len)
+                    .bind(len as i64)
                     .fetch_all(&self.pool)
                     .await?
             }
             "tail" => {
                 sqlx::query_as("SELECT * FROM (SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp DESC limit $2) ORDER BY tx_timestamp")
                     .bind(deployment_id)
-                    .bind(len)
+                    .bind(len as i64)
                     .fetch_all(&self.pool)
                     .await?
             }

@@ -4,7 +4,8 @@ use dal::{Dal, DalError};
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
 use shuttle_proto::logger::LogLine;
 use shuttle_proto::logger::{
-    logger_server::Logger, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
+    logger_server::Logger, LogsRequest, LogsRequestMode, LogsResponse, StoreLogsRequest,
+    StoreLogsResponse,
 };
 use thiserror::Error;
 use tokio::sync::broadcast::Sender;
@@ -44,8 +45,13 @@ where
         Self { dal, logs_tx }
     }
 
-    async fn get_logs(&self, deployment_id: String) -> Result<Vec<LogLine>, Error> {
-        let logs = self.dal.get_logs(deployment_id).await?;
+    async fn get_logs(
+        &self,
+        deployment_id: String,
+        mode: String,
+        len: u32,
+    ) -> Result<Vec<LogLine>, Error> {
+        let logs = self.dal.get_logs(deployment_id, mode, len).await?;
 
         Ok(logs.into_iter().map(Into::into).collect())
     }
@@ -88,12 +94,14 @@ where
     #[tracing::instrument(skip(self))]
     async fn get_logs(
         &self,
-        request: Request<LogsRequest>,
+        request: Request<LogsRequestMode>,
     ) -> Result<Response<LogsResponse>, Status> {
         request.verify(Scope::Logs)?;
 
         let request = request.into_inner();
-        let log_items = self.get_logs(request.deployment_id).await?;
+        let log_items = self
+            .get_logs(request.deployment_id, request.mode, request.len)
+            .await?;
         let result = LogsResponse { log_items };
 
         Ok(Response::new(result))
@@ -114,7 +122,9 @@ where
         let (tx, rx) = mpsc::channel(1);
 
         // Get logs before stream was started
-        let logs = self.get_logs(deployment_id.clone()).await?;
+        let logs = self
+            .get_logs(deployment_id.clone(), "tail".to_string(), 500)
+            .await?;
 
         tokio::spawn(async move {
             let mut last = Default::default();

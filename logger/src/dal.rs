@@ -27,7 +27,12 @@ pub enum DalError {
 #[async_trait]
 pub trait Dal {
     /// Get logs for a deployment
-    async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError>;
+    async fn get_logs(
+        &self,
+        deployment_id: String,
+        mode: String,
+        len: u32,
+    ) -> Result<Vec<Log>, DalError>;
 }
 
 #[derive(Clone)]
@@ -123,13 +128,34 @@ impl Postgres {
 
 #[async_trait]
 impl Dal for Postgres {
-    async fn get_logs(&self, deployment_id: String) -> Result<Vec<Log>, DalError> {
-        let result =
-            sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp")
-                .bind(deployment_id)
-                .fetch_all(&self.pool)
-                .await?;
-
+    async fn get_logs(
+        &self,
+        deployment_id: String,
+        mode: String,
+        len: u32,
+    ) -> Result<Vec<Log>, DalError> {
+        let result = match mode.as_str() {
+            "head" => {
+                sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp limit $2")
+                    .bind(deployment_id)
+                    .bind(len)
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+            "tail" => {
+                sqlx::query_as("SELECT * FROM (SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp DESC limit $2) ORDER BY tx_timestamp")
+                    .bind(deployment_id)
+                    .bind(len)
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+            _ => {
+                sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp")
+                    .bind(deployment_id)
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+        };
         Ok(result)
     }
 }

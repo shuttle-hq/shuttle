@@ -153,8 +153,8 @@ mod tests {
     use shuttle_proto::{
         builder::{builder_server::Builder, BuildRequest, BuildResponse},
         logger::{
-            self, logger_server::Logger, Batcher, LogLine, LogsRequest, LogsResponse,
-            StoreLogsRequest, StoreLogsResponse,
+            self, logger_server::Logger, Batcher, LogLine, LogsRequest, LogsRequestMode,
+            LogsResponse, StoreLogsRequest, StoreLogsResponse,
         },
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
@@ -308,7 +308,7 @@ mod tests {
 
         async fn get_logs(
             &self,
-            _: Request<LogsRequest>,
+            _: Request<LogsRequestMode>,
         ) -> Result<Response<LogsResponse>, Status> {
             Ok(Response::new(LogsResponse {
                 log_items: Vec::new(),

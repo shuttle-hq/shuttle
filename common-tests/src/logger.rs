@@ -7,7 +7,7 @@ use portpicker::pick_unused_port;
 use shuttle_proto::logger::{
     self,
     logger_server::{Logger, LoggerServer},
-    LogLine, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
+    LogLine, LogsRequest, LogsRequestMode, LogsResponse, StoreLogsRequest, StoreLogsResponse,
 };
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -24,7 +24,10 @@ impl Logger for MockedLogger {
         Ok(Response::new(StoreLogsResponse { success: true }))
     }
 
-    async fn get_logs(&self, _: Request<LogsRequest>) -> Result<Response<LogsResponse>, Status> {
+    async fn get_logs(
+        &self,
+        _: Request<LogsRequestMode>,
+    ) -> Result<Response<LogsResponse>, Status> {
         Ok(Response::new(LogsResponse {
             log_items: Vec::new(),
         }))

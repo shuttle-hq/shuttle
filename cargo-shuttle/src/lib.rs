@@ -935,12 +935,14 @@ impl Shuttle {
         service: &BuiltService,
         idx: u16,
     ) -> Result<Option<(Child, runtime::Client)>> {
-        let crate_directory = service.crate_directory();
-        let secrets_path = if crate_directory.join("Secrets.dev.toml").exists() {
-            crate_directory.join("Secrets.dev.toml")
-        } else {
-            crate_directory.join("Secrets.toml")
-        };
+        let secrets_path = run_args.secret_args.secrets.clone().unwrap_or_else(|| {
+            let crate_dir = service.crate_directory();
+            if crate_dir.join("Secrets.dev.toml").exists() {
+                crate_dir.join("Secrets.dev.toml")
+            } else {
+                crate_dir.join("Secrets.toml")
+            }
+        });
         trace!("Loading secrets from {}", secrets_path.display());
 
         let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)

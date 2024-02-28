@@ -267,6 +267,9 @@ pub struct DeployArgs {
     /// Don't run pre-deploy tests
     #[arg(long, visible_alias = "nt")]
     pub no_test: bool,
+
+    #[command(flatten)]
+    pub secrets: SecretsArgs,
 }
 
 #[derive(Parser, Debug)]
@@ -280,6 +283,16 @@ pub struct RunArgs {
     /// Use release mode for building the project
     #[arg(long, short = 'r')]
     pub release: bool,
+
+    #[command(flatten)]
+    pub secret_args: SecretsArgs,
+}
+
+#[derive(Parser, Debug)]
+pub struct SecretsArgs {
+    /// Use this secrets file instead
+    #[arg(long, value_parser = OsStringValueParser::new().try_map(parse_path_exists))]
+    pub secrets: Option<PathBuf>,
 }
 
 #[derive(Parser, Clone, Debug, Default)]
@@ -400,6 +413,19 @@ fn parse_path(path: OsString) -> Result<PathBuf, io::Error> {
             format!("could not turn {path:?} into a real path: {e}"),
         )
     })
+}
+
+/// Helper function to parse and check if the path exists
+fn parse_path_exists(path: OsString) -> Result<PathBuf, io::Error> {
+    let path = parse_path(path)?;
+    if !path.exists() {
+        return Err(io::Error::new(
+            ErrorKind::InvalidInput,
+            format!("{path:?} does not exist"),
+        ));
+    }
+
+    Ok(path)
 }
 
 /// Helper function to parse, create if not exists, and return the absolute path

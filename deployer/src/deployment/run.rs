@@ -459,6 +459,7 @@ async fn provision(
                     }
                 };
 
+                // `output` is serialized as a `DatabaseInfo` due to being serde untagged
                 resources_to_save.push(record_request::Resource {
                     r#type: shuttle_resource.r#type.to_string(),
                     // Send only the config fields that affect provisioning

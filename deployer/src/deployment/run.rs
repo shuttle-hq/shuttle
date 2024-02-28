@@ -351,6 +351,53 @@ impl Built {
     }
 }
 
+#[instrument(name = "Sending load request", skip_all)]
+async fn load(
+    service_name: String,
+    mut runtime_client: runtime::Client,
+    new_secrets: &HashMap<String, String>,
+) -> Result<Vec<Vec<u8>>> {
+    debug!(shuttle.project.name = %service_name, "loading service");
+    let response = runtime_client
+        .load(Request::new(LoadRequest {
+            project_name: service_name.clone(),
+            secrets: new_secrets.clone(),
+            env: Environment::Deployment.to_string(),
+            ..Default::default()
+        }))
+        .await;
+
+    debug!(shuttle.project.name = %service_name, "service loaded");
+    match response {
+        Ok(response) => {
+            let response = response.into_inner();
+            // Make sure to not log the entire response, the resources field is likely to contain secrets.
+            if response.success {
+                info!("successfully loaded service");
+            }
+
+            if response.success {
+                Ok(response.resources)
+            } else {
+                let error = Error::Load(response.message);
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to load service"
+                );
+                Err(error)
+            }
+        }
+        Err(error) => {
+            let error = Error::Load(error.to_string());
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to load service"
+            );
+            Err(error)
+        }
+    }
+}
+
 fn log(ty: resource::Type, msg: &str) {
     info!("[Resource][{}] {}", ty, msg);
 }
@@ -378,6 +425,7 @@ fn get_cached_output<T: DeserializeOwned>(
         })
 }
 
+#[instrument(name = "Provisioning resources", skip_all)]
 #[allow(clippy::too_many_arguments)]
 async fn provision(
     project_name: &str,
@@ -511,53 +559,7 @@ async fn provision(
     Ok(resources)
 }
 
-async fn load(
-    service_name: String,
-    mut runtime_client: runtime::Client,
-    new_secrets: &HashMap<String, String>,
-) -> Result<Vec<Vec<u8>>> {
-    debug!(shuttle.project.name = %service_name, "loading service");
-    let response = runtime_client
-        .load(Request::new(LoadRequest {
-            project_name: service_name.clone(),
-            secrets: new_secrets.clone(),
-            env: Environment::Deployment.to_string(),
-            ..Default::default()
-        }))
-        .await;
-
-    debug!(shuttle.project.name = %service_name, "service loaded");
-    match response {
-        Ok(response) => {
-            let response = response.into_inner();
-            // Make sure to not log the entire response, the resources field is likely to contain secrets.
-            if response.success {
-                info!("successfully loaded service");
-            }
-
-            if response.success {
-                Ok(response.resources)
-            } else {
-                let error = Error::Load(response.message);
-                error!(
-                    error = &error as &dyn std::error::Error,
-                    "failed to load service"
-                );
-                Err(error)
-            }
-        }
-        Err(error) => {
-            let error = Error::Load(error.to_string());
-            error!(
-                error = &error as &dyn std::error::Error,
-                "failed to load service"
-            );
-            Err(error)
-        }
-    }
-}
-
-#[instrument(name = "Starting service", skip(runtime_client, cleanup), fields(deployment_id = %id, state = %State::Running))]
+#[instrument(name = "Starting service", skip(runtime_client, cleanup, resources), fields(deployment_id = %id, state = %State::Running))]
 async fn run(
     id: Uuid,
     service_name: String,

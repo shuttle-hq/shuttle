@@ -17,7 +17,7 @@ use tracing::trace;
 async fn main() {
     let args = Args::parse();
 
-    setup_tracing(tracing_subscriber::registry(), Backend::Logger, None);
+    setup_tracing(tracing_subscriber::registry(), Backend::Logger);
 
     trace!(args = ?args, "parsed args");
 

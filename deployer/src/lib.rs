@@ -3,7 +3,7 @@ use std::sync::Arc;
 pub use persistence::Persistence;
 pub use runtime_manager::RuntimeManager;
 use shuttle_common::log::LogRecorder;
-use shuttle_proto::{builder, logger};
+use shuttle_proto::logger;
 use tokio::sync::Mutex;
 use tracing::info;
 use ulid::Ulid;
@@ -27,7 +27,6 @@ pub async fn start(
     runtime_manager: Arc<Mutex<RuntimeManager>>,
     log_recorder: impl LogRecorder,
     log_fetcher: logger::Client,
-    builder_client: Option<builder::Client>,
     args: Args,
 ) {
     // when _set is dropped once axum exits, the deployment tasks will be aborted.
@@ -38,7 +37,6 @@ pub async fn start(
         .runtime(runtime_manager)
         .deployment_updater(persistence.clone())
         .resource_manager(persistence.clone())
-        .builder_client(builder_client)
         .queue_client(gateway::Client::new(
             args.gateway_uri.clone(),
             args.gateway_uri,

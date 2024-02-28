@@ -13,7 +13,7 @@ use tonic::transport::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    setup_tracing(tracing_subscriber::registry(), Backend::Provisioner, None);
+    setup_tracing(tracing_subscriber::registry(), Backend::Provisioner);
 
     let Args {
         ip,

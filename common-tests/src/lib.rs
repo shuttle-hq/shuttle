@@ -1,4 +1,3 @@
-pub mod builder;
 pub mod cargo_shuttle;
 pub mod logger;
 pub mod postgres;

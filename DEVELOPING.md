@@ -203,7 +203,7 @@ make images
 make docker-compose.rendered.yml
 
 # then run
-docker compose -f docker-compose.rendered.yml up provisioner resource-recorder logger otel-collector builder
+docker compose -f docker-compose.rendered.yml up provisioner resource-recorder logger otel-collector
 ```
 
 This starts the provisioner and the auth service, while preventing `gateway` from starting up.
@@ -212,7 +212,7 @@ Make sure an admin user is inserted into auth and that the key is used by cargo-
 We're now ready to start a local run of the deployer:
 
 ```bash
-OTLP_ADDRESS=http://127.0.0.1:4317 cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --resource-recorder http://localhost:8007 --builder-uri http://localhost:8009 --logger-uri http://localhost:8010 --proxy-fqdn local.rs --admin-secret dh9z58jttoes3qvt --local --project-id "01H7WHDK23XYGSESCBG6XWJ1V0" --project <name>
+OTLP_ADDRESS=http://127.0.0.1:4317 cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --resource-recorder http://localhost:8007 --logger-uri http://localhost:8010 --proxy-fqdn local.rs --admin-secret dh9z58jttoes3qvt --local --project-id "01H7WHDK23XYGSESCBG6XWJ1V0" --project <name>
 ```
 
 The `<name>` needs to match the name of the project that will be deployed to this deployer.

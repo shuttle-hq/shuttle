@@ -12,14 +12,10 @@ doctest = false
 
 [dependencies]
 shuttle-common = { workspace = true, features = [
-    "claims",
     "service",
     "tracing",
-    "display",
 ] }
-shuttle-proto = { workspace = true, features = [
-    "provisioner",
-] }
+shuttle-proto = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -47,4 +43,4 @@ builder = [
     "toml",
     "tracing",
 ]
-runner = ["shuttle-proto/runtime", "tokio/process", "dunce"]
+runner = ["shuttle-proto/runtime-client", "tokio/process", "dunce"]

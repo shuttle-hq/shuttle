@@ -33,11 +33,22 @@ test-utils = ["portpicker"]
 logger = [
     "shuttle-common/service",
     "chrono",
-    "http",
     "tracing",
     "tokio/macros",
     "tokio/time",
 ]
-provisioner = ["http", "tower"]
-resource-recorder = ["anyhow", "async-trait", "http", "serde_json", "shuttle-common/backend", "tower"]
-runtime = ["anyhow", "tokio", "tower", "tracing"]
+provisioner = []
+resource-recorder = ["anyhow", "serde_json"]
+runtime = []
+
+client = ["shuttle-common/claims", "tower"]
+logger-client = ["logger", "client", "http"]
+provisioner-client = ["provisioner", "client", "http"]
+runtime-client = ["runtime", "client", "anyhow", "tokio", "tracing"]
+resource-recorder-client = [
+    "resource-recorder",
+    "client",
+    "async-trait",
+    "http",
+    "shuttle-common/backend",
+]

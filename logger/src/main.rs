@@ -4,8 +4,9 @@ use clap::Parser;
 use shuttle_common::{
     backends::{
         auth::{AuthPublicKey, JwtAuthenticationLayer},
-        trace::{setup_tracing, ExtractPropagationLayer},
+        trace::setup_tracing,
     },
+    extract_propagation::ExtractPropagationLayer,
     log::Backend,
 };
 use shuttle_logger::{args::Args, Postgres, Service};

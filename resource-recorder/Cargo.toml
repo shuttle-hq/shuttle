@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-shuttle-common = { workspace = true, features = ["backend", "tonic", "sqlx"] }
+shuttle-common = { workspace = true, features = ["backend", "extract_propagation", "tonic", "sqlx"] }
 shuttle-proto = { workspace = true, features = ["resource-recorder"] }
 
 async-trait = { workspace = true }

@@ -45,7 +45,6 @@ tonic = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 tracing = { workspace = true, features = ["std"], optional = true }
-tracing-core = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 ttl_cache = { workspace = true, optional = true }
@@ -72,7 +71,7 @@ backend = [
     "tower-http",
     "tracing-subscriber/env-filter",
     "tracing-subscriber/fmt",
-    "tracing-core",
+    "tracing",
     "ttl_cache",
 ]
 claims = [
@@ -90,6 +89,14 @@ claims = [
     "tracing-opentelemetry",
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
+extract_propagation = [
+    "http",
+    "opentelemetry",
+    "opentelemetry-http",
+    "pin-project",
+    "tower",
+    "tracing-opentelemetry",
+]
 models = ["async-trait", "http", "reqwest", "service", "thiserror"]
 persist = ["sqlx", "rand"]
 sqlx = ["dep:sqlx", "sqlx/sqlite"]

@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use shuttle_common::backends::trace::ExtractPropagationLayer;
+use shuttle_common::extract_propagation::ExtractPropagationLayer;
 use shuttle_proto::runtime::runtime_server::RuntimeServer;
 use shuttle_runtime::__internals::{print_version, AxumWasm, NextArgs};
 use tonic::transport::Server;

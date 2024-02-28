@@ -86,8 +86,8 @@ mod needs_docker {
             let logs = client
                 .get_logs(Request::new(LogsRequestMode {
                     deployment_id: deployment_id.into(),
-                    mode: "tail".to_string(),
-                    len: 1000,
+                    mode: "all".to_string(),
+                    len: 0,
                 }))
                 .await
                 .unwrap()

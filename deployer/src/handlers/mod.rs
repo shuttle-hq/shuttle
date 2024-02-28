@@ -475,7 +475,7 @@ pub async fn get_logs(
     let mut logs_request: tonic::Request<LogsRequestMode> = tonic::Request::new(LogsRequestMode {
         deployment_id: deployment_id.to_string(),
         mode: mode.to_string(),
-        len: len,
+        len,
     });
 
     logs_request.extensions_mut().insert(claim);

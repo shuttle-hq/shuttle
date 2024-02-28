@@ -146,11 +146,9 @@ mod tests {
     use flate2::{write::GzEncoder, Compression};
     use shuttle_common::claims::Claim;
     use shuttle_common_tests::{
-        builder::get_mocked_builder_client, logger::get_mocked_logger_client,
-        provisioner::get_mocked_provisioner_client,
+        logger::get_mocked_logger_client, provisioner::get_mocked_provisioner_client,
     };
     use shuttle_proto::{
-        builder::{builder_server::Builder, BuildRequest, BuildResponse},
         logger::{
             self, logger_server::Logger, Batcher, LogLine, LogsRequest, LogsResponse,
             StoreLogsRequest, StoreLogsResponse,
@@ -271,16 +269,6 @@ mod tests {
 
     impl LogRecorder for RecorderMock {
         fn record(&self, _: LogItem) {}
-    }
-
-    #[async_trait]
-    impl Builder for RecorderMock {
-        async fn build(
-            &self,
-            _request: tonic::Request<BuildRequest>,
-        ) -> Result<tonic::Response<BuildResponse>, tonic::Status> {
-            Ok(Response::new(BuildResponse::default()))
-        }
     }
 
     #[derive(thiserror::Error, Debug)]
@@ -780,14 +768,12 @@ mod tests {
 
     async fn get_deployment_manager() -> DeploymentManager {
         let logger_client = get_mocked_logger_client(RecorderMock::new()).await;
-        let builder_client = get_mocked_builder_client(RecorderMock::new()).await;
         DeploymentManager::builder()
             .build_log_recorder(RECORDER.clone())
             .active_deployment_getter(StubActiveDeploymentGetter)
             .artifacts_path(PathBuf::from("/tmp"))
             .resource_manager(StubResourceManager)
             .log_fetcher(logger_client.clone())
-            .builder_client(Some(builder_client))
             .runtime(get_runtime_manager(Batcher::wrap(logger_client)).await)
             .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)

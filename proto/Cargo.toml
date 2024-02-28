@@ -30,7 +30,6 @@ portpicker = { workspace = true }
 default = []
 test-utils = ["portpicker"]
 
-builder = ["http", "tower"]
 logger = [
     "shuttle-common/service",
     "chrono",

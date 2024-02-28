@@ -559,7 +559,6 @@ pub mod tests {
                 env::var("SHUTTLE_TESTS_NETWORK").unwrap_or_else(|_| "shuttle_default".to_string());
 
             let provisioner_host = "provisioner".to_string();
-            let builder_host = "builder".to_string();
 
             let docker_host = "/var/run/docker.sock".to_string();
 
@@ -573,7 +572,6 @@ pub mod tests {
                     image,
                     prefix,
                     provisioner_host,
-                    builder_host,
                     // The started containers need to reach auth on the host.
                     // For this to work, the firewall should not be blocking traffic on the `SHUTTLE_TEST_NETWORK` interface.
                     // The following command can be used on NixOs to allow traffic on the interface.

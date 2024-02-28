@@ -14,7 +14,6 @@ use shuttle_common::{
     log::LogRecorder,
     LogItem,
 };
-use shuttle_proto::builder::{self, BuildRequest};
 use shuttle_service::builder::{build_workspace, BuiltService};
 use tar::Archive;
 use tokio::{
@@ -23,7 +22,6 @@ use tokio::{
     task::JoinSet,
     time::{sleep, timeout},
 };
-use tonic::Request;
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
@@ -34,14 +32,12 @@ use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
 use crate::persistence::DeploymentUpdater;
 
-#[allow(clippy::too_many_arguments)]
 pub async fn task(
     mut recv: QueueReceiver,
     run_send: RunSender,
     deployment_updater: impl DeploymentUpdater,
     log_recorder: impl LogRecorder,
     queue_client: impl BuildQueueClient,
-    builder_client: Option<builder::Client>,
     builds_path: PathBuf,
 ) {
     info!("Queue task started");
@@ -59,7 +55,6 @@ pub async fn task(
                 let log_recorder = log_recorder.clone();
                 let queue_client = queue_client.clone();
                 let builds_path = builds_path.clone();
-                let builder_client = builder_client.clone();
 
                 tasks.spawn(async move {
                     let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -78,31 +73,6 @@ pub async fn task(
                         .await
                         {
                             return build_failed_to_get_slot(&id, err);
-                        }
-
-                        if let Some(mut inner) = builder_client {
-                            let deployment_id = queued.id.to_string();
-                            let archive = queued.data.clone();
-                            let claim = queued.claim.clone();
-                            tokio::spawn(async move {
-                                let mut req = Request::new(BuildRequest {
-                                    deployment_id,
-                                    archive,
-                                });
-                                req.extensions_mut().insert(claim);
-
-                                match inner.build(req).await {
-                                    Ok(inner) =>  {
-                                        let response = inner.into_inner();
-                                        info!(id = %queued.id, "shuttle-builder finished building the deployment: image length is {} bytes, is_wasm flag is {} and there are {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
-                                    },
-                                    Err(err) => error!(
-                                        id = %queued.id,
-                                        error = &err as &dyn std::error::Error,
-                                        "shuttle-builder errored while building"
-                                    )
-                                };
-                            });
                         }
 
                         match queued

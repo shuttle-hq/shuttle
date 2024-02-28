@@ -64,7 +64,6 @@ pub struct ContainerSettingsBuilder {
     prefix: Option<String>,
     image: Option<String>,
     provisioner: Option<String>,
-    builder: Option<String>,
     auth_uri: Option<String>,
     resource_recorder_uri: Option<String>,
     network_name: Option<String>,
@@ -84,7 +83,6 @@ impl ContainerSettingsBuilder {
             prefix: None,
             image: None,
             provisioner: None,
-            builder: None,
             auth_uri: None,
             resource_recorder_uri: None,
             network_name: None,
@@ -98,7 +96,6 @@ impl ContainerSettingsBuilder {
             prefix,
             network_name,
             provisioner_host,
-            builder_host,
             auth_uri,
             resource_recorder_uri,
             image,
@@ -109,7 +106,6 @@ impl ContainerSettingsBuilder {
         self.prefix(prefix)
             .image(image)
             .provisioner_host(provisioner_host)
-            .builder_host(builder_host)
             .auth_uri(auth_uri)
             .resource_recorder_uri(resource_recorder_uri)
             .network_name(network_name)
@@ -131,11 +127,6 @@ impl ContainerSettingsBuilder {
 
     pub fn provisioner_host<S: ToString>(mut self, host: S) -> Self {
         self.provisioner = Some(host.to_string());
-        self
-    }
-
-    pub fn builder_host<S: ToString>(mut self, host: S) -> Self {
-        self.builder = Some(host.to_string());
         self
     }
 
@@ -168,7 +159,6 @@ impl ContainerSettingsBuilder {
         let prefix = self.prefix.take().unwrap();
         let image = self.image.take().unwrap();
         let provisioner_host = self.provisioner.take().unwrap();
-        let builder_host = self.builder.take().unwrap();
         let auth_uri = self.auth_uri.take().unwrap();
         let resource_recorder_uri = self.resource_recorder_uri.take().unwrap();
         let extra_hosts = self.extra_hosts.take().unwrap();
@@ -180,7 +170,6 @@ impl ContainerSettingsBuilder {
             prefix,
             image,
             provisioner_host,
-            builder_host,
             auth_uri,
             resource_recorder_uri,
             network_name,
@@ -195,7 +184,6 @@ pub struct ContainerSettings {
     pub prefix: String,
     pub image: String,
     pub provisioner_host: String,
-    pub builder_host: String,
     pub auth_uri: String,
     pub resource_recorder_uri: String,
     pub network_name: String,

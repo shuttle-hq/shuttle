@@ -1,6 +1,8 @@
 **/target/
+**/.shuttle-executables
 **/*Containerfile*
 /examples
+.git
 **/.cargo/
 **/docker/
 **/*.md

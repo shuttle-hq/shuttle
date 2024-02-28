@@ -360,19 +360,18 @@ impl ResourceManager for Persistence {
         service_id: &Ulid,
         claim: Claim,
     ) -> Result<ResultResponse> {
-        let mut record_req: tonic::Request<RecordRequest> = tonic::Request::new(RecordRequest {
+        let mut req: tonic::Request<RecordRequest> = tonic::Request::new(RecordRequest {
             project_id: self.project_id.to_string(),
             service_id: service_id.to_string(),
             resources,
         });
-
-        record_req.extensions_mut().insert(claim);
+        req.extensions_mut().insert(claim);
 
         info!("Uploading resources to resource-recorder");
         self.resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
-            .record_resources(record_req)
+            .record_resources(req)
             .await
             .map_err(PersistenceError::ResourceRecorder)
             .map(|res| res.into_inner())
@@ -383,18 +382,17 @@ impl ResourceManager for Persistence {
         service_id: &Ulid,
         claim: Claim,
     ) -> Result<ResourcesResponse> {
-        let mut service_resources_req = tonic::Request::new(ServiceResourcesRequest {
+        let mut req = tonic::Request::new(ServiceResourcesRequest {
             service_id: service_id.to_string(),
         });
-
-        service_resources_req.extensions_mut().insert(claim.clone());
+        req.extensions_mut().insert(claim.clone());
 
         info!(%service_id, "Getting resources from resource-recorder");
         let res = self
             .resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
-            .get_service_resources(service_resources_req)
+            .get_service_resources(req)
             .await
             .map_err(PersistenceError::ResourceRecorder)
             .map(|res| res.into_inner())?;
@@ -430,18 +428,17 @@ impl ResourceManager for Persistence {
                 self.insert_resources(local_resources, service_id, claim.clone())
                     .await?;
 
-                let mut service_resources_req = tonic::Request::new(ServiceResourcesRequest {
+                let mut req = tonic::Request::new(ServiceResourcesRequest {
                     service_id: service_id.to_string(),
                 });
-
-                service_resources_req.extensions_mut().insert(claim);
+                req.extensions_mut().insert(claim);
 
                 info!("Getting resources from resource-recorder again");
                 let res = self
                     .resource_recorder_client
                     .as_mut()
                     .expect("to have the resource recorder set up")
-                    .get_service_resources(service_resources_req)
+                    .get_service_resources(req)
                     .await
                     .map_err(PersistenceError::ResourceRecorder)
                     .map(|res| res.into_inner())?;
@@ -472,19 +469,18 @@ impl ResourceManager for Persistence {
         r#type: shuttle_common::resource::Type,
         claim: Claim,
     ) -> Result<ResourceResponse> {
-        let mut get_resource_req = tonic::Request::new(ResourceIds {
+        let mut req = tonic::Request::new(ResourceIds {
             project_id: self.project_id.to_string(),
             service_id: service_id.to_string(),
             r#type: r#type.to_string(),
         });
-
-        get_resource_req.extensions_mut().insert(claim);
+        req.extensions_mut().insert(claim);
 
         return self
             .resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
-            .get_resource(get_resource_req)
+            .get_resource(req)
             .await
             .map_err(PersistenceError::ResourceRecorder)
             .map(|res| res.into_inner());
@@ -498,34 +494,32 @@ impl ResourceManager for Persistence {
         claim: Claim,
     ) -> Result<ResultResponse> {
         if let Type::Database(db_type) = resource_type {
-            let proto_db_type: shuttle_proto::provisioner::database_request::DbType =
-                db_type.into();
             if let Some(inner) = &mut self.provisioner_client {
-                let mut db_request = Request::new(DatabaseRequest {
+                let mut req = Request::new(DatabaseRequest {
                     project_name,
-                    db_type: Some(proto_db_type),
+                    db_type: Some(db_type.into()),
                 });
-                db_request.extensions_mut().insert(claim.clone());
+                req.extensions_mut().insert(claim.clone());
+
                 inner
-                    .delete_database(db_request)
+                    .delete_database(req)
                     .await
                     .map_err(error::Error::Provisioner)?;
             };
         }
 
-        let mut delete_resource_req = tonic::Request::new(ResourceIds {
+        let mut req = tonic::Request::new(ResourceIds {
             project_id: self.project_id.to_string(),
             service_id: service_id.to_string(),
             r#type: resource_type.to_string(),
         });
-
-        delete_resource_req.extensions_mut().insert(claim);
+        req.extensions_mut().insert(claim);
 
         return self
             .resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
-            .delete_resource(delete_resource_req)
+            .delete_resource(req)
             .await
             .map(|res| res.into_inner())
             .map_err(PersistenceError::ResourceRecorder);

@@ -8,4 +8,4 @@ edition = "2021"
 
 [dependencies]
 shuttle-runtime = { path = "../../../" }
-tokio = { version = "1.22.0" }
+shuttle-service = { path = "../../../../service" }

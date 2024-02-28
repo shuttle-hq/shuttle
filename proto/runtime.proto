@@ -16,17 +16,16 @@ service Runtime {
 }
 
 message LoadRequest {
-  // Name of service to load
-  string service_name = 1;
-
-  // Path to compiled file to load for service
-  string path = 2;
-
-  // A cache of resource details to use instead when asked
-  repeated bytes resources = 10;
-
+  string project_name = 1;
+  // "local" or "deployment"
+  string env = 3;
   // Secrets that belong to this deployment
   map<string, string> secrets = 20;
+
+  // deprecated for alpha, but still used in next
+  string path = 2;
+  // deprecated
+  repeated bytes resources = 10;
 }
 
 message LoadResponse {
@@ -41,11 +40,15 @@ message LoadResponse {
 message StartRequest {
   // Address and port to start the service on
   string ip = 1;
+  // The resources available
+  repeated bytes resources = 10;
 }
 
 message StartResponse {
   // Was the start successful
   bool success = 1;
+  // Error message if not successful
+  string message = 2;
 }
 
 message StopRequest {}

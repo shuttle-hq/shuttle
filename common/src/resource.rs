@@ -3,7 +3,52 @@ use std::{fmt::Display, str::FromStr};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::database;
+use crate::{constants::RESOURCE_SCHEMA_VERSION, database};
+
+/// Return this struct as a resource config to make Shuttle provision it
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProvisionResourceRequest {
+    /// The version of the config+data schema for this Shuttle resource
+    pub version: u32,
+    /// The type of this resource
+    pub r#type: Type,
+    /// The config used when creating this resource.
+    /// Use `Self::version` and `Self::r#type` to know how to parse this data.
+    pub config: Value,
+
+    /// Arbitrary extra data to include in this resource
+    pub custom: Value,
+}
+
+impl ProvisionResourceRequest {
+    pub fn new(r#type: Type, config: Value, custom: Value) -> Self {
+        Self {
+            version: RESOURCE_SCHEMA_VERSION,
+            r#type,
+            config,
+            custom,
+        }
+    }
+}
+
+/// Helper for deserializing
+#[derive(Deserialize)]
+#[serde(untagged)] // Try deserializing as a Shuttle resource, fall back to a custom value
+pub enum ResourceInput {
+    Shuttle(ProvisionResourceRequest),
+    Custom(Value),
+}
+
+/// Returned when provisioning a Shuttle resource
+#[derive(Serialize, Deserialize)]
+pub struct ShuttleResourceOutput<T> {
+    /// The output type for this Shuttle resource,
+    /// contains the data from the provisioner response
+    pub output: T,
+
+    /// Arbitrary extra data in this resource
+    pub custom: Value,
+}
 
 /// Common type to hold all the information we need for a generic resource
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -38,7 +83,8 @@ pub enum Type {
     Database(database::Type),
     Secrets,
     Persist,
-    Custom,
+    /// Local provisioner only
+    Container,
 }
 
 impl FromStr for Type {
@@ -54,7 +100,7 @@ impl FromStr for Type {
             match s {
                 "secrets" => Ok(Self::Secrets),
                 "persist" => Ok(Self::Persist),
-                "custom" => Ok(Self::Custom),
+                "container" => Ok(Self::Container),
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }
@@ -67,7 +113,7 @@ impl Display for Type {
             Type::Database(db_type) => write!(f, "database::{db_type}"),
             Type::Secrets => write!(f, "secrets"),
             Type::Persist => write!(f, "persist"),
-            Type::Custom => write!(f, "custom"),
+            Type::Container => write!(f, "container"),
         }
     }
 }
@@ -124,7 +170,7 @@ mod test {
             Type::Database(database::Type::Shared(database::SharedEngine::MongoDb)),
             Type::Secrets,
             Type::Persist,
-            Type::Custom,
+            Type::Container,
         ];
 
         for input in inputs {

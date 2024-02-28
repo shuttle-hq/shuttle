@@ -1,19 +1,21 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LoadRequest {
-    /// Name of service to load
     #[prost(string, tag = "1")]
-    pub service_name: ::prost::alloc::string::String,
-    /// Path to compiled file to load for service
-    #[prost(string, tag = "2")]
-    pub path: ::prost::alloc::string::String,
-    /// A cache of resource details to use instead when asked
-    #[prost(bytes = "vec", repeated, tag = "10")]
-    pub resources: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    pub project_name: ::prost::alloc::string::String,
+    /// "local" or "deployment"
+    #[prost(string, tag = "3")]
+    pub env: ::prost::alloc::string::String,
     /// Secrets that belong to this deployment
     #[prost(map = "string, string", tag = "20")]
     pub secrets:
         ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+    /// deprecated for alpha, but still used in next
+    #[prost(string, tag = "2")]
+    pub path: ::prost::alloc::string::String,
+    /// deprecated
+    #[prost(bytes = "vec", repeated, tag = "10")]
+    pub resources: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -34,6 +36,9 @@ pub struct StartRequest {
     /// Address and port to start the service on
     #[prost(string, tag = "1")]
     pub ip: ::prost::alloc::string::String,
+    /// The resources available
+    #[prost(bytes = "vec", repeated, tag = "10")]
+    pub resources: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -41,6 +46,9 @@ pub struct StartResponse {
     /// Was the start successful
     #[prost(bool, tag = "1")]
     pub success: bool,
+    /// Error message if not successful
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

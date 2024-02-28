@@ -54,20 +54,7 @@ async fn axum_static_files() {
         .await
         .unwrap();
 
-    assert_eq!(request_text, "Hello, world!");
-
-    let request_text = client
-        .get(format!("{url}/assets"))
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert!(
-        request_text.contains("This is an example of serving static files with axum and shuttle.")
-    );
+    assert!(request_text.contains("This is an example of serving"));
 }
 
 // note: you need `rustup target add wasm32-wasi` to make this project compile

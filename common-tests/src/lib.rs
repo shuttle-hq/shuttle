@@ -1,6 +1,7 @@
 pub mod cargo_shuttle;
 pub mod logger;
 pub mod postgres;
+pub mod provisioner;
 
 use shuttle_common::claims::{AccountTier, Claim, Scope};
 

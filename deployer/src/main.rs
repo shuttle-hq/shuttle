@@ -43,11 +43,7 @@ async fn main() {
         Backend::Deployer,
     );
 
-    let runtime_manager = RuntimeManager::new(
-        args.provisioner_address.to_string(),
-        logger_batcher.clone(),
-        Some(args.auth_uri.to_string()),
-    );
+    let runtime_manager = RuntimeManager::new(logger_batcher.clone());
 
     start(
         persistence,

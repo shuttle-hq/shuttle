@@ -34,7 +34,7 @@ async fn app(
 |-----------|-------|------------|--------------------------------------------------|
 | scheme    | `str` | `"memory"` | The scheme of the storage service to connect to. |
 
-All secrets are loaded from your `Secrets.toml` file. 
+All secrets are loaded from your `Secrets.toml` file.
 
 For instance, when using `s3`, you can configure the scheme to `s3` and specify the secrets: `bucket`, `access_key_id`, and `secret_access_key`.
 

@@ -9,5 +9,5 @@ impl shuttle_runtime::Service for MyService {
 
 #[shuttle_runtime::main]
 async fn main_panic() -> Result<MyService, shuttle_runtime::Error> {
-    panic!("main panic")
+    panic!("panic in main")
 }

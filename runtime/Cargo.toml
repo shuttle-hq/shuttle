@@ -14,8 +14,8 @@ doctest = false
 
 [dependencies]
 shuttle-codegen = { workspace = true, features = ["frameworks"] }
-shuttle-common = { workspace = true, features = ["backend", "claims"] }
-shuttle-proto = { workspace = true, features = ["provisioner", "runtime"] }
+shuttle-common = { workspace = true, features = ["backend"] }
+shuttle-proto = { workspace = true, features = ["runtime"] }
 shuttle-service = { workspace = true }
 
 anyhow = { workspace = true }

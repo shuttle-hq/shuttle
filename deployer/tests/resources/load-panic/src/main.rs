@@ -19,7 +19,7 @@ impl shuttle_service::ResourceInputBuilder for Thing {
         self,
         _factory: &shuttle_service::ResourceFactory,
     ) -> Result<Self::Input, shuttle_service::Error> {
-        panic!("panic in load");
+        panic!("load panic");
     }
 }
 

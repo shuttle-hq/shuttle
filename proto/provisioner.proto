@@ -3,7 +3,6 @@ package provisioner;
 
 service Provisioner {
   rpc ProvisionDatabase(DatabaseRequest) returns (DatabaseResponse);
-  rpc ProvisionArbitraryContainer(ContainerRequest) returns (ContainerResponse);
   rpc DeleteDatabase(DatabaseRequest) returns (DatabaseDeletionResponse);
   rpc HealthCheck(Ping) returns (Pong);
 }
@@ -44,24 +43,6 @@ message DatabaseResponse {
 }
 
 message DatabaseDeletionResponse {}
-
-message ContainerRequest {
-  string project_name = 1;
-  // Type of container, used in the container name. ex "qdrant"
-  string container_type = 2;
-  // ex. "qdrant/qdrant:latest"
-  string image = 3;
-  // The internal port that the container should expose. ex. "6334/tcp"
-  string port = 4;
-  // list of "KEY=value" strings
-  repeated string env = 5;
-}
-
-message ContainerResponse {
-  // The port that the container exposes to the host.
-  // Is a string for parity with the Docker respose.
-  string host_port = 1;
-}
 
 message Ping {}
 message Pong {}

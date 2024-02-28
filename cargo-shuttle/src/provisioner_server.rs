@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
+use std::{collections::HashMap, io::stdout, time::Duration};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -19,19 +19,15 @@ use futures::StreamExt;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     database::{AwsRdsEngine, SharedEngine},
-    Secret,
+    ContainerRequest, ContainerResponse, Secret,
 };
 use shuttle_proto::provisioner::{
-    provisioner_server::{Provisioner, ProvisionerServer},
-    ContainerRequest, ContainerResponse, DatabaseDeletionResponse, DatabaseRequest,
-    DatabaseResponse, Ping, Pong,
+    provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+    Ping, Pong,
 };
 use shuttle_service::database::Type;
-use tokio::{task::JoinHandle, time::sleep};
-use tonic::{
-    transport::{self, Server},
-    Request, Response, Status,
-};
+use tokio::time::sleep;
+use tonic::{Request, Response, Status};
 use tracing::{error, trace};
 
 /// A provisioner for local runs
@@ -44,15 +40,6 @@ impl LocalProvisioner {
     pub fn new() -> Result<Self> {
         Ok(Self {
             docker: Docker::connect_with_local_defaults()?,
-        })
-    }
-
-    pub fn start(self, address: SocketAddr) -> JoinHandle<Result<(), transport::Error>> {
-        tokio::spawn(async move {
-            Server::builder()
-                .add_service(ProvisionerServer::new(self))
-                .serve(address)
-                .await
         })
     }
 
@@ -216,16 +203,19 @@ impl LocalProvisioner {
         Ok(res)
     }
 
-    async fn start_container(&self, req: ContainerRequest) -> Result<ContainerResponse, Status> {
+    pub async fn start_container(
+        &self,
+        req: ContainerRequest,
+    ) -> Result<ContainerResponse, Status> {
         let ContainerRequest {
             project_name,
-            container_type,
+            container_name,
             env,
             image,
             port,
         } = req;
 
-        let container_name = format!("shuttle_{project_name}_{container_type}");
+        let container_name = format!("shuttle_{project_name}_{container_name}");
 
         let container = self
             .get_container(&container_name, &image, &port, Some(env))
@@ -233,7 +223,7 @@ impl LocalProvisioner {
 
         let host_port = self.get_container_first_host_port(&container, &port);
 
-        self.start_container_if_not_running(&container, &container_type, &container_name)
+        self.start_container_if_not_running(&container, &container_name, &container_name)
             .await;
 
         Ok(ContainerResponse { host_port })
@@ -346,15 +336,6 @@ impl Provisioner for LocalProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         panic!("local runner should not try to delete databases");
-    }
-
-    async fn provision_arbitrary_container(
-        &self,
-        request: Request<ContainerRequest>,
-    ) -> Result<Response<ContainerResponse>, Status> {
-        Ok(Response::new(
-            self.start_container(request.into_inner()).await?,
-        ))
     }
 
     async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {

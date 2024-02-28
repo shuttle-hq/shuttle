@@ -18,10 +18,9 @@ use shuttle_common::claims::Scope;
 use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
-    aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
+    aws_rds, database_request::DbType, provisioner_server::Provisioner, shared, AwsRds,
+    DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong, Shared,
 };
-use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
-use shuttle_proto::provisioner::{ContainerRequest, ContainerResponse, Ping, Pong};
 use shuttle_proto::resource_recorder;
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::sync::Mutex;
@@ -571,17 +570,6 @@ impl Provisioner for ShuttleProvisioner {
         };
 
         Ok(Response::new(reply))
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn provision_arbitrary_container(
-        &self,
-        _request: Request<ContainerRequest>,
-    ) -> Result<Response<ContainerResponse>, Status> {
-        // Intended for use in local runs
-        Err(Status::unimplemented(
-            "Provisioning arbitrary containers on Shuttle is not supported",
-        ))
     }
 
     #[tracing::instrument(skip(self))]

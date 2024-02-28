@@ -7,7 +7,7 @@ description = "Service with instances created per project for handling the compi
 
 [dependencies]
 shuttle-common = { workspace = true, features = ["backend", "models", "sqlx"] }
-shuttle-proto = { workspace = true, features = ["resource-recorder"] }
+shuttle-proto = { workspace = true, features = ["provisioner", "resource-recorder"] }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
 
 anyhow = { workspace = true }

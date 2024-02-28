@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
-    database, error::CustomError, resource::Type, DatabaseResource, DbInput, Error, Factory,
-    IntoResource, ResourceBuilder,
+    database,
+    resource::{ProvisionResourceRequest, ShuttleResourceOutput, Type},
+    DatabaseResource, DbInput, Error, IntoResource, ResourceFactory, ResourceInputBuilder,
 };
 
 /// Shuttle managed MongoDB in a shared cluster
@@ -19,53 +20,27 @@ impl MongoDb {
 }
 
 #[async_trait]
-impl ResourceBuilder for MongoDb {
-    const TYPE: Type = Type::Database(database::Type::Shared(database::SharedEngine::MongoDb));
+impl ResourceInputBuilder for MongoDb {
+    type Input = ProvisionResourceRequest;
+    type Output = OutputWrapper;
 
-    type Config = DbInput;
-
-    type Output = Wrapper;
-
-    fn config(&self) -> &Self::Config {
-        &self.0
-    }
-
-    async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, Error> {
-        let info = match factory.get_metadata().env {
-            shuttle_service::Environment::Deployment => DatabaseResource::Info(
-                factory
-                    .get_db_connection(database::Type::Shared(database::SharedEngine::MongoDb))
-                    .await
-                    .map_err(CustomError::new)?,
-            ),
-            shuttle_service::Environment::Local => {
-                if let Some(local_uri) = self.0.local_uri {
-                    DatabaseResource::ConnectionString(local_uri)
-                } else {
-                    DatabaseResource::Info(
-                        factory
-                            .get_db_connection(database::Type::Shared(
-                                database::SharedEngine::MongoDb,
-                            ))
-                            .await
-                            .map_err(CustomError::new)?,
-                    )
-                }
-            }
-        };
-
-        Ok(Wrapper(info))
+    async fn build(self, _factory: &ResourceFactory) -> Result<Self::Input, Error> {
+        Ok(ProvisionResourceRequest::new(
+            Type::Database(database::Type::Shared(database::SharedEngine::MongoDb)),
+            serde_json::to_value(self.0).unwrap(),
+            serde_json::Value::Null,
+        ))
     }
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Wrapper(DatabaseResource);
+pub struct OutputWrapper(ShuttleResourceOutput<DatabaseResource>);
 
 #[async_trait]
-impl IntoResource<String> for Wrapper {
+impl IntoResource<String> for OutputWrapper {
     async fn into_resource(self) -> Result<String, Error> {
-        Ok(match self.0 {
+        Ok(match self.0.output {
             DatabaseResource::ConnectionString(s) => s.clone(),
             DatabaseResource::Info(info) => info.connection_string_shuttle(),
         })
@@ -73,17 +48,18 @@ impl IntoResource<String> for Wrapper {
 }
 
 #[async_trait]
-impl IntoResource<mongodb::Database> for Wrapper {
+impl IntoResource<mongodb::Database> for OutputWrapper {
     async fn into_resource(self) -> Result<mongodb::Database, Error> {
         let connection_string: String = self.into_resource().await.unwrap();
 
         let mut client_options = mongodb::options::ClientOptions::parse(connection_string)
             .await
-            .map_err(CustomError::new)?;
+            .map_err(shuttle_service::CustomError::new)?;
         client_options.min_pool_size = Some(1);
         client_options.max_pool_size = Some(5);
 
-        let client = mongodb::Client::with_options(client_options).map_err(CustomError::new)?;
+        let client = mongodb::Client::with_options(client_options)
+            .map_err(shuttle_service::CustomError::new)?;
 
         // Return a handle to the database defined at the end of the connection string,
         // which is the users provisioned database

@@ -12,7 +12,7 @@ use shuttle_proto::{
     logger::{self, Batcher, LogItem, LogLine},
     runtime::{self, StopRequest},
 };
-use shuttle_service::{runner, Environment};
+use shuttle_service::runner;
 use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
@@ -26,22 +26,14 @@ type Runtimes = Arc<std::sync::Mutex<HashMap<Uuid, (process::Child, runtime::Cli
 #[derive(Clone)]
 pub struct RuntimeManager {
     runtimes: Runtimes,
-    provisioner_address: String,
     logger_client: Batcher<logger::Client>,
-    auth_uri: Option<String>,
 }
 
 impl RuntimeManager {
-    pub fn new(
-        provisioner_address: String,
-        logger_client: Batcher<logger::Client>,
-        auth_uri: Option<String>,
-    ) -> Arc<Mutex<Self>> {
+    pub fn new(logger_client: Batcher<logger::Client>) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             runtimes: Default::default(),
-            provisioner_address,
             logger_client,
-            auth_uri,
         }))
     }
 
@@ -55,8 +47,8 @@ impl RuntimeManager {
         trace!("making new client");
 
         // the port to run the runtime's gRPC server on
-        let port = portpicker::pick_unused_port().context("failed to find available port")?;
-        let is_next = alpha_runtime_path.is_none();
+        let port =
+            portpicker::pick_unused_port().context("failed to find port for runtime server")?;
 
         let runtime_executable = if let Some(alpha_runtime) = alpha_runtime_path {
             debug!(
@@ -100,17 +92,9 @@ impl RuntimeManager {
                 .join("bin/shuttle-next")
         };
 
-        let (mut process, runtime_client) = runner::start(
-            is_next,
-            Environment::Deployment,
-            &self.provisioner_address,
-            self.auth_uri.as_ref(),
-            port,
-            runtime_executable,
-            project_path,
-        )
-        .await
-        .context("failed to start shuttle runtime")?;
+        let (mut process, runtime_client) = runner::start(port, runtime_executable, project_path)
+            .await
+            .context("failed to start shuttle runtime")?;
 
         let stdout = process
             .stdout

@@ -260,9 +260,6 @@ impl TryFrom<record_request::Resource> for Resource {
 
     fn try_from(value: record_request::Resource) -> Result<Self, Self::Error> {
         let r#type = value.r#type.parse()?;
-        if let Type::Custom = r#type {
-            return Err("Custom resources can not be saved in resource-recorder".into());
-        }
         Ok(Self::new(r#type, value.data, value.config))
     }
 }

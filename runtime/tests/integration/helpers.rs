@@ -9,53 +9,45 @@ use async_trait::async_trait;
 use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        ContainerRequest, ContainerResponse, DatabaseDeletionResponse, DatabaseRequest,
-        DatabaseResponse, Ping, Pong,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong,
     },
     runtime,
 };
-use shuttle_service::{builder::build_workspace, runner, Environment};
+use shuttle_service::{builder::build_workspace, runner};
 use tokio::process::Child;
 use tonic::{transport::Server, Request, Response, Status};
 
 pub struct TestRuntime {
     pub runtime_client: runtime::Client,
     pub bin_path: String,
-    pub service_name: String,
     pub runtime_address: SocketAddr,
     pub secrets: HashMap<String, String>,
     pub runtime: Child,
 }
 
-pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<TestRuntime> {
-    let provisioner_address = SocketAddr::new(
-        Ipv4Addr::LOCALHOST.into(),
-        portpicker::pick_unused_port().unwrap(),
-    );
+pub async fn spawn_runtime(project_path: &str) -> Result<TestRuntime> {
     let runtime_port = portpicker::pick_unused_port().unwrap();
     let runtime_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), runtime_port);
 
     let (tx, _) = tokio::sync::mpsc::channel::<String>(256);
-    let runtimes = build_workspace(Path::new(&project_path), false, tx, false).await?;
+    let runtimes = build_workspace(Path::new(project_path), false, tx, false).await?;
     let service = runtimes[0].clone();
 
     let secrets: HashMap<String, String> = Default::default();
 
-    start_provisioner(DummyProvisioner, provisioner_address);
+    start_provisioner(
+        DummyProvisioner,
+        SocketAddr::new(
+            Ipv4Addr::LOCALHOST.into(),
+            portpicker::pick_unused_port().unwrap(),
+        ),
+    );
 
     // TODO: update this to work with shuttle-next projects, see cargo-shuttle local run
     let runtime_executable = service.executable_path.clone();
 
-    let (runtime, runtime_client) = runner::start(
-        service.is_wasm,
-        Environment::Local,
-        &format!("http://{}", provisioner_address),
-        None,
-        runtime_port,
-        runtime_executable,
-        Path::new(&project_path),
-    )
-    .await?;
+    let (runtime, runtime_client) =
+        runner::start(runtime_port, runtime_executable, Path::new(project_path)).await?;
 
     Ok(TestRuntime {
         runtime_client,
@@ -64,7 +56,6 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
             .into_os_string()
             .into_string()
             .expect("to convert path to string"),
-        service_name: service_name.to_string(),
         runtime_address,
         secrets,
         runtime,
@@ -91,13 +82,6 @@ impl Provisioner for DummyProvisioner {
         _request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseResponse>, Status> {
         panic!("did not expect any runtime test to use dbs")
-    }
-
-    async fn provision_arbitrary_container(
-        &self,
-        _req: tonic::Request<ContainerRequest>,
-    ) -> Result<tonic::Response<ContainerResponse>, tonic::Status> {
-        panic!("did not expect any runtime test to use container")
     }
 
     async fn delete_database(

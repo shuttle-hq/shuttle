@@ -20,9 +20,9 @@ use clap_mangen::Man;
 
 use shuttle_common::{
     constants::{
-        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXECUTABLE_DIRNAME, SHUTTLE_CLI_DOCS_URL,
-        SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL,
-        STORAGE_DIRNAME,
+        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION,
+        SHUTTLE_CLI_DOCS_URL, SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL,
+        SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
     },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
@@ -34,14 +34,16 @@ use shuttle_common::{
         project,
         resource::get_resource_tables,
     },
-    resource, semvers_are_compatible, ApiKey, LogItem, VersionInfo,
+    resource::{self, ResourceInput, ShuttleResourceOutput},
+    semvers_are_compatible, ApiKey, DatabaseResource, DbInput, LogItem, VersionInfo,
 };
-use shuttle_proto::runtime;
-use shuttle_proto::runtime::{LoadRequest, StartRequest, StopRequest};
-use shuttle_service::runner;
+use shuttle_proto::{
+    provisioner::{provisioner_server::Provisioner, DatabaseRequest},
+    runtime::{self, LoadRequest, StartRequest, StopRequest},
+};
 use shuttle_service::{
     builder::{build_workspace, BuiltService},
-    Environment,
+    runner, Environment,
 };
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -63,9 +65,8 @@ use strum::IntoEnumIterator;
 use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
-use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
-use tonic::Status;
+use tonic::{Request, Status};
 use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
@@ -932,9 +933,7 @@ impl Shuttle {
     async fn spin_local_runtime(
         run_args: &RunArgs,
         service: &BuiltService,
-        provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
         idx: u16,
-        provisioner_port: u16,
     ) -> Result<Option<(Child, runtime::Client)>> {
         let crate_directory = service.crate_directory();
         let secrets_path = if crate_directory.join("Secrets.dev.toml").exists() {
@@ -1039,31 +1038,21 @@ impl Shuttle {
 
         // Child process and gRPC client for sending requests to it
         let (mut runtime, mut runtime_client) = runner::start(
-            service.is_wasm,
-            Environment::Local,
-            &format!("http://localhost:{provisioner_port}"),
-            None,
             portpicker::pick_unused_port().expect("unable to find available port for gRPC server"),
             runtime_executable,
             service.workspace_path.as_path(),
         )
-        .await
-        .map_err(|err| {
-            provisioner_server.abort();
-            err
-        })?;
+        .await?;
 
         let service_name = service.service_name()?;
         let deployment_id: Uuid = Default::default();
-
-        // Clones to send to spawn
-        let service_name_clone = service_name.clone().to_string();
 
         let child_stdout = runtime
             .stdout
             .take()
             .context("child process did not have a handle to stdout")?;
         let mut reader = BufReader::new(child_stdout).lines();
+        let service_name_clone = service_name.clone();
         tokio::spawn(async move {
             while let Some(line) = reader.next_line().await.unwrap() {
                 let log_item = LogItem::new(
@@ -1075,23 +1064,27 @@ impl Shuttle {
             }
         });
 
+        //
+        // LOADING PHASE
+        //
+
         let load_request = tonic::Request::new(LoadRequest {
+            project_name: service_name.to_string(),
+            env: Environment::Local.to_string(),
+            secrets: secrets.clone(),
             path: service
                 .executable_path
                 .clone()
                 .into_os_string()
                 .into_string()
                 .expect("to convert path to string"),
-            service_name: service_name.to_string(),
-            resources: Default::default(),
-            secrets,
+            ..Default::default()
         });
 
         trace!("loading service");
         let response = runtime_client
             .load(load_request)
             .or_else(|err| async {
-                provisioner_server.abort();
                 runtime.kill().await?;
                 Err(err)
             })
@@ -1103,16 +1096,22 @@ impl Shuttle {
             return Ok(None);
         }
 
-        let resources = response
-            .resources
-            .into_iter()
-            .map(resource::Response::from_bytes)
-            .collect();
+        //
+        // PROVISIONING PHASE
+        //
+
+        let resources = response.resources;
+        let (resources, mocked_responses) =
+            Shuttle::local_provision_phase(service_name.as_str(), resources, secrets).await?;
 
         println!(
             "{}",
-            get_resource_tables(&resources, service_name.as_str(), false, false)
+            get_resource_tables(&mocked_responses, service_name.as_str(), false, false)
         );
+
+        //
+        // START PHASE
+        //
 
         let addr = SocketAddr::new(
             if run_args.external {
@@ -1133,13 +1132,13 @@ impl Shuttle {
 
         let start_request = StartRequest {
             ip: addr.to_string(),
+            resources,
         };
 
         trace!(?start_request, "starting service");
         let response = runtime_client
             .start(tonic::Request::new(start_request))
             .or_else(|err| async {
-                provisioner_server.abort();
                 runtime.kill().await?;
                 Err(err)
             })
@@ -1148,6 +1147,112 @@ impl Shuttle {
 
         trace!(response = ?response,  "client response: ");
         Ok(Some((runtime, runtime_client)))
+    }
+
+    async fn local_provision_phase(
+        project_name: &str,
+        mut resources: Vec<Vec<u8>>,
+        secrets: HashMap<String, String>,
+    ) -> Result<(Vec<Vec<u8>>, Vec<resource::Response>)> {
+        // for displaying the tables
+        let mut mocked_responses: Vec<resource::Response> = Vec::new();
+        let prov = LocalProvisioner::new()?;
+
+        // Fail early if any bytes is invalid json
+        let values = resources
+            .iter()
+            .map(|bytes| {
+                serde_json::from_slice::<ResourceInput>(bytes)
+                    .context("deserializing resource input")
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        for (bytes, shuttle_resource) in
+            resources
+                .iter_mut()
+                .zip(values)
+                // ignore non-Shuttle resource items
+                .filter_map(|(bytes, value)| match value {
+                    ResourceInput::Shuttle(shuttle_resource) => Some((bytes, shuttle_resource)),
+                    ResourceInput::Custom(_) => None,
+                })
+                .map(|(bytes, shuttle_resource)| {
+                    if shuttle_resource.version == RESOURCE_SCHEMA_VERSION {
+                        Ok((bytes, shuttle_resource))
+                    } else {
+                        Err(anyhow!("
+                            Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
+                            Make sure that this deployer and the Shuttle resource are up to date.
+                            ",
+                            shuttle_resource.r#type,
+                            RESOURCE_SCHEMA_VERSION,
+                            shuttle_resource.version
+                        ))
+                    }
+                }).collect::<anyhow::Result<Vec<_>>>()?.into_iter()
+        {
+            match shuttle_resource.r#type {
+                resource::Type::Database(db_type) => {
+                    let config: DbInput = serde_json::from_value(shuttle_resource.config)
+                        .context("deserializing resource config")?;
+                    let res = match config.local_uri {
+                        Some(local_uri) => DatabaseResource::ConnectionString(local_uri),
+                        None => DatabaseResource::Info(
+                            prov.provision_database(Request::new(DatabaseRequest {
+                                project_name: project_name.to_string(),
+                                db_type: Some(db_type.into()),
+                            }))
+                            .await?
+                            .into_inner()
+                            .into(),
+                        ),
+                    };
+                    mocked_responses.push(resource::Response {
+                        r#type: shuttle_resource.r#type,
+                        config: serde_json::Value::Null,
+                        data: serde_json::to_value(&res).unwrap(),
+                    });
+                    *bytes = serde_json::to_vec(&ShuttleResourceOutput {
+                        output: res,
+                        custom: shuttle_resource.custom,
+                    })
+                    .unwrap();
+                }
+                resource::Type::Secrets => {
+                    // We already know the secrets at this stage, they are not provisioned like other resources
+                    mocked_responses.push(resource::Response {
+                        r#type: shuttle_resource.r#type,
+                        config: serde_json::Value::Null,
+                        data: serde_json::to_value(secrets.clone()).unwrap(),
+                    });
+                    *bytes = serde_json::to_vec(&ShuttleResourceOutput {
+                        output: secrets.clone(),
+                        custom: shuttle_resource.custom,
+                    })
+                    .unwrap();
+                }
+                resource::Type::Persist => {
+                    // only show that this resource is "connected"
+                    mocked_responses.push(resource::Response {
+                        r#type: shuttle_resource.r#type,
+                        config: serde_json::Value::Null,
+                        data: serde_json::Value::Null,
+                    });
+                }
+                resource::Type::Container => {
+                    let config = serde_json::from_value(shuttle_resource.config)
+                        .context("deserializing resource config")?;
+                    let res = prov.start_container(config).await?;
+                    *bytes = serde_json::to_vec(&ShuttleResourceOutput {
+                        output: res,
+                        custom: shuttle_resource.custom,
+                    })
+                    .unwrap();
+                }
+            }
+        }
+
+        Ok((resources, mocked_responses))
     }
 
     async fn stop_runtime(
@@ -1165,14 +1270,13 @@ impl Shuttle {
             })
             .await?
             .into_inner();
-        trace!(response = ?response,  "client stop response: ");
+        trace!(response = ?response, "client stop response: ");
         Ok(())
     }
 
     async fn add_runtime_info(
         runtime: Option<(Child, runtime::Client)>,
         existing_runtimes: &mut Vec<(Child, runtime::Client)>,
-        extra_servers: &[&JoinHandle<Result<(), tonic::transport::Error>>],
     ) -> Result<(), Status> {
         match runtime {
             Some(inner) => {
@@ -1181,10 +1285,6 @@ impl Shuttle {
             }
             None => {
                 trace!("Runtime error: No runtime process. Crashed during startup?");
-                for server in extra_servers {
-                    server.abort();
-                }
-
                 for rt_info in existing_runtimes {
                     let mut errored_out = false;
                     // Stopping all runtimes gracefully first, but if this errors out the function kills the runtime forcefully.
@@ -1229,24 +1329,11 @@ impl Shuttle {
         build_workspace(working_directory, run_args.release, tx, false).await
     }
 
-    async fn setup_local_provisioner(
-    ) -> Result<(JoinHandle<Result<(), tonic::transport::Error>>, u16)> {
-        let provisioner = LocalProvisioner::new()?;
-        let provisioner_port =
-            portpicker::pick_unused_port().expect("unable to find available port for provisioner");
-        let provisioner_server = provisioner.start(SocketAddr::new(
-            Ipv4Addr::LOCALHOST.into(),
-            provisioner_port,
-        ));
-
-        Ok((provisioner_server, provisioner_port))
-    }
-
     #[cfg(target_family = "unix")]
     async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
         debug!("starting local run");
         let services = self.pre_local_run(&run_args).await?;
-        let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
+
         let mut sigterm_notif =
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
                 .expect("Can not get the SIGTERM signal receptor");
@@ -1264,10 +1351,10 @@ impl Shuttle {
             // We must cover the case of starting multiple workspace services and receiving a signal in parallel.
             // This must stop all the existing runtimes and creating new ones.
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
+                res = Shuttle::spin_local_runtime(&run_args, service, i as u16) => {
                     match res {
                         Ok(runtime) => {
-                            Shuttle::add_runtime_info(runtime, &mut runtimes, &[&provisioner_server]).await?;
+                            Shuttle::add_runtime_info(runtime, &mut runtimes).await?;
                         },
                         Err(e) => println!("Runtime error: {e:?}"),
                     }
@@ -1295,7 +1382,6 @@ impl Shuttle {
         // If prior signal received is set to true we must stop all the existing runtimes and
         // exit the `local_run`.
         if signal_received {
-            provisioner_server.abort();
             for (mut rt, mut rt_client) in runtimes {
                 Shuttle::stop_runtime(&mut rt, &mut rt_client)
                     .await
@@ -1333,7 +1419,6 @@ impl Shuttle {
                     println!(
                         "cargo-shuttle received SIGTERM. Killing all the runtimes..."
                     );
-                    provisioner_server.abort();
                     Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
                         trace!(status = ?err, "stopping the runtime errored out");
                     });
@@ -1343,7 +1428,6 @@ impl Shuttle {
                     println!(
                         "cargo-shuttle received SIGINT. Killing all the runtimes..."
                     );
-                    provisioner_server.abort();
                     Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
                         trace!(status = ?err, "stopping the runtime errored out");
                     });

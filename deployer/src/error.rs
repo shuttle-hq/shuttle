@@ -11,6 +11,8 @@ pub enum Error {
     Build(#[source] Box<dyn StdError + Send>),
     #[error("Load error: {0}")]
     Load(String),
+    #[error("Failed during provisioning: {0}")]
+    Provision(#[source] anyhow::Error),
     #[error("Prepare to run error: {0}")]
     PrepareRun(String),
     #[error("Run error: {0}")]

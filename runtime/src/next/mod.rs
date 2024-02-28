@@ -15,10 +15,9 @@ use hyper::body::HttpBody;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
-use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
-    LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest, StopResponse,
-    SubscribeStopRequest, SubscribeStopResponse,
+    runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason,
+    StopRequest, StopResponse, SubscribeStopRequest, SubscribeStopResponse,
 };
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
@@ -78,20 +77,18 @@ impl Runtime for AxumWasm {
 
         *self.router.lock().unwrap() = Some(router);
 
-        let message = LoadResponse {
+        Ok(tonic::Response::new(LoadResponse {
             success: true,
             message: String::new(),
             resources: Vec::new(),
-        };
-
-        Ok(tonic::Response::new(message))
+        }))
     }
 
     async fn start(
         &self,
         request: tonic::Request<StartRequest>,
     ) -> Result<tonic::Response<StartResponse>, Status> {
-        let StartRequest { ip } = request.into_inner();
+        let StartRequest { ip, .. } = request.into_inner();
 
         let address = SocketAddr::from_str(&ip)
             .context("invalid socket address")
@@ -113,9 +110,10 @@ impl Runtime for AxumWasm {
 
         tokio::spawn(run_until_stopped(router, address, kill_rx, stopped_tx));
 
-        let message = StartResponse { success: true };
-
-        Ok(tonic::Response::new(message))
+        Ok(tonic::Response::new(StartResponse {
+            success: true,
+            message: String::new(),
+        }))
     }
 
     async fn stop(

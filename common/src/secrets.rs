@@ -50,6 +50,7 @@ impl<T: Zeroize> Secret<T> {
 
 /// Store that holds all the secrets available to a deployment
 #[derive(Deserialize, Serialize, Clone)]
+#[serde(transparent)]
 pub struct SecretStore {
     pub(crate) secrets: BTreeMap<String, Secret<String>>,
 }

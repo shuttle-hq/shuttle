@@ -85,6 +85,8 @@ impl AsRef<str> for ApiKey {
     }
 }
 
+////// Resource Input/Output types
+
 /// The input given to Shuttle DB resources
 #[derive(Deserialize, Serialize, Default)]
 pub struct DbInput {
@@ -93,6 +95,7 @@ pub struct DbInput {
 
 /// The output produced by Shuttle DB resources
 #[derive(Deserialize, Serialize)]
+#[serde(untagged)]
 pub enum DatabaseResource {
     ConnectionString(String),
     Info(DatabaseInfo),
@@ -164,6 +167,28 @@ impl DatabaseInfo {
             self.database_name,
         )
     }
+}
+
+/// Used to request a container from the local run provisioner
+#[derive(Serialize, Deserialize)]
+pub struct ContainerRequest {
+    pub project_name: String,
+    /// Type of container, used in the container name. ex "qdrant"
+    pub container_name: String,
+    /// ex. "qdrant/qdrant:latest"
+    pub image: String,
+    /// The internal port that the container should expose. ex. "6334/tcp"
+    pub port: String,
+    /// list of "KEY=value" strings
+    pub env: Vec<String>,
+}
+
+/// Response from requesting a container from the local run provisioner
+#[derive(Serialize, Deserialize)]
+pub struct ContainerResponse {
+    /// The port that the container exposes to the host.
+    /// Is a string for parity with the Docker respose.
+    pub host_port: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -15,7 +15,6 @@ COPY . .
 # Select only the essential files for copying into next steps
 # so that changes to miscellaneous files don't trigger a new cargo-chef cook.
 # Beware that .dockerignore filters files before they get here.
-
 RUN find . \( \
     -name "*.rs" -or \
     -name "*.toml" -or \
@@ -26,6 +25,8 @@ RUN find . \( \
     -name "*.pem" \
     \) -type f -exec install -D \{\} /build/\{\} \;
 WORKDIR /build
+# Remove patch.unused entries as they trigger unnecessary rebuilds (don't ask how long it took to write)
+RUN N="$(grep -bPzo '(?s)\n\[\[patch.unused.*' Cargo.lock | grep -a : | cut -d: -f1)"; [ -z $N ] && exit 0; head -c $N Cargo.lock > Cargo.lock.nopatch && mv Cargo.lock.nopatch Cargo.lock
 RUN cargo chef prepare --recipe-path /recipe.json
 
 

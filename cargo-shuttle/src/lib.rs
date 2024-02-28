@@ -1056,6 +1056,8 @@ impl Shuttle {
         let service_name = service.service_name()?;
         let deployment_id: Uuid = Default::default();
 
+        let quite_mode = run_args.quite;
+
         // Clones to send to spawn
         let service_name_clone = service_name.clone().to_string();
 
@@ -1071,7 +1073,13 @@ impl Shuttle {
                     shuttle_common::log::Backend::Runtime(service_name_clone.clone()),
                     line,
                 );
-                println!("{log_item}");
+                if !quite_mode {
+                    println!("{log_item}");
+                } else {
+                    if log_item.line.contains("ERROR") {
+                        println!("{log_item}");
+                    }
+                }
             }
         });
 

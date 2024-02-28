@@ -260,19 +260,19 @@ impl ToTokens for Loader {
 
                 #vars
 
-                let mut v = Vec::new();
+                let mut inputs = Vec::new();
                 #(
-                    let b: <#fn_inputs_builder as ResourceInputBuilder>::Input =
+                    let input: <#fn_inputs_builder as ResourceInputBuilder>::Input =
                         #fn_inputs_builder::default()
                         #fn_inputs_builder_options // `vars` are used here
                         .build(&#factory_ident)
                         .await
                         .context(format!("failed to construct config for {}", stringify!(#fn_inputs_builder)))?;
-                    let j = ::shuttle_runtime::__internals::serde_json::to_vec(&b)
+                    let json = ::shuttle_runtime::__internals::serde_json::to_vec(&input)
                         .context(format!("failed to serialize config for {}", stringify!(#fn_inputs_builder)))?;
-                    v.push(j);
+                    inputs.push(json);
                 )*
-                Ok(v)
+                Ok(inputs)
             }
 
             async fn __runner(
@@ -350,8 +350,8 @@ mod tests {
                 _factory: ::shuttle_runtime::ResourceFactory,
             ) -> Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
-                let mut v = Vec::new();
-                Ok(v)
+                let mut inputs = Vec::new();
+                Ok(inputs)
             }
 
             async fn __runner(
@@ -430,24 +430,24 @@ mod tests {
             ) -> Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
                 use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
-                let mut v = Vec::new();
-                let b: <shuttle_shared_db::Postgres as ResourceInputBuilder>::Input =
+                let mut inputs = Vec::new();
+                let input: <shuttle_shared_db::Postgres as ResourceInputBuilder>::Input =
                     shuttle_shared_db::Postgres::default()
                     .build(&factory)
                     .await
                     .context(format!("failed to construct config for {}", stringify!(shuttle_shared_db::Postgres)))?;
-                let j = ::shuttle_runtime::__internals::serde_json::to_vec(&b)
+                let json = ::shuttle_runtime::__internals::serde_json::to_vec(&input)
                     .context(format!("failed to serialize config for {}", stringify!(shuttle_shared_db::Postgres)))?;
-                v.push(j);
-                let b: <shuttle_shared_db::Redis as ResourceInputBuilder>::Input =
+                inputs.push(json);
+                let input: <shuttle_shared_db::Redis as ResourceInputBuilder>::Input =
                     shuttle_shared_db::Redis::default()
                     .build(&factory)
                     .await
                     .context(format!("failed to construct config for {}", stringify!(shuttle_shared_db::Redis)))?;
-                let j = ::shuttle_runtime::__internals::serde_json::to_vec(&b)
+                let json = ::shuttle_runtime::__internals::serde_json::to_vec(&input)
                     .context(format!("failed to serialize config for {}", stringify!(shuttle_shared_db::Redis)))?;
-                v.push(j);
-                Ok(v)
+                inputs.push(json);
+                Ok(inputs)
             }
 
             async fn __runner(
@@ -576,17 +576,17 @@ mod tests {
                 use ::shuttle_runtime::__internals::Context;
                 use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
                 let __vars = std::collections::HashMap::from_iter(factory.get_secrets().into_iter().map(|(key, value)| (format!("secrets.{}", key), value.expose().clone())));
-                let mut v = Vec::new();
-                let b: <shuttle_shared_db::Postgres as ResourceInputBuilder>::Input =
+                let mut inputs = Vec::new();
+                let input: <shuttle_shared_db::Postgres as ResourceInputBuilder>::Input =
                     shuttle_shared_db::Postgres::default()
                     .size(&::shuttle_runtime::__internals::strfmt("10Gb", &__vars)?).public(false)
                     .build(&factory)
                     .await
                     .context(format!("failed to construct config for {}", stringify!(shuttle_shared_db::Postgres)))?;
-                let j = ::shuttle_runtime::__internals::serde_json::to_vec(&b)
+                let json = ::shuttle_runtime::__internals::serde_json::to_vec(&input)
                     .context(format!("failed to serialize config for {}", stringify!(shuttle_shared_db::Postgres)))?;
-                v.push(j);
-                Ok(v)
+                inputs.push(json);
+                Ok(inputs)
             }
             async fn __runner(
                 resources: Vec<Vec<u8>>,

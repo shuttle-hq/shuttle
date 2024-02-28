@@ -280,7 +280,7 @@ impl Built {
             .await
             .map_err(Error::Runtime)?;
 
-        // Check for cached resources for this deployment id. This only happens on wakeup from idle.
+        // Check for cached resources for this deployment id. This only succeeds on wakeup from idle or project restart.
         let resources = if let Some(bytes) = std::fs::read(&cached_resources_path)
             .ok()
             .and_then(|bytes| serde_json::from_slice(bytes.as_slice()).ok())

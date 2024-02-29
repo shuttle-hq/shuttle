@@ -18,21 +18,6 @@ Please file an issue if you encounter any problems!
     $RepoUrl = "https://github.com/shuttle-hq/shuttle"
     $CargoHome = if ($null -ne $Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
 
-    if (Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo-binstall.exe) {
-        Write-Host "Installing cargo-shuttle using cargo binstall"
-        cargo-binstall.exe cargo-shuttle --no-confirm
-        if ($?) {
-            Write-Host "Installed cargo-shuttle, try running ``cargo shuttle --help``" -ForegroundColor Green
-            return
-        }
-        else {
-            Write-Host "Could not install from release using cargo binstall, trying manual binary download" -ForegroundColor Red
-        }
-    }
-    else {
-        Write-Host "Cargo binstall not found, trying manual binary download" -ForegroundColor Red
-    }
-
     if (-not (Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo.exe)) {
         if ($Arch -in "AMD64", "x86") {
 			Write-Host "Could not find cargo.exe, Rust may not be installed" -ForegroundColor Red
@@ -61,6 +46,21 @@ Please file an issue if you encounter any problems!
 			Write-Host "Please install Rust manually, more info at: https://rust-lang.github.io/rustup/installation/other.html" -ForegroundColor Red
 			return
 		}
+    }
+
+    if (Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo-binstall.exe) {
+        Write-Host "Installing cargo-shuttle using cargo binstall"
+        cargo-binstall.exe cargo-shuttle --no-confirm
+        if ($?) {
+            Write-Host "Installed cargo-shuttle, try running ``cargo shuttle --help``" -ForegroundColor Green
+            return
+        }
+        else {
+            Write-Host "Could not install from release using cargo binstall, trying manual binary download" -ForegroundColor Red
+        }
+    }
+    else {
+        Write-Host "Cargo binstall not found, trying manual binary download" -ForegroundColor Red
     }
 
     if (($Arch -eq "AMD64") -and (Get-Command -CommandType Application -ErrorAction SilentlyContinue tar.exe)) {

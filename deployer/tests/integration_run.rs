@@ -311,13 +311,15 @@ async fn panic_in_bind() {
 }
 
 async fn make_and_built(crate_name: &str) -> (Built, PathBuf) {
+    // relative to deployer crate root
     let crate_dir: PathBuf = [RESOURCES_PATH, crate_name].iter().collect();
+    let target_dir: PathBuf = [RESOURCES_PATH, "target"].iter().collect();
 
     Command::new("cargo")
         .args(["build"])
         .current_dir(&crate_dir)
         // Let all tests compile against the same target dir, since their dependency trees are identical
-        .env("CARGO_TARGET_DIR", "../target")
+        .env("CARGO_TARGET_DIR", "../target") // relative to current_dir
         .spawn()
         .unwrap()
         .wait()
@@ -331,7 +333,7 @@ async fn make_and_built(crate_name: &str) -> (Built, PathBuf) {
     };
 
     let id = Uuid::new_v4();
-    let exe_path = crate_dir.join("target/debug").join(bin_name);
+    let exe_path = target_dir.join("debug").join(bin_name);
     let new_dir = crate_dir.join(EXECUTABLE_DIRNAME);
     let new_exe_path = new_dir.join(id.to_string());
 

@@ -10,21 +10,21 @@ pub async fn get_mocked_gateway_server() -> MockServer {
 
     let projects = vec![
         Project {
-            id: "id1",
+            id: "00000000000000000000000001",
             account_id: "user-1",
             name: "user-1-project-1",
             state: "stopped",
             idle_minutes: 30,
         },
         Project {
-            id: "id2",
+            id: "00000000000000000000000002",
             account_id: "user-1",
             name: "user-1-project-2",
             state: "ready",
             idle_minutes: 30,
         },
         Project {
-            id: "id3",
+            id: "00000000000000000000000003",
             account_id: "user-2",
             name: "user-2-project-1",
             state: "ready",
@@ -52,7 +52,7 @@ pub async fn get_mocked_gateway_server() -> MockServer {
 }
 
 /// A denormalized project to make it easy to return mocked responses
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct Project<'a> {
     id: &'a str,
     account_id: &'a str,

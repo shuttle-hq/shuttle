@@ -15,10 +15,8 @@ Please file an issue if you encounter any problems!
 
     $Arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE", [EnvironmentVariableTarget]::Machine)
     $TempDir = $Env:TEMP
-    $RepoUrl = "https://github.com/shuttle-hq/shuttle"
-    $CargoHome = if ($null -ne $Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
 
-    if (-not (Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo.exe)) {
+    if (!(Get-Command -CommandType Application -ErrorAction SilentlyContinue cargo.exe)) {
         if ($Arch -in "AMD64", "x86") {
 			Write-Host "Could not find cargo.exe, Rust may not be installed" -ForegroundColor Red
 			$Confirm = Read-Host -Prompt "Would you like to install Rust via Rustup? [y/N]"
@@ -62,6 +60,9 @@ Please file an issue if you encounter any problems!
     else {
         Write-Host "Cargo binstall not found, trying manual binary download" -ForegroundColor Red
     }
+
+    $RepoUrl = "https://github.com/shuttle-hq/shuttle"
+    $CargoHome = if ($null -ne $Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
 
     if (($Arch -eq "AMD64") -and (Get-Command -CommandType Application -ErrorAction SilentlyContinue tar.exe)) {
         (Invoke-WebRequest "$RepoUrl/releases/latest" -Headers @{ "Accept" = "application/json" }).Content -match '"tag_name":"([^"]*)"' | Out-Null

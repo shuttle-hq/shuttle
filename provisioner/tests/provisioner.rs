@@ -69,8 +69,8 @@ mod needs_docker {
         let mut r_r_client = resource_recorder::get_client(rr_uri).await;
         r_r_client
             .record_resources(Request::new(RecordRequest {
-                project_id: "id1".to_string(),
-                service_id: "service_id".to_string(),
+                project_id: "00000000000000000000000001".to_string(),
+                service_id: "00000000000000000000000001".to_string(),
                 resources: vec![
                     record_request::Resource {
                         r#type: "database::shared::postgres".to_string(),

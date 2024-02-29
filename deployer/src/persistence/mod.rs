@@ -222,7 +222,7 @@ impl Persistence {
     }
 
     pub async fn get_active_deployment(&self, service_id: &Ulid) -> Result<Option<Deployment>> {
-        sqlx::query_as("SELECT * FROM deployments WHERE service_id = ? AND state = ?")
+        sqlx::query_as("SELECT * FROM deployments WHERE service_id = ? AND state = ? ORDER BY last_update DESC")
             .bind(service_id.to_string())
             .bind(State::Running)
             .fetch_optional(&self.pool)
@@ -297,24 +297,6 @@ impl Persistence {
         )
         .bind(State::Running)
         .fetch_all(&self.pool)
-        .await
-        .map_err(Error::from)
-    }
-
-    /// Gets a deployment if it is runnable
-    pub async fn get_runnable_deployment(&self, id: &Uuid) -> Result<Option<DeploymentRunnable>> {
-        sqlx::query_as(
-            r#"SELECT d.id, service_id, s.name AS service_name, d.is_next
-                FROM deployments AS d
-                JOIN services AS s ON s.id = d.service_id
-                WHERE state IN (?, ?, ?)
-                AND d.id = ?"#,
-        )
-        .bind(State::Running)
-        .bind(State::Stopped)
-        .bind(State::Completed)
-        .bind(id)
-        .fetch_optional(&self.pool)
         .await
         .map_err(Error::from)
     }
@@ -930,20 +912,6 @@ mod tests {
         ] {
             p.insert_deployment(deployment).await.unwrap();
         }
-
-        let runnable = p.get_runnable_deployment(&id_1).await.unwrap();
-        assert_eq!(
-            runnable,
-            Some(DeploymentRunnable {
-                id: id_1,
-                service_name: "foo".to_string(),
-                service_id: foo_id,
-                is_next: false,
-            })
-        );
-
-        let runnable = p.get_runnable_deployment(&id_crashed).await.unwrap();
-        assert_eq!(runnable, None);
 
         let runnable = p.get_all_runnable_deployments().await.unwrap();
         assert_eq!(

@@ -134,14 +134,14 @@ DOCKER_COMPOSE_ENV=\
 	SHUTTLE_ENV=$(SHUTTLE_ENV)\
 	SHUTTLE_SERVICE_VERSION=$(SHUTTLE_SERVICE_VERSION)
 
-.PHONY: clean cargo-clean images the-shuttle-images shuttle-% postgres otel deploy test docker-compose.rendered.yml up down
+.PHONY: clean deep-clean images the-shuttle-images shuttle-% postgres otel deploy test docker-compose.rendered.yml up down
 
 clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-cargo-clean:
-	find . -type d \( -name target -or -name .shuttle-executables \) | xargs rm -rf
+deep-clean:
+	find . -type d \( -name target -or -name .shuttle-executables -or -name node_modules \) | xargs rm -rf
 
 images: the-shuttle-images postgres otel
 

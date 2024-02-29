@@ -17,7 +17,7 @@ mod runtime_manager;
 
 pub use crate::args::Args;
 pub use crate::deployment::state_change_layer::StateChangeLayer;
-use crate::deployment::DeploymentManager;
+use crate::deployment::{Built, DeploymentManager};
 use shuttle_common::backends::client::gateway;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -29,6 +29,9 @@ pub async fn start(
     log_fetcher: logger::Client,
     args: Args,
 ) {
+    let project_id = Ulid::from_string(args.project_id.as_str())
+        .expect("to have a valid ULID as project_id arg");
+
     // when _set is dropped once axum exits, the deployment tasks will be aborted.
     let deployment_manager = DeploymentManager::builder()
         .build_log_recorder(log_recorder)
@@ -47,17 +50,31 @@ pub async fn start(
 
     persistence.cleanup_invalid_states().await.unwrap();
 
-    let runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
-    info!(count = %runnable_deployments.len(), "stopping all but last running deploy");
-
-    // Make sure we don't stop the last running deploy. This works because they are returned in descending order.
-    let project_id = Ulid::from_string(args.project_id.as_str())
-        .expect("to have a valid ULID as project_id arg");
-    for existing_deployment in runnable_deployments.into_iter().skip(1) {
+    let deployments = persistence.get_all_runnable_deployments().await.unwrap();
+    info!(count = %deployments.len(), "Deployments considered in the running state");
+    // This works because they are returned in descending order.
+    let mut deployments = deployments.into_iter();
+    let last_running_deployment = deployments.next();
+    info!("Marking all but last running deployment as stopped");
+    for older_deployment in deployments {
         persistence
-            .stop_running_deployment(existing_deployment)
+            .stop_running_deployment(older_deployment)
             .await
             .unwrap();
+    }
+    if let Some(deployment) = last_running_deployment {
+        info!("Starting up last running deployment");
+        let built = Built {
+            id: deployment.id,
+            service_name: deployment.service_name,
+            service_id: deployment.service_id,
+            project_id,
+            tracing_context: Default::default(),
+            is_next: deployment.is_next,
+            claim: None,
+            secrets: Default::default(),
+        };
+        deployment_manager.run_push(built).await;
     }
 
     let mut builder = handlers::RouterBuilder::new(

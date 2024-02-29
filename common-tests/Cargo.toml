@@ -8,7 +8,11 @@ publish = false
 
 [dependencies]
 cargo-shuttle = { path = "../cargo-shuttle" }
-shuttle-proto = { workspace = true, features = ["logger", "resource-recorder"] }
+shuttle-proto = { workspace = true, features = [
+    "logger-client",
+    "resource-recorder-client",
+    "provisioner-client",
+] }
 
 hyper = { workspace = true }
 portpicker = { workspace = true }

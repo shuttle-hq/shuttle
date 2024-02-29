@@ -9,7 +9,7 @@ homepage = "https://www.shuttle.rs"
 
 [dependencies]
 shuttle-common = { workspace = true, features = ["models"] }
-shuttle-proto = { workspace = true, features = ["provisioner", "runtime"] }
+shuttle-proto = { workspace = true, features = ["provisioner", "runtime-client"] }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
 
 anyhow = { workspace = true }

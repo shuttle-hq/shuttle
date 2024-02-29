@@ -7,9 +7,9 @@ pub mod database;
 #[cfg(feature = "service")]
 pub mod deployment;
 #[cfg(feature = "service")]
-use uuid::Uuid;
-#[cfg(feature = "service")]
-pub type DeploymentId = Uuid;
+pub type DeploymentId = uuid::Uuid;
+#[cfg(feature = "extract_propagation")]
+pub mod extract_propagation;
 #[cfg(feature = "service")]
 pub mod log;
 #[cfg(feature = "service")]

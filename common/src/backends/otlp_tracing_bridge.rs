@@ -9,7 +9,10 @@ use opentelemetry::{
     KeyValue,
 };
 use std::borrow::Cow;
-use tracing_core::{field::Visit, Field, Level, Metadata, Subscriber};
+use tracing::{
+    field::{Field, Visit},
+    Event, Level, Metadata, Subscriber,
+};
 use tracing_opentelemetry::OtelData;
 use tracing_subscriber::{registry::LookupSpan, Layer};
 
@@ -32,7 +35,7 @@ impl<'a> tracing::field::Visit for EventVisitor<'a> {
         }
     }
 
-    fn record_str(&mut self, field: &tracing_core::Field, value: &str) {
+    fn record_str(&mut self, field: &Field, value: &str) {
         if let Some(ref mut vec) = self.log_record.attributes {
             vec.push((field.name().into(), value.to_owned().into()));
         } else {
@@ -41,7 +44,7 @@ impl<'a> tracing::field::Visit for EventVisitor<'a> {
         }
     }
 
-    fn record_bool(&mut self, field: &tracing_core::Field, value: bool) {
+    fn record_bool(&mut self, field: &Field, value: bool) {
         if let Some(ref mut vec) = self.log_record.attributes {
             vec.push((field.name().into(), value.into()));
         } else {
@@ -173,11 +176,7 @@ impl<S> Layer<S> for ErrorTracingLayer<S>
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
 {
-    fn on_event(
-        &self,
-        event: &tracing_core::Event<'_>,
-        ctx: tracing_subscriber::layer::Context<'_, S>,
-    ) {
+    fn on_event(&self, event: &Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
         // We only care about error events.
         if !ErrorVisitor::is_valid(event.metadata()) {
             return;

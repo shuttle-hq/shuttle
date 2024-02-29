@@ -408,7 +408,7 @@ impl Shuttle {
                 .interact()?;
             println!();
 
-            let path = args::parse_init_path(OsString::from(directory_str))?;
+            let path = args::create_and_parse_path(OsString::from(directory_str))?;
 
             if std::fs::read_dir(&path)
                 .expect("init dir to exist and list entries")

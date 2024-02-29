@@ -11,7 +11,7 @@ shuttle-common = { workspace = true, features = [
     "models",
     "persist",
 ] }
-shuttle-proto = { workspace = true, features = ["provisioner"] }
+shuttle-proto = { workspace = true, features = ["provisioner-client"] }
 shuttle-orchestrator = { workspace = true }
 
 async-trait = { workspace = true }

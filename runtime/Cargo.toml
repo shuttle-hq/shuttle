@@ -14,7 +14,7 @@ doctest = false
 
 [dependencies]
 shuttle-codegen = { workspace = true, features = ["frameworks"] }
-shuttle-common = { workspace = true, features = ["backend"] }
+shuttle-common = { workspace = true, features = ["extract_propagation"] }
 shuttle-proto = { workspace = true, features = ["runtime"] }
 shuttle-service = { workspace = true }
 
@@ -43,6 +43,7 @@ wasmtime-wasi = { version = "13.0.0", optional = true }
 portpicker = "0.1.1"
 futures = { workspace = true }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
+shuttle-proto = { workspace = true, features = ["provisioner"] }
 uuid = { workspace = true }
 
 [features]

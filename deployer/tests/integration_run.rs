@@ -316,6 +316,8 @@ async fn make_and_built(crate_name: &str) -> (Built, PathBuf) {
     Command::new("cargo")
         .args(["build"])
         .current_dir(&crate_dir)
+        // Let all tests compile against the same target dir, since their dependency trees are identical
+        .env("CARGO_TARGET_DIR", "../target")
         .spawn()
         .unwrap()
         .wait()
@@ -343,7 +345,12 @@ async fn make_and_built(crate_name: &str) -> (Built, PathBuf) {
             project_id: Ulid::new(),
             tracing_context: Default::default(),
             is_next: false,
-            claim: Default::default(),
+            claim: Some(Claim::new(
+                "test".into(),
+                Vec::new(),
+                shuttle_common::claims::AccountTier::Basic,
+                shuttle_common::claims::AccountTier::Basic,
+            )),
             secrets: Default::default(),
         },
         RESOURCES_PATH.into(), // is later joined with `service_name` to arrive at `crate_name`

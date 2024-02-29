@@ -55,12 +55,14 @@ where
     }
 
     fn call(&mut self, mut req: hyper::Request<hyper::Body>) -> Self::Future {
-        req.extensions_mut().insert(Claim::new(
-            "test".to_string(),
+        let mut c = Claim::new(
+            "user-1".to_string(),
             self.scopes.clone(),
             Default::default(),
             AccountTier::default(),
-        ));
+        );
+        c.token = Some("user-1".to_string());
+        req.extensions_mut().insert(c);
         self.inner.call(req)
     }
 }

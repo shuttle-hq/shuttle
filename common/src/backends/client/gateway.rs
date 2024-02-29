@@ -142,13 +142,13 @@ mod tests {
             res,
             vec![
                 Response {
-                    id: "id1".to_string(),
+                    id: "00000000000000000000000001".to_string(),
                     name: "user-1-project-1".to_string(),
                     state: State::Stopped,
                     idle_minutes: Some(30)
                 },
                 Response {
-                    id: "id2".to_string(),
+                    id: "00000000000000000000000002".to_string(),
                     name: "user-1-project-2".to_string(),
                     state: State::Ready,
                     idle_minutes: Some(30)
@@ -162,6 +162,6 @@ mod tests {
     async fn get_user_project_ids(client: &mut Client) {
         let res = client.get_user_project_ids("user-2").await.unwrap();
 
-        assert_eq!(res, vec!["id3"])
+        assert_eq!(res, vec!["00000000000000000000000003"])
     }
 }

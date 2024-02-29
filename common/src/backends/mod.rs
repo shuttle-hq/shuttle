@@ -1,6 +1,6 @@
 use tracing::instrument;
 
-use crate::claims::{Claim, Scope};
+use crate::claims::{AccountTier, Claim, Scope};
 
 use self::client::{ProjectsDal, ResourceDal};
 
@@ -17,6 +17,7 @@ pub mod trace;
 pub trait ClaimExt {
     /// Verify that the [Claim] has the [Scope::Admin] scope.
     fn is_admin(&self) -> bool;
+    fn is_deployer(&self) -> bool;
     /// Verify that the user's current project count is lower than the account limit in [Claim::limits].
     fn can_create_project(&self, current_count: u32) -> bool;
     /// Verify that the user has permission to provision RDS instances.
@@ -31,11 +32,20 @@ pub trait ClaimExt {
         projects_dal: &G,
         project_name: &str,
     ) -> Result<bool, client::Error>;
+    /// Verify if the claim subject has ownership of a project.
+    async fn owns_project_id<G: ProjectsDal>(
+        &self,
+        projects_dal: &G,
+        project_id: &str,
+    ) -> Result<bool, client::Error>;
 }
 
 impl ClaimExt for Claim {
     fn is_admin(&self) -> bool {
         self.scopes.contains(&Scope::Admin)
+    }
+    fn is_deployer(&self) -> bool {
+        self.tier == AccountTier::Deployer
     }
 
     fn can_create_project(&self, current_count: u32) -> bool {
@@ -71,7 +81,17 @@ impl ClaimExt for Claim {
         project_name: &str,
     ) -> Result<bool, client::Error> {
         let token = self.token.as_ref().expect("token to be set");
-        let projects = projects_dal.get_user_projects(token).await?;
-        Ok(projects.iter().any(|project| project.name == project_name))
+        projects_dal.head_user_project(token, project_name).await
+    }
+
+    #[instrument(skip_all)]
+    async fn owns_project_id<G: ProjectsDal>(
+        &self,
+        projects_dal: &G,
+        project_id: &str,
+    ) -> Result<bool, client::Error> {
+        let token = self.token.as_ref().expect("token to be set");
+        let projects = projects_dal.get_user_project_ids(token).await?;
+        Ok(projects.iter().any(|id| id == project_id))
     }
 }

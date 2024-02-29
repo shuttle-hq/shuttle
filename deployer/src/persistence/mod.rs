@@ -8,8 +8,8 @@ use shuttle_common::{claims::Claim, resource::Type};
 use shuttle_proto::{
     provisioner::{self, DatabaseRequest},
     resource_recorder::{
-        self, record_request, RecordRequest, ResourceIds, ResourceResponse, ResourcesResponse,
-        ResultResponse, ServiceResourcesRequest,
+        self, record_request, ProjectResourcesRequest, RecordRequest, ResourceIds,
+        ResourceResponse, ResourcesResponse, ResultResponse,
     },
 };
 use sqlx::{
@@ -364,17 +364,18 @@ impl ResourceManager for Persistence {
         service_id: &Ulid,
         claim: Claim,
     ) -> Result<ResourcesResponse> {
-        let mut req = tonic::Request::new(ServiceResourcesRequest {
-            service_id: service_id.to_string(),
+        let mut req = tonic::Request::new(ProjectResourcesRequest {
+            project_id: self.project_id.to_string(),
         });
+
         req.extensions_mut().insert(claim.clone());
 
-        info!(%service_id, "Getting resources from resource-recorder");
+        info!(%self.project_id, "Getting resources from resource-recorder");
         let res = self
             .resource_recorder_client
             .as_mut()
             .expect("to have the resource recorder set up")
-            .get_service_resources(req)
+            .get_project_resources(req)
             .await
             .map_err(PersistenceError::ResourceRecorder)
             .map(|res| res.into_inner())?;
@@ -384,8 +385,7 @@ impl ResourceManager for Persistence {
             info!("Got no resources from resource-recorder");
             // Check if there are cached resources on the local persistence.
             let resources: std::result::Result<Vec<Resource>, sqlx::Error> =
-                sqlx::query_as("SELECT * FROM resources WHERE service_id = ?")
-                    .bind(service_id.to_string())
+                sqlx::query_as("SELECT * FROM resources")
                     .fetch_all(&self.pool)
                     .await;
 
@@ -410,9 +410,10 @@ impl ResourceManager for Persistence {
                 self.insert_resources(local_resources, service_id, claim.clone())
                     .await?;
 
-                let mut req = tonic::Request::new(ServiceResourcesRequest {
-                    service_id: service_id.to_string(),
+                let mut req = tonic::Request::new(ProjectResourcesRequest {
+                    project_id: self.project_id.to_string(),
                 });
+
                 req.extensions_mut().insert(claim);
 
                 info!("Getting resources from resource-recorder again");
@@ -420,7 +421,7 @@ impl ResourceManager for Persistence {
                     .resource_recorder_client
                     .as_mut()
                     .expect("to have the resource recorder set up")
-                    .get_service_resources(req)
+                    .get_project_resources(req)
                     .await
                     .map_err(PersistenceError::ResourceRecorder)
                     .map(|res| res.into_inner())?;
@@ -433,8 +434,7 @@ impl ResourceManager for Persistence {
                 info!("Deleting local resources");
                 // Now that we know that the resources are in resource-recorder,
                 // we can safely delete them from here to prevent de-sync issues and to not hinder project deletion
-                sqlx::query("DELETE FROM resources WHERE service_id = ?")
-                    .bind(service_id.to_string())
+                sqlx::query("DELETE FROM resources")
                     .execute(&self.pool)
                     .await?;
 

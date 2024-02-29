@@ -16,4 +16,8 @@ pub struct Args {
     /// Address to reach the authentication service at
     #[arg(long, default_value = "http://127.0.0.1:8008")]
     pub auth_uri: Uri,
+
+    /// Address to reach gateway's control plane at
+    #[clap(long, default_value = "http://gateway:8001")]
+    pub gateway_uri: Uri,
 }

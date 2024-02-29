@@ -1,7 +1,6 @@
 version: "3.7"
 volumes:
   auth-vol:
-  # builder-store-vol:
   gateway-vol:
   postgres-vol:
   resource-recorder-vol:
@@ -114,7 +113,6 @@ services:
       - "--auth-uri=http://auth:8000"
       - "--deploys-api-key=${DEPLOYS_API_KEY}"
       - "--provisioner-host=provisioner"
-      - "--builder-host=builder"
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"
       - "--admin-key=${GATEWAY_ADMIN_KEY}"

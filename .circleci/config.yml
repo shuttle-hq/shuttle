@@ -33,7 +33,7 @@ commands:
       - run:
           name: Install sccache
           command: |
-            SCCACHE_VERSION='v0.5.4'
+            SCCACHE_VERSION='v0.7.7'
             ls ~/.cargo/bin/sccache \
               || curl -L https://github.com/mozilla/sccache/releases/download/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz \
                 | tar -xOz sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache \
@@ -96,8 +96,8 @@ commands:
   restore-buildx-cache:
     steps:
       - docker-buildx/install:
-          version: 0.8.2
-          qemu-user-static-version: 7.0.0-7
+          version: 0.12.1
+          qemu-user-static-version: 7.2.0-1
       - restore_cache:
           name: Restore buildx cache
           keys:
@@ -107,7 +107,7 @@ commands:
             - docker-buildx-{{ .Branch }}
       - run:
           name: Configure buildx cache
-          command: export BUILDX_CACHE=/tmp/cache/buildx
+          command: echo BUILDX_CACHE=/tmp/cache/buildx >> $BASH_ENV
   save-buildx-cache:
     steps:
       - save_cache:
@@ -159,12 +159,17 @@ commands:
       - run:
           name: Install cargo-audit
           environment:
-            VERSION: "v0.18.3"
+            VERSION: "v0.20.0"
           command: |
             curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$VERSION/cargo-audit-x86_64-unknown-linux-musl-$VERSION.tgz \
               | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$VERSION/cargo-audit \
               > ~/.cargo/bin/cargo-audit \
               && chmod +x ~/.cargo/bin/cargo-audit
+  set-git-tag:
+    steps:
+      - run:
+          name: Set git tag in BASH_ENV
+          command: echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
   make-artifact:
     parameters:
       target:
@@ -175,10 +180,7 @@ commands:
         type: string
         default: ""
     steps:
-      - run:
-          name: Set git tag in the environment
-          command: |
-            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+      - set-git-tag
       - run:
           name: Set binary directory in the environment
           command: |
@@ -348,10 +350,7 @@ jobs:
         default: staging
     steps:
       - checkout
-      - run:
-          name: Set git tag in bash_env
-          command: |
-            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+      - set-git-tag
       - restore-buildx-cache
       - aws-ecr/ecr-login:
           aws-access-key-id: << parameters.aws-access-key-id >>
@@ -414,10 +413,7 @@ jobs:
         type: string
     steps:
       - checkout
-      - run:
-          name: Set git tag in bash_env
-          command: |
-            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+      - set-git-tag
       - add_ssh_keys:
           fingerprints:
             - << parameters.ssh-fingerprint >>

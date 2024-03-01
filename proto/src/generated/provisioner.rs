@@ -3,6 +3,8 @@
 pub struct DatabaseRequest {
     #[prost(string, tag = "1")]
     pub project_name: ::prost::alloc::string::String,
+    #[prost(string, optional, tag = "2")]
+    pub db_name: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(oneof = "database_request::DbType", tags = "10, 11")]
     pub db_type: ::core::option::Option<database_request::DbType>,
 }

@@ -157,6 +157,7 @@ impl LocalProvisioner {
         &self,
         project_name: &str,
         db_type: Type,
+        db_name: Option<String>,
     ) -> Result<DatabaseResponse, Status> {
         trace!("getting sql string for project '{project_name}'");
 
@@ -172,6 +173,7 @@ impl LocalProvisioner {
             is_ready_cmd,
         } = db_type_to_config(db_type);
         let container_name = format!("shuttle_{project_name}_{type}");
+        let database_name = db_name.unwrap_or(database_name);
 
         let container = self
             .get_container(&container_name, &image, &port, env)
@@ -320,12 +322,13 @@ impl Provisioner for LocalProvisioner {
         let DatabaseRequest {
             project_name,
             db_type,
+            db_name,
         } = request.into_inner();
 
         let db_type: Option<Type> = db_type.unwrap().into();
 
         let res = self
-            .get_db_connection_string(&project_name, db_type.unwrap())
+            .get_db_connection_string(&project_name, db_type.unwrap(), db_name)
             .await?;
 
         Ok(Response::new(res))

@@ -265,6 +265,7 @@ impl ShuttleProvisioner {
         &self,
         project_name: &str,
         engine: aws_rds::Engine,
+        database_name: &Option<String>,
     ) -> Result<DatabaseResponse, Error> {
         let client = &self.rds_client;
 
@@ -287,13 +288,7 @@ impl ShuttleProvisioner {
                 if let ModifyDBInstanceError::DbInstanceNotFoundFault(_) = err.err() {
                     debug!("creating new AWS RDS {instance_name}");
 
-                    // The engine display impl is used for both the engine and the database name,
-                    // but for mysql the engine name is an invalid database name.
-                    let db_name = if let aws_rds::Engine::Mysql(_) = engine {
-                        "msql".to_string()
-                    } else {
-                        engine.to_string()
-                    };
+                    let db_name = database_name.to_owned().unwrap_or_else(|| project_name.to_string());
 
                     client
                         .create_db_instance()
@@ -527,7 +522,7 @@ impl Provisioner for ShuttleProvisioner {
                     }
                 }
 
-                self.request_aws_rds(&request.project_name, engine.expect("engine to be set"))
+                self.request_aws_rds(&request.project_name, engine.expect("engine to be set"), &request.db_name)
                     .await?
             }
         };

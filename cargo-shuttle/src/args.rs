@@ -255,12 +255,12 @@ pub struct DeployArgs {
     /// Don't run pre-deploy tests
     #[arg(long, visible_alias = "nt")]
     pub no_test: bool,
+    /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
 
     #[command(flatten)]
     pub secret_args: SecretsArgs,
-    /// Don't display timestamps and log origin tags
 }
 
 #[derive(Parser, Debug)]

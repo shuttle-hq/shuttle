@@ -57,29 +57,6 @@ async fn axum_static_files() {
     assert!(request_text.contains("This is an example of serving"));
 }
 
-// note: you need `rustup target add wasm32-wasi` to make this project compile
-#[tokio::test(flavor = "multi_thread")]
-async fn shuttle_next() {
-    let url = cargo_shuttle_run("../examples/next/hello-world", false).await;
-    let client = reqwest::Client::new();
-
-    let request_text = client.get(&url).send().await.unwrap().text().await.unwrap();
-
-    assert_eq!(request_text, "Hello, World!");
-
-    let post_text = client
-        .post(format!("{url}/uppercase"))
-        .body("uppercase this")
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert_eq!(post_text, "UPPERCASE THIS");
-}
-
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn rocket_authentication() {

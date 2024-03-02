@@ -37,7 +37,6 @@ ARG CARGO_PROFILE
 COPY --from=chef-planner /recipe.json /
 # https://i.imgflip.com/2/74bvex.jpg
 RUN cargo chef cook \
-    --all-features \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
     --recipe-path /recipe.json \
     --bin shuttle-auth \
@@ -45,8 +44,7 @@ RUN cargo chef cook \
     --bin shuttle-gateway \
     --bin shuttle-logger \
     --bin shuttle-provisioner \
-    --bin shuttle-resource-recorder \
-    --bin shuttle-next
+    --bin shuttle-resource-recorder
 COPY --from=chef-planner /build .
 # Building all at once to share build artifacts in the "cook" layer
 RUN cargo build \
@@ -56,8 +54,7 @@ RUN cargo build \
     --bin shuttle-gateway \
     --bin shuttle-logger \
     --bin shuttle-provisioner \
-    --bin shuttle-resource-recorder \
-    --bin shuttle-next -F next
+    --bin shuttle-resource-recorder
 
 
 ####### Helper step
@@ -104,7 +101,6 @@ COPY scripts/apply-patches.sh /scripts/apply-patches.sh
 COPY scripts/patches.toml /scripts/patches.toml
 RUN /prepare.sh "${prepare_args}"
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-deployer /usr/local/bin
-COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin
 ENTRYPOINT ["/usr/local/bin/shuttle-deployer"]
 FROM shuttle-deployer AS shuttle-deployer-dev
 # Source code needed for compiling local deploys with [patch.crates-io]

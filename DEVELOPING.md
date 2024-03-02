@@ -66,12 +66,11 @@ and renewing SSL certificates through the acme client in the `gateway`.
 - `runtime` contains the `alpha` runtime, which embeds a gRPC server and a `Loader` in a service with the `shuttle_runtime::main` macro.
   The gRPC server receives commands from `deployer` like `start` and `stop`.
   The `Loader` sets up a tracing subscriber and provisions resources for the users service.
-  The `runtime` crate also contains the `shuttle-next` binary, which is a standalone runtime binary that is started by the `deployer` or the `cargo-shuttle` CLI, responsible for loading and starting `shuttle-next` services.
 - `service` is where our special `Service` trait is defined.
   Anything implementing this `Service` can be loaded by the `deployer` and the local runner in `cargo-shuttle`.
   The `service` library also defines the `ResourceBuilder` and `Factory` trais which are used in our codegen to provision resources.
   The `service` library also contains the utilities we use for compiling users crates with `cargo`.
-- `proto` contains the gRPC server and client definitions to allow `deployer` to communicate with `provisioner`, and to allow the `deployer` and `cargo-shuttle` cli to communicate with the `alpha` and `shuttle-next` runtimes.
+- `proto` contains the gRPC server and client definitions to allow `deployer` to communicate with `provisioner`, and to allow the `deployer` and `cargo-shuttle` cli to communicate with the `alpha` runtime.
 - `resources` contains various implementations of `ResourceBuilder`, which are consumed in the `codegen` to provision resources.
 - `services` contains implementations of `Service` for common Rust web frameworks. Anything implementing `Service` can be deployed by shuttle.
 - `e2e` just contains tests which starts up the `deployer` in a container and then deploys services to it using `cargo-shuttle`.

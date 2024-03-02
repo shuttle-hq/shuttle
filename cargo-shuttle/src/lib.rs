@@ -79,7 +79,6 @@ use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -958,85 +957,37 @@ impl Shuttle {
             Default::default()
         };
 
-        let runtime_executable = if service.is_wasm {
-            let runtime_path = home::cargo_home()
-                .expect("failed to find cargo home dir")
-                .join("bin/shuttle-next");
-
-            println!("Installing shuttle-next runtime. This can take a while...");
-
-            if cfg!(debug_assertions) {
-                // Canonicalized path to shuttle-runtime for dev to work on windows
-
-                let path = dunce::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
-                    .expect("path to shuttle-runtime does not exist or is invalid");
-
-                tokio::process::Command::new("cargo")
-                    .arg("install")
-                    .arg("shuttle-runtime")
-                    .arg("--path")
-                    .arg(path)
-                    .arg("--bin")
-                    .arg("shuttle-next")
-                    .arg("--features")
-                    .arg("next")
-                    .output()
-                    .await
-                    .expect("failed to install the shuttle runtime");
-            } else {
-                // If the version of cargo-shuttle is different from shuttle-runtime,
-                // or it isn't installed, try to install shuttle-runtime from crates.io.
-                if let Err(err) = check_version(&runtime_path).await {
-                    warn!("{}", err);
-
-                    trace!("installing shuttle-runtime");
-                    tokio::process::Command::new("cargo")
-                        .arg("install")
-                        .arg("shuttle-runtime")
-                        .arg("--bin")
-                        .arg("shuttle-next")
-                        .arg("--features")
-                        .arg("next")
-                        .output()
-                        .await
-                        .expect("failed to install the shuttle runtime");
-                };
-            };
-
-            runtime_path
-        } else {
-            trace!(path = ?service.executable_path, "using alpha runtime");
-            if let Err(err) = check_version(&service.executable_path).await {
-                warn!("{}", err);
-                if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
-                    println!("Warning: {}.", mismatch);
-                    if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
-                        // The runtime is newer than cargo-shuttle so we
-                        // should help the user to update cargo-shuttle.
-                        printdoc! {"
-                            Hint: A newer version of cargo-shuttle is available.
-                                  Check out the installation docs for how to update: {SHUTTLE_INSTALL_DOCS_URL}",
-                        };
-                    } else {
-                        printdoc! {"
-                            Hint: A newer version of shuttle-runtime is available.
-                            Change its version to {} in Cargo.toml to update it, or
-                            run this command: cargo add shuttle-runtime@{}",
-                            mismatch.cargo_shuttle,
-                            mismatch.cargo_shuttle,
-                        };
-                    }
+        trace!(path = ?service.executable_path, "using alpha runtime");
+        if let Err(err) = check_version(&service.executable_path).await {
+            warn!("{}", err);
+            if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
+                println!("Warning: {}.", mismatch);
+                if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
+                    // The runtime is newer than cargo-shuttle so we
+                    // should help the user to update cargo-shuttle.
+                    printdoc! {"
+                        Hint: A newer version of cargo-shuttle is available.
+                                Check out the installation docs for how to update: {SHUTTLE_INSTALL_DOCS_URL}",
+                    };
                 } else {
-                    return Err(err.context(
-                        format!(
-                            "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct executable?",
-                            service.executable_path.display()
-                        )
-                    ));
+                    printdoc! {"
+                        Hint: A newer version of shuttle-runtime is available.
+                        Change its version to {} in Cargo.toml to update it, or
+                        run this command: cargo add shuttle-runtime@{}",
+                        mismatch.cargo_shuttle,
+                        mismatch.cargo_shuttle,
+                    };
                 }
+            } else {
+                return Err(err.context(
+                    format!(
+                        "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct executable?",
+                        service.executable_path.display()
+                    )
+                ));
             }
-            service.executable_path.clone()
-        };
+        }
+        let runtime_executable = service.executable_path.clone();
 
         // Child process and gRPC client for sending requests to it
         let (mut runtime, mut runtime_client) = runner::start(
@@ -1327,7 +1278,6 @@ impl Shuttle {
             working_directory.display()
         );
 
-        // Compile all the alpha or shuttle-next services in the workspace.
         build_workspace(working_directory, run_args.release, tx, false).await
     }
 

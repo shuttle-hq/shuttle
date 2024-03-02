@@ -23,8 +23,6 @@ pub use secrets::{Secret, SecretStore};
 pub mod limits;
 #[cfg(feature = "tracing")]
 pub mod tracing;
-#[cfg(feature = "wasm")]
-pub mod wasm;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;

@@ -229,7 +229,6 @@ pub struct Built {
     pub service_id: Ulid,
     pub project_id: Ulid,
     pub tracing_context: HashMap<String, String>,
-    pub is_next: bool,
     /// must be set if this run will perform requests to backends
     pub claim: Option<Claim>,
     pub secrets: HashMap<String, String>,
@@ -248,9 +247,7 @@ impl Built {
         provisioner_client: provisioner::Client,
     ) -> Result<JoinHandle<()>> {
         let project_path = builds_path.join(&self.service_name);
-        // For alpha this is the path to the users project with an embedded runtime.
-        // For shuttle-next this is the path to the compiled .wasm file, which will be
-        // used in the load request.
+        // This is the path to the users project with an embedded runtime.
         let executable_path = project_path
             .join(EXECUTABLE_DIRNAME)
             .join(self.id.to_string());
@@ -261,13 +258,6 @@ impl Built {
         // Let the runtime expose its user HTTP port on port 8000
         let address = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 8000);
 
-        let alpha_runtime_path = if self.is_next {
-            // The runtime client for next is the installed shuttle-next bin
-            None
-        } else {
-            Some(executable_path)
-        };
-
         let runtime_client = runtime_manager
             .lock()
             .await
@@ -275,7 +265,7 @@ impl Built {
                 self.id,
                 project_path.as_path(),
                 self.service_name.clone(),
-                alpha_runtime_path,
+                executable_path,
             )
             .await
             .map_err(Error::Runtime)?;

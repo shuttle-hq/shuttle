@@ -134,17 +134,12 @@ mod tests {
         time::Duration,
     };
 
-    use crate::{
-        persistence::{
-            resource::ResourceManager, DeploymentState, DeploymentUpdater, StateRecorder,
-        },
-        RuntimeManager,
-    };
     use async_trait::async_trait;
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use shuttle_common::claims::Claim;
+    use shuttle_common::log::LogRecorder;
     use shuttle_common_tests::{
         logger::get_mocked_logger_client, provisioner::get_mocked_provisioner_client,
     };
@@ -171,12 +166,11 @@ mod tests {
             gateway_client::BuildQueueClient, ActiveDeploymentsGetter, Built, DeploymentManager,
             Queued,
         },
-        persistence::State,
+        persistence::{resource::ResourceManager, DeploymentState, State, StateRecorder},
+        RuntimeManager,
     };
 
     use super::{LogItem, StateChangeLayer};
-
-    use shuttle_common::log::LogRecorder;
 
     #[ctor]
     static RECORDER: RecorderMock = {
@@ -342,18 +336,6 @@ mod tests {
         logger_client: Batcher<logger::Client>,
     ) -> Arc<tokio::sync::Mutex<RuntimeManager>> {
         RuntimeManager::new(logger_client)
-    }
-
-    #[derive(Clone)]
-    struct StubDeploymentUpdater;
-
-    #[async_trait::async_trait]
-    impl DeploymentUpdater for StubDeploymentUpdater {
-        type Err = std::io::Error;
-
-        async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
-            Ok(())
-        }
     }
 
     #[derive(Clone)]
@@ -704,7 +686,6 @@ mod tests {
                 service_id: Ulid::new(),
                 project_id: Ulid::new(),
                 tracing_context: Default::default(),
-                is_next: false,
                 claim: Default::default(),
                 secrets: Default::default(),
             })
@@ -775,7 +756,6 @@ mod tests {
             .resource_manager(StubResourceManager)
             .log_fetcher(logger_client.clone())
             .runtime(get_runtime_manager(Batcher::wrap(logger_client)).await)
-            .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)
             .provisioner_client(get_mocked_provisioner_client(ProvisionerMock).await)
             .build()

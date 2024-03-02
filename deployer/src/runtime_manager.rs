@@ -17,8 +17,6 @@ use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
-const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
-
 type Runtimes = Arc<std::sync::Mutex<HashMap<Uuid, (process::Child, runtime::Client)>>>;
 
 /// Manager that can start up multiple runtimes. This is needed so that two runtimes can be up when a new deployment is made:
@@ -42,7 +40,7 @@ impl RuntimeManager {
         id: Uuid,
         project_path: &Path,
         service_name: String,
-        alpha_runtime_path: Option<PathBuf>,
+        runtime_executable: PathBuf,
     ) -> anyhow::Result<runtime::Client> {
         trace!("making new client");
 
@@ -50,47 +48,14 @@ impl RuntimeManager {
         let port =
             portpicker::pick_unused_port().context("failed to find port for runtime server")?;
 
-        let runtime_executable = if let Some(alpha_runtime) = alpha_runtime_path {
-            debug!(
-                "Starting alpha runtime at: {}",
-                alpha_runtime
-                    .clone()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap_or_default()
-            );
-            alpha_runtime
-        } else {
-            if cfg!(debug_assertions) {
-                debug!("Installing shuttle-next runtime in debug mode from local source");
-                // If we're running deployer natively, install shuttle-runtime using the
-                // version of runtime from the calling repo.
-                let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"));
-
-                // The path will not be valid if we are in a deployer container, in which
-                // case we don't try to install and use the one installed in deploy.sh.
-                if let Ok(path) = path {
-                    std::process::Command::new("cargo")
-                        .arg("install")
-                        .arg("shuttle-runtime")
-                        .arg("--path")
-                        .arg(path)
-                        .arg("--bin")
-                        .arg("shuttle-next")
-                        .arg("--features")
-                        .arg("next")
-                        .output()
-                        .expect("failed to install the local version of shuttle-runtime");
-                }
-            }
-
-            debug!("Returning path to shuttle-next runtime");
-            // If we're in a deployer built with the containerfile, the runtime will have
-            // been installed in deploy.sh.
-            home::cargo_home()
-                .expect("failed to find path to cargo home")
-                .join("bin/shuttle-next")
-        };
+        debug!(
+            "Starting alpha runtime at: {}",
+            runtime_executable
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap_or_default()
+        );
 
         let (mut process, runtime_client) = runner::start(port, runtime_executable, project_path)
             .await

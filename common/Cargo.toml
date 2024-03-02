@@ -19,7 +19,6 @@ crossterm = { workspace = true, optional = true }
 headers = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 http-body = { version = "0.4.5", optional = true }
-http-serde = { version = "1.1.2", optional = true }
 hyper = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
@@ -31,7 +30,6 @@ opentelemetry-appender-tracing = { workspace = true, optional = true }
 pin-project = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
-rmp-serde = { workspace = true, optional = true }
 # keep locked to not accidentally invalidate someone's project name
 rustrict = { version = "=0.7.12", optional = true }
 semver = { workspace = true }
@@ -103,14 +101,6 @@ sqlx = ["dep:sqlx", "sqlx/sqlite"]
 service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
 test-utils = ["wiremock"]
 tracing = ["dep:tracing"]
-wasm = [
-    "chrono/clock",
-    "http-serde",
-    "http",
-    "rmp-serde",
-    "tracing",
-    "tracing-subscriber",
-]
 
 [dev-dependencies]
 axum = { workspace = true }

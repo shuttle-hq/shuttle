@@ -10,7 +10,7 @@ pub struct LoadRequest {
     #[prost(map = "string, string", tag = "20")]
     pub secrets:
         ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    /// deprecated for alpha, but still used in next
+    /// deprecated
     #[prost(string, tag = "2")]
     pub path: ::prost::alloc::string::String,
     /// deprecated

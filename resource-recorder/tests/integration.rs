@@ -15,7 +15,6 @@ use shuttle_proto::resource_recorder::{
 use shuttle_resource_recorder::{Service, Sqlite};
 use tokio::select;
 use tonic::{transport::Server, Request};
-use ulid::Ulid;
 
 #[tokio::test]
 async fn manage_resources() {
@@ -48,10 +47,10 @@ async fn manage_resources() {
             .await
             .unwrap();
 
-        let project_id = Ulid::new().to_string();
-        let service_id = "id1".to_string();
+        let project_id = "00000000000000000000000001".to_string();
+        let service_id = "00000000000000000000000001".to_string();
 
-        let mut req = Request::new(RecordRequest {
+        let req = Request::new(RecordRequest {
             project_id: project_id.clone(),
             service_id: service_id.clone(),
             resources: vec![
@@ -67,12 +66,6 @@ async fn manage_resources() {
                 },
             ],
         });
-        req.metadata_mut().insert(
-            "authorization",
-            format!("Bearer user-1")
-                .parse()
-                .expect("to construct a bearer token"),
-        );
 
         // Add resources for on service
         let response = client.record_resources(req).await.unwrap().into_inner();
@@ -85,7 +78,7 @@ async fn manage_resources() {
         assert_eq!(response, expected);
 
         // Add resources for another service on same project
-        let service_id2 = "id2".to_string();
+        let service_id2 = "00000000000000000000000002".to_string();
 
         let response = client
             .record_resources(Request::new(RecordRequest {
@@ -104,8 +97,8 @@ async fn manage_resources() {
         assert_eq!(response, expected);
 
         // Add resources to a new project
-        let project_id2 = Ulid::new().to_string();
-        let service_id3 = "id3".to_string();
+        let project_id2 = "00000000000000000000000002".to_string();
+        let service_id3 = "00000000000000000000000003".to_string();
 
         let response = client
             .record_resources(Request::new(RecordRequest {
@@ -152,11 +145,25 @@ async fn manage_resources() {
             created_at: response.resources[1].created_at.clone(),
             last_updated: response.resources[1].last_updated.clone(),
         };
+        let service_secrets2 = Resource {
+            project_id: project_id.clone(),
+            service_id: service_id2.clone(),
+            r#type: "secrets".to_string(),
+            config: serde_json::to_vec(&json!({"folder": "static"})).unwrap(),
+            data: serde_json::to_vec(&json!({"path": "/tmp/static"})).unwrap(),
+            is_active: true,
+            created_at: response.resources[2].created_at.clone(),
+            last_updated: response.resources[2].last_updated.clone(),
+        };
 
         let expected = ResourcesResponse {
             success: true,
             message: String::new(),
-            resources: vec![service_db.clone(), service_secrets.clone()],
+            resources: vec![
+                service_db.clone(),
+                service_secrets.clone(),
+                service_secrets2,
+            ],
         };
 
         assert_eq!(response, expected);

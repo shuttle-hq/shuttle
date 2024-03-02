@@ -38,7 +38,7 @@ pub struct ShuttleArgs {
 }
 
 // Common args for subcommands that deal with projects.
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
     #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
@@ -247,7 +247,7 @@ pub struct LogoutArgs {
     #[arg(long)]
     pub reset_api_key: bool,
 }
-#[derive(Parser)]
+#[derive(Parser, Default)]
 pub struct DeployArgs {
     /// Allow deployment with uncommitted files
     #[arg(long, visible_alias = "ad")]
@@ -255,9 +255,12 @@ pub struct DeployArgs {
     /// Don't run pre-deploy tests
     #[arg(long, visible_alias = "nt")]
     pub no_test: bool,
-    /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
+
+    #[command(flatten)]
+    pub secret_args: SecretsArgs,
+    /// Don't display timestamps and log origin tags
 }
 
 #[derive(Parser, Debug)]
@@ -274,6 +277,16 @@ pub struct RunArgs {
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
+
+    #[command(flatten)]
+    pub secret_args: SecretsArgs,
+}
+
+#[derive(Parser, Debug, Default)]
+pub struct SecretsArgs {
+    /// Use this secrets file instead
+    #[arg(long, value_parser = OsStringValueParser::new().try_map(parse_path))]
+    pub secrets: Option<PathBuf>,
 }
 
 #[derive(Parser, Clone, Debug, Default)]

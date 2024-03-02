@@ -31,6 +31,7 @@ pub async fn cargo_shuttle_run(working_directory: &str, external: bool) -> Strin
         external,
         release: false,
         raw: false,
+        secret_args: Default::default(),
     };
 
     let runner = Shuttle::new().unwrap().run(

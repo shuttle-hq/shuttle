@@ -920,12 +920,14 @@ impl Shuttle {
         service: &BuiltService,
         idx: u16,
     ) -> Result<Option<(Child, runtime::Client)>> {
-        let crate_directory = service.crate_directory();
-        let secrets_path = if crate_directory.join("Secrets.dev.toml").exists() {
-            crate_directory.join("Secrets.dev.toml")
-        } else {
-            crate_directory.join("Secrets.toml")
-        };
+        let secrets_path = run_args.secret_args.secrets.clone().unwrap_or_else(|| {
+            let crate_dir = service.crate_directory();
+            if crate_dir.join("Secrets.dev.toml").exists() {
+                crate_dir.join("Secrets.dev.toml")
+            } else {
+                crate_dir.join("Secrets.toml")
+            }
+        });
         trace!("Loading secrets from {}", secrets_path.display());
 
         let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)
@@ -1478,7 +1480,6 @@ impl Shuttle {
     #[cfg(target_family = "windows")]
     async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
         let services = self.pre_local_run(&run_args).await?;
-        let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
 
         // Start all the services.
         let mut runtimes: Vec<(Child, runtime::Client)> = Vec::new();
@@ -1488,8 +1489,8 @@ impl Shuttle {
         let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
-                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &[&provisioner_server]).await?;
+                res = Shuttle::spin_local_runtime(&run_args, service, i as u16) => {
+                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes).await?;
                     false
                 },
                 _ = Shuttle::handle_signals() => {
@@ -1508,7 +1509,6 @@ impl Shuttle {
         // If prior signal received is set to true we must stop all the existing runtimes and
         // exit the `local_run`.
         if signal_received {
-            provisioner_server.abort();
             for (mut rt, mut rt_client) in runtimes {
                 Shuttle::stop_runtime(&mut rt, &mut rt_client)
                     .await
@@ -1546,7 +1546,6 @@ impl Shuttle {
                     println!(
                         "Killing all the runtimes..."
                     );
-                    provisioner_server.abort();
                     Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
                         trace!(status = ?err, "stopping the runtime errored out");
                     });
@@ -1601,7 +1600,7 @@ impl Shuttle {
             }
         }
 
-        deployment_req.data = self.make_archive()?;
+        deployment_req.data = self.make_archive(args.secret_args.secrets.clone())?;
         if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
             bail!(
                 r#"The project is too large - the limit is {} MB. \
@@ -2045,7 +2044,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    fn make_archive(&self) -> Result<Vec<u8>> {
+    fn make_archive(&self, secrets_file: Option<PathBuf>) -> Result<Vec<u8>> {
         let include_patterns = self.ctx.assets();
         let encoder = GzEncoder::new(Vec::new(), Compression::new(3));
         let mut tar = Builder::new(encoder);
@@ -2081,8 +2080,12 @@ impl Shuttle {
 
         let mut globs = GlobSetBuilder::new();
 
-        // Always include secrets
-        globs.add(Glob::new("**/Secrets.toml").unwrap());
+        if let Some(secrets_file) = secrets_file.clone() {
+            entries.push(secrets_file);
+        } else {
+            // Default: Include all Secrets.toml files
+            globs.add(Glob::new("**/Secrets.toml").unwrap());
+        }
 
         // User provided includes
         if let Some(rules) = include_patterns {
@@ -2112,10 +2115,16 @@ impl Shuttle {
                 continue;
             }
 
-            let name = path
+            let mut name = path
                 .strip_prefix(working_directory.parent().context("get parent dir")?)
                 .context("strip prefix of path")?
                 .to_owned();
+
+            // if this is the custom secrets file, rename it to Secrets.toml
+            if secrets_file.as_ref().is_some_and(|sf| sf == &path) {
+                name.pop();
+                name.push("Secrets.toml");
+            }
 
             archive_files.insert(path, name);
         }
@@ -2302,7 +2311,7 @@ mod tests {
     use flate2::read::GzDecoder;
     use tar::Archive;
 
-    use crate::args::ProjectArgs;
+    use crate::args::{DeployArgs, ProjectArgs, SecretsArgs};
     use crate::Shuttle;
     use std::fs::{self, canonicalize};
     use std::path::PathBuf;
@@ -2315,11 +2324,13 @@ mod tests {
         dunce::canonicalize(path).unwrap()
     }
 
-    fn get_archive_entries(project_args: ProjectArgs) -> Vec<String> {
+    fn get_archive_entries(project_args: ProjectArgs, deploy_args: DeployArgs) -> Vec<String> {
         let mut shuttle = Shuttle::new().unwrap();
         shuttle.load_project(&project_args).unwrap();
 
-        let archive = shuttle.make_archive().unwrap();
+        let archive = shuttle
+            .make_archive(deploy_args.secret_args.secrets)
+            .unwrap();
 
         let tar = GzDecoder::new(&archive[..]);
         let mut archive = Archive::new(tar);
@@ -2359,10 +2370,10 @@ mod tests {
         fs::write(working_directory.join("target").join("binary"), b"12345").unwrap();
 
         let project_args = ProjectArgs {
-            working_directory,
+            working_directory: working_directory.clone(),
             name: Some("archiving-test".to_owned()),
         };
-        let mut entries = get_archive_entries(project_args);
+        let mut entries = get_archive_entries(project_args.clone(), Default::default());
         entries.sort();
 
         assert_eq!(
@@ -2385,10 +2396,43 @@ mod tests {
                 "src/main.rs",
             ]
         );
+
+        fs::remove_file(working_directory.join("Secrets.toml")).unwrap();
+        let mut entries = get_archive_entries(
+            project_args,
+            DeployArgs {
+                secret_args: SecretsArgs {
+                    secrets: Some(working_directory.join("Secrets.toml.example")),
+                },
+                ..Default::default()
+            },
+        );
+        entries.sort();
+
+        assert_eq!(
+            entries,
+            vec![
+                ".gitignore",
+                ".ignore",
+                "Cargo.toml",
+                "Secrets.toml", // got moved here
+                // Secrets.toml.example was the given secrets file, so it got moved
+                "Shuttle.toml",
+                "asset1", // normal file
+                "asset2", // .gitignore'd, but included in Shuttle.toml
+                // asset3 is .ignore'd
+                "asset4",                // .gitignore'd, but un-ignored in .ignore
+                "asset5",                // .ignore'd, but included in Shuttle.toml
+                "dist/dist1",            // .gitignore'd, but included in Shuttle.toml
+                "nested/static/nested1", // normal file
+                // nested/static/nestedignore is .gitignore'd
+                "src/main.rs",
+            ]
+        );
     }
 
     #[test]
-    fn load_project_returns_proper_working_directory_in_project_args() {
+    fn finds_workspace_root() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
             name: None,

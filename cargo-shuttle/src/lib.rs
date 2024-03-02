@@ -15,9 +15,23 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use anyhow::{anyhow, bail, Context, Result};
 use args::{ConfirmationArgs, GenerateCommand};
+use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
+use clap_complete::{generate, Shell};
 use clap_mangen::Man;
-
+use config::RequestContext;
+use crossterm::style::Stylize;
+use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use futures::{StreamExt, TryFutureExt};
+use git2::{Repository, StatusOptions};
+use globset::{Glob, GlobSetBuilder};
+use ignore::overrides::OverrideBuilder;
+use ignore::WalkBuilder;
+use indicatif::ProgressBar;
+use indoc::{formatdoc, printdoc};
 use shuttle_common::{
     constants::{
         API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION,
@@ -45,22 +59,6 @@ use shuttle_service::{
     builder::{build_workspace, BuiltService},
     runner, Environment,
 };
-
-use anyhow::{anyhow, bail, Context, Result};
-use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
-use clap_complete::{generate, Shell};
-use config::RequestContext;
-use crossterm::style::Stylize;
-use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use futures::{StreamExt, TryFutureExt};
-use git2::{Repository, StatusOptions};
-use globset::{Glob, GlobSetBuilder};
-use ignore::overrides::OverrideBuilder;
-use ignore::WalkBuilder;
-use indicatif::ProgressBar;
-use indoc::{formatdoc, printdoc};
 use strum::IntoEnumIterator;
 use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};

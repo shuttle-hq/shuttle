@@ -104,19 +104,7 @@ pub enum Command {
     /// Stop this Shuttle service
     Stop,
     /// View the logs of a deployment in this Shuttle service
-    Logs {
-        /// Deployment ID to get logs for. Defaults to currently running deployment
-        id: Option<Uuid>,
-        #[arg(short, long)]
-        /// View logs from the most recent deployment (which is not always the latest running one)
-        latest: bool,
-        #[arg(short, long)]
-        /// Follow log output
-        follow: bool,
-        #[arg(long)]
-        /// Don't display timestamps and log origin tags
-        raw: bool,
-    },
+    Logs(LogsArgs),
     /// List or manage projects on Shuttle
     #[command(subcommand)]
     Project(ProjectCommand),
@@ -390,6 +378,28 @@ impl InitTemplateArg {
             subfolder: Some(path.to_string()),
         }
     }
+}
+
+#[derive(Parser, Clone, Debug, Default)]
+pub struct LogsArgs {
+    /// Deployment ID to get logs for. Defaults to currently running deployment
+    pub id: Option<Uuid>,
+    #[arg(short, long)]
+    /// View logs from the most recent deployment (which is not always the latest running one)
+    pub latest: bool,
+    #[arg(short, long)]
+    /// Follow log output
+    pub follow: bool,
+    #[arg(long)]
+    /// Log format
+    pub format: Option<LogFormat>,
+}
+
+#[derive(ValueEnum, Clone, Debug, strum::Display, strum::EnumIter)]
+#[strum(serialize_all = "kebab-case")]
+pub enum LogFormat {
+    /// Don't display timestamps and log origin tags
+    Raw,
 }
 
 /// Helper function to parse and return the absolute path

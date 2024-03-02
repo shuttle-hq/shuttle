@@ -1038,6 +1038,7 @@ impl Shuttle {
             .context("child process did not have a handle to stdout")?;
         let mut reader = BufReader::new(child_stdout).lines();
         let service_name_clone = service_name.clone();
+        let raw = run_args.raw;
         tokio::spawn(async move {
             while let Some(line) = reader.next_line().await.unwrap() {
                 let log_item = LogItem::new(
@@ -1045,7 +1046,12 @@ impl Shuttle {
                     shuttle_common::log::Backend::Runtime(service_name_clone.clone()),
                     line,
                 );
-                println!("{log_item}");
+
+                if raw {
+                    println!("{}", log_item.get_raw_line())
+                } else {
+                    println!("{log_item}")
+                }
             }
         });
 
@@ -1641,7 +1647,11 @@ impl Shuttle {
                         }
                     };
 
-                    println!("{log_item}");
+                    if args.raw {
+                        println!("{}", log_item.get_raw_line())
+                    } else {
+                        println!("{log_item}")
+                    }
 
                     // Detect versions of deployer and runtime, and print warnings of outdated.
                     if !deployer_version_checked

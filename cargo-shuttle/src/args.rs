@@ -255,6 +255,9 @@ pub struct DeployArgs {
     /// Don't run pre-deploy tests
     #[arg(long, visible_alias = "nt")]
     pub no_test: bool,
+    /// Don't display timestamps and log origin tags
+    #[arg(long)]
+    pub raw: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -268,6 +271,9 @@ pub struct RunArgs {
     /// Use release mode for building the project
     #[arg(long, short = 'r')]
     pub release: bool,
+    /// Don't display timestamps and log origin tags
+    #[arg(long)]
+    pub raw: bool,
 }
 
 #[derive(Parser, Clone, Debug, Default)]
@@ -390,8 +396,8 @@ pub struct LogsArgs {
     #[arg(short, long)]
     /// Follow log output
     pub follow: bool,
-    #[arg(long)]
     /// Log format
+    #[arg(short = 'F', long)]
     pub format: Option<LogFormat>,
 }
 

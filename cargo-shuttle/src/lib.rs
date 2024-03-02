@@ -399,12 +399,15 @@ impl Shuttle {
             let path = args
                 .path
                 .to_str()
-                .context("path arg should always be set")?;
+                .context("path arg should always be set")?
+                .parse::<PathBuf>()?
+                .join(project_args.name.as_ref().expect("name should be set"));
 
             println!("Where should we create this project?");
+
             let directory_str: String = Input::with_theme(&theme)
                 .with_prompt("Directory")
-                .default(path.to_owned())
+                .default(format!("{}", path.display()))
                 .interact()?;
             println!();
 

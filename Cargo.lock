@@ -2027,9 +2027,9 @@ dependencies = [
 
 [[package]]
 name = "fqdn"
-version = "0.3.2"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3d76ed310eb8c6f88ddde3e976d015f4f91761fe98d7d41e497db542318fca9"
+checksum = "1bf664d6b0598fea5600b85cddc79e60d4c1f262f42faf75c2d77dc2164c9a8b"
 
 [[package]]
 name = "fs-set-times"

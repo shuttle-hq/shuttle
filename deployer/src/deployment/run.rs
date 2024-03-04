@@ -509,7 +509,7 @@ async fn provision(
         match shuttle_resource.r#type {
             resource::Type::Database(db_type) => {
                 // no config fields are used yet, but verify the format anyways
-                let _config: DbInput = serde_json::from_value(shuttle_resource.config.clone())
+                let config: DbInput = serde_json::from_value(shuttle_resource.config.clone())
                     .context("deserializing resource config")?;
 
                 let output = get_cached_output(&shuttle_resource, prev_resources.as_slice());
@@ -521,6 +521,7 @@ async fn provision(
                         let mut req = Request::new(DatabaseRequest {
                             project_name: project_name.to_string(),
                             db_type: Some(db_type.into()),
+                            db_name: config.db_name,
                             // other relevant config fields would go here
                         });
                         req.extensions_mut().insert(claim.clone());

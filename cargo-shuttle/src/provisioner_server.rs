@@ -18,7 +18,7 @@ use crossterm::{
 use futures::StreamExt;
 use portpicker::pick_unused_port;
 use shuttle_common::{
-    database::{AwsRdsEngine, SharedEngine},
+    database::{self, AwsRdsEngine, SharedEngine},
     ContainerRequest, ContainerResponse, Secret,
 };
 use shuttle_proto::provisioner::{
@@ -157,8 +157,15 @@ impl LocalProvisioner {
         &self,
         project_name: &str,
         db_type: Type,
+        db_name: Option<String>,
     ) -> Result<DatabaseResponse, Status> {
         trace!("getting sql string for project '{project_name}'");
+
+        let database_name = match db_type {
+            database::Type::AwsRds(_) => db_name.unwrap_or_else(|| project_name.to_string()),
+            database::Type::Shared(SharedEngine::MongoDb) => "admin".to_string(),
+            _ => project_name.to_string(),
+        };
 
         let EngineConfig {
             r#type,
@@ -166,11 +173,10 @@ impl LocalProvisioner {
             engine,
             username,
             password,
-            database_name,
             port,
             env,
             is_ready_cmd,
-        } = db_type_to_config(db_type);
+        } = db_type_to_config(db_type, &database_name);
         let container_name = format!("shuttle_{project_name}_{type}");
 
         let container = self
@@ -320,12 +326,13 @@ impl Provisioner for LocalProvisioner {
         let DatabaseRequest {
             project_name,
             db_type,
+            db_name,
         } = request.into_inner();
 
         let db_type: Option<Type> = db_type.unwrap().into();
 
         let res = self
-            .get_db_connection_string(&project_name, db_type.unwrap())
+            .get_db_connection_string(&project_name, db_type.unwrap(), db_name)
             .await?;
 
         Ok(Response::new(res))
@@ -387,13 +394,12 @@ struct EngineConfig {
     engine: String,
     username: String,
     password: Secret<String>,
-    database_name: String,
     port: String,
     env: Option<Vec<String>>,
     is_ready_cmd: Vec<String>,
 }
 
-fn db_type_to_config(db_type: Type) -> EngineConfig {
+fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
     match db_type {
         Type::Shared(SharedEngine::Postgres) => EngineConfig {
             r#type: "shared_postgres".to_string(),
@@ -401,9 +407,11 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string().into(),
-            database_name: "postgres".to_string(),
             port: "5432/tcp".to_string(),
-            env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
+            env: Some(vec![
+                "POSTGRES_PASSWORD=postgres".to_string(),
+                format!("POSTGRES_DB={database_name}"),
+            ]),
             is_ready_cmd: vec![
                 "/bin/sh".to_string(),
                 "-c".to_string(),
@@ -416,11 +424,11 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             engine: "mongodb".to_string(),
             username: "mongodb".to_string(),
             password: "password".to_string().into(),
-            database_name: "admin".to_string(),
             port: "27017/tcp".to_string(),
             env: Some(vec![
                 "MONGO_INITDB_ROOT_USERNAME=mongodb".to_string(),
                 "MONGO_INITDB_ROOT_PASSWORD=password".to_string(),
+                format!("MONGO_INITDB_DATABASE={database_name}"),
             ]),
             is_ready_cmd: vec![
                 "mongosh".to_string(),
@@ -435,9 +443,11 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string().into(),
-            database_name: "postgres".to_string(),
             port: "5432/tcp".to_string(),
-            env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
+            env: Some(vec![
+                "POSTGRES_PASSWORD=postgres".to_string(),
+                format!("POSTGRES_DB={database_name}"),
+            ]),
             is_ready_cmd: vec![
                 "/bin/sh".to_string(),
                 "-c".to_string(),
@@ -450,9 +460,11 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             engine: "mariadb".to_string(),
             username: "root".to_string(),
             password: "mariadb".to_string().into(),
-            database_name: "mysql".to_string(),
             port: "3306/tcp".to_string(),
-            env: Some(vec!["MARIADB_ROOT_PASSWORD=mariadb".to_string()]),
+            env: Some(vec![
+                "MARIADB_ROOT_PASSWORD=mariadb".to_string(),
+                format!("MARIADB_DATABASE={database_name}"),
+            ]),
             is_ready_cmd: vec![
                 "mysql".to_string(),
                 "-pmariadb".to_string(),
@@ -467,9 +479,11 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             engine: "mysql".to_string(),
             username: "root".to_string(),
             password: "mysql".to_string().into(),
-            database_name: "mysql".to_string(),
             port: "3306/tcp".to_string(),
-            env: Some(vec!["MYSQL_ROOT_PASSWORD=mysql".to_string()]),
+            env: Some(vec![
+                "MYSQL_ROOT_PASSWORD=mysql".to_string(),
+                format!("MYSQL_DATABASE={database_name}"),
+            ]),
             is_ready_cmd: vec![
                 "mysql".to_string(),
                 "-pmysql".to_string(),

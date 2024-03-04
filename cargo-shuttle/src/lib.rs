@@ -1206,6 +1206,7 @@ impl Shuttle {
                             prov.provision_database(Request::new(DatabaseRequest {
                                 project_name: project_name.to_string(),
                                 db_type: Some(db_type.into()),
+                                db_name: config.db_name,
                             }))
                             .await?
                             .into_inner()

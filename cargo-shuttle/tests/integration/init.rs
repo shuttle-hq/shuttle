@@ -388,6 +388,13 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
     session.exp_string("Directory")?;
     session.send_line(temp_dir_path.to_str().unwrap())?;
     session.exp_string("Target directory is not empty. Are you sure?")?;
+    session.send("n")?;
+    session.flush()?;
+    session.exp_string("no")?;
+    session.exp_string("Where should we create this project?")?;
+    session.exp_string("Directory")?;
+    session.send_line(temp_dir_path.to_str().unwrap())?;
+    session.exp_string("Target directory is not empty. Are you sure?")?;
     session.send("y")?;
     session.flush()?;
     session.exp_string("yes")?;

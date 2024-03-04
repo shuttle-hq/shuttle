@@ -1,6 +1,13 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 /// Schema used in `examples/templates.toml` and services that parses it
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TemplatesSchema {
+    templates: HashMap<String, TemplateDefinition>,
+}
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct TemplateDefinition {
     /// Title of the template

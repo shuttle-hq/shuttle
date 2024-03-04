@@ -398,34 +398,34 @@ impl Shuttle {
         let path = if needs_path {
             let path = args
                 .path
-                .to_str()
-                .context("path arg should always be set")?
-                .parse::<PathBuf>()?
                 .join(project_args.name.as_ref().expect("name should be set"));
 
-            println!("Where should we create this project?");
+            loop {
+                println!("Where should we create this project?");
 
-            let directory_str: String = Input::with_theme(&theme)
-                .with_prompt("Directory")
-                .default(format!("{}", path.display()))
-                .interact()?;
-            println!();
+                let directory_str: String = Input::with_theme(&theme)
+                    .with_prompt("Directory")
+                    .default(format!("{}", path.display()))
+                    .interact()?;
+                println!();
 
-            let path = args::create_and_parse_path(OsString::from(directory_str))?;
+                let path = args::create_and_parse_path(OsString::from(directory_str))?;
 
-            if std::fs::read_dir(&path)
-                .expect("init dir to exist and list entries")
-                .count()
-                > 0
-                && !Confirm::with_theme(&theme)
-                    .with_prompt("Target directory is not empty. Are you sure?")
-                    .default(true)
-                    .interact()?
-            {
-                return Ok(CommandOutcome::Ok);
+                if std::fs::read_dir(&path)
+                    .expect("init dir to exist and list entries")
+                    .count()
+                    > 0
+                    && !Confirm::with_theme(&theme)
+                        .with_prompt("Target directory is not empty. Are you sure?")
+                        .default(true)
+                        .interact()?
+                {
+                    println!();
+                    continue;
+                }
+
+                break path;
             }
-
-            path
         } else {
             args.path.clone()
         };

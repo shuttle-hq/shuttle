@@ -91,6 +91,7 @@ impl AsRef<str> for ApiKey {
 #[derive(Deserialize, Serialize, Default)]
 pub struct DbInput {
     pub local_uri: Option<String>,
+    /// Override the default db name. Only applies to RDS.
     pub db_name: Option<String>,
 }
 

@@ -3,6 +3,7 @@
 pub struct DatabaseRequest {
     #[prost(string, tag = "1")]
     pub project_name: ::prost::alloc::string::String,
+    /// Override the default db name. Only applies to RDS.
     #[prost(string, optional, tag = "2")]
     pub db_name: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(oneof = "database_request::DbType", tags = "10, 11")]

@@ -13,6 +13,7 @@ message DatabaseRequest {
     Shared Shared = 10;
     AwsRds AwsRds = 11;
   };
+  // Override the default db name. Only applies to RDS.
   optional string db_name = 2;
 }
 

@@ -161,10 +161,10 @@ impl LocalProvisioner {
     ) -> Result<DatabaseResponse, Status> {
         trace!("getting sql string for project '{project_name}'");
 
-        let database_name = if matches!(db_type, database::Type::AwsRds(_)) {
-            db_name.unwrap_or_else(|| project_name.to_string())
-        } else {
-            project_name.to_string()
+        let database_name = match db_type {
+            database::Type::AwsRds(_) => db_name.unwrap_or_else(|| project_name.to_string()),
+            database::Type::Shared(SharedEngine::MongoDb) => "admin".to_string(),
+            _ => project_name.to_string(),
         };
 
         let EngineConfig {

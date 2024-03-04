@@ -288,7 +288,9 @@ impl ShuttleProvisioner {
                 if let ModifyDBInstanceError::DbInstanceNotFoundFault(_) = err.err() {
                     debug!("creating new AWS RDS {instance_name}");
 
-                    let db_name = database_name.to_owned().unwrap_or_else(|| project_name.to_string());
+                    let db_name = database_name
+                        .to_owned()
+                        .unwrap_or_else(|| project_name.to_string());
 
                     client
                         .create_db_instance()
@@ -522,8 +524,12 @@ impl Provisioner for ShuttleProvisioner {
                     }
                 }
 
-                self.request_aws_rds(&request.project_name, engine.expect("engine to be set"), &request.db_name)
-                    .await?
+                self.request_aws_rds(
+                    &request.project_name,
+                    engine.expect("engine to be set"),
+                    &request.db_name,
+                )
+                .await?
             }
         };
 

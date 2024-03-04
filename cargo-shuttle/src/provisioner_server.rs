@@ -18,7 +18,7 @@ use crossterm::{
 use futures::StreamExt;
 use portpicker::pick_unused_port;
 use shuttle_common::{
-    database::{AwsRdsEngine, SharedEngine},
+    database::{self, AwsRdsEngine, SharedEngine},
     ContainerRequest, ContainerResponse, Secret,
 };
 use shuttle_proto::provisioner::{
@@ -167,13 +167,16 @@ impl LocalProvisioner {
             engine,
             username,
             password,
-            database_name,
             port,
             env,
             is_ready_cmd,
         } = db_type_to_config(db_type);
         let container_name = format!("shuttle_{project_name}_{type}");
-        let database_name = db_name.unwrap_or(database_name);
+        let database_name = if matches!(db_type, database::Type::AwsRds(_)) {
+            db_name.unwrap_or_else(|| project_name.to_string())
+        } else {
+            project_name.to_string()
+        };
 
         let container = self
             .get_container(&container_name, &image, &port, env)
@@ -390,7 +393,6 @@ struct EngineConfig {
     engine: String,
     username: String,
     password: Secret<String>,
-    database_name: String,
     port: String,
     env: Option<Vec<String>>,
     is_ready_cmd: Vec<String>,
@@ -404,7 +406,6 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string().into(),
-            database_name: "postgres".to_string(),
             port: "5432/tcp".to_string(),
             env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
             is_ready_cmd: vec![
@@ -419,7 +420,6 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             engine: "mongodb".to_string(),
             username: "mongodb".to_string(),
             password: "password".to_string().into(),
-            database_name: "admin".to_string(),
             port: "27017/tcp".to_string(),
             env: Some(vec![
                 "MONGO_INITDB_ROOT_USERNAME=mongodb".to_string(),
@@ -438,7 +438,6 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string().into(),
-            database_name: "postgres".to_string(),
             port: "5432/tcp".to_string(),
             env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
             is_ready_cmd: vec![
@@ -453,7 +452,6 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             engine: "mariadb".to_string(),
             username: "root".to_string(),
             password: "mariadb".to_string().into(),
-            database_name: "mysql".to_string(),
             port: "3306/tcp".to_string(),
             env: Some(vec!["MARIADB_ROOT_PASSWORD=mariadb".to_string()]),
             is_ready_cmd: vec![
@@ -470,7 +468,6 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             engine: "mysql".to_string(),
             username: "root".to_string(),
             password: "mysql".to_string().into(),
-            database_name: "mysql".to_string(),
             port: "3306/tcp".to_string(),
             env: Some(vec!["MYSQL_ROOT_PASSWORD=mysql".to_string()]),
             is_ready_cmd: vec![

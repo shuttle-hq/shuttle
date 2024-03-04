@@ -161,6 +161,12 @@ impl LocalProvisioner {
     ) -> Result<DatabaseResponse, Status> {
         trace!("getting sql string for project '{project_name}'");
 
+        let database_name = if matches!(db_type, database::Type::AwsRds(_)) {
+            db_name.unwrap_or_else(|| project_name.to_string())
+        } else {
+            project_name.to_string()
+        };
+
         let EngineConfig {
             r#type,
             image,
@@ -170,13 +176,8 @@ impl LocalProvisioner {
             port,
             env,
             is_ready_cmd,
-        } = db_type_to_config(db_type);
+        } = db_type_to_config(db_type, &database_name);
         let container_name = format!("shuttle_{project_name}_{type}");
-        let database_name = if matches!(db_type, database::Type::AwsRds(_)) {
-            db_name.unwrap_or_else(|| project_name.to_string())
-        } else {
-            project_name.to_string()
-        };
 
         let container = self
             .get_container(&container_name, &image, &port, env)
@@ -398,7 +399,7 @@ struct EngineConfig {
     is_ready_cmd: Vec<String>,
 }
 
-fn db_type_to_config(db_type: Type) -> EngineConfig {
+fn db_type_to_config(db_type: Type, database_name: &str) -> EngineConfig {
     match db_type {
         Type::Shared(SharedEngine::Postgres) => EngineConfig {
             r#type: "shared_postgres".to_string(),
@@ -407,7 +408,10 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             username: "postgres".to_string(),
             password: "postgres".to_string().into(),
             port: "5432/tcp".to_string(),
-            env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
+            env: Some(vec![
+                "POSTGRES_PASSWORD=postgres".to_string(),
+                format!("POSTGRES_DB={database_name}"),
+            ]),
             is_ready_cmd: vec![
                 "/bin/sh".to_string(),
                 "-c".to_string(),
@@ -424,6 +428,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             env: Some(vec![
                 "MONGO_INITDB_ROOT_USERNAME=mongodb".to_string(),
                 "MONGO_INITDB_ROOT_PASSWORD=password".to_string(),
+                format!("MONGO_INITDB_DATABASE={database_name}"),
             ]),
             is_ready_cmd: vec![
                 "mongosh".to_string(),
@@ -439,7 +444,10 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             username: "postgres".to_string(),
             password: "postgres".to_string().into(),
             port: "5432/tcp".to_string(),
-            env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
+            env: Some(vec![
+                "POSTGRES_PASSWORD=postgres".to_string(),
+                format!("POSTGRES_DB={database_name}"),
+            ]),
             is_ready_cmd: vec![
                 "/bin/sh".to_string(),
                 "-c".to_string(),
@@ -453,7 +461,10 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             username: "root".to_string(),
             password: "mariadb".to_string().into(),
             port: "3306/tcp".to_string(),
-            env: Some(vec!["MARIADB_ROOT_PASSWORD=mariadb".to_string()]),
+            env: Some(vec![
+                "MARIADB_ROOT_PASSWORD=mariadb".to_string(),
+                format!("MARIADB_DATABASE={database_name}"),
+            ]),
             is_ready_cmd: vec![
                 "mysql".to_string(),
                 "-pmariadb".to_string(),
@@ -469,7 +480,10 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             username: "root".to_string(),
             password: "mysql".to_string().into(),
             port: "3306/tcp".to_string(),
-            env: Some(vec!["MYSQL_ROOT_PASSWORD=mysql".to_string()]),
+            env: Some(vec![
+                "MYSQL_ROOT_PASSWORD=mysql".to_string(),
+                format!("MYSQL_DATABASE={database_name}"),
+            ]),
             is_ready_cmd: vec![
                 "mysql".to_string(),
                 "-pmysql".to_string(),

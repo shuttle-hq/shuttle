@@ -71,7 +71,7 @@ impl ClaimExt for Claim {
                 .len();
         }
 
-        Ok(self.limits.rds_quota > (rds_count as u32))
+        Ok(self.limits.rds_quota > (rds_count as u32) || self.is_admin())
     }
 
     #[instrument(skip_all)]

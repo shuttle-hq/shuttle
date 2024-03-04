@@ -77,7 +77,7 @@ impl Postgres {
             .await
             .expect("to run migrations successfully");
 
-        // Perform cleaning of old logs on startup and then every 24h
+        // Perform cleaning of old logs on startup and then every hour
         let pool_clean = pool.clone();
         tokio::spawn(async move {
             info!("Cleaning old logs");
@@ -87,7 +87,7 @@ impl Postgres {
                 .map_err(|e| {
                     error!("Cleaning old logs failed: {}", e);
                 });
-            tokio::time::sleep(tokio::time::Duration::from_secs(60 * 60 * 24)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(60 * 60)).await;
         });
 
         let (tx, mut rx) = broadcast::channel::<(Vec<Log>, Span)>(1000);

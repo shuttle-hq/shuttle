@@ -462,14 +462,11 @@ jobs:
                   ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
-      image: << parameters.image >>
+      image: default
     resource_class: << parameters.resource_class >>
     parameters:
       target:
         description: "Linux target to build for"
-        type: string
-      image:
-        description: "Machine image to use"
         type: string
       resource_class:
         description: "The resource type to use for the machine"
@@ -558,7 +555,7 @@ jobs:
             ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft ${TAG} ./artifacts/
   linux-qa:
     machine:
-      image: ubuntu-2004:current
+      image: default
     resource_class: medium
     steps:
       - checkout
@@ -838,7 +835,6 @@ workflows:
     jobs:
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
-          image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-gnu
           resource_class: xlarge
           filters:
@@ -846,7 +842,6 @@ workflows:
               only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-musl
-          image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-musl
           resource_class: xlarge
           filters:
@@ -854,7 +849,6 @@ workflows:
               only: production
       - build-binaries-linux:
           name: build-binaries-aarch64
-          image: ubuntu-2004:202101-01
           target: aarch64-unknown-linux-musl
           resource_class: arm.xlarge
           filters:

@@ -386,7 +386,7 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
 
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
-    session.send_line(temp_dir_path.join("my-project").to_str().unwrap())?;
+    session.send_line(temp_dir_path.to_str().unwrap())?;
     session.exp_string("Target directory is not empty. Are you sure?")?;
     session.send("y")?;
     session.flush()?;
@@ -397,7 +397,7 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
     session.flush()?;
     session.exp_string("no")?;
 
-    assert_valid_rocket_project(&temp_dir_path.as_path().join("my-project"), "my-project");
+    assert_valid_rocket_project(&temp_dir_path, "my-project");
 
     Ok(())
 }

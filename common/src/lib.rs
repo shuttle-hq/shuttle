@@ -10,6 +10,8 @@ pub mod deployment;
 pub type DeploymentId = uuid::Uuid;
 #[cfg(feature = "extract_propagation")]
 pub mod extract_propagation;
+#[cfg(feature = "claims")]
+pub mod limits;
 #[cfg(feature = "service")]
 pub mod log;
 #[cfg(feature = "service")]
@@ -19,8 +21,7 @@ pub mod models;
 pub mod resource;
 pub mod secrets;
 pub use secrets::{Secret, SecretStore};
-#[cfg(feature = "claims")]
-pub mod limits;
+pub mod templates;
 #[cfg(feature = "tracing")]
 pub mod tracing;
 #[cfg(feature = "wasm")]

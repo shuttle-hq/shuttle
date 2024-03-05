@@ -305,7 +305,6 @@ mod _resource_recorder_client {
 
     #[cfg(test)]
     mod tests {
-        use async_trait::async_trait;
         use serde_json::json;
         use shuttle_common::{database, resource};
         use test_context::{test_context, AsyncTestContext};
@@ -316,7 +315,6 @@ mod _resource_recorder_client {
 
         use super::{get_client, Client, ResourceDal};
 
-        #[async_trait]
         impl AsyncTestContext for Client {
             async fn setup() -> Self {
                 let port = get_mocked_resource_recorder().await;
@@ -324,7 +322,7 @@ mod _resource_recorder_client {
                 get_client(format!("http://localhost:{port}").parse().unwrap()).await
             }
 
-            async fn teardown(mut self) {}
+            async fn teardown(self) {}
         }
 
         #[test_context(Client)]

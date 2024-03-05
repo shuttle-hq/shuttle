@@ -89,7 +89,7 @@ strfmt = "0.2.2"
 strum = { version = "0.25.0", features = ["derive"] }
 tar = "0.4.38"
 tempfile = "3.4.0"
-test-context = "0.1.4"
+test-context = "0.3.0"
 thiserror = "1.0.37"
 tokio = "1.22.0"
 tokio-stream = "0.1.11"

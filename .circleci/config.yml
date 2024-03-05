@@ -484,6 +484,7 @@ jobs:
   build-binaries-windows:
     executor:
       name: win/default
+      size: xlarge
       shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
@@ -816,32 +817,32 @@ workflows:
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
           target: x86_64-unknown-linux-gnu
-          resource_class: large
-          # filters:
-          #   branches:
-          #     only: production
+          resource_class: xlarge
+          filters:
+            branches:
+              only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-musl
           target: x86_64-unknown-linux-musl
-          resource_class: large
-          # filters:
-          #   branches:
-          #     only: production
+          resource_class: xlarge
+          filters:
+            branches:
+              only: production
       - build-binaries-linux:
           name: build-binaries-aarch64
           target: aarch64-unknown-linux-musl
-          resource_class: arm.large
-          # filters:
-          #   branches:
-          #     only: production
-      - build-binaries-windows
-          # filters:
-          #   branches:
-          #     only: production
-      - build-binaries-mac
-          # filters:
-          #   branches:
-          #     only: production
+          resource_class: arm.xlarge
+          filters:
+            branches:
+              only: production
+      - build-binaries-windows:
+          filters:
+            branches:
+              only: production
+      - build-binaries-mac:
+          filters:
+            branches:
+              only: production
       - publish-github-release-draft:
           requires:
             - build-binaries-x86_64-gnu
@@ -858,9 +859,9 @@ workflows:
           aws-access-key-id: PROD_AWS_ACCESS_KEY_ID
           aws-secret-access-key: PROD_AWS_SECRET_ACCESS_KEY
           shuttle-env: production
-          # filters:
-          #   branches:
-          #     only: production
+          filters:
+            branches:
+              only: production
       - approve-deploy-production:
           type: approval
           filters:

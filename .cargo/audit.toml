@@ -1,9 +1,5 @@
 [advisories]
 ignore = [
-  # Advisory about the crate `mach` being unmaintained.
-  # This is a dependency from `wasmtime`. A fork exists (`mach2`) but they haven't yet audited it.
-  # Corresponding issue: https://github.com/bytecodealliance/wasmtime/issues/6000
-  "RUSTSEC-2020-0168",
   # Advisory about a vulnerability in rsa, which we don't use, but it is pulled in via sqlx due
   # to a bug in cargo. See https://github.com/shuttle-hq/shuttle/pull/1475 for context.
   "RUSTSEC-2023-0071"

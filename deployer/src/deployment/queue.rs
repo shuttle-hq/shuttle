@@ -30,12 +30,10 @@ use uuid::Uuid;
 use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
-use crate::persistence::DeploymentUpdater;
 
 pub async fn task(
     mut recv: QueueReceiver,
     run_send: RunSender,
-    deployment_updater: impl DeploymentUpdater,
     log_recorder: impl LogRecorder,
     queue_client: impl BuildQueueClient,
     builds_path: PathBuf,
@@ -50,7 +48,6 @@ pub async fn task(
                 let id = queued.id;
 
                 info!("Queued deployment at the front of the queue: {id}");
-                let deployment_updater = deployment_updater.clone();
                 let run_send_cloned = run_send.clone();
                 let log_recorder = log_recorder.clone();
                 let queue_client = queue_client.clone();
@@ -77,7 +74,6 @@ pub async fn task(
 
                         match queued
                             .handle(
-                                deployment_updater,
                                 log_recorder,
                                 builds_path.as_path(),
                             )
@@ -178,17 +174,8 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(
-        name = "Building project",
-        skip(self, deployment_updater, log_recorder, builds_path),
-        fields(deployment_id = %self.id, state = %State::Building)
-    )]
-    async fn handle(
-        self,
-        deployment_updater: impl DeploymentUpdater,
-        log_recorder: impl LogRecorder,
-        builds_path: &Path,
-    ) -> Result<Built> {
+    #[instrument(name = "Building project", skip_all, fields(deployment_id = %self.id, state = %State::Building))]
+    async fn handle(self, log_recorder: impl LogRecorder, builds_path: &Path) -> Result<Built> {
         let project_path = builds_path.join(&self.service_name);
 
         info!("Extracting files");
@@ -231,20 +218,12 @@ impl Queued {
         )
         .await?;
 
-        let is_next = built_service.is_wasm;
-
-        deployment_updater
-            .set_is_next(&self.id, is_next)
-            .await
-            .map_err(|e| Error::Build(Box::new(e)))?;
-
         let built = Built {
             id: self.id,
             service_name: self.service_name,
             service_id: self.service_id,
             project_id: self.project_id,
             tracing_context: Default::default(),
-            is_next,
             claim: Some(self.claim),
             secrets,
         };
@@ -398,8 +377,6 @@ async fn run_pre_deploy_tests(
     }
 }
 
-/// This will store the path to the executable for each runtime, which will be the users project with
-/// an embedded runtime for alpha, and a .wasm file for shuttle-next.
 #[instrument(skip(executable_path, to_directory, new_filename))]
 async fn copy_executable(
     executable_path: &Path,

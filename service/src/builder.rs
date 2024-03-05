@@ -3,19 +3,18 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anyhow::{anyhow, bail, Context};
-use cargo_metadata::{Package, Target};
-use shuttle_common::constants::{NEXT_NAME, RUNTIME_NAME};
+use cargo_metadata::Package;
+use shuttle_common::constants::RUNTIME_NAME;
 use tokio::io::AsyncBufReadExt;
 use tracing::{debug, error, info, trace};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-/// This represents a compiled alpha or shuttle-next service.
+/// This represents a compiled alpha service
 pub struct BuiltService {
     pub workspace_path: PathBuf,
     pub manifest_path: PathBuf,
     pub package_name: String,
     pub executable_path: PathBuf,
-    pub is_wasm: bool,
 }
 
 impl BuiltService {
@@ -125,65 +124,40 @@ pub async fn build_workspace(
     trace!("Cargo metadata parsed");
 
     let mut alpha_packages = Vec::new();
-    let mut next_packages = Vec::new();
 
     for member in metadata.workspace_packages() {
-        let next = is_next(member);
-        let alpha = is_alpha(member);
-        if next || alpha {
-            let mut shuttle_deps = member
-                .dependencies
-                .iter()
-                .filter(|&d| d.name.starts_with("shuttle-"))
-                .map(|d| format!("{} '{}'", d.name, d.req))
-                .collect::<Vec<_>>();
-            shuttle_deps.sort();
-            info!(name = member.name, deps = ?shuttle_deps, "Compiling workspace member with shuttle dependencies");
+        // skip non-Shuttle-related crates
+        if !member
+            .dependencies
+            .iter()
+            .any(|dependency| dependency.name == RUNTIME_NAME)
+        {
+            continue;
         }
-        if next {
-            ensure_cdylib(member)?;
-            next_packages.push(member);
-        } else if alpha {
-            ensure_binary(member)?;
-            alpha_packages.push(member);
-        }
+        let mut shuttle_deps = member
+            .dependencies
+            .iter()
+            .filter(|&d| d.name.starts_with("shuttle-"))
+            .map(|d| format!("{} '{}'", d.name, d.req))
+            .collect::<Vec<_>>();
+        shuttle_deps.sort();
+        info!(name = member.name, deps = ?shuttle_deps, "Compiling workspace member with shuttle dependencies");
+        ensure_binary(member)?;
+        alpha_packages.push(member);
     }
 
-    let mut runtimes = Vec::new();
+    let services = compile(
+        alpha_packages,
+        release_mode,
+        project_path.clone(),
+        metadata.target_directory.clone(),
+        deployment,
+        tx.clone(),
+    )
+    .await?;
+    trace!("alpha packages compiled");
 
-    if !alpha_packages.is_empty() {
-        let mut services = compile(
-            alpha_packages,
-            release_mode,
-            false,
-            project_path.clone(),
-            metadata.target_directory.clone(),
-            deployment,
-            tx.clone(),
-        )
-        .await?;
-        trace!("alpha packages compiled");
-
-        runtimes.append(&mut services);
-    }
-
-    if !next_packages.is_empty() {
-        let mut services = compile(
-            next_packages,
-            release_mode,
-            true,
-            project_path,
-            metadata.target_directory.clone(),
-            deployment,
-            tx,
-        )
-        .await?;
-        trace!("next packages compiled");
-
-        runtimes.append(&mut services);
-    }
-
-    Ok(runtimes)
+    Ok(services)
 }
 
 // Only used in deployer
@@ -207,46 +181,18 @@ pub async fn clean_crate(project_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn is_next(package: &Package) -> bool {
-    package
-        .dependencies
-        .iter()
-        .any(|dependency| dependency.name == NEXT_NAME)
-}
-
-fn is_alpha(package: &Package) -> bool {
-    package
-        .dependencies
-        .iter()
-        .any(|dependency| dependency.name == RUNTIME_NAME)
-}
-
 /// Make sure the project is a binary for alpha projects.
 fn ensure_binary(package: &Package) -> anyhow::Result<()> {
     if package.targets.iter().any(|target| target.is_bin()) {
         Ok(())
     } else {
-        bail!("Your Shuttle project must be a binary.")
+        bail!("Your Shuttle package must be a binary.")
     }
-}
-
-/// Make sure "cdylib" is set for shuttle-next projects, else set it if possible.
-fn ensure_cdylib(package: &Package) -> anyhow::Result<()> {
-    if package.targets.iter().any(is_cdylib) {
-        Ok(())
-    } else {
-        bail!("Your Shuttle next project must be a library. Please add `[lib]` to your Cargo.toml file.")
-    }
-}
-
-fn is_cdylib(target: &Target) -> bool {
-    target.kind.iter().any(|kind| kind == "cdylib")
 }
 
 async fn compile(
     packages: Vec<&Package>,
     release_mode: bool,
-    wasm: bool,
     project_path: PathBuf,
     target_path: impl Into<PathBuf>,
     deployment: bool,
@@ -280,10 +226,6 @@ async fn compile(
         "debug"
     };
 
-    if wasm {
-        cmd.arg("--target").arg("wasm32-wasi");
-    }
-
     cmd.stderr(Stdio::piped());
     cmd.stdout(Stdio::null());
     let mut handle = cmd.spawn()?;
@@ -305,37 +247,21 @@ async fn compile(
     let services = packages
         .iter()
         .map(|package| {
-            let path = if wasm {
-                let mut path: PathBuf = [
-                    project_path.clone(),
-                    target_path.clone(),
-                    "wasm32-wasi".into(),
-                    profile.into(),
-                    package.name.replace('-', "_").into(),
-                ]
-                .iter()
-                .collect();
-                path.set_extension("wasm");
-                path
-            } else {
-                let mut path: PathBuf = [
-                    project_path.clone(),
-                    target_path.clone(),
-                    profile.into(),
-                    package.name.clone().into(),
-                ]
-                .iter()
-                .collect();
-                path.set_extension(std::env::consts::EXE_EXTENSION);
-                path
-            };
+            let mut path: PathBuf = [
+                project_path.clone(),
+                target_path.clone(),
+                profile.into(),
+                package.name.clone().into(),
+            ]
+            .iter()
+            .collect();
+            path.set_extension(std::env::consts::EXE_EXTENSION);
 
             BuiltService {
                 workspace_path: project_path.clone(),
                 manifest_path: package.manifest_path.clone().into_std_path_buf(),
                 package_name: package.name.clone(),
                 executable_path: path,
-                is_wasm: wasm,
             }
         })
         .collect();

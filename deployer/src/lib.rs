@@ -38,7 +38,6 @@ pub async fn start(
         .active_deployment_getter(persistence.clone())
         .artifacts_path(args.artifacts_path)
         .runtime(runtime_manager)
-        .deployment_updater(persistence.clone())
         .resource_manager(persistence.clone())
         .provisioner_client(provisioner::get_client(args.provisioner_address).await)
         .queue_client(gateway::Client::new(
@@ -70,7 +69,6 @@ pub async fn start(
             service_id: deployment.service_id,
             project_id,
             tracing_context: Default::default(),
-            is_next: deployment.is_next,
             claim: None,
             secrets: Default::default(),
         };

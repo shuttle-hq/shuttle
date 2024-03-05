@@ -22,8 +22,7 @@ pub const SHUTTLE_IDLE_DOCS_URL: &str = "https://docs.shuttle.rs/getting-started
 pub const SHUTTLE_EXAMPLES_README: &str =
     "https://github.com/shuttle-hq/shuttle-examples#how-to-clone-run-and-deploy-an-example";
 
-// Crate names for checking cargo metadata
-pub const NEXT_NAME: &str = "shuttle-next";
+// Crate name for checking cargo metadata
 pub const RUNTIME_NAME: &str = "shuttle-runtime";
 
 /// Current version field in requests to provisioner

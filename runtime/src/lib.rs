@@ -215,8 +215,6 @@ pub use tokio;
 
 mod alpha;
 mod args;
-#[cfg(feature = "next")]
-mod next;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -226,8 +224,6 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod __internals {
     // Internals used by the codegen
     pub use crate::alpha::{start, Alpha};
-    #[cfg(feature = "next")]
-    pub use crate::next::{AxumWasm, NextArgs};
 
     // Dependencies required by the codegen
     pub use anyhow::Context;

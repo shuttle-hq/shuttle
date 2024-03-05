@@ -4,7 +4,7 @@ orbs:
   docker-buildx: sensu/docker-buildx@1.1.1
   aws-ecr: circleci/aws-ecr@8.2.1
   win: circleci/windows@5.0
-  macos: circleci/macos@2.3.6
+  macos: circleci/macos@2.4.1
 
 executors:
   docker-rust:
@@ -483,14 +483,12 @@ jobs:
           target: << parameters.target >>
   build-binaries-windows:
     executor:
-      name: win/server-2022
-      size: xlarge
+      name: win/default
       shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - checkout
-      - run: choco install -y strawberryperl
       - run:
           name: Install Rust
           # Note: Let binary build use latest
@@ -501,9 +499,6 @@ jobs:
       - run:
           name: Build
           command: |
-            # From https://github.com/alexcrichton/openssl-src-rs/issues/45
-            # Because of https://github.com/openssl/openssl/issues/9048
-            $env:OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
             ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - make-artifact:
@@ -511,7 +506,7 @@ jobs:
           suffix: ".exe"
   build-binaries-mac:
     macos:
-      xcode: 14.2.0
+      xcode: 15.3.0
     resource_class: macos.m1.medium.gen1
     steps:
       - checkout
@@ -577,8 +572,8 @@ jobs:
       #     command: ./.circleci/qa-docker.sh
   mac-qa:
     macos:
-      xcode: 12.5.1
-    resource_class: medium
+      xcode: 15.3.0
+    resource_class: macos.m1.medium.gen1
     steps:
       - checkout
       - run:

@@ -22,7 +22,7 @@ use clap_complete::{generate, Shell};
 use clap_mangen::Man;
 use config::RequestContext;
 use crossterm::style::Stylize;
-use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::{StreamExt, TryFutureExt};
@@ -34,8 +34,8 @@ use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
 use shuttle_common::{
     constants::{
-        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION,
-        SHUTTLE_CLI_DOCS_URL, SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL,
+        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXAMPLES_TEMPLATES_TOML,
+        EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION, SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL,
         SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
     },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
@@ -49,7 +49,9 @@ use shuttle_common::{
         resource::get_resource_tables,
     },
     resource::{self, ResourceInput, ShuttleResourceOutput},
-    semvers_are_compatible, ApiKey, DatabaseResource, DbInput, LogItem, VersionInfo,
+    semvers_are_compatible,
+    templates::{TemplateDefinition, TemplateType, TemplatesSchema},
+    ApiKey, DatabaseResource, DbInput, LogItem, VersionInfo,
 };
 use shuttle_proto::{
     provisioner::{provisioner_server::Provisioner, DatabaseRequest},
@@ -59,7 +61,7 @@ use shuttle_service::{
     builder::{build_workspace, BuiltService},
     runner, Environment,
 };
-use strum::IntoEnumIterator;
+use strum::{EnumMessage, VariantArray};
 use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
@@ -71,7 +73,7 @@ use uuid::Uuid;
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
     DeployArgs, DeploymentCommand, InitArgs, LoginArgs, LogoutArgs, ProjectCommand,
-    ProjectStartArgs, ResourceCommand, EXAMPLES_REPO,
+    ProjectStartArgs, ResourceCommand, TemplateLocation,
 };
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
@@ -427,21 +429,144 @@ impl Shuttle {
             args.path.clone()
         };
 
-        // 4. Ask for the framework
+        // 4. Ask for the template
         let template = match git_template {
             Some(git_template) => git_template,
             None => {
-                println!(
-                    "Shuttle works with a range of web frameworks. Which one do you want to use?"
-                );
-                let frameworks = args::InitTemplateArg::iter().collect::<Vec<_>>();
-                let index = FuzzySelect::with_theme(&theme)
-                    .with_prompt("Framework")
-                    .items(&frameworks)
-                    .default(0)
-                    .interact()?;
-                println!();
-                frameworks[index].template()
+                async fn get_templates() -> Result<HashMap<String, TemplateDefinition>> {
+                    let client = reqwest::Client::new();
+                    let s: TemplatesSchema = toml::from_str(
+                        &client
+                            .get(EXAMPLES_TEMPLATES_TOML)
+                            .send()
+                            .await?
+                            .text()
+                            .await?,
+                    )?;
+                    Ok(s.templates)
+                }
+                // Try to present choices from our up-to-date examples.
+                // Fall back to the internal (potentially outdated) list
+                match get_templates().await {
+                    Ok(t) => {
+                        println!("What type of project template would you like to start from?");
+                        let i = Select::with_theme(&theme)
+                            .items(&[
+                                "A Hello World app in a supported framework",
+                                "Browse our full library of templates", // TODO(when templates page is live): Add link to it?
+                            ])
+                            .clear(false)
+                            .default(0)
+                            .interact()?;
+                        println!();
+                        if i == 0 {
+                            // Use a Hello world starter
+                            let mut starters = t
+                                .into_iter()
+                                .map(|(_, t)| t)
+                                .filter(|t| t.r#type == TemplateType::Starter)
+                                .collect::<Vec<_>>();
+                            starters.sort_by_key(|t| {
+                                // Make the "No templates" appear last in the list
+                                if t.title.starts_with("No") {
+                                    "zzz".to_owned()
+                                } else {
+                                    t.title.clone()
+                                }
+                            });
+                            let starter_strings = starters
+                                .iter()
+                                .map(|t| {
+                                    format!(
+                                        "{} - {}",
+                                        t.title.clone().bold(),
+                                        t.description.as_ref().unwrap_or(&"".to_owned()),
+                                    )
+                                })
+                                .collect::<Vec<_>>();
+                            let index = Select::with_theme(&theme)
+                                .with_prompt("Select template")
+                                .items(&starter_strings)
+                                .default(0)
+                                .interact()?;
+                            println!();
+                            let path = starters[index]
+                                .path
+                                .clone()
+                                .expect("starter to have a path");
+
+                            TemplateLocation {
+                                auto_path: EXAMPLES_REPO.into(),
+                                subfolder: Some(path),
+                            }
+                        } else {
+                            // Browse all non-starter templates
+                            let mut templates = t
+                                .into_iter()
+                                .map(|(_, t)| t)
+                                .filter(|t| {
+                                    t.r#type == TemplateType::Template
+                                        && !t.community.is_some_and(|c| c)
+                                })
+                                .collect::<Vec<_>>();
+                            templates.sort_by_key(|t| t.title.clone());
+                            let template_strings = templates
+                                .iter()
+                                .map(|t| {
+                                    format!(
+                                        "{} - {}{}",
+                                        t.title.clone().bold(),
+                                        t.description.as_ref().unwrap_or(&"".to_owned()),
+                                        if let Some(tag) = t.tags.first() {
+                                            format!(" ({tag})").dim().to_string()
+                                        } else {
+                                            "".to_owned()
+                                        },
+                                    )
+                                })
+                                .collect::<Vec<_>>();
+                            let index = Select::with_theme(&theme)
+                                .with_prompt("Select template")
+                                .items(&template_strings)
+                                .default(0)
+                                .interact()?;
+                            println!();
+                            let path = templates[index]
+                                .path
+                                .clone()
+                                .expect("starter to have a path");
+
+                            TemplateLocation {
+                                auto_path: EXAMPLES_REPO.into(),
+                                subfolder: Some(path),
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        println!(
+                            "{}",
+                            "Failed to look up template list. Falling back to internal list."
+                                .yellow()
+                        );
+                        println!(
+                            "Shuttle works with many frameworks. Which one do you want to use?"
+                        );
+                        let frameworks = args::InitTemplateArg::VARIANTS;
+                        let framework_strings = frameworks
+                            .iter()
+                            .map(|t| {
+                                t.get_documentation()
+                                    .expect("all template variants to have docs")
+                            })
+                            .collect::<Vec<_>>();
+                        let index = Select::with_theme(&theme)
+                            .items(&framework_strings)
+                            .default(0)
+                            .interact()?;
+                        println!();
+                        frameworks[index].template()
+                    }
+                }
             }
         };
 
@@ -460,17 +585,6 @@ impl Shuttle {
             template,
             no_git,
         )?;
-        println!();
-
-        printdoc!(
-            "
-            Hint: Check the examples repo for a full list of templates:
-                  {EXAMPLES_REPO}
-            Hint: You can also use `cargo shuttle init --from` to clone templates.
-                  See {SHUTTLE_CLI_DOCS_URL}
-                  or run `cargo shuttle init --help`
-            "
-        );
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle

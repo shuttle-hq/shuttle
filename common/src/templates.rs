@@ -16,7 +16,7 @@ pub struct TemplateDefinition {
     pub description: Option<String>,
     /// Path relative to the repo root
     pub path: Option<String>,
-    /// "starter" OR "template" (default) OR "tutorial"
+    /// High-level classification of what this template is
     #[serde(default)]
     pub r#type: TemplateType,
     /// List of areas where this template is useful. Examples: "Web app", "Discord bot", "Monitoring", "Automation", "Utility"
@@ -37,11 +37,16 @@ pub struct TemplateDefinition {
     pub repo: Option<String>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TemplateType {
+    /// A very basic template, typically Hello World
     Starter,
+    /// A non-starter template
     #[default]
     Template,
+    /// An example not meant to be a template
+    Example,
+    /// An example app with an attached tutorial
     Tutorial,
 }

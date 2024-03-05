@@ -480,6 +480,7 @@ impl ResourceManager for Persistence {
                 let mut req = Request::new(DatabaseRequest {
                     project_name,
                     db_type: Some(db_type.into()),
+                    db_name: None,
                 });
                 req.extensions_mut().insert(claim.clone());
 

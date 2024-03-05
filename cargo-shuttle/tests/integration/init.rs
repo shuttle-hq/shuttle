@@ -233,7 +233,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     session.send_line("my-project")?;
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
-    session.send_line(temp_dir_path.to_str().unwrap())?;
+    session.send_line(temp_dir_path.join("my-project").to_str().unwrap())?;
     session.exp_string(
         "Shuttle works with a range of web frameworks. Which one do you want to use?",
     )?;
@@ -246,7 +246,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     session.flush()?;
     session.exp_string("no")?;
 
-    assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
+    assert_valid_rocket_project(&temp_dir_path.as_path().join("my-project"), "my-project");
 
     Ok(())
 }
@@ -268,7 +268,7 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
     session.send_line("my-project")?;
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
-    session.send_line(temp_dir_path.to_str().unwrap())?;
+    session.send_line(temp_dir_path.join("my-project").to_str().unwrap())?;
     session.exp_string(
         "Shuttle works with a range of web frameworks. Which one do you want to use?",
     )?;
@@ -281,7 +281,7 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
     session.flush()?;
     session.exp_string("no")?;
 
-    assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
+    assert_valid_rocket_project(&temp_dir_path.as_path().join("my-project"), "my-project");
 
     Ok(())
 }
@@ -310,14 +310,14 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     session.send_line("my-project")?;
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
-    session.send_line(temp_dir_path.to_str().unwrap())?;
+    session.send_line(temp_dir_path.join("my-project").to_str().unwrap())?;
     session.exp_string("Creating project")?;
     session.exp_string("container on Shuttle?")?;
     session.send("n")?;
     session.flush()?;
     session.exp_string("no")?;
 
-    assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
+    assert_valid_rocket_project(&temp_dir_path.as_path().join("my-project"), "my-project");
 
     Ok(())
 }
@@ -343,7 +343,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
 
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
-    session.send_line(temp_dir_path.to_str().unwrap())?;
+    session.send_line(temp_dir_path.join("my-project").to_str().unwrap())?;
     session.exp_string(
         "Shuttle works with a range of web frameworks. Which one do you want to use?",
     )?;
@@ -356,7 +356,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     session.flush()?;
     session.exp_string("no")?;
 
-    assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
+    assert_valid_rocket_project(&temp_dir_path.as_path().join("my-project"), "my-project");
 
     Ok(())
 }
@@ -388,6 +388,13 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
     session.exp_string("Directory")?;
     session.send_line(temp_dir_path.to_str().unwrap())?;
     session.exp_string("Target directory is not empty. Are you sure?")?;
+    session.send("n")?;
+    session.flush()?;
+    session.exp_string("no")?;
+    session.exp_string("Where should we create this project?")?;
+    session.exp_string("Directory")?;
+    session.send_line(temp_dir_path.to_str().unwrap())?;
+    session.exp_string("Target directory is not empty. Are you sure?")?;
     session.send("y")?;
     session.flush()?;
     session.exp_string("yes")?;
@@ -397,7 +404,7 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
     session.flush()?;
     session.exp_string("no")?;
 
-    assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
+    assert_valid_rocket_project(&temp_dir_path, "my-project");
 
     Ok(())
 }

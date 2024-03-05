@@ -541,7 +541,7 @@ jobs:
           # the artifacts directory before passing it to ghr
           command: |
             find artifacts -mindepth 2 -type f -exec mv -t artifacts {} +
-            go install github.com/tcnksm/ghr@v0.16.0
+            go install github.com/tcnksm/ghr@v0.16.2
             ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft ${TAG} ./artifacts/
   linux-qa:
     machine:

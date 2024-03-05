@@ -93,29 +93,6 @@ commands:
             - ~/.cargo/registry/cache
             - ~/.cargo/registry/index
             - ~/.cargo/git/db
-  restore-buildx-cache:
-    steps:
-      - docker-buildx/install:
-          version: 0.12.1
-          qemu-user-static-version: 7.2.0-1
-      - restore_cache:
-          name: Restore buildx cache
-          keys:
-            # Try lockfile cache first
-            - docker-buildx-{{ checksum "Cargo.lock" }}
-            # Fall back to any cache
-            - docker-buildx-
-      - run:
-          name: Configure buildx cache
-          command: echo BUILDX_CACHE=/tmp/cache/buildx >> $BASH_ENV
-  save-buildx-cache:
-    steps:
-      - save_cache:
-          name: Save buildx cache
-          paths:
-            - /tmp/cache/buildx
-          key: docker-buildx-{{ checksum "Cargo.lock" }}-{{ epoch }}
-          when: always
   apply-patches:
     steps:
       - run:
@@ -305,13 +282,7 @@ jobs:
       - install-rust
       - checkout
       - run: git submodule update --init
-      - restore-buildx-cache
-      - run:
-          name: Make images for tests
-          command: |
-            sudo mkdir -p $BUILDX_CACHE && sudo chown -R circleci:circleci $BUILDX_CACHE
-            make images
-      - save-buildx-cache
+      - run: make images
       - apply-patches
       - run:
           name: Run the E2E tests
@@ -320,10 +291,7 @@ jobs:
             # the tests just in case the environment is not clean
             make down
             make up
-
             SHUTTLE_TESTS_NETWORK=shuttle-dev_user-net SHUTTLE_TESTS_RUNTIME_IMAGE=public.ecr.aws/shuttle-dev/deployer:latest cargo test --package shuttle-gateway --all-features --lib -- --nocapture
-
-            # runs tests in e2e crate
             make test
   build-and-push:
     executor: machine-ubuntu
@@ -351,8 +319,7 @@ jobs:
           public-registry: << parameters.public-registry >>
           # `registry-id` field is required, although we don't need it (used for private registry).
           # We give it a non-empty env variable name to bypass the `ecr-login` empty check.
-          registry-id: TAG
-      # - restore-buildx-cache
+          registry-id: bruh
       - docker-buildx/install:
           version: 0.12.1
           qemu-user-static-version: 7.2.0-1
@@ -360,7 +327,6 @@ jobs:
           name: Make and push images
           command: |
             PUSH=true SHUTTLE_ENV=<< parameters.shuttle-env >> PLATFORMS=linux/amd64 TAG=$TAG SHUTTLE_SERVICE_VERSION=$TAG make images
-      # - save-buildx-cache
   deploy-images:
     executor: machine-ubuntu
     resource_class: medium

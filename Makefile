@@ -15,7 +15,8 @@ ifdef PLATFORMS
 PLATFORM_FLAGS=--platform $(PLATFORMS)
 endif
 
-BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
+# BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
+BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS)
 
 # The Rust version used by our containers
 # Can be updated to the latest stable

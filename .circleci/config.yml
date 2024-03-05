@@ -345,19 +345,22 @@ jobs:
     steps:
       - checkout
       - set-git-tag
-      - restore-buildx-cache
       - aws-ecr/ecr-login:
           aws-access-key-id: << parameters.aws-access-key-id >>
           aws-secret-access-key: << parameters.aws-secret-access-key >>
           public-registry: << parameters.public-registry >>
-          # `registry-id`` field is required, although we don't need it (used for private registry).
+          # `registry-id` field is required, although we don't need it (used for private registry).
           # We give it a non-empty env variable name to bypass the `ecr-login` empty check.
           registry-id: TAG
+      # - restore-buildx-cache
+      - docker-buildx/install:
+          version: 0.12.1
+          qemu-user-static-version: 7.2.0-1
       - run:
           name: Make and push images
           command: |
-            PUSH=true SHUTTLE_SERVICE_VERSION=$TAG SHUTTLE_ENV=<< parameters.shuttle-env >> PLATFORMS=linux/amd64 TAG=$TAG make images
-      - save-buildx-cache
+            PUSH=true SHUTTLE_ENV=<< parameters.shuttle-env >> PLATFORMS=linux/amd64 TAG=$TAG SHUTTLE_SERVICE_VERSION=$TAG make images
+      # - save-buildx-cache
   deploy-images:
     executor: machine-ubuntu
     resource_class: medium

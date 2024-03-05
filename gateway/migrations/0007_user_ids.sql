@@ -1,3 +1,3 @@
 -- Add new user_id column for projects
-ALTER TABLE users
+ALTER TABLE projects
 ADD COLUMN user_id UUID;

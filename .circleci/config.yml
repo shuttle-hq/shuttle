@@ -641,7 +641,7 @@ jobs:
       # - run:
       #     name: Test Docker
       #     command: ./.circleci/qa-docker.ps1
-  publish-crates:
+  publish-crate:
     parameters:
       path:
         description: Path to crate to publish
@@ -896,7 +896,7 @@ workflows:
           filters:
             branches:
               only: production
-      - publish-crates:
+      - publish-crate:
           matrix:
             parameters:
               path:
@@ -905,7 +905,7 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - approve-publish-crates
-      - publish-crates:
+      - publish-crate:
           matrix:
             parameters:
               path:
@@ -914,7 +914,7 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-common
-      - publish-crates:
+      - publish-crate:
           matrix:
             parameters:
               path:
@@ -929,7 +929,7 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-service
-      - publish-crates:
+      - publish-crate:
           matrix:
             parameters:
               path:
@@ -939,7 +939,7 @@ workflows:
           requires:
             - publish-service
             - publish-proto
-      - publish-crates:
+      - publish-crate:
           matrix:
             parameters:
               path:

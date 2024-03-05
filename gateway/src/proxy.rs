@@ -124,7 +124,7 @@ async fn proxy(
                 let mut ms = 5;
                 loop {
                     if let Ok(socket) = TcpSocket::new_v4() {
-                        if let Ok(_) = socket.connect(addr).await {
+                        if socket.connect(addr).await.is_ok() {
                             break;
                         }
                     }

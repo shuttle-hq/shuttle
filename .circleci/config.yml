@@ -101,10 +101,10 @@ commands:
       - restore_cache:
           name: Restore buildx cache
           keys:
-            # Try lock cache first
+            # Try lockfile cache first
             - docker-buildx-{{ checksum "Cargo.lock" }}
-            # Try branch cache next
-            - docker-buildx-{{ .Branch }}
+            # Fall back to any cache
+            - docker-buildx-
       - run:
           name: Configure buildx cache
           command: echo BUILDX_CACHE=/tmp/cache/buildx >> $BASH_ENV
@@ -113,7 +113,7 @@ commands:
       - save_cache:
           name: Save buildx cache
           paths:
-            - "/tmp/cache/buildx"
+            - /tmp/cache/buildx
           key: docker-buildx-{{ checksum "Cargo.lock" }}-{{ epoch }}
           when: always
   apply-patches:
@@ -319,18 +319,12 @@ jobs:
             # clean up a potential existing deployments before running
             # the tests just in case the environment is not clean
             make down
-            BUILDX_CACHE=/tmp/cache/buildx make up
+            make up
 
             SHUTTLE_TESTS_NETWORK=shuttle-dev_user-net SHUTTLE_TESTS_RUNTIME_IMAGE=public.ecr.aws/shuttle-dev/deployer:latest cargo test --package shuttle-gateway --all-features --lib -- --nocapture
 
             # runs tests in e2e crate
-            BUILDX_CACHE=/tmp/cache/buildx make test
-      - save_cache:
-          name: Save buildx cache
-          paths:
-            - /tmp/cache/buildx
-          key: docker-buildx-{{ .Branch }}-{{ .Revision }}
-          when: always
+            make test
   build-and-push:
     executor: machine-ubuntu
     parameters:

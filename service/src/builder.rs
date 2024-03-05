@@ -149,7 +149,6 @@ pub async fn build_workspace(
     let services = compile(
         alpha_packages,
         release_mode,
-        false,
         project_path.clone(),
         metadata.target_directory.clone(),
         deployment,
@@ -187,14 +186,13 @@ fn ensure_binary(package: &Package) -> anyhow::Result<()> {
     if package.targets.iter().any(|target| target.is_bin()) {
         Ok(())
     } else {
-        bail!("Your Shuttle project must be a binary.")
+        bail!("Your Shuttle package must be a binary.")
     }
 }
 
 async fn compile(
     packages: Vec<&Package>,
     release_mode: bool,
-    wasm: bool,
     project_path: PathBuf,
     target_path: impl Into<PathBuf>,
     deployment: bool,
@@ -228,10 +226,6 @@ async fn compile(
         "debug"
     };
 
-    if wasm {
-        cmd.arg("--target").arg("wasm32-wasi");
-    }
-
     cmd.stderr(Stdio::piped());
     cmd.stdout(Stdio::null());
     let mut handle = cmd.spawn()?;
@@ -253,30 +247,15 @@ async fn compile(
     let services = packages
         .iter()
         .map(|package| {
-            let path = if wasm {
-                let mut path: PathBuf = [
-                    project_path.clone(),
-                    target_path.clone(),
-                    "wasm32-wasi".into(),
-                    profile.into(),
-                    package.name.replace('-', "_").into(),
-                ]
-                .iter()
-                .collect();
-                path.set_extension("wasm");
-                path
-            } else {
-                let mut path: PathBuf = [
-                    project_path.clone(),
-                    target_path.clone(),
-                    profile.into(),
-                    package.name.clone().into(),
-                ]
-                .iter()
-                .collect();
-                path.set_extension(std::env::consts::EXE_EXTENSION);
-                path
-            };
+            let mut path: PathBuf = [
+                project_path.clone(),
+                target_path.clone(),
+                profile.into(),
+                package.name.clone().into(),
+            ]
+            .iter()
+            .collect();
+            path.set_extension(std::env::consts::EXE_EXTENSION);
 
             BuiltService {
                 workspace_path: project_path.clone(),

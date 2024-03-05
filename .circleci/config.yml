@@ -124,10 +124,9 @@ commands:
   install-rust:
     steps:
       - run:
-          name: Install Rust and wasm32-wasi
+          name: Install Rust (MSRV)
           # Note: Let CI use our MSRV, rather than latest
           command: which cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75.0
-      - run: rustup target add wasm32-wasi
   install-protoc:
     steps:
       - run:
@@ -577,9 +576,6 @@ jobs:
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule update --init
-      - run:
-          name: Test WASM
-          command: ./.circleci/qa-wasm.sh
       # - run:
       #     name: Test Docker
       #     command: ./.circleci/qa-docker.sh
@@ -607,9 +603,6 @@ jobs:
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule update --init
-      - run:
-          name: Test WASM
-          command: ./.circleci/qa-wasm.sh
       # We can't run Docker inside the MacOs executor at this time
       # https://support.circleci.com/hc/en-us/articles/360045029591-Can-I-use-Docker-within-the-macOS-executor-
       # - run:
@@ -647,9 +640,6 @@ jobs:
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule update --init
-      # - run:
-      #     name: Test WASM
-      #     command: ./.circleci/qa-wasm.ps1
       # We can't run linux containers on the Windows executor at this time
       # https://circleci.com/docs/using-windows/#known-issues-and-limitations
       # - run:

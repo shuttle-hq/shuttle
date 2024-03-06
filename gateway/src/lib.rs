@@ -884,7 +884,6 @@ pub mod tests {
         }
     }
 
-    #[async_trait]
     impl AsyncTestContext for TestGateway {
         async fn setup() -> Self {
             let world = World::new().await;
@@ -903,7 +902,7 @@ pub mod tests {
             }
         }
 
-        async fn teardown(mut self) {}
+        async fn teardown(self) {}
     }
 
     /// Helper struct to wrap a bunch of commands to run against a test project
@@ -1159,7 +1158,6 @@ pub mod tests {
         }
     }
 
-    #[async_trait]
     impl AsyncTestContext for TestProject {
         async fn setup() -> Self {
             let mut world = TestGateway::setup().await;

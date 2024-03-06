@@ -5244,7 +5244,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "strum 0.25.0",
- "test-context",
+ "test-context 0.3.0",
  "thiserror",
  "tokio",
  "tonic 0.10.2",
@@ -5372,7 +5372,7 @@ dependencies = [
  "strum 0.25.0",
  "tar",
  "tempfile",
- "test-context",
+ "test-context 0.3.0",
  "tokio",
  "tonic 0.10.2",
  "tower",
@@ -5430,7 +5430,7 @@ dependencies = [
  "prost-types",
  "serde_json",
  "shuttle-common",
- "test-context",
+ "test-context 0.3.0",
  "tokio",
  "tonic 0.10.2",
  "tower",
@@ -6101,7 +6101,17 @@ checksum = "b7b6965c21232186af0092233c18030fe607cfc3960dbabb209325272458eeea"
 dependencies = [
  "async-trait",
  "futures",
- "test-context-macros",
+ "test-context-macros 0.1.6",
+]
+
+[[package]]
+name = "test-context"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6676ab8513edfd2601a108621103fdb45cac9098305ca25ec93f7023b06b05d9"
+dependencies = [
+ "futures",
+ "test-context-macros 0.3.0",
 ]
 
 [[package]]
@@ -6110,6 +6120,17 @@ version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d506c7664333e246f564949bee4ed39062aa0f11918e6f5a95f553cdad65c274"
 dependencies = [
+ "quote",
+ "syn 2.0.52",
+]
+
+[[package]]
+name = "test-context-macros"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78ea17a2dc368aeca6f554343ced1b1e31f76d63683fa8016e5844bd7a5144a1"
+dependencies = [
+ "proc-macro2",
  "quote",
  "syn 2.0.52",
 ]
@@ -6307,7 +6328,7 @@ dependencies = [
  "lazy_static",
  "queues",
  "serde_json",
- "test-context",
+ "test-context 0.1.6",
  "tokio",
  "tokio-test",
  "tower-http 0.2.5",

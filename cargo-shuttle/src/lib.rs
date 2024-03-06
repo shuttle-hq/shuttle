@@ -197,13 +197,20 @@ impl Shuttle {
                 client.set_api_key(self.ctx.api_key()?);
             }
             self.client = Some(client);
-            self.check_api_versions().await?;
+            if !args.offline {
+                self.check_api_versions().await?;
+            }
         }
 
         let res = match args.cmd {
             Command::Init(init_args) => {
-                self.init(init_args, args.project_args, provided_path_to_init)
-                    .await
+                self.init(
+                    init_args,
+                    args.project_args,
+                    provided_path_to_init,
+                    args.offline,
+                )
+                .await
             }
             Command::Generate(GenerateCommand::Manpage) => self.generate_manpage(),
             Command::Generate(GenerateCommand::Shell { shell, output }) => {
@@ -314,6 +321,7 @@ impl Shuttle {
         args: InitArgs,
         mut project_args: ProjectArgs,
         provided_path_to_init: bool,
+        offline: bool,
     ) -> Result<CommandOutcome> {
         // Turns the template or git args (if present) to a repo+folder.
         let git_template = args.git_template()?;
@@ -452,123 +460,115 @@ impl Shuttle {
                 }
 
                 // Try to present choices from our up-to-date examples.
-                // Fall back to the internal (potentially outdated) list
-                match get_schema().await {
-                    Ok(schema) => {
-                        println!("What type of project template would you like to start from?");
-                        let i = Select::with_theme(&theme)
-                            .items(&[
-                                "A Hello World app in a supported framework",
-                                "Browse our full library of templates", // TODO(when templates page is live): Add link to it?
-                            ])
-                            .clear(false)
-                            .default(0)
-                            .interact()?;
-                        println!();
-                        if i == 0 {
-                            // Use a Hello world starter
-                            let mut starters = schema
-                                .starters
-                                .into_iter()
-                                .map(|(_, t)| t)
-                                .collect::<Vec<_>>();
-                            starters.sort_by_key(|t| {
-                                // Make the "No templates" appear last in the list
-                                if t.title.starts_with("No") {
-                                    "zzz".to_owned()
-                                } else {
-                                    t.title.clone()
-                                }
-                            });
-                            let starter_strings = starters
-                                .iter()
-                                .map(|t| {
-                                    format!(
-                                        "{} - {}",
-                                        t.title.clone().bold(),
-                                        t.description.clone(),
-                                    )
-                                })
-                                .collect::<Vec<_>>();
-                            let index = Select::with_theme(&theme)
-                                .with_prompt("Select template")
-                                .items(&starter_strings)
-                                .default(0)
-                                .interact()?;
-                            println!();
-                            let path = starters[index]
-                                .path
-                                .clone()
-                                .expect("starter to have a path");
-
-                            TemplateLocation {
-                                auto_path: EXAMPLES_REPO.into(),
-                                subfolder: Some(path),
+                // Fall back to the internal (potentially outdated) list.
+                let schema = if offline {
+                    None
+                } else {
+                    get_schema()
+                        .await
+                        .map_err(|_| {
+                            println!(
+                                "{}",
+                                "Failed to look up template list. Falling back to internal list."
+                                    .yellow()
+                            )
+                        })
+                        .ok()
+                };
+                if let Some(schema) = schema {
+                    println!("What type of project template would you like to start from?");
+                    let i = Select::with_theme(&theme)
+                        .items(&[
+                            "A Hello World app in a supported framework",
+                            "Browse our full library of templates", // TODO(when templates page is live): Add link to it?
+                        ])
+                        .clear(false)
+                        .default(0)
+                        .interact()?;
+                    println!();
+                    if i == 0 {
+                        // Use a Hello world starter
+                        let mut starters = schema.starters.into_values().collect::<Vec<_>>();
+                        starters.sort_by_key(|t| {
+                            // Make the "No templates" appear last in the list
+                            if t.title.starts_with("No") {
+                                "zzz".to_owned()
+                            } else {
+                                t.title.clone()
                             }
-                        } else {
-                            // Browse all non-starter templates
-                            let mut templates = schema
-                                .templates
-                                .into_iter()
-                                .map(|(_, t)| t)
-                                .collect::<Vec<_>>();
-                            templates.sort_by_key(|t| t.title.clone());
-                            let template_strings = templates
-                                .iter()
-                                .map(|t| {
-                                    format!(
-                                        "{} - {}{}",
-                                        t.title.clone().bold(),
-                                        t.description.clone(),
-                                        if let Some(tag) = t.tags.first() {
-                                            format!(" ({tag})").dim().to_string()
-                                        } else {
-                                            "".to_owned()
-                                        },
-                                    )
-                                })
-                                .collect::<Vec<_>>();
-                            let index = Select::with_theme(&theme)
-                                .with_prompt("Select template")
-                                .items(&template_strings)
-                                .default(0)
-                                .interact()?;
-                            println!();
-                            let path = templates[index]
-                                .path
-                                .clone()
-                                .expect("starter to have a path");
-
-                            TemplateLocation {
-                                auto_path: EXAMPLES_REPO.into(),
-                                subfolder: Some(path),
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        println!(
-                            "{}",
-                            "Failed to look up template list. Falling back to internal list."
-                                .yellow()
-                        );
-                        println!(
-                            "Shuttle works with many frameworks. Which one do you want to use?"
-                        );
-                        let frameworks = args::InitTemplateArg::VARIANTS;
-                        let framework_strings = frameworks
+                        });
+                        let starter_strings = starters
                             .iter()
                             .map(|t| {
-                                t.get_documentation()
-                                    .expect("all template variants to have docs")
+                                format!("{} - {}", t.title.clone().bold(), t.description.clone(),)
                             })
                             .collect::<Vec<_>>();
                         let index = Select::with_theme(&theme)
-                            .items(&framework_strings)
+                            .with_prompt("Select template")
+                            .items(&starter_strings)
                             .default(0)
                             .interact()?;
                         println!();
-                        frameworks[index].template()
+                        let path = starters[index]
+                            .path
+                            .clone()
+                            .expect("starter to have a path");
+
+                        TemplateLocation {
+                            auto_path: EXAMPLES_REPO.into(),
+                            subfolder: Some(path),
+                        }
+                    } else {
+                        // Browse all non-starter templates
+                        let mut templates = schema.templates.into_values().collect::<Vec<_>>();
+                        templates.sort_by_key(|t| t.title.clone());
+                        let template_strings = templates
+                            .iter()
+                            .map(|t| {
+                                format!(
+                                    "{} - {}{}",
+                                    t.title.clone().bold(),
+                                    t.description.clone(),
+                                    if let Some(tag) = t.tags.first() {
+                                        format!(" ({tag})").dim().to_string()
+                                    } else {
+                                        "".to_owned()
+                                    },
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        let index = Select::with_theme(&theme)
+                            .with_prompt("Select template")
+                            .items(&template_strings)
+                            .default(0)
+                            .interact()?;
+                        println!();
+                        let path = templates[index]
+                            .path
+                            .clone()
+                            .expect("starter to have a path");
+
+                        TemplateLocation {
+                            auto_path: EXAMPLES_REPO.into(),
+                            subfolder: Some(path),
+                        }
                     }
+                } else {
+                    println!("Shuttle works with many frameworks. Which one do you want to use?");
+                    let frameworks = args::InitTemplateArg::VARIANTS;
+                    let framework_strings = frameworks
+                        .iter()
+                        .map(|t| {
+                            t.get_documentation()
+                                .expect("all template variants to have docs")
+                        })
+                        .collect::<Vec<_>>();
+                    let index = Select::with_theme(&theme)
+                        .items(&framework_strings)
+                        .default(0)
+                        .interact()?;
+                    println!();
+                    frameworks[index].template()
                 }
             }
         };

@@ -33,6 +33,10 @@ pub struct ShuttleArgs {
     /// (allows targeting a custom deployed instance for this command only, mainly for development)
     #[arg(long, env = "SHUTTLE_API")]
     pub api_url: Option<String>,
+    /// Disable network requests that are not strictly necessary. Limits some features.
+    #[arg(long, env = "SHUTTLE_OFFLINE")]
+    pub offline: bool,
+
     #[command(subcommand)]
     pub cmd: Command,
 }
@@ -320,6 +324,7 @@ pub struct InitArgs {
     /// Don't initialize a new git repository
     #[arg(long)]
     pub no_git: bool,
+
     #[command(flatten)]
     pub login_args: LoginArgs,
 }

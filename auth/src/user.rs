@@ -246,6 +246,7 @@ impl UserManagement for UserManager {
 #[derive(Clone, Debug)]
 pub struct User {
     pub name: AccountName,
+    pub id: String,
     pub key: Secret<ApiKey>,
     pub account_tier: AccountTier,
     pub subscriptions: Vec<Subscription>,
@@ -272,6 +273,10 @@ impl User {
             .map(|sub| &sub.id)
     }
 
+    pub fn new_user_id() -> String {
+        format!("user_{}", ulid::Ulid::new())
+    }
+
     pub fn new(
         name: AccountName,
         key: ApiKey,
@@ -280,6 +285,7 @@ impl User {
     ) -> Self {
         Self {
             name,
+            id: Self::new_user_id(),
             key: Secret::new(key),
             account_tier,
             subscriptions,
@@ -344,6 +350,7 @@ impl FromRow<'_, PgRow> for User {
     fn from_row(row: &PgRow) -> Result<Self, sqlx::Error> {
         Ok(User {
             name: row.try_get("account_name").unwrap(),
+            id: row.try_get("user_id").unwrap(),
             key: Secret::new(row.try_get("key").unwrap()),
             account_tier: AccountTier::from_str(row.try_get("account_tier").unwrap()).map_err(
                 |err| sqlx::Error::ColumnDecode {

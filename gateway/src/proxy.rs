@@ -30,7 +30,7 @@ use shuttle_common::models::project::ProjectName;
 use tokio::net::TcpSocket;
 use tokio::sync::mpsc::Sender;
 use tower_sanitize_path::SanitizePath;
-use tracing::{debug, debug_span, error, field, trace};
+use tracing::{debug, debug_span, error, field, trace, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::AcmeClient;
@@ -116,19 +116,15 @@ async fn proxy(
 
         if was_stopped {
             // wait until service has started and opens its port, give up after 10s
-            span.in_scope(|| {
-                debug!("project waking up, checking service port");
-            });
+            span.in_scope(|| debug!("project waking up, checking service port"));
+
             let addr = SocketAddr::new(ip, DEPLOYER_SERVICE_HTTP_PORT);
-            let span_clone = span.clone();
             let _ = tokio::time::timeout(Duration::from_secs(10), async move {
                 let mut ms = 5;
                 loop {
                     if let Ok(socket) = TcpSocket::new_v4() {
                         if socket.connect(addr).await.is_ok() {
-                            span_clone.in_scope(|| {
-                                debug!("service port detected open");
-                            });
+                            debug!("service port detected open");
                             break;
                         }
                     }
@@ -138,6 +134,7 @@ async fn proxy(
                     ms *= 2;
                 }
             })
+            .instrument(span.clone())
             .await;
         }
 

@@ -2,9 +2,11 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-/// Schema used in `examples/templates.toml` and services that parses it
+/// Schema used in `examples/templates.toml` and services that parse it
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TemplatesSchema {
+    /// Version of this schema
+    pub version: u32,
     /// Very basic templates, typically Hello World
     pub starters: HashMap<String, TemplateDefinition>,
     /// Non-starter templates

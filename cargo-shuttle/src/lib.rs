@@ -36,7 +36,7 @@ use shuttle_common::{
     constants::{
         API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
         RESOURCE_SCHEMA_VERSION, SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL,
-        SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
+        SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
@@ -474,6 +474,18 @@ impl Shuttle {
                             )
                         })
                         .ok()
+                        .and_then(|s| {
+                            if s.version == TEMPLATES_SCHEMA_VERSION {
+                                return Some(s);
+                            }
+                            println!(
+                                "{}",
+                                "Template list with incompatible version found. Consider updating cargo-shuttle. Falling back to internal list."
+                                    .yellow()
+                            );
+
+                            None
+                        })
                 };
                 if let Some(schema) = schema {
                     println!("What type of project template would you like to start from?");
@@ -500,7 +512,7 @@ impl Shuttle {
                         let starter_strings = starters
                             .iter()
                             .map(|t| {
-                                format!("{} - {}", t.title.clone().bold(), t.description.clone(),)
+                                format!("{} - {}", t.title.clone().bold(), t.description.clone())
                             })
                             .collect::<Vec<_>>();
                         let index = Select::with_theme(&theme)
@@ -529,11 +541,10 @@ impl Shuttle {
                                     "{} - {}{}",
                                     t.title.clone().bold(),
                                     t.description.clone(),
-                                    if let Some(tag) = t.tags.first() {
-                                        format!(" ({tag})").dim().to_string()
-                                    } else {
-                                        "".to_owned()
-                                    },
+                                    t.tags
+                                        .first()
+                                        .map(|tag| format!(" ({tag})").dim().to_string())
+                                        .unwrap_or_default(),
                                 )
                             })
                             .collect::<Vec<_>>();
@@ -546,7 +557,7 @@ impl Shuttle {
                         let path = templates[index]
                             .path
                             .clone()
-                            .expect("starter to have a path");
+                            .expect("template to have a path");
 
                         TemplateLocation {
                             auto_path: EXAMPLES_REPO.into(),

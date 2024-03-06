@@ -30,6 +30,9 @@ pub const RUNTIME_NAME: &str = "shuttle-runtime";
 /// Current version field in requests to provisioner
 pub const RESOURCE_SCHEMA_VERSION: u32 = 1;
 
+/// Current version field in `examples/templates.toml`
+pub const TEMPLATES_SCHEMA_VERSION: u32 = 0;
+
 /// Timeframe before a project is considered idle
 pub const DEFAULT_IDLE_MINUTES: u64 = 30;
 

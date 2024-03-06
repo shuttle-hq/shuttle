@@ -319,7 +319,7 @@ jobs:
           public-registry: << parameters.public-registry >>
           # `registry-id` field is required, although we don't need it (used for private registry).
           # We give it a non-empty env variable name to bypass the `ecr-login` empty check.
-          registry-id: bruh
+          registry-id: TAG
       - docker-buildx/install:
           version: 0.12.1
           qemu-user-static-version: 7.2.0-1

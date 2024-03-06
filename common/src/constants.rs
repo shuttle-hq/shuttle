@@ -36,6 +36,9 @@ pub const fn default_idle_minutes() -> u64 {
     DEFAULT_IDLE_MINUTES
 }
 
+/// The port that deployer tells the runtime to expose its service on
+pub const DEPLOYER_SERVICE_HTTP_PORT: u16 = 8000;
+
 pub mod limits {
     pub const MAX_PROJECTS_DEFAULT: u32 = 3;
     pub const MAX_PROJECTS_EXTRA: u32 = 15;

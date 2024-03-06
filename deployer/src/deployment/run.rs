@@ -12,7 +12,7 @@ use opentelemetry::global;
 use serde::de::DeserializeOwned;
 use shuttle_common::{
     claims::Claim,
-    constants::{EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION},
+    constants::{DEPLOYER_SERVICE_HTTP_PORT, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION},
     deployment::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_FAILED, DEPLOYER_RUNTIME_START_RESPONSE,
@@ -255,8 +255,8 @@ impl Built {
             .join(EXECUTABLE_DIRNAME)
             .join(format!("{}.resources", self.id));
 
-        // Let the runtime expose its user HTTP port on port 8000
-        let address = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 8000);
+        // Let the runtime expose its HTTP port
+        let address = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), DEPLOYER_SERVICE_HTTP_PORT);
 
         let runtime_client = runtime_manager
             .lock()

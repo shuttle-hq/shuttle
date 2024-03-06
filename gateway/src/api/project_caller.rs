@@ -34,7 +34,10 @@ impl ProjectCaller {
             service, sender, ..
         } = state;
         let project_name = scoped_user.scope;
-        let project = service.find_or_start_project(&project_name, sender).await?;
+        let project = service
+            .find_or_start_project(&project_name, sender)
+            .await?
+            .0;
 
         Ok(Self {
             project: project.state,

@@ -120,11 +120,15 @@ async fn proxy(
                 debug!("project waking up, checking service port");
             });
             let addr = SocketAddr::new(ip, DEPLOYER_SERVICE_HTTP_PORT);
+            let span_clone = span.clone();
             let _ = tokio::time::timeout(Duration::from_secs(10), async move {
                 let mut ms = 5;
                 loop {
                     if let Ok(socket) = TcpSocket::new_v4() {
                         if socket.connect(addr).await.is_ok() {
+                            span_clone.in_scope(|| {
+                                debug!("service port detected open");
+                            });
                             break;
                         }
                     }

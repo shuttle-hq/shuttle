@@ -34,8 +34,8 @@ use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
 use shuttle_common::{
     constants::{
-        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXAMPLES_TEMPLATES_TOML,
-        EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION, SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL,
+        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
+        RESOURCE_SCHEMA_VERSION, SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL,
         SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
     },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
@@ -50,7 +50,7 @@ use shuttle_common::{
     },
     resource::{self, ResourceInput, ShuttleResourceOutput},
     semvers_are_compatible,
-    templates::{TemplateDefinition, TemplateType, TemplatesSchema},
+    templates::TemplatesSchema,
     ApiKey, DatabaseResource, DbInput, LogItem, VersionInfo,
 };
 use shuttle_proto::{
@@ -433,22 +433,28 @@ impl Shuttle {
         let template = match git_template {
             Some(git_template) => git_template,
             None => {
-                async fn get_templates() -> Result<HashMap<String, TemplateDefinition>> {
+                // /// Can be used during testing
+                // async fn get_schema() -> Result<TemplatesSchema> {
+                //     Ok(toml::from_str(include_str!(
+                //         "../../examples/templates.toml"
+                //     ))?)
+                // }
+                async fn get_schema() -> Result<TemplatesSchema> {
                     let client = reqwest::Client::new();
-                    let s: TemplatesSchema = toml::from_str(
+                    Ok(toml::from_str(
                         &client
-                            .get(EXAMPLES_TEMPLATES_TOML)
+                            .get(shuttle_common::constants::EXAMPLES_TEMPLATES_TOML)
                             .send()
                             .await?
                             .text()
                             .await?,
-                    )?;
-                    Ok(s.templates)
+                    )?)
                 }
+
                 // Try to present choices from our up-to-date examples.
                 // Fall back to the internal (potentially outdated) list
-                match get_templates().await {
-                    Ok(t) => {
+                match get_schema().await {
+                    Ok(schema) => {
                         println!("What type of project template would you like to start from?");
                         let i = Select::with_theme(&theme)
                             .items(&[
@@ -461,10 +467,10 @@ impl Shuttle {
                         println!();
                         if i == 0 {
                             // Use a Hello world starter
-                            let mut starters = t
+                            let mut starters = schema
+                                .starters
                                 .into_iter()
                                 .map(|(_, t)| t)
-                                .filter(|t| t.r#type == TemplateType::Starter)
                                 .collect::<Vec<_>>();
                             starters.sort_by_key(|t| {
                                 // Make the "No templates" appear last in the list
@@ -480,7 +486,7 @@ impl Shuttle {
                                     format!(
                                         "{} - {}",
                                         t.title.clone().bold(),
-                                        t.description.as_ref().unwrap_or(&"".to_owned()),
+                                        t.description.clone(),
                                     )
                                 })
                                 .collect::<Vec<_>>();
@@ -501,13 +507,10 @@ impl Shuttle {
                             }
                         } else {
                             // Browse all non-starter templates
-                            let mut templates = t
+                            let mut templates = schema
+                                .templates
                                 .into_iter()
                                 .map(|(_, t)| t)
-                                .filter(|t| {
-                                    t.r#type == TemplateType::Template
-                                        && !t.community.is_some_and(|c| c)
-                                })
                                 .collect::<Vec<_>>();
                             templates.sort_by_key(|t| t.title.clone());
                             let template_strings = templates
@@ -516,7 +519,7 @@ impl Shuttle {
                                     format!(
                                         "{} - {}{}",
                                         t.title.clone().bold(),
-                                        t.description.as_ref().unwrap_or(&"".to_owned()),
+                                        t.description.clone(),
                                         if let Some(tag) = t.tags.first() {
                                             format!(" ({tag})").dim().to_string()
                                         } else {

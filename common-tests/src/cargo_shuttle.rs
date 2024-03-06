@@ -40,6 +40,7 @@ pub async fn cargo_shuttle_run(working_directory: &str, external: bool) -> Strin
                 working_directory: working_directory.clone(),
                 name: None,
             },
+            offline: false,
             cmd: Command::Run(run_args),
         },
         false,

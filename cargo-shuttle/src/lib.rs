@@ -448,7 +448,8 @@ impl Shuttle {
                 } else {
                     get_templates_schema()
                         .await
-                        .map_err(|_| {
+                        .map_err(|e| {
+                            error!(err = %e, "Failed to get templates");
                             println!(
                                 "{}",
                                 "Failed to look up template list. Falling back to internal list."

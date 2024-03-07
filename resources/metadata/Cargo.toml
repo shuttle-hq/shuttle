@@ -7,5 +7,3 @@ description = "Plugin to get Shuttle service information"
 keywords = ["shuttle-service", "metadata"]
 
 [dependencies]
-async-trait = "0.1.56"
-shuttle-service = { path = "../../service", version = "0.41.0" }

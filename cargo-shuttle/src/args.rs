@@ -12,7 +12,7 @@ use clap::{
     Parser, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::constants::DEFAULT_IDLE_MINUTES;
+use shuttle_common::constants::{DEFAULT_IDLE_MINUTES, EXAMPLES_REPO};
 use shuttle_common::resource;
 use uuid::Uuid;
 
@@ -33,6 +33,10 @@ pub struct ShuttleArgs {
     /// (allows targeting a custom deployed instance for this command only, mainly for development)
     #[arg(long, env = "SHUTTLE_API")]
     pub api_url: Option<String>,
+    /// Disable network requests that are not strictly necessary. Limits some features.
+    #[arg(long, env = "SHUTTLE_OFFLINE")]
+    pub offline: bool,
+
     #[command(subcommand)]
     pub cmd: Command,
 }
@@ -320,42 +324,40 @@ pub struct InitArgs {
     /// Don't initialize a new git repository
     #[arg(long)]
     pub no_git: bool,
+
     #[command(flatten)]
     pub login_args: LoginArgs,
 }
 
-#[derive(ValueEnum, Clone, Debug, strum::Display, strum::EnumIter)]
-#[strum(serialize_all = "kebab-case")]
+#[derive(ValueEnum, Clone, Debug, strum::EnumMessage, strum::VariantArray)]
 pub enum InitTemplateArg {
-    /// Actix Web framework
-    ActixWeb,
-    /// Axum web framework
+    /// Axum - Modular web framework from the Tokio ecosystem
     Axum,
-    /// Loco web framework
-    Loco,
-    /// Poem web framework
-    Poem,
-    /// Poise Discord framework
-    Poise,
-    /// Rocket web framework
+    /// Actix Web - Powerful and fast web framework
+    ActixWeb,
+    /// Rocket - Simple and easy-to-use web framework
     Rocket,
-    /// Salvo web framework
+    /// Loco - Batteries included web framework based on Axum
+    Loco,
+    /// Salvo - Powerful and simple web framework
     Salvo,
-    /// Serenity Discord framework
+    /// Poem - Full-featured and easy-to-use web framework
+    Poem,
+    /// Poise - Discord Bot framework with good slash command support
+    Poise,
+    /// Serenity - Discord Bot framework
     Serenity,
-    /// Thruster web framework
-    Thruster,
-    /// Tide web framework
-    Tide,
-    /// Tower web framework
+    /// Tower - Modular service library
     Tower,
-    /// Warp web framework
+    /// Thruster - Web framework
+    Thruster,
+    /// Tide - Web framework
+    Tide,
+    /// Warp - Web framework
     Warp,
-    /// No template - Custom empty service
+    /// No template - Make a custom service
     None,
 }
-
-pub const EXAMPLES_REPO: &str = "https://github.com/shuttle-hq/shuttle-examples";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TemplateLocation {

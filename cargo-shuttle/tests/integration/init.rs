@@ -225,7 +225,13 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
 
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
     let mut command = Command::new(bin_path);
-    command.args(["init", "--force-name", "--api-key", "dh9z58jttoes3qvt"]);
+    command.args([
+        "--offline",
+        "init",
+        "--force-name",
+        "--api-key",
+        "dh9z58jttoes3qvt",
+    ]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string("What do you want to name your project?")?;
@@ -234,12 +240,8 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
     session.send_line(temp_dir_path.join("my-project").to_str().unwrap())?;
-    session.exp_string(
-        "Shuttle works with a range of web frameworks. Which one do you want to use?",
-    )?;
-    session.exp_string("Framework")?;
-    // Partial input should be enough to match "rocket"
-    session.send_line("roc")?;
+    session.exp_string("Which one do you want to use?")?;
+    session.send_line("\t\t")?;
     session.exp_string("Creating project")?;
     session.exp_string("container on Shuttle?")?;
     session.send("n")?;
@@ -260,7 +262,13 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
 
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
     let mut command = Command::new(bin_path);
-    command.args(["init", "--force-name", "--api-key", "dh9z58jttoes3qvt"]);
+    command.args([
+        "--offline",
+        "init",
+        "--force-name",
+        "--api-key",
+        "dh9z58jttoes3qvt",
+    ]);
     let mut session = rexpect::session::spawn_command(command, Some(EXPECT_TIMEOUT_MS))?;
 
     session.exp_string("What do you want to name your project?")?;
@@ -269,12 +277,8 @@ fn interactive_rocket_init_manually_choose_template() -> Result<(), Box<dyn std:
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
     session.send_line(temp_dir_path.join("my-project").to_str().unwrap())?;
-    session.exp_string(
-        "Shuttle works with a range of web frameworks. Which one do you want to use?",
-    )?;
-    session.exp_string("Framework")?;
-    // Partial input should be enough to match "rocket"
-    session.send_line("roc")?;
+    session.exp_string("Which one do you want to use?")?;
+    session.send_line("\t\t")?;
     session.exp_string("Creating project")?;
     session.exp_string("container on Shuttle?")?;
     session.send("n")?;
@@ -296,6 +300,7 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
     let mut command = Command::new(bin_path);
     command.args([
+        "--offline",
         "init",
         "--force-name",
         "--api-key",
@@ -332,6 +337,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
     let mut command = Command::new(bin_path);
     command.args([
+        "--offline",
         "init",
         "--force-name",
         "--api-key",
@@ -344,12 +350,8 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     session.exp_string("Where should we create this project?")?;
     session.exp_string("Directory")?;
     session.send_line(temp_dir_path.join("my-project").to_str().unwrap())?;
-    session.exp_string(
-        "Shuttle works with a range of web frameworks. Which one do you want to use?",
-    )?;
-    session.exp_string("Framework")?;
-    // Partial input should be enough to match "rocket"
-    session.send_line("roc")?;
+    session.exp_string("Which one do you want to use?")?;
+    session.send_line("\t\t")?;
     session.exp_string("Creating project")?;
     session.exp_string("container on Shuttle?")?;
     session.send("n")?;
@@ -373,6 +375,7 @@ fn interactive_rocket_init_prompt_path_dirty_dir() -> Result<(), Box<dyn std::er
     let bin_path = assert_cmd::cargo::cargo_bin("cargo-shuttle");
     let mut command = Command::new(bin_path);
     command.args([
+        "--offline",
         "init",
         "--api-key",
         "dh9z58jttoes3qvt",

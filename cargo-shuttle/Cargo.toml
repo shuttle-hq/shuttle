@@ -21,7 +21,7 @@ clap = { workspace = true, features = ["env"] }
 clap_complete = "4.3.1"
 clap_mangen = "0.2.15"
 crossterm = { workspace = true }
-dialoguer = { version = "0.11.0", features = ["fuzzy-select"] }
+dialoguer = { version = "0.11", default-features = false, features = ["password"] }
 dirs = { workspace = true }
 dunce = { workspace = true }
 flate2 = { workspace = true }

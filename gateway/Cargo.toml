@@ -13,6 +13,7 @@ shuttle-common = { workspace = true, features = [
 ] }
 shuttle-proto = { workspace = true, features = ["provisioner-client"] }
 
+async-posthog = { git = "https://github.com/shuttle-hq/posthog-rs", branch = "main" }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["default", "headers"] }
 axum-server = { version = "0.5.1", features = ["tls-rustls"] }
@@ -43,18 +44,17 @@ serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "json", "migrate"] }
 strum = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tonic = { workspace = true }
 tower = { workspace = true, features = ["steer"] }
 tower-http = { workspace = true }
+tower-sanitize-path = "0.2.0"
 tracing = { workspace = true, features = ["default"] }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default", "env-filter"] }
 ttl_cache = { workspace = true }
+ulid = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4"] }
 x509-parser = "0.15.1"
-tonic = { workspace = true }
-tower-sanitize-path = "0.2.0"
-ulid = { workspace = true, features = ["serde"] }
-async-posthog = { git = "https://github.com/shuttle-hq/posthog-rs", branch = "main" }
 
 [dev-dependencies]
 anyhow = { workspace = true }

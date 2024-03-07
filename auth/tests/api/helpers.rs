@@ -40,10 +40,11 @@ pub(crate) async fn app() -> TestApp {
     let mock_server = MockServer::start().await;
 
     // Insert an admin user for the tests.
-    query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
+    query("INSERT INTO users VALUES ($1, $2, $3, $4)")
         .bind("admin")
         .bind(ADMIN_KEY)
         .bind(AccountTier::Admin.to_string())
+        .bind(shuttle_auth::User::new_user_id())
         .execute(&pg_pool)
         .await
         .unwrap();

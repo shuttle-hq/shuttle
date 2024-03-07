@@ -62,16 +62,19 @@ pub struct UserManager {
 #[async_trait]
 impl UserManagement for UserManager {
     async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error> {
-        let key = ApiKey::generate();
+        let user = User::new(name, ApiKey::generate(), tier, vec![]);
 
-        query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
-            .bind(&name)
-            .bind(&key)
-            .bind(tier.to_string())
-            .execute(&self.pool)
-            .await?;
+        query(
+            "INSERT INTO users (account_name, key, account_tier, user_id) VALUES ($1, $2, $3, $4)",
+        )
+        .bind(&user.name)
+        .bind(user.key.expose())
+        .bind(user.account_tier.to_string())
+        .bind(&user.id)
+        .execute(&self.pool)
+        .await?;
 
-        Ok(User::new(name, key, tier, vec![]))
+        Ok(user)
     }
 
     // Update tier leaving the subscription_id untouched.
@@ -91,13 +94,11 @@ impl UserManagement for UserManager {
     }
 
     async fn get_user(&self, name: AccountName) -> Result<User, Error> {
-        let mut user: User = sqlx::query_as(
-            "SELECT account_name, key, account_tier FROM users WHERE account_name = $1",
-        )
-        .bind(&name)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or(Error::UserNotFound)?;
+        let mut user: User = sqlx::query_as("SELECT * FROM users WHERE account_name = $1")
+            .bind(&name)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(Error::UserNotFound)?;
 
         let subscriptions: Vec<Subscription> = sqlx::query_as(
             "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE account_name = $1",
@@ -125,12 +126,11 @@ impl UserManagement for UserManager {
     }
 
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error> {
-        let mut user: User =
-            sqlx::query_as("SELECT account_name, key, account_tier FROM users WHERE key = $1")
-                .bind(&key)
-                .fetch_optional(&self.pool)
-                .await?
-                .ok_or(Error::UserNotFound)?;
+        let mut user: User = sqlx::query_as("SELECT * FROM users WHERE key = $1")
+            .bind(&key)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(Error::UserNotFound)?;
 
         let subscriptions: Vec<Subscription> = sqlx::query_as(
             "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE account_name = $1",
@@ -277,7 +277,7 @@ impl User {
         format!("user_{}", ulid::Ulid::new())
     }
 
-    pub fn new(
+    fn new(
         name: AccountName,
         key: ApiKey,
         account_tier: AccountTier,

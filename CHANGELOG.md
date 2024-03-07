@@ -7,33 +7,67 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [0.40.0](https://github.com/shuttle-hq/shuttle/compare/v0.39.0..0.40.0) - 2024-02-29
+## [0.41.0](https://github.com/shuttle-hq/shuttle/compare/v0.40.0..0.41.0) - 2024-03-07
 
 ### Features
 
+- *(cargo-shuttle)* New template system for init ([#1667](https://github.com/shuttle-hq/shuttle/issues/1667)) - ([7c393a8](https://github.com/shuttle-hq/shuttle/commit/7c393a8eadfeac8165219a79227b4dc1691f8bc4))
+- *(install)* Change powershell installation script ([#1636](https://github.com/shuttle-hq/shuttle/issues/1636)) - ([0c57746](https://github.com/shuttle-hq/shuttle/commit/0c577463ccf5af6328a09c5ff82c1f099e6dbda5))
+- Migration for user_id ([#1663](https://github.com/shuttle-hq/shuttle/issues/1663)) - ([83d9651](https://github.com/shuttle-hq/shuttle/commit/83d965134190b079bf23043d8421f41079d35153))
+
+### Bug Fixes
+
+- *(auth)* User query columns ([#1669](https://github.com/shuttle-hq/shuttle/issues/1669)) - ([b3f3c60](https://github.com/shuttle-hq/shuttle/commit/b3f3c6071a808e2ae5ec595cfc4283d149ec258b))
+- *(common)* Public fields, v0.40.2 ([#1662](https://github.com/shuttle-hq/shuttle/issues/1662)) - ([dc74c42](https://github.com/shuttle-hq/shuttle/commit/dc74c4276f333e5fc201e82e916cc9d8b0003dc8))
+- *(common)* Add missing schema, v0.40.1 ([#1661](https://github.com/shuttle-hq/shuttle/issues/1661)) - ([3e11ae3](https://github.com/shuttle-hq/shuttle/commit/3e11ae3ef74ce0294cfe3331d7a1ecb9e2b5b3e4))
+- *(gateway)* Proxy wait for service port to open ([#1668](https://github.com/shuttle-hq/shuttle/issues/1668)) - ([93562fc](https://github.com/shuttle-hq/shuttle/commit/93562fc886a815743c32d8ef74f90c6343f78588))
+
+### Miscellaneous Tasks
+
+- Remove orchestrator - ([0a1e1f8](https://github.com/shuttle-hq/shuttle/commit/0a1e1f88597e10fea09cd75b6cd1e71f53e38674))
+- V0.41.0 - ([e4ffc7b](https://github.com/shuttle-hq/shuttle/commit/e4ffc7b9472234021fd36896b543460e586cf823))
+- Update test-context dependency ([#1665](https://github.com/shuttle-hq/shuttle/issues/1665)) - ([d39724a](https://github.com/shuttle-hq/shuttle/commit/d39724a6c4594c8a706c6041347eaedae6a08aea))
+- Remove buildx cache, bump versions ([#1650](https://github.com/shuttle-hq/shuttle/issues/1650)) - ([f41afde](https://github.com/shuttle-hq/shuttle/commit/f41afde9065be9b9892f7ddf68dd6ff4a4b57f44))
+
+### Miscellaneous
+
+- Bump examples - ([f20b6dd](https://github.com/shuttle-hq/shuttle/commit/f20b6ddf646990fe21d28c954a4220ffd3447c9c))
+- Nit - ([c2468c6](https://github.com/shuttle-hq/shuttle/commit/c2468c651ea28ac94740a5872cc6b2c5c7dd0c49))
+- Remove shuttle-next ([#1652](https://github.com/shuttle-hq/shuttle/issues/1652)) - ([98551c9](https://github.com/shuttle-hq/shuttle/commit/98551c9f3521d451c54281ca80f402c624c7356e))
+
+## [0.40.0](https://github.com/shuttle-hq/shuttle/compare/v0.39.0..v0.40.0) - 2024-03-04
+
+### Features
+
+- *(cargo-shuttle)* Add project name to the default directory, ask again if path is rejected ([#1654](https://github.com/shuttle-hq/shuttle/issues/1654)) - ([e6f2b2f](https://github.com/shuttle-hq/shuttle/commit/e6f2b2fd77bdbea9e0d5f82b0a3f80012e479aa0))
 - *(cargo-shuttle)* `--secrets` arg to use non-default secrets file ([#1642](https://github.com/shuttle-hq/shuttle/issues/1642)) - ([751f337](https://github.com/shuttle-hq/shuttle/commit/751f337dbd7ba410f659221de24ad0eebd9b92dd))
+- *(common)* Add template definition schema ([#1655](https://github.com/shuttle-hq/shuttle/issues/1655)) - ([c386702](https://github.com/shuttle-hq/shuttle/commit/c386702a84f3e74656f287fc776b7ab1a72bd359))
 - *(deployer)* Load phase caching, automatic startup ([#1640](https://github.com/shuttle-hq/shuttle/issues/1640)) - ([ada3fe1](https://github.com/shuttle-hq/shuttle/commit/ada3fe1d32884142ecb4b51c8ff4189a02ad19a3))
 - *(install.sh)* Always check for cargo install first ([#1610](https://github.com/shuttle-hq/shuttle/issues/1610)) - ([cca27d9](https://github.com/shuttle-hq/shuttle/commit/cca27d953ff09b55b6f0b79d8f06d4eb8cc44385))
 - *(runtime, deployer)* [**breaking**] Extract load phase + provisioning to deployer, resource update ([#1628](https://github.com/shuttle-hq/shuttle/issues/1628)) - ([ba57785](https://github.com/shuttle-hq/shuttle/commit/ba57785a6054f8f04c4e0b42730a11d368e9efa3))
+- RDS custom database name ([#1651](https://github.com/shuttle-hq/shuttle/issues/1651)) - ([958399c](https://github.com/shuttle-hq/shuttle/commit/958399cde40ae4d1b4b5d9beaf455736ac5d84e0))
 - Enable Datadog APM error tracking with a tracing layer ([#1626](https://github.com/shuttle-hq/shuttle/issues/1626)) - ([c5f2caf](https://github.com/shuttle-hq/shuttle/commit/c5f2caf037eb5ce05dda80dcd01ba8618319d3be))
 
 ### Bug Fixes
 
+- *(cargo-shuttle)* Windows build ([#1648](https://github.com/shuttle-hq/shuttle/issues/1648)) - ([9614da4](https://github.com/shuttle-hq/shuttle/commit/9614da4e5f05fb62f3b6db1c56b50a6cfbcf1b67))
 - *(gateway)* Custom domain followup improvements ([#1627](https://github.com/shuttle-hq/shuttle/issues/1627)) - ([46c71e7](https://github.com/shuttle-hq/shuttle/commit/46c71e7cc95f6dd018dc1160b338e30bc39d29f1))
 - *(resource-recorder)* [**breaking**] Disable service id endpoint ([#1644](https://github.com/shuttle-hq/shuttle/issues/1644)) - ([0b97911](https://github.com/shuttle-hq/shuttle/commit/0b9791125774a965c25476fb05e971ac05ceb7fb))
 - *(resource-recorder, provisioner)* Fix integration tests ([#1645](https://github.com/shuttle-hq/shuttle/issues/1645)) - ([b4f6577](https://github.com/shuttle-hq/shuttle/commit/b4f6577d0f1bcf36a9458da2f61979b16a28e497))
+- Cargo audit ([#1657](https://github.com/shuttle-hq/shuttle/issues/1657)) - ([5742dc8](https://github.com/shuttle-hq/shuttle/commit/5742dc862feea3e6ea10dd169189511cacc8d241))
 - Remove builder from compose ([#1643](https://github.com/shuttle-hq/shuttle/issues/1643)) - ([b637bef](https://github.com/shuttle-hq/shuttle/commit/b637bef9bcafc99a938107fa2c8589496653aa97))
 - Various fixes ([#1641](https://github.com/shuttle-hq/shuttle/issues/1641)) - ([b026bd5](https://github.com/shuttle-hq/shuttle/commit/b026bd519dbfe5bf8f47f7670d170df5b420f5fe))
 
 ### Miscellaneous Tasks
 
-- V0.40.0 - ([da54ed3](https://github.com/shuttle-hq/shuttle/commit/da54ed3764595e75f6a5b8b95f59e79f7afdb328))
+- Use newer linux images ([#1659](https://github.com/shuttle-hq/shuttle/issues/1659)) - ([22c3695](https://github.com/shuttle-hq/shuttle/commit/22c369526b8909e4def42fa1a875493f15195c45))
+- V0.40.0 ([#1646](https://github.com/shuttle-hq/shuttle/issues/1646)) - ([30f075a](https://github.com/shuttle-hq/shuttle/commit/30f075aef182f0154b5bd3d6417132967ba3ce4d))
 - Remove builder ([#1637](https://github.com/shuttle-hq/shuttle/issues/1637)) - ([637b0f2](https://github.com/shuttle-hq/shuttle/commit/637b0f27c64b1ab8ff12be2d76bd9049d8a4e662))
 
 ### Miscellaneous
 
 - *(provisioner)* Check project ownership in APIs ([#1630](https://github.com/shuttle-hq/shuttle/issues/1630)) - ([6e135a0](https://github.com/shuttle-hq/shuttle/commit/6e135a021f57d953851100d46fce16bbbc28a774))
-- Bump examples - ([9176eef](https://github.com/shuttle-hq/shuttle/commit/9176eefe4546f000c34f4e70a7def2c593f20e90))
+- Make passwords longer ([#1649](https://github.com/shuttle-hq/shuttle/issues/1649)) - ([3080c93](https://github.com/shuttle-hq/shuttle/commit/3080c93d063524b29d48012a9e1484f26b0cca5c))
 - Use cargo-chef 0.1.64 --bin flags ([#1638](https://github.com/shuttle-hq/shuttle/issues/1638)) - ([acddd82](https://github.com/shuttle-hq/shuttle/commit/acddd8276b37dea474ecb3dac78e1e6efe293d87))
 
 ## [0.39.0](https://github.com/shuttle-hq/shuttle/compare/v0.38.0..v0.39.0) - 2024-02-14

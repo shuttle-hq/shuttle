@@ -68,7 +68,7 @@ impl UserManagement for UserManager {
             "INSERT INTO users (account_name, key, account_tier, user_id) VALUES ($1, $2, $3, $4)",
         )
         .bind(&user.name)
-        .bind(&user.key.expose())
+        .bind(user.key.expose())
         .bind(user.account_tier.to_string())
         .bind(&user.id)
         .execute(&self.pool)

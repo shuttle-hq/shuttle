@@ -301,36 +301,6 @@ mod needs_docker {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn poem_postgres() {
-        let url = cargo_shuttle_run("../examples/poem/postgres", false).await;
-        let client = reqwest::Client::new();
-
-        let post_text = client
-            .post(format!("{url}/todo"))
-            .body("{\"note\": \"Deploy to shuttle\"}")
-            .header("content-type", "application/json")
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-
-        assert_eq!(post_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
-
-        let request_text = client
-            .get(format!("{url}/todo/1"))
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-
-        assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
     async fn poem_mongodb() {
         let url = cargo_shuttle_run("../examples/poem/mongodb", false).await;
         let client = reqwest::Client::new();

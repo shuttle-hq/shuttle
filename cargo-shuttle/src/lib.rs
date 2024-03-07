@@ -441,30 +441,12 @@ impl Shuttle {
         let template = match git_template {
             Some(git_template) => git_template,
             None => {
-                // /// Can be used during testing
-                // async fn get_schema() -> Result<TemplatesSchema> {
-                //     Ok(toml::from_str(include_str!(
-                //         "../../examples/templates.toml"
-                //     ))?)
-                // }
-                async fn get_schema() -> Result<TemplatesSchema> {
-                    let client = reqwest::Client::new();
-                    Ok(toml::from_str(
-                        &client
-                            .get(shuttle_common::constants::EXAMPLES_TEMPLATES_TOML)
-                            .send()
-                            .await?
-                            .text()
-                            .await?,
-                    )?)
-                }
-
                 // Try to present choices from our up-to-date examples.
                 // Fall back to the internal (potentially outdated) list.
                 let schema = if offline {
                     None
                 } else {
-                    get_schema()
+                    get_templates_schema()
                         .await
                         .map_err(|_| {
                             println!(
@@ -2231,6 +2213,24 @@ impl Shuttle {
 
         Ok(bytes)
     }
+}
+
+// /// Can be used during testing
+// async fn get_templates_schema() -> Result<TemplatesSchema> {
+//     Ok(toml::from_str(include_str!(
+//         "../../examples/templates.toml"
+//     ))?)
+// }
+async fn get_templates_schema() -> Result<TemplatesSchema> {
+    let client = reqwest::Client::new();
+    Ok(toml::from_str(
+        &client
+            .get(shuttle_common::constants::EXAMPLES_TEMPLATES_TOML)
+            .send()
+            .await?
+            .text()
+            .await?,
+    )?)
 }
 
 fn is_dirty(repo: &Repository) -> Result<()> {

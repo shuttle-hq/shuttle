@@ -20,7 +20,7 @@ use crate::{
 
 use super::handlers::{
     convert_key, delete_subscription, get_public_key, get_user, post_subscription, post_user,
-    put_user_reset_key, refresh_token,
+    put_user_reset_key,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -64,7 +64,7 @@ impl ApiBuilder {
         let router = Router::new()
             .route("/", get(|| async move {})) // Health check: 200 OK
             .route("/auth/key", get(convert_key))
-            .route("/auth/refresh", post(refresh_token))
+            .route("/auth/refresh", post(|| async move {}))
             .route("/public-key", get(get_public_key))
             .route("/users/:user_id", get(get_user))
             .route("/users/:account_name/:account_tier", post(post_user))

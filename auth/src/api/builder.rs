@@ -64,7 +64,6 @@ impl ApiBuilder {
         let router = Router::new()
             .route("/", get(|| async move {})) // Health check: 200 OK
             .route("/auth/key", get(convert_key))
-            .route("/auth/refresh", post(|| async move {}))
             .route("/public-key", get(get_public_key))
             .route("/users/:user_id", get(get_user))
             .route("/users/:account_name/:account_tier", post(post_user))

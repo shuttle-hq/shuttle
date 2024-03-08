@@ -300,8 +300,10 @@ impl GatewayService {
         let control_key = self.control_key_from_project_name(project_name).await?;
 
         let headers = req.headers_mut();
-        headers.typed_insert(XShuttleUserId(user_id.to_string()));
+        headers.typed_insert(XShuttleUserId(user_id.clone()));
         headers.typed_insert(XShuttleAdminSecret(control_key));
+        // deprecated, used for soft backward compatibility
+        headers.insert("x-shuttle-account-name", user_id.parse().unwrap());
 
         let cx = Span::current().context();
         global::get_text_map_propagator(|propagator| {

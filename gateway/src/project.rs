@@ -35,6 +35,9 @@ use uuid::Uuid;
 use crate::service::ContainerSettings;
 use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
 
+/// The `user_id` AND `account_name` of gateway's admin account
+const GATEWAY_ADMIN_ACCOUNT_USER_ID: &str = "gateway";
+
 macro_rules! safe_unwrap {
     {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
         $fst$(
@@ -1497,8 +1500,10 @@ impl Service {
                 .method(Method::PUT)
                 .uri(uri)
                 .header(AUTHORIZATION, format!("Bearer {}", jwt))
-                .header(X_SHUTTLE_USER_ID.clone(), "gateway")
+                .header(X_SHUTTLE_USER_ID.clone(), GATEWAY_ADMIN_ACCOUNT_USER_ID)
                 .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
+                // deprecated, used for soft backward compatibility
+                .header("x-shuttle-account-name", GATEWAY_ADMIN_ACCOUNT_USER_ID)
                 .body(Body::empty())?;
 
             let _ = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await;
@@ -1518,8 +1523,10 @@ impl Service {
         let req = Request::builder()
             .uri(uri)
             .header(AUTHORIZATION, format!("Bearer {}", jwt))
-            .header(X_SHUTTLE_USER_ID.clone(), "gateway")
+            .header(X_SHUTTLE_USER_ID.clone(), GATEWAY_ADMIN_ACCOUNT_USER_ID)
             .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
+            // deprecated, used for soft backward compatibility
+            .header("x-shuttle-account-name", GATEWAY_ADMIN_ACCOUNT_USER_ID)
             .body(Body::empty())?;
 
         let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await??;

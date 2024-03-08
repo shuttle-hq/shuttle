@@ -18,7 +18,6 @@ use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
 use shuttle_service::builder::clean_crate;
 use tracing::{error, field, info, info_span, instrument, trace, warn};
-use ulid::Ulid;
 use uuid::Uuid;
 
 use shuttle_common::{
@@ -67,7 +66,6 @@ impl RouterBuilder {
         persistence: Persistence,
         deployment_manager: DeploymentManager,
         project_name: ProjectName,
-        project_id: Ulid,
         auth_uri: Uri,
     ) -> Self {
         let router = Router::new()
@@ -102,11 +100,10 @@ impl RouterBuilder {
                 "/projects/:project_name/deployments/:deployment_id",
                 get(get_deployment.layer(ScopedLayer::new(vec![Scope::Deployment])))
                     .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush])))
-                    .put(
-                        start_deployment
-                            .layer(Extension(project_id))
-                            .layer(ScopedLayer::new(vec![Scope::DeploymentPush])),
-                    ),
+                    // Deprecated.
+                    // Deployer now always starts the last running deployment on start up / wake up.
+                    // This is kept for compatibility.
+                    .put(|| async move {}),
             )
             .route(
                 "/projects/:project_name/ws/deployments/:deployment_id/logs",
@@ -429,11 +426,6 @@ pub async fn delete_deployment(
         Err(Error::NotFound("deployment not found".to_string()))
     }
 }
-
-/// Deprecated.
-/// Now always starts the last running deployment on start up / wake up.
-/// Kept around for compatibility.
-pub async fn start_deployment() {}
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, %deployment_id))]
 pub async fn get_logs(

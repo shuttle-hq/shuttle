@@ -1496,6 +1496,8 @@ impl Service {
                 self.name, running_id
             ))?;
 
+            // NOTE: Deployer 0.40 and newer will start up old deployments themselves and ignore this call
+            // When deployer 0.39 is no longer supported, this function and its callers+task can be removed
             let req = Request::builder()
                 .method(Method::PUT)
                 .uri(uri)

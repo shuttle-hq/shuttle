@@ -75,13 +75,8 @@ pub async fn start(
         deployment_manager.run_push(built).await;
     }
 
-    let mut builder = handlers::RouterBuilder::new(
-        persistence,
-        deployment_manager,
-        args.project,
-        project_id,
-        args.auth_uri,
-    );
+    let mut builder =
+        handlers::RouterBuilder::new(persistence, deployment_manager, args.project, args.auth_uri);
 
     if args.local {
         // If the --local flag is passed, setup an auth layer in deployer

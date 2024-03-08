@@ -12,12 +12,12 @@ shuttle-serenity = { version = "0.41.0", default-features = false, features = ["
 ### Example
 
 ```rust,ignore
-use anyhow::anyhow;
+use anyhow::Context;
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
-use shuttle_secrets::SecretStore;
+use shuttle_runtime::SecretStore;
 use tracing::{error, info};
 
 struct Bot;
@@ -39,14 +39,10 @@ impl EventHandler for Bot {
 
 #[shuttle_runtime::main]
 async fn serenity(
-    #[shuttle_secrets::Secrets] secret_store: SecretStore,
+    #[shuttle_runtime::Secrets] secrets: SecretStore,
 ) -> shuttle_serenity::ShuttleSerenity {
     // Get the discord token set in `Secrets.toml`
-    let token = if let Some(token) = secret_store.get("DISCORD_TOKEN") {
-        token
-    } else {
-        return Err(anyhow!("'DISCORD_TOKEN' was not found").into());
-    };
+    let token = secret_store.get("DISCORD_TOKEN").context("'DISCORD_TOKEN' was not found")?;
 
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;

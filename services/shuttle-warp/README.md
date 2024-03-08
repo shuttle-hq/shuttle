@@ -1,4 +1,4 @@
-## Shuttle service integration for the Warp web framework.
+## Shuttle service integration for the Warp web framework
 
 ### Example
 

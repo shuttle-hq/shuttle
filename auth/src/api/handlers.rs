@@ -11,7 +11,7 @@ use shuttle_common::{
     claims::{AccountTier, Claim},
     models::user::{self, SubscriptionRequest, UserId},
 };
-use tracing::instrument;
+use tracing::{instrument, Span};
 
 use super::{
     builder::{KeyManagerState, UserManagerState},
@@ -36,7 +36,7 @@ pub(crate) async fn post_user(
     Path((account_name, account_tier)): Path<(String, AccountTier)>,
 ) -> Result<Json<user::Response>, Error> {
     let user = user_manager.create_user(account_name, account_tier).await?;
-    // TODO?: Add `user.id` to span's `account.user_id`?
+    Span::current().record("account.user_id", &user.id);
 
     Ok(Json(user.into()))
 }
@@ -72,11 +72,6 @@ pub(crate) async fn delete_subscription(
         .delete_subscription(&user_id, &subscription_id)
         .await?;
 
-    Ok(())
-}
-
-// Dummy health-check returning 200 if the auth server is up.
-pub(crate) async fn health_check() -> Result<(), Error> {
     Ok(())
 }
 

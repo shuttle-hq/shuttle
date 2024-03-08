@@ -38,10 +38,11 @@ pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> io::Result
         None => ApiKey::generate(),
     };
 
-    query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
+    query("INSERT INTO users (account_name, key, account_tier, user_id) VALUES ($1, $2, $3, $4)")
         .bind(&args.name)
         .bind(&key)
         .bind(tier.to_string())
+        .bind(crate::User::new_user_id())
         .execute(&pool)
         .await
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;

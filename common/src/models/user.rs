@@ -7,6 +7,7 @@ pub type UserId = String;
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Response {
     pub name: String,
+    pub id: UserId,
     pub key: String,
     pub account_tier: String,
     pub subscriptions: Vec<Subscription>,

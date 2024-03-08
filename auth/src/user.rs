@@ -429,6 +429,7 @@ impl From<User> for models::user::Response {
     fn from(user: User) -> Self {
         Self {
             name: user.name.to_string(),
+            id: user.id,
             key: user.key.expose().as_ref().to_owned(),
             account_tier: user.account_tier.to_string(),
             subscriptions: user.subscriptions.into_iter().map(Into::into).collect(),

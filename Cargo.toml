@@ -48,6 +48,7 @@ chrono = { version = "0.4.23", default-features = false }
 clap = { version = "4.2.7", features = ["derive"] }
 colored = "2.0.0"
 comfy-table = "6.2.0"
+config = { version = "0.14.0", default-features = false }
 crossterm = "0.27.0"
 ctor = "0.2.5"
 dirs = "5.0.0"

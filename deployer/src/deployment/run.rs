@@ -309,7 +309,7 @@ impl Built {
                         match serde_json::from_value::<SecretStore>(r.data.clone()) {
                             Ok(ss) => {
                                 // Combine old and new, but insert old first so that new ones override.
-                                let mut combined = HashMap::from_iter(ss.into_iter());
+                                let mut combined = HashMap::from_iter(ss.0.into_iter());
                                 combined.extend(new_secrets.clone().into_iter());
                                 new_secrets = combined;
                             }

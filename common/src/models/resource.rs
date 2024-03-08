@@ -155,7 +155,7 @@ fn get_secrets_table(secrets: &[&Response], service_name: &str, raw: bool) -> St
 
     let secrets = serde_json::from_value::<SecretStore>(secrets[0].data.clone()).unwrap();
 
-    for key in secrets.secrets.keys() {
+    for key in secrets.keys() {
         table.add_row(vec![key]);
     }
 

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt::Debug};
+use std::{collections::BTreeMap, fmt::Debug, ops::Deref};
 use zeroize::Zeroize;
 
 /// Wrapper type for secret values such as passwords or authentication keys.
@@ -49,32 +49,35 @@ impl<T: Zeroize> Secret<T> {
 }
 
 /// Store that holds all the secrets available to a deployment
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(transparent)]
-pub struct SecretStore {
-    pub(crate) secrets: BTreeMap<String, Secret<String>>,
-}
+pub struct SecretStore(pub BTreeMap<String, String>);
 
 impl SecretStore {
-    pub fn new(secrets: BTreeMap<String, Secret<String>>) -> Self {
-        Self { secrets }
-    }
-
     pub fn get(&self, key: &str) -> Option<String> {
-        self.secrets.get(key).map(|s| s.expose().to_owned())
+        self.0.get(key).map(|s| s.to_owned())
     }
 }
 
-impl IntoIterator for SecretStore {
-    type Item = (String, String);
-    type IntoIter = <BTreeMap<String, String> as IntoIterator>::IntoIter;
+impl Deref for SecretStore {
+    type Target = BTreeMap<String, String>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.secrets
-            .into_iter()
-            .map(|(k, s)| (k, s.expose().to_owned()))
-            .collect::<BTreeMap<_, _>>()
-            .into_iter()
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl config::Source for SecretStore {
+    fn clone_into_box(&self) -> Box<dyn config::Source + Send + Sync> {
+        Box::new(self.clone())
+    }
+
+    fn collect(&self) -> Result<config::Map<String, config::Value>, config::ConfigError> {
+        let mut map: config::Map<String, config::Value> = config::Map::new();
+        for (a, b) in self.iter() {
+            map.insert(a.clone(), b.clone().into());
+        }
+        Ok(map)
     }
 }
 
@@ -121,19 +124,5 @@ mod secrets_tests {
             printed,
             "Wrapper { password: [REDACTED \"alloc::string::String\"] }"
         );
-    }
-
-    #[test]
-    fn secretstore_intoiter() {
-        let bt = BTreeMap::from([
-            ("1".to_owned(), "2".to_owned().into()),
-            ("3".to_owned(), "4".to_owned().into()),
-        ]);
-        let ss = SecretStore::new(bt);
-
-        let mut iter = ss.into_iter();
-        assert_eq!(iter.next(), Some(("1".to_owned(), "2".to_owned())));
-        assert_eq!(iter.next(), Some(("3".to_owned(), "4".to_owned())));
-        assert_eq!(iter.next(), None);
     }
 }

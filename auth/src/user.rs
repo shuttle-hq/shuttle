@@ -102,7 +102,7 @@ impl UserManagement for UserManager {
         let subscriptions: Vec<Subscription> = sqlx::query_as(
             "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE user_id = $1",
         )
-        .bind(&user.name.to_string())
+        .bind(&user.id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -117,9 +117,8 @@ impl UserManagement for UserManager {
                 "failed syncing account"
             );
             return Err(err);
-        } else {
-            debug!("synced account");
         }
+        debug!("synced account");
 
         Ok(user)
     }
@@ -320,7 +319,7 @@ impl User {
         if self.account_tier == AccountTier::CancelledPro && !subscription_is_valid {
             self.account_tier = AccountTier::Basic;
             user_manager
-                .update_tier(&self.name, self.account_tier)
+                .update_tier(&self.id, self.account_tier)
                 .await?;
             return Ok(true);
         }
@@ -328,7 +327,7 @@ impl User {
         if self.account_tier == AccountTier::Pro && !subscription_is_valid {
             self.account_tier = AccountTier::PendingPaymentPro;
             user_manager
-                .update_tier(&self.name, self.account_tier)
+                .update_tier(&self.id, self.account_tier)
                 .await?;
             return Ok(true);
         }
@@ -336,7 +335,7 @@ impl User {
         if self.account_tier == AccountTier::PendingPaymentPro && subscription_is_valid {
             self.account_tier = AccountTier::Pro;
             user_manager
-                .update_tier(&self.name, self.account_tier)
+                .update_tier(&self.id, self.account_tier)
                 .await?;
             return Ok(true);
         }

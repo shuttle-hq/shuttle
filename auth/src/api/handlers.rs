@@ -11,7 +11,7 @@ use shuttle_common::{
     claims::{AccountTier, Claim},
     models::user::{self, SubscriptionRequest, UserId},
 };
-use tracing::{instrument, Span};
+use tracing::{field, instrument, Span};
 
 use super::{
     builder::{KeyManagerState, UserManagerState},
@@ -29,7 +29,7 @@ pub(crate) async fn get_user(
     Ok(Json(user.into()))
 }
 
-#[instrument(skip_all, fields(account.account_name = %account_name, account.tier = %account_tier))]
+#[instrument(skip_all, fields(account.name = %account_name, account.tier = %account_tier, account.user_id = field::Empty))]
 pub(crate) async fn post_user(
     _: Admin,
     State(user_manager): State<UserManagerState>,

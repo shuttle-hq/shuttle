@@ -15,7 +15,6 @@ axum = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
 chrono = { workspace = true }
 comfy-table = { workspace = true, optional = true }
-config = { workspace = true }
 crossterm = { workspace = true, optional = true }
 headers = { workspace = true, optional = true }
 http = { workspace = true, optional = true }

@@ -24,7 +24,7 @@ use uuid::Uuid;
 use shuttle_common::{
     backends::{
         auth::{AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
-        headers::XShuttleAccountName,
+        headers::XShuttleUserId,
         metrics::{Metrics, TraceLayer},
     },
     claims::{Claim, Scope},
@@ -156,14 +156,14 @@ impl RouterBuilder {
             .route_layer(from_extractor::<Metrics>())
             .layer(
                 TraceLayer::new(|request| {
-                    let account_name = request
+                    let user_id = request
                         .headers()
-                        .typed_get::<XShuttleAccountName>()
+                        .typed_get::<XShuttleUserId>()
                         .unwrap_or_default();
 
                     request_span!(
                         request,
-                        account.name = account_name.0,
+                        account.user_id = user_id.0,
                         request.params.project_name = field::Empty,
                         request.params.service_name = field::Empty,
                         request.params.deployment_id = field::Empty,

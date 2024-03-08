@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
+pub type UserId = String;
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Response {
     pub name: String,

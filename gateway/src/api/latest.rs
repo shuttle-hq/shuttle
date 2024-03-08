@@ -132,7 +132,7 @@ async fn check_project_name(
 
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
-    User { name, .. }: User,
+    User { id: name, .. }: User,
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
     let limit = limit.unwrap_or(u32::MAX);
@@ -157,7 +157,7 @@ async fn create_project(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
-    User { name, claim, .. }: User,
+    User { id, claim, .. }: User,
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
@@ -166,7 +166,7 @@ async fn create_project(
     // Check that the user is within their project limits.
     let can_create_project = claim.can_create_project(
         service
-            .get_project_count(&name)
+            .get_project_count(&id)
             .await?
             .saturating_sub(is_cch_project as u32),
     );
@@ -178,7 +178,7 @@ async fn create_project(
     let project = service
         .create_project(
             project_name.clone(),
-            name.clone(),
+            id,
             claim.is_admin(),
             can_create_project,
             if is_cch_project {
@@ -368,10 +368,10 @@ async fn override_create_service(
     scoped_user: ScopedUser,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    let account_name = scoped_user.user.claim.sub.clone();
+    let user_id = scoped_user.user.claim.sub.clone();
     let posthog_client = state.posthog_client.clone();
     tokio::spawn(async move {
-        let event = async_posthog::Event::new("shuttle_api_start_deployment", &account_name);
+        let event = async_posthog::Event::new("shuttle_api_start_deployment", &user_id);
 
         if let Err(err) = posthog_client.capture(event).await {
             error!(
@@ -441,7 +441,7 @@ async fn route_project(
         .await?
         .0;
     service
-        .route(&project.state, &project_name, &scoped_user.user.name, req)
+        .route(&project.state, &project_name, &scoped_user.user.id, req)
         .await
 }
 
@@ -869,9 +869,9 @@ impl ApiBuilder {
             TraceLayer::new(|request| {
                 request_span!(
                     request,
-                    account.name = field::Empty,
+                    account.user_id = field::Empty,
                     request.params.project_name = field::Empty,
-                    request.params.account_name = field::Empty,
+                    request.params.user_id = field::Empty,
                 )
             })
             .with_propagation()

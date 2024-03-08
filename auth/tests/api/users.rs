@@ -237,7 +237,7 @@ mod needs_docker {
 
         // Make sure JWT does not allow any RDS instances
         let claim = app.get_claim(basic_user_key).await;
-        assert_eq!(claim.sub, "test-user");
+        assert!(claim.sub.starts_with("user_"));
         assert_eq!(claim.limits.rds_quota(), 0);
 
         // Send a request to insert an RDS subscription for the test user.

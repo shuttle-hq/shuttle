@@ -66,12 +66,12 @@ impl ApiBuilder {
             .route("/auth/key", get(convert_key))
             .route("/auth/refresh", post(refresh_token))
             .route("/public-key", get(get_public_key))
-            .route("/users/:account_name", get(get_user))
+            .route("/users/:user_id", get(get_user))
             .route("/users/:account_name/:account_tier", post(post_user))
             .route("/users/reset-api-key", put(put_user_reset_key))
-            .route("/users/:account_name/subscribe", post(post_subscription))
+            .route("/users/:user_id/subscribe", post(post_subscription))
             .route(
-                "/users/:account_name/subscribe/:subscription_id",
+                "/users/:user_id/subscribe/:subscription_id",
                 delete(delete_subscription),
             )
             .route_layer(from_extractor::<Metrics>())
@@ -79,7 +79,7 @@ impl ApiBuilder {
                 TraceLayer::new(|request| {
                     request_span!(
                         request,
-                        request.params.account_name = field::Empty,
+                        request.params.user_id = field::Empty,
                         request.params.account_tier = field::Empty,
                     )
                 })

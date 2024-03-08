@@ -1,4 +1,4 @@
-use std::{fmt::Formatter, io::ErrorKind, str::FromStr};
+use std::{io::ErrorKind, str::FromStr};
 
 use async_trait::async_trait;
 use axum::{
@@ -8,38 +8,37 @@ use axum::{
     TypedHeader,
 };
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::{
-    backends::headers::XShuttleAdminSecret, claims::AccountTier, limits::Limits, models, ApiKey,
-    Secret,
+    backends::headers::XShuttleAdminSecret, claims::AccountTier, limits::Limits, models,
+    models::user::UserId, ApiKey, Secret,
 };
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
+use stripe::{SubscriptionId, SubscriptionStatus};
 use tracing::{debug, error, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
-use stripe::{SubscriptionId, SubscriptionStatus};
 
 #[async_trait]
 pub trait UserManagement: Send + Sync {
     /// Create a user with the given tier
-    async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error>;
+    async fn create_user(&self, name: String, tier: AccountTier) -> Result<User, Error>;
 
     /// Change the tier for a user
-    async fn update_tier(&self, name: &AccountName, tier: AccountTier) -> Result<(), Error>;
+    async fn update_tier(&self, user_id: &UserId, tier: AccountTier) -> Result<(), Error>;
 
-    /// Get a user by their account name
-    async fn get_user(&self, name: AccountName) -> Result<User, Error>;
+    /// Get a user by their user id
+    async fn get_user(&self, user_id: UserId) -> Result<User, Error>;
 
     /// Get a user by their api key
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
 
     /// Reset the key that belongs to an account
-    async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
+    async fn reset_key(&self, user_id: UserId) -> Result<(), Error>;
 
     /// Insert a subscription for an account
     async fn insert_subscription(
         &self,
-        name: &AccountName,
+        user_id: &UserId,
         subscription_id: &str,
         subscription_type: &models::user::SubscriptionType,
         subscription_quantity: i32,
@@ -48,7 +47,7 @@ pub trait UserManagement: Send + Sync {
     /// Delete a subscription from an account
     async fn delete_subscription(
         &self,
-        name: &AccountName,
+        user_id: &UserId,
         subscription_id: &str,
     ) -> Result<(), Error>;
 }
@@ -61,7 +60,7 @@ pub struct UserManager {
 
 #[async_trait]
 impl UserManagement for UserManager {
-    async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error> {
+    async fn create_user(&self, name: String, tier: AccountTier) -> Result<User, Error> {
         let user = User::new(name, ApiKey::generate(), tier, vec![]);
 
         query(
@@ -78,10 +77,10 @@ impl UserManagement for UserManager {
     }
 
     // Update tier leaving the subscription_id untouched.
-    async fn update_tier(&self, name: &AccountName, tier: AccountTier) -> Result<(), Error> {
-        let rows_affected = query("UPDATE users SET account_tier = $1 WHERE account_name = $2")
+    async fn update_tier(&self, user_id: &UserId, tier: AccountTier) -> Result<(), Error> {
+        let rows_affected = query("UPDATE users SET account_tier = $1 WHERE user_id = $2")
             .bind(tier.to_string())
-            .bind(name)
+            .bind(user_id)
             .execute(&self.pool)
             .await?
             .rows_affected();
@@ -93,15 +92,15 @@ impl UserManagement for UserManager {
         }
     }
 
-    async fn get_user(&self, name: AccountName) -> Result<User, Error> {
-        let mut user: User = sqlx::query_as("SELECT * FROM users WHERE account_name = $1")
-            .bind(&name)
+    async fn get_user(&self, user_id: UserId) -> Result<User, Error> {
+        let mut user: User = sqlx::query_as("SELECT * FROM users WHERE user_id = $1")
+            .bind(&user_id)
             .fetch_optional(&self.pool)
             .await?
             .ok_or(Error::UserNotFound)?;
 
         let subscriptions: Vec<Subscription> = sqlx::query_as(
-            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE account_name = $1",
+            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE user_id = $1",
         )
         .bind(&user.name.to_string())
         .fetch_all(&self.pool)
@@ -133,9 +132,9 @@ impl UserManagement for UserManager {
             .ok_or(Error::UserNotFound)?;
 
         let subscriptions: Vec<Subscription> = sqlx::query_as(
-            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE account_name = $1",
+            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE user_id = $1",
         )
-        .bind(&user.name.to_string())
+        .bind(&user.id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -151,12 +150,12 @@ impl UserManagement for UserManager {
         Ok(user)
     }
 
-    async fn reset_key(&self, name: AccountName) -> Result<(), Error> {
+    async fn reset_key(&self, user_id: UserId) -> Result<(), Error> {
         let key = ApiKey::generate();
 
-        let rows_affected = query("UPDATE users SET key = $1 WHERE account_name = $2")
+        let rows_affected = query("UPDATE users SET key = $1 WHERE user_id = $2")
             .bind(&key)
-            .bind(&name)
+            .bind(&user_id)
             .execute(&self.pool)
             .await?
             .rows_affected();
@@ -170,7 +169,7 @@ impl UserManagement for UserManager {
 
     async fn insert_subscription(
         &self,
-        name: &AccountName,
+        user_id: &UserId,
         subscription_id: &str,
         subscription_type: &models::user::SubscriptionType,
         subscription_quantity: i32,
@@ -178,9 +177,9 @@ impl UserManagement for UserManager {
         let mut transaction = self.pool.begin().await?;
 
         if *subscription_type == models::user::SubscriptionType::Pro {
-            query("UPDATE users SET account_tier = $1 WHERE account_name = $2")
+            query("UPDATE users SET account_tier = $1 WHERE user_id = $2")
                 .bind(AccountTier::Pro.to_string())
-                .bind(name)
+                .bind(user_id)
                 .execute(&mut *transaction)
                 .await?;
         }
@@ -188,14 +187,14 @@ impl UserManagement for UserManager {
         // Insert a new subscription. If the same type of subscription already exists, update the
         // subscription id and quantity.
         let rows_affected = query(
-            r#"INSERT INTO subscriptions (subscription_id, account_name, type, quantity)
+            r#"INSERT INTO subscriptions (subscription_id, user_id, type, quantity)
             VALUES ($1, $2, $3, $4)
-            ON CONFLICT (account_name, type)
+            ON CONFLICT (user_id, type)
             DO UPDATE SET subscription_id = EXCLUDED.subscription_id, quantity = EXCLUDED.quantity
         "#,
         )
         .bind(subscription_id)
-        .bind(name)
+        .bind(user_id)
         .bind(subscription_type.to_string())
         .bind(subscription_quantity)
         .execute(&mut *transaction)
@@ -214,27 +213,27 @@ impl UserManagement for UserManager {
 
     async fn delete_subscription(
         &self,
-        name: &AccountName,
+        user_id: &UserId,
         subscription_id: &str,
     ) -> Result<(), Error> {
         let subscription: Subscription = sqlx::query_as(
-            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE account_name = $1 AND subscription_id = $2",
+            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE user_id = $1 AND subscription_id = $2",
         )
-        .bind(name)
+        .bind(user_id)
         .bind(subscription_id)
         .fetch_one(&self.pool)
         .await?;
 
         if subscription.r#type == models::user::SubscriptionType::Pro {
-            self.update_tier(name, AccountTier::CancelledPro).await?;
+            self.update_tier(user_id, AccountTier::CancelledPro).await?;
         } else {
             query(
                 r#"DELETE FROM subscriptions
-                WHERE subscription_id = $1 AND account_name = $2
+                WHERE subscription_id = $1 AND user_id = $2
             "#,
             )
             .bind(subscription_id)
-            .bind(name)
+            .bind(user_id)
             .execute(&self.pool)
             .await?;
         }
@@ -245,7 +244,7 @@ impl UserManagement for UserManager {
 
 #[derive(Clone, Debug)]
 pub struct User {
-    pub name: AccountName,
+    pub name: UserId,
     pub id: String,
     pub key: Secret<ApiKey>,
     pub account_tier: AccountTier,
@@ -278,7 +277,7 @@ impl User {
     }
 
     fn new(
-        name: AccountName,
+        name: UserId,
         key: ApiKey,
         account_tier: AccountTier,
         subscriptions: Vec<Subscription>,
@@ -420,7 +419,7 @@ where
             .map_err(|_| Error::Unauthorized)?;
 
         // Record current account name for tracing purposes
-        Span::current().record("account.name", &user.name.to_string());
+        Span::current().record("account.user_id", &user.id);
 
         Ok(user)
     }
@@ -480,41 +479,6 @@ where
         trace!("got bearer key");
 
         Ok(Key(key))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
-#[sqlx(transparent)]
-pub struct AccountName(String);
-
-impl From<String> for AccountName {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
-}
-
-impl FromStr for AccountName {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(s.to_string().into())
-    }
-}
-
-impl std::fmt::Display for AccountName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl<'de> Deserialize<'de> for AccountName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
     }
 }
 

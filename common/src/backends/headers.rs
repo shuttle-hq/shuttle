@@ -33,15 +33,15 @@ impl Header for XShuttleAdminSecret {
     }
 }
 
-pub static X_SHUTTLE_ACCOUNT_NAME: HeaderName = HeaderName::from_static("x-shuttle-account-name");
+pub static X_SHUTTLE_USER_ID: HeaderName = HeaderName::from_static("x-shuttle-user-id");
 
 /// Typed header for sending account names around
 #[derive(Default)]
-pub struct XShuttleAccountName(pub String);
+pub struct XShuttleUserId(pub String);
 
-impl Header for XShuttleAccountName {
+impl Header for XShuttleUserId {
     fn name() -> &'static HeaderName {
-        &X_SHUTTLE_ACCOUNT_NAME
+        &X_SHUTTLE_USER_ID
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>

@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use args::{ConfirmationArgs, GenerateCommand, LogFormat, LogsArgs};
+use args::{ConfirmationArgs, GenerateCommand};
 use clap_mangen::Man;
 
 use shuttle_common::{
@@ -72,7 +72,7 @@ use uuid::Uuid;
 
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
-    DeployArgs, DeploymentCommand, InitArgs, LoginArgs, LogoutArgs, ProjectCommand,
+    DeployArgs, DeploymentCommand, InitArgs, LoginArgs, LogoutArgs, LogsArgs, ProjectCommand,
     ProjectStartArgs, ResourceCommand, EXAMPLES_REPO,
 };
 use crate::client::Client;
@@ -773,10 +773,13 @@ impl Shuttle {
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
                     match serde_json::from_str::<shuttle_common::LogItem>(&line) {
-                        Ok(log) => match &args.format {
-                            Some(LogFormat::Raw) => println!("{}", log.get_raw_line()),
-                            None => println!("{log}"),
-                        },
+                        Ok(log) => {
+                            if args.raw {
+                                println!("{}", log.get_raw_line())
+                            } else {
+                                println!("{log}")
+                            }
+                        }
                         Err(err) => {
                             debug!(error = %err, "failed to parse message into log item");
 
@@ -800,9 +803,10 @@ impl Shuttle {
                 })?;
 
             for log in logs.into_iter() {
-                match &args.format {
-                    Some(LogFormat::Raw) => println!("{}", log.get_raw_line()),
-                    None => println!("{log}"),
+                if args.raw {
+                    println!("{}", log.get_raw_line())
+                } else {
+                    println!("{log}")
                 }
             }
         }

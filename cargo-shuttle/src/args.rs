@@ -409,16 +409,9 @@ pub struct LogsArgs {
     #[arg(short, long)]
     /// Follow log output
     pub follow: bool,
-    /// Log format
-    #[arg(short = 'F', long)]
-    pub format: Option<LogFormat>,
-}
-
-#[derive(ValueEnum, Clone, Debug, strum::Display, strum::EnumIter)]
-#[strum(serialize_all = "kebab-case")]
-pub enum LogFormat {
     /// Don't display timestamps and log origin tags
-    Raw,
+    #[arg(long)]
+    pub raw: bool,
 }
 
 /// Helper function to parse and return the absolute path

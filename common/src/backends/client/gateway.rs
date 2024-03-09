@@ -114,7 +114,6 @@ impl ProjectsDal for Client {
 
 #[cfg(test)]
 mod tests {
-    use async_trait::async_trait;
     use test_context::{test_context, AsyncTestContext};
 
     use crate::models::project::{Response, State};
@@ -122,7 +121,6 @@ mod tests {
 
     use super::{Client, ProjectsDal};
 
-    #[async_trait]
     impl AsyncTestContext for Client {
         async fn setup() -> Self {
             let server = get_mocked_gateway_server().await;
@@ -130,7 +128,7 @@ mod tests {
             Client::new(server.uri().parse().unwrap(), server.uri().parse().unwrap())
         }
 
-        async fn teardown(mut self) {}
+        async fn teardown(self) {}
     }
 
     #[test_context(Client)]

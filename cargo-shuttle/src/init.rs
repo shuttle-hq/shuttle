@@ -12,7 +12,7 @@ use gix::create::{self, Kind};
 use gix::remote::fetch::Shallow;
 use gix::{open, progress};
 use regex::Regex;
-use shuttle_common::constants::SHUTTLE_EXAMPLES_README;
+use shuttle_common::constants::EXAMPLES_README;
 use tempfile::{Builder, TempDir};
 use toml_edit::{value, Document};
 use url::Url;
@@ -101,8 +101,8 @@ fn setup_template(auto_path: &str) -> Result<TempDir> {
         // `owner` and `name` are required for the regex to
         // match. Thus, we don't need to check if they exist.
         let url = format!("{vendor}{}/{}.git", &caps["owner"], &caps["name"]);
-        gix_clone(&url, temp_dir.path())
-            .with_context(|| format!("Failed to clone template Git repository at {url}"))?;
+        println!(r#"Cloning from "{}"..."#, url);
+        gix_clone(&url, temp_dir.path()).context("Failed to clone git repository")?;
     } else if Path::new(auto_path).is_absolute() || auto_path.starts_with('.') {
         if Path::new(auto_path).exists() {
             copy_dirs(Path::new(auto_path), temp_dir.path(), GitDir::Copy)?;
@@ -121,7 +121,7 @@ fn setup_template(auto_path: &str) -> Result<TempDir> {
                 or use another method of specifying the template location."
             );
             println!(
-                "HINT: You can find examples of how to select a template here: {SHUTTLE_EXAMPLES_README}"
+                "HINT: You can find examples of how to select a template here: {EXAMPLES_README}"
             );
             anyhow::bail!("invalid URL scheme")
         }

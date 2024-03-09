@@ -16,7 +16,6 @@ shuttle-turso = { path = "BASE/resources/turso" }
 
 shuttle-axum = { path = "BASE/services/shuttle-axum" }
 shuttle-actix-web = { path = "BASE/services/shuttle-actix-web" }
-shuttle-next = { path = "BASE/services/shuttle-next" }
 shuttle-poem = { path = "BASE/services/shuttle-poem" }
 shuttle-rocket = { path = "BASE/services/shuttle-rocket" }
 shuttle-salvo = { path = "BASE/services/shuttle-salvo" }

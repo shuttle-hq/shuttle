@@ -12,7 +12,7 @@ use opentelemetry::global;
 use serde::de::DeserializeOwned;
 use shuttle_common::{
     claims::Claim,
-    constants::{EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION},
+    constants::{DEPLOYER_SERVICE_HTTP_PORT, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION},
     deployment::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_FAILED, DEPLOYER_RUNTIME_START_RESPONSE,
@@ -229,7 +229,6 @@ pub struct Built {
     pub service_id: Ulid,
     pub project_id: Ulid,
     pub tracing_context: HashMap<String, String>,
-    pub is_next: bool,
     /// must be set if this run will perform requests to backends
     pub claim: Option<Claim>,
     pub secrets: HashMap<String, String>,
@@ -248,9 +247,7 @@ impl Built {
         provisioner_client: provisioner::Client,
     ) -> Result<JoinHandle<()>> {
         let project_path = builds_path.join(&self.service_name);
-        // For alpha this is the path to the users project with an embedded runtime.
-        // For shuttle-next this is the path to the compiled .wasm file, which will be
-        // used in the load request.
+        // This is the path to the users project with an embedded runtime.
         let executable_path = project_path
             .join(EXECUTABLE_DIRNAME)
             .join(self.id.to_string());
@@ -258,15 +255,8 @@ impl Built {
             .join(EXECUTABLE_DIRNAME)
             .join(format!("{}.resources", self.id));
 
-        // Let the runtime expose its user HTTP port on port 8000
-        let address = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 8000);
-
-        let alpha_runtime_path = if self.is_next {
-            // The runtime client for next is the installed shuttle-next bin
-            None
-        } else {
-            Some(executable_path)
-        };
+        // Let the runtime expose its HTTP port
+        let address = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), DEPLOYER_SERVICE_HTTP_PORT);
 
         let runtime_client = runtime_manager
             .lock()
@@ -275,7 +265,7 @@ impl Built {
                 self.id,
                 project_path.as_path(),
                 self.service_name.clone(),
-                alpha_runtime_path,
+                executable_path,
             )
             .await
             .map_err(Error::Runtime)?;
@@ -509,7 +499,7 @@ async fn provision(
         match shuttle_resource.r#type {
             resource::Type::Database(db_type) => {
                 // no config fields are used yet, but verify the format anyways
-                let _config: DbInput = serde_json::from_value(shuttle_resource.config.clone())
+                let config: DbInput = serde_json::from_value(shuttle_resource.config.clone())
                     .context("deserializing resource config")?;
 
                 let output = get_cached_output(&shuttle_resource, prev_resources.as_slice());
@@ -521,6 +511,7 @@ async fn provision(
                         let mut req = Request::new(DatabaseRequest {
                             project_name: project_name.to_string(),
                             db_type: Some(db_type.into()),
+                            db_name: config.db_name,
                             // other relevant config fields would go here
                         });
                         req.extensions_mut().insert(claim.clone());

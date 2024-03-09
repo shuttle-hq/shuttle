@@ -24,6 +24,13 @@ macro_rules! aws_engine {
 
                     self
                 }
+
+                /// Use something other than the project name as the DB name
+                pub fn database_name(mut self, database_name: &str) -> Self {
+                    self.0.db_name = Some(database_name.to_string());
+
+                    self
+                }
             }
 
             #[cfg(feature = $feature)]

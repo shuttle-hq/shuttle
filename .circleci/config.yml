@@ -4,7 +4,7 @@ orbs:
   docker-buildx: sensu/docker-buildx@1.1.1
   aws-ecr: circleci/aws-ecr@8.2.1
   win: circleci/windows@5.0
-  macos: circleci/macos@2.3.6
+  macos: circleci/macos@2.4.1
 
 executors:
   docker-rust:
@@ -33,7 +33,7 @@ commands:
       - run:
           name: Install sccache
           command: |
-            SCCACHE_VERSION='v0.5.4'
+            SCCACHE_VERSION='v0.7.7'
             ls ~/.cargo/bin/sccache \
               || curl -L https://github.com/mozilla/sccache/releases/download/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz \
                 | tar -xOz sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache \
@@ -93,29 +93,6 @@ commands:
             - ~/.cargo/registry/cache
             - ~/.cargo/registry/index
             - ~/.cargo/git/db
-  restore-buildx-cache:
-    steps:
-      - docker-buildx/install:
-          version: 0.8.2
-          qemu-user-static-version: 7.0.0-7
-      - restore_cache:
-          name: Restore buildx cache
-          keys:
-            # Try lock cache first
-            - docker-buildx-{{ checksum "Cargo.lock" }}
-            # Try branch cache next
-            - docker-buildx-{{ .Branch }}
-      - run:
-          name: Configure buildx cache
-          command: export BUILDX_CACHE=/tmp/cache/buildx
-  save-buildx-cache:
-    steps:
-      - save_cache:
-          name: Save buildx cache
-          paths:
-            - "/tmp/cache/buildx"
-          key: docker-buildx-{{ checksum "Cargo.lock" }}-{{ epoch }}
-          when: always
   apply-patches:
     steps:
       - run:
@@ -124,10 +101,9 @@ commands:
   install-rust:
     steps:
       - run:
-          name: Install Rust and wasm32-wasi
+          name: Install Rust (MSRV)
           # Note: Let CI use our MSRV, rather than latest
           command: which cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75.0
-      - run: rustup target add wasm32-wasi
   install-protoc:
     steps:
       - run:
@@ -160,12 +136,17 @@ commands:
       - run:
           name: Install cargo-audit
           environment:
-            VERSION: "v0.18.3"
+            VERSION: "v0.20.0"
           command: |
             curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit/$VERSION/cargo-audit-x86_64-unknown-linux-musl-$VERSION.tgz \
               | tar -xOz cargo-audit-x86_64-unknown-linux-musl-$VERSION/cargo-audit \
               > ~/.cargo/bin/cargo-audit \
               && chmod +x ~/.cargo/bin/cargo-audit
+  set-git-tag:
+    steps:
+      - run:
+          name: Set git tag in BASH_ENV
+          command: echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
   make-artifact:
     parameters:
       target:
@@ -176,10 +157,7 @@ commands:
         type: string
         default: ""
     steps:
-      - run:
-          name: Set git tag in the environment
-          command: |
-            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+      - set-git-tag
       - run:
           name: Set binary directory in the environment
           command: |
@@ -304,13 +282,7 @@ jobs:
       - install-rust
       - checkout
       - run: git submodule update --init
-      - restore-buildx-cache
-      - run:
-          name: Make images for tests
-          command: |
-            sudo mkdir -p $BUILDX_CACHE && sudo chown -R circleci:circleci $BUILDX_CACHE
-            make images
-      - save-buildx-cache
+      - run: make images
       - apply-patches
       - run:
           name: Run the E2E tests
@@ -318,18 +290,9 @@ jobs:
             # clean up a potential existing deployments before running
             # the tests just in case the environment is not clean
             make down
-            BUILDX_CACHE=/tmp/cache/buildx make up
-
+            make up
             SHUTTLE_TESTS_NETWORK=shuttle-dev_user-net SHUTTLE_TESTS_RUNTIME_IMAGE=public.ecr.aws/shuttle-dev/deployer:latest cargo test --package shuttle-gateway --all-features --lib -- --nocapture
-
-            # runs tests in e2e crate
-            BUILDX_CACHE=/tmp/cache/buildx make test
-      - save_cache:
-          name: Save buildx cache
-          paths:
-            - /tmp/cache/buildx
-          key: docker-buildx-{{ .Branch }}-{{ .Revision }}
-          when: always
+            make test
   build-and-push:
     executor: machine-ubuntu
     parameters:
@@ -349,23 +312,21 @@ jobs:
         default: staging
     steps:
       - checkout
-      - run:
-          name: Set git tag in bash_env
-          command: |
-            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
-      - restore-buildx-cache
+      - set-git-tag
       - aws-ecr/ecr-login:
           aws-access-key-id: << parameters.aws-access-key-id >>
           aws-secret-access-key: << parameters.aws-secret-access-key >>
           public-registry: << parameters.public-registry >>
-          # `registry-id`` field is required, although we don't need it (used for private registry).
+          # `registry-id` field is required, although we don't need it (used for private registry).
           # We give it a non-empty env variable name to bypass the `ecr-login` empty check.
           registry-id: TAG
+      - docker-buildx/install:
+          version: 0.12.1
+          qemu-user-static-version: 7.2.0-1
       - run:
           name: Make and push images
           command: |
-            PUSH=true SHUTTLE_SERVICE_VERSION=$TAG SHUTTLE_ENV=<< parameters.shuttle-env >> PLATFORMS=linux/amd64 TAG=$TAG make images
-      - save-buildx-cache
+            PUSH=true SHUTTLE_ENV=<< parameters.shuttle-env >> PLATFORMS=linux/amd64 TAG=$TAG SHUTTLE_SERVICE_VERSION=$TAG make images
   deploy-images:
     executor: machine-ubuntu
     resource_class: medium
@@ -415,10 +376,7 @@ jobs:
         type: string
     steps:
       - checkout
-      - run:
-          name: Set git tag in bash_env
-          command: |
-            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
+      - set-git-tag
       - add_ssh_keys:
           fingerprints:
             - << parameters.ssh-fingerprint >>
@@ -462,14 +420,11 @@ jobs:
                   ssh ec2-user@controller.<< parameters.ssh-host >> "docker pull public.ecr.aws/shuttle-dev/deployer:$TAG"
   build-binaries-linux:
     machine:
-      image: << parameters.image >>
+      image: default
     resource_class: << parameters.resource_class >>
     parameters:
       target:
         description: "Linux target to build for"
-        type: string
-      image:
-        description: "Machine image to use"
         type: string
       resource_class:
         description: "The resource type to use for the machine"
@@ -491,14 +446,13 @@ jobs:
           target: << parameters.target >>
   build-binaries-windows:
     executor:
-      name: win/server-2022
+      name: win/default
       size: xlarge
       shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - checkout
-      - run: choco install -y strawberryperl
       - run:
           name: Install Rust
           # Note: Let binary build use latest
@@ -509,9 +463,6 @@ jobs:
       - run:
           name: Build
           command: |
-            # From https://github.com/alexcrichton/openssl-src-rs/issues/45
-            # Because of https://github.com/openssl/openssl/issues/9048
-            $env:OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
             ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - make-artifact:
@@ -519,7 +470,7 @@ jobs:
           suffix: ".exe"
   build-binaries-mac:
     macos:
-      xcode: 14.2.0
+      xcode: 15.3.0
     resource_class: macos.m1.medium.gen1
     steps:
       - checkout
@@ -554,11 +505,11 @@ jobs:
           # the artifacts directory before passing it to ghr
           command: |
             find artifacts -mindepth 2 -type f -exec mv -t artifacts {} +
-            go install github.com/tcnksm/ghr@v0.16.0
+            go install github.com/tcnksm/ghr@v0.16.2
             ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft ${TAG} ./artifacts/
   linux-qa:
     machine:
-      image: ubuntu-2004:current
+      image: default
     resource_class: medium
     steps:
       - checkout
@@ -580,16 +531,13 @@ jobs:
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule update --init
-      - run:
-          name: Test WASM
-          command: ./.circleci/qa-wasm.sh
       # - run:
       #     name: Test Docker
       #     command: ./.circleci/qa-docker.sh
   mac-qa:
     macos:
-      xcode: 12.5.1
-    resource_class: medium
+      xcode: 15.3.0
+    resource_class: macos.m1.medium.gen1
     steps:
       - checkout
       - run:
@@ -610,9 +558,6 @@ jobs:
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule update --init
-      - run:
-          name: Test WASM
-          command: ./.circleci/qa-wasm.sh
       # We can't run Docker inside the MacOs executor at this time
       # https://support.circleci.com/hc/en-us/articles/360045029591-Can-I-use-Docker-within-the-macOS-executor-
       # - run:
@@ -650,15 +595,12 @@ jobs:
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule update --init
-      # - run:
-      #     name: Test WASM
-      #     command: ./.circleci/qa-wasm.ps1
       # We can't run linux containers on the Windows executor at this time
       # https://circleci.com/docs/using-windows/#known-issues-and-limitations
       # - run:
       #     name: Test Docker
       #     command: ./.circleci/qa-docker.ps1
-  publish-crates:
+  publish-crate:
     parameters:
       path:
         description: Path to crate to publish
@@ -698,7 +640,6 @@ workflows:
                 - resources/opendal
                 - services/shuttle-actix-web
                 - services/shuttle-axum
-                - services/shuttle-next
                 - services/shuttle-poem
                 - services/shuttle-rocket
                 - services/shuttle-salvo
@@ -838,7 +779,6 @@ workflows:
     jobs:
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
-          image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-gnu
           resource_class: xlarge
           filters:
@@ -846,7 +786,6 @@ workflows:
               only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-musl
-          image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-musl
           resource_class: xlarge
           filters:
@@ -854,7 +793,6 @@ workflows:
               only: production
       - build-binaries-linux:
           name: build-binaries-aarch64
-          image: ubuntu-2004:202101-01
           target: aarch64-unknown-linux-musl
           resource_class: arm.xlarge
           filters:
@@ -917,7 +855,7 @@ workflows:
           filters:
             branches:
               only: production
-      - publish-crates:
+      - publish-crate:
           matrix:
             parameters:
               path:
@@ -926,7 +864,7 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - approve-publish-crates
-      - publish-crates:
+      - publish-crate:
           matrix:
             parameters:
               path:
@@ -935,7 +873,7 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-common
-      - publish-crates:
+      - publish-crate:
           matrix:
             parameters:
               path:
@@ -950,7 +888,7 @@ workflows:
           name: publish-<< matrix.path >>
           requires:
             - publish-service
-      - publish-crates:
+      - publish-crate:
           matrix:
             parameters:
               path:
@@ -960,13 +898,12 @@ workflows:
           requires:
             - publish-service
             - publish-proto
-      - publish-crates:
+      - publish-crate:
           matrix:
             parameters:
               path:
                 - services/shuttle-actix-web
                 - services/shuttle-axum
-                - services/shuttle-next
                 - services/shuttle-poem
                 - services/shuttle-rocket
                 - services/shuttle-salvo

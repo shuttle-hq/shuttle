@@ -15,14 +15,28 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use anyhow::{anyhow, bail, Context, Result};
 use args::{ConfirmationArgs, GenerateCommand};
+use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
+use clap_complete::{generate, Shell};
 use clap_mangen::Man;
-
+use config::RequestContext;
+use crossterm::style::Stylize;
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use futures::{StreamExt, TryFutureExt};
+use git2::{Repository, StatusOptions};
+use globset::{Glob, GlobSetBuilder};
+use ignore::overrides::OverrideBuilder;
+use ignore::WalkBuilder;
+use indicatif::ProgressBar;
+use indoc::{formatdoc, printdoc};
 use shuttle_common::{
     constants::{
-        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXECUTABLE_DIRNAME, RESOURCE_SCHEMA_VERSION,
-        SHUTTLE_CLI_DOCS_URL, SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL,
-        SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME,
+        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
+        RESOURCE_SCHEMA_VERSION, SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL,
+        SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
@@ -35,7 +49,9 @@ use shuttle_common::{
         resource::get_resource_tables,
     },
     resource::{self, ResourceInput, ShuttleResourceOutput},
-    semvers_are_compatible, ApiKey, DatabaseResource, DbInput, LogItem, VersionInfo,
+    semvers_are_compatible,
+    templates::TemplatesSchema,
+    ApiKey, DatabaseResource, DbInput, LogItem, VersionInfo,
 };
 use shuttle_proto::{
     provisioner::{provisioner_server::Provisioner, DatabaseRequest},
@@ -45,23 +61,7 @@ use shuttle_service::{
     builder::{build_workspace, BuiltService},
     runner, Environment,
 };
-
-use anyhow::{anyhow, bail, Context, Result};
-use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
-use clap_complete::{generate, Shell};
-use config::RequestContext;
-use crossterm::style::Stylize;
-use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use futures::{StreamExt, TryFutureExt};
-use git2::{Repository, StatusOptions};
-use globset::{Glob, GlobSetBuilder};
-use ignore::overrides::OverrideBuilder;
-use ignore::WalkBuilder;
-use indicatif::ProgressBar;
-use indoc::{formatdoc, printdoc};
-use strum::IntoEnumIterator;
+use strum::{EnumMessage, VariantArray};
 use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
@@ -73,13 +73,12 @@ use uuid::Uuid;
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
     DeployArgs, DeploymentCommand, InitArgs, LoginArgs, LogoutArgs, LogsArgs, ProjectCommand,
-    ProjectStartArgs, ResourceCommand, EXAMPLES_REPO,
+    ProjectStartArgs, ResourceCommand, TemplateLocation,
 };
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -198,13 +197,20 @@ impl Shuttle {
                 client.set_api_key(self.ctx.api_key()?);
             }
             self.client = Some(client);
-            self.check_api_versions().await?;
+            if !args.offline {
+                self.check_api_versions().await?;
+            }
         }
 
         let res = match args.cmd {
             Command::Init(init_args) => {
-                self.init(init_args, args.project_args, provided_path_to_init)
-                    .await
+                self.init(
+                    init_args,
+                    args.project_args,
+                    provided_path_to_init,
+                    args.offline,
+                )
+                .await
             }
             Command::Generate(GenerateCommand::Manpage) => self.generate_manpage(),
             Command::Generate(GenerateCommand::Shell { shell, output }) => {
@@ -310,6 +316,7 @@ impl Shuttle {
         args: InitArgs,
         mut project_args: ProjectArgs,
         provided_path_to_init: bool,
+        offline: bool,
     ) -> Result<CommandOutcome> {
         // Turns the template or git args (if present) to a repo+folder.
         let git_template = args.git_template()?;
@@ -393,50 +400,164 @@ impl Shuttle {
         let path = if needs_path {
             let path = args
                 .path
-                .to_str()
-                .context("path arg should always be set")?;
+                .join(project_args.name.as_ref().expect("name should be set"));
 
-            println!("Where should we create this project?");
-            let directory_str: String = Input::with_theme(&theme)
-                .with_prompt("Directory")
-                .default(path.to_owned())
-                .interact()?;
-            println!();
+            loop {
+                println!("Where should we create this project?");
 
-            let path = args::create_and_parse_path(OsString::from(directory_str))?;
+                let directory_str: String = Input::with_theme(&theme)
+                    .with_prompt("Directory")
+                    .default(format!("{}", path.display()))
+                    .interact()?;
+                println!();
 
-            if std::fs::read_dir(&path)
-                .expect("init dir to exist and list entries")
-                .count()
-                > 0
-                && !Confirm::with_theme(&theme)
-                    .with_prompt("Target directory is not empty. Are you sure?")
-                    .default(true)
-                    .interact()?
-            {
-                return Ok(CommandOutcome::Ok);
+                let path = args::create_and_parse_path(OsString::from(directory_str))?;
+
+                if std::fs::read_dir(&path)
+                    .expect("init dir to exist and list entries")
+                    .count()
+                    > 0
+                    && !Confirm::with_theme(&theme)
+                        .with_prompt("Target directory is not empty. Are you sure?")
+                        .default(true)
+                        .interact()?
+                {
+                    println!();
+                    continue;
+                }
+
+                break path;
             }
-
-            path
         } else {
             args.path.clone()
         };
 
-        // 4. Ask for the framework
+        // 4. Ask for the template
         let template = match git_template {
             Some(git_template) => git_template,
             None => {
-                println!(
-                    "Shuttle works with a range of web frameworks. Which one do you want to use?"
-                );
-                let frameworks = args::InitTemplateArg::iter().collect::<Vec<_>>();
-                let index = FuzzySelect::with_theme(&theme)
-                    .with_prompt("Framework")
-                    .items(&frameworks)
-                    .default(0)
-                    .interact()?;
-                println!();
-                frameworks[index].template()
+                // Try to present choices from our up-to-date examples.
+                // Fall back to the internal (potentially outdated) list.
+                let schema = if offline {
+                    None
+                } else {
+                    get_templates_schema()
+                        .await
+                        .map_err(|_| {
+                            println!(
+                                "{}",
+                                "Failed to look up template list. Falling back to internal list."
+                                    .yellow()
+                            )
+                        })
+                        .ok()
+                        .and_then(|s| {
+                            if s.version == TEMPLATES_SCHEMA_VERSION {
+                                return Some(s);
+                            }
+                            println!(
+                                "{}",
+                                "Template list with incompatible version found. Consider updating cargo-shuttle. Falling back to internal list."
+                                    .yellow()
+                            );
+
+                            None
+                        })
+                };
+                if let Some(schema) = schema {
+                    println!("What type of project template would you like to start from?");
+                    let i = Select::with_theme(&theme)
+                        .items(&[
+                            "A Hello World app in a supported framework",
+                            "Browse our full library of templates", // TODO(when templates page is live): Add link to it?
+                        ])
+                        .clear(false)
+                        .default(0)
+                        .interact()?;
+                    println!();
+                    if i == 0 {
+                        // Use a Hello world starter
+                        let mut starters = schema.starters.into_values().collect::<Vec<_>>();
+                        starters.sort_by_key(|t| {
+                            // Make the "No templates" appear last in the list
+                            if t.title.starts_with("No") {
+                                "zzz".to_owned()
+                            } else {
+                                t.title.clone()
+                            }
+                        });
+                        let starter_strings = starters
+                            .iter()
+                            .map(|t| {
+                                format!("{} - {}", t.title.clone().bold(), t.description.clone())
+                            })
+                            .collect::<Vec<_>>();
+                        let index = Select::with_theme(&theme)
+                            .with_prompt("Select template")
+                            .items(&starter_strings)
+                            .default(0)
+                            .interact()?;
+                        println!();
+                        let path = starters[index]
+                            .path
+                            .clone()
+                            .expect("starter to have a path");
+
+                        TemplateLocation {
+                            auto_path: EXAMPLES_REPO.into(),
+                            subfolder: Some(path),
+                        }
+                    } else {
+                        // Browse all non-starter templates
+                        let mut templates = schema.templates.into_values().collect::<Vec<_>>();
+                        templates.sort_by_key(|t| t.title.clone());
+                        let template_strings = templates
+                            .iter()
+                            .map(|t| {
+                                format!(
+                                    "{} - {}{}",
+                                    t.title.clone().bold(),
+                                    t.description.clone(),
+                                    t.tags
+                                        .first()
+                                        .map(|tag| format!(" ({tag})").dim().to_string())
+                                        .unwrap_or_default(),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        let index = Select::with_theme(&theme)
+                            .with_prompt("Select template")
+                            .items(&template_strings)
+                            .default(0)
+                            .interact()?;
+                        println!();
+                        let path = templates[index]
+                            .path
+                            .clone()
+                            .expect("template to have a path");
+
+                        TemplateLocation {
+                            auto_path: EXAMPLES_REPO.into(),
+                            subfolder: Some(path),
+                        }
+                    }
+                } else {
+                    println!("Shuttle works with many frameworks. Which one do you want to use?");
+                    let frameworks = args::InitTemplateArg::VARIANTS;
+                    let framework_strings = frameworks
+                        .iter()
+                        .map(|t| {
+                            t.get_documentation()
+                                .expect("all template variants to have docs")
+                        })
+                        .collect::<Vec<_>>();
+                    let index = Select::with_theme(&theme)
+                        .items(&framework_strings)
+                        .default(0)
+                        .interact()?;
+                    println!();
+                    frameworks[index].template()
+                }
             }
         };
 
@@ -455,17 +576,6 @@ impl Shuttle {
             template,
             no_git,
         )?;
-        println!();
-
-        printdoc!(
-            "
-            Hint: Check the examples repo for a full list of templates:
-                  {EXAMPLES_REPO}
-            Hint: You can also use `cargo shuttle init --from` to clone templates.
-                  See {SHUTTLE_CLI_DOCS_URL}
-                  or run `cargo shuttle init --help`
-            "
-        );
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
@@ -947,85 +1057,37 @@ impl Shuttle {
             Default::default()
         };
 
-        let runtime_executable = if service.is_wasm {
-            let runtime_path = home::cargo_home()
-                .expect("failed to find cargo home dir")
-                .join("bin/shuttle-next");
-
-            println!("Installing shuttle-next runtime. This can take a while...");
-
-            if cfg!(debug_assertions) {
-                // Canonicalized path to shuttle-runtime for dev to work on windows
-
-                let path = dunce::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
-                    .expect("path to shuttle-runtime does not exist or is invalid");
-
-                tokio::process::Command::new("cargo")
-                    .arg("install")
-                    .arg("shuttle-runtime")
-                    .arg("--path")
-                    .arg(path)
-                    .arg("--bin")
-                    .arg("shuttle-next")
-                    .arg("--features")
-                    .arg("next")
-                    .output()
-                    .await
-                    .expect("failed to install the shuttle runtime");
-            } else {
-                // If the version of cargo-shuttle is different from shuttle-runtime,
-                // or it isn't installed, try to install shuttle-runtime from crates.io.
-                if let Err(err) = check_version(&runtime_path).await {
-                    warn!("{}", err);
-
-                    trace!("installing shuttle-runtime");
-                    tokio::process::Command::new("cargo")
-                        .arg("install")
-                        .arg("shuttle-runtime")
-                        .arg("--bin")
-                        .arg("shuttle-next")
-                        .arg("--features")
-                        .arg("next")
-                        .output()
-                        .await
-                        .expect("failed to install the shuttle runtime");
-                };
-            };
-
-            runtime_path
-        } else {
-            trace!(path = ?service.executable_path, "using alpha runtime");
-            if let Err(err) = check_version(&service.executable_path).await {
-                warn!("{}", err);
-                if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
-                    println!("Warning: {}.", mismatch);
-                    if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
-                        // The runtime is newer than cargo-shuttle so we
-                        // should help the user to update cargo-shuttle.
-                        printdoc! {"
-                            Hint: A newer version of cargo-shuttle is available.
-                                  Check out the installation docs for how to update: {SHUTTLE_INSTALL_DOCS_URL}",
-                        };
-                    } else {
-                        printdoc! {"
-                            Hint: A newer version of shuttle-runtime is available.
-                            Change its version to {} in Cargo.toml to update it, or
-                            run this command: cargo add shuttle-runtime@{}",
-                            mismatch.cargo_shuttle,
-                            mismatch.cargo_shuttle,
-                        };
-                    }
+        trace!(path = ?service.executable_path, "using alpha runtime");
+        if let Err(err) = check_version(&service.executable_path).await {
+            warn!("{}", err);
+            if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
+                println!("Warning: {}.", mismatch);
+                if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
+                    // The runtime is newer than cargo-shuttle so we
+                    // should help the user to update cargo-shuttle.
+                    printdoc! {"
+                        Hint: A newer version of cargo-shuttle is available.
+                                Check out the installation docs for how to update: {SHUTTLE_INSTALL_DOCS_URL}",
+                    };
                 } else {
-                    return Err(err.context(
-                        format!(
-                            "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct executable?",
-                            service.executable_path.display()
-                        )
-                    ));
+                    printdoc! {"
+                        Hint: A newer version of shuttle-runtime is available.
+                        Change its version to {} in Cargo.toml to update it, or
+                        run this command: cargo add shuttle-runtime@{}",
+                        mismatch.cargo_shuttle,
+                        mismatch.cargo_shuttle,
+                    };
                 }
+            } else {
+                return Err(err.context(
+                    format!(
+                        "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct executable?",
+                        service.executable_path.display()
+                    )
+                ));
             }
-            service.executable_path.clone()
-        };
+        }
+        let runtime_executable = service.executable_path.clone();
 
         // Child process and gRPC client for sending requests to it
         let (mut runtime, mut runtime_client) = runner::start(
@@ -1198,6 +1260,7 @@ impl Shuttle {
                             prov.provision_database(Request::new(DatabaseRequest {
                                 project_name: project_name.to_string(),
                                 db_type: Some(db_type.into()),
+                                db_name: config.db_name,
                             }))
                             .await?
                             .into_inner()
@@ -1322,7 +1385,6 @@ impl Shuttle {
             working_directory.display()
         );
 
-        // Compile all the alpha or shuttle-next services in the workspace.
         build_workspace(working_directory, run_args.release, tx, false).await
     }
 
@@ -2150,6 +2212,24 @@ impl Shuttle {
 
         Ok(bytes)
     }
+}
+
+// /// Can be used during testing
+// async fn get_templates_schema() -> Result<TemplatesSchema> {
+//     Ok(toml::from_str(include_str!(
+//         "../../examples/templates.toml"
+//     ))?)
+// }
+async fn get_templates_schema() -> Result<TemplatesSchema> {
+    let client = reqwest::Client::new();
+    Ok(toml::from_str(
+        &client
+            .get(shuttle_common::constants::EXAMPLES_TEMPLATES_TOML)
+            .send()
+            .await?
+            .text()
+            .await?,
+    )?)
 }
 
 fn is_dirty(repo: &Repository) -> Result<()> {

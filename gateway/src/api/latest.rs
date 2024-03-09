@@ -436,7 +436,10 @@ async fn route_project(
             .await?;
     }
 
-    let project = service.find_or_start_project(&project_name, sender).await?;
+    let project = service
+        .find_or_start_project(&project_name, sender)
+        .await?
+        .0;
     service
         .route(&project.state, &project_name, &scoped_user.user.name, req)
         .await

@@ -1,10 +1,5 @@
 COMMIT_SHA?=$(shell git rev-parse --short HEAD)
 
-ifeq ($(CI),true)
-BUILDX_CACHE?=/tmp/cache/buildx
-CACHE_FLAGS=--cache-to type=local,dest=$(BUILDX_CACHE),mode=max --cache-from type=local,src=$(BUILDX_CACHE)
-endif
-
 ifeq ($(PUSH),true)
 BUILDX_OP=--push
 else
@@ -15,7 +10,7 @@ ifdef PLATFORMS
 PLATFORM_FLAGS=--platform $(PLATFORMS)
 endif
 
-BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
+BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS)
 
 # The Rust version used by our containers
 # Can be updated to the latest stable

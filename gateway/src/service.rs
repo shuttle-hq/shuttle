@@ -874,11 +874,12 @@ impl GatewayService {
         self: &Arc<Self>,
         project_name: &ProjectName,
         task_sender: Sender<BoxedTask>,
-    ) -> Result<FindProjectPayload, Error> {
+    ) -> Result<(FindProjectPayload, bool), Error> {
         let mut project = self.find_project(project_name).await?;
 
         // Start the project if it is idle
-        if project.state.is_stopped() {
+        let is_stopped = project.state.is_stopped();
+        if is_stopped {
             trace!(shuttle.project.name = %project_name, "starting up idle project");
 
             let handle = self
@@ -895,7 +896,7 @@ impl GatewayService {
             project = self.find_project(project_name).await?;
         }
 
-        Ok(project)
+        Ok((project, is_stopped))
     }
 
     /// Get project id of a project, by name.

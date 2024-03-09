@@ -1,32 +1,24 @@
 [package]
 name = "shuttle-runtime"
-version = "0.40.0"
+version = "0.41.0"
 edition.workspace = true
 license.workspace = true
 description = "Runtime to start and manage any service that runs on shuttle"
-
-[[bin]]
-name = "shuttle-next"
-required-features = ["next"]
 
 [lib]
 doctest = false
 
 [dependencies]
-shuttle-codegen = { workspace = true, features = ["frameworks"] }
+shuttle-codegen = { workspace = true }
 shuttle-common = { workspace = true, features = ["extract_propagation"] }
 shuttle-proto = { workspace = true, features = ["runtime"] }
 shuttle-service = { workspace = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-cap-std = { version = "2.0.0", optional = true }
 chrono = { workspace = true }
 colored = { workspace = true, optional = true }
-futures = { workspace = true, optional = true }
-hyper = { workspace = true, optional = true }
 prost-types = { workspace = true }
-rmp-serde = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 strfmt = { workspace = true }
@@ -35,13 +27,9 @@ tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tracing-subscriber = { workspace = true, optional = true }
-wasi-common = { version = "13.0.0", optional = true }
-wasmtime = { version = "13.0.0", optional = true }
-wasmtime-wasi = { version = "13.0.0", optional = true }
 
 [dev-dependencies]
 portpicker = "0.1.1"
-futures = { workspace = true }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
 shuttle-proto = { workspace = true, features = ["provisioner"] }
 uuid = { workspace = true }
@@ -49,17 +37,6 @@ uuid = { workspace = true }
 [features]
 default = ["setup-tracing"]
 
-next = [
-    "cap-std",
-    "futures",
-    "hyper/server",
-    "rmp-serde",
-    "futures",
-    "wasi-common",
-    "wasmtime",
-    "wasmtime-wasi",
-    "shuttle-common/wasm",
-]
 setup-tracing = [
     "tracing-subscriber/default",
     "tracing-subscriber/env-filter",

@@ -11,8 +11,6 @@ if [[ "$SHUTTLE_ENV" != "production" ]]; then
     bash scripts/apply-patches.sh $CARGO_HOME/config.toml /usr/src/shuttle
 fi
 
-# Add the wasm32-wasi target for building shuttle-next
-rustup target add wasm32-wasi
 # Add the wasm32 target for building frontend frameworks
 rustup target add wasm32-unknown-unknown
 

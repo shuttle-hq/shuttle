@@ -346,7 +346,6 @@ async fn make_and_built(crate_name: &str) -> (Built, PathBuf) {
             service_id: Ulid::new(),
             project_id: Ulid::new(),
             tracing_context: Default::default(),
-            is_next: false,
             claim: Some(Claim::new(
                 "test".into(),
                 Vec::new(),

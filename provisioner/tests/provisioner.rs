@@ -93,6 +93,7 @@ mod needs_docker {
             db_type: Some(DbType::AwsRds(AwsRds {
                 engine: Some(Engine::Postgres(Default::default())),
             })),
+            db_name: Some("custom-name".to_string()),
         });
 
         // Add a claim that only allows for one RDS - the one that will be returned by r-r

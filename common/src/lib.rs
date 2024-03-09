@@ -10,6 +10,8 @@ pub mod deployment;
 pub type DeploymentId = uuid::Uuid;
 #[cfg(feature = "extract_propagation")]
 pub mod extract_propagation;
+#[cfg(feature = "claims")]
+pub mod limits;
 #[cfg(feature = "service")]
 pub mod log;
 #[cfg(feature = "service")]
@@ -19,12 +21,9 @@ pub mod models;
 pub mod resource;
 pub mod secrets;
 pub use secrets::{Secret, SecretStore};
-#[cfg(feature = "claims")]
-pub mod limits;
+pub mod templates;
 #[cfg(feature = "tracing")]
 pub mod tracing;
-#[cfg(feature = "wasm")]
-pub mod wasm;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
@@ -91,6 +90,8 @@ impl AsRef<str> for ApiKey {
 #[derive(Deserialize, Serialize, Default)]
 pub struct DbInput {
     pub local_uri: Option<String>,
+    /// Override the default db name. Only applies to RDS.
+    pub db_name: Option<String>,
 }
 
 /// The output produced by Shuttle DB resources

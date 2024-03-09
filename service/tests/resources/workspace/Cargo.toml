@@ -1,6 +1,6 @@
 [workspace]
 members = [
     "alpha",
-    "next",
+    "alpha2",
     "shared",
 ]

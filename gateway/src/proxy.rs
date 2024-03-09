@@ -2,6 +2,7 @@ use std::future::Future;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::{ConnectInfo, Path, State};
 use axum::headers::{HeaderMapExt, Host};
@@ -23,11 +24,13 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::cache::{CacheManagement, CacheManager};
 use shuttle_common::backends::headers::XShuttleProject;
+use shuttle_common::constants::DEPLOYER_SERVICE_HTTP_PORT;
 use shuttle_common::models::error::InvalidProjectName;
 use shuttle_common::models::project::ProjectName;
+use tokio::net::TcpSocket;
 use tokio::sync::mpsc::Sender;
 use tower_sanitize_path::SanitizePath;
-use tracing::{debug_span, error, field, trace};
+use tracing::{debug, debug_span, error, field, trace, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::AcmeClient;
@@ -97,10 +100,11 @@ async fn proxy(
     let target_ip = if let Some(ip) = { state.project_cache.get(project_name.as_str()) } {
         ip
     } else {
-        let ip = state
+        let (proj, was_stopped) = state
             .gateway
             .find_or_start_project(&project_name, state.task_sender.clone())
-            .await?
+            .await?;
+        let ip = proj
             .state
             .target_ip()?
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
@@ -109,9 +113,34 @@ async fn proxy(
             ip,
             std::time::Duration::from_millis(1000),
         );
+
+        if was_stopped {
+            // wait until service has started and opens its port, give up after 10s
+            span.in_scope(|| debug!("project waking up, checking service port"));
+
+            let addr = SocketAddr::new(ip, DEPLOYER_SERVICE_HTTP_PORT);
+            let _ = tokio::time::timeout(Duration::from_secs(10), async move {
+                let mut ms = 5;
+                loop {
+                    if let Ok(socket) = TcpSocket::new_v4() {
+                        if socket.connect(addr).await.is_ok() {
+                            debug!("service port detected open");
+                            break;
+                        }
+                    }
+                    trace!("waiting for service port to open");
+                    // exponential backoff
+                    tokio::time::sleep(Duration::from_millis(ms)).await;
+                    ms *= 2;
+                }
+            })
+            .instrument(span.clone())
+            .await;
+        }
+
         ip
     };
-    let target_url = format!("http://{}:{}", target_ip, 8000);
+    let target_url = format!("http://{}:{}", target_ip, DEPLOYER_SERVICE_HTTP_PORT);
 
     let cx = span.context();
     global::get_text_map_propagator(|propagator| {

@@ -11,7 +11,7 @@ shuttle-serenity = { version = "0.41.0", default-features = false, features = ["
 
 ### Example
 
-```rust,no_run
+```rust,ignore
 use anyhow::Context as _;
 use serenity::async_trait;
 use serenity::model::channel::Message;

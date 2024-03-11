@@ -1,4 +1,4 @@
--- All rows should have user_ids at this point
+-- All rows should have user_ids at this point (added in the application logic before this migration was introduced)
 ALTER TABLE users
 ALTER COLUMN user_id SET NOT NULL;
 

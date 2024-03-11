@@ -15,7 +15,7 @@ shuttle-runtime = { path = "../../runtime", version = "0.41.0", default-features
 
 [dev-dependencies] # for building doctests
 anyhow = "1.0.69"
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }
+tokio = "1.26.0"
 tracing = "0.1.37"
 
 [features]

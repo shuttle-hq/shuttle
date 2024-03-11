@@ -33,7 +33,7 @@ use tokio::{
     task::{JoinHandle, JoinSet},
 };
 use tonic::{Code, Request};
-use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
+use tracing::{debug, debug_span, error, field, info, instrument, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -426,7 +426,10 @@ fn get_cached_output<T: DeserializeOwned>(
     prev_resources
         .iter()
         .find(|resource| {
-            resource.r#type == shuttle_resource.r#type && resource.config == shuttle_resource.config
+            // TODO: verify only the config fields that are relevant for provisioning and resource caching.
+            // When provisioning currently we don't need any configs fields for existing Shuttle resources,
+            // so we can leave out the configs comparison.
+            resource.r#type == shuttle_resource.r#type // && resource.config == shuttle_resource.config
         })
         .and_then(|resource| {
             let cached_output = resource.data.clone();

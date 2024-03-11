@@ -108,19 +108,7 @@ pub enum Command {
     /// Stop this Shuttle service
     Stop,
     /// View the logs of a deployment in this Shuttle service
-    Logs {
-        /// Deployment ID to get logs for. Defaults to currently running deployment
-        id: Option<Uuid>,
-        #[arg(short, long)]
-        /// View logs from the most recent deployment (which is not always the latest running one)
-        latest: bool,
-        #[arg(short, long)]
-        /// Follow log output
-        follow: bool,
-        #[arg(long)]
-        /// Don't display timestamps and log origin tags
-        raw: bool,
-    },
+    Logs(LogsArgs),
     /// List or manage projects on Shuttle
     #[command(subcommand)]
     Project(ProjectCommand),
@@ -271,6 +259,9 @@ pub struct DeployArgs {
     /// Don't run pre-deploy tests
     #[arg(long, visible_alias = "nt")]
     pub no_test: bool,
+    /// Don't display timestamps and log origin tags
+    #[arg(long)]
+    pub raw: bool,
 
     #[command(flatten)]
     pub secret_args: SecretsArgs,
@@ -287,6 +278,9 @@ pub struct RunArgs {
     /// Use release mode for building the project
     #[arg(long, short = 'r')]
     pub release: bool,
+    /// Don't display timestamps and log origin tags
+    #[arg(long)]
+    pub raw: bool,
 
     #[command(flatten)]
     pub secret_args: SecretsArgs,
@@ -405,6 +399,21 @@ impl InitTemplateArg {
             subfolder: Some(path.to_string()),
         }
     }
+}
+
+#[derive(Parser, Clone, Debug, Default)]
+pub struct LogsArgs {
+    /// Deployment ID to get logs for. Defaults to currently running deployment
+    pub id: Option<Uuid>,
+    #[arg(short, long)]
+    /// View logs from the most recent deployment (which is not always the latest running one)
+    pub latest: bool,
+    #[arg(short, long)]
+    /// Follow log output
+    pub follow: bool,
+    /// Don't display timestamps and log origin tags
+    #[arg(long)]
+    pub raw: bool,
 }
 
 /// Helper function to parse and return the absolute path

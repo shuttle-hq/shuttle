@@ -96,7 +96,7 @@ mod plugins {
     ///     let secret = secrets.get("MY_API_KEY").unwrap();
     ///
     ///     let router = Router::new()
-    ///         .route("/", async move { format!("My secret is: {}", secret) });
+    ///         .route("/", || async move { format!("My secret is: {}", secret) });
     ///
     ///     Ok(router.into())
     /// }

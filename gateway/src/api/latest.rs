@@ -267,12 +267,26 @@ async fn delete_project(
 
     let project_name = scoped_user.scope.clone();
     let project = state.service.find_project(&project_name).await?;
+
     let project_id =
         Ulid::from_string(&project.project_id).expect("stored project id to be a valid ULID");
 
-    // Try to startup destroyed or errored projects
+    // Try to startup destroyed, errored or outdated projects
     let project_deletable = project.state.is_ready() || project.state.is_stopped();
-    if !(project_deletable) {
+    let lowest_restartable_version = semver::Version::new(0, 39, 0);
+    let version = project
+        .state
+        .container()
+        .and_then(|container_inspect_response| {
+            container_inspect_response.image.and_then(|inner| {
+                inner
+                    .strip_prefix("public.ecr.aws/shuttle/deployer:v")
+                    .and_then(|x| x.parse::<semver::Version>().ok())
+            })
+        })
+        .unwrap_or(lowest_restartable_version.clone());
+
+    if !project_deletable || version.le(&lowest_restartable_version) {
         let handle = state
             .service
             .new_task()

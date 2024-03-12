@@ -3,8 +3,7 @@
 ### Example
 
 ```rust,no_run
-#[macro_use]
-extern crate rocket;
+use rocket::{get, routes};
 
 #[get("/")]
 fn index() -> &'static str {

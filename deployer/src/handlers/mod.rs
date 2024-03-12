@@ -17,6 +17,7 @@ use chrono::{SecondsFormat, Utc};
 use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
 use shuttle_service::builder::clean_crate;
+use tonic::Code;
 use tracing::{error, field, info, info_span, instrument, trace, warn};
 use ulid::Ulid;
 use uuid::Uuid;
@@ -462,7 +463,14 @@ pub async fn get_logs(
                 error = &error as &dyn std::error::Error,
                 "failed to retrieve logs for deployment"
             );
-            Err(anyhow!("failed to retrieve logs for deployment").into())
+            match error.code() {
+                Code::OutOfRange => {
+                    Err(anyhow!("Too many log lines to be fetched in one request. You can redeploy your app to refresh the logs quota\n
+                    or if you'd like more flexibility around logs fetching, please reach out in a help thread\n
+                    on Shuttle's Discord server.").into())
+                }
+                _ => Err(anyhow!("failed to retrieve logs for deployment").into()),
+            }
         }
     }
 }

@@ -17,7 +17,7 @@ use shuttle_common::{
         DEPLOYER_END_MSG_COMPLETED, DEPLOYER_END_MSG_CRASHED, DEPLOYER_END_MSG_STARTUP_ERR,
         DEPLOYER_END_MSG_STOPPED, DEPLOYER_RUNTIME_START_FAILED, DEPLOYER_RUNTIME_START_RESPONSE,
     },
-    resource::{self, ProvisionResourceRequest, ResourceInput},
+    resource::{self, ResourceInput, Type},
     DatabaseResource, DbInput, SecretStore,
 };
 use shuttle_proto::{
@@ -414,27 +414,26 @@ async fn load(
     }
 }
 
-fn log(ty: resource::Type, msg: &str) {
+fn log(ty: &resource::Type, msg: &str) {
     info!("[Resource][{}] {}", ty, msg);
 }
 
 /// If an old resource with matching type + config and valid data exists, return it
 fn get_cached_output<T: DeserializeOwned>(
-    shuttle_resource: &ProvisionResourceRequest,
+    shuttle_resource_type: &Type,
+    config: &serde_json::Value,
     prev_resources: &[resource::Response],
 ) -> Option<T> {
     prev_resources
         .iter()
-        .find(|resource| {
-            resource.r#type == shuttle_resource.r#type && resource.config == shuttle_resource.config
-        })
+        .find(|resource| resource.r#type == *shuttle_resource_type && resource.config == *config)
         .and_then(|resource| {
             let cached_output = resource.data.clone();
-            log(shuttle_resource.r#type, "Found cached output");
+            log(shuttle_resource_type, "Found cached output");
             match serde_json::from_value::<T>(cached_output) {
                 Ok(output) => Some(output),
                 Err(_) => {
-                    log(shuttle_resource.r#type, "Failed to validate cached output");
+                    log(shuttle_resource_type, "Failed to validate cached output");
                     None
                 }
             }
@@ -501,12 +500,15 @@ async fn provision(
                 // no config fields are used yet, but verify the format anyways
                 let config: DbInput = serde_json::from_value(shuttle_resource.config.clone())
                     .context("deserializing resource config")?;
-
-                let output = get_cached_output(&shuttle_resource, prev_resources.as_slice());
+                // We pass a Null config right now because this is relevant only for updating the resources
+                // through the provisioner, which is something we don't support currently. If there will be
+                // config fields that are relevant for provisioner updates on top of resources, they should
+                // be cached.
+                let output = get_cached_output(&shuttle_resource.r#type, &serde_json::Value::Null, prev_resources.as_slice());
                 let output = match output {
                     Some(o) => o,
                     None => {
-                        log(shuttle_resource.r#type, "Provisioning...");
+                        log(&shuttle_resource.r#type, "Provisioning...");
                         // ###
                         let mut req = Request::new(DatabaseRequest {
                             project_name: project_name.to_string(),

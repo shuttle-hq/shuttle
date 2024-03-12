@@ -33,7 +33,7 @@ use tokio::{
     task::{JoinHandle, JoinSet},
 };
 use tonic::{Code, Request};
-use tracing::{debug, debug_span, error, field, info, instrument, warn, Instrument};
+use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 use uuid::Uuid;

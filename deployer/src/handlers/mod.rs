@@ -9,7 +9,6 @@ use axum::extract::{
 };
 use axum::extract::{DefaultBodyLimit, Extension, Query};
 use axum::handler::Handler;
-use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
 use axum::routing::{delete, get, post, Router};
 use axum::Json;
@@ -23,7 +22,6 @@ use uuid::Uuid;
 use shuttle_common::{
     backends::{
         auth::{AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
-        headers::XShuttleUserId,
         metrics::{Metrics, TraceLayer},
     },
     claims::{Claim, Scope},
@@ -153,14 +151,9 @@ impl RouterBuilder {
             .route_layer(from_extractor::<Metrics>())
             .layer(
                 TraceLayer::new(|request| {
-                    let user_id = request
-                        .headers()
-                        .typed_get::<XShuttleUserId>()
-                        .unwrap_or_default();
-
                     request_span!(
                         request,
-                        account.user_id = user_id.0,
+                        account.user_id = field::Empty,
                         request.params.project_name = field::Empty,
                         request.params.service_name = field::Empty,
                         request.params.deployment_id = field::Empty,

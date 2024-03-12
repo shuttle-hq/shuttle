@@ -21,7 +21,7 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use shuttle_common::backends::headers::{XShuttleAdminSecret, XShuttleUserId};
+use shuttle_common::backends::headers::XShuttleAdminSecret;
 use shuttle_common::claims::AccountTier;
 use shuttle_common::constants::SHUTTLE_IDLE_DOCS_URL;
 use shuttle_common::models::project::{ProjectName, State};
@@ -300,7 +300,6 @@ impl GatewayService {
         let control_key = self.control_key_from_project_name(project_name).await?;
 
         let headers = req.headers_mut();
-        headers.typed_insert(XShuttleUserId(user_id.clone()));
         headers.typed_insert(XShuttleAdminSecret(control_key));
         // deprecated, used for soft backward compatibility
         headers.insert("x-shuttle-account-name", user_id.parse().unwrap());

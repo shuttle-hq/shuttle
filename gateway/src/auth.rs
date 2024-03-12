@@ -37,7 +37,7 @@ where
         let user_id = claim.sub.clone();
 
         // Record current account name for tracing purposes
-        Span::current().record("account.user_id", &user_id.to_string());
+        Span::current().record("account.user_id", &user_id);
 
         let RouterState { service, .. } = RouterState::from_ref(state);
 

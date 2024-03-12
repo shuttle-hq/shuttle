@@ -23,7 +23,7 @@ use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::backends::headers::{X_SHUTTLE_ADMIN_SECRET, X_SHUTTLE_USER_ID};
+use shuttle_common::backends::headers::X_SHUTTLE_ADMIN_SECRET;
 use shuttle_common::constants::{default_idle_minutes, DEFAULT_IDLE_MINUTES};
 use shuttle_common::models::project::ProjectName;
 use shuttle_common::models::service;
@@ -1502,7 +1502,6 @@ impl Service {
                 .method(Method::PUT)
                 .uri(uri)
                 .header(AUTHORIZATION, format!("Bearer {}", jwt))
-                .header(X_SHUTTLE_USER_ID.clone(), GATEWAY_ADMIN_ACCOUNT_USER_ID)
                 .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
                 // deprecated, used for soft backward compatibility
                 .header("x-shuttle-account-name", GATEWAY_ADMIN_ACCOUNT_USER_ID)
@@ -1525,7 +1524,6 @@ impl Service {
         let req = Request::builder()
             .uri(uri)
             .header(AUTHORIZATION, format!("Bearer {}", jwt))
-            .header(X_SHUTTLE_USER_ID.clone(), GATEWAY_ADMIN_ACCOUNT_USER_ID)
             .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
             // deprecated, used for soft backward compatibility
             .header("x-shuttle-account-name", GATEWAY_ADMIN_ACCOUNT_USER_ID)

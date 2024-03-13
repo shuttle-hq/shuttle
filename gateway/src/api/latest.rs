@@ -267,17 +267,42 @@ async fn delete_project(
 
     let project_name = scoped_user.scope.clone();
     let project = state.service.find_project(&project_name).await?;
+
     let project_id =
         Ulid::from_string(&project.project_id).expect("stored project id to be a valid ULID");
 
-    // Try to startup destroyed or errored projects
+    // Try to startup destroyed, errored or outdated projects
     let project_deletable = project.state.is_ready() || project.state.is_stopped();
-    if !(project_deletable) {
+    let current_version: semver::Version = env!("CARGO_PKG_VERSION")
+        .parse()
+        .expect("to have a valid semver gateway version");
+
+    let version = project
+        .state
+        .container()
+        .and_then(|container_inspect_response| {
+            container_inspect_response.image.and_then(|inner| {
+                inner
+                    .strip_prefix("public.ecr.aws/shuttle/deployer:v")
+                    .and_then(|x| x.parse::<semver::Version>().ok())
+            })
+        })
+        // Defaulting to a version that introduced a breaking change.
+        // This was the last one that introduced it at the present
+        // moment.
+        .unwrap_or(semver::Version::new(0, 39, 0));
+
+    // We restart the project before deletion everytime
+    // we detect it is outdated, so that we avoid by default
+    // breaking changes that can happen on the deployer
+    // side in the future.
+    if !project_deletable || version < current_version {
         let handle = state
             .service
             .new_task()
             .project(project_name.clone())
             .and_then(task::restart(project_id))
+            .and_then(task::run_until_done())
             .send(&state.sender)
             .await?;
 

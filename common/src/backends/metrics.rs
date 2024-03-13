@@ -197,6 +197,7 @@ macro_rules! request_span {
             http.status_code = tracing::field::Empty,
             // A bunch of extra things for metrics
             // Should be able to make this clearer once `Valuable` support lands in tracing
+            request.path = path,
             $($field)*
         )
         }
@@ -252,6 +253,7 @@ mod tests {
                 .with_span_field("http.uri")
                 .with_span_field("http.method")
                 .with_span_field("http.status_code")
+                .with_span_field("request.path")
                 .was_closed()
                 .finalize();
 
@@ -295,6 +297,7 @@ mod tests {
                 .with_span_field("http.uri")
                 .with_span_field("http.method")
                 .with_span_field("http.status_code")
+                .with_span_field("request.path")
                 .with_span_field("request.params.user_name")
                 .with_span_field("extra")
                 .was_closed()

@@ -302,6 +302,7 @@ async fn delete_project(
             .new_task()
             .project(project_name.clone())
             .and_then(task::restart(project_id))
+            .and_then(task::run_until_done())
             .send(&state.sender)
             .await?;
 

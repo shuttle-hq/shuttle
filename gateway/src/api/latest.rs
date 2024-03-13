@@ -273,7 +273,10 @@ async fn delete_project(
 
     // Try to startup destroyed, errored or outdated projects
     let project_deletable = project.state.is_ready() || project.state.is_stopped();
-    let lowest_restartable_version = semver::Version::new(0, 39, 0);
+    let current_version: semver::Version = env!("CARGO_PKG_VERSION")
+        .parse()
+        .expect("to have a valid semver gateway version");
+
     let version = project
         .state
         .container()
@@ -284,9 +287,16 @@ async fn delete_project(
                     .and_then(|x| x.parse::<semver::Version>().ok())
             })
         })
-        .unwrap_or(lowest_restartable_version.clone());
+        // Defaulting to a version that introduced a breaking change.
+        // This was the last one that introduced it at the present
+        // moment.
+        .unwrap_or(semver::Version::new(0, 39, 0));
 
-    if !project_deletable || version.le(&lowest_restartable_version) {
+    // We restart the project before deletion everytime
+    // we detect it is outdated, so that we avoid by default
+    // breaking changes that can happen on the deployer
+    // side in the future.
+    if !project_deletable || version < current_version {
         let handle = state
             .service
             .new_task()

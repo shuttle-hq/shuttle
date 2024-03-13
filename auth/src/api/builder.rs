@@ -19,7 +19,8 @@ use crate::{
 };
 
 use super::handlers::{
-    convert_key, delete_subscription, get_public_key, get_user, get_user_by_name, post_subscription, post_user, put_user_reset_key
+    convert_key, delete_subscription, get_public_key, get_user, get_user_by_name,
+    post_subscription, post_user, put_user_reset_key,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;

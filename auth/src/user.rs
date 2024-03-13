@@ -49,7 +49,7 @@ pub struct UserManager {
 }
 
 impl UserManager {
-    /// Add subscriptions to and sync the tier of a user 
+    /// Add subscriptions to and sync the tier of a user
     async fn complete_user(&self, mut user: User) -> Result<User, Error> {
         let subscriptions: Vec<Subscription> = sqlx::query_as(
             "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE user_id = $1",

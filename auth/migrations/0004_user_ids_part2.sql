@@ -9,15 +9,17 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.constraint_column_usage WHERE table_name = 'users' AND constraint_name = 'idx_16440_sqlite_autoindex_users_1') THEN
         EXECUTE 'ALTER TABLE users RENAME CONSTRAINT idx_16440_sqlite_autoindex_users_1 TO users_pkey';
     END IF;
-    IF EXISTS (SELECT 1 FROM information_schema.constraint_column_usage WHERE table_name = 'users' AND constraint_name = 'idx_16440_sqlite_autoindex_users_2') THEN
-        EXECUTE 'ALTER TABLE users RENAME CONSTRAINT idx_16440_sqlite_autoindex_users_2 TO users_key_key';
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'users' AND indexname = 'idx_16440_sqlite_autoindex_users_2') THEN
+        EXECUTE 'ALTER TABLE users DROP CONSTRAINT idx_16440_sqlite_autoindex_users_2';
+        EXECUTE 'ALTER TABLE users ADD CONSTRAINT users_key_key UNIQUE(key)';
     END IF;
     -- prod
     IF EXISTS (SELECT 1 FROM information_schema.constraint_column_usage WHERE table_name = 'users' AND constraint_name = 'idx_20519_sqlite_autoindex_users_1') THEN
         EXECUTE 'ALTER TABLE users RENAME CONSTRAINT idx_20519_sqlite_autoindex_users_1 TO users_pkey';
     END IF;
-    IF EXISTS (SELECT 1 FROM information_schema.constraint_column_usage WHERE table_name = 'users' AND constraint_name = 'idx_20519_sqlite_autoindex_users_2') THEN
-        EXECUTE 'ALTER TABLE users RENAME CONSTRAINT idx_20519_sqlite_autoindex_users_2 TO users_key_key';
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'users' AND indexname = 'idx_20519_sqlite_autoindex_users_2') THEN
+        EXECUTE 'ALTER TABLE users DROP CONSTRAINT idx_20519_sqlite_autoindex_users_2';
+        EXECUTE 'ALTER TABLE users ADD CONSTRAINT users_key_key UNIQUE(key)';
     END IF;
 END$$;
 --------

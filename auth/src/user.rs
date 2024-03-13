@@ -111,8 +111,8 @@ impl UserManagement for UserManager {
     }
 
     async fn get_user_by_name(&self, account_name: &str) -> Result<User, Error> {
-        let mut user: User = sqlx::query_as("SELECT * FROM users WHERE account_name = $1")
-            .bind(&account_name)
+        let user: User = sqlx::query_as("SELECT * FROM users WHERE account_name = $1")
+            .bind(account_name)
             .fetch_optional(&self.pool)
             .await?
             .ok_or(Error::UserNotFound)?;

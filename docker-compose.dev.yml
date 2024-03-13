@@ -116,3 +116,11 @@ services:
       - 8004:8000
       # the shared postgres already uses 5432
       - 5434:5432
+  permit-dpd:
+    image: "docker.io/permitio/pdp-v2:latest"
+    environment:
+      PDP_API_KEY: "permit_key_ANBv6Neo3PebuyB2gwGxglZFzuCsCQvcJ2XLRUFJLnlQwSyddCzUp6RqCidTex54ns5fduMuX5bLDkK3aMszBJ"
+      PDP_DEBUG: True
+      PDP_CONTROL_PLANE: "https://api.eu-central-1.permit.io"
+    ports:
+      - 7000:7000

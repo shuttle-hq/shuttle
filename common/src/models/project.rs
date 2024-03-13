@@ -17,6 +17,7 @@ pub struct Response {
     pub name: String,
     pub state: State,
     pub idle_minutes: Option<u64>,
+    pub is_admin: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]

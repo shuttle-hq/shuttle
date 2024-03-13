@@ -19,7 +19,6 @@ use crate::{AccountName, Error, ErrorKind};
 /// is valid against the user's owned resources.
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
 pub struct User {
-    pub projects: Vec<ProjectName>,
     pub claim: Claim,
     pub name: AccountName,
 }
@@ -40,11 +39,8 @@ where
         // Record current account name for tracing purposes
         Span::current().record("account.name", &name.to_string());
 
-        let RouterState { service, .. } = RouterState::from_ref(state);
-
         let user = User {
             claim: claim.clone(),
-            projects: service.iter_user_projects(&name).await?.collect(),
             name,
         };
 
@@ -75,6 +71,7 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let user = User::from_request_parts(parts, state).await?;
+        let RouterState { service, permit_client, .. } = RouterState::from_ref(state);
 
         let scope = match Path::<ProjectName>::from_request_parts(parts, state).await {
             Ok(Path(p)) => p,
@@ -84,7 +81,9 @@ where
                 .map_err(|_| Error::from(ErrorKind::InvalidProjectName(InvalidProjectName)))?,
         };
 
-        if user.projects.contains(&scope) || user.claim.scopes.contains(&Scope::Admin) {
+        let project_id = service.project_id(&scope).await?;
+
+        if permit_client.allowed(&user.name.0.replace("github-", "github|"), &project_id, "read").await || user.claim.scopes.contains(&Scope::Admin) {
             Ok(Self { user, scope })
         } else {
             Err(Error::from(ErrorKind::ProjectNotFound(scope.to_string())))

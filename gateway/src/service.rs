@@ -397,6 +397,19 @@ impl GatewayService {
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound(project_name.to_string())))
     }
 
+    pub async fn find_project_name(
+        &self,
+        project_id: &str,
+    ) -> Result<ProjectName, Error> {
+        let name = query("SELECT project_name FROM projects WHERE project_id = ?1")
+            .bind(project_id)
+            .fetch_one(&self.db)
+            .await?
+            .get("project_name");
+
+        Ok(name)
+    }
+
     pub async fn project_name_exists(&self, project_name: &ProjectName) -> Result<bool, Error> {
         Ok(
             query("SELECT project_name FROM projects WHERE project_name=?1")
@@ -405,6 +418,33 @@ impl GatewayService {
                 .await?
                 .is_some(),
         )
+    }
+
+    pub async fn get_project_detailed(
+        &self,
+        project_id: &str,
+    ) -> Result<(String, ProjectName, Project), Error> {
+        let row = query("SELECT project_id, project_name, project_state FROM projects WHERE project_id = ?")
+            .bind(project_id)
+            .fetch_one(&self.db)
+            .await?;
+
+        Ok((
+            row.get("project_id"),
+            row.get("project_name"),
+            // This can be invalid JSON if it refers to an outdated Project state
+            row.try_get::<SqlxJson<Project>, _>("project_state")
+                .map(|p| p.0)
+                .unwrap_or_else(|err| {
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        "Failed to deser `project_state`"
+                    );
+                    Project::Errored(ProjectError::internal(
+                        "Error when trying to deserialize state of project.",
+                    ))
+                }),
+        ))
     }
 
     pub async fn iter_user_projects_detailed(
@@ -495,19 +535,6 @@ impl GatewayService {
             .map(|row| row.try_get("initial_key").unwrap())
             .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound(project_name.to_string())))?;
         Ok(control_key)
-    }
-
-    pub async fn iter_user_projects(
-        &self,
-        AccountName(account_name): &AccountName,
-    ) -> Result<impl Iterator<Item = ProjectName>, Error> {
-        let iter = query("SELECT project_name FROM projects WHERE account_name = ?1")
-            .bind(account_name)
-            .fetch_all(&self.db)
-            .await?
-            .into_iter()
-            .map(|row| row.try_get::<ProjectName, _>("project_name").unwrap());
-        Ok(iter)
     }
 
     pub async fn create_project(

@@ -14,11 +14,14 @@ use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::{StatusCode, Uri};
+use http::header::{ORIGIN, AUTHORIZATION};
+use http::{StatusCode, Uri, Method};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
 use shuttle_common::backends::cache::CacheManager;
+use shuttle_common::backends::client::permit::{self, OrganizationResource};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::backends::ClaimExt;
 use shuttle_common::claims::{Scope, EXP_MINUTES};
@@ -35,7 +38,9 @@ use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
+use tokio::time::sleep;
 use tower::ServiceBuilder;
+use tower_http::cors::CorsLayer;
 use tracing::{error, field, instrument, trace};
 use ttl_cache::TtlCache;
 use ulid::Ulid;
@@ -114,6 +119,7 @@ async fn get_project(
         name: scope.to_string(),
         state: project.state.into(),
         idle_minutes,
+        is_admin: false, // TODO: fix this
     };
 
     Ok(AxumJson(response))
@@ -131,31 +137,178 @@ async fn check_project_name(
 }
 
 async fn get_projects_list(
-    State(RouterState { service, .. }): State<RouterState>,
+    State(RouterState { service, permit_client, .. }): State<RouterState>,
     User { name, .. }: User,
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
-    let limit = limit.unwrap_or(u32::MAX);
-    let page = page.unwrap_or(0);
-    let projects = service
-        // The `offset` is page size * amount of pages
-        .iter_user_projects_detailed(&name, limit * page, limit)
-        .await?
-        .map(|project| project::Response {
+    let projects_perms = permit_client.get_user_projects(&name.0.replace("github-", "github|")).await;
+
+    // let limit = limit.unwrap_or(u32::MAX);
+    // let page = page.unwrap_or(0);
+
+    let mut projects = Vec::with_capacity(projects_perms.len());
+
+    for project in projects_perms {
+        let is_admin = project.roles.contains(&"admin".to_string());
+        let project = service.get_project_detailed(&project.resource.key).await.unwrap();
+
+        projects.push(project::Response {
             id: project.0.to_uppercase(),
             name: project.1.to_string(),
             idle_minutes: project.2.idle_minutes(),
             state: project.2.into(),
+            is_admin,
         })
-        .collect();
+    }
 
     Ok(AxumJson(projects))
+}
+
+// TODO: add allowed checks
+#[instrument(skip_all)]
+async fn create_organization(
+    State(RouterState {
+        permit_client,
+        ..
+    }): State<RouterState>,
+    User { name, .. }: User,
+    CustomErrorPath(organization_name): CustomErrorPath<String>,
+) -> Result<AxumJson<Value>, Error> {
+    permit_client.create_organization(&name.0.replace("github-", "github|"), &organization_name).await;
+
+    Ok(AxumJson(json!({"success": true})))
+}
+
+#[instrument(skip_all)]
+async fn delete_organization(
+    State(RouterState {
+        permit_client,
+        ..
+    }): State<RouterState>,
+    User { name, .. }: User,
+    CustomErrorPath(organization_id): CustomErrorPath<String>,
+) -> Result<AxumJson<Value>, Error> {
+    permit_client.delete_organization(&organization_id).await;
+
+    Ok(AxumJson(json!({"success": true})))
+}
+
+#[instrument(skip_all)]
+async fn get_organizations(
+    State(RouterState {
+        permit_client,
+        ..
+    }): State<RouterState>,
+    User { name, .. }: User,
+) -> Result<AxumJson<Value>, Error> {
+    let orgs = permit_client.get_organizations(&name.0.replace("github-", "github|")).await;
+
+    Ok(AxumJson(orgs))
+}
+
+#[instrument(skip_all)]
+async fn get_organization(
+    State(RouterState {
+        service,
+        permit_client,
+        ..
+    }): State<RouterState>,
+    User { name, .. }: User,
+    CustomErrorPath(organization_name): CustomErrorPath<String>,
+) -> Result<AxumJson<Value>, Error> {
+    // TODO: check if user is allowed to get this organization
+    let mut projects = permit_client.get_organization_projects(&organization_name).await;
+
+    for project in projects.iter_mut() {
+        project.object_details.name = service.find_project_name(&project.object_details.key).await?.to_string();
+    }
+
+    let members = permit_client.get_organization_members(&organization_name).await;
+
+    Ok(AxumJson(json!({
+        "projects": projects,
+        "members": members
+    })))
+}
+
+#[instrument(skip_all)]
+async fn create_organization_project(
+    State(RouterState {
+        permit_client,
+        ..
+    }): State<RouterState>,
+    User { name, .. }: User,
+    CustomErrorPath((organization_name, project_id)): CustomErrorPath<(String, String)>,
+) -> Result<AxumJson<Value>, Error> {
+    // TODO: check if user is the project admin
+    permit_client.delete_user_project(&name.0.replace("github-", "github|"), &project_id).await;
+
+    // TODO: check if user is the org admin
+    permit_client.create_organization_project(&organization_name, &project_id).await;
+
+    // Permit is a bit slow for the console UI
+    sleep(Duration::from_millis(100)).await;
+
+    Ok(AxumJson(json!({"success": true})))
+}
+
+#[instrument(skip_all)]
+async fn delete_organization_project(
+    State(RouterState {
+        permit_client,
+        ..
+    }): State<RouterState>,
+    User { name, .. }: User,
+    CustomErrorPath((organization_name, project_id)): CustomErrorPath<(String, String)>,
+) -> Result<AxumJson<Value>, Error> {
+    // TODO: check if user is the org admin
+    permit_client.delete_organization_project(&organization_name, &project_id).await;
+
+    permit_client.create_project(&name.0.replace("github-", "github|"), &project_id).await;
+
+    // Permit is a bit slow for the console UI
+    sleep(Duration::from_millis(100)).await;
+
+    Ok(AxumJson(json!({"success": true})))
+}
+
+#[instrument(skip_all)]
+async fn create_organization_member(
+    State(RouterState {
+        permit_client,
+        ..
+    }): State<RouterState>,
+    User { name, .. }: User,
+    CustomErrorPath((organization_name, user_id)): CustomErrorPath<(String, String)>,
+) -> Result<AxumJson<Value>, Error> {
+    // TODO: check if user is the org admin
+    permit_client.create_organization_member(&organization_name, &user_id).await;
+
+    Ok(AxumJson(json!({"success": true})))
+}
+
+#[instrument(skip_all)]
+async fn delete_organization_member(
+    State(RouterState {
+        permit_client,
+        ..
+    }): State<RouterState>,
+    User { name, .. }: User,
+    CustomErrorPath((organization_name, user_id)): CustomErrorPath<(String, String)>,
+) -> Result<AxumJson<Value>, Error> {
+    // TODO: check if user is the org admin
+    permit_client.delete_organization_member(&organization_name, &user_id).await;
+
+    Ok(AxumJson(json!({"success": true})))
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name))]
 async fn create_project(
     State(RouterState {
-        service, sender, ..
+        service,
+        sender,
+        permit_client,
+        ..
     }): State<RouterState>,
     User { name, claim, .. }: User,
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
@@ -198,11 +351,14 @@ async fn create_project(
         .send(&sender)
         .await?;
 
+    permit_client.create_project(&name.0.replace("github-", "github|"), &project.project_id).await;
+
     let response = project::Response {
         id: project.project_id.to_string().to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
+        is_admin: true,
     };
 
     Ok(AxumJson(response))
@@ -226,6 +382,7 @@ async fn destroy_project(
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
+        is_admin: true, // TODO: fix this
     };
 
     if response.state == shuttle_common::models::project::State::Destroyed {
@@ -781,6 +938,7 @@ pub(crate) struct RouterState {
     pub sender: Sender<BoxedTask>,
     pub running_builds: Arc<Mutex<TtlCache<Uuid, ()>>>,
     pub posthog_client: async_posthog::Client,
+    pub permit_client: permit::Client,
 }
 
 pub struct ApiBuilder {
@@ -888,7 +1046,32 @@ impl ApiBuilder {
 
         const CARGO_SHUTTLE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+        let cors = CorsLayer::new()
+            .allow_methods(vec![Method::GET, Method::POST, Method::PUT, Method::DELETE])
+            .allow_headers(vec![ORIGIN, AUTHORIZATION])
+            .allow_origin(tower_http::cors::Any);
+
         let project_routes = Router::new()
+            .route(
+                "/organizations",
+                    get(get_organizations)
+            )
+            .route(
+                "/organization/:organization_name",
+                    get(get_organization)
+                    .post(create_organization)
+                    .delete(delete_organization),
+            )
+            .route(
+                "/organization/:organization_name/project/:project_id",
+                    post(create_organization_project)
+                    .delete(delete_organization_project),
+            )
+            .route(
+                "/organization/:organization_name/member/:user_id",
+                    post(create_organization_member)
+                    .delete(delete_organization_member),
+            )
             .route(
                 "/projects/:project_name",
                 get(get_project.layer(ScopedLayer::new(vec![Scope::Project])))
@@ -936,7 +1119,8 @@ impl ApiBuilder {
                 get(get_projects_list.layer(ScopedLayer::new(vec![Scope::Project]))),
             )
             .route("/stats/load", post(post_load).delete(delete_load))
-            .nest("/admin", admin_routes);
+            .nest("/admin", admin_routes)
+            .layer(cors);
 
         self
     }
@@ -974,6 +1158,7 @@ impl ApiBuilder {
             sender,
             posthog_client,
             running_builds,
+            permit_client: permit::Client::new("permit_key_ANBv6Neo3PebuyB2gwGxglZFzuCsCQvcJ2XLRUFJLnlQwSyddCzUp6RqCidTex54ns5fduMuX5bLDkK3aMszBJ"),
         })
     }
 

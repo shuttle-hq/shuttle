@@ -20,6 +20,7 @@ headers = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 http-body = { version = "0.4.5", optional = true }
 hyper = { workspace = true, optional = true }
+hyper-tls = { version = "0.5.0", optional = true, features = ["vendored"] }
 jsonwebtoken = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
@@ -58,6 +59,7 @@ backend = [
     "axum/json",
     "claims",
     "hyper/client",
+    "hyper-tls",
     "opentelemetry_sdk",
     "opentelemetry-appender-tracing",
     "opentelemetry-otlp",

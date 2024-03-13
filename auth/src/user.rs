@@ -20,22 +20,14 @@ use crate::{api::UserManagerState, error::Error};
 
 #[async_trait]
 pub trait UserManagement: Send + Sync {
-    /// Create a user with the given tier
-    async fn create_user(&self, name: String, tier: AccountTier) -> Result<User, Error>;
+    /// Create a user with the given auth0 name and tier
+    async fn create_user(&self, account_name: String, tier: AccountTier) -> Result<User, Error>;
 
-    /// Change the tier for a user
     async fn update_tier(&self, user_id: &UserId, tier: AccountTier) -> Result<(), Error>;
-
-    /// Get a user by their user id
+    async fn get_user_by_name(&self, account_name: &str) -> Result<User, Error>;
     async fn get_user(&self, user_id: UserId) -> Result<User, Error>;
-
-    /// Get a user by their api key
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
-
-    /// Reset the key that belongs to an account
     async fn reset_key(&self, user_id: UserId) -> Result<(), Error>;
-
-    /// Insert a subscription for an account
     async fn insert_subscription(
         &self,
         user_id: &UserId,
@@ -43,8 +35,6 @@ pub trait UserManagement: Send + Sync {
         subscription_type: &models::user::SubscriptionType,
         subscription_quantity: i32,
     ) -> Result<(), Error>;
-
-    /// Delete a subscription from an account
     async fn delete_subscription(
         &self,
         user_id: &UserId,
@@ -58,10 +48,38 @@ pub struct UserManager {
     pub stripe_client: stripe::Client,
 }
 
+impl UserManager {
+    /// Add subscriptions to and sync the tier of a user 
+    async fn complete_user(&self, mut user: User) -> Result<User, Error> {
+        let subscriptions: Vec<Subscription> = sqlx::query_as(
+            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE user_id = $1",
+        )
+        .bind(&user.id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        if !subscriptions.is_empty() {
+            user.subscriptions = subscriptions;
+        }
+
+        // Sync the user tier based on the subscription validity, if any.
+        if let Err(err) = user.sync_tier(self).await {
+            error!(
+                error = &err as &dyn std::error::Error,
+                "failed syncing account"
+            );
+            return Err(err);
+        }
+        debug!("synced account");
+
+        Ok(user)
+    }
+}
+
 #[async_trait]
 impl UserManagement for UserManager {
-    async fn create_user(&self, name: String, tier: AccountTier) -> Result<User, Error> {
-        let user = User::new(name, ApiKey::generate(), tier, vec![]);
+    async fn create_user(&self, account_name: String, tier: AccountTier) -> Result<User, Error> {
+        let user = User::new(account_name, ApiKey::generate(), tier, vec![]);
 
         query(
             "INSERT INTO users (account_name, key, account_tier, user_id) VALUES ($1, $2, $3, $4)",
@@ -92,35 +110,24 @@ impl UserManagement for UserManager {
         }
     }
 
+    async fn get_user_by_name(&self, account_name: &str) -> Result<User, Error> {
+        let mut user: User = sqlx::query_as("SELECT * FROM users WHERE account_name = $1")
+            .bind(&account_name)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(Error::UserNotFound)?;
+
+        self.complete_user(user).await
+    }
+
     async fn get_user(&self, user_id: UserId) -> Result<User, Error> {
-        let mut user: User = sqlx::query_as("SELECT * FROM users WHERE user_id = $1")
+        let user: User = sqlx::query_as("SELECT * FROM users WHERE user_id = $1")
             .bind(&user_id)
             .fetch_optional(&self.pool)
             .await?
             .ok_or(Error::UserNotFound)?;
 
-        let subscriptions: Vec<Subscription> = sqlx::query_as(
-            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE user_id = $1",
-        )
-        .bind(&user.id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        if !subscriptions.is_empty() {
-            user.subscriptions = subscriptions;
-        }
-
-        // Sync the user tier based on the subscription validity, if any.
-        if let Err(err) = user.sync_tier(self).await {
-            error!(
-                error = &err as &dyn std::error::Error,
-                "failed syncing account"
-            );
-            return Err(err);
-        }
-        debug!("synced account");
-
-        Ok(user)
+        self.complete_user(user).await
     }
 
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error> {

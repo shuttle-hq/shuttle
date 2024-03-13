@@ -19,8 +19,7 @@ use crate::{
 };
 
 use super::handlers::{
-    convert_key, delete_subscription, get_public_key, get_user, post_subscription, post_user,
-    put_user_reset_key,
+    convert_key, delete_subscription, get_public_key, get_user, get_user_by_name, post_subscription, post_user, put_user_reset_key
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -62,11 +61,15 @@ impl Default for ApiBuilder {
 impl ApiBuilder {
     pub fn new() -> Self {
         let router = Router::new()
-            .route("/", get(|| async move {})) // Health check: 200 OK
+            // health check: 200 OK
+            .route("/", get(|| async move {}))
             .route("/auth/key", get(convert_key))
             .route("/public-key", get(get_public_key))
-            .route("/users/:user_id", get(get_user))
+            // users are created based on auth0 name by console
             .route("/users/:account_name/:account_tier", post(post_user))
+            // used by console to get user based on auth0 name
+            .route("/users/name/:account_name", get(get_user_by_name))
+            .route("/users/:user_id", get(get_user))
             .route("/users/reset-api-key", put(put_user_reset_key))
             .route("/users/:user_id/subscribe", post(post_subscription))
             .route(

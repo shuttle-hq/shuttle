@@ -29,6 +29,18 @@ pub(crate) async fn get_user(
     Ok(Json(user.into()))
 }
 
+#[instrument(skip_all, fields(account.name = %account_name, account.user_id = field::Empty))]
+pub(crate) async fn get_user_by_name(
+    _: Admin,
+    State(user_manager): State<UserManagerState>,
+    Path(account_name): Path<String>,
+) -> Result<Json<user::Response>, Error> {
+    let user = user_manager.get_user_by_name(&account_name).await?;
+    Span::current().record("account.user_id", &user.id);
+
+    Ok(Json(user.into()))
+}
+
 #[instrument(skip_all, fields(account.name = %account_name, account.tier = %account_tier, account.user_id = field::Empty))]
 pub(crate) async fn post_user(
     _: Admin,

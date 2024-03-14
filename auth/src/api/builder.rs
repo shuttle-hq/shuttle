@@ -66,10 +66,10 @@ impl ApiBuilder {
             .route("/", get(|| async move {}))
             .route("/auth/key", get(convert_key))
             .route("/public-key", get(get_public_key))
-            // users are created based on auth0 name by console
-            .route("/users/:account_name/:account_tier", post(post_user))
             // used by console to get user based on auth0 name
             .route("/users/name/:account_name", get(get_user_by_name))
+            // users are created based on auth0 name by console
+            .route("/users/:account_name/:account_tier", post(post_user))
             .route("/users/:user_id", get(get_user))
             .route("/users/reset-api-key", put(put_user_reset_key))
             .route("/users/:user_id/subscribe", post(post_subscription))

@@ -12,10 +12,13 @@ use anyhow::Context;
 use async_trait::async_trait;
 use core::future::Future;
 use shuttle_common::{extract_propagation::ExtractPropagationLayer, secrets::Secret};
-use shuttle_proto::runtime::{
-    runtime_server::{Runtime, RuntimeServer},
-    LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest, StopResponse,
-    SubscribeStopRequest, SubscribeStopResponse,
+use shuttle_proto::{
+    runtime::{
+        runtime_server::{Runtime, RuntimeServer},
+        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
+        StopResponse, SubscribeStopRequest, SubscribeStopResponse,
+    },
+    runtime::{Ping, Pong},
 };
 use shuttle_service::{ResourceFactory, Service};
 use tokio::sync::{
@@ -99,7 +102,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     }
 
     // where to serve the gRPC control layer
-    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
+    let addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), args.port);
 
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
@@ -412,5 +415,9 @@ where
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
+    }
+
+    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        Ok(Response::new(Pong {}))
     }
 }

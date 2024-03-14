@@ -15,12 +15,6 @@ pub struct StoreLogsResponse {
 pub struct LogsRequest {
     #[prost(string, tag = "1")]
     pub deployment_id: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct LogsRequestMode {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub mode: ::prost::alloc::string::String,
     #[prost(uint32, tag = "3")]
@@ -155,7 +149,7 @@ pub mod logger_client {
         /// Get stored logs
         pub async fn get_logs(
             &mut self,
-            request: impl tonic::IntoRequest<super::LogsRequestMode>,
+            request: impl tonic::IntoRequest<super::LogsRequest>,
         ) -> std::result::Result<tonic::Response<super::LogsResponse>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::new(
@@ -208,7 +202,7 @@ pub mod logger_server {
         /// Get stored logs
         async fn get_logs(
             &self,
-            request: tonic::Request<super::LogsRequestMode>,
+            request: tonic::Request<super::LogsRequest>,
         ) -> std::result::Result<tonic::Response<super::LogsResponse>, tonic::Status>;
         /// Server streaming response type for the GetLogsStream method.
         type GetLogsStreamStream: tonic::codegen::tokio_stream::Stream<
@@ -339,12 +333,12 @@ pub mod logger_server {
                 "/logger.Logger/GetLogs" => {
                     #[allow(non_camel_case_types)]
                     struct GetLogsSvc<T: Logger>(pub Arc<T>);
-                    impl<T: Logger> tonic::server::UnaryService<super::LogsRequestMode> for GetLogsSvc<T> {
+                    impl<T: Logger> tonic::server::UnaryService<super::LogsRequest> for GetLogsSvc<T> {
                         type Response = super::LogsResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::LogsRequestMode>,
+                            request: tonic::Request<super::LogsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move { <T as Logger>::get_logs(&inner, request).await };

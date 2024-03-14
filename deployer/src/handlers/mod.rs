@@ -35,7 +35,7 @@ use shuttle_common::{
     },
     request_span, LogItem,
 };
-use shuttle_proto::logger::{LogsRequest, LogsRequestMode};
+use shuttle_proto::logger::LogsRequest;
 
 use crate::persistence::{Deployment, Persistence, State};
 use crate::{
@@ -472,7 +472,7 @@ pub async fn get_logs(
         (None, None) => ("all", 0),
         _ => ("tail", 1000),
     };
-    let mut logs_request: tonic::Request<LogsRequestMode> = tonic::Request::new(LogsRequestMode {
+    let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),
         mode: mode.to_string(),
         len,
@@ -503,20 +503,32 @@ pub async fn get_logs_subscribe(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
+    Query(LogSize { head, tail }): Query<LogSize>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    ws_upgrade
-        .on_upgrade(move |s| logs_websocket_handler(s, deployment_manager, deployment_id, claim))
+    let (mode, len) = match (head, tail) {
+        (Some(len), None) => ("head", len),
+        (None, Some(len)) => ("tail", len),
+        (None, None) => ("all", 0),
+        _ => ("tail", 1000),
+    };
+    ws_upgrade.on_upgrade(move |s| {
+        logs_websocket_handler(s, deployment_manager, deployment_id, mode, len, claim)
+    })
 }
 
 async fn logs_websocket_handler(
     mut s: WebSocket,
     deployment_manager: DeploymentManager,
     deployment_id: Uuid,
+    mode: &str,
+    len: u32,
     claim: Claim,
 ) {
     let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),
+        mode: mode.to_string(),
+        len,
     });
 
     logs_request.extensions_mut().insert(claim);

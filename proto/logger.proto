@@ -8,7 +8,7 @@ service Logger {
   rpc StoreLogs(StoreLogsRequest) returns (StoreLogsResponse);
 
   // Get stored logs
-  rpc GetLogs(LogsRequestMode) returns (LogsResponse);
+  rpc GetLogs(LogsRequest) returns (LogsResponse);
 
   // Get fresh logs as they are incoming
   rpc GetLogsStream(LogsRequest) returns (stream LogLine);
@@ -24,12 +24,8 @@ message StoreLogsResponse {
 
 message LogsRequest {
   string deployment_id = 1;
-}
-
-message LogsRequestMode {
-  string deployment_id = 1;
   string mode = 2;
-  uint32 len = 3;
+  uint32 len =3;
 }
 
 message LogsResponse {

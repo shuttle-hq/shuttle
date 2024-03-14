@@ -4,8 +4,7 @@ use dal::{Dal, DalError};
 use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
 use shuttle_proto::logger::LogLine;
 use shuttle_proto::logger::{
-    logger_server::Logger, LogsRequest, LogsRequestMode, LogsResponse, StoreLogsRequest,
-    StoreLogsResponse,
+    logger_server::Logger, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,
 };
 use thiserror::Error;
 use tokio::sync::broadcast::Sender;
@@ -94,7 +93,7 @@ where
     #[tracing::instrument(skip(self))]
     async fn get_logs(
         &self,
-        request: Request<LogsRequestMode>,
+        request: Request<LogsRequest>,
     ) -> Result<Response<LogsResponse>, Status> {
         request.verify(Scope::Logs)?;
 
@@ -118,12 +117,16 @@ where
 
         // Subscribe as soon as possible
         let mut logs_rx = self.logs_tx.subscribe();
-        let LogsRequest { deployment_id } = request.into_inner();
+        let LogsRequest {
+            deployment_id,
+            mode,
+            len,
+        } = request.into_inner();
         let (tx, rx) = mpsc::channel(1);
 
         // Get logs before stream was started
         let logs = self
-            .get_logs(deployment_id.clone(), "tail".to_string(), 500)
+            .get_logs(deployment_id.clone(), mode.to_string(), len)
             .await?;
 
         tokio::spawn(async move {

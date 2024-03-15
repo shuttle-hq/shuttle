@@ -179,7 +179,7 @@ pub async fn get_services(
     Ok(Json(services))
 }
 
-#[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name))]
+#[instrument(skip_all, fields(shuttle.project.name = %project_name, shuttle.service.name = %service_name, account.user_id = field::Empty))]
 pub async fn get_service(
     Extension(persistence): Extension<Persistence>,
     CustomErrorPath((project_name, service_name)): CustomErrorPath<(String, String)>,

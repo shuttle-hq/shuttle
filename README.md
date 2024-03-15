@@ -177,7 +177,7 @@ async fn main(
 
     pool.execute(include_str!("../schema.sql"))
         .await
-        .map_err(CustomError::new)?;
+        .context("failed to run migrations")?;
 
     let router = Router::new().route("/", get(hello_world));
 

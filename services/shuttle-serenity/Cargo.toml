@@ -13,12 +13,6 @@ serenity = { version = "0.12", default-features = false, features = ["client", "
 serenity-0-11 = { package = "serenity", version = "0.11.7", default-features = false, features = ["client", "gateway", "model"], optional = true }
 shuttle-runtime = { path = "../../runtime", version = "0.41.0", default-features = false }
 
-[dev-dependencies]
-anyhow = "1.0.69"
-shuttle-secrets = { path = "../../resources/secrets" }
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }
-tracing = "0.1.37"
-
 [features]
 default = ["rustls_backend"]
 

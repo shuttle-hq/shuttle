@@ -1,4 +1,4 @@
-## Shuttle service integration for the Tower framework.
+## Shuttle service integration for the Tower framework
 
 ### Example
 

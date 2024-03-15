@@ -1,4 +1,4 @@
-## Shuttle service integration for the Actix Web framework.
+## Shuttle service integration for the Actix Web framework
 
 ### Example
 
@@ -19,5 +19,4 @@ async fn actix_web() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send +
 
     Ok(config.into())
 }
-
 ```

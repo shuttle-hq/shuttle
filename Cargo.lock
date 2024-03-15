@@ -5350,6 +5350,7 @@ dependencies = [
  "rmp-serde",
  "rustls",
  "rustls-pemfile",
+ "semver 1.0.22",
  "serde",
  "serde_json",
  "shuttle-common",

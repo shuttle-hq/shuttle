@@ -39,6 +39,7 @@ rcgen = "0.11.3"
 reqwest = { workspace = true }
 rustls = "0.21.7"
 rustls-pemfile = "1.0.1"
+semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "json", "migrate"] }

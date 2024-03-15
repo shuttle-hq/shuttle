@@ -114,7 +114,7 @@ impl<R: Serialize + DeserializeOwned + Send> IntoResource<R> for ShuttleResource
 
 /// The core trait of the Shuttle platform. Every service deployed to Shuttle needs to implement this trait.
 ///
-/// An `Into<Service>` implementor is what is returned in the [`shuttle_runtime::main`] macro
+/// An `Into<Service>` implementor is what is returned in the `shuttle_runtime::main` macro
 /// in order to run it on the Shuttle servers.
 #[async_trait]
 pub trait Service: Send {

@@ -56,10 +56,10 @@ pub struct Response {
     /// The type of this resource.
     pub r#type: Type,
 
-    /// The config used when creating this resource. Use the [Self::r#type] to know how to parse this data.
+    /// The config used when creating this resource. Use the `r#type` to know how to parse this data.
     pub config: Value,
 
-    /// The data associated with this resource. Use the [Self::r#type] to know how to parse this data.
+    /// The data associated with this resource. Use the `r#type` to know how to parse this data.
     pub data: Value,
 }
 

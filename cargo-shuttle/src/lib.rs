@@ -1043,9 +1043,9 @@ impl Shuttle {
                 crate_dir.join("Secrets.toml"),
                 service.workspace_path.join("Secrets.dev.toml"),
                 service.workspace_path.join("Secrets.toml"),
-            ].into_iter().find(|f| {
-                f.exists() && f.is_file()
-            })
+            ]
+            .into_iter()
+            .find(|f| f.exists() && f.is_file())
         });
         let secrets = if let Some(secrets_file) = secrets_file {
             trace!("Loading secrets from {}", secrets_file.display());

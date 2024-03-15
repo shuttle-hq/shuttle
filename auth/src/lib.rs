@@ -38,17 +38,18 @@ pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> io::Result
         None => ApiKey::generate(),
     };
 
-    query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
-        .bind(&args.name)
+    query("INSERT INTO users (account_name, key, account_tier, user_id) VALUES ($1, $2, $3, $4)")
+        .bind("")
         .bind(&key)
         .bind(tier.to_string())
+        .bind(&args.user_id)
         .execute(&pool)
         .await
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
     println!(
         "`{}` created as {} with key: {}",
-        args.name,
+        args.user_id,
         tier,
         key.as_ref()
     );
@@ -67,22 +68,6 @@ pub async fn pgpool_init(db_uri: &str) -> io::Result<PgPool> {
         .run(&pool)
         .await
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-
-    // Post-migration logic for 0003.
-    // This is done here to skip the need for postgres extensions.
-    let names: Vec<(String,)> =
-        sqlx::query_as("SELECT account_name FROM users WHERE user_id IS NULL")
-            .fetch_all(&pool)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    for (name,) in names {
-        sqlx::query("UPDATE users SET user_id = $1 WHERE account_name = $2")
-            .bind(User::new_user_id())
-            .bind(name)
-            .execute(&pool)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    }
 
     Ok(pool)
 }

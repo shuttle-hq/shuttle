@@ -411,6 +411,9 @@ where
             return StatusCodeFuture::Code(StatusCode::UNAUTHORIZED);
         };
 
+        // Record current account name for tracing purposes
+        Span::current().record("account.user_id", &claim.sub);
+
         if self
             .required
             .iter()

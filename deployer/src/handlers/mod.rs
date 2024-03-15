@@ -9,7 +9,6 @@ use axum::extract::{
 };
 use axum::extract::{DefaultBodyLimit, Extension, Query};
 use axum::handler::Handler;
-use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
 use axum::routing::{delete, get, post, Router};
 use axum::Json;
@@ -19,13 +18,11 @@ use serde::{de::DeserializeOwned, Deserialize};
 use shuttle_service::builder::clean_crate;
 use tonic::Code;
 use tracing::{error, field, info, info_span, instrument, trace, warn};
-use ulid::Ulid;
 use uuid::Uuid;
 
 use shuttle_common::{
     backends::{
         auth::{AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
-        headers::XShuttleAccountName,
         metrics::{Metrics, TraceLayer},
     },
     claims::{Claim, Scope},
@@ -68,7 +65,6 @@ impl RouterBuilder {
         persistence: Persistence,
         deployment_manager: DeploymentManager,
         project_name: ProjectName,
-        project_id: Ulid,
         auth_uri: Uri,
     ) -> Self {
         let router = Router::new()
@@ -103,11 +99,10 @@ impl RouterBuilder {
                 "/projects/:project_name/deployments/:deployment_id",
                 get(get_deployment.layer(ScopedLayer::new(vec![Scope::Deployment])))
                     .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush])))
-                    .put(
-                        start_deployment
-                            .layer(Extension(project_id))
-                            .layer(ScopedLayer::new(vec![Scope::DeploymentPush])),
-                    ),
+                    // Deprecated.
+                    // Deployer now always starts the last running deployment on start up / wake up.
+                    // This is kept for compatibility.
+                    .put(|| async move {}),
             )
             .route(
                 "/projects/:project_name/ws/deployments/:deployment_id/logs",
@@ -157,14 +152,9 @@ impl RouterBuilder {
             .route_layer(from_extractor::<Metrics>())
             .layer(
                 TraceLayer::new(|request| {
-                    let account_name = request
-                        .headers()
-                        .typed_get::<XShuttleAccountName>()
-                        .unwrap_or_default();
-
                     request_span!(
                         request,
-                        account.name = account_name.0,
+                        account.user_id = field::Empty,
                         request.params.project_name = field::Empty,
                         request.params.service_name = field::Empty,
                         request.params.deployment_id = field::Empty,
@@ -430,11 +420,6 @@ pub async fn delete_deployment(
         Err(Error::NotFound("deployment not found".to_string()))
     }
 }
-
-/// Deprecated.
-/// Now always starts the last running deployment on start up / wake up.
-/// Kept around for compatibility.
-pub async fn start_deployment() {}
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, %deployment_id))]
 pub async fn get_logs(

@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use clap::{Parser, Subcommand};
+use shuttle_common::models::user::UserId;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -37,9 +38,9 @@ pub struct StartArgs {
 
 #[derive(clap::Args, Debug, Clone)]
 pub struct InitArgs {
-    /// Name of initial account to create
+    /// User id of account to create
     #[arg(long)]
-    pub name: String,
+    pub user_id: UserId,
     /// Key to assign to initial account
     #[arg(long)]
     pub key: Option<String>,

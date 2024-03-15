@@ -19,8 +19,8 @@ use crate::{
 };
 
 use super::handlers::{
-    convert_key, delete_subscription, get_public_key, get_user, health_check, post_subscription,
-    post_user, put_user_reset_key, refresh_token,
+    convert_key, delete_subscription, get_public_key, get_user, get_user_by_name,
+    post_subscription, post_user, put_user_reset_key,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -62,16 +62,19 @@ impl Default for ApiBuilder {
 impl ApiBuilder {
     pub fn new() -> Self {
         let router = Router::new()
-            .route("/", get(health_check))
+            // health check: 200 OK
+            .route("/", get(|| async move {}))
             .route("/auth/key", get(convert_key))
-            .route("/auth/refresh", post(refresh_token))
             .route("/public-key", get(get_public_key))
-            .route("/users/:account_name", get(get_user))
+            // used by console to get user based on auth0 name
+            .route("/users/name/:account_name", get(get_user_by_name))
+            // users are created based on auth0 name by console
             .route("/users/:account_name/:account_tier", post(post_user))
+            .route("/users/:user_id", get(get_user))
             .route("/users/reset-api-key", put(put_user_reset_key))
-            .route("/users/:account_name/subscribe", post(post_subscription))
+            .route("/users/:user_id/subscribe", post(post_subscription))
             .route(
-                "/users/:account_name/subscribe/:subscription_id",
+                "/users/:user_id/subscribe/:subscription_id",
                 delete(delete_subscription),
             )
             .route_layer(from_extractor::<Metrics>())
@@ -79,7 +82,7 @@ impl ApiBuilder {
                 TraceLayer::new(|request| {
                     request_span!(
                         request,
-                        request.params.account_name = field::Empty,
+                        request.params.user_id = field::Empty,
                         request.params.account_tier = field::Empty,
                     )
                 })

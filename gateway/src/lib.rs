@@ -6,7 +6,6 @@ use std::error::Error as StdError;
 use std::fmt::Formatter;
 use std::io;
 use std::pin::Pin;
-use std::str::FromStr;
 
 use acme::AcmeClientError;
 
@@ -17,10 +16,10 @@ use futures::prelude::*;
 use hyper::client::HttpConnector;
 use hyper::Client;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use shuttle_common::models::project::ProjectName;
+use shuttle_common::models::user::UserId;
 use strum::Display;
 use tokio::sync::mpsc::error::SendError;
 
@@ -139,46 +138,19 @@ impl std::fmt::Display for Error {
 
 impl StdError for Error {}
 
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
-#[sqlx(transparent)]
-pub struct AccountName(String);
-
-impl FromStr for AccountName {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_string()))
-    }
-}
-
-impl std::fmt::Display for AccountName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl<'de> Deserialize<'de> for AccountName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(|_err| todo!())
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectDetails {
     pub project_name: ProjectName,
-    pub account_name: AccountName,
+    pub account_name: Option<String>,
+    pub user_id: UserId,
 }
 
 impl From<ProjectDetails> for shuttle_common::models::admin::ProjectResponse {
     fn from(project: ProjectDetails) -> Self {
         Self {
             project_name: project.project_name.to_string(),
-            account_name: project.account_name.to_string(),
+            account_name: project.account_name.unwrap_or_default(),
+            user_id: project.user_id,
         }
     }
 }

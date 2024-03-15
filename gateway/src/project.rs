@@ -23,7 +23,7 @@ use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::backends::headers::{X_SHUTTLE_ACCOUNT_NAME, X_SHUTTLE_ADMIN_SECRET};
+use shuttle_common::backends::headers::X_SHUTTLE_ADMIN_SECRET;
 use shuttle_common::constants::{default_idle_minutes, DEFAULT_IDLE_MINUTES};
 use shuttle_common::models::project::ProjectName;
 use shuttle_common::models::service;
@@ -34,6 +34,9 @@ use uuid::Uuid;
 
 use crate::service::ContainerSettings;
 use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
+
+/// The `user_id` AND `account_name` of gateway's admin account
+const GATEWAY_ADMIN_ACCOUNT_USER_ID: &str = "gateway";
 
 macro_rules! safe_unwrap {
     {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
@@ -1493,12 +1496,15 @@ impl Service {
                 self.name, running_id
             ))?;
 
+            // NOTE: Deployer 0.40 and newer will start up old deployments themselves and ignore this call
+            // When deployer 0.39 is no longer supported, this function and its callers+task can be removed
             let req = Request::builder()
                 .method(Method::PUT)
                 .uri(uri)
                 .header(AUTHORIZATION, format!("Bearer {}", jwt))
-                .header(X_SHUTTLE_ACCOUNT_NAME.clone(), "gateway")
                 .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
+                // deprecated, used for soft backward compatibility
+                .header("x-shuttle-account-name", GATEWAY_ADMIN_ACCOUNT_USER_ID)
                 .body(Body::empty())?;
 
             let _ = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await;
@@ -1518,8 +1524,9 @@ impl Service {
         let req = Request::builder()
             .uri(uri)
             .header(AUTHORIZATION, format!("Bearer {}", jwt))
-            .header(X_SHUTTLE_ACCOUNT_NAME.clone(), "gateway")
             .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
+            // deprecated, used for soft backward compatibility
+            .header("x-shuttle-account-name", GATEWAY_ADMIN_ACCOUNT_USER_ID)
             .body(Body::empty())?;
 
         let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await??;

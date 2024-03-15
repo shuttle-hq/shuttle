@@ -12,7 +12,7 @@ mod needs_docker {
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
     use pretty_assertions::assert_eq;
     use serde_json::{self, Value};
-    use shuttle_common::models;
+    use shuttle_common::models::user;
 
     #[tokio::test]
     async fn post_user() {
@@ -47,11 +47,12 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: Value = serde_json::from_slice(&body).unwrap();
+        let user: user::Response = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(user["name"], "test-user");
-        assert_eq!(user["account_tier"], "basic");
-        assert!(user["key"].to_string().is_ascii());
+        assert_eq!(user.name, "test-user");
+        assert_eq!(user.account_tier, "basic");
+        assert!(user.id.starts_with("user_"));
+        assert!(user.key.is_ascii());
 
         // POST user with valid bearer token and pro tier.
         let response = app.post_user("pro-user", "pro").await;
@@ -59,11 +60,12 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: Value = serde_json::from_slice(&body).unwrap();
+        let user: user::Response = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(user["name"], "pro-user");
-        assert_eq!(user["account_tier"], "pro");
-        assert!(user["key"].to_string().is_ascii());
+        assert_eq!(user.name, "pro-user");
+        assert_eq!(user.account_tier, "pro");
+        assert!(user.id.starts_with("user_"));
+        assert!(user.key.is_ascii());
     }
 
     #[tokio::test]
@@ -75,12 +77,13 @@ mod needs_docker {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: Value = serde_json::from_slice(&body).unwrap();
+        let post_body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let user: user::Response = serde_json::from_slice(&post_body).unwrap();
+        let user_id = user.id;
 
         // GET user without bearer token.
         let request = Request::builder()
-            .uri("/users/test-user")
+            .uri(format!("/users/{user_id}"))
             .body(Body::empty())
             .unwrap();
 
@@ -90,7 +93,7 @@ mod needs_docker {
 
         // GET user with invalid bearer token.
         let request = Request::builder()
-            .uri("/users/test-user")
+            .uri(format!("/users/{user_id}"))
             .header(AUTHORIZATION, "Bearer notadmin")
             .body(Body::empty())
             .unwrap();
@@ -105,14 +108,13 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
         // GET user with valid bearer token.
-        let response = app.get_user("test-user").await;
+        let response = app.get_user(&user_id).await;
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let persisted_user: Value = serde_json::from_slice(&body).unwrap();
+        let get_body = hyper::body::to_bytes(response.into_body()).await.unwrap();
 
-        assert_eq!(user, persisted_user);
+        assert_eq!(post_body, get_body);
     }
 
     #[tokio::test]
@@ -125,16 +127,12 @@ mod needs_docker {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let expected_user: Value = serde_json::from_slice(&body).unwrap();
+        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user_id = &user.id;
 
         // PUT /users/test-user/pro with a completed subscription id to upgrade a user to pro.
         let response = app
-            .post_subscription(
-                "test-user",
-                MOCKED_COMPLETED_CHECKOUT_SUBSCRIPTION_ID,
-                "pro",
-                1,
-            )
+            .post_subscription(user_id, MOCKED_COMPLETED_CHECKOUT_SUBSCRIPTION_ID, "pro", 1)
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -146,39 +144,25 @@ mod needs_docker {
             .get_user_with_mocked_stripe(
                 MOCKED_COMPLETED_CHECKOUT_SUBSCRIPTION_ID,
                 MOCKED_ACTIVE_SUBSCRIPTION,
-                "test-user",
+                user_id,
             )
             .await;
 
         assert_eq!(response.status(), StatusCode::OK);
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let actual_user: Value = serde_json::from_slice(&body).unwrap();
+        let pro_user: user::Response = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(
-            expected_user.get("name").unwrap(),
-            actual_user.get("name").unwrap()
-        );
+        assert_eq!(user.name, pro_user.name);
 
-        assert_eq!(
-            expected_user.get("key").unwrap(),
-            actual_user.get("key").unwrap()
-        );
+        assert_eq!(user.key, pro_user.key);
 
-        assert_eq!(actual_user.get("account_tier").unwrap(), "pro");
+        assert_eq!(pro_user.account_tier, "pro");
 
         let mocked_subscription_obj: Value =
             serde_json::from_str(MOCKED_ACTIVE_SUBSCRIPTION).unwrap();
         assert_eq!(
-            actual_user
-                .get("subscriptions")
-                .unwrap()
-                .as_array()
-                .unwrap()
-                .first()
-                .unwrap()
-                .get("id")
-                .unwrap(),
-            mocked_subscription_obj.get("id").unwrap()
+            pro_user.subscriptions.first().unwrap().id,
+            mocked_subscription_obj.get("id").unwrap().as_str().unwrap()
         );
     }
 
@@ -189,11 +173,14 @@ mod needs_docker {
         // POST user first so one exists in the database.
         let response = app.post_user("test-user", "basic").await;
         assert_eq!(response.status(), StatusCode::OK);
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user_id = &user.id;
 
         // Test upgrading to pro with a subscription id that points to a due session.
         let response = app
             .post_subscription(
-                "test-user",
+                user_id,
                 MOCKED_OVERDUE_PAYMENT_CHECKOUT_SUBSCRIPTION_ID,
                 "pro",
                 1,
@@ -207,19 +194,16 @@ mod needs_docker {
             .get_user_with_mocked_stripe(
                 MOCKED_OVERDUE_PAYMENT_CHECKOUT_SUBSCRIPTION_ID,
                 MOCKED_PAST_DUE_SUBSCRIPTION,
-                "test-user",
+                user_id,
             )
             .await;
 
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let actual_user: Value = serde_json::from_slice(&body).unwrap();
+        let actual_user: user::Response = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(
-            actual_user.get("account_tier").unwrap(),
-            "pendingpaymentpro"
-        );
+        assert_eq!(actual_user.account_tier, "pendingpaymentpro");
     }
 
     #[tokio::test]
@@ -232,22 +216,23 @@ mod needs_docker {
 
         // Extract the API key from the response so we can use it in a future request.
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: Value = serde_json::from_slice(&body).unwrap();
-        let basic_user_key = user["key"].as_str().unwrap();
+        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user_id = &user.id;
+        let basic_user_key = &user.key;
 
         // Make sure JWT does not allow any RDS instances
         let claim = app.get_claim(basic_user_key).await;
-        assert_eq!(claim.sub, "test-user");
+        assert!(claim.sub.starts_with("user_"));
         assert_eq!(claim.limits.rds_quota(), 0);
 
         // Send a request to insert an RDS subscription for the test user.
         let response = app
-            .post_subscription("test-user", "sub_Eoarshy23pointInira", "rds", 1)
+            .post_subscription(user_id, "sub_Eoarshy23pointInira", "rds", 1)
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
         // Fetch the user and verify they have an rds subscription.
-        let response = app.get_user_typed("test-user").await;
+        let response = app.get_user_typed(user_id).await;
 
         assert_eq!(
             response.subscriptions.len(),
@@ -256,7 +241,7 @@ mod needs_docker {
         );
         assert_eq!(
             response.subscriptions[0].r#type,
-            models::user::SubscriptionType::Rds
+            user::SubscriptionType::Rds
         );
         assert_eq!(response.subscriptions[0].quantity, 1);
 
@@ -267,7 +252,7 @@ mod needs_docker {
         // Send another request to insert an RDS subscription for the user.
         // This uses a different subscription id to make sure we only keep record of one
         let response = app
-            .post_subscription("test-user", "sub_IOhso230rakstr023soI", "rds", 4)
+            .post_subscription(user_id, "sub_IOhso230rakstr023soI", "rds", 4)
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -277,7 +262,7 @@ mod needs_docker {
 
         // Send a request to delete an RDS subscription
         let response = app
-            .delete_subscription("test-user", "sub_IOhso230rakstr023soI")
+            .delete_subscription(user_id, "sub_IOhso230rakstr023soI")
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -317,11 +302,14 @@ mod needs_docker {
         // Create user with basic tier
         let response = app.post_user("test-user", "basic").await;
         assert_eq!(response.status(), StatusCode::OK);
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user_id = &user.id;
 
         // Upgrade user to pro
         let response = app
             .post_subscription(
-                "test-user",
+                user_id,
                 MOCKED_CANCELLEDPRO_CHECKOUT_SUBSCRIPTION_ID,
                 "pro",
                 1,
@@ -331,7 +319,7 @@ mod needs_docker {
 
         // Cancel subscription, this will be called by the console.
         let response = app
-            .delete_subscription("test-user", MOCKED_CANCELLEDPRO_CHECKOUT_SUBSCRIPTION_ID)
+            .delete_subscription(user_id, MOCKED_CANCELLEDPRO_CHECKOUT_SUBSCRIPTION_ID)
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -342,15 +330,15 @@ mod needs_docker {
             .get_user_with_mocked_stripe(
                 MOCKED_CANCELLEDPRO_CHECKOUT_SUBSCRIPTION_ID,
                 MOCKED_CANCELLEDPRO_SUBSCRIPTION_ACTIVE,
-                "test-user",
+                user_id,
             )
             .await;
 
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(user.get("account_tier").unwrap(), "cancelledpro");
+        let user: user::Response = serde_json::from_slice(&body).unwrap();
+        assert_eq!(user.account_tier, "cancelledpro");
 
         // When called again at some later time, the subscription returned from stripe should be
         // cancelled.
@@ -358,14 +346,14 @@ mod needs_docker {
             .get_user_with_mocked_stripe(
                 MOCKED_CANCELLEDPRO_CHECKOUT_SUBSCRIPTION_ID,
                 MOCKED_CANCELLEDPRO_SUBSCRIPTION_CANCELLED,
-                "test-user",
+                user_id,
             )
             .await;
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let user: Value = serde_json::from_slice(&body).unwrap();
+        let user: user::Response = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(user.get("account_tier").unwrap(), "basic");
+        assert_eq!(user.account_tier, "basic");
     }
 }

@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::str::FromStr;
 
 use axum::extract::{FromRef, FromRequestParts, Path};
 use axum::http::request::Parts;
@@ -7,10 +6,11 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::claims::{Claim, Scope};
 use shuttle_common::models::error::InvalidProjectName;
 use shuttle_common::models::project::ProjectName;
+use shuttle_common::models::user::UserId;
 use tracing::{trace, Span};
 
 use crate::api::latest::RouterState;
-use crate::{AccountName, Error, ErrorKind};
+use crate::{Error, ErrorKind};
 
 /// A wrapper to enrich a token with user details
 ///
@@ -21,7 +21,7 @@ use crate::{AccountName, Error, ErrorKind};
 pub struct User {
     pub projects: Vec<ProjectName>,
     pub claim: Claim,
-    pub name: AccountName,
+    pub id: UserId,
 }
 
 #[async_trait]
@@ -34,18 +34,17 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let claim = parts.extensions.get::<Claim>().ok_or(ErrorKind::Internal)?;
-        let name = AccountName::from_str(&claim.sub)
-            .map_err(|err| Error::source(ErrorKind::Internal, err))?;
+        let user_id = claim.sub.clone();
 
         // Record current account name for tracing purposes
-        Span::current().record("account.name", &name.to_string());
+        Span::current().record("account.user_id", &user_id);
 
         let RouterState { service, .. } = RouterState::from_ref(state);
 
         let user = User {
             claim: claim.clone(),
-            projects: service.iter_user_projects(&name).await?.collect(),
-            name,
+            projects: service.iter_user_projects(&user_id).await?.collect(),
+            id: user_id,
         };
 
         trace!(?user, "got user");

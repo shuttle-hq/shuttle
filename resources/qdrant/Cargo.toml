@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-qdrant"
-version = "0.41.0"
+version = "0.42.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Shuttle plugin for connecting to a Qdrant database"
@@ -11,4 +11,4 @@ async-trait = "0.1.56"
 qdrant-client = "1.7.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-shuttle-service = { path = "../../service", version = "0.41.0" }
+shuttle-service = { path = "../../service", version = "0.42.0" }

@@ -172,7 +172,7 @@ async fn hello_world() -> &'static str {
 
 #[shuttle_runtime::main]
 async fn main(
-    #[shuttle_shared_db::Postgres] pool: PgPool,
+    #[shuttle_shared_db::Postgres] pool: sqlx::PgPool,
 ) -> shuttle_axum::ShuttleAxum {
 
     pool.execute(include_str!("../schema.sql"))

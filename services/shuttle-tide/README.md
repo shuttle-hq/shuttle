@@ -1,4 +1,4 @@
-## Shuttle service integration for the Tide web framework.
+## Shuttle service integration for the Tide web framework
 
 ### Example
 

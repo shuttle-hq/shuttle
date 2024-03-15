@@ -4,7 +4,7 @@ use zeroize::Zeroize;
 
 /// Wrapper type for secret values such as passwords or authentication keys.
 ///
-/// Once wrapped, the inner value cannot leak accidentally, as both the [`Display`] and [`Debug`]
+/// Once wrapped, the inner value cannot leak accidentally, as both the [`std::fmt::Display`] and [`Debug`]
 /// implementations cover up the actual value and only show the type.
 ///
 /// If you need access to the inner value, there is an [expose](`Secret::expose`) method.

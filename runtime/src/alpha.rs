@@ -25,9 +25,8 @@ use tokio::sync::{
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
 
-use crate::__internals::print_version;
-
 use crate::args::args;
+use crate::print_version;
 
 // uses custom macro instead of clap to reduce dependency weight
 args! {
@@ -49,17 +48,14 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         Ok(args) => args,
         Err(e) => {
             eprintln!("Runtime received malformed or incorrect args, {e}");
-            let help_str = "[HINT]: Run shuttle with `cargo shuttle run`";
+            let help_str = "[HINT]: Run your Shuttle app with `cargo shuttle run`";
             let wrapper_str = "-".repeat(help_str.len());
             eprintln!("{wrapper_str}\n{help_str}\n{wrapper_str}");
             return;
         }
     };
 
-    println!(
-        "shuttle-runtime executable started (version {})",
-        crate::VERSION
-    );
+    println!("{} {} executable started", crate::NAME, crate::VERSION);
 
     // this is handled after arg parsing to not interfere with --version above
     #[cfg(feature = "setup-tracing")]
@@ -81,21 +77,10 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
             .init();
 
         println!(
-            "{}\n\
-            {}\n\
-            To disable the subscriber and use your own,\n\
-            turn off the default features for {}:\n\
-            \n\
-            {}\n\
-            {}",
-            "=".repeat(63).yellow(),
-            "Shuttle's default tracing subscriber is initialized!"
-                .yellow()
-                .bold(),
-            "shuttle-runtime".italic(),
-            r#"shuttle-runtime = { version = "...", default-features = false }"#.italic(),
-            "=".repeat(63).yellow(),
+            "{}",
+            "Shuttle's default tracing subscriber is initialized!".yellow(),
         );
+        println!("To disable it and use your own, check the docs: https://docs.shuttle.rs/configuration/logs");
     }
 
     // where to serve the gRPC control layer

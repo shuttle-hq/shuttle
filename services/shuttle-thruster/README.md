@@ -1,4 +1,4 @@
-## Shuttle service integration for the Thruster web framework.
+## Shuttle service integration for the Thruster web framework
 
 ### Example
 

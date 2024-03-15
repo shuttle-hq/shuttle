@@ -1,12 +1,10 @@
-## Shuttle service integration for the Rocket web framework.
+## Shuttle service integration for the Rocket web framework
 
 ### Example
 
 ```rust,no_run
-#[macro_use]
-extern crate rocket;
+use rocket::{get, routes};
 
-# fn main() {
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world!"
@@ -18,5 +16,4 @@ async fn rocket() -> shuttle_rocket::ShuttleRocket {
 
     Ok(rocket.into())
 }
-# }
 ```

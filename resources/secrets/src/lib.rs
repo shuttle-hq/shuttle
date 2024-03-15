@@ -1,3 +1,4 @@
+
 #![doc = include_str!("../README.md")]
 use async_trait::async_trait;
 pub use shuttle_service::SecretStore;
@@ -8,6 +9,10 @@ use shuttle_service::{
 
 /// Secrets plugin that provides service secrets
 #[derive(Default)]
+#[deprecated(
+    since = "0.42.0",
+    note = "This plugin has been moved to shuttle_runtime::Secrets, see https://docs.shuttle.rs/resources/shuttle-secrets"
+)]
 pub struct Secrets;
 
 #[async_trait]

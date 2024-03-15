@@ -1,4 +1,4 @@
-## Shuttle service integration for the Salvo web framework.
+## Shuttle service integration for the Salvo web framework
 
 ### Example
 
@@ -16,5 +16,4 @@ async fn salvo() -> shuttle_salvo::ShuttleSalvo {
 
     Ok(router.into())
 }
-
 ```

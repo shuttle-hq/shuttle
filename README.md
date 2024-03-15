@@ -121,6 +121,8 @@ URI:           https://hello-world.shuttleapp.rs
 Feel free to build on top of the generated `hello-world` boilerplate or take a stab at one of our [examples](https://github.com/shuttle-hq/shuttle-examples).
 
 For the full documentation, visit [our docs](https://docs.shuttle.rs).
+<br>
+<br>
 
 # Quick Look
 
@@ -186,6 +188,8 @@ async fn main(
 ```
 
 Now, if we run `cargo shuttle deploy`, we'll have an up and running project with a database inside & ready to use.
+<br>
+<br>
 
 # Repositories
 
@@ -198,6 +202,8 @@ Now, if we run `cargo shuttle deploy`, we'll have an up and running project with
 | [deploy-action](https://github.com/shuttle-hq/deploy-action) ⚙ | GitHub Action for continuous deployments. |
 | [awesome-shuttle](https://github.com/shuttle-hq/awesome-shuttle) 🌟 | An awesome list of Shuttle-hosted projects and resources that users can add to. |
 | [shuttlings](https://github.com/shuttle-hq/shuttlings) ⚔️ | A collection of Rust code challenges. A great way to get started with using Rust and Shuttle. |
+<br>
+<br>
 
 # Contributing to Shuttle
 
@@ -225,8 +231,10 @@ Also, check out the [Beta announcement](https://www.shuttle.rs/beta#06) for feat
   there are a few kinks
 - [x] Public Beta: Stable enough for most non-enterprise use-cases
 - [ ] Public: Production-ready!
+<br>
+<br>
 
-## Contributors ✨
+# Contributors ✨
 
 Thanks goes to these wonderful people:
 

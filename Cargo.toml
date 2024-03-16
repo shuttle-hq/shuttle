@@ -17,7 +17,6 @@ members = [
   "service",
 ]
 exclude = [
-  "e2e",
   "examples",
   "resources",
   "services",

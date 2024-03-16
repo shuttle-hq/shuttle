@@ -22,4 +22,4 @@ fi
 
 mkdir -p "$(dirname "$OUT")"
 
-sed "s|BASE|$ROOT|" scripts/patches.toml > "$OUT"
+sed "s|BASE|$ROOT|" "$ROOT/scripts/patches.toml" > "$OUT"

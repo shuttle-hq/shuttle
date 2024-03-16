@@ -788,7 +788,7 @@ impl Shuttle {
 
         if follow {
             let mut stream = client
-                .get_logs_ws(self.ctx.project_name(), &id)
+                .get_logs_ws(self.ctx.project_name(), &id, mode, len)
                 .await
                 .map_err(|err| {
                     suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
@@ -1557,7 +1557,7 @@ impl Shuttle {
             .map_err(suggestions::deploy::deploy_request_failure)?;
 
         let mut stream = client
-            .get_logs_ws(self.ctx.project_name(), &deployment.id)
+            .get_logs_ws(self.ctx.project_name(), &deployment.id, "all", 0)
             .await
             .map_err(|err| {
                 suggestions::deploy::deployment_setup_failure(
@@ -1673,7 +1673,7 @@ impl Shuttle {
                 // the terminal isn't completely spammed
                 sleep(Duration::from_millis(100)).await;
                 stream = client
-                    .get_logs_ws(self.ctx.project_name(), &deployment.id)
+                    .get_logs_ws(self.ctx.project_name(), &deployment.id, "all", 0)
                     .await
                     .map_err(|err| {
                         suggestions::deploy::deployment_setup_failure(

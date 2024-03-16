@@ -196,8 +196,14 @@ impl Client {
         &self,
         project: &str,
         deployment_id: &Uuid,
+        mode: &str,
+        len: u32,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        let path = format!("/projects/{project}/ws/deployments/{deployment_id}/logs");
+        let path = match mode {
+            "head" => format!("/projects/{project}/deployments/{deployment_id}/logs?head={len}"),
+            "tail" => format!("/projects/{project}/deployments/{deployment_id}/logs?tail={len}"),
+            _ => format!("/projects/{project}/deployments/{deployment_id}/logs"),
+        };
 
         self.ws_get(path).await
     }

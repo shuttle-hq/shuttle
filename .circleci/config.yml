@@ -845,10 +845,8 @@ workflows:
             parameters:
               path:
                 - resources/aws-rds
-                - resources/metadata
                 - resources/persist
                 - resources/qdrant
-                - resources/secrets
                 - resources/shared-db
                 - resources/turso
                 - resources/opendal

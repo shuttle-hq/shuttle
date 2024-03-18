@@ -10,7 +10,7 @@
 header = """
 # Changelog
 
-<!-- Install git-cliff and use `make tag=TAG changelog` to update this file -->
+<!-- Install git-cliff and use `cargo make changelog 0.X.Y` to update this file -->
 
 This is an auto-generated changelog based on commits on the main branch, made with [git-cliff](https://github.com/orhun/git-cliff).
 See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.

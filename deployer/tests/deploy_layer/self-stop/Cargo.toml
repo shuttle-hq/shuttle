@@ -7,5 +7,5 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-shuttle-runtime = "0.41.0"
+shuttle-runtime = "0.42.0"
 tokio = "1.22"

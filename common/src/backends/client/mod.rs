@@ -294,6 +294,21 @@ pub mod permit {
                 .unwrap()
         }
 
+        pub async fn is_organization_admin(&self, user_id: &str, org_name: &str) -> bool {
+             let res: Vec<Value> = self
+                .client
+                .request(
+                    Method::GET,
+                    &format!("v2/facts/default/poc/role_assignments?user={user_id}&resource_instance=Organization:{org_name}"),
+                    None::<()>,
+                    Some(Authorization::bearer(&self.api_key).unwrap()),
+                )
+                .await
+                .unwrap();
+
+            res[0].as_object().unwrap()["role"].as_str().unwrap() == "admin"
+        }
+
         pub async fn create_organization_project(&self, organization_name: &str, project_id: &str) {
             let res: Result<Value, _> = self
                 .client

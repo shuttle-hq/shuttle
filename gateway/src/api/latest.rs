@@ -225,9 +225,12 @@ async fn get_organization(
 
     let members = permit_client.get_organization_members(&organization_name).await;
 
+    let is_admin = permit_client.is_organization_admin(&name.0.replace("github-", "github|"), &organization_name).await;
+
     Ok(AxumJson(json!({
         "projects": projects,
-        "members": members
+        "members": members,
+        "is_admin": is_admin,
     })))
 }
 

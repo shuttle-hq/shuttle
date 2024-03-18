@@ -275,24 +275,6 @@ jobs:
       - apply-patches
       - run: cargo make test-member-integration-docker << parameters.crate >>
       - save-sccache
-  e2e-test: # outdated
-    executor: machine-ubuntu
-    resource_class: medium
-    steps:
-      - install-rust
-      - checkout
-      - run: git submodule update --init
-      - run: make images
-      - apply-patches
-      - run:
-          name: Run the E2E tests
-          command: |
-            # clean up a potential existing deployments before running
-            # the tests just in case the environment is not clean
-            make down
-            make up
-            SHUTTLE_TESTS_NETWORK=shuttle-dev_user-net SHUTTLE_TESTS_RUNTIME_IMAGE=public.ecr.aws/shuttle-dev/deployer:latest cargo test --package shuttle-gateway --all-features --lib -- --nocapture
-            make test
   build-and-push:
     executor: machine-ubuntu
     parameters:
@@ -712,19 +694,6 @@ workflows:
           filters:
             branches:
               only: main
-      # - e2e-test:
-      #     requires:
-      #       - test-standalone
-      #       - test-standalone-shared-db
-      #       - test-workspace-member
-      #       - test-workspace-member-with-integration-medium
-      #       - test-workspace-member-with-integration-large
-      #       - test-workspace-member-with-integration-xlarge
-      #       - test-workspace-member-with-integration-docker-medium
-      #       - test-workspace-member-with-integration-docker-large
-      #     filters:
-      #       branches:
-      #         only: production
   unstable:
     jobs:
       - approve-deploy-images-unstable:

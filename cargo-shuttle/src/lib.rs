@@ -1035,26 +1035,30 @@ impl Shuttle {
         service: &BuiltService,
         idx: u16,
     ) -> Result<Option<(Child, runtime::Client)>> {
-        let secrets_path = run_args.secret_args.secrets.clone().unwrap_or_else(|| {
+        let secrets_file = run_args.secret_args.secrets.clone().or_else(|| {
             let crate_dir = service.crate_directory();
-            if crate_dir.join("Secrets.dev.toml").exists() {
-                crate_dir.join("Secrets.dev.toml")
-            } else {
-                crate_dir.join("Secrets.toml")
-            }
+            // Prioritise crate-local prod secrets over workspace dev secrets (in the rare case that both exist)
+            [
+                crate_dir.join("Secrets.dev.toml"),
+                crate_dir.join("Secrets.toml"),
+                service.workspace_path.join("Secrets.dev.toml"),
+                service.workspace_path.join("Secrets.toml"),
+            ]
+            .into_iter()
+            .find(|f| f.exists() && f.is_file())
         });
-        trace!("Loading secrets from {}", secrets_path.display());
-
-        let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)
-        {
-            let secrets: HashMap<String, String> =
-                secrets_str.parse::<toml::Value>()?.try_into()?;
-
-            trace!(keys = ?secrets.keys(), "available secrets");
-
-            secrets
+        let secrets = if let Some(secrets_file) = secrets_file {
+            trace!("Loading secrets from {}", secrets_file.display());
+            if let Ok(secrets_str) = read_to_string(secrets_file) {
+                let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
+                trace!(keys = ?secrets.keys(), "available secrets");
+                secrets
+            } else {
+                trace!("No secrets were loaded");
+                Default::default()
+            }
         } else {
-            trace!("No secrets were loaded");
+            trace!("No secrets file was found");
             Default::default()
         };
 

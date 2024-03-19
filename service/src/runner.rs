@@ -13,8 +13,8 @@ pub async fn start(
     runtime_executable: PathBuf,
     project_path: &Path,
 ) -> anyhow::Result<(process::Child, runtime::Client)> {
-    let port = &port.to_string();
-    let args = vec!["--port", port];
+    let port_str = port.to_string();
+    let args = vec!["--port", &port_str];
 
     info!(
         args = %format!("{} {}", runtime_executable.display(), args.join(" ")),

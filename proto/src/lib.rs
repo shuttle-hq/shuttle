@@ -154,7 +154,7 @@ mod _runtime_client {
 
     /// Get a runtime client that is correctly configured
     #[cfg(feature = "client")]
-    pub async fn get_client(port: &str) -> anyhow::Result<Client> {
+    pub async fn get_client(port: u16) -> anyhow::Result<Client> {
         info!("connecting runtime client");
         let conn = Endpoint::new(format!("http://0.0.0.0:{port}"))
             .context("creating runtime client endpoint")?

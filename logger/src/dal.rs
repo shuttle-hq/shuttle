@@ -7,7 +7,6 @@ use prost_types::Timestamp;
 use shuttle_proto::logger::{LogItem, LogLine};
 use sqlx::{
     migrate::Migrator,
-    postgres::PgConnectOptions,
     types::chrono::{DateTime, Utc},
     Executor, FromRow, PgPool, QueryBuilder,
 };
@@ -60,14 +59,7 @@ impl Postgres {
     pub async fn new(connection_uri: &Uri) -> Self {
         let pool = PgPool::connect(connection_uri.to_string().as_str())
             .await
-            .expect("to be able to connect to the postgres db using the connection url");
-        Self::from_pool(pool).await
-    }
-
-    pub async fn with_options(options: PgConnectOptions) -> Self {
-        let pool = PgPool::connect_with(options)
-            .await
-            .expect("to be able to connect to the postgres db using the pg connect options");
+            .expect("to connect to the db");
         Self::from_pool(pool).await
     }
 
@@ -77,13 +69,17 @@ impl Postgres {
             .await
             .expect("to run migrations successfully");
 
-        // Perform cleaning of old logs on startup
-        pool.execute("DELETE FROM logs WHERE tx_timestamp < (NOW() - INTERVAL '1 month')")
-            .await
-            .expect("to clean old logs successfully");
+        let pool_clone = pool.clone();
+        tokio::spawn(async move {
+            info!("cleaning old logs");
+            pool_clone
+                .execute("DELETE FROM logs WHERE tx_timestamp < (NOW() - INTERVAL '1 month')")
+                .await
+                .expect("to clean old logs successfully");
+            info!("done cleaning old logs");
+        });
 
         let (tx, mut rx) = broadcast::channel::<(Vec<Log>, Span)>(1000);
-        let pool_spawn = pool.clone();
 
         let interval_tx = tx.clone();
         tokio::spawn(async move {
@@ -95,6 +91,7 @@ impl Postgres {
             }
         });
 
+        let pool_clone = pool.clone();
         tokio::spawn(async move {
             loop {
                 match rx.recv().await {
@@ -124,7 +121,7 @@ impl Postgres {
                         });
                         let query = builder.build();
 
-                        if let Err(error) = query.execute(&pool_spawn).instrument(parent_span).await
+                        if let Err(error) = query.execute(&pool_clone).instrument(parent_span).await
                         {
                             error!(
                                 error = &error as &dyn std::error::Error,

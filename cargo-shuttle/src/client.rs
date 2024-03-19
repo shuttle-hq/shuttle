@@ -34,7 +34,7 @@ impl Client {
             client: reqwest::Client::builder()
                 .default_headers(
                     HeaderMap::try_from(&HashMap::from([(
-                        X_CARGO_SHUTTLE_VERSION,
+                        X_CARGO_SHUTTLE_VERSION.clone(),
                         crate::VERSION.to_owned(),
                     )]))
                     .unwrap(),

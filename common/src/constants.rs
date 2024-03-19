@@ -52,6 +52,6 @@ pub mod limits {
 pub mod headers {
     use http::HeaderName;
 
-    pub const X_CARGO_SHUTTLE_VERSION: HeaderName =
+    pub static X_CARGO_SHUTTLE_VERSION: HeaderName =
         HeaderName::from_static("x-cargo-shuttle-version");
 }

@@ -94,7 +94,7 @@ impl Client {
         Self {
             client: ServicesApiClient::new_with_bearer(
                 "https://api.eu-central-1.permit.io".parse().unwrap(),
-                api_key
+                api_key,
             ),
             environment: environment.to_string(),
         }
@@ -103,10 +103,7 @@ impl Client {
 
 impl PermissionsDal for Client {
     async fn create_user(&self, user_id: &str) -> Result<User, Error> {
-        let Self {
-            environment,
-            ..
-        } = self;
+        let Self { environment, .. } = self;
 
         self.client
             .post(
@@ -118,31 +115,25 @@ impl PermissionsDal for Client {
     }
 
     async fn get_user(&self, user_id: &str) -> Result<User, Error> {
-        let Self {
-            environment,
-            ..
-        } = self;
+        let Self { environment, .. } = self;
 
         self.client
             .get(
                 &format!("v2/facts/default/{environment}/users/{user_id}"),
-                None
+                None,
             )
             .await
     }
 
     async fn delete_user(&self, user_id: &str) -> Result<(), Error> {
-        let Self {
-            environment,
-            ..
-        } = self;
+        let Self { environment, .. } = self;
 
         self.client
             .request_raw(
                 Method::DELETE,
                 &format!("v2/facts/default/{environment}/users/{user_id}"),
                 None::<()>,
-                None
+                None,
             )
             .await?;
 
@@ -150,10 +141,7 @@ impl PermissionsDal for Client {
     }
 
     async fn assign_role(&self, user_id: &str, role: &AccountTier) -> Result<(), Error> {
-        let Self {
-            environment,
-            ..
-        } = self;
+        let Self { environment, .. } = self;
 
         self.client
             .request_raw(
@@ -163,7 +151,7 @@ impl PermissionsDal for Client {
                     "role": role,
                     "tenant": "default",
                 })),
-                None
+                None,
             )
             .await?;
 
@@ -171,10 +159,7 @@ impl PermissionsDal for Client {
     }
 
     async fn unassign_role(&self, user_id: &str, role: &AccountTier) -> Result<(), Error> {
-        let Self {
-            environment,
-            ..
-        } = self;
+        let Self { environment, .. } = self;
 
         self.client
             .request_raw(
@@ -184,7 +169,7 @@ impl PermissionsDal for Client {
                     "role": role,
                     "tenant": "default",
                 })),
-                None
+                None,
             )
             .await?;
 
@@ -205,17 +190,11 @@ mod tests {
 
     impl Client {
         async fn clear_users(&self) {
-            let Self {
-                environment,
-                ..
-            } = self;
+            let Self { environment, .. } = self;
 
             let users: Value = self
                 .client
-                .get(
-                    &format!("v2/facts/default/{environment}/users"),
-                    None
-                )
+                .get(&format!("v2/facts/default/{environment}/users"), None)
                 .await
                 .unwrap();
 
@@ -237,8 +216,6 @@ mod tests {
             CLEANUP_CALLED
                 .get_or_init(async {
                     client.clear_users().await;
-
-                    ()
                 })
                 .await;
 

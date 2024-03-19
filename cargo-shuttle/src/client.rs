@@ -1,9 +1,14 @@
+use std::collections::HashMap;
+use std::time::Duration;
+
 use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
 use percent_encoding::utf8_percent_encode;
+use reqwest::header::HeaderMap;
 use reqwest::RequestBuilder;
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
+use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
 use shuttle_common::models::deployment::DeploymentRequest;
 use shuttle_common::models::{deployment, project, service, ToJson};
 use shuttle_common::secrets::Secret;
@@ -26,7 +31,17 @@ impl Client {
         Self {
             api_url,
             api_key: None,
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .default_headers(
+                    HeaderMap::try_from(&HashMap::from([(
+                        X_CARGO_SHUTTLE_VERSION,
+                        crate::VERSION.to_owned(),
+                    )]))
+                    .unwrap(),
+                )
+                .timeout(Duration::from_secs(60))
+                .build()
+                .unwrap(),
         }
     }
 

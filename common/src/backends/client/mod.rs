@@ -11,6 +11,7 @@ use tracing::{trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 pub mod gateway;
+pub mod permit;
 mod resource_recorder;
 
 pub use gateway::ProjectsDal;
@@ -57,6 +58,33 @@ impl ServicesApiClient {
         }
     }
 
+    pub async fn get<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        headers: Option<HeaderMap<HeaderValue>>,
+    ) -> Result<T, Error> {
+        self.request(Method::GET, path, None::<()>, headers).await
+    }
+
+    pub async fn post<B: Serialize, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: B,
+        headers: Option<HeaderMap<HeaderValue>>,
+    ) -> Result<T, Error> {
+        self.request(Method::POST, path, Some(body), headers).await
+    }
+
+    pub async fn delete<B: Serialize, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: B,
+        headers: Option<HeaderMap<HeaderValue>>,
+    ) -> Result<T, Error> {
+        self.request(Method::DELETE, path, Some(body), headers)
+            .await
+    }
+
     pub async fn request<B: Serialize, T: DeserializeOwned>(
         &self,
         method: Method,
@@ -93,9 +121,9 @@ impl ServicesApiClient {
         };
 
         let resp = req.send().await?;
-        trace!(response = ?resp, "Load response");
+        trace!(response = ?resp, "service response");
 
-        if resp.status() != StatusCode::OK {
+        if !resp.status().is_success() {
             return Err(Error::RequestError(resp.status()));
         }
 

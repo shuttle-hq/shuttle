@@ -36,6 +36,9 @@ pub struct ShuttleArgs {
     /// Disable network requests that are not strictly necessary. Limits some features.
     #[arg(long, env = "SHUTTLE_OFFLINE")]
     pub offline: bool,
+    /// Turn on tracing output for cargo-shuttle and shuttle libraries.
+    #[arg(long, env = "SHUTTLE_DEBUG")]
+    pub debug: bool,
 
     #[command(subcommand)]
     pub cmd: Command,

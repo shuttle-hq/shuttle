@@ -169,7 +169,9 @@ impl Default for ScopeBuilder {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, EnumString)]
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, EnumString,
+)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "display", derive(strum::Display))]
 #[cfg_attr(feature = "persist", derive(sqlx::Type))]

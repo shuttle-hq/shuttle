@@ -12,9 +12,11 @@ use tracing::{trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 pub mod gateway;
+pub mod permit;
 mod resource_recorder;
 
 pub use gateway::ProjectsDal;
+pub use permit::PermissionsDal;
 pub use resource_recorder::ResourceDal;
 
 #[derive(Error, Debug)]

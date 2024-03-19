@@ -21,7 +21,6 @@ http = { workspace = true, optional = true }
 http-body = { workspace = true, optional = true }
 hyper = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
-once_cell = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
@@ -104,6 +103,7 @@ test-utils = ["wiremock"]
 tracing = ["dep:tracing"]
 
 [dev-dependencies]
+async-once-cell = "0.5.0"
 axum = { workspace = true }
 base64 = { workspace = true }
 hyper = { workspace = true }

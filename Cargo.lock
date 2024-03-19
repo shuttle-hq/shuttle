@@ -202,6 +202,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-once-cell"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9338790e78aa95a416786ec8389546c4b6a1dfc3dc36071ed9518a9413a542eb"
+
+[[package]]
 name = "async-posthog"
 version = "0.2.3"
 source = "git+https://github.com/shuttle-hq/posthog-rs?branch=main#4a8299fde3080bff550620c0853be9b83fee8f44"
@@ -5204,6 +5210,7 @@ name = "shuttle-common"
 version = "0.42.0"
 dependencies = [
  "anyhow",
+ "async-once-cell",
  "async-trait",
  "axum",
  "base64 0.21.7",
@@ -5216,7 +5223,6 @@ dependencies = [
  "http-body 0.4.6",
  "hyper 0.14.28",
  "jsonwebtoken",
- "once_cell",
  "opentelemetry 0.21.0",
  "opentelemetry-appender-tracing",
  "opentelemetry-http 0.10.0",

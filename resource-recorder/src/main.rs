@@ -4,7 +4,7 @@ use clap::Parser;
 use shuttle_common::{
     backends::{
         auth::{AuthPublicKey, JwtAuthenticationLayer},
-        client::gateway,
+        client::ServicesApiClient,
         trace::setup_tracing,
     },
     extract_propagation::ExtractPropagationLayer,
@@ -30,7 +30,7 @@ async fn main() {
         .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_uri)))
         .layer(ExtractPropagationLayer);
 
-    let gateway_client = gateway::Client::new(gateway_uri.clone(), gateway_uri);
+    let gateway_client = ServicesApiClient::new(gateway_uri);
 
     let db_path = state.join("resource-recorder.sqlite");
     let svc = Service::new(

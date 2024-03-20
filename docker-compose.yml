@@ -21,6 +21,8 @@ networks:
 services:
   auth:
     image: "${CONTAINER_REGISTRY}/auth:${AUTH_TAG}"
+    depends_on:
+      - permit-pdp
     ports:
       - 8008:8000
     deploy:
@@ -66,6 +68,7 @@ services:
     depends_on:
       - provisioner
       - auth
+      - permit-pdp
     ports:
       - 7999:7999
       - 8000:8000
@@ -261,6 +264,21 @@ services:
       - DD_API_KEY=${DD_API_KEY}
       - DD_ENV=${DD_ENV}
       - HONEYCOMB_API_KEY=${HONEYCOMB_API_KEY}
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==controller
+  permit-pdp:
+    image: docker.io/permitio/pdp-v2:0.2.37
+    restart: always
+    environment:
+      - PDP_CONTROL_PLANE=${PERMIT_API}
+      - PDP_API_KEY=${PERMIT_API_KEY}
+      - PDP_DEBUG=${PERMIT_BEDUG}
+    ports:
+      - 7000:7000
+    networks:
+      user-net:
     deploy:
       placement:
         constraints:

@@ -44,10 +44,8 @@ impl ProjectsDal for ServicesApiClient {
         user_token: &str,
         project_name: &str,
     ) -> Result<models::project::Response, Error> {
-        self.request(
-            Method::GET,
+        self.get(
             format!("projects/{}", project_name).as_str(),
-            None::<()>,
             Some(header_map_with_bearer(user_token)),
         )
         .await
@@ -71,13 +69,8 @@ impl ProjectsDal for ServicesApiClient {
         &self,
         user_token: &str,
     ) -> Result<Vec<models::project::Response>, Error> {
-        self.request(
-            Method::GET,
-            "projects",
-            None::<()>,
-            Some(header_map_with_bearer(user_token)),
-        )
-        .await
+        self.get("projects", Some(header_map_with_bearer(user_token)))
+            .await
     }
 }
 

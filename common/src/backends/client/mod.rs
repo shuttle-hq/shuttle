@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use bytes::Bytes;
-use http::{header::AUTHORIZATION, HeaderMap, HeaderValue, Method, StatusCode, Uri};
+use headers::{Authorization, HeaderMapExt};
+use http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use reqwest::{Client, ClientBuilder, Response};
@@ -36,20 +37,20 @@ pub struct ServicesApiClient {
 }
 
 impl ServicesApiClient {
-    fn _builder() -> ClientBuilder {
+    pub fn builder() -> ClientBuilder {
         Client::builder().timeout(Duration::from_secs(60))
     }
 
     pub fn new(base: Uri) -> Self {
         Self {
-            client: Self::_builder().build().unwrap(),
+            client: Self::builder().build().unwrap(),
             base,
         }
     }
 
     pub fn new_with_bearer(base: Uri, token: &str) -> Self {
         Self {
-            client: Self::_builder()
+            client: Self::builder()
                 .default_headers(header_map_with_bearer(token))
                 .build()
                 .unwrap(),
@@ -148,16 +149,13 @@ impl ServicesApiClient {
 
 pub fn header_map_with_bearer(token: &str) -> HeaderMap {
     let mut h = HeaderMap::new();
-    h.append(
-        AUTHORIZATION,
-        format!("Bearer {token}").parse().expect("valid token"),
-    );
+    h.typed_insert(Authorization::bearer(token).expect("valid token"));
     h
 }
 
 #[cfg(test)]
 mod tests {
-    use http::{Method, StatusCode};
+    use http::StatusCode;
 
     use crate::models;
     use crate::test_utils::get_mocked_gateway_server;
@@ -172,7 +170,7 @@ mod tests {
         let client = ServicesApiClient::new(server.uri().parse().unwrap());
 
         let err = client
-            .request::<_, Vec<models::project::Response>>(Method::GET, "projects", None::<()>, None)
+            .get::<Vec<models::project::Response>>("projects", None)
             .await
             .unwrap_err();
 

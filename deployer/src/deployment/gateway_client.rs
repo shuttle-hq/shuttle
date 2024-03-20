@@ -1,4 +1,3 @@
-use hyper::Method;
 use shuttle_common::{
     backends::client::{Error, ServicesApiClient},
     models,
@@ -18,18 +17,24 @@ pub trait BuildQueueClient: Clone + Send + Sync + 'static {
 #[async_trait::async_trait]
 impl BuildQueueClient for ServicesApiClient {
     async fn get_slot(&self, deployment_id: Uuid) -> Result<bool, Error> {
-        let body = models::stats::LoadRequest { id: deployment_id };
         let load: models::stats::LoadResponse = self
-            .request(Method::POST, "stats/load", Some(body), None)
+            .post(
+                "stats/load",
+                models::stats::LoadRequest { id: deployment_id },
+                None,
+            )
             .await?;
 
         Ok(load.has_capacity)
     }
 
     async fn release_slot(&self, deployment_id: Uuid) -> Result<(), Error> {
-        let body = models::stats::LoadRequest { id: deployment_id };
         let _load: models::stats::LoadResponse = self
-            .request(Method::DELETE, "stats/load", Some(body), None)
+            .delete(
+                "stats/load",
+                models::stats::LoadRequest { id: deployment_id },
+                None,
+            )
             .await?;
 
         Ok(())

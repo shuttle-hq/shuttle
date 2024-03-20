@@ -11,7 +11,6 @@ use tracing::{trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 pub mod gateway;
-pub mod permit;
 mod resource_recorder;
 
 pub use gateway::ProjectsDal;

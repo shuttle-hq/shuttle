@@ -370,14 +370,10 @@ impl Client {
     }
 }
 
-
 impl PermissionsDal for Client {
     async fn get_user(&self, user_id: &str) -> Result<User, Error> {
         self.api
-            .get(
-                &format!("{}/users/{user_id}", self.facts),
-                None,
-            )
+            .get(&format!("{}/users/{user_id}", self.facts), None)
             .await
     }
 
@@ -514,6 +510,8 @@ pub struct SimpleResource {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use http::StatusCode;
     use serde_json::Value;
     use serial_test::serial;
@@ -540,13 +538,13 @@ mod tests {
 
     impl AsyncTestContext for Client {
         async fn setup() -> Self {
-            let api_key = env!("PERMIT_API_KEY");
+            let api_key = env::var("PERMIT_API_KEY").expect("PERMIT_API_KEY to be set. You can copy the testing API key from the Testing environment on Permit.io.");
             let client = Client::new(
                 "https://api.eu-central-1.permit.io".parse().unwrap(),
                 "http://localhost:7000".parse().unwrap(),
                 "default".to_string(),
                 "testing".to_string(),
-                api_key,
+                &api_key,
             );
 
             client.clear_users().await;

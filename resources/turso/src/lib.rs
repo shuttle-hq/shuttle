@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use libsql::{Connection, Database};
+use libsql::{Builder, Connection};
 use serde::{Deserialize, Serialize};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
@@ -123,15 +123,19 @@ impl ResourceInputBuilder for Turso {
 impl IntoResource<Connection> for TursoOutput {
     async fn into_resource(self) -> Result<Connection, shuttle_service::Error> {
         let database = match self.environment {
-            Environment::Deployment => Database::open_remote(
-                self.conn_url.to_string(),
-                self.token
-                    .clone()
-                    .ok_or(ShuttleError::Custom(CustomError::msg(
-                        "missing token for remote database",
-                    )))?,
-            ),
-            Environment::Local => Database::open(self.conn_url.to_string()),
+            Environment::Deployment => {
+                Builder::new_remote(
+                    self.conn_url.to_string(),
+                    self.token
+                        .clone()
+                        .ok_or(ShuttleError::Custom(CustomError::msg(
+                            "missing token for remote database",
+                        )))?,
+                )
+                .build()
+                .await
+            }
+            Environment::Local => Builder::new_local(self.conn_url.to_string()).build().await,
         };
         database
             .map_err(|err| ShuttleError::Custom(err.into()))?

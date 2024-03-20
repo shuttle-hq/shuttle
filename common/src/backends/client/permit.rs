@@ -8,50 +8,20 @@ use super::{Error, ServicesApiClient};
 
 #[allow(async_fn_in_trait)]
 pub trait PermissionsDal {
-    /// Low-level function to create a new user. Should almost always use [Self::new_user()] instead
-    async fn create_user(&self, user_id: &str) -> Result<User, Error>;
-
     /// Get a user with the given ID
     async fn get_user(&self, user_id: &str) -> Result<User, Error>;
 
     /// Delete a user with the given ID
     async fn delete_user(&self, user_id: &str) -> Result<(), Error>;
 
-    /// Low-level function to assign a specific role to a user. Should almost always use [Self::make_pro()] or [Self::make_free()] instead
-    async fn assign_role(&self, user_id: &str, role: &AccountTier) -> Result<(), Error>;
-
-    /// Low-level function to remove a specific role from a user. Should almost always use [Self::make_pro()] or [Self::make_free()] instead
-    async fn unassign_role(&self, user_id: &str, role: &AccountTier) -> Result<(), Error>;
-
     /// Create a new user and set their tier correctly
-    async fn new_user(&self, user_id: &str) -> Result<User, Error> {
-        let user = self.create_user(user_id).await?;
-        self.make_free(&user.id).await?;
-
-        self.get_user(&user.id).await
-    }
+    async fn new_user(&self, user_id: &str) -> Result<User, Error>;
 
     /// Set a user to be a Pro user
-    async fn make_pro(&self, user_id: &str) -> Result<(), Error> {
-        let user = self.get_user(user_id).await?;
-
-        if user.roles.contains(&AccountTier::Basic) {
-            self.unassign_role(user_id, &AccountTier::Basic).await?;
-        }
-
-        self.assign_role(user_id, &AccountTier::Pro).await
-    }
+    async fn make_pro(&self, user_id: &str) -> Result<(), Error>;
 
     /// Set a user to be a Free user
-    async fn make_free(&self, user_id: &str) -> Result<(), Error> {
-        let user = self.get_user(user_id).await?;
-
-        if user.roles.contains(&AccountTier::Pro) {
-            self.unassign_role(user_id, &AccountTier::Pro).await?;
-        }
-
-        self.assign_role(user_id, &AccountTier::Basic).await
-    }
+    async fn make_free(&self, user_id: &str) -> Result<(), Error>;
 }
 
 /// Simple user
@@ -99,9 +69,7 @@ impl Client {
             environment: environment.to_string(),
         }
     }
-}
 
-impl PermissionsDal for Client {
     async fn create_user(&self, user_id: &str) -> Result<User, Error> {
         let Self { environment, .. } = self;
 
@@ -112,32 +80,6 @@ impl PermissionsDal for Client {
                 None,
             )
             .await
-    }
-
-    async fn get_user(&self, user_id: &str) -> Result<User, Error> {
-        let Self { environment, .. } = self;
-
-        self.client
-            .get(
-                &format!("v2/facts/default/{environment}/users/{user_id}"),
-                None,
-            )
-            .await
-    }
-
-    async fn delete_user(&self, user_id: &str) -> Result<(), Error> {
-        let Self { environment, .. } = self;
-
-        self.client
-            .request_raw(
-                Method::DELETE,
-                &format!("v2/facts/default/{environment}/users/{user_id}"),
-                None::<()>,
-                None,
-            )
-            .await?;
-
-        Ok(())
     }
 
     async fn assign_role(&self, user_id: &str, role: &AccountTier) -> Result<(), Error> {
@@ -174,6 +116,61 @@ impl PermissionsDal for Client {
             .await?;
 
         Ok(())
+    }
+}
+
+impl PermissionsDal for Client {
+    async fn get_user(&self, user_id: &str) -> Result<User, Error> {
+        let Self { environment, .. } = self;
+
+        self.client
+            .get(
+                &format!("v2/facts/default/{environment}/users/{user_id}"),
+                None,
+            )
+            .await
+    }
+
+    async fn delete_user(&self, user_id: &str) -> Result<(), Error> {
+        let Self { environment, .. } = self;
+
+        self.client
+            .request_raw(
+                Method::DELETE,
+                &format!("v2/facts/default/{environment}/users/{user_id}"),
+                None::<()>,
+                None,
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn new_user(&self, user_id: &str) -> Result<User, Error> {
+        let user = self.create_user(user_id).await?;
+        self.make_free(&user.id).await?;
+
+        self.get_user(&user.id).await
+    }
+
+    async fn make_pro(&self, user_id: &str) -> Result<(), Error> {
+        let user = self.get_user(user_id).await?;
+
+        if user.roles.contains(&AccountTier::Basic) {
+            self.unassign_role(user_id, &AccountTier::Basic).await?;
+        }
+
+        self.assign_role(user_id, &AccountTier::Pro).await
+    }
+
+    async fn make_free(&self, user_id: &str) -> Result<(), Error> {
+        let user = self.get_user(user_id).await?;
+
+        if user.roles.contains(&AccountTier::Pro) {
+            self.unassign_role(user_id, &AccountTier::Pro).await?;
+        }
+
+        self.assign_role(user_id, &AccountTier::Basic).await
     }
 }
 

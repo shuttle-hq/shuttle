@@ -82,6 +82,18 @@ impl Permit {
     pub async fn create_organization(&self, user_id: &str, org_name: &str) -> Result<(), Error> {
         self.api
             .post(
+                &format!("{}/resource_instances", self.endpoint_facts()),
+                json!({
+                    "key": org_name,
+                    "tenant": "default",
+                    "resource": "Organization",
+                }),
+                None,
+            )
+            .await?;
+
+        self.api
+            .post(
                 &format!("{}/role_assignments", self.endpoint_facts()),
                 json!({
                     "role": "admin",
@@ -98,7 +110,10 @@ impl Permit {
         self.api
             .request(
                 Method::DELETE,
-                &format!("v2/facts/default/poc/resource_instances/{organization_id}"),
+                &format!(
+                    "{}/resource_instances/{organization_id}",
+                    self.endpoint_facts()
+                ),
                 None::<()>,
                 None,
             )
@@ -109,7 +124,8 @@ impl Permit {
         self.api
             .get(
                 &format!(
-                    "v2/facts/default/poc/role_assignments?user={user_id}&resource=Organization"
+                    "{}/role_assignments?user={user_id}&resource=Organization",
+                    self.endpoint_facts()
                 ),
                 None,
             )
@@ -124,7 +140,10 @@ impl Permit {
         let res: Vec<Value> = self
             .api
             .get(
-                &format!("v2/facts/default/poc/role_assignments?user={user_id}&resource_instance=Organization:{org_name}"),
+                &format!(
+                    "{}/role_assignments?user={user_id}&resource_instance=Organization:{org_name}",
+                    self.endpoint_facts()
+                ),
                 None,
             )
             .await?;
@@ -139,7 +158,7 @@ impl Permit {
     ) -> Result<(), Error> {
         self.api
             .post(
-                "v2/facts/default/poc/relationship_tuples",
+                &format!("{}/relationship_tuples", self.endpoint_facts()),
                 json!({
                     "subject": format!("Organization:{org_name}"),
                     "tenant": "default",
@@ -158,7 +177,7 @@ impl Permit {
     ) -> Result<(), Error> {
         self.api
             .delete(
-                "v2/facts/default/poc/relationship_tuples",
+                &format!("{}/relationship_tuples", self.endpoint_facts()),
                 json!({
                     "subject": format!("Organization:{org_name}"),
                     "relation": "parent",
@@ -175,7 +194,10 @@ impl Permit {
     ) -> Result<Vec<OrganizationResource>, Error> {
         self.api
             .get(
-                &format!("v2/facts/default/poc/relationship_tuples?subject=Organization:{org_name}&detailed=true"),
+                &format!(
+                    "{}/relationship_tuples?subject=Organization:{org_name}&detailed=true",
+                    self.endpoint_facts()
+                ),
                 None,
             )
             .await
@@ -184,7 +206,10 @@ impl Permit {
     pub async fn get_organization_members(&self, org_name: &str) -> Result<Vec<Value>, Error> {
         self.api
             .get(
-                &format!("v2/facts/default/poc/role_assignments?resource_instance=Organization:{org_name}&role=member"),
+                &format!(
+                    "{}/role_assignments?resource_instance=Organization:{org_name}&role=member",
+                    self.endpoint_facts()
+                ),
                 None,
             )
             .await
@@ -197,7 +222,7 @@ impl Permit {
     ) -> Result<(), Error> {
         self.api
             .post(
-                "v2/facts/default/poc/role_assignments",
+                &format!("{}/role_assignments", self.endpoint_facts()),
                 json!({
                     "role": "member",
                     "resource_instance": format!("Organization:{org_name}"),
@@ -216,7 +241,7 @@ impl Permit {
     ) -> Result<(), Error> {
         self.api
             .delete(
-                "v2/facts/default/poc/role_assignments",
+                &format!("{}/role_assignments", self.endpoint_facts()),
                 json!({
                     "role": "member",
                     "resource_instance": format!("Organization:{org_name}"),
@@ -232,7 +257,7 @@ impl Permit {
         let perms: HashMap<String, ProjectPermissions> = self
             .pdp
             .post(
-                "user-permissions",
+                "/user-permissions",
                 json!({
                     "user": {"key": user_id},
                     "resource_types": ["Project"],
@@ -253,7 +278,7 @@ impl Permit {
         let res: Value = self
             .pdp
             .post(
-                "allowed",
+                "/allowed",
                 json!({
                     "user": {"key": user_id},
                     "action": action,

@@ -57,11 +57,12 @@ backend = [
     "axum/matched-path",
     "axum/json",
     "claims",
-    "hyper/client",
+    "hyper",
     "opentelemetry_sdk",
     "opentelemetry-appender-tracing",
     "opentelemetry-otlp",
     "models",
+    "reqwest/json",
     "rustrict", # only ProjectName model uses it
     "thiserror",
     "tokio",

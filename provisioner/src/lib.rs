@@ -12,7 +12,7 @@ pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_common::backends::auth::VerifyClaim;
-use shuttle_common::backends::client::gateway;
+use shuttle_common::backends::client::ServicesApiClient;
 use shuttle_common::backends::ClaimExt;
 use shuttle_common::claims::{Claim, Scope};
 use shuttle_common::models::project::ProjectName;
@@ -44,7 +44,7 @@ pub struct ShuttleProvisioner {
     internal_pg_address: String,
     internal_mongodb_address: String,
     rr_client: Arc<Mutex<resource_recorder::Client>>,
-    gateway_client: gateway::Client,
+    gateway_client: ServicesApiClient,
 }
 
 impl ShuttleProvisioner {
@@ -81,7 +81,7 @@ impl ShuttleProvisioner {
 
         let rr_client = resource_recorder::get_client(resource_recorder_uri).await;
 
-        let gateway_client = gateway::Client::new(gateway_uri.clone(), gateway_uri);
+        let gateway_client = ServicesApiClient::new(gateway_uri);
 
         Ok(Self {
             pool,

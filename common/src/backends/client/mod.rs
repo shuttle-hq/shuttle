@@ -1,9 +1,11 @@
+use std::time::Duration;
+
 use bytes::Bytes;
-use headers::{ContentType, Header, HeaderMapExt};
-use http::{Method, Request, StatusCode, Uri};
-use hyper::{body, client::HttpConnector, Body, Client};
+use headers::{Authorization, HeaderMapExt};
+use http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
+use reqwest::{Client, ClientBuilder, Response};
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 use tracing::{trace, Span};
@@ -17,95 +19,143 @@ pub use resource_recorder::ResourceDal;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Hyper error: {0}")]
-    Hyper(#[from] hyper::Error),
+    #[error("Reqwest error: {0}")]
+    Reqwest(#[from] reqwest::Error),
     #[error("Serde JSON error: {0}")]
     SerdeJson(#[from] serde_json::Error),
-    #[error("Hyper error: {0}")]
-    Http(#[from] hyper::http::Error),
     #[error("Request did not return correctly. Got status code: {0}")]
     RequestError(StatusCode),
     #[error("GRpc request did not return correctly. Got status code: {0}")]
     GrpcError(#[from] tonic::Status),
 }
 
-/// `Hyper` wrapper to make request to RESTful Shuttle services easy
+/// `reqwest` wrapper to make requests to other services easy
 #[derive(Clone)]
 pub struct ServicesApiClient {
-    client: Client<HttpConnector>,
+    client: Client,
     base: Uri,
 }
 
 impl ServicesApiClient {
-    fn new(base: Uri) -> Self {
+    pub fn builder() -> ClientBuilder {
+        Client::builder().timeout(Duration::from_secs(60))
+    }
+
+    pub fn new(base: Uri) -> Self {
         Self {
-            client: Client::new(),
+            client: Self::builder().build().unwrap(),
             base,
         }
     }
 
-    pub async fn request<B: Serialize, T: DeserializeOwned, H: Header>(
-        &self,
-        method: Method,
-        path: &str,
-        body: Option<B>,
-        extra_header: Option<H>,
-    ) -> Result<T, Error> {
-        let bytes = self.request_raw(method, path, body, extra_header).await?;
-        let json = serde_json::from_slice(&bytes)?;
-
-        Ok(json)
+    pub fn new_with_bearer(base: Uri, token: &str) -> Self {
+        Self {
+            client: Self::builder()
+                .default_headers(header_map_with_bearer(token))
+                .build()
+                .unwrap(),
+            base,
+        }
     }
 
-    pub async fn request_raw<B: Serialize, H: Header>(
+    pub async fn get<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        headers: Option<HeaderMap<HeaderValue>>,
+    ) -> Result<T, Error> {
+        self.request(Method::GET, path, None::<()>, headers).await
+    }
+
+    pub async fn post<B: Serialize, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: B,
+        headers: Option<HeaderMap<HeaderValue>>,
+    ) -> Result<T, Error> {
+        self.request(Method::POST, path, Some(body), headers).await
+    }
+
+    pub async fn delete<B: Serialize, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: B,
+        headers: Option<HeaderMap<HeaderValue>>,
+    ) -> Result<T, Error> {
+        self.request(Method::DELETE, path, Some(body), headers)
+            .await
+    }
+
+    pub async fn request<B: Serialize, T: DeserializeOwned>(
         &self,
         method: Method,
         path: &str,
         body: Option<B>,
-        extra_header: Option<H>,
+        headers: Option<HeaderMap<HeaderValue>>,
+    ) -> Result<T, Error> {
+        Ok(self
+            .request_raw(method, path, body, headers)
+            .await?
+            .json()
+            .await?)
+    }
+
+    pub async fn request_bytes<B: Serialize>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<B>,
+        headers: Option<HeaderMap<HeaderValue>>,
     ) -> Result<Bytes, Error> {
+        Ok(self
+            .request_raw(method, path, body, headers)
+            .await?
+            .bytes()
+            .await?)
+    }
+
+    // can be used for explicit HEAD requests (ignores body)
+    pub async fn request_raw<B: Serialize>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<B>,
+        headers: Option<HeaderMap<HeaderValue>>,
+    ) -> Result<Response, Error> {
         let uri = format!("{}{path}", self.base);
         trace!(uri, "calling inner service");
 
-        let mut req = Request::builder().method(method).uri(uri);
-        let headers = req
-            .headers_mut()
-            .expect("new request to have mutable headers");
-        if let Some(extra_header) = extra_header {
-            headers.typed_insert(extra_header);
-        }
-        if body.is_some() {
-            headers.typed_insert(ContentType::json());
-        }
-
+        let mut h = headers.unwrap_or_default();
         let cx = Span::current().context();
         global::get_text_map_propagator(|propagator| {
-            propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut().unwrap()))
+            propagator.inject_context(&cx, &mut HeaderInjector(&mut h))
         });
-
+        let req = self.client.request(method, uri).headers(h);
         let req = if let Some(body) = body {
-            req.body(Body::from(serde_json::to_vec(&body)?))
+            req.json(&body)
         } else {
-            req.body(Body::empty())
+            req
         };
 
-        let resp = self.client.request(req?).await?;
-        trace!(response = ?resp, "Load response");
+        let resp = req.send().await?;
+        trace!(response = ?resp, "service response");
 
-        if resp.status() != StatusCode::OK {
+        if !resp.status().is_success() {
             return Err(Error::RequestError(resp.status()));
         }
 
-        let bytes = body::to_bytes(resp.into_body()).await?;
-
-        Ok(bytes)
+        Ok(resp)
     }
+}
+
+pub fn header_map_with_bearer(token: &str) -> HeaderMap {
+    let mut h = HeaderMap::new();
+    h.typed_insert(Authorization::bearer(token).expect("valid token"));
+    h
 }
 
 #[cfg(test)]
 mod tests {
-    use headers::{authorization::Bearer, Authorization};
-    use http::{Method, StatusCode};
+    use http::StatusCode;
 
     use crate::models;
     use crate::test_utils::get_mocked_gateway_server;
@@ -120,12 +170,7 @@ mod tests {
         let client = ServicesApiClient::new(server.uri().parse().unwrap());
 
         let err = client
-            .request::<_, Vec<models::project::Response>, _>(
-                Method::GET,
-                "projects",
-                None::<()>,
-                None::<Authorization<Bearer>>,
-            )
+            .get::<Vec<models::project::Response>>("projects", None)
             .await
             .unwrap_err();
 

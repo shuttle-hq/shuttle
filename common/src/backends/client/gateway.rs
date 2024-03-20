@@ -1,37 +1,9 @@
-use headers::Authorization;
-use http::{Method, Uri};
+use http::Method;
 use tracing::instrument;
 
 use crate::models;
 
-use super::{Error, ServicesApiClient};
-
-/// Wrapper struct to make API calls to gateway easier
-#[derive(Clone)]
-pub struct Client {
-    public_client: ServicesApiClient,
-    private_client: ServicesApiClient,
-}
-
-impl Client {
-    /// Make a gateway client that is able to call the public and private APIs on gateway
-    pub fn new(public_uri: Uri, private_uri: Uri) -> Self {
-        Self {
-            public_client: ServicesApiClient::new(public_uri),
-            private_client: ServicesApiClient::new(private_uri),
-        }
-    }
-
-    /// Get the client of public API calls
-    pub fn public_client(&self) -> &ServicesApiClient {
-        &self.public_client
-    }
-
-    /// Get the client of private API calls
-    pub fn private_client(&self) -> &ServicesApiClient {
-        &self.private_client
-    }
-}
+use super::{header_map_with_bearer, Error, ServicesApiClient};
 
 /// Interact with all the data relating to projects
 #[allow(async_fn_in_trait)]
@@ -65,33 +37,29 @@ pub trait ProjectsDal {
     }
 }
 
-impl ProjectsDal for Client {
+impl ProjectsDal for ServicesApiClient {
     #[instrument(skip_all)]
     async fn get_user_project(
         &self,
         user_token: &str,
         project_name: &str,
     ) -> Result<models::project::Response, Error> {
-        self.public_client
-            .request(
-                Method::GET,
-                format!("projects/{}", project_name).as_str(),
-                None::<()>,
-                Some(Authorization::bearer(user_token).expect("to build an authorization bearer")),
-            )
-            .await
+        self.get(
+            format!("projects/{}", project_name).as_str(),
+            Some(header_map_with_bearer(user_token)),
+        )
+        .await
     }
 
     #[instrument(skip_all)]
     async fn head_user_project(&self, user_token: &str, project_name: &str) -> Result<bool, Error> {
-        self.public_client
-            .request_raw(
-                Method::HEAD,
-                format!("projects/{}", project_name).as_str(),
-                None::<()>,
-                Some(Authorization::bearer(user_token).expect("to build an authorization bearer")),
-            )
-            .await?;
+        self.request_raw(
+            Method::HEAD,
+            format!("projects/{}", project_name).as_str(),
+            None::<()>,
+            Some(header_map_with_bearer(user_token)),
+        )
+        .await?;
 
         Ok(true)
     }
@@ -101,13 +69,7 @@ impl ProjectsDal for Client {
         &self,
         user_token: &str,
     ) -> Result<Vec<models::project::Response>, Error> {
-        self.public_client
-            .request(
-                Method::GET,
-                "projects",
-                None::<()>,
-                Some(Authorization::bearer(user_token).expect("to build an authorization bearer")),
-            )
+        self.get("projects", Some(header_map_with_bearer(user_token)))
             .await
     }
 }
@@ -116,24 +78,25 @@ impl ProjectsDal for Client {
 mod tests {
     use test_context::{test_context, AsyncTestContext};
 
+    use crate::backends::client::ServicesApiClient;
     use crate::models::project::{Response, State};
     use crate::test_utils::get_mocked_gateway_server;
 
-    use super::{Client, ProjectsDal};
+    use super::ProjectsDal;
 
-    impl AsyncTestContext for Client {
+    impl AsyncTestContext for ServicesApiClient {
         async fn setup() -> Self {
             let server = get_mocked_gateway_server().await;
 
-            Client::new(server.uri().parse().unwrap(), server.uri().parse().unwrap())
+            ServicesApiClient::new(server.uri().parse().unwrap())
         }
 
         async fn teardown(self) {}
     }
 
-    #[test_context(Client)]
+    #[test_context(ServicesApiClient)]
     #[tokio::test]
-    async fn get_user_projects(client: &mut Client) {
+    async fn get_user_projects(client: &mut ServicesApiClient) {
         let res = client.get_user_projects("user-1").await.unwrap();
 
         assert_eq!(
@@ -155,9 +118,9 @@ mod tests {
         )
     }
 
-    #[test_context(Client)]
+    #[test_context(ServicesApiClient)]
     #[tokio::test]
-    async fn get_user_project_ids(client: &mut Client) {
+    async fn get_user_project_ids(client: &mut ServicesApiClient) {
         let res = client.get_user_project_ids("user-2").await.unwrap();
 
         assert_eq!(res, vec!["00000000000000000000000003"])

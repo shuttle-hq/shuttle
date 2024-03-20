@@ -116,3 +116,6 @@ services:
       - 8004:8000
       # the shared postgres already uses 5432
       - 5434:5432
+  permit-pdp:
+    environment:
+      - PDP_DEBUG=True

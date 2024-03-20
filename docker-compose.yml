@@ -274,7 +274,6 @@ services:
     environment:
       - PDP_CONTROL_PLANE=${PERMIT_API}
       - PDP_API_KEY=${PERMIT_API_KEY}
-      - PDP_DEBUG=${PERMIT_BEDUG}
     ports:
       - 7000:7000
     networks:

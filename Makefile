@@ -41,8 +41,6 @@ MONGO_INITDB_ROOT_USERNAME?=mongodb
 MONGO_INITDB_ROOT_PASSWORD?=password
 STRIPE_SECRET_KEY?=""
 AUTH_JWTSIGNING_PRIVATE_KEY?=""
-
-PERMIT_API?=https://api.eu-central-1.permit.io
 PERMIT_API_KEY?=""
 
 DD_ENV=$(SHUTTLE_ENV)
@@ -131,7 +129,6 @@ DOCKER_COMPOSE_ENV=\
 	DOCKER_SOCK=$(DOCKER_SOCK)\
 	SHUTTLE_ENV=$(SHUTTLE_ENV)\
 	SHUTTLE_SERVICE_VERSION=$(SHUTTLE_SERVICE_VERSION)\
-	PERMIT_API=$(PERMIT_API)\
 	PERMIT_API_KEY=$(PERMIT_API_KEY)
 
 .PHONY: clean deep-clean images the-shuttle-images shuttle-% postgres otel deploy test docker-compose.rendered.yml up down

@@ -54,6 +54,8 @@ services:
       - "--address=0.0.0.0:8000"
       - "--stripe-secret-key=${STRIPE_SECRET_KEY}"
       - "--jwt-signing-private-key=${AUTH_JWTSIGNING_PRIVATE_KEY}"
+      - "--permit-api=https://api.eu-central-1.permit.io"
+      - "--permit-api-key=${PERMIT_API_KEY}"
     healthcheck:
       test: curl -f -s http://localhost:8000
       interval: 1m
@@ -119,6 +121,9 @@ services:
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"
       - "--admin-key=${GATEWAY_ADMIN_KEY}"
+      - "--permit-api=https://api.eu-central-1.permit.io"
+      - "--permit-api-key=${PERMIT_API_KEY}"
+      - "--permit-pdp=http://permit-pdp:7000"
     healthcheck:
       test: curl -f -s http://localhost:8001
       interval: 1m

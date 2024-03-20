@@ -48,7 +48,7 @@ pub struct StartArgs {
     #[arg(long, default_value = "local")]
     pub permit_environment: String,
 
-    /// Permit environment to use
+    /// Permit API key
     #[arg(long, default_value = "permit_")]
     pub permit_api_key: String,
 }

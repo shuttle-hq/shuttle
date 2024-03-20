@@ -86,6 +86,15 @@ pub struct ContextArgs {
     /// Maximum number of containers to start on this node before blocking any project
     #[arg(long, default_value = "990")]
     pub hard_container_limit: u32,
+    /// Address to the Permit.io API
+    #[arg(long, default_value = "https://api.eu-central-1.permit.io")]
+    pub permit_api: Uri,
+    /// Permit.io API key
+    #[arg(long)]
+    pub permit_api_key: String,
+    /// Address to the local Permit.io PDP
+    #[arg(long, default_value = "http://permit-pdp:7000")]
+    pub permit_pdp: Uri,
 
     /// Allow tests to set some extra /etc/hosts
     pub extra_hosts: Vec<String>,

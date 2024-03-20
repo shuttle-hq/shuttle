@@ -176,9 +176,9 @@ impl PermissionsDal for Client {
 
 #[cfg(test)]
 mod tests {
-    use async_once_cell::OnceCell;
     use http::StatusCode;
     use serde_json::Value;
+    use serial_test::serial;
     use test_context::{test_context, AsyncTestContext};
 
     use crate::{backends::client::Error, claims::AccountTier};
@@ -202,26 +202,24 @@ mod tests {
         }
     }
 
-    // Used to ensure that the cleanup steps are only run once while blocking other threads
-    static CLEANUP_CALLED: OnceCell<()> = OnceCell::new();
-
     impl AsyncTestContext for Client {
         async fn setup() -> Self {
             let api_key = env!("PERMIT_API_KEY");
             let client = Client::new(api_key, "testing");
 
-            CLEANUP_CALLED
-                .get_or_init(async {
-                    client.clear_users().await;
-                })
-                .await;
+            client.clear_users().await;
 
             client
+        }
+
+        async fn teardown(self) {
+            self.clear_users().await;
         }
     }
 
     #[test_context(Client)]
     #[tokio::test]
+    #[serial]
     async fn test_user_flow(client: &mut Client) {
         let user = client.create_user("test_user").await.unwrap();
         let user_actual = client.get_user("test_user").await.unwrap();
@@ -243,6 +241,7 @@ mod tests {
 
     #[test_context(Client)]
     #[tokio::test]
+    #[serial]
     async fn test_tiers_flow(client: &mut Client) {
         let user = client.create_user("tier_user").await.unwrap();
 
@@ -278,6 +277,7 @@ mod tests {
 
     #[test_context(Client)]
     #[tokio::test]
+    #[serial]
     async fn test_user_complex_flow(client: &mut Client) {
         let user = client.new_user("jane").await.unwrap();
         assert_eq!(

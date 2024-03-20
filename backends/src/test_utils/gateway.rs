@@ -3,7 +3,9 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use anyhow::Error;
 use async_trait::async_trait;
+use permit_client_rs::models::UserRead;
 use serde::Serialize;
 use shuttle_common::claims::AccountTier;
 use wiremock::{
@@ -12,7 +14,7 @@ use wiremock::{
     Mock, MockServer, Request, ResponseTemplate,
 };
 
-use crate::client::{permit::User, Error, PermissionsDal};
+use crate::client::PermissionsDal;
 
 pub async fn get_mocked_gateway_server() -> MockServer {
     let mock_server = MockServer::start().await;
@@ -93,12 +95,12 @@ struct Project<'a> {
 
 #[derive(Clone, Default)]
 pub struct PermissionsMock {
-    pub users: Arc<RwLock<HashMap<String, User>>>,
+    pub users: Arc<RwLock<HashMap<String, UserRead>>>,
 }
 
 #[async_trait]
 impl PermissionsDal for PermissionsMock {
-    async fn get_user(&self, _user_id: &str) -> Result<User, Error> {
+    async fn get_user(&self, _user_id: &str) -> Result<UserRead, Error> {
         unimplemented!()
     }
 
@@ -106,30 +108,42 @@ impl PermissionsDal for PermissionsMock {
         unimplemented!()
     }
 
-    async fn new_user(&self, user_id: &str) -> Result<User, Error> {
-        let user = User {
-            id: user_id.to_string(),
-            key: user_id.to_string(),
-            roles: vec![AccountTier::Basic],
-        };
+    async fn new_user(&self, user_id: &str) -> Result<UserRead, Error> {
+        // let user = UserRead {
+        //     id: user_id.to_string(),
+        //     key: user_id.to_string(),
+        //     roles: vec![AccountTier::Basic],
+        //     ..Default::default()
+        // };
 
-        self.users
-            .write()
-            .unwrap()
-            .insert(user_id.to_string(), user.clone());
+        // self.users
+        //     .write()
+        //     .unwrap()
+        //     .insert(user_id.to_string(), user.clone());
 
-        Ok(user)
+        // Ok(user)
+        unimplemented!()
     }
 
     async fn make_pro(&self, user_id: &str) -> Result<(), Error> {
-        self.users.write().unwrap().get_mut(user_id).unwrap().roles = vec![AccountTier::Pro];
+        // self.users.write().unwrap().get_mut(user_id).unwrap().roles = vec![AccountTier::Pro];
 
-        Ok(())
+        // Ok(())
+        unimplemented!()
     }
 
     async fn make_free(&self, user_id: &str) -> Result<(), Error> {
-        self.users.write().unwrap().get_mut(user_id).unwrap().roles = vec![AccountTier::Basic];
+        // self.users.write().unwrap().get_mut(user_id).unwrap().roles = vec![AccountTier::Basic];
 
-        Ok(())
+        // Ok(())
+        unimplemented!()
+    }
+
+    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
+        unimplemented!()
+    }
+
+    async fn delete_project(&self, project_id: &str) -> Result<(), Error> {
+        unimplemented!()
     }
 }

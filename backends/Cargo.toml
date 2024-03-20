@@ -24,6 +24,8 @@ opentelemetry-appender-tracing = { workspace = true }
 opentelemetry-http = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 pin-project = { workspace = true }
+permit-client-rs = { git = "https://github.com/shuttle-hq/permit-client-rs" }
+permit-pdp-client-rs = { git = "https://github.com/shuttle-hq/permit-pdp-client-rs" }
 portpicker = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["json"] }
 # keep locked to not accidentally invalidate someone's project name

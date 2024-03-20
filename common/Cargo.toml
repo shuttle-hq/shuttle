@@ -62,7 +62,7 @@ backend = [
     "opentelemetry-appender-tracing",
     "opentelemetry-otlp",
     "models",
-    "reqwest",
+    "reqwest/json",
     "rustrict", # only ProjectName model uses it
     "thiserror",
     "tokio",

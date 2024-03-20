@@ -12,33 +12,24 @@ pub struct Permit {
     api: ServicesApiClient,
     /// The local Permit PDP (Policy decision point) API
     pdp: ServicesApiClient,
-    /// The project id used in API paths
-    proj_id: String,
-    /// The environment id used in API paths
-    env_id: String,
+    /// The base URL path for 'facts' endpoints. Helps with building full URLs.
+    facts: String,
 }
 
 impl Permit {
-    // "https://api.eu-central-1.permit.io".parse().unwrap(),
-    // "http://localhost:7000".parse().unwrap(),
     pub fn new(api_uri: Uri, pdp_uri: Uri, proj_id: String, env_id: String, api_key: &str) -> Self {
         Self {
             api: ServicesApiClient::new_with_bearer(api_uri, api_key),
             pdp: ServicesApiClient::new(pdp_uri),
-            proj_id,
-            env_id,
+            facts: format!("/v2/facts/{}/{}", proj_id, env_id),
         }
-    }
-
-    fn endpoint_facts(&self) -> String {
-        format!("/v2/facts/{}/{}", self.proj_id, self.env_id)
     }
 
     /// Creates a Project resource and assigns the user as admin for that project
     pub async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
         self.api
             .post(
-                &format!("{}/resource_instances", self.endpoint_facts()),
+                &format!("{}/resource_instances", self.facts),
                 json!({
                     "key": project_id,
                     "tenant": "default",
@@ -50,7 +41,7 @@ impl Permit {
 
         self.api
             .post(
-                &format!("{}/role_assignments", self.endpoint_facts()),
+                &format!("{}/role_assignments", self.facts),
                 json!({
                     "role": "admin",
                     "resource_instance": format!("Project:{project_id}"),
@@ -66,7 +57,7 @@ impl Permit {
     pub async fn delete_user_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
         self.api
             .delete(
-                &format!("{}/role_assignments", self.endpoint_facts()),
+                &format!("{}/role_assignments", self.facts),
                 json!({
                     "role": "admin",
                     "resource_instance": format!("Project:{project_id}"),
@@ -82,7 +73,7 @@ impl Permit {
     pub async fn create_organization(&self, user_id: &str, org_name: &str) -> Result<(), Error> {
         self.api
             .post(
-                &format!("{}/resource_instances", self.endpoint_facts()),
+                &format!("{}/resource_instances", self.facts),
                 json!({
                     "key": org_name,
                     "tenant": "default",
@@ -94,7 +85,7 @@ impl Permit {
 
         self.api
             .post(
-                &format!("{}/role_assignments", self.endpoint_facts()),
+                &format!("{}/role_assignments", self.facts),
                 json!({
                     "role": "admin",
                     "resource_instance": format!("Organization:{org_name}"),
@@ -110,10 +101,7 @@ impl Permit {
         self.api
             .request(
                 Method::DELETE,
-                &format!(
-                    "{}/resource_instances/{organization_id}",
-                    self.endpoint_facts()
-                ),
+                &format!("{}/resource_instances/{organization_id}", self.facts),
                 None::<()>,
                 None,
             )
@@ -125,7 +113,7 @@ impl Permit {
             .get(
                 &format!(
                     "{}/role_assignments?user={user_id}&resource=Organization",
-                    self.endpoint_facts()
+                    self.facts
                 ),
                 None,
             )
@@ -142,7 +130,7 @@ impl Permit {
             .get(
                 &format!(
                     "{}/role_assignments?user={user_id}&resource_instance=Organization:{org_name}",
-                    self.endpoint_facts()
+                    self.facts
                 ),
                 None,
             )
@@ -158,7 +146,7 @@ impl Permit {
     ) -> Result<(), Error> {
         self.api
             .post(
-                &format!("{}/relationship_tuples", self.endpoint_facts()),
+                &format!("{}/relationship_tuples", self.facts),
                 json!({
                     "subject": format!("Organization:{org_name}"),
                     "tenant": "default",
@@ -177,7 +165,7 @@ impl Permit {
     ) -> Result<(), Error> {
         self.api
             .delete(
-                &format!("{}/relationship_tuples", self.endpoint_facts()),
+                &format!("{}/relationship_tuples", self.facts),
                 json!({
                     "subject": format!("Organization:{org_name}"),
                     "relation": "parent",
@@ -196,7 +184,7 @@ impl Permit {
             .get(
                 &format!(
                     "{}/relationship_tuples?subject=Organization:{org_name}&detailed=true",
-                    self.endpoint_facts()
+                    self.facts
                 ),
                 None,
             )
@@ -208,7 +196,7 @@ impl Permit {
             .get(
                 &format!(
                     "{}/role_assignments?resource_instance=Organization:{org_name}&role=member",
-                    self.endpoint_facts()
+                    self.facts
                 ),
                 None,
             )
@@ -222,7 +210,7 @@ impl Permit {
     ) -> Result<(), Error> {
         self.api
             .post(
-                &format!("{}/role_assignments", self.endpoint_facts()),
+                &format!("{}/role_assignments", self.facts),
                 json!({
                     "role": "member",
                     "resource_instance": format!("Organization:{org_name}"),
@@ -241,7 +229,7 @@ impl Permit {
     ) -> Result<(), Error> {
         self.api
             .delete(
-                &format!("{}/role_assignments", self.endpoint_facts()),
+                &format!("{}/role_assignments", self.facts),
                 json!({
                     "role": "member",
                     "resource_instance": format!("Organization:{org_name}"),

@@ -4,7 +4,7 @@ use bytes::Bytes;
 use http::{header::AUTHORIZATION, HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use reqwest::{Client, ClientBuilder};
+use reqwest::{Client, ClientBuilder, Response};
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 use tracing::{trace, Span};
@@ -91,19 +91,35 @@ impl ServicesApiClient {
         body: Option<B>,
         headers: Option<HeaderMap<HeaderValue>>,
     ) -> Result<T, Error> {
-        let bytes = self.request_raw(method, path, body, headers).await?;
-        let json = serde_json::from_slice(&bytes)?;
-
-        Ok(json)
+        Ok(self
+            .request_raw(method, path, body, headers)
+            .await?
+            .json()
+            .await?)
     }
 
-    pub async fn request_raw<B: Serialize>(
+    pub async fn request_bytes<B: Serialize>(
         &self,
         method: Method,
         path: &str,
         body: Option<B>,
         headers: Option<HeaderMap<HeaderValue>>,
     ) -> Result<Bytes, Error> {
+        Ok(self
+            .request_raw(method, path, body, headers)
+            .await?
+            .bytes()
+            .await?)
+    }
+
+    // can be used for explicit HEAD requests (ignores body)
+    pub async fn request_raw<B: Serialize>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<B>,
+        headers: Option<HeaderMap<HeaderValue>>,
+    ) -> Result<Response, Error> {
         let uri = format!("{}{path}", self.base);
         trace!(uri, "calling inner service");
 
@@ -126,9 +142,7 @@ impl ServicesApiClient {
             return Err(Error::RequestError(resp.status()));
         }
 
-        let bytes = resp.bytes().await?;
-
-        Ok(bytes)
+        Ok(resp)
     }
 }
 

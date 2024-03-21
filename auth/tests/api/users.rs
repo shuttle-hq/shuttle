@@ -12,7 +12,7 @@ mod needs_docker {
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
     use pretty_assertions::assert_eq;
     use serde_json::{self, Value};
-    use shuttle_common::models::user;
+    use shuttle_common::{claims::AccountTier, models::user};
 
     #[tokio::test]
     async fn post_user() {
@@ -54,6 +54,18 @@ mod needs_docker {
         assert!(user.id.starts_with("user_"));
         assert!(user.key.is_ascii());
 
+        assert_eq!(
+            app.permissions
+                .users
+                .read()
+                .unwrap()
+                .get(&user.id)
+                .unwrap()
+                .roles,
+            vec![AccountTier::Basic],
+            "should default to basic tier"
+        );
+
         // POST user with valid bearer token and pro tier.
         let response = app.post_user("pro-user", "pro").await;
 
@@ -66,6 +78,17 @@ mod needs_docker {
         assert_eq!(user.account_tier, "pro");
         assert!(user.id.starts_with("user_"));
         assert!(user.key.is_ascii());
+
+        assert_eq!(
+            app.permissions
+                .users
+                .read()
+                .unwrap()
+                .get(&user.id)
+                .unwrap()
+                .roles,
+            vec![AccountTier::Pro]
+        );
     }
 
     #[tokio::test]
@@ -164,6 +187,18 @@ mod needs_docker {
             pro_user.subscriptions.first().unwrap().id,
             mocked_subscription_obj.get("id").unwrap().as_str().unwrap()
         );
+
+        assert_eq!(
+            app.permissions
+                .users
+                .read()
+                .unwrap()
+                .get(&user.id)
+                .unwrap()
+                .roles,
+            vec![AccountTier::Pro],
+            "should have update the permissions too"
+        );
     }
 
     #[tokio::test]
@@ -204,6 +239,17 @@ mod needs_docker {
         let actual_user: user::Response = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(actual_user.account_tier, "pendingpaymentpro");
+        assert_eq!(
+            app.permissions
+                .users
+                .read()
+                .unwrap()
+                .get(&actual_user.id)
+                .unwrap()
+                .roles,
+            vec![AccountTier::Basic],
+            "should have update the permissions too"
+        );
     }
 
     #[tokio::test]
@@ -244,6 +290,18 @@ mod needs_docker {
             user::SubscriptionType::Rds
         );
         assert_eq!(response.subscriptions[0].quantity, 1);
+
+        assert_eq!(
+            app.permissions
+                .users
+                .read()
+                .unwrap()
+                .get(&response.id)
+                .unwrap()
+                .roles,
+            vec![AccountTier::Basic],
+            "RDS subscription should not change the account tier"
+        );
 
         // Make sure JWT has the quota
         let claim = app.get_claim(basic_user_key).await;
@@ -340,6 +398,18 @@ mod needs_docker {
         let user: user::Response = serde_json::from_slice(&body).unwrap();
         assert_eq!(user.account_tier, "cancelledpro");
 
+        assert_eq!(
+            app.permissions
+                .users
+                .read()
+                .unwrap()
+                .get(&user.id)
+                .unwrap()
+                .roles,
+            vec![AccountTier::Basic],
+            "permissions should be updated to basic"
+        );
+
         // When called again at some later time, the subscription returned from stripe should be
         // cancelled.
         let response = app
@@ -355,5 +425,16 @@ mod needs_docker {
         let user: user::Response = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(user.account_tier, "basic");
+        assert_eq!(
+            app.permissions
+                .users
+                .read()
+                .unwrap()
+                .get(&user.id)
+                .unwrap()
+                .roles,
+            vec![AccountTier::Basic],
+            "permissions should still be basic"
+        );
     }
 }

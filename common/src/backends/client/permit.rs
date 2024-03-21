@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use async_trait::async_trait;
 use http::{Method, Uri};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -8,7 +9,7 @@ use crate::claims::AccountTier;
 
 use super::{Error, ServicesApiClient};
 
-#[allow(async_fn_in_trait)]
+#[async_trait]
 pub trait PermissionsDal {
     /// Get a user with the given ID
     async fn get_user(&self, user_id: &str) -> Result<User, Error>;
@@ -27,7 +28,7 @@ pub trait PermissionsDal {
 }
 
 /// Simple user
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct User {
     pub id: String,
     pub key: String,
@@ -370,6 +371,7 @@ impl Client {
     }
 }
 
+#[async_trait]
 impl PermissionsDal for Client {
     async fn get_user(&self, user_id: &str) -> Result<User, Error> {
         self.api

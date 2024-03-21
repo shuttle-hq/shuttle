@@ -12,7 +12,7 @@ shuttle-proto = { workspace = true, features = ["resource-recorder-client"] }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-axum = { workspace = true }
+axum = { workspace = true, features = ["matched-path"] }
 bytes = { workspace = true }
 headers = { workspace = true }
 http = { workspace = true }
@@ -48,7 +48,6 @@ sqlx = ["dep:sqlx"]
 test-utils = ["portpicker", "wiremock"]
 
 [dev-dependencies]
-axum = { workspace = true, features = ["matched-path"] }
 base64 = { workspace = true }
 jsonwebtoken = { workspace = true }
 ring = { workspace = true }

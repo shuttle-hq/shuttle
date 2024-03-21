@@ -24,7 +24,6 @@ serde_json = { workspace = true, optional = true }
 
 [features]
 default = []
-test-utils = ["portpicker"]
 
 logger = [
     "shuttle-common/service",

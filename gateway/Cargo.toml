@@ -6,7 +6,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
-shuttle-backends = { workspace = true }
+shuttle-backends = { workspace = true, features = ["sqlx"] }
 shuttle-common = { workspace = true, features = ["models", "persist"] }
 shuttle-proto = { workspace = true, features = ["provisioner-client"] }
 
@@ -63,7 +63,7 @@ portpicker = { workspace = true }
 ring = { workspace = true }
 rmp-serde = { workspace = true }
 shuttle-common-tests = { workspace = true }
-shuttle-proto = { workspace = true, features = ["test-utils"] }
+shuttle-backends = { workspace = true, features = ["test-utils"] }
 snailquote = "0.3.1"
 tar = { workspace = true }
 tempfile = { workspace = true }

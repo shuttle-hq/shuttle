@@ -11,6 +11,7 @@ rust-version = "1.75"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
 chrono = { workspace = true }
 comfy-table = { workspace = true, optional = true }
@@ -41,6 +42,7 @@ zeroize = { workspace = true }
 wiremock = { workspace = true, optional = true }
 
 [features]
+axum = ["dep:axum"]
 claims = [
     "bytes",
     "chrono/clock",

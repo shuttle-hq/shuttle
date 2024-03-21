@@ -90,7 +90,7 @@ pub(crate) async fn convert_key(
     State(user_manager): State<UserManagerState>,
     State(key_manager): State<KeyManagerState>,
     key: Key,
-) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
+) -> Result<Json<shuttle_backends::auth::ConvertResponse>, StatusCode> {
     let user = user_manager
         .get_user_by_key(key.into())
         .await
@@ -105,7 +105,7 @@ pub(crate) async fn convert_key(
 
     let token = claim.into_token(key_manager.private_key())?;
 
-    let response = shuttle_common::backends::auth::ConvertResponse { token };
+    let response = shuttle_backends::auth::ConvertResponse { token };
 
     Ok(Json(response))
 }

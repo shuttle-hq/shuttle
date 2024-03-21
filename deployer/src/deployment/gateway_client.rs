@@ -1,7 +1,5 @@
-use shuttle_common::{
-    backends::client::{Error, ServicesApiClient},
-    models,
-};
+use shuttle_backends::client::{Error, ServicesApiClient};
+use shuttle_common::models;
 use uuid::Uuid;
 
 /// A client that can communicate with the build queue

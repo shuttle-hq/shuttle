@@ -7,7 +7,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-shuttle-common = { workspace = true, features = ["claims", "models"] }
+shuttle-common = { workspace = true, features = ["axum", "claims", "models"] }
 shuttle-proto = { workspace = true, features = ["resource-recorder-client"] }
 
 anyhow = { workspace = true }
@@ -24,14 +24,17 @@ opentelemetry-appender-tracing = { workspace = true }
 opentelemetry-http = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 pin-project = { workspace = true }
+portpicker = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["json"] }
 # keep locked to not accidentally invalidate someone's project name
 rustrict = { version = "=0.7.12" }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
+sqlx = { workspace = true, optional = true }
+strum = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tonic = { workspace = true }
+tonic = { workspace = true, optional = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
 tracing = { workspace = true, features = ["std"] }
@@ -41,14 +44,15 @@ ttl_cache = { workspace = true }
 wiremock = { workspace = true, optional = true }
 
 [features]
-test-utils = ["wiremock"]
+sqlx = ["dep:sqlx"]
+tonic = ["dep:tonic", "strum"]
+test-utils = ["portpicker", "wiremock"]
 
 [dev-dependencies]
 axum = { workspace = true, features = ["matched-path"] }
 base64 = { workspace = true }
 hyper = { workspace = true }
 jsonwebtoken = { workspace = true }
-portpicker = { workspace = true }
 proptest = "1.1.0"
 ring = { workspace = true }
 test-context = { workspace = true }

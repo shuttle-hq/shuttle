@@ -6,11 +6,9 @@ use axum::{
     routing::{delete, get, post, put},
     Router, Server,
 };
-use shuttle_common::{
-    backends::{
-        client::PermissionsDal,
-        metrics::{Metrics, TraceLayer},
-    },
+use shuttle_backends::{
+    client::PermissionsDal,
+    metrics::{Metrics, TraceLayer},
     request_span,
 };
 use sqlx::PgPool;

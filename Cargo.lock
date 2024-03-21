@@ -5250,6 +5250,8 @@ dependencies = [
  "serde_json",
  "shuttle-common",
  "shuttle-proto",
+ "sqlx",
+ "strum 0.26.1",
  "test-context 0.3.0",
  "thiserror",
  "tokio",

@@ -1,15 +1,12 @@
 use std::time::Duration;
 
 use clap::Parser;
-use shuttle_common::{
-    backends::{
-        auth::{AuthPublicKey, JwtAuthenticationLayer},
-        client::ServicesApiClient,
-        trace::setup_tracing,
-    },
-    extract_propagation::ExtractPropagationLayer,
-    log::Backend,
+use shuttle_backends::{
+    auth::{AuthPublicKey, JwtAuthenticationLayer},
+    client::ServicesApiClient,
+    trace::setup_tracing,
 };
+use shuttle_common::{extract_propagation::ExtractPropagationLayer, log::Backend};
 use shuttle_proto::resource_recorder::resource_recorder_server::ResourceRecorderServer;
 use shuttle_resource_recorder::{args::Args, Service, Sqlite};
 use tonic::transport::Server;

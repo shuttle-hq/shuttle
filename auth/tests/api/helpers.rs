@@ -4,8 +4,8 @@ use hyper::http::{header::AUTHORIZATION, Request};
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use shuttle_auth::{pgpool_init, ApiBuilder};
+use shuttle_backends::headers::X_SHUTTLE_ADMIN_SECRET;
 use shuttle_common::{
-    backends::headers::X_SHUTTLE_ADMIN_SECRET,
     claims::{AccountTier, Claim},
     models::user,
     test_utils::PermissionsMock,

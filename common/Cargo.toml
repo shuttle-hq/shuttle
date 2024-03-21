@@ -21,7 +21,6 @@ http = { workspace = true, optional = true }
 http-body = { workspace = true, optional = true }
 hyper = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
-once_cell = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
@@ -109,6 +108,7 @@ base64 = { workspace = true }
 hyper = { workspace = true }
 proptest = "1.1.0"
 ring = { workspace = true }
+serial_test = "3.0.0"
 test-context = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true, features = ["util"] }

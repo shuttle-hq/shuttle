@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use clap::{Parser, Subcommand};
+use http::Uri;
 use shuttle_common::models::user::UserId;
 
 #[derive(Parser, Debug)]
@@ -34,6 +35,22 @@ pub struct StartArgs {
     /// a PEM encoded PKCS#8 v1 formatted unencrypted private key.
     #[arg(long, default_value = "")]
     pub jwt_signing_private_key: String,
+
+    /// Address to reach the permit.io API at
+    #[arg(long, default_value = "https://api.eu-central-1.permit.io")]
+    pub permit_api_uri: Uri,
+
+    /// Address to reach the permit.io PDP at
+    #[arg(long, default_value = "http://permit-pdp:7000")]
+    pub permit_pdp_uri: Uri,
+
+    /// Permit environment to use
+    #[arg(long, default_value = "local")]
+    pub permit_environment: String,
+
+    /// Permit environment to use
+    #[arg(long, default_value = "permit_")]
+    pub permit_api_key: String,
 }
 
 #[derive(clap::Args, Debug, Clone)]

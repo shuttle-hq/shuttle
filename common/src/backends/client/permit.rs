@@ -1,13 +1,62 @@
 use std::collections::HashMap;
 
+use async_trait::async_trait;
 use http::{Method, Uri};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
+
+use crate::claims::AccountTier;
 
 use super::{Error, ServicesApiClient};
 
+#[async_trait]
+pub trait PermissionsDal {
+    /// Get a user with the given ID
+    async fn get_user(&self, user_id: &str) -> Result<User, Error>;
+
+    /// Delete a user with the given ID
+    async fn delete_user(&self, user_id: &str) -> Result<(), Error>;
+
+    /// Create a new user and set their tier correctly
+    async fn new_user(&self, user_id: &str) -> Result<User, Error>;
+
+    /// Set a user to be a Pro user
+    async fn make_pro(&self, user_id: &str) -> Result<(), Error>;
+
+    /// Set a user to be a Free user
+    async fn make_free(&self, user_id: &str) -> Result<(), Error>;
+}
+
+/// Simple user
+#[derive(Clone, Deserialize, Debug)]
+pub struct User {
+    pub id: String,
+    pub key: String,
+    #[serde(deserialize_with = "deserialize_role")]
+    pub roles: Vec<AccountTier>,
+}
+
+#[derive(Deserialize)]
+struct RoleObject {
+    role: AccountTier,
+}
+
+// Used to convert a Permit role into our internal `AccountTier` enum
+fn deserialize_role<'de, D>(deserializer: D) -> Result<Vec<AccountTier>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let roles = Vec::<RoleObject>::deserialize(deserializer)?;
+
+    let mut role_vec: Vec<AccountTier> = roles.into_iter().map(|r| r.role).collect();
+
+    role_vec.sort();
+
+    Ok(role_vec)
+}
+
 #[derive(Clone)]
-pub struct Permit {
+pub struct Client {
     /// The Permit.io API
     api: ServicesApiClient,
     /// The local Permit PDP (Policy decision point) API
@@ -16,12 +65,12 @@ pub struct Permit {
     facts: String,
 }
 
-impl Permit {
+impl Client {
     pub fn new(api_uri: Uri, pdp_uri: Uri, proj_id: String, env_id: String, api_key: &str) -> Self {
         Self {
             api: ServicesApiClient::new_with_bearer(api_uri, api_key),
             pdp: ServicesApiClient::new(pdp_uri),
-            facts: format!("/v2/facts/{}/{}", proj_id, env_id),
+            facts: format!("v2/facts/{}/{}", proj_id, env_id),
         }
     }
 
@@ -278,6 +327,97 @@ impl Permit {
 
         Ok(res["allow"].as_bool().unwrap())
     }
+
+    async fn create_user(&self, user_id: &str) -> Result<User, Error> {
+        self.api
+            .post(
+                &format!("{}/users", self.facts),
+                json!({"key": user_id}),
+                None,
+            )
+            .await
+    }
+
+    async fn assign_role(&self, user_id: &str, role: &AccountTier) -> Result<(), Error> {
+        self.api
+            .request_raw(
+                Method::POST,
+                &format!("{}/users/{user_id}/roles", self.facts),
+                Some(json!({
+                    "role": role,
+                    "tenant": "default",
+                })),
+                None,
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn unassign_role(&self, user_id: &str, role: &AccountTier) -> Result<(), Error> {
+        self.api
+            .request_raw(
+                Method::DELETE,
+                &format!("{}/users/{user_id}/roles", self.facts),
+                Some(json!({
+                    "role": role,
+                    "tenant": "default",
+                })),
+                None,
+            )
+            .await?;
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl PermissionsDal for Client {
+    async fn get_user(&self, user_id: &str) -> Result<User, Error> {
+        self.api
+            .get(&format!("{}/users/{user_id}", self.facts), None)
+            .await
+    }
+
+    async fn delete_user(&self, user_id: &str) -> Result<(), Error> {
+        self.api
+            .request_raw(
+                Method::DELETE,
+                &format!("{}/users/{user_id}", self.facts),
+                None::<()>,
+                None,
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn new_user(&self, user_id: &str) -> Result<User, Error> {
+        let user = self.create_user(user_id).await?;
+        self.make_free(&user.id).await?;
+
+        self.get_user(&user.id).await
+    }
+
+    async fn make_pro(&self, user_id: &str) -> Result<(), Error> {
+        let user = self.get_user(user_id).await?;
+
+        if user.roles.contains(&AccountTier::Basic) {
+            self.unassign_role(user_id, &AccountTier::Basic).await?;
+        }
+
+        self.assign_role(user_id, &AccountTier::Pro).await
+    }
+
+    async fn make_free(&self, user_id: &str) -> Result<(), Error> {
+        let user = self.get_user(user_id).await?;
+
+        if user.roles.contains(&AccountTier::Pro) {
+            self.unassign_role(user_id, &AccountTier::Pro).await?;
+        }
+
+        self.assign_role(user_id, &AccountTier::Basic).await
+    }
 }
 
 /// Struct to hold the following relationship tuple from permit
@@ -368,4 +508,134 @@ pub struct SimpleResource {
     pub key: String,
     pub r#type: String,
     pub attributes: Value,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+
+    use http::StatusCode;
+    use serde_json::Value;
+    use serial_test::serial;
+    use test_context::{test_context, AsyncTestContext};
+
+    use crate::{backends::client::Error, claims::AccountTier};
+
+    use super::*;
+
+    impl Client {
+        async fn clear_users(&self) {
+            let users: Value = self
+                .api
+                .get(&format!("{}/users", self.facts), None)
+                .await
+                .unwrap();
+
+            for user in users["data"].as_array().unwrap() {
+                let user_id = user["id"].as_str().unwrap();
+                self.delete_user(user_id).await.unwrap();
+            }
+        }
+    }
+
+    impl AsyncTestContext for Client {
+        async fn setup() -> Self {
+            let api_key = env::var("PERMIT_API_KEY").expect("PERMIT_API_KEY to be set. You can copy the testing API key from the Testing environment on Permit.io.");
+            let client = Client::new(
+                "https://api.eu-central-1.permit.io".parse().unwrap(),
+                "http://localhost:7000".parse().unwrap(),
+                "default".to_string(),
+                "testing".to_string(),
+                &api_key,
+            );
+
+            client.clear_users().await;
+
+            client
+        }
+
+        async fn teardown(self) {
+            self.clear_users().await;
+        }
+    }
+
+    #[test_context(Client)]
+    #[tokio::test]
+    #[serial]
+    async fn test_user_flow(client: &mut Client) {
+        let user = client.create_user("test_user").await.unwrap();
+        let user_actual = client.get_user("test_user").await.unwrap();
+
+        assert_eq!(user.id, user_actual.id);
+
+        // Can also get user by permit id
+        client.get_user(&user.id).await.unwrap();
+
+        // Now delete the user
+        client.delete_user("test_user").await.unwrap();
+        let res = client.get_user("test_user").await;
+
+        assert!(matches!(
+            res,
+            Err(Error::RequestError(StatusCode::NOT_FOUND))
+        ));
+    }
+
+    #[test_context(Client)]
+    #[tokio::test]
+    #[serial]
+    async fn test_tiers_flow(client: &mut Client) {
+        let user = client.create_user("tier_user").await.unwrap();
+
+        assert!(user.roles.is_empty());
+
+        // Make user a pro
+        client
+            .assign_role("tier_user", &AccountTier::Pro)
+            .await
+            .unwrap();
+        let user = client.get_user("tier_user").await.unwrap();
+
+        assert_eq!(user.roles, vec![AccountTier::Pro]);
+
+        // Make user a free user
+        client
+            .assign_role("tier_user", &AccountTier::Basic)
+            .await
+            .unwrap();
+        let user = client.get_user("tier_user").await.unwrap();
+
+        assert_eq!(user.roles, vec![AccountTier::Basic, AccountTier::Pro]);
+
+        // Remove the pro role
+        client
+            .unassign_role("tier_user", &AccountTier::Pro)
+            .await
+            .unwrap();
+        let user = client.get_user("tier_user").await.unwrap();
+
+        assert_eq!(user.roles, vec![AccountTier::Basic]);
+    }
+
+    #[test_context(Client)]
+    #[tokio::test]
+    #[serial]
+    async fn test_user_complex_flow(client: &mut Client) {
+        let user = client.new_user("jane").await.unwrap();
+        assert_eq!(
+            user.roles,
+            vec![AccountTier::Basic],
+            "making a new user should default to Free tier"
+        );
+
+        client.make_pro("jane").await.unwrap();
+        client.make_pro("jane").await.unwrap();
+
+        let user = client.get_user("jane").await.unwrap();
+        assert_eq!(
+            user.roles,
+            vec![AccountTier::Pro],
+            "changing to Pro should remove Free"
+        );
+    }
 }

@@ -13,10 +13,7 @@ use shuttle_common::{
 };
 use tracing::{field, instrument, Span};
 
-use super::{
-    builder::{KeyManagerState, UserManagerState},
-    RouterState,
-};
+use super::builder::{KeyManagerState, UserManagerState};
 
 #[instrument(skip_all, fields(account.user_id = %user_id))]
 pub(crate) async fn get_user(
@@ -90,10 +87,8 @@ pub(crate) async fn delete_subscription(
 /// Convert a valid API-key bearer token to a JWT.
 pub(crate) async fn convert_key(
     _: Admin,
-    State(RouterState {
-        key_manager,
-        user_manager,
-    }): State<RouterState>,
+    State(user_manager): State<UserManagerState>,
+    State(key_manager): State<KeyManagerState>,
     key: Key,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
     let user = user_manager

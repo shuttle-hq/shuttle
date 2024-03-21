@@ -630,14 +630,23 @@ workflows:
                 - services/shuttle-warp
       - test-workspace-member:
           name: << matrix.crate >>
+          filters:
+            branches:
+              ignore:
+                - pull/*
           matrix:
             parameters:
               crate:
                 # - shuttle-admin # no tests
                 - shuttle-backends
+                # - shuttle-gateway # TODO: move docker-dependant tests to integration tests and activate this
+      - test-workspace-member:
+          name: << matrix.crate >>
+          matrix:
+            parameters:
+              crate:
                 - shuttle-codegen
                 - shuttle-common
-                # - shuttle-gateway # TODO: move docker-dependant tests to integration tests and activate this
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
           matrix:

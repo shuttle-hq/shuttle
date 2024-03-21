@@ -20,18 +20,16 @@ use tonic::Code;
 use tracing::{error, field, info, info_span, instrument, trace, warn};
 use uuid::Uuid;
 
+use shuttle_backends::{
+    auth::{AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
+    axum::CustomErrorPath,
+    metrics::{Metrics, TraceLayer},
+    request_span,
+};
 use shuttle_common::{
-    backends::{
-        auth::{AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
-        metrics::{Metrics, TraceLayer},
-    },
     claims::{Claim, Scope},
-    models::{
-        deployment::{DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH},
-        error::axum::CustomErrorPath,
-        project::ProjectName,
-    },
-    request_span, LogItem,
+    models::deployment::{DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH},
+    LogItem,
 };
 use shuttle_proto::logger::LogsRequest;
 
@@ -56,7 +54,8 @@ pub struct PaginationDetails {
 #[derive(Clone)]
 pub struct RouterBuilder {
     router: Router,
-    _project_name: ProjectName,
+    // might be used for tracing instruments?
+    _project_name: String,
     auth_uri: Uri,
 }
 
@@ -64,7 +63,7 @@ impl RouterBuilder {
     pub fn new(
         persistence: Persistence,
         deployment_manager: DeploymentManager,
-        project_name: ProjectName,
+        project_name: String,
         auth_uri: Uri,
     ) -> Self {
         let router = Router::new()

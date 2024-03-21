@@ -1,4 +1,3 @@
-use shuttle_common::backends;
 use std::error::Error as StdError;
 use std::io;
 use thiserror::Error;
@@ -30,7 +29,7 @@ pub enum Error {
     #[error("Failed to cleanup old deployments: {0}")]
     OldCleanup(#[source] Box<dyn StdError + Send>),
     #[error("Gateway client error: {0}")]
-    GatewayClient(#[from] backends::client::Error),
+    GatewayClient(#[from] shuttle_backends::client::Error),
     #[error("Failed to get runtime: {0}")]
     Runtime(#[source] anyhow::Error),
     #[error("Failed to call start on runtime: {0}")]

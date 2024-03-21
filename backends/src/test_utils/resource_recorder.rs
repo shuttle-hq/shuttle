@@ -6,7 +6,7 @@ use std::{
 use portpicker::pick_unused_port;
 use tonic::{async_trait, transport::Server, Request, Response, Status};
 
-use crate::generated::resource_recorder::{
+use shuttle_proto::resource_recorder::{
     resource_recorder_server::{ResourceRecorder, ResourceRecorderServer},
     ProjectResourcesRequest, RecordRequest, Resource, ResourceIds, ResourceResponse,
     ResourcesResponse, ResultResponse, ServiceResourcesRequest,

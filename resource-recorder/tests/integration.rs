@@ -3,9 +3,9 @@ use std::net::{Ipv4Addr, SocketAddr};
 use portpicker::pick_unused_port;
 use pretty_assertions::{assert_eq, assert_ne};
 use serde_json::json;
-use shuttle_common::{
-    backends::client::ServicesApiClient, claims::Scope, test_utils::get_mocked_gateway_server,
-};
+use shuttle_backends::client::ServicesApiClient;
+use shuttle_backends::test_utils::gateway::get_mocked_gateway_server;
+use shuttle_common::claims::Scope;
 use shuttle_common_tests::JwtScopesLayer;
 use shuttle_proto::resource_recorder::{
     record_request, resource_recorder_client::ResourceRecorderClient,

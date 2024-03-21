@@ -1,10 +1,8 @@
 use async_trait::async_trait;
 use dal::{Dal, DalError, Resource};
 use prost_types::TimestampError;
-use shuttle_common::{
-    backends::{auth::VerifyClaim, client::ServicesApiClient, ClaimExt},
-    claims::{Claim, Scope},
-};
+use shuttle_backends::{auth::VerifyClaim, client::ServicesApiClient, ClaimExt};
+use shuttle_common::claims::{Claim, Scope};
 use shuttle_proto::resource_recorder::{
     self, resource_recorder_server::ResourceRecorder, ProjectResourcesRequest, RecordRequest,
     ResourceIds, ResourceResponse, ResourcesResponse, ResultResponse, ServiceResourcesRequest,

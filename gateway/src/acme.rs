@@ -8,7 +8,7 @@ use instant_acme::{
     Identifier, KeyAuthorization, LetsEncrypt, NewAccount, NewOrder, Order, OrderStatus,
 };
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
-use shuttle_common::models::project::ProjectName;
+use shuttle_backends::project_name::ProjectName;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{error, trace, warn};

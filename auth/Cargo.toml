@@ -4,13 +4,11 @@ version = "0.42.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish = false
 
 [dependencies]
-shuttle-common = { workspace = true, features = [
-    "backend",
-    "models",
-    "persist",
-] }
+shuttle-backends = { workspace = true }
+shuttle-common = { workspace = true, features = ["models", "persist"] }
 
 anyhow = { workspace = true }
 async-stripe = { version = "0.25.1", default-features = false, features = ["checkout", "runtime-tokio-hyper-rustls"] }
@@ -41,7 +39,7 @@ once_cell = { workspace = true }
 portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
-shuttle-common = { workspace = true, features = ["test-utils"] }
+shuttle-backends = { workspace = true, features = ["test-utils"] }
 shuttle-common-tests = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 wiremock = { workspace = true }

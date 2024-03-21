@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 pub use persistence::Persistence;
 pub use runtime_manager::RuntimeManager;
-use shuttle_common::{backends::client::ServicesApiClient, log::LogRecorder};
+use shuttle_backends::client::ServicesApiClient;
+use shuttle_common::log::LogRecorder;
 use shuttle_proto::{logger, provisioner};
 use tokio::sync::Mutex;
 use tracing::info;

@@ -634,9 +634,10 @@ workflows:
             parameters:
               crate:
                 # - shuttle-admin # no tests
+                - shuttle-backends
                 - shuttle-codegen
                 - shuttle-common
-                # - shuttle-common-tests # no tests
+                # - shuttle-gateway # TODO: move docker-dependant tests to integration tests and activate this
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
           matrix:

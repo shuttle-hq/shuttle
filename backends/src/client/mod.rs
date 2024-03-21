@@ -159,10 +159,10 @@ pub fn header_map_with_bearer(token: &str) -> HeaderMap {
 mod tests {
     use http::StatusCode;
 
-    use crate::models;
-    use crate::test_utils::get_mocked_gateway_server;
+    use shuttle_common::models;
 
     use super::{Error, ServicesApiClient};
+    use crate::test_utils::gateway::get_mocked_gateway_server;
 
     // Make sure we handle any unexpected responses correctly
     #[tokio::test]

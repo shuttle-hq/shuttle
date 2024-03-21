@@ -11,7 +11,7 @@ rust-version = "1.75"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true, optional = true }
-axum = { workspace = true, optional = true }
+axum = { workspace = true, features = ["json"], optional = true }
 bytes = { workspace = true, optional = true }
 chrono = { workspace = true }
 comfy-table = { workspace = true, optional = true }
@@ -19,59 +19,30 @@ crossterm = { workspace = true, optional = true }
 headers = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 http-body = { workspace = true, optional = true }
-hyper = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
-opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
-opentelemetry-otlp = { workspace = true, optional = true }
-opentelemetry-appender-tracing = { workspace = true, optional = true }
 pin-project = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
-# keep locked to not accidentally invalidate someone's project name
-rustrict = { version = "=0.7.12", optional = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true, optional = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true }
 tonic = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
-tower-http = { workspace = true, optional = true }
 tracing = { workspace = true, features = ["std"], optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
-ttl_cache = { workspace = true, optional = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 zeroize = { workspace = true }
 wiremock = { workspace = true, optional = true }
 
 [features]
-backend = [
-    "async-trait",
-    "axum/matched-path",
-    "axum/json",
-    "claims",
-    "hyper",
-    "opentelemetry_sdk",
-    "opentelemetry-appender-tracing",
-    "opentelemetry-otlp",
-    "models",
-    "reqwest/json",
-    "rustrict", # only ProjectName model uses it
-    "thiserror",
-    "tokio",
-    "tonic",
-    "tower-http",
-    "tracing-subscriber/env-filter",
-    "tracing-subscriber/fmt",
-    "tracing",
-    "ttl_cache",
-]
+axum = ["dep:axum"]
 claims = [
     "bytes",
     "chrono/clock",
@@ -100,18 +71,8 @@ persist = ["sqlx", "rand"]
 sqlx = ["dep:sqlx", "sqlx/sqlite"]
 service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]
 test-utils = ["wiremock"]
+tonic = ["dep:tonic"]
 tracing = ["dep:tracing"]
 
 [dev-dependencies]
-axum = { workspace = true }
-base64 = { workspace = true }
-hyper = { workspace = true }
 proptest = "1.1.0"
-ring = { workspace = true }
-serial_test = "3.0.0"
-test-context = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-tower = { workspace = true, features = ["util"] }
-tracing-fluent-assertions = "0.3.0"
-tracing-subscriber = { workspace = true }
-wiremock = { workspace = true }

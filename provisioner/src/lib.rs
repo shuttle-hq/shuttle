@@ -11,11 +11,11 @@ use aws_sdk_rds::{
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
-use shuttle_common::backends::auth::VerifyClaim;
-use shuttle_common::backends::client::ServicesApiClient;
-use shuttle_common::backends::ClaimExt;
+use shuttle_backends::auth::VerifyClaim;
+use shuttle_backends::client::ServicesApiClient;
+use shuttle_backends::project_name::ProjectName;
+use shuttle_backends::ClaimExt;
 use shuttle_common::claims::{Claim, Scope};
-use shuttle_common::models::project::ProjectName;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, provisioner_server::Provisioner, shared, AwsRds,

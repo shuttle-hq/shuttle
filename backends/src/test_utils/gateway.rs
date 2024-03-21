@@ -5,16 +5,14 @@ use std::{
 
 use async_trait::async_trait;
 use serde::Serialize;
+use shuttle_common::claims::AccountTier;
 use wiremock::{
     http,
     matchers::{method, path, path_regex},
     Mock, MockServer, Request, ResponseTemplate,
 };
 
-use crate::{
-    backends::client::{permit::User, Error, PermissionsDal},
-    claims::AccountTier,
-};
+use crate::client::{permit::User, Error, PermissionsDal};
 
 pub async fn get_mocked_gateway_server() -> MockServer {
     let mock_server = MockServer::start().await;

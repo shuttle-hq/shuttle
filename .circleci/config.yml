@@ -697,16 +697,21 @@ workflows:
               only: main
   unstable:
     jobs:
+      # allow this job on main and other internal branches, but not on PRs from forks
       - approve-deploy-images-unstable:
           type: approval
           filters:
             branches:
-              only: main
+              ignore:
+                - pull/*
+                - production
       - approve-build-and-push-images-unstable:
           type: approval
           filters:
             branches:
-              only: main
+              ignore:
+                - pull/*
+                - production
       - build-and-push:
           name: build-and-push-unstable
           aws-access-key-id: DEV_AWS_ACCESS_KEY_ID

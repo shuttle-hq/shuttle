@@ -6,11 +6,8 @@ license.workspace = true
 publish = false
 
 [dependencies]
-shuttle-common = { workspace = true, features = [
-    "backend",
-    "models",
-    "persist",
-] }
+shuttle-backends = { workspace = true }
+shuttle-common = { workspace = true, features = ["models", "persist"] }
 shuttle-proto = { workspace = true, features = ["provisioner-client"] }
 
 async-posthog = { git = "https://github.com/shuttle-hq/posthog-rs", branch = "main" }

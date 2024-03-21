@@ -4,13 +4,11 @@ version = "0.42.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish = false
 
 [dependencies]
-shuttle-common = { workspace = true, features = [
-    "backend",
-    "models",
-    "persist",
-] }
+shuttle-backends = { workspace = true }
+shuttle-common = { workspace = true, features = ["models", "persist"] }
 
 anyhow = { workspace = true }
 async-stripe = { version = "0.25.1", default-features = false, features = ["checkout", "runtime-tokio-hyper-rustls"] }

@@ -8,7 +8,7 @@ use crate::{
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Limits {
     /// The amount of projects this user can create.
-    pub(crate) project_limit: u32,
+    pub project_limit: u32,
     /// Whether this user has permission to provision RDS instances.
     #[deprecated(
         since = "0.38.0",
@@ -17,7 +17,7 @@ pub struct Limits {
     #[serde(skip_deserializing)]
     rds_access: bool,
     /// The quantity of RDS instances this user can provision.
-    pub(crate) rds_quota: u32,
+    pub rds_quota: u32,
 }
 
 impl Default for Limits {

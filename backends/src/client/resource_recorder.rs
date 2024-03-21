@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use tracing::instrument;
 
-use crate::{database, resource};
+use shuttle_common::{database, resource};
 
 use super::Error;
 

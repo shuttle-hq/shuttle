@@ -1,7 +1,7 @@
 use http::Method;
 use tracing::instrument;
 
-use crate::models;
+use shuttle_common::models;
 
 use super::{header_map_with_bearer, Error, ServicesApiClient};
 
@@ -78,8 +78,9 @@ impl ProjectsDal for ServicesApiClient {
 mod tests {
     use test_context::{test_context, AsyncTestContext};
 
-    use crate::backends::client::ServicesApiClient;
-    use crate::models::project::{Response, State};
+    use shuttle_common::models::project::{Response, State};
+
+    use crate::client::ServicesApiClient;
     use crate::test_utils::get_mocked_gateway_server;
 
     use super::ProjectsDal;

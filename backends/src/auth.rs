@@ -15,7 +15,7 @@ use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::claims::{Claim, Scope};
+use shuttle_common::claims::{Claim, Scope};
 
 use super::{
     cache::{CacheManagement, CacheManager},
@@ -485,7 +485,7 @@ mod tests {
     use serde_json::json;
     use tower::{ServiceBuilder, ServiceExt};
 
-    use crate::claims::{AccountTier, Claim, Scope};
+    use shuttle_common::claims::{AccountTier, Claim, Scope};
 
     use super::{JwtAuthenticationLayer, ScopedLayer};
 

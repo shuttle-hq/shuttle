@@ -6,7 +6,7 @@ use opentelemetry_sdk::{
 use tracing::Subscriber;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
 
-use crate::log::Backend;
+use shuttle_common::log::Backend;
 
 use super::otlp_tracing_bridge::{self, ErrorTracingLayer};
 

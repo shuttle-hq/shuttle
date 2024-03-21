@@ -4,11 +4,10 @@ use hyper::http::{header::AUTHORIZATION, Request};
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use shuttle_auth::{pgpool_init, ApiBuilder};
-use shuttle_backends::headers::X_SHUTTLE_ADMIN_SECRET;
+use shuttle_backends::{headers::X_SHUTTLE_ADMIN_SECRET, test_utils::gateway::PermissionsMock};
 use shuttle_common::{
     claims::{AccountTier, Claim},
     models::user,
-    test_utils::PermissionsMock,
 };
 use shuttle_common_tests::postgres::DockerInstance;
 use sqlx::query;

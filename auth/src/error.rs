@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
 use serde::{ser::SerializeMap, Serialize};
-use shuttle_common::backends::client;
+use shuttle_backends::client;
 use shuttle_common::models::error::ApiError;
 use stripe::StripeError;
 

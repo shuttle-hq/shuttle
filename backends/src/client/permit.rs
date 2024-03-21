@@ -4,8 +4,7 @@ use async_trait::async_trait;
 use http::{Method, Uri};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
-
-use crate::claims::AccountTier;
+use shuttle_common::claims::AccountTier;
 
 use super::{Error, ServicesApiClient};
 
@@ -519,7 +518,7 @@ mod tests {
     use serial_test::serial;
     use test_context::{test_context, AsyncTestContext};
 
-    use crate::{backends::client::Error, claims::AccountTier};
+    use crate::client::Error;
 
     use super::*;
 

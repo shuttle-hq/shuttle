@@ -7,7 +7,8 @@ mod user;
 use std::io;
 
 use args::StartArgs;
-use shuttle_common::{backends::client::permit, claims::AccountTier, ApiKey};
+use shuttle_backends::client::permit;
+use shuttle_common::{claims::AccountTier, ApiKey};
 use sqlx::{migrate::Migrator, query, PgPool};
 use tracing::info;
 pub use user::User;

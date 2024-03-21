@@ -39,7 +39,7 @@ once_cell = { workspace = true }
 portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
-shuttle-common = { workspace = true, features = ["test-utils"] }
+shuttle-backends = { workspace = true, features = ["test-utils"] }
 shuttle-common-tests = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 wiremock = { workspace = true }

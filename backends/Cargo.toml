@@ -31,10 +31,10 @@ rustrict = { version = "=0.7.12" }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true, optional = true }
-strum = { workspace = true, optional = true }
+strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tonic = { workspace = true, optional = true }
+tonic = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
 tracing = { workspace = true, features = ["std"] }
@@ -45,19 +45,13 @@ wiremock = { workspace = true, optional = true }
 
 [features]
 sqlx = ["dep:sqlx"]
-tonic = ["dep:tonic", "strum"]
 test-utils = ["portpicker", "wiremock"]
 
 [dev-dependencies]
 axum = { workspace = true, features = ["matched-path"] }
 base64 = { workspace = true }
-hyper = { workspace = true }
 jsonwebtoken = { workspace = true }
-proptest = "1.1.0"
 ring = { workspace = true }
+serial_test = "3.0.0"
 test-context = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-tower = { workspace = true, features = ["util"] }
 tracing-fluent-assertions = "0.3.0"
-tracing-subscriber = { workspace = true }
-wiremock = { workspace = true }

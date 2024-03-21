@@ -10,6 +10,7 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
+use strum::EnumMessage;
 use thiserror::Error;
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
@@ -437,13 +438,10 @@ pub trait VerifyClaim {
     fn get_claim(&self) -> Result<Claim, Self::Error>;
 }
 
-#[cfg(feature = "tonic")]
 impl<B> VerifyClaim for tonic::Request<B> {
     type Error = tonic::Status;
 
     fn verify(&self, required_scope: Scope) -> Result<(), Self::Error> {
-        use strum::EnumMessage;
-
         let claim = self
             .extensions()
             .get::<Claim>()

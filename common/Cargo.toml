@@ -11,7 +11,7 @@ rust-version = "1.75"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true, optional = true }
-axum = { workspace = true, optional = true }
+axum = { workspace = true, features = ["json"], optional = true }
 bytes = { workspace = true, optional = true }
 chrono = { workspace = true }
 comfy-table = { workspace = true, optional = true }
@@ -75,15 +75,4 @@ tonic = ["dep:tonic"]
 tracing = ["dep:tracing"]
 
 [dev-dependencies]
-axum = { workspace = true }
-base64 = { workspace = true }
-hyper = { workspace = true }
 proptest = "1.1.0"
-ring = { workspace = true }
-serial_test = "3.0.0"
-test-context = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-tower = { workspace = true, features = ["util"] }
-tracing-fluent-assertions = "0.3.0"
-tracing-subscriber = { workspace = true }
-wiremock = { workspace = true }

@@ -81,7 +81,7 @@ mod tests {
     use shuttle_common::models::project::{Response, State};
 
     use crate::client::ServicesApiClient;
-    use crate::test_utils::get_mocked_gateway_server;
+    use crate::test_utils::gateway::get_mocked_gateway_server;
 
     use super::ProjectsDal;
 

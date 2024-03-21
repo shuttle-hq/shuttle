@@ -162,7 +162,7 @@ mod tests {
     use shuttle_common::models;
 
     use super::{Error, ServicesApiClient};
-    use crate::test_utils::get_mocked_gateway_server;
+    use crate::test_utils::gateway::get_mocked_gateway_server;
 
     // Make sure we handle any unexpected responses correctly
     #[tokio::test]

@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 shuttle-common = { workspace = true, features = ["claims", "models"] }
+shuttle-proto = { workspace = true, features = ["resource-recorder-client"] }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -47,6 +48,7 @@ axum = { workspace = true, features = ["matched-path"] }
 base64 = { workspace = true }
 hyper = { workspace = true }
 jsonwebtoken = { workspace = true }
+portpicker = { workspace = true }
 proptest = "1.1.0"
 ring = { workspace = true }
 test-context = { workspace = true }

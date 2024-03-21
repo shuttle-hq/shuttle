@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     iter::FromIterator,
     net::{Ipv4Addr, SocketAddr},
-    ops::DerefMut,
+    ops::{Deref, DerefMut},
     str::FromStr,
     sync::Mutex,
     time::Duration,
@@ -112,6 +112,8 @@ pub struct Alpha<L, R> {
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     loader: Mutex<Option<L>>,
     runner: Mutex<Option<R>>,
+    /// Whether or not the runtime is healthy, which is checked by the ECS task.
+    healthy: Mutex<bool>,
 }
 
 impl<L, R> Alpha<L, R> {
@@ -123,6 +125,7 @@ impl<L, R> Alpha<L, R> {
             kill_tx: Mutex::new(None),
             loader: Mutex::new(Some(loader)),
             runner: Mutex::new(Some(runner)),
+            healthy: Mutex::new(false),
         }
     }
 }
@@ -225,6 +228,9 @@ where
                 }
             }
         };
+
+        println!("setting current state to healthy");
+        *self.healthy.lock().unwrap() = true;
 
         Ok(Response::new(LoadResponse {
             success: true,
@@ -403,6 +409,13 @@ where
     }
 
     async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        if !self.healthy.lock().unwrap().deref() {
+            println!("responded negatively to health check");
+            return Err(Status::unavailable(
+                "runtime has not reached a healthy state",
+            ));
+        }
+        println!("responded positively to health check");
         Ok(Response::new(Pong {}))
     }
 }

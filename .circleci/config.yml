@@ -633,7 +633,7 @@ workflows:
           filters:
             branches:
               ignore:
-                - pull/*
+                - /pull\/.*/
           matrix:
             parameters:
               crate:
@@ -712,14 +712,14 @@ workflows:
           filters:
             branches:
               ignore:
-                - pull/*
+                - /pull\/.*/
                 - production
       - approve-build-and-push-images-unstable:
           type: approval
           filters:
             branches:
               ignore:
-                - pull/*
+                - /pull\/.*/
                 - production
       - build-and-push:
           name: build-and-push-unstable

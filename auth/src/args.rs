@@ -39,16 +39,13 @@ pub struct StartArgs {
     /// Address to reach the permit.io API at
     #[arg(long, default_value = "https://api.eu-central-1.permit.io")]
     pub permit_api_uri: Uri,
-
     /// Address to reach the permit.io PDP at
     #[arg(long, default_value = "http://permit-pdp:7000")]
     pub permit_pdp_uri: Uri,
-
     /// Permit environment to use
     #[arg(long, default_value = "local")]
-    pub permit_environment: String,
-
-    /// Permit environment to use
+    pub permit_env: String,
+    /// Permit API key
     #[arg(long, default_value = "permit_")]
     pub permit_api_key: String,
 }

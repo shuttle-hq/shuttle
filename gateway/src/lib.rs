@@ -570,6 +570,10 @@ pub mod tests {
                     cch_container_limit: 1,
                     soft_container_limit: 2,
                     hard_container_limit: 3,
+                    permit_api_uri: Default::default(), // TODO: will need mock?
+                    permit_pdp_uri: Default::default(), // TODO: will need mock?
+                    permit_env: Default::default(),     // TODO: will need mock?
+                    permit_api_key: Default::default(), // TODO: will need mock?
 
                     // Allow access to the auth on the host
                     extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],

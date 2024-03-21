@@ -27,7 +27,7 @@ pub async fn start(pool: PgPool, args: StartArgs) -> io::Result<()> {
             args.permit_api_uri,
             args.permit_pdp_uri,
             "default".to_string(),
-            args.permit_environment,
+            args.permit_env,
             &args.permit_api_key,
         ))
         .with_jwt_signing_private_key(args.jwt_signing_private_key)

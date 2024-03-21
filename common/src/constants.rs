@@ -48,3 +48,10 @@ pub mod limits {
     pub const MAX_PROJECTS_DEFAULT: u32 = 3;
     pub const MAX_PROJECTS_EXTRA: u32 = 15;
 }
+
+pub mod headers {
+    use http::HeaderName;
+
+    pub static X_CARGO_SHUTTLE_VERSION: HeaderName =
+        HeaderName::from_static("x-cargo-shuttle-version");
+}

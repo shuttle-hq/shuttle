@@ -17,7 +17,7 @@ chrono = { workspace = true }
 comfy-table = { workspace = true, optional = true }
 crossterm = { workspace = true, optional = true }
 headers = { workspace = true, optional = true }
-http = { workspace = true, optional = true }
+http = { workspace = true }
 http-body = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
@@ -47,7 +47,6 @@ claims = [
     "bytes",
     "chrono/clock",
     "headers",
-    "http",
     "http-body",
     "jsonwebtoken",
     "opentelemetry",
@@ -59,14 +58,13 @@ claims = [
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
 extract_propagation = [
-    "http",
     "opentelemetry",
     "opentelemetry-http",
     "pin-project",
     "tower",
     "tracing-opentelemetry",
 ]
-models = ["async-trait", "http", "reqwest", "service", "thiserror"]
+models = ["async-trait", "reqwest", "service", "thiserror"]
 persist = ["sqlx", "rand"]
 sqlx = ["dep:sqlx", "sqlx/sqlite"]
 service = ["chrono/serde", "display", "tracing", "tracing-subscriber", "uuid"]

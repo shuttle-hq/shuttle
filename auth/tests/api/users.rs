@@ -197,7 +197,7 @@ mod needs_docker {
                 .unwrap()
                 .roles,
             vec![AccountTier::Pro],
-            "should have update the permissions too"
+            "should have updated the permissions too"
         );
     }
 
@@ -248,7 +248,7 @@ mod needs_docker {
                 .unwrap()
                 .roles,
             vec![AccountTier::Basic],
-            "should have update the permissions too"
+            "should have updated the permissions too"
         );
     }
 

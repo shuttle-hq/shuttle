@@ -61,8 +61,13 @@ mod needs_docker {
                 .unwrap()
                 .get(&user.id)
                 .unwrap()
-                .roles,
-            vec![AccountTier::Basic],
+                .roles
+                .as_ref()
+                .unwrap()
+                .first()
+                .unwrap()
+                .role,
+            AccountTier::Basic.to_string(),
             "should default to basic tier"
         );
 
@@ -86,8 +91,13 @@ mod needs_docker {
                 .unwrap()
                 .get(&user.id)
                 .unwrap()
-                .roles,
-            vec![AccountTier::Pro]
+                .roles
+                .as_ref()
+                .unwrap()
+                .first()
+                .unwrap()
+                .role,
+            AccountTier::Pro.to_string()
         );
     }
 
@@ -195,8 +205,13 @@ mod needs_docker {
                 .unwrap()
                 .get(&user.id)
                 .unwrap()
-                .roles,
-            vec![AccountTier::Pro],
+                .roles
+                .as_ref()
+                .unwrap()
+                .first()
+                .unwrap()
+                .role,
+            AccountTier::Pro.to_string(),
             "should have updated the permissions too"
         );
     }
@@ -246,8 +261,13 @@ mod needs_docker {
                 .unwrap()
                 .get(&actual_user.id)
                 .unwrap()
-                .roles,
-            vec![AccountTier::Basic],
+                .roles
+                .as_ref()
+                .unwrap()
+                .first()
+                .unwrap()
+                .role,
+            AccountTier::Basic.to_string(),
             "should have updated the permissions too"
         );
     }
@@ -298,8 +318,13 @@ mod needs_docker {
                 .unwrap()
                 .get(&response.id)
                 .unwrap()
-                .roles,
-            vec![AccountTier::Basic],
+                .roles
+                .as_ref()
+                .unwrap()
+                .first()
+                .unwrap()
+                .role,
+            AccountTier::Basic.to_string(),
             "RDS subscription should not change the account tier"
         );
 
@@ -405,8 +430,13 @@ mod needs_docker {
                 .unwrap()
                 .get(&user.id)
                 .unwrap()
-                .roles,
-            vec![AccountTier::Basic],
+                .roles
+                .as_ref()
+                .unwrap()
+                .first()
+                .unwrap()
+                .role,
+            AccountTier::Basic.to_string(),
             "permissions should be updated to basic"
         );
 
@@ -432,8 +462,13 @@ mod needs_docker {
                 .unwrap()
                 .get(&user.id)
                 .unwrap()
-                .roles,
-            vec![AccountTier::Basic],
+                .roles
+                .as_ref()
+                .unwrap()
+                .first()
+                .unwrap()
+                .role,
+            AccountTier::Basic.to_string(),
             "permissions should still be basic"
         );
     }

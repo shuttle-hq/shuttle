@@ -49,18 +49,24 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(api_uri: Uri, pdp_uri: Uri, proj_id: String, env_id: String, api_key: &str) -> Self {
+    pub fn new(
+        api_uri: Uri,
+        pdp_uri: Uri,
+        proj_id: String,
+        env_id: String,
+        api_key: String,
+    ) -> Self {
         Self {
             api: permit_client_rs::apis::configuration::Configuration {
                 base_path: api_uri.to_string(),
                 user_agent: None,
-                bearer_access_token: Some(api_key.to_string()),
+                bearer_access_token: Some(api_key.clone()),
                 ..Default::default()
             },
             pdp: permit_pdp_client_rs::apis::configuration::Configuration {
                 base_path: pdp_uri.to_string(),
                 user_agent: None,
-                bearer_access_token: Some(api_key.to_string()),
+                bearer_access_token: Some(api_key),
                 ..Default::default()
             },
             proj_id,
@@ -469,7 +475,7 @@ mod tests {
                 "http://localhost:7000".parse().unwrap(),
                 "default".to_string(),
                 "testing".to_string(),
-                &api_key,
+                api_key,
             );
 
             client.clear_users().await;

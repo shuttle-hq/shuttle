@@ -21,6 +21,7 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
+use shuttle_backends::client::PermissionsDal;
 use shuttle_backends::headers::XShuttleAdminSecret;
 use shuttle_backends::project_name::ProjectName;
 use shuttle_common::claims::AccountTier;
@@ -204,6 +205,7 @@ pub struct GatewayService {
     db: SqlitePool,
     task_router: TaskRouter,
     pub state_location: PathBuf,
+    permit_client: Box<dyn PermissionsDal + Send + Sync>,
 
     /// Maximum number of containers the gateway can start before blocking cch projects
     cch_container_limit: u32,
@@ -226,6 +228,7 @@ impl GatewayService {
         args: ContextArgs,
         db: SqlitePool,
         state_location: PathBuf,
+        permit_client: Box<dyn PermissionsDal + Send + Sync>,
     ) -> io::Result<Self> {
         let docker_stats_path_v1 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V1)
             .expect("to parse docker stats path for cgroup v1");
@@ -274,6 +277,7 @@ impl GatewayService {
             db,
             task_router,
             state_location,
+            permit_client,
             provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
                 .expect("to have a valid provisioner endpoint"),
             auth_host: args.auth_uri,
@@ -1139,6 +1143,7 @@ pub struct FindProjectPayload {
 #[cfg(test)]
 pub mod tests {
     use fqdn::FQDN;
+    use shuttle_backends::test_utils::gateway::PermissionsMock;
 
     use super::*;
 
@@ -1149,7 +1154,15 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_stop_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let neo: UserId = "neo".to_owned();
         let trinity: UserId = "trinity".to_owned();
@@ -1365,7 +1378,15 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_ready_kill_restart_docker() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let neo: UserId = "neo".to_owned();
         let matrix: ProjectName = "matrix".parse().unwrap();
@@ -1417,7 +1438,15 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_custom_domain() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let account: UserId = "neo".to_owned();
         let project_name: ProjectName = "matrix".parse().unwrap();
@@ -1471,7 +1500,15 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_custom_domain_destroy_recreate_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let account: UserId = "neo".to_owned();
         let project_name: ProjectName = "matrix".parse().unwrap();

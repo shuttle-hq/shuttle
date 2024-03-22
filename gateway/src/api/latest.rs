@@ -1022,6 +1022,7 @@ pub mod tests {
     use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
+    use shuttle_backends::test_utils::gateway::PermissionsMock;
     use shuttle_common::claims::AccountTier;
     use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
     use test_context::test_context;
@@ -1039,7 +1040,15 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let service = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let (sender, mut receiver) = channel::<BoxedTask>(256);
         tokio::spawn(async move {
@@ -1221,7 +1230,15 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_project_limits() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let service = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let (sender, mut receiver) = channel::<BoxedTask>(256);
         tokio::spawn(async move {
@@ -1545,9 +1562,14 @@ pub mod tests {
     async fn status() {
         let world = World::new().await;
         let service = Arc::new(
-            GatewayService::init(world.args(), world.pool(), "".into())
-                .await
-                .unwrap(),
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
         );
 
         let (sender, mut receiver) = channel::<BoxedTask>(1);

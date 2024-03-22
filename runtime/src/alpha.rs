@@ -4,7 +4,7 @@ use std::{
     net::{Ipv4Addr, SocketAddr},
     ops::{Deref, DerefMut},
     str::FromStr,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -106,14 +106,21 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     };
 }
 
+pub enum State {
+    Unhealthy,
+    Loading,
+    Running,
+}
+
 pub struct Alpha<L, R> {
     // Mutexes are for interior mutability
     stopped_tx: Sender<(StopReason, String)>,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     loader: Mutex<Option<L>>,
     runner: Mutex<Option<R>>,
-    /// Whether or not the runtime is healthy, which is checked by the ECS task.
-    healthy: Mutex<bool>,
+    /// The current state of the runtime, which is used by the ECS task to determine if the runtime
+    /// is healthy.
+    state: Arc<Mutex<State>>,
 }
 
 impl<L, R> Alpha<L, R> {
@@ -125,7 +132,7 @@ impl<L, R> Alpha<L, R> {
             kill_tx: Mutex::new(None),
             loader: Mutex::new(Some(loader)),
             runner: Mutex::new(Some(runner)),
-            healthy: Mutex::new(false),
+            state: Arc::new(Mutex::new(State::Unhealthy)),
         }
     }
 }
@@ -230,7 +237,22 @@ where
         };
 
         println!("setting current state to healthy");
-        *self.healthy.lock().unwrap() = true;
+        *self.state.lock().unwrap() = State::Loading;
+
+        let state = self.state.clone();
+
+        // Ensure that the runtime is set to unhealthy if it doesn't reach the running state after
+        // it has sent a load response, so that the ECS task will fail.
+        tokio::spawn(async move {
+            // Note: The timeout is quite low as we are not actually provisioning resources after
+            // sending the load response.
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            let mut state = state.lock().unwrap();
+            if !matches!(state.deref(), State::Running) {
+                println!("the runtime failed to enter the running state before timing out");
+                *state = State::Unhealthy;
+            }
+        });
 
         Ok(Response::new(LoadResponse {
             success: true,
@@ -364,6 +386,8 @@ where
             ..Default::default()
         };
 
+        *self.state.lock().unwrap() = State::Running;
+
         Ok(Response::new(message))
     }
 
@@ -409,13 +433,13 @@ where
     }
 
     async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
-        if !self.healthy.lock().unwrap().deref() {
-            println!("responded negatively to health check");
+        if matches!(self.state.lock().unwrap().deref(), State::Unhealthy) {
+            println!("runtime health check failed");
             return Err(Status::unavailable(
                 "runtime has not reached a healthy state",
             ));
         }
-        println!("responded positively to health check");
+
         Ok(Response::new(Pong {}))
     }
 }

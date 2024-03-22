@@ -1006,7 +1006,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-tungstenite",
- "tokiotest-httpserver",
  "toml",
  "toml_edit 0.20.7",
  "tonic 0.10.2",
@@ -4359,12 +4358,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "queues"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1475abae4f8ad4998590fe3acfe20104f0a5d48fc420c817cd2c09c3f56151f0"
-
-[[package]]
 name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5257,12 +5250,12 @@ dependencies = [
  "shuttle-proto",
  "sqlx",
  "strum 0.26.1",
- "test-context 0.3.0",
+ "test-context",
  "thiserror",
  "tokio",
  "tonic 0.10.2",
  "tower",
- "tower-http 0.4.4",
+ "tower-http",
  "tracing",
  "tracing-fluent-assertions",
  "tracing-opentelemetry",
@@ -5439,11 +5432,11 @@ dependencies = [
  "strum 0.26.1",
  "tar",
  "tempfile",
- "test-context 0.3.0",
+ "test-context",
  "tokio",
  "tonic 0.10.2",
  "tower",
- "tower-http 0.4.4",
+ "tower-http",
  "tower-sanitize-path",
  "tracing",
  "tracing-opentelemetry",
@@ -6151,33 +6144,12 @@ checksum = "3369f5ac52d5eb6ab48c6b4ffdc8efbcad6b89c765749064ba298f2c68a16a76"
 
 [[package]]
 name = "test-context"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7b6965c21232186af0092233c18030fe607cfc3960dbabb209325272458eeea"
-dependencies = [
- "async-trait",
- "futures",
- "test-context-macros 0.1.6",
-]
-
-[[package]]
-name = "test-context"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6676ab8513edfd2601a108621103fdb45cac9098305ca25ec93f7023b06b05d9"
 dependencies = [
  "futures",
- "test-context-macros 0.3.0",
-]
-
-[[package]]
-name = "test-context-macros"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d506c7664333e246f564949bee4ed39062aa0f11918e6f5a95f553cdad65c274"
-dependencies = [
- "quote",
- "syn 2.0.52",
+ "test-context-macros",
 ]
 
 [[package]]
@@ -6331,19 +6303,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-test"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e89b3cbabd3ae862100094ae433e1def582cf86451b4e9bf83aa7ac1d8a7d719"
-dependencies = [
- "async-stream",
- "bytes",
- "futures-core",
- "tokio",
- "tokio-stream",
-]
-
-[[package]]
 name = "tokio-tungstenite"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6371,23 +6330,6 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "tokiotest-httpserver"
-version = "0.2.1"
-source = "git+https://github.com/shuttle-hq/tokiotest-httpserver?branch=feat/body#ca413a227397f0d0441b4454581ddd803acabdd7"
-dependencies = [
- "async-trait",
- "futures",
- "hyper 0.14.28",
- "lazy_static",
- "queues",
- "serde_json",
- "test-context 0.1.6",
- "tokio",
- "tokio-test",
- "tower-http 0.2.5",
 ]
 
 [[package]]
@@ -6508,24 +6450,6 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
-]
-
-[[package]]
-name = "tower-http"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aba3f3efabf7fb41fae8534fc20a817013dd1c12cb45441efb6c82e6556b4cd8"
-dependencies = [
- "bitflags 1.3.2",
- "bytes",
- "futures-core",
- "futures-util",
- "http 0.2.12",
- "http-body 0.4.6",
- "http-range-header",
- "pin-project-lite",
- "tower-layer",
- "tower-service",
 ]
 
 [[package]]

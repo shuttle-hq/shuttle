@@ -29,8 +29,8 @@ pub trait PermissionsDal {
     async fn new_user(&self, user_id: &str) -> Result<UserRead, Error>;
     /// Set a user to be a Pro user
     async fn make_pro(&self, user_id: &str) -> Result<(), Error>;
-    /// Set a user to be a Free user
-    async fn make_free(&self, user_id: &str) -> Result<(), Error>;
+    /// Set a user to be a Basic user
+    async fn make_basic(&self, user_id: &str) -> Result<(), Error>;
 
     /// Creates a Project resource and assigns the user as admin for that project
     async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error>;
@@ -354,7 +354,7 @@ impl PermissionsDal for Client {
 
     async fn new_user(&self, user_id: &str) -> Result<UserRead, Error> {
         let user = self.create_user(user_id).await?;
-        self.make_free(&user.id.to_string()).await?;
+        self.make_basic(&user.id.to_string()).await?;
 
         self.get_user(&user.id.to_string()).await
     }
@@ -373,7 +373,7 @@ impl PermissionsDal for Client {
         self.assign_role(user_id, &AccountTier::Pro).await
     }
 
-    async fn make_free(&self, user_id: &str) -> Result<(), Error> {
+    async fn make_basic(&self, user_id: &str) -> Result<(), Error> {
         let user = self.get_user(user_id).await?;
 
         if user

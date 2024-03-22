@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Error;
 use async_trait::async_trait;
-use permit_client_rs::models::UserRead;
+use permit_client_rs::models::{UserRead, UserRole};
 use serde::Serialize;
 use shuttle_common::claims::AccountTier;
 use wiremock::{
@@ -109,41 +109,46 @@ impl PermissionsDal for PermissionsMock {
     }
 
     async fn new_user(&self, user_id: &str) -> Result<UserRead, Error> {
-        // let user = UserRead {
-        //     id: user_id.to_string(),
-        //     key: user_id.to_string(),
-        //     roles: vec![AccountTier::Basic],
-        //     ..Default::default()
-        // };
+        let user = UserRead {
+            key: user_id.to_string(),
+            roles: Some(vec![UserRole {
+                role: AccountTier::Basic.to_string(),
+                tenant: "default".to_string(),
+            }]),
+            ..Default::default()
+        };
 
-        // self.users
-        //     .write()
-        //     .unwrap()
-        //     .insert(user_id.to_string(), user.clone());
+        self.users
+            .write()
+            .unwrap()
+            .insert(user_id.to_string(), user.clone());
 
-        // Ok(user)
-        unimplemented!()
+        Ok(user)
     }
 
     async fn make_pro(&self, user_id: &str) -> Result<(), Error> {
-        // self.users.write().unwrap().get_mut(user_id).unwrap().roles = vec![AccountTier::Pro];
+        self.users.write().unwrap().get_mut(user_id).unwrap().roles = Some(vec![UserRole {
+            role: AccountTier::Pro.to_string(),
+            tenant: "default".to_string(),
+        }]);
 
-        // Ok(())
+        Ok(())
+    }
+
+    async fn make_basic(&self, user_id: &str) -> Result<(), Error> {
+        self.users.write().unwrap().get_mut(user_id).unwrap().roles = Some(vec![UserRole {
+            role: AccountTier::Basic.to_string(),
+            tenant: "default".to_string(),
+        }]);
+
+        Ok(())
+    }
+
+    async fn create_project(&self, _user_id: &str, _project_id: &str) -> Result<(), Error> {
         unimplemented!()
     }
 
-    async fn make_free(&self, user_id: &str) -> Result<(), Error> {
-        // self.users.write().unwrap().get_mut(user_id).unwrap().roles = vec![AccountTier::Basic];
-
-        // Ok(())
-        unimplemented!()
-    }
-
-    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
-        unimplemented!()
-    }
-
-    async fn delete_project(&self, project_id: &str) -> Result<(), Error> {
+    async fn delete_project(&self, _project_id: &str) -> Result<(), Error> {
         unimplemented!()
     }
 }

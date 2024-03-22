@@ -119,7 +119,7 @@ where
         if tier == AccountTier::Pro {
             self.permissions_client.make_pro(user_id).await?;
         } else {
-            self.permissions_client.make_free(user_id).await?;
+            self.permissions_client.make_basic(user_id).await?;
         }
 
         if rows_affected > 0 {
@@ -254,7 +254,7 @@ where
         if subscription.r#type == models::user::SubscriptionType::Pro {
             self.update_tier(user_id, AccountTier::CancelledPro).await?;
 
-            self.permissions_client.make_free(user_id).await?;
+            self.permissions_client.make_basic(user_id).await?;
         } else {
             query(
                 r#"DELETE FROM subscriptions

@@ -93,17 +93,30 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
         .layer(ExtractPropagationLayer);
 
+    // A channel we can use to kill the runtime if it does not become healthy in time.
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+
     let router = {
-        let alpha = Alpha::new(loader, runner);
+        let alpha = Alpha::new(loader, runner, tx);
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
     };
 
-    match router.serve(addr).await {
-        Ok(_) => {}
-        Err(e) => panic!("Error while serving address {addr}: {e}"),
-    };
+    tokio::select! {
+        res = router.serve(addr) => {
+            match res{
+                Ok(_) => {}
+                Err(e) => panic!("Error while serving address {addr}: {e}")
+            }
+        }
+        res = rx => {
+            match res{
+                Ok(_) => panic!("Received runtime kill signal"),
+                Err(e) => panic!("Receiver error: {e}")
+            }
+        }
+    }
 }
 
 pub enum State {
@@ -121,10 +134,11 @@ pub struct Alpha<L, R> {
     /// The current state of the runtime, which is used by the ECS task to determine if the runtime
     /// is healthy.
     state: Arc<Mutex<State>>,
+    runtime_kill_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
 }
 
 impl<L, R> Alpha<L, R> {
-    pub fn new(loader: L, runner: R) -> Self {
+    pub fn new(loader: L, runner: R, runtime_kill_tx: tokio::sync::oneshot::Sender<()>) -> Self {
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
@@ -133,6 +147,7 @@ impl<L, R> Alpha<L, R> {
             loader: Mutex::new(Some(loader)),
             runner: Mutex::new(Some(runner)),
             state: Arc::new(Mutex::new(State::Unhealthy)),
+            runtime_kill_tx: Mutex::new(Some(runtime_kill_tx)),
         }
     }
 }
@@ -240,6 +255,13 @@ where
         *self.state.lock().unwrap() = State::Loading;
 
         let state = self.state.clone();
+        let runtime_kill_tx = self
+            .runtime_kill_tx
+            .lock()
+            .unwrap()
+            .deref_mut()
+            .take()
+            .unwrap();
 
         // Ensure that the runtime is set to unhealthy if it doesn't reach the running state after
         // it has sent a load response, so that the ECS task will fail.
@@ -247,10 +269,10 @@ where
             // Note: The timeout is quite low as we are not actually provisioning resources after
             // sending the load response.
             tokio::time::sleep(Duration::from_secs(60)).await;
-            let mut state = state.lock().unwrap();
-            if !matches!(state.deref(), State::Running) {
+            if !matches!(state.lock().unwrap().deref(), State::Running) {
                 println!("the runtime failed to enter the running state before timing out");
-                *state = State::Unhealthy;
+
+                runtime_kill_tx.send(()).unwrap();
             }
         });
 

@@ -9,9 +9,8 @@ use syn::{
 };
 
 pub(crate) fn tokens(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut fn_decl = parse_macro_input!(item as ItemFn);
-
-    let loader = Loader::from_item_fn(&mut fn_decl);
+    let mut user_main_fn = parse_macro_input!(item as ItemFn);
+    let loader_runner = LoaderAndRunner::from_item_fn(&mut user_main_fn);
 
     quote! {
         fn main() {
@@ -25,43 +24,46 @@ pub(crate) fn tokens(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 })
         }
 
-        #loader
+        #loader_runner
 
-        #fn_decl
+        #user_main_fn
     }
     .into()
 }
 
-struct Loader {
+struct LoaderAndRunner {
     fn_ident: Ident,
     fn_inputs: Vec<Input>,
     fn_return: TypePath,
 }
 
+/// A resource-decorated input to the user's main function
 #[derive(Debug, PartialEq)]
 struct Input {
-    /// The identifier for a resource input
+    /// The identifier (variable name)
     ident: Ident,
-    /// The shuttle_runtime builder for this resource
-    builder: Builder,
-    /// The type declaration of the resource input
+    /// The builder pattern data
+    builder: BuilderPattern,
+    /// The type declaration
     ty: Type,
 }
 
+/// Represents a builder pattern that a resource input gets turned into
 #[derive(Debug, PartialEq)]
-struct Builder {
-    /// Path to the builder
+struct BuilderPattern {
+    /// Namespace path to the builder
     path: Path,
-    /// Options to call on the builder
+    /// Options to call the builder with
     options: BuilderOptions,
 }
 
+/// The options (function names, values) to call the builder pattern with
 #[derive(Debug, Default, PartialEq)]
 struct BuilderOptions {
-    /// The actual options
     options: Punctuated<BuilderOption, Token![,]>,
 }
 
+/// One item in the builder pattern
 #[derive(Debug, PartialEq)]
 struct BuilderOption {
     /// Identifier of the option to set
@@ -88,7 +90,8 @@ impl Parse for BuilderOption {
     }
 }
 
-impl Loader {
+impl LoaderAndRunner {
+    /// Modifies function identifier and inputs while extracting and constructing the Shuttle inputs
     pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Option<Self> {
         // prefix the function name to allow any name, such as 'main'
         item_fn.sig.ident = Ident::new(
@@ -109,7 +112,7 @@ impl Loader {
                 _ => None,
             })
             .filter_map(|(pat_ident, attrs, ty)| {
-                match attribute_to_builder(pat_ident, attrs) {
+                match Self::attribute_to_builder(pat_ident, attrs) {
                     Ok(builder) => Some(Input {
                         ident: pat_ident.ident.clone(),
                         builder,
@@ -123,80 +126,83 @@ impl Loader {
             })
             .collect();
 
-        check_return_type(item_fn.sig.clone()).map(|type_path| Self {
+        Self::check_return_type(item_fn.sig.clone()).map(|type_path| Self {
             fn_ident: item_fn.sig.ident.clone(),
             fn_inputs: inputs,
             fn_return: type_path,
         })
     }
-}
 
-fn check_return_type(signature: Signature) -> Option<TypePath> {
-    match signature.output {
-        ReturnType::Default => {
-            emit_error!(
-                signature,
-                "shuttle_runtime::main functions need to return a service";
-                hint = "See the docs for services with first class support";
-                doc = "https://docs.rs/shuttle-runtime/latest/shuttle_runtime/attr.main.html#shuttle-supported-services"
-            );
-            None
-        }
-        ReturnType::Type(_, ty) => match *ty {
-            Type::Path(path) => Some(path),
-            _ => {
+    fn check_return_type(signature: Signature) -> Option<TypePath> {
+        match signature.output {
+            ReturnType::Default => {
                 emit_error!(
-                    ty,
-                    "shuttle_runtime::main functions need to return a first class service or 'Result<impl shuttle_service::Service, shuttle_runtime::Error>";
+                    signature,
+                    "shuttle_runtime::main functions need to return a service";
                     hint = "See the docs for services with first class support";
                     doc = "https://docs.rs/shuttle-runtime/latest/shuttle_runtime/attr.main.html#shuttle-supported-services"
                 );
                 None
             }
-        },
+            ReturnType::Type(_, ty) => match *ty {
+                Type::Path(path) => Some(path),
+                _ => {
+                    emit_error!(
+                        ty,
+                        "shuttle_runtime::main functions need to return a first class service or 'Result<impl shuttle_service::Service, shuttle_runtime::Error>";
+                        hint = "See the docs for services with first class support";
+                        doc = "https://docs.rs/shuttle-runtime/latest/shuttle_runtime/attr.main.html#shuttle-supported-services"
+                    );
+                    None
+                }
+            },
+        }
+    }
+
+    fn attribute_to_builder(
+        pat_ident: &PatIdent,
+        attrs: Vec<Attribute>,
+    ) -> syn::Result<BuilderPattern> {
+        if attrs.is_empty() {
+            return Err(syn::Error::new_spanned(
+                pat_ident,
+                "resource needs an attribute configuration",
+            ));
+        }
+
+        let options = if attrs[0].meta.require_list().is_err() {
+            Default::default()
+        } else {
+            attrs[0].parse_args()?
+        };
+
+        let builder = BuilderPattern {
+            path: attrs[0].path().clone(),
+            options,
+        };
+
+        Ok(builder)
     }
 }
 
-fn attribute_to_builder(pat_ident: &PatIdent, attrs: Vec<Attribute>) -> syn::Result<Builder> {
-    if attrs.is_empty() {
-        return Err(syn::Error::new_spanned(
-            pat_ident,
-            "resource needs an attribute configuration",
-        ));
-    }
-
-    let options = if attrs[0].meta.require_list().is_err() {
-        Default::default()
-    } else {
-        attrs[0].parse_args()?
-    };
-
-    let builder = Builder {
-        path: attrs[0].path().clone(),
-        options,
-    };
-
-    Ok(builder)
-}
-
-impl ToTokens for Loader {
+impl ToTokens for LoaderAndRunner {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let fn_ident = &self.fn_ident;
-
         let return_type = &self.fn_return;
+        let inputs_len = self.fn_inputs.len();
 
-        let mut fn_inputs = Vec::with_capacity(self.fn_inputs.len());
-        let mut fn_inputs_builder = Vec::with_capacity(self.fn_inputs.len());
-        let mut fn_inputs_builder_options = Vec::with_capacity(self.fn_inputs.len());
-        let mut fn_inputs_types = Vec::with_capacity(self.fn_inputs.len());
+        let mut fn_inputs = Vec::with_capacity(inputs_len);
+        let mut fn_input_builders = Vec::with_capacity(inputs_len);
+        let mut fn_input_builder_options = Vec::with_capacity(inputs_len);
+        let mut fn_input_types = Vec::with_capacity(inputs_len);
 
-        // whether any string literals are being used in resource macro args
+        // whether any string literals are being used in resource macro args (for secret interpolation)
         let mut needs_vars = false;
 
         for input in self.fn_inputs.iter() {
             fn_inputs.push(&input.ident);
-            fn_inputs_builder.push(&input.builder.path);
-            fn_inputs_types.push(&input.ty);
+            fn_input_builders.push(&input.builder.path);
+            fn_input_types.push(&input.ty);
 
             let (methods, values): (Vec<_>, Vec<_>) = input
                 .builder
@@ -206,10 +212,11 @@ impl ToTokens for Loader {
                 .map(|o| {
                     let value = match &o.value {
                         Expr::Lit(ExprLit {
-                            lit: Lit::Str(str), ..
+                            lit: Lit::Str(string),
+                            ..
                         }) => {
                             needs_vars = true;
-                            quote!(&::shuttle_runtime::__internals::strfmt(#str, &__vars)?)
+                            quote!(&::shuttle_runtime::__internals::strfmt(#string, &__vars)?)
                         }
                         other => quote!(#other),
                     };
@@ -217,8 +224,8 @@ impl ToTokens for Loader {
                     (&o.ident, value)
                 })
                 .unzip();
-            let chain = quote!(#(.#methods(#values))*);
-            fn_inputs_builder_options.push(chain);
+            let builder_chain = quote!(#(.#methods(#values))*);
+            fn_input_builder_options.push(builder_chain);
         }
 
         // modify output based on if any resource macros are being used
@@ -258,14 +265,14 @@ impl ToTokens for Loader {
 
                 let mut inputs = Vec::new();
                 #(
-                    let input: <#fn_inputs_builder as ResourceInputBuilder>::Input =
-                        #fn_inputs_builder::default()
-                        #fn_inputs_builder_options // `vars` are used here
+                    let input: <#fn_input_builders as ResourceInputBuilder>::Input =
+                        #fn_input_builders::default()
+                        #fn_input_builder_options // `vars` are used here
                         .build(&#factory_ident)
                         .await
-                        .context(format!("failed to construct config for {}", stringify!(#fn_inputs_builder)))?;
+                        .context(format!("failed to construct config for {}", stringify!(#fn_input_builders)))?;
                     let json = ::shuttle_runtime::__internals::serde_json::to_vec(&input)
-                        .context(format!("failed to serialize config for {}", stringify!(#fn_inputs_builder)))?;
+                        .context(format!("failed to serialize config for {}", stringify!(#fn_input_builders)))?;
                     inputs.push(json);
                 )*
                 Ok(inputs)
@@ -279,14 +286,14 @@ impl ToTokens for Loader {
 
                 let mut iter = resources.into_iter();
                 #(
-                    let x: <#fn_inputs_builder as ResourceInputBuilder>::Output =
+                    let x: <#fn_input_builders as ResourceInputBuilder>::Output =
                         ::shuttle_runtime::__internals::serde_json::from_slice(
                             &iter.next().expect("resource list to have correct length")
                         )
-                        .context(format!("failed to deserialize output for {}", stringify!(#fn_inputs_builder)))?;
-                    let #fn_inputs: #fn_inputs_types = x.into_resource()
+                        .context(format!("failed to deserialize output for {}", stringify!(#fn_input_builders)))?;
+                    let #fn_inputs: #fn_input_types = x.into_resource()
                         .await
-                        .context(format!("failed to initialize {}", stringify!(#fn_inputs_builder)))?;
+                        .context(format!("failed to initialize {}", stringify!(#fn_input_builders)))?;
                 )*
 
                 #fn_ident(#(#fn_inputs),*).await
@@ -300,10 +307,8 @@ impl ToTokens for Loader {
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use quote::quote;
-    use syn::{parse_quote, Ident, TypePath};
 
-    use super::{Builder, BuilderOptions, Input, Loader};
+    use super::*;
 
     #[test]
     fn from_with_return() {
@@ -311,12 +316,12 @@ mod tests {
             async fn simple() -> ShuttleAxum {}
         );
 
-        let actual = Loader::from_item_fn(&mut input).unwrap();
+        let actual = LoaderAndRunner::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(__shuttle_simple);
         let expected_return: TypePath = parse_quote!(ShuttleAxum);
 
         assert_eq!(actual.fn_ident, expected_ident);
-        assert_eq!(actual.fn_inputs, Vec::<Input>::new());
+        assert_eq!(actual.fn_inputs, Vec::new());
         assert_eq!(actual.fn_return, expected_return);
     }
 
@@ -326,15 +331,108 @@ mod tests {
             async fn main() -> ShuttleAxum {}
         );
 
-        let actual = Loader::from_item_fn(&mut input).unwrap();
+        let actual = LoaderAndRunner::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(__shuttle_main);
 
         assert_eq!(actual.fn_ident, expected_ident);
     }
 
     #[test]
-    fn output_with_return() {
-        let input = Loader {
+    fn parse_fn_inputs() {
+        let mut input = parse_quote!(
+            async fn complex(#[shuttle_shared_db::Postgres] pool: PgPool) -> ShuttleTide {}
+        );
+
+        let actual = LoaderAndRunner::from_item_fn(&mut input).unwrap();
+        let expected_ident: Ident = parse_quote!(__shuttle_complex);
+        let expected_inputs: Vec<Input> = vec![Input {
+            ident: parse_quote!(pool),
+            builder: BuilderPattern {
+                path: parse_quote!(shuttle_shared_db::Postgres),
+                options: Default::default(),
+            },
+            ty: parse_quote!(PgPool),
+        }];
+
+        assert_eq!(actual.fn_ident, expected_ident);
+        assert_eq!(actual.fn_inputs, expected_inputs);
+
+        // Make sure attributes was removed from input
+        if let syn::FnArg::Typed(param) = input.sig.inputs.first().unwrap() {
+            assert!(
+                param.attrs.is_empty(),
+                "some attributes were not removed: {:?}",
+                param.attrs
+            );
+        } else {
+            panic!("expected first input to be typed")
+        }
+    }
+
+    #[test]
+    fn parse_builder_options() {
+        let input: BuilderOptions = parse_quote!(
+            string = "string_val",
+            boolean = true,
+            integer = 5,
+            float = 2.65,
+            enum_variant = SomeEnum::Variant1,
+            sensitive = "user:{secrets.password}"
+        );
+
+        let mut expected: BuilderOptions = Default::default();
+        expected.options.push(parse_quote!(string = "string_val"));
+        expected.options.push(parse_quote!(boolean = true));
+        expected.options.push(parse_quote!(integer = 5));
+        expected.options.push(parse_quote!(float = 2.65));
+        expected
+            .options
+            .push(parse_quote!(enum_variant = SomeEnum::Variant1));
+        expected
+            .options
+            .push(parse_quote!(sensitive = "user:{secrets.password}"));
+
+        assert_eq!(input, expected);
+    }
+
+    #[test]
+    fn parse_input_with_options() {
+        let mut input = parse_quote!(
+            async fn complex(
+                #[shared::Postgres(size = "10Gb", public = false)] pool: PgPool,
+            ) -> ShuttlePoem {
+            }
+        );
+
+        let actual = LoaderAndRunner::from_item_fn(&mut input).unwrap();
+        let expected_ident: Ident = parse_quote!(__shuttle_complex);
+        let mut expected_inputs: Vec<Input> = vec![Input {
+            ident: parse_quote!(pool),
+            builder: BuilderPattern {
+                path: parse_quote!(shared::Postgres),
+                options: Default::default(),
+            },
+            ty: parse_quote!(PgPool),
+        }];
+
+        expected_inputs[0]
+            .builder
+            .options
+            .options
+            .push(parse_quote!(size = "10Gb"));
+        expected_inputs[0]
+            .builder
+            .options
+            .options
+            .push(parse_quote!(public = false));
+
+        assert_eq!(actual.fn_ident, expected_ident);
+        assert_eq!(actual.fn_inputs, expected_inputs);
+    }
+
+    #[test]
+    fn loader_runner_simple_inputs() {
+        let input = LoaderAndRunner {
             fn_ident: parse_quote!(simple),
             fn_inputs: Vec::new(),
             fn_return: parse_quote!(ShuttleSimple),
@@ -363,45 +461,13 @@ mod tests {
     }
 
     #[test]
-    fn from_with_inputs() {
-        let mut input = parse_quote!(
-            async fn complex(#[shuttle_shared_db::Postgres] pool: PgPool) -> ShuttleTide {}
-        );
-
-        let actual = Loader::from_item_fn(&mut input).unwrap();
-        let expected_ident: Ident = parse_quote!(__shuttle_complex);
-        let expected_inputs: Vec<Input> = vec![Input {
-            ident: parse_quote!(pool),
-            builder: Builder {
-                path: parse_quote!(shuttle_shared_db::Postgres),
-                options: Default::default(),
-            },
-            ty: parse_quote!(PgPool),
-        }];
-
-        assert_eq!(actual.fn_ident, expected_ident);
-        assert_eq!(actual.fn_inputs, expected_inputs);
-
-        // Make sure attributes was removed from input
-        if let syn::FnArg::Typed(param) = input.sig.inputs.first().unwrap() {
-            assert!(
-                param.attrs.is_empty(),
-                "some attributes were not removed: {:?}",
-                param.attrs
-            );
-        } else {
-            panic!("expected first input to be typed")
-        }
-    }
-
-    #[test]
-    fn output_with_inputs() {
-        let input = Loader {
+    fn loader_runner_complex_inputs() {
+        let input = LoaderAndRunner {
             fn_ident: parse_quote!(__shuttle_complex),
             fn_inputs: vec![
                 Input {
                     ident: parse_quote!(pool),
-                    builder: Builder {
+                    builder: BuilderPattern {
                         path: parse_quote!(shuttle_shared_db::Postgres),
                         options: Default::default(),
                     },
@@ -409,7 +475,7 @@ mod tests {
                 },
                 Input {
                     ident: parse_quote!(redis),
-                    builder: Builder {
+                    builder: BuilderPattern {
                         path: parse_quote!(shuttle_shared_db::Redis),
                         options: Default::default(),
                     },
@@ -478,73 +544,12 @@ mod tests {
     }
 
     #[test]
-    fn parse_builder_options() {
-        let input: BuilderOptions = parse_quote!(
-            string = "string_val",
-            boolean = true,
-            integer = 5,
-            float = 2.65,
-            enum_variant = SomeEnum::Variant1,
-            sensitive = "user:{secrets.password}"
-        );
-
-        let mut expected: BuilderOptions = Default::default();
-        expected.options.push(parse_quote!(string = "string_val"));
-        expected.options.push(parse_quote!(boolean = true));
-        expected.options.push(parse_quote!(integer = 5));
-        expected.options.push(parse_quote!(float = 2.65));
-        expected
-            .options
-            .push(parse_quote!(enum_variant = SomeEnum::Variant1));
-        expected
-            .options
-            .push(parse_quote!(sensitive = "user:{secrets.password}"));
-
-        assert_eq!(input, expected);
-    }
-
-    #[test]
-    fn from_with_input_options() {
-        let mut input = parse_quote!(
-            async fn complex(
-                #[shared::Postgres(size = "10Gb", public = false)] pool: PgPool,
-            ) -> ShuttlePoem {
-            }
-        );
-
-        let actual = Loader::from_item_fn(&mut input).unwrap();
-        let expected_ident: Ident = parse_quote!(__shuttle_complex);
-        let mut expected_inputs: Vec<Input> = vec![Input {
-            ident: parse_quote!(pool),
-            builder: Builder {
-                path: parse_quote!(shared::Postgres),
-                options: Default::default(),
-            },
-            ty: parse_quote!(PgPool),
-        }];
-
-        expected_inputs[0]
-            .builder
-            .options
-            .options
-            .push(parse_quote!(size = "10Gb"));
-        expected_inputs[0]
-            .builder
-            .options
-            .options
-            .push(parse_quote!(public = false));
-
-        assert_eq!(actual.fn_ident, expected_ident);
-        assert_eq!(actual.fn_inputs, expected_inputs);
-    }
-
-    #[test]
     fn output_with_input_options() {
-        let mut input = Loader {
+        let mut input = LoaderAndRunner {
             fn_ident: parse_quote!(complex),
             fn_inputs: vec![Input {
                 ident: parse_quote!(pool),
-                builder: Builder {
+                builder: BuilderPattern {
                     path: parse_quote!(shuttle_shared_db::Postgres),
                     options: Default::default(),
                 },
@@ -612,8 +617,8 @@ mod tests {
     }
 
     #[test]
-    fn ui() {
+    fn compiler_output() {
         let t = trybuild::TestCases::new();
-        t.compile_fail("tests/ui/main/*.rs");
+        t.compile_fail("tests/compiler_output/*.rs");
     }
 }

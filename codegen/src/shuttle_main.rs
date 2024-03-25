@@ -250,7 +250,7 @@ impl ToTokens for Loader {
         let loader_runner = quote! {
             async fn __loader(
                 #factory_ident: ::shuttle_runtime::ResourceFactory,
-            ) -> Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
+            ) -> std::result::Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
                 #extra_imports
 
@@ -344,7 +344,7 @@ mod tests {
         let expected = quote! {
             async fn __loader(
                 _factory: ::shuttle_runtime::ResourceFactory,
-            ) -> Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
+            ) -> std::result::Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
                 let mut inputs = Vec::new();
                 Ok(inputs)
@@ -423,7 +423,7 @@ mod tests {
         let expected = quote! {
             async fn __loader(
                 factory: ::shuttle_runtime::ResourceFactory,
-            ) -> Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
+            ) -> std::result::Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
                 use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
                 let mut inputs = Vec::new();
@@ -568,7 +568,7 @@ mod tests {
         let expected = quote! {
             async fn __loader(
                 factory: ::shuttle_runtime::ResourceFactory,
-            ) -> Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
+            ) -> std::result::Result<Vec<Vec<u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
                 use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
                 let __vars = std::collections::HashMap::from_iter(factory.get_secrets().into_iter().map(|(key, value)| (format!("secrets.{}", key), value.expose().clone())));

@@ -10,12 +10,13 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
+use strum::EnumMessage;
 use thiserror::Error;
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::claims::{Claim, Scope};
+use shuttle_common::claims::{Claim, Scope};
 
 use super::{
     cache::{CacheManagement, CacheManager},
@@ -437,13 +438,10 @@ pub trait VerifyClaim {
     fn get_claim(&self) -> Result<Claim, Self::Error>;
 }
 
-#[cfg(feature = "tonic")]
 impl<B> VerifyClaim for tonic::Request<B> {
     type Error = tonic::Status;
 
     fn verify(&self, required_scope: Scope) -> Result<(), Self::Error> {
-        use strum::EnumMessage;
-
         let claim = self
             .extensions()
             .get::<Claim>()
@@ -485,7 +483,7 @@ mod tests {
     use serde_json::json;
     use tower::{ServiceBuilder, ServiceExt};
 
-    use crate::claims::{AccountTier, Claim, Scope};
+    use shuttle_common::claims::{AccountTier, Claim, Scope};
 
     use super::{JwtAuthenticationLayer, ScopedLayer};
 

@@ -4,8 +4,8 @@ use hyper::http::{header::AUTHORIZATION, Request};
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use shuttle_auth::{pgpool_init, ApiBuilder};
+use shuttle_backends::{headers::X_SHUTTLE_ADMIN_SECRET, test_utils::gateway::PermissionsMock};
 use shuttle_common::{
-    backends::headers::X_SHUTTLE_ADMIN_SECRET,
     claims::{AccountTier, Claim},
     models::user,
 };
@@ -31,6 +31,7 @@ fn cleanup() {
 pub(crate) struct TestApp {
     pub router: Router,
     pub mock_server: MockServer,
+    pub permissions: PermissionsMock,
 }
 
 /// Initialize a router with an in-memory sqlite database for each test.
@@ -49,18 +50,22 @@ pub(crate) async fn app() -> TestApp {
         .await
         .unwrap();
 
+    let permissions = PermissionsMock::default();
+
     let router = ApiBuilder::new()
         .with_pg_pool(pg_pool)
         .with_stripe_client(stripe::Client::from_url(
             mock_server.uri().as_str(),
             STRIPE_TEST_KEY,
         ))
+        .with_permissions_client(permissions.clone())
         .with_jwt_signing_private_key("LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUR5V0ZFYzhKYm05NnA0ZGNLTEwvQWNvVUVsbUF0MVVKSTU4WTc4d1FpWk4KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=".to_string())
         .into_router();
 
     TestApp {
         router,
         mock_server,
+        permissions,
     }
 }
 

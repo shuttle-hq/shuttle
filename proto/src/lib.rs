@@ -5,9 +5,6 @@ pub use prost;
 pub use prost_types;
 pub use tonic;
 
-#[cfg(any(test, feature = "test-utils"))]
-pub mod test_utils;
-
 #[cfg(feature = "provisioner")]
 pub mod provisioner {
     pub use super::generated::provisioner::*;
@@ -241,11 +238,7 @@ pub mod resource_recorder {
 
 #[cfg(feature = "resource-recorder-client")]
 mod _resource_recorder_client {
-    use super::resource_recorder::*;
-
-    use async_trait::async_trait;
-    use http::{header::AUTHORIZATION, Uri};
-    use shuttle_common::backends::client::{self, ResourceDal};
+    use http::Uri;
 
     pub type Client = super::resource_recorder::resource_recorder_client::ResourceRecorderClient<
         shuttle_common::claims::ClaimService<
@@ -266,131 +259,6 @@ mod _resource_recorder_client {
             .service(channel);
 
         Client::new(resource_recorder_service)
-    }
-
-    #[async_trait]
-    impl ResourceDal for Client {
-        async fn get_project_resources(
-            &mut self,
-            project_id: &str,
-            token: &str,
-        ) -> Result<Vec<shuttle_common::resource::Response>, client::Error> {
-            let mut req = tonic::Request::new(ProjectResourcesRequest {
-                project_id: project_id.to_string(),
-            });
-
-            req.metadata_mut().insert(
-                AUTHORIZATION.as_str(),
-                format!("Bearer {token}")
-                    .parse()
-                    .expect("to construct a bearer token"),
-            );
-
-            let resp = (*self)
-                .get_project_resources(req)
-                .await?
-                .into_inner()
-                .clone();
-
-            let resources = resp
-                .resources
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|error: anyhow::Error| tonic::Status::internal(error.to_string()))?;
-
-            Ok(resources)
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use serde_json::json;
-        use shuttle_common::{database, resource};
-        use test_context::{test_context, AsyncTestContext};
-        use tonic::Request;
-
-        use crate::generated::resource_recorder::{record_request, RecordRequest};
-        use crate::test_utils::resource_recorder::get_mocked_resource_recorder;
-
-        use super::{get_client, Client, ResourceDal};
-
-        impl AsyncTestContext for Client {
-            async fn setup() -> Self {
-                let port = get_mocked_resource_recorder().await;
-
-                get_client(format!("http://localhost:{port}").parse().unwrap()).await
-            }
-
-            async fn teardown(self) {}
-        }
-
-        #[test_context(Client)]
-        #[tokio::test]
-        async fn get_project_resources(mut r_r_client: &mut Client) {
-            // First record some resources
-            r_r_client
-                .record_resources(Request::new(RecordRequest {
-                    project_id: "project_1".to_string(),
-                    service_id: "service_1".to_string(),
-                    resources: vec![
-                        record_request::Resource {
-                            r#type: "database::shared::postgres".to_string(),
-                            config: serde_json::to_vec(&json!({"public": true})).unwrap(),
-                            data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
-                        },
-                        record_request::Resource {
-                            r#type: "database::aws_rds::mariadb".to_string(),
-                            config: serde_json::to_vec(&json!({})).unwrap(),
-                            data: serde_json::to_vec(&json!({"username": "maria"})).unwrap(),
-                        },
-                    ],
-                }))
-                .await
-                .unwrap();
-
-            let resources = (&mut r_r_client as &mut dyn ResourceDal)
-                .get_project_resources("project_1", "user-1")
-                .await
-                .unwrap();
-
-            assert_eq!(
-                resources,
-                vec![
-                    resource::Response {
-                        r#type: resource::Type::Database(database::Type::Shared(
-                            database::SharedEngine::Postgres
-                        )),
-                        config: json!({"public": true}),
-                        data: json!({"username": "test"}),
-                    },
-                    resource::Response {
-                        r#type: resource::Type::Database(database::Type::AwsRds(
-                            database::AwsRdsEngine::MariaDB
-                        )),
-                        config: json!({}),
-                        data: json!({"username": "maria"}),
-                    }
-                ]
-            );
-
-            // Getting only RDS resources should filter correctly
-            let resources = (&mut r_r_client as &mut dyn ResourceDal)
-                .get_project_rds_resources("project_1", "user-1")
-                .await
-                .unwrap();
-
-            assert_eq!(
-                resources,
-                vec![resource::Response {
-                    r#type: resource::Type::Database(database::Type::AwsRds(
-                        database::AwsRdsEngine::MariaDB
-                    )),
-                    config: json!({}),
-                    data: json!({"username": "maria"}),
-                }]
-            );
-        }
     }
 }
 

@@ -8,9 +8,9 @@ use axum::{
     TypedHeader,
 };
 use chrono::{DateTime, Utc};
+use shuttle_backends::{client::PermissionsDal, headers::XShuttleAdminSecret};
 use shuttle_common::{
-    backends::headers::XShuttleAdminSecret, claims::AccountTier, limits::Limits, models,
-    models::user::UserId, ApiKey, Secret,
+    claims::AccountTier, limits::Limits, models, models::user::UserId, ApiKey, Secret,
 };
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
 use stripe::{SubscriptionId, SubscriptionStatus};
@@ -43,12 +43,16 @@ pub trait UserManagement: Send + Sync {
 }
 
 #[derive(Clone)]
-pub struct UserManager {
+pub struct UserManager<P> {
     pub pool: PgPool,
     pub stripe_client: stripe::Client,
+    pub permissions_client: P,
 }
 
-impl UserManager {
+impl<P> UserManager<P>
+where
+    P: PermissionsDal + Send + Sync,
+{
     /// Add subscriptions to and sync the tier of a user
     async fn complete_user(&self, mut user: User) -> Result<User, Error> {
         let subscriptions: Vec<Subscription> = sqlx::query_as(
@@ -77,7 +81,10 @@ impl UserManager {
 }
 
 #[async_trait]
-impl UserManagement for UserManager {
+impl<P> UserManagement for UserManager<P>
+where
+    P: PermissionsDal + Send + Sync,
+{
     async fn create_user(&self, account_name: String, tier: AccountTier) -> Result<User, Error> {
         let user = User::new(account_name, ApiKey::generate(), tier, vec![]);
 
@@ -91,6 +98,12 @@ impl UserManagement for UserManager {
         .execute(&self.pool)
         .await?;
 
+        self.permissions_client.new_user(&user.id).await?;
+
+        if tier == AccountTier::Pro {
+            self.permissions_client.make_pro(&user.id).await?;
+        }
+
         Ok(user)
     }
 
@@ -102,6 +115,12 @@ impl UserManagement for UserManager {
             .execute(&self.pool)
             .await?
             .rows_affected();
+
+        if tier == AccountTier::Pro {
+            self.permissions_client.make_pro(user_id).await?;
+        } else {
+            self.permissions_client.make_free(user_id).await?;
+        }
 
         if rows_affected > 0 {
             Ok(())
@@ -188,6 +207,8 @@ impl UserManagement for UserManager {
                 .bind(user_id)
                 .execute(&mut *transaction)
                 .await?;
+
+            self.permissions_client.make_pro(user_id).await?;
         }
 
         // Insert a new subscription. If the same type of subscription already exists, update the
@@ -232,6 +253,8 @@ impl UserManagement for UserManager {
 
         if subscription.r#type == models::user::SubscriptionType::Pro {
             self.update_tier(user_id, AccountTier::CancelledPro).await?;
+
+            self.permissions_client.make_free(user_id).await?;
         } else {
             query(
                 r#"DELETE FROM subscriptions
@@ -310,7 +333,10 @@ impl User {
     }
 
     // Synchronize the tiers with the subscription validity.
-    async fn sync_tier(&mut self, user_manager: &UserManager) -> Result<bool, Error> {
+    async fn sync_tier<P: PermissionsDal + Send + Sync>(
+        &mut self,
+        user_manager: &UserManager<P>,
+    ) -> Result<bool, Error> {
         let has_pro_access = self.account_tier == AccountTier::Pro
             || self.account_tier == AccountTier::CancelledPro
             || self.account_tier == AccountTier::PendingPaymentPro;

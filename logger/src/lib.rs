@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use dal::Log;
 use dal::{Dal, DalError};
-use shuttle_common::{backends::auth::VerifyClaim, claims::Scope};
+use shuttle_backends::auth::VerifyClaim;
+use shuttle_common::claims::Scope;
 use shuttle_proto::logger::LogLine;
 use shuttle_proto::logger::{
     logger_server::Logger, LogsRequest, LogsResponse, StoreLogsRequest, StoreLogsResponse,

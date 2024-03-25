@@ -68,6 +68,8 @@ services:
       - "--stripe-secret-key=${STRIPE_SECRET_KEY}"
       # used only for local development
       - "--jwt-signing-private-key=LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUR5V0ZFYzhKYm05NnA0ZGNLTEwvQWNvVUVsbUF0MVVKSTU4WTc4d1FpWk4KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo="
+      - "--permit-api=https://api.eu-central-1.permit.io"
+      - "--permit-api-key=${PERMIT_API_KEY}"
   otel-collector:
     ports:
       - 4317:4317
@@ -116,3 +118,6 @@ services:
       - 8004:8000
       # the shared postgres already uses 5432
       - 5434:5432
+  permit-pdp:
+    environment:
+      - PDP_DEBUG=True

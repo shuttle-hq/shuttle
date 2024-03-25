@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 pub use persistence::Persistence;
 pub use runtime_manager::RuntimeManager;
+use shuttle_backends::client::ServicesApiClient;
 use shuttle_common::log::LogRecorder;
 use shuttle_proto::{logger, provisioner};
 use tokio::sync::Mutex;
@@ -18,7 +19,6 @@ mod runtime_manager;
 pub use crate::args::Args;
 pub use crate::deployment::state_change_layer::StateChangeLayer;
 use crate::deployment::{Built, DeploymentManager};
-use shuttle_common::backends::client::gateway;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -40,10 +40,7 @@ pub async fn start(
         .runtime(runtime_manager)
         .resource_manager(persistence.clone())
         .provisioner_client(provisioner::get_client(args.provisioner_address).await)
-        .queue_client(gateway::Client::new(
-            args.gateway_uri.clone(),
-            args.gateway_uri,
-        ))
+        .queue_client(ServicesApiClient::new(args.gateway_uri))
         .log_fetcher(log_fetcher)
         .build();
 

@@ -80,6 +80,20 @@ use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+// Returns the args and whether the PATH arg of the init command was explicitly given
+pub fn parse_args() -> (ShuttleArgs, bool) {
+    let matches = ShuttleArgs::command().get_matches();
+    let args =
+        ShuttleArgs::from_arg_matches(&matches).expect("args to already be parsed successfully");
+    let provided_path_to_init = matches
+        .subcommand_matches("init")
+        .is_some_and(|init_matches| {
+            init_matches.value_source("path") == Some(ValueSource::CommandLine)
+        });
+
+    (args, provided_path_to_init)
+}
+
 pub struct Shuttle {
     ctx: RequestContext,
     client: Option<Client>,
@@ -96,21 +110,6 @@ impl Shuttle {
             version_info: None,
             version_warnings: vec![],
         })
-    }
-
-    pub async fn parse_args_and_run(self) -> Result<CommandOutcome> {
-        // A hack to see if the PATH arg of the init command was explicitly given
-        let matches = ShuttleArgs::command().get_matches();
-        let args = ShuttleArgs::from_arg_matches(&matches)
-            .expect("args to already be parsed successfully");
-        let provided_path_to_init =
-            matches
-                .subcommand_matches("init")
-                .is_some_and(|init_matches| {
-                    init_matches.value_source("path") == Some(ValueSource::CommandLine)
-                });
-
-        self.run(args, provided_path_to_init).await
     }
 
     fn find_available_port(run_args: &mut RunArgs, services_len: usize) {
@@ -1676,7 +1675,7 @@ impl Shuttle {
             bail!(
                 r#"The project is too large - the limit is {} MB. \
                 Your project archive is {:.1} MB. \
-                Run with `RUST_LOG="cargo_shuttle=debug"` to see which files are being packed."#,
+                Run with `cargo shuttle --debug` to see which files are being packed."#,
                 CREATE_SERVICE_BODY_LIMIT / 1_000_000,
                 deployment_req.data.len() as f32 / 1_000_000f32,
             );

@@ -6,7 +6,7 @@ use opentelemetry_sdk::{
 use tracing::Subscriber;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
 
-use crate::log::Backend;
+use shuttle_common::log::Backend;
 
 use super::otlp_tracing_bridge::{self, ErrorTracingLayer};
 
@@ -18,7 +18,7 @@ where
 {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
-    let shuttle_env = std::env::var("SHUTTLE_ENV").unwrap_or("".to_string());
+    let shuttle_env = std::env::var("SHUTTLE_ENV").unwrap_or_default();
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new("info"))
         .unwrap();

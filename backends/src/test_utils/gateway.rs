@@ -1,9 +1,18 @@
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
+
+use async_trait::async_trait;
 use serde::Serialize;
+use shuttle_common::claims::AccountTier;
 use wiremock::{
     http,
     matchers::{method, path, path_regex},
     Mock, MockServer, Request, ResponseTemplate,
 };
+
+use crate::client::{permit::User, Error, PermissionsDal};
 
 pub async fn get_mocked_gateway_server() -> MockServer {
     let mock_server = MockServer::start().await;
@@ -80,4 +89,47 @@ struct Project<'a> {
     name: &'a str,
     state: &'a str,
     idle_minutes: u64,
+}
+
+#[derive(Clone, Default)]
+pub struct PermissionsMock {
+    pub users: Arc<RwLock<HashMap<String, User>>>,
+}
+
+#[async_trait]
+impl PermissionsDal for PermissionsMock {
+    async fn get_user(&self, _user_id: &str) -> Result<User, Error> {
+        unimplemented!()
+    }
+
+    async fn delete_user(&self, _user_id: &str) -> Result<(), Error> {
+        unimplemented!()
+    }
+
+    async fn new_user(&self, user_id: &str) -> Result<User, Error> {
+        let user = User {
+            id: user_id.to_string(),
+            key: user_id.to_string(),
+            roles: vec![AccountTier::Basic],
+        };
+
+        self.users
+            .write()
+            .unwrap()
+            .insert(user_id.to_string(), user.clone());
+
+        Ok(user)
+    }
+
+    async fn make_pro(&self, user_id: &str) -> Result<(), Error> {
+        self.users.write().unwrap().get_mut(user_id).unwrap().roles = vec![AccountTier::Pro];
+
+        Ok(())
+    }
+
+    async fn make_free(&self, user_id: &str) -> Result<(), Error> {
+        self.users.write().unwrap().get_mut(user_id).unwrap().roles = vec![AccountTier::Basic];
+
+        Ok(())
+    }
 }

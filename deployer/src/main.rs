@@ -1,8 +1,6 @@
 use clap::Parser;
-use shuttle_common::{
-    backends::trace::setup_tracing,
-    log::{Backend, DeploymentLogLayer},
-};
+use shuttle_backends::trace::setup_tracing;
+use shuttle_common::log::{Backend, DeploymentLogLayer};
 use shuttle_deployer::{start, Args, Persistence, RuntimeManager, StateChangeLayer};
 use shuttle_proto::logger::{self, Batcher};
 use tracing::trace;

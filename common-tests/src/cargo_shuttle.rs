@@ -42,6 +42,7 @@ pub async fn cargo_shuttle_run(working_directory: &str, external: bool) -> Strin
                 name: None,
             },
             offline: false,
+            debug: false,
             cmd: Command::Run(run_args),
         },
         false,

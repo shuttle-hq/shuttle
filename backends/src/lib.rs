@@ -1,17 +1,22 @@
 use tracing::instrument;
 
-use crate::claims::{AccountTier, Claim, Scope};
+use shuttle_common::claims::{AccountTier, Claim, Scope};
 
-use self::client::{ProjectsDal, ResourceDal};
+use client::{ProjectsDal, ResourceDal};
 
 pub mod auth;
+pub mod axum;
 pub mod cache;
 pub mod client;
 mod future;
 pub mod headers;
 pub mod metrics;
 mod otlp_tracing_bridge;
+pub mod project_name;
 pub mod trace;
+
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;
 
 #[allow(async_fn_in_trait)]
 pub trait ClaimExt {

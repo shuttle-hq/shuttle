@@ -630,13 +630,23 @@ workflows:
                 - services/shuttle-warp
       - test-workspace-member:
           name: << matrix.crate >>
+          filters:
+            branches:
+              ignore:
+                - /pull\/.*/
           matrix:
             parameters:
               crate:
                 # - shuttle-admin # no tests
+                - shuttle-backends
+                # - shuttle-gateway # TODO: move docker-dependant tests to integration tests and activate this
+      - test-workspace-member:
+          name: << matrix.crate >>
+          matrix:
+            parameters:
+              crate:
                 - shuttle-codegen
                 - shuttle-common
-                # - shuttle-common-tests # no tests
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
           matrix:
@@ -696,16 +706,21 @@ workflows:
               only: main
   unstable:
     jobs:
+      # allow this job on main and other internal branches, but not on PRs from forks
       - approve-deploy-images-unstable:
           type: approval
           filters:
             branches:
-              only: main
+              ignore:
+                - /pull\/.*/
+                - production
       - approve-build-and-push-images-unstable:
           type: approval
           filters:
             branches:
-              only: main
+              ignore:
+                - /pull\/.*/
+                - production
       - build-and-push:
           name: build-and-push-unstable
           aws-access-key-id: DEV_AWS_ACCESS_KEY_ID

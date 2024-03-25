@@ -6,8 +6,9 @@ use axum::{
     routing::{delete, get, post, put},
     Router, Server,
 };
-use shuttle_common::{
-    backends::metrics::{Metrics, TraceLayer},
+use shuttle_backends::{
+    client::PermissionsDal,
+    metrics::{Metrics, TraceLayer},
     request_span,
 };
 use sqlx::PgPool;
@@ -46,20 +47,27 @@ impl FromRef<RouterState> for KeyManagerState {
     }
 }
 
-pub struct ApiBuilder {
+pub struct ApiBuilder<P: PermissionsDal> {
     router: Router<RouterState>,
     pool: Option<PgPool>,
     stripe_client: Option<stripe::Client>,
+    permissions_client: Option<P>,
     jwt_signing_private_key: Option<String>,
 }
 
-impl Default for ApiBuilder {
+impl<P> Default for ApiBuilder<P>
+where
+    P: PermissionsDal + Send + Sync + 'static,
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ApiBuilder {
+impl<P> ApiBuilder<P>
+where
+    P: PermissionsDal + Send + Sync + 'static,
+{
     pub fn new() -> Self {
         let router = Router::new()
             // health check: 200 OK
@@ -94,6 +102,7 @@ impl ApiBuilder {
             router,
             pool: None,
             stripe_client: None,
+            permissions_client: None,
             jwt_signing_private_key: None,
         }
     }
@@ -108,6 +117,11 @@ impl ApiBuilder {
         self
     }
 
+    pub fn with_permissions_client(mut self, permissions_client: P) -> Self {
+        self.permissions_client = Some(permissions_client);
+        self
+    }
+
     pub fn with_jwt_signing_private_key(mut self, private_key: String) -> Self {
         self.jwt_signing_private_key = Some(private_key);
         self
@@ -116,12 +130,16 @@ impl ApiBuilder {
     pub fn into_router(self) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
         let stripe_client = self.stripe_client.expect("a stripe client is required");
+        let permit_client = self
+            .permissions_client
+            .expect("a permit client is required");
         let jwt_signing_private_key = self
             .jwt_signing_private_key
             .expect("a jwt signing private key");
         let user_manager = UserManager {
             pool,
             stripe_client,
+            permissions_client: permit_client,
         };
         let key_manager = EdDsaManager::new(jwt_signing_private_key);
 

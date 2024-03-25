@@ -7,6 +7,7 @@ mod user;
 use std::io;
 
 use args::StartArgs;
+use shuttle_backends::client::permit;
 use shuttle_common::{claims::AccountTier, ApiKey};
 use sqlx::{migrate::Migrator, query, PgPool};
 use tracing::info;
@@ -22,6 +23,13 @@ pub async fn start(pool: PgPool, args: StartArgs) -> io::Result<()> {
     let router = api::ApiBuilder::new()
         .with_pg_pool(pool)
         .with_stripe_client(stripe::Client::new(args.stripe_secret_key))
+        .with_permissions_client(permit::Client::new(
+            args.permit_api_uri,
+            args.permit_pdp_uri,
+            "default".to_string(),
+            args.permit_env,
+            &args.permit_api_key,
+        ))
         .with_jwt_signing_private_key(args.jwt_signing_private_key)
         .into_router();
 

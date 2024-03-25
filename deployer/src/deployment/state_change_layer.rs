@@ -358,17 +358,11 @@ mod tests {
 
     #[async_trait::async_trait]
     impl BuildQueueClient for StubBuildQueueClient {
-        async fn get_slot(
-            &self,
-            _id: Uuid,
-        ) -> Result<bool, shuttle_common::backends::client::Error> {
+        async fn get_slot(&self, _id: Uuid) -> Result<bool, shuttle_backends::client::Error> {
             Ok(true)
         }
 
-        async fn release_slot(
-            &self,
-            _id: Uuid,
-        ) -> Result<(), shuttle_common::backends::client::Error> {
+        async fn release_slot(&self, _id: Uuid) -> Result<(), shuttle_backends::client::Error> {
             Ok(())
         }
     }

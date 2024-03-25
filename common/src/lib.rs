@@ -1,5 +1,3 @@
-#[cfg(feature = "backend")]
-pub mod backends;
 #[cfg(feature = "claims")]
 pub mod claims;
 pub mod constants;
@@ -24,9 +22,6 @@ pub use secrets::{Secret, SecretStore};
 pub mod templates;
 #[cfg(feature = "tracing")]
 pub mod tracing;
-
-#[cfg(any(test, feature = "test-utils"))]
-pub mod test_utils;
 
 use std::fmt::Debug;
 

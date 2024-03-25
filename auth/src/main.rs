@@ -1,7 +1,8 @@
 use std::io;
 
 use clap::Parser;
-use shuttle_common::{backends::trace::setup_tracing, claims::AccountTier, log::Backend};
+use shuttle_backends::trace::setup_tracing;
+use shuttle_common::{claims::AccountTier, log::Backend};
 use sqlx::migrate::Migrator;
 use tracing::trace;
 

@@ -400,7 +400,7 @@ async fn override_create_service(
     scoped_user: ScopedUser,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    let user_id = scoped_user.user.claim.sub.clone();
+    let user_id = scoped_user.user.id.clone();
     let posthog_client = state.posthog_client.clone();
     tokio::spawn(async move {
         let event = async_posthog::Event::new("shuttle_api_start_deployment", &user_id);

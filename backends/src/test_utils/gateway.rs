@@ -6,6 +6,7 @@ use std::{
 use anyhow::Error;
 use async_trait::async_trait;
 use permit_client_rs::models::{UserRead, UserRole};
+use permit_pdp_client_rs::models::UserPermissionsResult;
 use serde::Serialize;
 use shuttle_common::claims::AccountTier;
 use wiremock::{
@@ -149,6 +150,19 @@ impl PermissionsDal for PermissionsMock {
     }
 
     async fn delete_project(&self, _project_id: &str) -> Result<(), Error> {
+        unimplemented!()
+    }
+
+    async fn get_user_projects(&self, _user_id: &str) -> Result<Vec<UserPermissionsResult>, Error> {
+        unimplemented!()
+    }
+
+    async fn allowed(
+        &self,
+        _user_id: &str,
+        _project_id: &str,
+        _action: &str,
+    ) -> Result<bool, Error> {
         unimplemented!()
     }
 }

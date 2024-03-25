@@ -20,6 +20,8 @@ use shuttle_common::claims::AccountTier;
 
 #[async_trait]
 pub trait PermissionsDal {
+    // User management
+
     /// Get a user with the given ID
     async fn get_user(&self, user_id: &str) -> Result<UserRead, Error>;
     /// Delete a user with the given ID
@@ -31,17 +33,29 @@ pub trait PermissionsDal {
     /// Set a user to be a Basic user
     async fn make_basic(&self, user_id: &str) -> Result<(), Error>;
 
+    // Project management
+
     /// Creates a Project resource and assigns the user as admin for that project
     async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error>;
     /// Deletes a Project resource
     async fn delete_project(&self, project_id: &str) -> Result<(), Error>;
+
+    // Organization management
+
+    ////// TODO
+
+    // Permissions queries
+
+    /// Get list of all projects user has permissions for
+    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error>;
+    /// Check if user can perform action on this project
+    async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool, Error>;
 }
 
+/// Wrapper for the Permit.io API and PDP (Policy decision point) API
 #[derive(Clone)]
 pub struct Client {
-    /// The Permit.io API
     api: permit_client_rs::apis::configuration::Configuration,
-    /// The local Permit PDP (Policy decision point) API
     pdp: permit_pdp_client_rs::apis::configuration::Configuration,
     proj_id: String,
     env_id: String,
@@ -78,7 +92,131 @@ impl Client {
             env_id,
         }
     }
+}
 
+#[async_trait]
+impl PermissionsDal for Client {
+    async fn get_user(&self, user_id: &str) -> Result<UserRead, Error> {
+        Ok(get_user(&self.api, &self.proj_id, &self.env_id, user_id).await?)
+    }
+
+    async fn delete_user(&self, user_id: &str) -> Result<(), Error> {
+        Ok(delete_user(&self.api, &self.proj_id, &self.env_id, user_id).await?)
+    }
+
+    async fn new_user(&self, user_id: &str) -> Result<UserRead, Error> {
+        let user = self.create_user(user_id).await?;
+        self.make_basic(&user.id.to_string()).await?;
+
+        self.get_user(&user.id.to_string()).await
+    }
+
+    async fn make_pro(&self, user_id: &str) -> Result<(), Error> {
+        let user = self.get_user(user_id).await?;
+
+        if user.roles.is_some_and(|roles| {
+            roles
+                .iter()
+                .any(|r| r.role == AccountTier::Basic.to_string())
+        }) {
+            self.unassign_role(user_id, &AccountTier::Basic).await?;
+        }
+
+        self.assign_role(user_id, &AccountTier::Pro).await
+    }
+
+    async fn make_basic(&self, user_id: &str) -> Result<(), Error> {
+        let user = self.get_user(user_id).await?;
+
+        if user
+            .roles
+            .is_some_and(|roles| roles.iter().any(|r| r.role == AccountTier::Pro.to_string()))
+        {
+            self.unassign_role(user_id, &AccountTier::Pro).await?;
+        }
+
+        self.assign_role(user_id, &AccountTier::Basic).await
+    }
+
+    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
+        create_resource_instance(
+            &self.api,
+            &self.proj_id,
+            &self.env_id,
+            ResourceInstanceCreate {
+                key: project_id.to_owned(),
+                tenant: "default".to_owned(),
+                resource: "Project".to_owned(),
+                attributes: None,
+            },
+        )
+        .await?;
+
+        self.assign_resource_role(user_id, format!("Project:{project_id}"), "admin")
+            .await?;
+
+        Ok(())
+    }
+
+    async fn delete_project(&self, project_id: &str) -> Result<(), Error> {
+        Ok(delete_resource_instance(
+            &self.api,
+            &self.proj_id,
+            &self.env_id,
+            format!("Project:{project_id}").as_str(),
+        )
+        .await?)
+    }
+
+    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error> {
+        let perms = get_user_permissions_user_permissions_post(
+            &self.pdp,
+            UserPermissionsQuery {
+                user: Box::new(User {
+                    key: user_id.to_owned(),
+                    ..Default::default()
+                }),
+                resource_types: Some(vec!["Project".to_owned()]),
+                tenants: Some(vec!["default".to_owned()]),
+                ..Default::default()
+            },
+            None,
+            None,
+        )
+        .await?;
+
+        Ok(perms.into_values().collect())
+    }
+
+    async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool, Error> {
+        // NOTE: This API function was modified in upstream to use AuthorizationQuery
+        let res = is_allowed_allowed_post(
+            &self.pdp,
+            AuthorizationQuery {
+                user: Box::new(User {
+                    key: user_id.to_owned(),
+                    ..Default::default()
+                }),
+                action: action.to_owned(),
+                resource: Box::new(Resource {
+                    r#type: "Project".to_string(),
+                    key: Some(project_id.to_owned()),
+                    tenant: Some("default".to_owned()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            None,
+            None,
+        )
+        .await?;
+
+        Ok(res.allow.unwrap_or_default())
+    }
+}
+
+// Helpers for trait methods
+impl Client {
     // /// Assigns a user to an org directly without creating the org first
     // pub async fn create_organization(&self, user_id: &str, org_name: &str) -> Result<(), Error> {
     //     self.api
@@ -251,60 +389,6 @@ impl Client {
     //         .await
     // }
 
-    pub async fn get_user_projects(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<UserPermissionsResult>, Error> {
-        let perms = get_user_permissions_user_permissions_post(
-            &self.pdp,
-            UserPermissionsQuery {
-                user: Box::new(User {
-                    key: user_id.to_owned(),
-                    ..Default::default()
-                }),
-                resource_types: Some(vec!["Project".to_owned()]),
-                tenants: Some(vec!["default".to_owned()]),
-                ..Default::default()
-            },
-            None,
-            None,
-        )
-        .await?;
-
-        Ok(perms.into_values().collect())
-    }
-
-    pub async fn allowed(
-        &self,
-        user_id: &str,
-        project_id: &str,
-        action: &str,
-    ) -> Result<bool, Error> {
-        // NOTE: This API function was modified in upstream to use AuthorizationQuery
-        let res = is_allowed_allowed_post(
-            &self.pdp,
-            AuthorizationQuery {
-                user: Box::new(User {
-                    key: user_id.to_owned(),
-                    ..Default::default()
-                }),
-                action: action.to_owned(),
-                resource: Box::new(Resource {
-                    r#type: "Project".to_string(),
-                    key: Some(project_id.to_owned()),
-                    tenant: Some("default".to_owned()),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            None,
-            None,
-        )
-        .await?;
-
-        Ok(res.allow.unwrap_or_default())
-    }
-
     async fn create_user(&self, user_id: &str) -> Result<UserRead, Error> {
         Ok(create_user(
             &self.api,
@@ -351,74 +435,21 @@ impl Client {
 
         Ok(())
     }
-}
 
-#[async_trait]
-impl PermissionsDal for Client {
-    async fn get_user(&self, user_id: &str) -> Result<UserRead, Error> {
-        Ok(get_user(&self.api, &self.proj_id, &self.env_id, user_id).await?)
-    }
-
-    async fn delete_user(&self, user_id: &str) -> Result<(), Error> {
-        Ok(delete_user(&self.api, &self.proj_id, &self.env_id, user_id).await?)
-    }
-
-    async fn new_user(&self, user_id: &str) -> Result<UserRead, Error> {
-        let user = self.create_user(user_id).await?;
-        self.make_basic(&user.id.to_string()).await?;
-
-        self.get_user(&user.id.to_string()).await
-    }
-
-    async fn make_pro(&self, user_id: &str) -> Result<(), Error> {
-        let user = self.get_user(user_id).await?;
-
-        if user.roles.is_some_and(|roles| {
-            roles
-                .iter()
-                .any(|r| r.role == AccountTier::Basic.to_string())
-        }) {
-            self.unassign_role(user_id, &AccountTier::Basic).await?;
-        }
-
-        self.assign_role(user_id, &AccountTier::Pro).await
-    }
-
-    async fn make_basic(&self, user_id: &str) -> Result<(), Error> {
-        let user = self.get_user(user_id).await?;
-
-        if user
-            .roles
-            .is_some_and(|roles| roles.iter().any(|r| r.role == AccountTier::Pro.to_string()))
-        {
-            self.unassign_role(user_id, &AccountTier::Pro).await?;
-        }
-
-        self.assign_role(user_id, &AccountTier::Basic).await
-    }
-
-    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
-        create_resource_instance(
-            &self.api,
-            &self.proj_id,
-            &self.env_id,
-            ResourceInstanceCreate {
-                key: project_id.to_owned(),
-                tenant: "default".to_owned(),
-                resource: "Project".to_owned(),
-                attributes: None,
-            },
-        )
-        .await?;
-
+    async fn assign_resource_role(
+        &self,
+        user_id: &str,
+        resource_instance: String,
+        role: &str,
+    ) -> Result<(), Error> {
         assign_role(
             &self.api,
             &self.proj_id,
             &self.env_id,
             RoleAssignmentCreate {
-                role: "admin".to_owned(),
+                role: role.to_owned(),
                 tenant: Some("default".to_owned()),
-                resource_instance: Some(format!("Project:{project_id}")),
+                resource_instance: Some(resource_instance),
                 user: user_id.to_owned(),
             },
         )
@@ -427,14 +458,26 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
-    async fn delete_project(&self, project_id: &str) -> Result<(), Error> {
-        Ok(delete_resource_instance(
+    async fn _unassign_resource_role(
+        &self,
+        user_id: &str,
+        resource_instance: String,
+        role: &str,
+    ) -> Result<(), Error> {
+        unassign_role(
             &self.api,
             &self.proj_id,
             &self.env_id,
-            format!("Project:{project_id}").as_str(),
+            RoleAssignmentRemove {
+                role: role.to_owned(),
+                tenant: Some("default".to_owned()),
+                resource_instance: Some(resource_instance),
+                user: user_id.to_owned(),
+            },
         )
-        .await?)
+        .await?;
+
+        Ok(())
     }
 }
 
@@ -496,14 +539,14 @@ mod tests {
     #[test_context(Client)]
     #[tokio::test]
     #[serial]
-    async fn test_user_flow(client: &mut Client) {
-        let user = client.create_user("test_user").await.unwrap();
-        let user_actual = client.get_user("test_user").await.unwrap();
-
-        assert_eq!(user.id, user_actual.id);
+    async fn test_user_flow(client: &mut impl PermissionsDal) {
+        client.new_user("test_user").await.unwrap();
+        let user = client.get_user("test_user").await.unwrap();
 
         // Can also get user by permit id
-        client.get_user(&user.id.to_string()).await.unwrap();
+        let user2 = client.get_user(&user.id.to_string()).await.unwrap();
+
+        assert_eq!(user.id, user2.id);
 
         // Now delete the user
         client.delete_user("test_user").await.unwrap();
@@ -518,16 +561,18 @@ mod tests {
     #[test_context(Client)]
     #[tokio::test]
     #[serial]
-    async fn test_tiers_flow(client: &mut Client) {
-        let user = client.create_user("tier_user").await.unwrap();
+    async fn test_tiers_flow(client: &mut impl PermissionsDal) {
+        client.new_user("tier_user").await.unwrap();
+        let user = client.get_user("tier_user").await.unwrap();
 
-        assert!(user.roles.unwrap().is_empty());
+        assert_eq!(user.roles.as_ref().unwrap().len(), 1);
+        assert_eq!(
+            user.roles.as_ref().unwrap()[0].role,
+            AccountTier::Basic.to_string()
+        );
 
         // Make user a pro
-        client
-            .assign_role("tier_user", &AccountTier::Pro)
-            .await
-            .unwrap();
+        client.make_pro("tier_user").await.unwrap();
         let user = client.get_user("tier_user").await.unwrap();
 
         assert_eq!(user.roles.as_ref().unwrap().len(), 1);
@@ -537,27 +582,7 @@ mod tests {
         );
 
         // Make user a free user
-        client
-            .assign_role("tier_user", &AccountTier::Basic)
-            .await
-            .unwrap();
-        let user = client.get_user("tier_user").await.unwrap();
-
-        assert_eq!(user.roles.as_ref().unwrap().len(), 2);
-        assert_eq!(
-            user.roles.as_ref().unwrap()[0].role,
-            AccountTier::Basic.to_string()
-        );
-        assert_eq!(
-            user.roles.as_ref().unwrap()[1].role,
-            AccountTier::Pro.to_string()
-        );
-
-        // Remove the pro role
-        client
-            .unassign_role("tier_user", &AccountTier::Pro)
-            .await
-            .unwrap();
+        client.make_basic("tier_user").await.unwrap();
         let user = client.get_user("tier_user").await.unwrap();
 
         assert_eq!(user.roles.as_ref().unwrap().len(), 1);
@@ -565,28 +590,12 @@ mod tests {
             user.roles.as_ref().unwrap()[0].role,
             AccountTier::Basic.to_string()
         );
+
+        client.delete_user("tier_user").await.unwrap();
     }
 
     #[test_context(Client)]
     #[tokio::test]
     #[serial]
-    async fn test_user_complex_flow(client: &mut Client) {
-        let user = client.new_user("jane").await.unwrap();
-        assert_eq!(user.roles.as_ref().unwrap().len(), 1);
-        assert_eq!(
-            user.roles.as_ref().unwrap()[0].role,
-            AccountTier::Basic.to_string(),
-            "making a new user should default to Free tier"
-        );
-
-        client.make_pro("jane").await.unwrap();
-
-        let user = client.get_user("jane").await.unwrap();
-        assert_eq!(user.roles.as_ref().unwrap().len(), 1);
-        assert_eq!(
-            user.roles.as_ref().unwrap()[0].role,
-            AccountTier::Pro.to_string(),
-            "changing to Pro should remove Free"
-        );
-    }
+    async fn test_projects(client: &mut impl PermissionsDal) {}
 }

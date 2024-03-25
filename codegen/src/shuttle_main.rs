@@ -8,7 +8,7 @@ use syn::{
     Signature, Stmt, Token, Type, TypePath,
 };
 
-pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub(crate) fn tokens(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut fn_decl = parse_macro_input!(item as ItemFn);
 
     let loader = Loader::from_item_fn(&mut fn_decl);
@@ -42,10 +42,8 @@ struct Loader {
 struct Input {
     /// The identifier for a resource input
     ident: Ident,
-
     /// The shuttle_runtime builder for this resource
     builder: Builder,
-
     /// The type declaration of the resource input
     ty: Type,
 }
@@ -54,7 +52,6 @@ struct Input {
 struct Builder {
     /// Path to the builder
     path: Path,
-
     /// Options to call on the builder
     options: BuilderOptions,
 }
@@ -69,7 +66,6 @@ struct BuilderOptions {
 struct BuilderOption {
     /// Identifier of the option to set
     ident: Ident,
-
     /// Value to set option to
     value: Expr,
 }
@@ -94,7 +90,7 @@ impl Parse for BuilderOption {
 
 impl Loader {
     pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Option<Self> {
-        // rename function to allow any name, such as 'main'
+        // prefix the function name to allow any name, such as 'main'
         item_fn.sig.ident = Ident::new(
             &format!("__shuttle_{}", item_fn.sig.ident),
             Span::call_site(),
@@ -120,7 +116,7 @@ impl Loader {
                         ty: *ty,
                     }),
                     Err(err) => {
-                        emit_error!(pat_ident, err; hint = pat_ident.span() => "Try adding a config like `#[shuttle_shared_db::Postgres]`");
+                        emit_error!(pat_ident, err; hint = pat_ident.span() => "Try adding an attribute like `#[shuttle_shared_db::Postgres]`");
                         None
                     }
                 }
@@ -142,18 +138,18 @@ fn check_return_type(signature: Signature) -> Option<TypePath> {
                 signature,
                 "shuttle_runtime::main functions need to return a service";
                 hint = "See the docs for services with first class support";
-                doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
+                doc = "https://docs.rs/shuttle-runtime/latest/shuttle_runtime/attr.main.html#shuttle-supported-services"
             );
             None
         }
-        ReturnType::Type(_, r#type) => match *r#type {
+        ReturnType::Type(_, ty) => match *ty {
             Type::Path(path) => Some(path),
             _ => {
                 emit_error!(
-                    r#type,
-                    "shuttle_runtime::main functions need to return a first class service or 'Result<impl Service, shuttle_runtime::Error>";
+                    ty,
+                    "shuttle_runtime::main functions need to return a first class service or 'Result<impl shuttle_service::Service, shuttle_runtime::Error>";
                     hint = "See the docs for services with first class support";
-                    doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
+                    doc = "https://docs.rs/shuttle-runtime/latest/shuttle_runtime/attr.main.html#shuttle-supported-services"
                 );
                 None
             }

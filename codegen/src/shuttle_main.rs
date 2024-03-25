@@ -250,7 +250,7 @@ impl ToTokens for Loader {
         let loader_runner = quote! {
             async fn __loader(
                 #factory_ident: ::shuttle_runtime::ResourceFactory,
-            ) -> std::result::Result<std::vec::Vec<std::vec::Vec<u8>>, ::shuttle_runtime::Error> {
+            ) -> std::result::Result<std::vec::Vec<std::vec::Vec<::core::primitive::u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
                 #extra_imports
 
@@ -272,7 +272,7 @@ impl ToTokens for Loader {
             }
 
             async fn __runner(
-                resources: std::vec::Vec<std::vec::Vec<u8>>,
+                resources: std::vec::Vec<std::vec::Vec<::core::primitive::u8>>,
             ) -> #return_type {
                 use ::shuttle_runtime::__internals::Context;
                 #extra_imports
@@ -344,14 +344,14 @@ mod tests {
         let expected = quote! {
             async fn __loader(
                 _factory: ::shuttle_runtime::ResourceFactory,
-            ) -> std::result::Result<std::vec::Vec<std::vec::Vec<u8>>, ::shuttle_runtime::Error> {
+            ) -> std::result::Result<std::vec::Vec<std::vec::Vec<::core::primitive::u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
                 let mut inputs = Vec::new();
                 Ok(inputs)
             }
 
             async fn __runner(
-                resources: std::vec::Vec<std::vec::Vec<u8>>,
+                resources: std::vec::Vec<std::vec::Vec<::core::primitive::u8>>,
             ) -> ShuttleSimple {
                 use ::shuttle_runtime::__internals::Context;
                 let mut iter = resources.into_iter();
@@ -423,7 +423,7 @@ mod tests {
         let expected = quote! {
             async fn __loader(
                 factory: ::shuttle_runtime::ResourceFactory,
-            ) -> std::result::Result<std::vec::Vec<std::vec::Vec<u8>>, ::shuttle_runtime::Error> {
+            ) -> std::result::Result<std::vec::Vec<std::vec::Vec<::core::primitive::u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
                 use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
                 let mut inputs = Vec::new();
@@ -447,7 +447,7 @@ mod tests {
             }
 
             async fn __runner(
-                resources: std::vec::Vec<std::vec::Vec<u8>>,
+                resources: std::vec::Vec<std::vec::Vec<::core::primitive::u8>>,
             ) -> ShuttleComplex {
 
                 use ::shuttle_runtime::__internals::Context;
@@ -568,7 +568,7 @@ mod tests {
         let expected = quote! {
             async fn __loader(
                 factory: ::shuttle_runtime::ResourceFactory,
-            ) -> std::result::Result<std::vec::Vec<std::vec::Vec<u8>>, ::shuttle_runtime::Error> {
+            ) -> std::result::Result<std::vec::Vec<std::vec::Vec<::core::primitive::u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
                 use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
                 let __vars = std::collections::HashMap::from_iter(
@@ -590,7 +590,7 @@ mod tests {
                 Ok(inputs)
             }
             async fn __runner(
-                resources: std::vec::Vec<std::vec::Vec<u8>>,
+                resources: std::vec::Vec<std::vec::Vec<::core::primitive::u8>>,
             ) -> ShuttleComplex {
                 use ::shuttle_runtime::__internals::Context;
                 use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};

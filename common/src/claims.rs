@@ -96,12 +96,13 @@ pub enum Scope {
     Admin,
 }
 
+#[derive(Default)]
 pub struct ScopeBuilder(Vec<Scope>);
 
 impl ScopeBuilder {
     /// Create a builder with the standard scopes for new users.
     pub fn new() -> Self {
-        Self(Default::default())
+        Self::default()
     }
 
     /// Extend the current scopes with admin scopes.
@@ -160,12 +161,6 @@ impl ScopeBuilder {
 
     pub fn build(self) -> Vec<Scope> {
         self.0
-    }
-}
-
-impl Default for ScopeBuilder {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

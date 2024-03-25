@@ -822,6 +822,7 @@ pub(crate) struct RouterState {
     pub posthog_client: async_posthog::Client,
 }
 
+#[derive(Default)]
 pub struct ApiBuilder {
     router: Router<RouterState>,
     service: Option<Arc<GatewayService>>,
@@ -830,21 +831,9 @@ pub struct ApiBuilder {
     bind: Option<SocketAddr>,
 }
 
-impl Default for ApiBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ApiBuilder {
     pub fn new() -> Self {
-        Self {
-            router: Router::new(),
-            service: None,
-            sender: None,
-            posthog_client: None,
-            bind: None,
-        }
+        Self::default()
     }
 
     pub fn with_acme(mut self, acme: AcmeClient, resolver: Arc<GatewayCertResolver>) -> Self {

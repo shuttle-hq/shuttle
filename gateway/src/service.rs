@@ -63,6 +63,7 @@ impl From<SqlxError> for Error {
     }
 }
 
+#[derive(Default)]
 pub struct ContainerSettingsBuilder {
     prefix: Option<String>,
     image: Option<String>,
@@ -74,24 +75,9 @@ pub struct ContainerSettingsBuilder {
     extra_hosts: Option<Vec<String>>,
 }
 
-impl Default for ContainerSettingsBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ContainerSettingsBuilder {
     pub fn new() -> Self {
-        Self {
-            prefix: None,
-            image: None,
-            provisioner: None,
-            auth_uri: None,
-            resource_recorder_uri: None,
-            network_name: None,
-            fqdn: None,
-            extra_hosts: None,
-        }
+        Self::default()
     }
 
     pub async fn from_args(self, args: &ContextArgs) -> ContainerSettings {

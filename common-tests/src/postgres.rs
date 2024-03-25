@@ -25,7 +25,7 @@ use uuid::Uuid;
 /// async fn test_case() {
 ///     // Get an unique db uri which points to a unique database.
 ///     let db_uri = PG.get_unique_uri();
-///     
+///
 ///     // Test logic below, which can use `db_uri` to connect to the postgres instance.
 /// }
 ///```
@@ -37,8 +37,7 @@ pub struct DockerInstance {
 
 impl Default for DockerInstance {
     fn default() -> Self {
-        let s = Uuid::new_v4().to_string();
-        DockerInstance::new(s.as_str())
+        DockerInstance::new(Uuid::new_v4().to_string().as_str())
     }
 }
 

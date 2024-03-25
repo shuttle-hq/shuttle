@@ -4084,7 +4084,7 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 [[package]]
 name = "permit-client-rs"
 version = "2.0.0"
-source = "git+https://github.com/shuttle-hq/permit-client-rs#27c775918aa6f7522e0845d8775a8b63d4124f6b"
+source = "git+https://github.com/shuttle-hq/permit-client-rs?rev=27c7759#27c775918aa6f7522e0845d8775a8b63d4124f6b"
 dependencies = [
  "reqwest",
  "serde",
@@ -4098,7 +4098,7 @@ dependencies = [
 [[package]]
 name = "permit-pdp-client-rs"
 version = "0.2.0"
-source = "git+https://github.com/shuttle-hq/permit-pdp-client-rs#72fe7a20cbc1c67f858aac857ce7f2db550bb31b"
+source = "git+https://github.com/shuttle-hq/permit-pdp-client-rs?rev=37c7296#37c72968adf360aa4e2386c3f0c918b823fb919f"
 dependencies = [
  "reqwest",
  "serde",

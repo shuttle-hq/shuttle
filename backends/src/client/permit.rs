@@ -1,6 +1,5 @@
 use anyhow::Error;
 use async_trait::async_trait;
-use http::Uri;
 use permit_client_rs::{
     apis::{
         resource_instances_api::{create_resource_instance, delete_resource_instance},
@@ -50,21 +49,27 @@ pub struct Client {
 
 impl Client {
     pub fn new(
-        api_uri: Uri,
-        pdp_uri: Uri,
+        api_uri: String,
+        pdp_uri: String,
         proj_id: String,
         env_id: String,
         api_key: String,
     ) -> Self {
         Self {
             api: permit_client_rs::apis::configuration::Configuration {
-                base_path: api_uri.to_string(),
+                base_path: api_uri
+                    .strip_suffix('/')
+                    .map(ToOwned::to_owned)
+                    .unwrap_or(api_uri),
                 user_agent: None,
                 bearer_access_token: Some(api_key.clone()),
                 ..Default::default()
             },
             pdp: permit_pdp_client_rs::apis::configuration::Configuration {
-                base_path: pdp_uri.to_string(),
+                base_path: pdp_uri
+                    .strip_suffix('/')
+                    .map(ToOwned::to_owned)
+                    .unwrap_or(pdp_uri),
                 user_agent: None,
                 bearer_access_token: Some(api_key),
                 ..Default::default()
@@ -471,10 +476,10 @@ mod tests {
         async fn setup() -> Self {
             let api_key = env::var("PERMIT_API_KEY").expect("PERMIT_API_KEY to be set. You can copy the testing API key from the Testing environment on Permit.io.");
             let client = Client::new(
-                "https://api.eu-central-1.permit.io".parse().unwrap(),
-                "http://localhost:7000".parse().unwrap(),
-                "default".to_string(),
-                "testing".to_string(),
+                "https://api.eu-central-1.permit.io".to_owned(),
+                "http://localhost:7000".to_owned(),
+                "default".to_owned(),
+                "testing".to_owned(),
                 api_key,
             );
 

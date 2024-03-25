@@ -176,7 +176,7 @@ async fn create_project(
     let project = service
         .create_project(
             project_name.clone(),
-            id,
+            &id,
             claim.is_admin(),
             can_create_project,
             if is_cch_project {
@@ -187,6 +187,12 @@ async fn create_project(
         )
         .await?;
     let idle_minutes = project.state.idle_minutes();
+
+    service
+        .permit_client
+        .create_project(&id, &project.project_id)
+        .await
+        .map_err(|_| Error::from(ErrorKind::Internal))?;
 
     service
         .new_task()
@@ -379,6 +385,13 @@ async fn delete_project(
         .send(&sender)
         .await?;
     task.await;
+
+    state
+        .service
+        .permit_client
+        .delete_project(&project.project_id)
+        .await
+        .map_err(|_| Error::from(ErrorKind::Internal))?;
 
     service.delete_project(&project_name).await?;
 

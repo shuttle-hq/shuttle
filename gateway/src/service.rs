@@ -205,7 +205,7 @@ pub struct GatewayService {
     db: SqlitePool,
     task_router: TaskRouter,
     pub state_location: PathBuf,
-    permit_client: Box<dyn PermissionsDal + Send + Sync>,
+    pub permit_client: Box<dyn PermissionsDal + Send + Sync>,
 
     /// Maximum number of containers the gateway can start before blocking cch projects
     cch_container_limit: u32,
@@ -378,10 +378,7 @@ impl GatewayService {
         Ok(ready_count)
     }
 
-    pub async fn find_project(
-        &self,
-        project_name: &ProjectName,
-    ) -> Result<FindProjectPayload, Error> {
+    pub async fn find_project(&self, project_name: &str) -> Result<FindProjectPayload, Error> {
         query("SELECT project_id, project_state FROM projects WHERE project_name = ?1")
             .bind(project_name)
             .fetch_optional(&self.db)
@@ -517,7 +514,7 @@ impl GatewayService {
     pub async fn create_project(
         &self,
         project_name: ProjectName,
-        user_id: UserId,
+        user_id: &UserId,
         is_admin: bool,
         can_create_project: bool,
         idle_minutes: u64,
@@ -530,7 +527,7 @@ impl GatewayService {
             "#,
         )
         .bind(&project_name)
-        .bind(&user_id)
+        .bind(user_id)
         .bind(is_admin)
         .fetch_optional(&self.db)
         .await?
@@ -629,7 +626,7 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         project_id: Ulid,
-        user_id: UserId,
+        user_id: &UserId,
         idle_minutes: u64,
     ) -> Result<FindProjectPayload, Error> {
         let project = SqlxJson(Project::Creating(
@@ -644,7 +641,7 @@ impl GatewayService {
             .bind(&project_id.to_string())
             .bind(&project_name)
             .bind("")
-            .bind(&user_id)
+            .bind(user_id)
             .bind(project.initial_key().unwrap())
             .bind(&project)
             .execute(&self.db)
@@ -1178,7 +1175,7 @@ pub mod tests {
         };
 
         let project = svc
-            .create_project(matrix.clone(), neo.clone(), false, true, 0)
+            .create_project(matrix.clone(), &neo, false, true, 0)
             .await
             .unwrap();
 
@@ -1211,14 +1208,14 @@ pub mod tests {
 
         // Test project pagination, first create 20 projects.
         for p in (0..20).map(|p| format!("matrix-{p}")) {
-            svc.create_project(p.parse().unwrap(), admin.clone(), true, true, 0)
+            svc.create_project(p.parse().unwrap(), &admin, true, true, 0)
                 .await
                 .unwrap();
         }
 
         // Creating a project with can_create_project set to false should fail.
         assert_eq!(
-            svc.create_project("final-one".parse().unwrap(), admin.clone(), false, false, 0)
+            svc.create_project("final-one".parse().unwrap(), &admin, false, false, 0)
                 .await
                 .err()
                 .unwrap()
@@ -1285,7 +1282,7 @@ pub mod tests {
 
         // If recreated by a different user
         assert!(matches!(
-            svc.create_project(matrix.clone(), trinity.clone(), false, true, 0)
+            svc.create_project(matrix.clone(), &trinity, false, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::ProjectAlreadyExists,
@@ -1295,7 +1292,7 @@ pub mod tests {
 
         // If recreated by the same user
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
+            svc.create_project(matrix.clone(), &neo, false, true, 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1305,7 +1302,7 @@ pub mod tests {
 
         // If recreated by the same user again while it's running
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
+            svc.create_project(matrix.clone(), &neo, false, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
@@ -1333,7 +1330,7 @@ pub mod tests {
 
         // If recreated by an admin
         assert!(matches!(
-            svc.create_project(matrix.clone(), admin.clone(), true, true, 0)
+            svc.create_project(matrix.clone(), &admin, true, true, 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1343,7 +1340,7 @@ pub mod tests {
 
         // If recreated by an admin again while it's running
         assert!(matches!(
-            svc.create_project(matrix.clone(), admin.clone(), true, true, 0)
+            svc.create_project(matrix.clone(), &admin, true, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
@@ -1365,8 +1362,7 @@ pub mod tests {
 
         // It can be re-created by anyone, with the same project name
         assert!(matches!(
-            svc.create_project(matrix, trinity.clone(), false, true, 0)
-                .await,
+            svc.create_project(matrix, &trinity, false, true, 0).await,
             Ok(FindProjectPayload {
                 project_id: _,
                 state: Project::Creating(_),
@@ -1391,7 +1387,7 @@ pub mod tests {
         let neo: UserId = "neo".to_owned();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
+        svc.create_project(matrix.clone(), &neo, false, true, 0)
             .await
             .unwrap();
 
@@ -1460,7 +1456,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, true, 0)
+            .create_project(project_name.clone(), &account, false, true, 0)
             .await
             .unwrap();
 
@@ -1522,7 +1518,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, true, 0)
+            .create_project(project_name.clone(), &account, false, true, 0)
             .await
             .unwrap();
 
@@ -1540,7 +1536,7 @@ pub mod tests {
         assert!(matches!(work.poll(()).await, TaskResult::Done(())));
 
         let recreated_project = svc
-            .create_project(project_name.clone(), account.clone(), false, true, 0)
+            .create_project(project_name.clone(), &account, false, true, 0)
             .await
             .unwrap();
 

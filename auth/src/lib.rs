@@ -25,8 +25,8 @@ pub async fn start(pool: PgPool, args: StartArgs) -> io::Result<()> {
         .with_pg_pool(pool)
         .with_stripe_client(stripe::Client::new(args.stripe_secret_key))
         .with_permissions_client(permit::Client::new(
-            args.permit.permit_api_uri,
-            args.permit.permit_pdp_uri,
+            args.permit.permit_api_uri.to_string(),
+            args.permit.permit_pdp_uri.to_string(),
             "default".to_string(),
             args.permit.permit_env,
             args.permit.permit_api_key,

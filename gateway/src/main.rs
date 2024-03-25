@@ -83,8 +83,8 @@ async fn start(
             db,
             fs,
             Box::new(permit::Client::new(
-                args.context.permit_api_uri,
-                args.context.permit_pdp_uri,
+                args.context.permit_api_uri.to_string(),
+                args.context.permit_pdp_uri.to_string(),
                 "default".to_owned(),
                 args.context.permit_env,
                 args.context.permit_api_key,

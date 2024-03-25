@@ -571,7 +571,12 @@ mod tests {
             ) -> std::result::Result<std::alloc::vec::Vec<std::alloc::vec::Vec<u8>>, ::shuttle_runtime::Error> {
                 use ::shuttle_runtime::__internals::Context;
                 use ::shuttle_runtime::{ResourceFactory, IntoResource, ResourceInputBuilder};
-                let __vars = std::collections::HashMap::from_iter(factory.get_secrets().into_iter().map(|(key, value)| (format!("secrets.{}", key), value.expose().clone())));
+                let __vars = std::collections::HashMap::from_iter(
+                    factory
+                        .get_secrets()
+                        .into_iter()
+                        .map(|(key, value)| (format!("secrets.{}", key), value.expose().clone()))
+                );
                 let mut inputs = Vec::new();
                 let input: <shuttle_shared_db::Postgres as ResourceInputBuilder>::Input =
                     shuttle_shared_db::Postgres::default()

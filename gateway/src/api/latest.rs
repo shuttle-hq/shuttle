@@ -127,25 +127,34 @@ async fn check_project_name(
         .await
         .map(AxumJson)
 }
-
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
-    User { id: name, .. }: User,
-    Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
+    User { id, .. }: User,
+    Query(PaginationDetails { limit, .. }): Query<PaginationDetails>,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
     let limit = limit.unwrap_or(u32::MAX);
-    let page = page.unwrap_or(0);
-    let projects = service
-        // The `offset` is page size * amount of pages
-        .iter_user_projects_detailed(&name, limit * page, limit)
-        .await?
-        .map(|project| project::Response {
-            id: project.0.to_uppercase(),
-            name: project.1.to_string(),
-            idle_minutes: project.2.idle_minutes(),
-            state: project.2.into(),
-        })
-        .collect();
+
+    let mut projects = vec![];
+    for p in service
+        .permit_client
+        .get_user_projects(&id)
+        .await
+        .map_err(|_| Error::from(ErrorKind::Internal))?
+        .into_iter()
+        .take(limit as usize)
+    {
+        let name = p.resource.expect("project resource").key;
+        let project = service.find_project(name.as_str()).await?;
+        let idle_minutes = project.state.idle_minutes();
+
+        let response = project::Response {
+            id: project.project_id,
+            name,
+            state: project.state.into(),
+            idle_minutes,
+        };
+        projects.push(response);
+    }
 
     Ok(AxumJson(projects))
 }

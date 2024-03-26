@@ -4,9 +4,8 @@ mod error;
 mod secrets;
 mod user;
 
-use std::io;
-
-use args::{StartArgs, SyncArgs};
+use anyhow::Result;
+use args::{CopyPermitEnvArgs, StartArgs, SyncArgs};
 use shuttle_backends::client::{permit, PermissionsDal};
 use shuttle_common::{claims::AccountTier, ApiKey};
 use sqlx::{migrate::Migrator, query, PgPool};
@@ -19,7 +18,7 @@ pub use args::{Args, Commands, InitArgs};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
-pub async fn start(pool: PgPool, args: StartArgs) -> io::Result<()> {
+pub async fn start(pool: PgPool, args: StartArgs) {
     let router = api::ApiBuilder::new()
         .with_pg_pool(pool)
         .with_stripe_client(stripe::Client::new(args.stripe_secret_key))
@@ -36,15 +35,12 @@ pub async fn start(pool: PgPool, args: StartArgs) -> io::Result<()> {
     info!(address=%args.address, "Binding to and listening at address");
 
     serve(router, args.address).await;
-
-    Ok(())
 }
 
-pub async fn sync(pool: PgPool, args: SyncArgs) -> io::Result<()> {
+pub async fn sync(pool: PgPool, args: SyncArgs) -> Result<()> {
     let users: Vec<User> = sqlx::query_as("SELECT * FROM users")
         .fetch_all(&pool)
-        .await
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .await?;
 
     let permit_client = permit::Client::new(
         args.permit.permit_api_uri.to_string(),
@@ -69,16 +65,10 @@ pub async fn sync(pool: PgPool, args: SyncArgs) -> io::Result<()> {
                         | AccountTier::Team
                         | AccountTier::Admin
                         | AccountTier::Deployer => {
-                            permit_client
-                                .make_basic(&user.id)
-                                .await
-                                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                            permit_client.make_basic(&user.id).await?;
                         }
                         AccountTier::Pro => {
-                            permit_client
-                                .make_pro(&user.id)
-                                .await
-                                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                            permit_client.make_pro(&user.id).await?;
                         }
                     }
                 }
@@ -89,16 +79,10 @@ pub async fn sync(pool: PgPool, args: SyncArgs) -> io::Result<()> {
                 println!("creating user: {}", user.id);
 
                 // Add users that are not in permit
-                permit_client
-                    .new_user(&user.id)
-                    .await
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                permit_client.new_user(&user.id).await?;
 
                 if user.account_tier == AccountTier::Pro {
-                    permit_client
-                        .make_pro(&user.id)
-                        .await
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                    permit_client.make_pro(&user.id).await?;
                 }
             }
         }
@@ -107,7 +91,19 @@ pub async fn sync(pool: PgPool, args: SyncArgs) -> io::Result<()> {
     Ok(())
 }
 
-pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> io::Result<()> {
+pub async fn copy_environment(args: CopyPermitEnvArgs) -> Result<()> {
+    let client = permit::Client::new(
+        args.permit.permit_api_uri.to_string(),
+        args.permit.permit_pdp_uri.to_string(),
+        "default".to_string(),
+        args.permit.permit_env,
+        args.permit.permit_api_key,
+    );
+
+    client.copy_environment(&args.target).await
+}
+
+pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> Result<()> {
     let key = match args.key {
         Some(ref key) => ApiKey::parse(key).unwrap(),
         None => ApiKey::generate(),
@@ -119,8 +115,7 @@ pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> io::Result
         .bind(tier.to_string())
         .bind(&args.user_id)
         .execute(&pool)
-        .await
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .await?;
 
     println!(
         "`{}` created as {} with key: {}",
@@ -132,17 +127,10 @@ pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> io::Result
 }
 
 /// Initialize the connection pool to a Postgres database at the given URI.
-pub async fn pgpool_init(db_uri: &str) -> io::Result<PgPool> {
-    let opts = db_uri
-        .parse()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    let pool = PgPool::connect_with(opts)
-        .await
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    MIGRATIONS
-        .run(&pool)
-        .await
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+pub async fn pgpool_init(db_uri: &str) -> Result<PgPool> {
+    let opts = db_uri.parse()?;
+    let pool = PgPool::connect_with(opts).await?;
+    MIGRATIONS.run(&pool).await?;
 
     Ok(pool)
 }

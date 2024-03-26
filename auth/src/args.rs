@@ -20,6 +20,9 @@ pub enum Commands {
     InitAdmin(InitArgs),
     InitDeployer(InitArgs),
     Sync(SyncArgs),
+    /// Copy and overwrite a permit env's policies to another env.
+    /// Requires a project level API key.
+    CopyPermitEnv(CopyPermitEnvArgs),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -53,6 +56,14 @@ pub struct InitArgs {
 
 #[derive(clap::Args, Debug, Clone)]
 pub struct SyncArgs {
+    #[command(flatten)]
+    pub permit: PermitArgs,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct CopyPermitEnvArgs {
+    /// environment to copy to
+    pub target: String,
     #[command(flatten)]
     pub permit: PermitArgs,
 }

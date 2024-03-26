@@ -7,7 +7,6 @@ mod user;
 use std::io;
 
 use args::{StartArgs, SyncArgs};
-use http::StatusCode;
 use shuttle_backends::client::{permit, PermissionsDal};
 use shuttle_common::{claims::AccountTier, ApiKey};
 use sqlx::{migrate::Migrator, query, PgPool};
@@ -48,18 +47,21 @@ pub async fn sync(pool: PgPool, args: SyncArgs) -> io::Result<()> {
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
     let permit_client = permit::Client::new(
-        args.permit.permit_api_uri,
-        args.permit.permit_pdp_uri,
+        args.permit.permit_api_uri.to_string(),
+        args.permit.permit_pdp_uri.to_string(),
         "default".to_string(),
         args.permit.permit_env,
-        &args.permit.permit_api_key,
+        args.permit.permit_api_key,
     );
 
     for user in users {
         match permit_client.get_user(&user.id).await {
             Ok(p_user) => {
                 // Update tier if out of sync
-                if !p_user.roles.contains(&user.account_tier) {
+                if !p_user
+                    .roles
+                    .is_some_and(|rs| rs.iter().any(|r| r.role == user.account_tier.to_string()))
+                {
                     match user.account_tier {
                         AccountTier::Basic
                         | AccountTier::PendingPaymentPro
@@ -68,7 +70,7 @@ pub async fn sync(pool: PgPool, args: SyncArgs) -> io::Result<()> {
                         | AccountTier::Admin
                         | AccountTier::Deployer => {
                             permit_client
-                                .make_free(&user.id)
+                                .make_basic(&user.id)
                                 .await
                                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                         }
@@ -81,7 +83,9 @@ pub async fn sync(pool: PgPool, args: SyncArgs) -> io::Result<()> {
                     }
                 }
             }
-            Err(shuttle_backends::client::Error::RequestError(StatusCode::NOT_FOUND)) => {
+            Err(_) => {
+                // FIXME: Make the error type better so that this is only done on 404s
+
                 println!("creating user: {}", user.id);
 
                 // Add users that are not in permit
@@ -97,7 +101,6 @@ pub async fn sync(pool: PgPool, args: SyncArgs) -> io::Result<()> {
                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                 }
             }
-            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e)),
         }
     }
 

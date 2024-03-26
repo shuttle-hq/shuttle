@@ -1135,7 +1135,7 @@ pub mod tests {
     use crate::{Error, ErrorKind};
 
     #[tokio::test]
-    async fn service_create_find_stop_delete_project() -> anyhow::Result<()> {
+    async fn service_create_find_stop_delete_project() {
         let world = World::new().await;
         let svc = Arc::new(
             GatewayService::init(
@@ -1144,7 +1144,8 @@ pub mod tests {
                 "".into(),
                 Box::<PermissionsMock>::default(),
             )
-            .await?,
+            .await
+            .unwrap(),
         );
 
         let neo: UserId = "neo".to_owned();
@@ -1354,11 +1355,10 @@ pub mod tests {
                 state: Project::Creating(_),
             })
         ));
-        Ok(())
     }
 
     #[tokio::test]
-    async fn service_create_ready_kill_restart_docker() -> anyhow::Result<()> {
+    async fn service_create_ready_kill_restart_docker() {
         let world = World::new().await;
         let svc = Arc::new(
             GatewayService::init(
@@ -1367,7 +1367,8 @@ pub mod tests {
                 "".into(),
                 Box::<PermissionsMock>::default(),
             )
-            .await?,
+            .await
+            .unwrap(),
         );
 
         let neo: UserId = "neo".to_owned();
@@ -1413,12 +1414,10 @@ pub mod tests {
         let project = svc.find_project(&matrix).await.unwrap();
         println!("{:?}", project.state);
         assert!(project.state.is_ready());
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn service_create_find_custom_domain() -> anyhow::Result<()> {
+    async fn service_create_find_custom_domain() {
         let world = World::new().await;
         let svc = Arc::new(
             GatewayService::init(
@@ -1427,7 +1426,8 @@ pub mod tests {
                 "".into(),
                 Box::<PermissionsMock>::default(),
             )
-            .await?,
+            .await
+            .unwrap(),
         );
 
         let account: UserId = "neo".to_owned();
@@ -1475,12 +1475,10 @@ pub mod tests {
         assert_eq!(custom_domain.project_name, project_name);
         assert_eq!(custom_domain.certificate, certificate);
         assert_eq!(custom_domain.private_key, private_key);
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn service_create_custom_domain_destroy_recreate_project() -> anyhow::Result<()> {
+    async fn service_create_custom_domain_destroy_recreate_project() {
         let world = World::new().await;
         let svc = Arc::new(
             GatewayService::init(
@@ -1489,7 +1487,8 @@ pub mod tests {
                 "".into(),
                 Box::<PermissionsMock>::default(),
             )
-            .await?,
+            .await
+            .unwrap(),
         );
 
         let account: UserId = "neo".to_owned();
@@ -1527,7 +1526,5 @@ pub mod tests {
             .unwrap();
 
         assert!(matches!(recreated_project.state, Project::Creating(_)));
-
-        Ok(())
     }
 }

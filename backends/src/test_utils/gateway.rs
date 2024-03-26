@@ -1,14 +1,11 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use std::sync::Arc;
 
 use anyhow::Error;
 use async_trait::async_trait;
-use permit_client_rs::models::{UserRead, UserRole};
+use permit_client_rs::models::UserRead;
 use permit_pdp_client_rs::models::UserPermissionsResult;
 use serde::Serialize;
-use shuttle_common::claims::AccountTier;
+use tokio::sync::Mutex;
 use wiremock::{
     http,
     matchers::{method, path, path_regex},
@@ -96,73 +93,71 @@ struct Project<'a> {
 
 #[derive(Clone, Default)]
 pub struct PermissionsMock {
-    pub users: Arc<RwLock<HashMap<String, UserRead>>>,
+    pub calls: Arc<Mutex<Vec<String>>>,
 }
 
 #[async_trait]
 impl PermissionsDal for PermissionsMock {
-    async fn get_user(&self, _user_id: &str) -> Result<UserRead, Error> {
-        unimplemented!()
+    async fn get_user(&self, user_id: &str) -> Result<UserRead, Error> {
+        self.calls.lock().await.push(format!("get_user {user_id}"));
+        Ok(Default::default())
     }
 
-    async fn delete_user(&self, _user_id: &str) -> Result<(), Error> {
-        unimplemented!()
+    async fn delete_user(&self, user_id: &str) -> Result<(), Error> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("delete_user {user_id}"));
+        Ok(())
     }
 
     async fn new_user(&self, user_id: &str) -> Result<UserRead, Error> {
-        let user = UserRead {
-            key: user_id.to_string(),
-            roles: Some(vec![UserRole {
-                role: AccountTier::Basic.to_string(),
-                tenant: "default".to_string(),
-            }]),
-            ..Default::default()
-        };
-
-        self.users
-            .write()
-            .unwrap()
-            .insert(user_id.to_string(), user.clone());
-
-        Ok(user)
+        self.calls.lock().await.push(format!("new_user {user_id}"));
+        Ok(Default::default())
     }
 
     async fn make_pro(&self, user_id: &str) -> Result<(), Error> {
-        self.users.write().unwrap().get_mut(user_id).unwrap().roles = Some(vec![UserRole {
-            role: AccountTier::Pro.to_string(),
-            tenant: "default".to_string(),
-        }]);
-
+        self.calls.lock().await.push(format!("make_pro {user_id}"));
         Ok(())
     }
 
     async fn make_basic(&self, user_id: &str) -> Result<(), Error> {
-        self.users.write().unwrap().get_mut(user_id).unwrap().roles = Some(vec![UserRole {
-            role: AccountTier::Basic.to_string(),
-            tenant: "default".to_string(),
-        }]);
-
+        self.calls
+            .lock()
+            .await
+            .push(format!("make_basic {user_id}"));
         Ok(())
     }
 
-    async fn create_project(&self, _user_id: &str, _project_id: &str) -> Result<(), Error> {
-        unimplemented!()
+    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("create_project {user_id} {project_id}"));
+        Ok(())
     }
 
-    async fn delete_project(&self, _project_id: &str) -> Result<(), Error> {
-        unimplemented!()
+    async fn delete_project(&self, project_id: &str) -> Result<(), Error> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("delete_project {project_id}"));
+        Ok(())
     }
 
-    async fn get_user_projects(&self, _user_id: &str) -> Result<Vec<UserPermissionsResult>, Error> {
-        unimplemented!()
+    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("get_user_projects {user_id}"));
+        Ok(vec![])
     }
 
-    async fn allowed(
-        &self,
-        _user_id: &str,
-        _project_id: &str,
-        _action: &str,
-    ) -> Result<bool, Error> {
-        unimplemented!()
+    async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool, Error> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("allowed {user_id} {project_id} {action}"));
+        Ok(true)
     }
 }

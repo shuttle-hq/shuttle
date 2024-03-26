@@ -491,3 +491,55 @@ impl Client {
         Ok(())
     }
 }
+
+// #[cfg(feature = "admin")]
+mod admin {
+    use permit_client_rs::{
+        apis::environments_api::copy_environment,
+        models::{
+            environment_copy::ConflictStrategy, EnvironmentCopy, EnvironmentCopyScope,
+            EnvironmentCopyScopeFilters, EnvironmentCopyTarget,
+        },
+    };
+
+    use super::*;
+
+    impl Client {
+        /// Copy and overwrite the policies of one env to another existing one
+        pub async fn copy_environment(&self, target_env: &str) -> Result<(), Error> {
+            copy_environment(
+                &self.api,
+                &self.proj_id,
+                &self.env_id,
+                EnvironmentCopy {
+                    target_env: Box::new(EnvironmentCopyTarget {
+                        existing: Some(target_env.to_owned()),
+                        new: None,
+                    }),
+                    conflict_strategy: Some(ConflictStrategy::Overwrite),
+                    scope: Some(Box::new(EnvironmentCopyScope {
+                        resources: Some(Box::new(EnvironmentCopyScopeFilters {
+                            include: Some(vec!["*".to_owned()]),
+                            exclude: None,
+                        })),
+                        roles: Some(Box::new(EnvironmentCopyScopeFilters {
+                            include: Some(vec!["*".to_owned()]),
+                            exclude: None,
+                        })),
+                        user_sets: Some(Box::new(EnvironmentCopyScopeFilters {
+                            include: Some(vec!["*".to_owned()]),
+                            exclude: None,
+                        })),
+                        resource_sets: Some(Box::new(EnvironmentCopyScopeFilters {
+                            include: Some(vec!["*".to_owned()]),
+                            exclude: None,
+                        })),
+                    })),
+                },
+            )
+            .await?;
+
+            Ok(())
+        }
+    }
+}

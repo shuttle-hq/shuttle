@@ -6,8 +6,9 @@ mod user;
 
 use std::io;
 
-use args::StartArgs;
-use shuttle_backends::client::permit;
+use args::{StartArgs, SyncArgs};
+use http::StatusCode;
+use shuttle_backends::client::{permit, PermissionsDal};
 use shuttle_common::{claims::AccountTier, ApiKey};
 use sqlx::{migrate::Migrator, query, PgPool};
 use tracing::info;
@@ -24,11 +25,11 @@ pub async fn start(pool: PgPool, args: StartArgs) -> io::Result<()> {
         .with_pg_pool(pool)
         .with_stripe_client(stripe::Client::new(args.stripe_secret_key))
         .with_permissions_client(permit::Client::new(
-            args.permit_api_uri,
-            args.permit_pdp_uri,
+            args.permit.permit_api_uri,
+            args.permit.permit_pdp_uri,
             "default".to_string(),
-            args.permit_env,
-            &args.permit_api_key,
+            args.permit.permit_env,
+            &args.permit.permit_api_key,
         ))
         .with_jwt_signing_private_key(args.jwt_signing_private_key)
         .into_router();
@@ -36,6 +37,69 @@ pub async fn start(pool: PgPool, args: StartArgs) -> io::Result<()> {
     info!(address=%args.address, "Binding to and listening at address");
 
     serve(router, args.address).await;
+
+    Ok(())
+}
+
+pub async fn sync(pool: PgPool, args: SyncArgs) -> io::Result<()> {
+    let users: Vec<User> = sqlx::query_as("SELECT * FROM users")
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+    let permit_client = permit::Client::new(
+        args.permit.permit_api_uri,
+        args.permit.permit_pdp_uri,
+        "default".to_string(),
+        args.permit.permit_env,
+        &args.permit.permit_api_key,
+    );
+
+    for user in users {
+        match permit_client.get_user(&user.id).await {
+            Ok(p_user) => {
+                // Update tier if out of sync
+                if !p_user.roles.contains(&user.account_tier) {
+                    match user.account_tier {
+                        AccountTier::Basic
+                        | AccountTier::PendingPaymentPro
+                        | AccountTier::CancelledPro
+                        | AccountTier::Team
+                        | AccountTier::Admin
+                        | AccountTier::Deployer => {
+                            permit_client
+                                .make_free(&user.id)
+                                .await
+                                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                        }
+                        AccountTier::Pro => {
+                            permit_client
+                                .make_pro(&user.id)
+                                .await
+                                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                        }
+                    }
+                }
+            }
+            Err(shuttle_backends::client::Error::RequestError(StatusCode::NOT_FOUND)) => {
+                println!("creating user: {}", user.id);
+
+                // Add users that are not in permit
+                permit_client
+                    .new_user(&user.id)
+                    .await
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+                if user.account_tier == AccountTier::Pro {
+                    permit_client
+                        .make_pro(&user.id)
+                        .await
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                }
+            }
+            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e)),
+        }
+    }
 
     Ok(())
 }

@@ -18,7 +18,13 @@ impl DockerInstance {
         let env = [e1.as_str(), e2.as_str()];
         let port = "7000";
         let image = "docker.io/permitio/pdp-v2:0.2.37";
-        let is_ready_cmd = vec!["exec", container_name.as_str(), "curl", "localhost:7000"];
+        let is_ready_cmd = vec![
+            "exec",
+            container_name.as_str(),
+            "curl",
+            "-f",
+            "localhost:7000",
+        ];
         let host_port = pick_unused_port().unwrap();
         let port_binding = format!("{}:{}", host_port, port);
 
@@ -57,6 +63,7 @@ impl DockerInstance {
 
             if status.success() {
                 println!("{is_ready_cmd:?} succeeded...");
+                sleep(Duration::from_millis(350));
                 return;
             }
 

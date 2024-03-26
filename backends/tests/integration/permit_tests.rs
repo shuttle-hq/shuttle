@@ -17,7 +17,9 @@ mod needs_docker {
     #[ctor::dtor]
     fn cleanup() {
         println!("Cleaning up PDP container...");
-        PDP.get().map(|p| p.cleanup());
+        if let Some(p) = PDP.get() {
+            p.cleanup()
+        }
     }
 
     async fn clear_permit_state(client: &Client) {
@@ -81,11 +83,10 @@ mod needs_docker {
                 DockerInstance::new(&Uuid::new_v4().to_string(), api_url, &api_key)
             });
 
-            dbg!(&PDP.get().unwrap().uri);
-
             let client = Client::new(
                 api_url.to_owned(),
                 PDP.get().unwrap().uri.clone(),
+                // "http://localhost:19716".to_owned(),
                 "default".to_owned(),
                 std::env::var("PERMIT_ENV").unwrap_or_else(|_| "testing".to_owned()),
                 api_key,
@@ -160,18 +161,14 @@ mod needs_docker {
         client.new_user(u1).await.unwrap();
         client.new_user(u2).await.unwrap();
 
-        const SLEEP: u64 = 10000;
+        const SLEEP: u64 = 500;
 
-        client.sync_pdp().await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
         let p1 = client.get_user_projects(u1).await.unwrap();
-        dbg!(&p1);
 
         assert!(p1.is_empty());
 
         client.create_project(u1, "proj1").await.unwrap();
-
-        client.sync_pdp().await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
         let p1 = client.get_user_projects(u1).await.unwrap();
 
@@ -179,14 +176,12 @@ mod needs_docker {
         assert_eq!(p1[0].resource.as_ref().unwrap().key, "proj1");
 
         client.create_project(u1, "proj2").await.unwrap();
-        client.sync_pdp().await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
         let p1 = client.get_user_projects(u1).await.unwrap();
 
         assert_eq!(p1.len(), 2);
 
         client.delete_project("proj1").await.unwrap();
-        client.sync_pdp().await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
         let p1 = client.get_user_projects(u1).await.unwrap();
 

@@ -11,8 +11,12 @@ use permit_client_rs::{
     },
 };
 use permit_pdp_client_rs::{
-    apis::authorization_api_api::{
-        get_user_permissions_user_permissions_post, is_allowed_allowed_post,
+    apis::{
+        authorization_api_api::{
+            get_user_permissions_user_permissions_post, is_allowed_allowed_post,
+        },
+        data_updater_api::trigger_policy_data_update_data_updater_trigger_post,
+        policy_updater_api::trigger_policy_update_policy_updater_trigger_post,
     },
     models::{AuthorizationQuery, Resource, User, UserPermissionsQuery, UserPermissionsResult},
 };
@@ -55,10 +59,10 @@ pub trait PermissionsDal {
 /// Wrapper for the Permit.io API and PDP (Policy decision point) API
 #[derive(Clone)]
 pub struct Client {
-    api: permit_client_rs::apis::configuration::Configuration,
-    pdp: permit_pdp_client_rs::apis::configuration::Configuration,
-    proj_id: String,
-    env_id: String,
+    pub api: permit_client_rs::apis::configuration::Configuration,
+    pub pdp: permit_pdp_client_rs::apis::configuration::Configuration,
+    pub proj_id: String,
+    pub env_id: String,
 }
 
 impl Client {
@@ -479,123 +483,11 @@ impl Client {
 
         Ok(())
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use std::env;
+    pub async fn sync_pdp(&self) -> Result<(), Error> {
+        trigger_policy_update_policy_updater_trigger_post(&self.pdp).await?;
+        trigger_policy_data_update_data_updater_trigger_post(&self.pdp).await?;
 
-    use http::StatusCode;
-    use permit_client_rs::apis::users_api::list_users;
-    use serial_test::serial;
-    use test_context::{test_context, AsyncTestContext};
-
-    use crate::client::Error;
-
-    use super::*;
-
-    impl Client {
-        async fn clear_users(&self) {
-            let users = list_users(
-                &self.api,
-                &self.proj_id,
-                &self.env_id,
-                None,
-                None,
-                None,
-                None,
-                Some(100),
-            )
-            .await
-            .unwrap();
-
-            for user in users.data {
-                self.delete_user(&user.id.to_string()).await.unwrap();
-            }
-        }
+        Ok(())
     }
-
-    impl AsyncTestContext for Client {
-        async fn setup() -> Self {
-            let api_key = env::var("PERMIT_API_KEY").expect("PERMIT_API_KEY to be set. You can copy the testing API key from the Testing environment on Permit.io.");
-            let client = Client::new(
-                "https://api.eu-central-1.permit.io".to_owned(),
-                "http://localhost:7000".to_owned(),
-                "default".to_owned(),
-                "testing".to_owned(),
-                api_key,
-            );
-
-            client.clear_users().await;
-
-            client
-        }
-
-        async fn teardown(self) {
-            self.clear_users().await;
-        }
-    }
-
-    #[test_context(Client)]
-    #[tokio::test]
-    #[serial]
-    async fn test_user_flow(client: &mut impl PermissionsDal) {
-        client.new_user("test_user").await.unwrap();
-        let user = client.get_user("test_user").await.unwrap();
-
-        // Can also get user by permit id
-        let user2 = client.get_user(&user.id.to_string()).await.unwrap();
-
-        assert_eq!(user.id, user2.id);
-
-        // Now delete the user
-        client.delete_user("test_user").await.unwrap();
-        let res = client.get_user("test_user").await;
-
-        assert!(matches!(
-            res.unwrap_err().downcast_ref::<Error>().unwrap(),
-            Error::RequestError(StatusCode::NOT_FOUND)
-        ));
-    }
-
-    #[test_context(Client)]
-    #[tokio::test]
-    #[serial]
-    async fn test_tiers_flow(client: &mut impl PermissionsDal) {
-        client.new_user("tier_user").await.unwrap();
-        let user = client.get_user("tier_user").await.unwrap();
-
-        assert_eq!(user.roles.as_ref().unwrap().len(), 1);
-        assert_eq!(
-            user.roles.as_ref().unwrap()[0].role,
-            AccountTier::Basic.to_string()
-        );
-
-        // Make user a pro
-        client.make_pro("tier_user").await.unwrap();
-        let user = client.get_user("tier_user").await.unwrap();
-
-        assert_eq!(user.roles.as_ref().unwrap().len(), 1);
-        assert_eq!(
-            user.roles.as_ref().unwrap()[0].role,
-            AccountTier::Pro.to_string()
-        );
-
-        // Make user a free user
-        client.make_basic("tier_user").await.unwrap();
-        let user = client.get_user("tier_user").await.unwrap();
-
-        assert_eq!(user.roles.as_ref().unwrap().len(), 1);
-        assert_eq!(
-            user.roles.as_ref().unwrap()[0].role,
-            AccountTier::Basic.to_string()
-        );
-
-        client.delete_user("tier_user").await.unwrap();
-    }
-
-    #[test_context(Client)]
-    #[tokio::test]
-    #[serial]
-    async fn test_projects(client: &mut impl PermissionsDal) {}
 }

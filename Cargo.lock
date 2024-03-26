@@ -5226,6 +5226,7 @@ dependencies = [
  "axum",
  "base64 0.21.7",
  "bytes",
+ "ctor",
  "headers",
  "http 0.2.12",
  "http-body 0.4.6",
@@ -5247,6 +5248,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "shuttle-common",
+ "shuttle-common-tests",
  "shuttle-proto",
  "sqlx",
  "strum 0.26.1",
@@ -5261,6 +5263,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "ttl_cache",
+ "uuid",
  "wiremock",
 ]
 

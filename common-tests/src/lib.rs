@@ -1,5 +1,6 @@
 pub mod cargo_shuttle;
 pub mod logger;
+pub mod permit_pdp;
 pub mod postgres;
 pub mod provisioner;
 

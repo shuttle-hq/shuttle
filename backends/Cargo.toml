@@ -51,8 +51,11 @@ test-utils = ["portpicker", "wiremock"]
 
 [dev-dependencies]
 base64 = { workspace = true }
+ctor = { workspace = true }
 jsonwebtoken = { workspace = true }
 ring = { workspace = true }
 serial_test = "3.0.0"
+shuttle-common-tests = { workspace = true }
 test-context = { workspace = true }
 tracing-fluent-assertions = "0.3.0"
+uuid = { workspace = true }

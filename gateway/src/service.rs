@@ -623,6 +623,7 @@ impl GatewayService {
             ),
         ));
 
+        let mut transaction = self.db.begin().await?;
         query("INSERT INTO projects (project_id, project_name, account_name, user_id, initial_key, project_state) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
             .bind(&project_id.to_string())
             .bind(&project_name)
@@ -630,7 +631,7 @@ impl GatewayService {
             .bind(user_id)
             .bind(project.initial_key().unwrap())
             .bind(&project)
-            .execute(&self.db)
+            .execute(&mut *transaction)
             .await
             .map_err(|err| {
                 // If the error is a broken PK constraint, this is a
@@ -643,6 +644,13 @@ impl GatewayService {
                 // Otherwise this is internal
                 err.into()
             })?;
+
+        self.permit_client
+            .create_project(user_id, &project_id.to_string())
+            .await
+            .map_err(|_| Error::from(ErrorKind::Internal))?;
+
+        transaction.commit().await?;
 
         let project = project.0;
 
@@ -662,7 +670,7 @@ impl GatewayService {
         let mut transaction = self.db.begin().await?;
 
         query("DELETE FROM custom_domains WHERE project_id = ?1")
-            .bind(project_id)
+            .bind(&project_id)
             .execute(&mut *transaction)
             .await?;
 
@@ -670,6 +678,11 @@ impl GatewayService {
             .bind(project_name)
             .execute(&mut *transaction)
             .await?;
+
+        self.permit_client
+            .delete_project(&project_id)
+            .await
+            .map_err(|_| Error::from(ErrorKind::Internal))?;
 
         transaction.commit().await?;
 

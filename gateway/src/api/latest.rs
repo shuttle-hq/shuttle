@@ -189,12 +189,6 @@ async fn create_project(
     let idle_minutes = project.state.idle_minutes();
 
     service
-        .permit_client
-        .create_project(&id, &project.project_id)
-        .await
-        .map_err(|_| Error::from(ErrorKind::Internal))?;
-
-    service
         .new_task()
         .project(project_name.clone())
         .and_then(task::run_until_done())
@@ -385,13 +379,6 @@ async fn delete_project(
         .send(&sender)
         .await?;
     task.await;
-
-    state
-        .service
-        .permit_client
-        .delete_project(&project.project_id)
-        .await
-        .map_err(|_| Error::from(ErrorKind::Internal))?;
 
     service.delete_project(&project_name).await?;
 

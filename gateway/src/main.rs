@@ -7,7 +7,7 @@ use std::time::Duration;
 use async_posthog::ClientOptions;
 use clap::Parser;
 use futures::prelude::*;
-use shuttle_backends::client::permit;
+use shuttle_backends::client::{permit, PermissionsDal};
 use shuttle_backends::trace::setup_tracing;
 use shuttle_common::log::Backend;
 use sqlx::migrate::MigrateDatabase;
@@ -73,6 +73,27 @@ async fn sync_permit_projects(db: SqlitePool, args: SyncArgs) {
         args.permit.permit_env,
         args.permit.permit_api_key,
     );
+
+    let projects: Vec<(String, String)> = sqlx::query_as("SELECT user_id, project_id")
+        .fetch_all(&db)
+        .await
+        .unwrap();
+
+    for (uid, pid) in projects {
+        match client.get_user_projects(&uid).await {
+            Ok(projs) => {
+                if !projs
+                    .iter()
+                    .any(|p| p.resource.as_ref().unwrap().key == pid)
+                {
+                    client.create_project(&uid, &pid).await.unwrap();
+                }
+            }
+            Err(e) => {
+                println!("failed to get projects for {uid}. skipping. error: {e:?}");
+            }
+        }
+    }
 }
 
 async fn start(

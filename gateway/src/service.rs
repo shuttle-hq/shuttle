@@ -42,7 +42,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 
 use crate::acme::{AcmeClient, CustomDomain};
-use crate::args::ContextArgs;
+use crate::args::ServiceArgs;
 use crate::project::{Project, ProjectCreating, ProjectError, IS_HEALTHY_TIMEOUT};
 use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::ChainAndPrivateKey;
@@ -80,8 +80,8 @@ impl ContainerSettingsBuilder {
         Self::default()
     }
 
-    pub async fn from_args(self, args: &ContextArgs) -> ContainerSettings {
-        let ContextArgs {
+    pub async fn from_args(self, args: &ServiceArgs) -> ContainerSettings {
+        let ServiceArgs {
             prefix,
             network_name,
             provisioner_host,
@@ -211,7 +211,7 @@ impl GatewayService {
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
     pub async fn init(
-        args: ContextArgs,
+        args: ServiceArgs,
         db: SqlitePool,
         state_dir: PathBuf,
         permit_client: Box<dyn PermissionsDal + Send + Sync>,

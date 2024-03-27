@@ -73,7 +73,7 @@ async fn main() -> io::Result<()> {
 
 async fn start(
     db: SqlitePool,
-    fs: PathBuf,
+    state_dir: PathBuf,
     posthog_client: async_posthog::Client,
     args: StartArgs,
 ) -> io::Result<()> {
@@ -81,7 +81,7 @@ async fn start(
         GatewayService::init(
             args.context.clone(),
             db,
-            fs,
+            state_dir,
             Box::new(permit::Client::new(
                 args.context.permit_api_uri.to_string(),
                 args.context.permit_pdp_uri.to_string(),

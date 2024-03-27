@@ -505,57 +505,6 @@ impl Client {
 
         Ok(())
     }
-
-    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error> {
-        let perms = get_user_permissions_user_permissions_post(
-            &self.pdp,
-            UserPermissionsQuery {
-                user: Box::new(User {
-                    key: user_id.to_owned(),
-                    ..Default::default()
-                }),
-                resource_types: Some(vec!["Project".to_owned()]),
-                tenants: Some(vec!["default".to_owned()]),
-                ..Default::default()
-            },
-            None,
-            None,
-        )
-        .await?;
-
-        Ok(perms.into_values().collect())
-    }
-
-    async fn is_allowed(
-        &self,
-        user_id: &str,
-        project_id: &str,
-        action: &str,
-    ) -> Result<bool, Error> {
-        // NOTE: This API function was modified in upstream to use AuthorizationQuery
-        let res = is_allowed_allowed_post(
-            &self.pdp,
-            AuthorizationQuery {
-                user: Box::new(User {
-                    key: user_id.to_owned(),
-                    ..Default::default()
-                }),
-                action: action.to_owned(),
-                resource: Box::new(Resource {
-                    r#type: "Project".to_string(),
-                    key: Some(project_id.to_owned()),
-                    tenant: Some("default".to_owned()),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            None,
-            None,
-        )
-        .await?;
-
-        Ok(res.allow.unwrap_or_default())
-    }
 }
 
 /// Higher level management methods. Use with care.

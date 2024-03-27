@@ -100,7 +100,7 @@ pub async fn copy_environment(args: CopyPermitEnvArgs) -> Result<()> {
         args.permit.permit_api_key,
     );
 
-    client.copy_environment(&args.target).await
+    Ok(client.copy_environment(&args.target).await?)
 }
 
 pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> Result<()> {

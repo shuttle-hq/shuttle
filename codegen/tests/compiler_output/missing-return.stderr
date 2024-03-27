@@ -1,0 +1,15 @@
+error: shuttle_runtime::main functions need to return a service
+
+         = help: See the docs for services with first class support
+         = note: https://docs.rs/shuttle-runtime/latest/shuttle_runtime/attr.main.html#shuttle-supported-services
+
+ --> tests/compiler_output/missing-return.rs:2:1
+  |
+2 | async fn missing_return() {}
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/compiler_output/missing-return.rs:2:29
+  |
+2 | async fn missing_return() {}
+  |                             ^ consider adding a `main` function to `$DIR/tests/compiler_output/missing-return.rs`

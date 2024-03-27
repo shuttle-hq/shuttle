@@ -74,10 +74,11 @@ async fn sync_permit_projects(db: SqlitePool, args: SyncArgs) {
         args.permit.permit_api_key,
     );
 
-    let projects: Vec<(String, String)> = sqlx::query_as("SELECT user_id, project_id")
-        .fetch_all(&db)
-        .await
-        .unwrap();
+    let projects: Vec<(String, String)> =
+        sqlx::query_as("SELECT user_id, project_id FROM projects")
+            .fetch_all(&db)
+            .await
+            .unwrap();
 
     for (uid, pid) in projects {
         match client.get_user_projects(&uid).await {
@@ -86,6 +87,7 @@ async fn sync_permit_projects(db: SqlitePool, args: SyncArgs) {
                     .iter()
                     .any(|p| p.resource.as_ref().unwrap().key == pid)
                 {
+                    println!("creating project link {uid} <-> {pid}");
                     client.create_project(&uid, &pid).await.unwrap();
                 }
             }

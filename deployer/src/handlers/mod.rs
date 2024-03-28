@@ -33,10 +33,9 @@ use shuttle_common::{
 };
 use shuttle_proto::logger::LogsRequest;
 
-use crate::persistence::{Deployment, Persistence, State};
 use crate::{
     deployment::{DeploymentManager, Queued},
-    persistence::resource::ResourceManager,
+    persistence::{resource::ResourceManager, Deployment, Persistence, State},
 };
 pub use {self::error::Error, self::error::Result, self::local::set_jwt_bearer};
 

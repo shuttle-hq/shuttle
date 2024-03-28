@@ -86,23 +86,15 @@ impl ChainAndPrivateKey {
     }
 }
 
+#[derive(Default)]
 pub struct GatewayCertResolver {
     keys: RwLock<HashMap<String, Arc<CertifiedKey>>>,
     default: RwLock<Option<Arc<CertifiedKey>>>,
 }
 
-impl Default for GatewayCertResolver {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl GatewayCertResolver {
     pub fn new() -> Self {
-        Self {
-            keys: RwLock::new(HashMap::default()),
-            default: RwLock::new(None),
-        }
+        Self::default()
     }
 
     /// Get the loaded [CertifiedKey] associated with the given

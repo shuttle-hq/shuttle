@@ -2,7 +2,7 @@ use strum::{Display, EnumString};
 use uuid::Uuid;
 
 /// States a deployment can be in
-#[derive(sqlx::Type, Debug, Display, Clone, Copy, EnumString, PartialEq, Eq)]
+#[derive(sqlx::Type, Debug, Default, Display, Clone, Copy, EnumString, PartialEq, Eq)]
 #[strum(ascii_case_insensitive)]
 pub enum State {
     /// Deployment is queued to be build
@@ -30,6 +30,7 @@ pub enum State {
     Crashed,
 
     /// We never expect this state and entering this state should be considered a bug
+    #[default]
     Unknown,
 }
 
@@ -37,12 +38,6 @@ pub enum State {
 pub struct DeploymentState {
     pub id: Uuid,
     pub state: State,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 impl From<State> for shuttle_common::deployment::State {

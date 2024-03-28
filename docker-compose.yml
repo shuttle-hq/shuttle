@@ -280,7 +280,7 @@ services:
     image: docker.io/permitio/pdp-v2:0.2.37
     restart: always
     environment:
-      - PDP_CONTROL_PLANE=${PERMIT_API}
+      - PDP_CONTROL_PLANE=https://api.eu-central-1.permit.io
       - PDP_API_KEY=${PERMIT_API_KEY}
     ports:
       - 7000:7000

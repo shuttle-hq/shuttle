@@ -12,7 +12,7 @@ mod needs_docker {
     use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
     use pretty_assertions::assert_eq;
     use serde_json::{self, Value};
-    use shuttle_common::{claims::AccountTier, models::user};
+    use shuttle_common::models::user;
 
     #[tokio::test]
     async fn post_user() {
@@ -48,23 +48,12 @@ mod needs_docker {
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user_id1 = user.id.clone();
 
         assert_eq!(user.name, "test-user");
         assert_eq!(user.account_tier, "basic");
         assert!(user.id.starts_with("user_"));
         assert!(user.key.is_ascii());
-
-        assert_eq!(
-            app.permissions
-                .users
-                .read()
-                .unwrap()
-                .get(&user.id)
-                .unwrap()
-                .roles,
-            vec![AccountTier::Basic],
-            "should default to basic tier"
-        );
 
         // POST user with valid bearer token and pro tier.
         let response = app.post_user("pro-user", "pro").await;
@@ -73,6 +62,7 @@ mod needs_docker {
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let user: user::Response = serde_json::from_slice(&body).unwrap();
+        let user_id2 = user.id.clone();
 
         assert_eq!(user.name, "pro-user");
         assert_eq!(user.account_tier, "pro");
@@ -80,14 +70,12 @@ mod needs_docker {
         assert!(user.key.is_ascii());
 
         assert_eq!(
-            app.permissions
-                .users
-                .read()
-                .unwrap()
-                .get(&user.id)
-                .unwrap()
-                .roles,
-            vec![AccountTier::Pro]
+            *app.permissions.calls.lock().await,
+            [
+                format!("new_user {user_id1}"),
+                format!("new_user {user_id2}"),
+                format!("make_pro {user_id2}"),
+            ]
         );
     }
 
@@ -176,9 +164,7 @@ mod needs_docker {
         let pro_user: user::Response = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(user.name, pro_user.name);
-
         assert_eq!(user.key, pro_user.key);
-
         assert_eq!(pro_user.account_tier, "pro");
 
         let mocked_subscription_obj: Value =
@@ -189,15 +175,8 @@ mod needs_docker {
         );
 
         assert_eq!(
-            app.permissions
-                .users
-                .read()
-                .unwrap()
-                .get(&user.id)
-                .unwrap()
-                .roles,
-            vec![AccountTier::Pro],
-            "should have updated the permissions too"
+            *app.permissions.calls.lock().await,
+            [format!("new_user {user_id}"), format!("make_pro {user_id}")]
         );
     }
 
@@ -239,16 +218,14 @@ mod needs_docker {
         let actual_user: user::Response = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(actual_user.account_tier, "pendingpaymentpro");
+
         assert_eq!(
-            app.permissions
-                .users
-                .read()
-                .unwrap()
-                .get(&actual_user.id)
-                .unwrap()
-                .roles,
-            vec![AccountTier::Basic],
-            "should have updated the permissions too"
+            *app.permissions.calls.lock().await,
+            [
+                format!("new_user {user_id}"),
+                format!("make_pro {user_id}"),
+                format!("make_basic {user_id}"),
+            ]
         );
     }
 
@@ -291,18 +268,6 @@ mod needs_docker {
         );
         assert_eq!(response.subscriptions[0].quantity, 1);
 
-        assert_eq!(
-            app.permissions
-                .users
-                .read()
-                .unwrap()
-                .get(&response.id)
-                .unwrap()
-                .roles,
-            vec![AccountTier::Basic],
-            "RDS subscription should not change the account tier"
-        );
-
         // Make sure JWT has the quota
         let claim = app.get_claim(basic_user_key).await;
         assert_eq!(claim.limits.rds_quota(), 1);
@@ -327,6 +292,11 @@ mod needs_docker {
         // Make sure JWT is reset correctly
         let claim = app.get_claim(basic_user_key).await;
         assert_eq!(claim.limits.rds_quota(), 0);
+
+        assert_eq!(
+            *app.permissions.calls.lock().await,
+            [format!("new_user {user_id}")]
+        );
     }
 
     #[tokio::test]
@@ -398,18 +368,6 @@ mod needs_docker {
         let user: user::Response = serde_json::from_slice(&body).unwrap();
         assert_eq!(user.account_tier, "cancelledpro");
 
-        assert_eq!(
-            app.permissions
-                .users
-                .read()
-                .unwrap()
-                .get(&user.id)
-                .unwrap()
-                .roles,
-            vec![AccountTier::Basic],
-            "permissions should be updated to basic"
-        );
-
         // When called again at some later time, the subscription returned from stripe should be
         // cancelled.
         let response = app
@@ -425,16 +383,16 @@ mod needs_docker {
         let user: user::Response = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(user.account_tier, "basic");
+
         assert_eq!(
-            app.permissions
-                .users
-                .read()
-                .unwrap()
-                .get(&user.id)
-                .unwrap()
-                .roles,
-            vec![AccountTier::Basic],
-            "permissions should still be basic"
+            *app.permissions.calls.lock().await,
+            [
+                format!("new_user {user_id}"),
+                format!("make_pro {user_id}"),
+                format!("make_basic {user_id}"),
+                format!("make_basic {user_id}"),
+                format!("make_basic {user_id}"),
+            ]
         );
     }
 }

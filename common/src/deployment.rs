@@ -28,19 +28,16 @@ pub struct DeploymentMetadata {
 }
 
 /// The environment this project is running in
-#[derive(Clone, Copy, Debug, Display, EnumString, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Display, EnumString, PartialEq, Eq, Serialize, Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum Environment {
+    #[default]
     Local,
     #[strum(serialize = "production")] // Keep this around for a while for backward compat
     Deployment,
-}
-
-impl Default for Environment {
-    fn default() -> Self {
-        Self::Local
-    }
 }
 
 pub const DEPLOYER_END_MSG_STARTUP_ERR: &str = "Service startup encountered an error";

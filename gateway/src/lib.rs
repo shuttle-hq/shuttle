@@ -268,6 +268,7 @@ pub mod tests {
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
     use shuttle_backends::auth::ConvertResponse;
+    use shuttle_backends::test_utils::gateway::PermissionsMock;
     use shuttle_backends::test_utils::resource_recorder::get_mocked_resource_recorder;
     use shuttle_common::claims::{AccountTier, Claim};
     use shuttle_common::models::deployment::DeploymentRequest;
@@ -653,9 +654,14 @@ pub mod tests {
         /// Create a service and sender to handle tasks. Also starts up a worker to create actual Docker containers for all requests
         pub async fn service(&self) -> (Arc<GatewayService>, Sender<BoxedTask>) {
             let service = Arc::new(
-                GatewayService::init(self.args(), self.pool(), "".into())
-                    .await
-                    .unwrap(),
+                GatewayService::init(
+                    self.args(),
+                    self.pool(),
+                    "".into(),
+                    Box::<PermissionsMock>::default(),
+                )
+                .await
+                .unwrap(),
             );
             let worker = Worker::new();
 
@@ -1155,9 +1161,14 @@ pub mod tests {
     async fn end_to_end() {
         let world = World::new().await;
         let service = Arc::new(
-            GatewayService::init(world.args(), world.pool(), "".into())
-                .await
-                .unwrap(),
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
         );
         let worker = Worker::new();
 

@@ -176,7 +176,7 @@ async fn create_project(
     let project = service
         .create_project(
             project_name.clone(),
-            id,
+            &id,
             claim.is_admin(),
             can_create_project,
             if is_cch_project {
@@ -809,6 +809,7 @@ pub(crate) struct RouterState {
     pub posthog_client: async_posthog::Client,
 }
 
+#[derive(Default)]
 pub struct ApiBuilder {
     router: Router<RouterState>,
     service: Option<Arc<GatewayService>>,
@@ -817,21 +818,9 @@ pub struct ApiBuilder {
     bind: Option<SocketAddr>,
 }
 
-impl Default for ApiBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ApiBuilder {
     pub fn new() -> Self {
-        Self {
-            router: Router::new(),
-            service: None,
-            sender: None,
-            posthog_client: None,
-            bind: None,
-        }
+        Self::default()
     }
 
     pub fn with_acme(mut self, acme: AcmeClient, resolver: Arc<GatewayCertResolver>) -> Self {
@@ -1022,6 +1011,7 @@ pub mod tests {
     use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
+    use shuttle_backends::test_utils::gateway::PermissionsMock;
     use shuttle_common::claims::AccountTier;
     use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
     use test_context::test_context;
@@ -1039,7 +1029,15 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let service = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let (sender, mut receiver) = channel::<BoxedTask>(256);
         tokio::spawn(async move {
@@ -1221,7 +1219,15 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_project_limits() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let service = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let (sender, mut receiver) = channel::<BoxedTask>(256);
         tokio::spawn(async move {
@@ -1545,9 +1551,14 @@ pub mod tests {
     async fn status() {
         let world = World::new().await;
         let service = Arc::new(
-            GatewayService::init(world.args(), world.pool(), "".into())
-                .await
-                .unwrap(),
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
         );
 
         let (sender, mut receiver) = channel::<BoxedTask>(1);

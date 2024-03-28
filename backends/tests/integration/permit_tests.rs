@@ -1,12 +1,16 @@
 mod needs_docker {
     use std::sync::OnceLock;
 
+    use http::StatusCode;
     use permit_client_rs::apis::{
         resource_instances_api::{delete_resource_instance, list_resource_instances},
         users_api::list_users,
     };
     use serial_test::serial;
-    use shuttle_backends::client::{permit::Client, PermissionsDal};
+    use shuttle_backends::client::{
+        permit::{Client, Error, ResponseContent},
+        PermissionsDal,
+    };
     use shuttle_common::claims::AccountTier;
     use shuttle_common_tests::permit_pdp::DockerInstance;
     use test_context::{test_context, AsyncTestContext};
@@ -116,7 +120,13 @@ mod needs_docker {
         client.delete_user(u).await.unwrap();
         let res = client.get_user(u).await;
 
-        assert!(res.is_err());
+        assert!(matches!(
+            res,
+            Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::NOT_FOUND,
+                ..
+            }))
+        ));
     }
 
     #[test_context(Wrap)]

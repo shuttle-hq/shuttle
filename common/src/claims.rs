@@ -169,9 +169,9 @@ impl ScopeBuilder {
 )]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "display", derive(strum::Display))]
+#[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
 #[cfg_attr(feature = "persist", derive(sqlx::Type))]
 #[cfg_attr(feature = "persist", sqlx(rename_all = "lowercase"))]
-#[cfg_attr(feature = "display", strum(serialize_all = "lowercase"))]
 pub enum AccountTier {
     #[default]
     Basic,
@@ -182,6 +182,23 @@ pub enum AccountTier {
     Team,
     Admin,
     Deployer,
+}
+
+impl AccountTier {
+    /// The tier that this user should have in Permit.io.
+    /// Permit should only store the tier that determines permissions,
+    /// with the exception of 'admin', which is an override and not checked against Permit.
+    pub fn as_permit_account_tier(&self) -> Self {
+        match self {
+            Self::Basic
+            | Self::PendingPaymentPro
+            | Self::CancelledPro
+            | Self::Team
+            | Self::Admin
+            | Self::Deployer => Self::Basic,
+            Self::Pro => Self::Pro,
+        }
+    }
 }
 
 impl From<AccountTier> for Vec<Scope> {

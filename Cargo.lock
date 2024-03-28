@@ -5554,10 +5554,8 @@ version = "0.42.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "chrono",
  "colored",
  "portpicker",
- "prost-types",
  "serde",
  "serde_json",
  "shuttle-codegen",
@@ -5565,7 +5563,6 @@ dependencies = [
  "shuttle-proto",
  "shuttle-service",
  "strfmt",
- "thiserror",
  "tokio",
  "tokio-stream",
  "tonic 0.10.2",

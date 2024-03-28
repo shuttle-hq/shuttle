@@ -768,7 +768,7 @@ async fn renew_gateway_acme_certificate(
             .whole_days()
             <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS
     {
-        let tls_path = service.state_location.join("ssl.pem");
+        let tls_path = service.state_dir.join("ssl.pem");
         let certs = service
             .create_certificate(&acme_client, account.credentials())
             .await;

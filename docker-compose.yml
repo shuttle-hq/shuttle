@@ -290,3 +290,9 @@ services:
       placement:
         constraints:
           - node.hostname==controller
+    healthcheck:
+      test: curl -f -s http://localhost:7000
+      interval: 1m
+      timeout: 10s
+      retries: 5
+

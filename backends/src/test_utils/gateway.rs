@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use anyhow::Error;
 use async_trait::async_trait;
 use permit_client_rs::models::UserRead;
 use permit_pdp_client_rs::models::UserPermissionsResult;
@@ -12,7 +11,7 @@ use wiremock::{
     Mock, MockServer, Request, ResponseTemplate,
 };
 
-use crate::client::PermissionsDal;
+use crate::client::{permit::Error, PermissionsDal};
 
 pub async fn get_mocked_gateway_server() -> MockServer {
     let mock_server = MockServer::start().await;

@@ -282,7 +282,7 @@ pub mod tests {
 
     use crate::acme::AcmeClient;
     use crate::api::latest::ApiBuilder;
-    use crate::args::{ContextArgs, StartArgs, UseTls};
+    use crate::args::{PermitArgs, ServiceArgs, StartArgs, UseTls};
     use crate::project::Project;
     use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
@@ -540,7 +540,7 @@ pub mod tests {
                 user,
                 bouncer,
                 use_tls: UseTls::Disable,
-                context: ContextArgs {
+                context: ServiceArgs {
                     docker_host,
                     image,
                     prefix,
@@ -571,13 +571,15 @@ pub mod tests {
                     cch_container_limit: 1,
                     soft_container_limit: 2,
                     hard_container_limit: 3,
+
+                    // Allow access to the auth on the host
+                    extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],
+                },
+                permit: PermitArgs {
                     permit_api_uri: Default::default(), // TODO: will need mock?
                     permit_pdp_uri: Default::default(), // TODO: will need mock?
                     permit_env: Default::default(),     // TODO: will need mock?
                     permit_api_key: Default::default(), // TODO: will need mock?
-
-                    // Allow access to the auth on the host
-                    extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],
                 },
             };
 
@@ -608,7 +610,7 @@ pub mod tests {
             }
         }
 
-        pub fn args(&self) -> ContextArgs {
+        pub fn args(&self) -> ServiceArgs {
             self.args.context.clone()
         }
 

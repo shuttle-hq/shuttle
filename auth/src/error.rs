@@ -26,6 +26,8 @@ pub enum Error {
     Stripe(#[from] StripeError),
     #[error("Failed to communicate with service API.")]
     ServiceApi(#[from] client::Error),
+    #[error("Failed to communicate with Permit API.")]
+    PermitApi(#[from] client::permit::Error),
 }
 
 impl Serialize for Error {

@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use axum::extract::{ConnectInfo, Path, State};
 use axum::headers::{HeaderMapExt, Host};
-use axum::response::Response;
+use axum::response::{Response, Redirect, IntoResponse};
 use axum::routing::any;
 use axum_server::accept::DefaultAcceptor;
 use axum_server::tls_rustls::RustlsAcceptor;
@@ -74,8 +74,10 @@ async fn proxy(
                 .to_owned()
                 .parse()
                 .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName(InvalidProjectName)))?
-        } else if let Some(project) = { state.domain_cache.get(fqdn.to_string().as_str()) } {
+        } else if let Some(project) = state.domain_cache.get(fqdn.to_string().as_str()) {
             project
+        } else if fqdn == state.public {
+            return Ok(Redirect::permanent("https://shuttle.rs").into_response());
         } else {
             let project_name = state
                 .gateway

@@ -752,7 +752,7 @@ workflows:
           jwt-signing-private-key: DEV_AUTH_JWTSIGNING_PRIVATE_KEY
           control-db-postgres-uri: DEV_CONTROL_DB_POSTGRES_URI
           gateway-admin-key: DEV_GATEWAY_ADMIN_KEY
-          permit-api-key: PERMIT_API_KEY # TODO: switch to staging key
+          permit-api-key: STAGING_PERMIT_API_KEY
           requires:
             - build-and-push-unstable
             - approve-deploy-images-unstable

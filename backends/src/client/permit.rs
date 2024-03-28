@@ -147,6 +147,7 @@ impl PermissionsDal for Client {
     }
 
     async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
+        // TODO?: Ignore error if 409?
         create_resource_instance(
             &self.api,
             &self.proj_id,

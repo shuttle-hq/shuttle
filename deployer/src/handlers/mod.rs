@@ -467,10 +467,7 @@ pub async fn get_logs(
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
     Query(LogSize { mode, len }): Query<LogSize>,
 ) -> Result<Json<Vec<LogItem>>> {
-    let len = match len {
-        Some(num) => num,
-        None => 0,
-    };
+    let len = len.unwarp_or(0);
     let mode: String = match mode {
         Some(temp) => match temp {
             LogMode::Head => "head".to_string(),
@@ -513,10 +510,7 @@ pub async fn get_logs_subscribe(
     Query(LogSize { mode, len }): Query<LogSize>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    let len = match len {
-        Some(num) => num,
-        None => 0,
-    };
+    let len = len.unwarp_or(0);
     let mode = match mode {
         Some(temp) => match temp {
             LogMode::Head => "head",

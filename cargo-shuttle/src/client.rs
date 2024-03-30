@@ -6,6 +6,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
+use shuttle_common::log::LogMode;
 use shuttle_common::models::deployment::DeploymentRequest;
 use shuttle_common::models::{deployment, project, service, ToJson};
 use shuttle_common::secrets::Secret;
@@ -178,13 +179,17 @@ impl Client {
         &self,
         project: &str,
         deployment_id: &Uuid,
-        mode: &str,
+        mode: LogMode,
         len: u32,
     ) -> Result<Vec<LogItem>> {
         let path = match mode {
-            "head" => format!("/projects/{project}/deployments/{deployment_id}/logs?head={len}"),
-            "tail" => format!("/projects/{project}/deployments/{deployment_id}/logs?tail={len}"),
-            _ => format!("/projects/{project}/deployments/{deployment_id}/logs"),
+            LogMode::Head => {
+                format!("/projects/{project}/deployments/{deployment_id}/logs?mode=head&len={len}")
+            }
+            LogMode::Tail => {
+                format!("/projects/{project}/deployments/{deployment_id}/logs?mode=tail&len={len}")
+            }
+            LogMode::All => format!("/projects/{project}/deployments/{deployment_id}/logs"),
         };
 
         self.get(path)
@@ -196,13 +201,17 @@ impl Client {
         &self,
         project: &str,
         deployment_id: &Uuid,
-        mode: &str,
+        mode: LogMode,
         len: u32,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let path = match mode {
-            "head" => format!("/projects/{project}/deployments/{deployment_id}/logs?head={len}"),
-            "tail" => format!("/projects/{project}/deployments/{deployment_id}/logs?tail={len}"),
-            _ => format!("/projects/{project}/deployments/{deployment_id}/logs"),
+            LogMode::Head => {
+                format!("/projects/{project}/deployments/{deployment_id}/logs?mode=head&len={len}")
+            }
+            LogMode::Tail => {
+                format!("/projects/{project}/deployments/{deployment_id}/logs?mode=tail&len={len}")
+            }
+            LogMode::All => format!("/projects/{project}/deployments/{deployment_id}/logs"),
         };
 
         self.ws_get(path).await

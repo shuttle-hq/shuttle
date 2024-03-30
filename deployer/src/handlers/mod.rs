@@ -16,6 +16,7 @@ use axum::Json;
 use chrono::{SecondsFormat, Utc};
 use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
+use shuttle_common::log::LogMode;
 use shuttle_service::builder::clean_crate;
 use tracing::{error, field, info, info_span, instrument, trace, warn};
 use ulid::Ulid;
@@ -57,8 +58,8 @@ pub struct PaginationDetails {
 
 #[derive(Deserialize)]
 struct LogSize {
-    head: Option<u32>,
-    tail: Option<u32>,
+    mode: Option<LogMode>,
+    len: Option<u32>,
 }
 #[derive(Clone)]
 pub struct RouterBuilder {
@@ -464,17 +465,23 @@ pub async fn get_logs(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
-    Query(LogSize { head, tail }): Query<LogSize>,
+    Query(LogSize { mode, len }): Query<LogSize>,
 ) -> Result<Json<Vec<LogItem>>> {
-    let (mode, len) = match (head, tail) {
-        (Some(len), None) => ("head", len),
-        (None, Some(len)) => ("tail", len),
-        (None, None) => ("all", 0),
-        _ => ("tail", 1000),
+    let len = match len {
+        Some(num) => num,
+        None => 0,
+    };
+    let mode: String = match mode {
+        Some(temp) => match temp {
+            LogMode::Head => "head".to_string(),
+            LogMode::Tail => "tail".to_string(),
+            _ => "all".to_string(),
+        },
+        None => "all".to_string(),
     };
     let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),
-        mode: mode.to_string(),
+        mode,
         len,
     });
 
@@ -503,14 +510,20 @@ pub async fn get_logs_subscribe(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
-    Query(LogSize { head, tail }): Query<LogSize>,
+    Query(LogSize { mode, len }): Query<LogSize>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    let (mode, len) = match (head, tail) {
-        (Some(len), None) => ("head", len),
-        (None, Some(len)) => ("tail", len),
-        (None, None) => ("all", 0),
-        _ => ("tail", 1000),
+    let len = match len {
+        Some(num) => num,
+        None => 0,
+    };
+    let mode = match mode {
+        Some(temp) => match temp {
+            LogMode::Head => "head",
+            LogMode::Tail => "tail",
+            _ => "all",
+        },
+        None => "all",
     };
     ws_upgrade.on_upgrade(move |s| {
         logs_websocket_handler(s, deployment_manager, deployment_id, mode, len, claim)

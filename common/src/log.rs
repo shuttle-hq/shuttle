@@ -31,6 +31,13 @@ pub enum Backend {
     Runtime(String),
 }
 
+#[derive(Deserialize)]
+pub enum LogMode {
+    Head,
+    Tail,
+    All,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LogItem {
     /// Deployment id

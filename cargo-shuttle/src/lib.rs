@@ -18,6 +18,7 @@ use std::str::FromStr;
 use args::{ConfirmationArgs, GenerateCommand};
 use clap_mangen::Man;
 
+use shuttle_common::log::LogMode;
 use shuttle_common::{
     constants::{
         API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXECUTABLE_DIRNAME, SHUTTLE_CLI_DOCS_URL,
@@ -747,10 +748,10 @@ impl Shuttle {
         all: bool,
     ) -> Result<CommandOutcome> {
         let (mode, len) = match (head, tail, all) {
-            (Some(num), _, _) => ("head", num),
-            (_, Some(num), _) => ("tail", num),
-            (_, _, all) if all => ("all", 0),
-            _ => ("tail", 1000),
+            (Some(num), _, _) => (LogMode::Head, num),
+            (_, Some(num), _) => (LogMode::Tail, num),
+            (_, _, all) if all => (LogMode::All, 0),
+            _ => (LogMode::Tail, 1000),
         };
 
         let client = self.client.as_ref().unwrap();
@@ -1557,7 +1558,7 @@ impl Shuttle {
             .map_err(suggestions::deploy::deploy_request_failure)?;
 
         let mut stream = client
-            .get_logs_ws(self.ctx.project_name(), &deployment.id, "all", 0)
+            .get_logs_ws(self.ctx.project_name(), &deployment.id, LogMode::All, 0)
             .await
             .map_err(|err| {
                 suggestions::deploy::deployment_setup_failure(
@@ -1673,7 +1674,7 @@ impl Shuttle {
                 // the terminal isn't completely spammed
                 sleep(Duration::from_millis(100)).await;
                 stream = client
-                    .get_logs_ws(self.ctx.project_name(), &deployment.id, "all", 0)
+                    .get_logs_ws(self.ctx.project_name(), &deployment.id, LogMode::All, 0)
                     .await
                     .map_err(|err| {
                         suggestions::deploy::deployment_setup_failure(

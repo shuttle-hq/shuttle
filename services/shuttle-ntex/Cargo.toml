@@ -1,0 +1,17 @@
+[package]
+name = "shuttle-ntex"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Service implementation to run a Ntex webserver on shuttle"
+keywords = ["shuttle-service", "ntex"]
+
+[workspace]
+
+[dependencies]
+ntex = { version = "1.2.1"}
+shuttle-runtime = { path = "../../runtime", version = "0.43.0", default-features = false }
+num_cpus = "1.16.0"
+
+[dev-dependencies]
+tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -75,20 +76,30 @@ async fn sync_permit_projects(db: SqlitePool, args: SyncArgs) {
     );
 
     let projects: Vec<(String, String)> =
-        sqlx::query_as("SELECT user_id, project_id FROM projects")
+        sqlx::query_as("SELECT user_id, project_id FROM projects GROUP BY user_id")
             .fetch_all(&db)
             .await
             .unwrap();
-
+    let mut projects_by_user = BTreeMap::<String, Vec<String>>::new();
     for (uid, pid) in projects {
+        let v = projects_by_user.entry(uid).or_default();
+        v.push(pid);
+    }
+
+    for (uid, pids) in projects_by_user {
+        println!("syncing {uid} projects");
         match client.get_user_projects(&uid).await {
             Ok(projs) => {
-                if !projs
-                    .iter()
-                    .any(|p| p.resource.as_ref().unwrap().key == pid)
-                {
-                    println!("creating project link {uid} <-> {pid}");
-                    client.create_project(&uid, &pid).await.unwrap();
+                for pid in pids {
+                    if !projs
+                        .iter()
+                        .any(|p| p.resource.as_ref().unwrap().key == pid)
+                    {
+                        println!("creating project link {uid} <-> {pid}");
+                        client.create_project(&uid, &pid).await.unwrap();
+                    } else {
+                        println!("project link exists {uid} <-> {pid}");
+                    }
                 }
             }
             Err(e) => {

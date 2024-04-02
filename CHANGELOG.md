@@ -7,7 +7,40 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [0.42.0](https://github.com/shuttle-hq/shuttle/compare/v0.41.0..0.42.0) - 2024-03-18
+## [0.43.0](https://github.com/shuttle-hq/shuttle/compare/v0.42.0..0.43.0) - 2024-04-02
+
+### Features
+
+- *(cargo-shuttle)* --debug ([#1689](https://github.com/shuttle-hq/shuttle/issues/1689)) - ([38510fb](https://github.com/shuttle-hq/shuttle/commit/38510fb16f4857806efeec6e753d8b2284e60c3a))
+- *(cargo-shuttle)* Remove retry client, add version header ([#1691](https://github.com/shuttle-hq/shuttle/issues/1691)) - ([0aac5d7](https://github.com/shuttle-hq/shuttle/commit/0aac5d7e6531ca1f0725f1fff7d18862486014c5))
+- Gateway command to sync permit ([#1705](https://github.com/shuttle-hq/shuttle/issues/1705)) - ([8a38a12](https://github.com/shuttle-hq/shuttle/commit/8a38a126e95a6c08f7b782a3503f30351e7d2a84))
+- Generated Permit client, project permission logic ([#1699](https://github.com/shuttle-hq/shuttle/issues/1699)) - ([e33329b](https://github.com/shuttle-hq/shuttle/commit/e33329bd8c0cc09866d9399f8fc07e8e63e36031))
+- Auth sync users with permit ([#1703](https://github.com/shuttle-hq/shuttle/issues/1703)) - ([e4e8e01](https://github.com/shuttle-hq/shuttle/commit/e4e8e01c7137e62f810a1750765b8bcd0d69e527))
+- Permit pdp in docker stack ([#1697](https://github.com/shuttle-hq/shuttle/issues/1697)) - ([1b7a8a1](https://github.com/shuttle-hq/shuttle/commit/1b7a8a12adfee02ae78526c7a0991854ff2baa68))
+- Basic Permit client with tests ([#1693](https://github.com/shuttle-hq/shuttle/issues/1693)) - ([29646a3](https://github.com/shuttle-hq/shuttle/commit/29646a3167175a75749598564355c0e642c59658))
+- Permit client skeleton ([#1696](https://github.com/shuttle-hq/shuttle/issues/1696)) - ([b1e029a](https://github.com/shuttle-hq/shuttle/commit/b1e029a27ca4ea2cde6ff3d4decbb394378e8d9f))
+- Update services api client ([#1695](https://github.com/shuttle-hq/shuttle/issues/1695)) - ([27c5c37](https://github.com/shuttle-hq/shuttle/commit/27c5c370883b11e794f4c6ee66e91a1622214374))
+
+### Bug Fixes
+
+- *(codegen)* Use full path for std types ([#1702](https://github.com/shuttle-hq/shuttle/issues/1702)) - ([71e240f](https://github.com/shuttle-hq/shuttle/commit/71e240fae0446a2beb19df79cfa369706d41b75c))
+- *(logger)* Don't block when deleting old logs ([#1690](https://github.com/shuttle-hq/shuttle/issues/1690)) - ([cb9559f](https://github.com/shuttle-hq/shuttle/commit/cb9559fca269a12d9a4b5649131a948e13d60e1b))
+- *(shuttle-turso)* Use open_remote when using local_addr ([#1701](https://github.com/shuttle-hq/shuttle/issues/1701)) - ([c437091](https://github.com/shuttle-hq/shuttle/commit/c4370913eae4633416cb3324f0b9b7c38a3fcb99))
+
+### Refactor
+
+- Shuttle-common/backend -> shuttle-backends ([#1698](https://github.com/shuttle-hq/shuttle/issues/1698)) - ([ee7809d](https://github.com/shuttle-hq/shuttle/commit/ee7809d1856226804834eaf97d6cf4ef8b10348f))
+
+### Miscellaneous Tasks
+
+- *(shuttle-turso)* Update libsql dep ([#1694](https://github.com/shuttle-hq/shuttle/issues/1694)) - ([bd9466f](https://github.com/shuttle-hq/shuttle/commit/bd9466fead12f38c5970ceea18b49d83f9fdc36e))
+- Bump examples - ([b732fcc](https://github.com/shuttle-hq/shuttle/commit/b732fcc67f9f6a5e94b91e4e6cbb6af652481d16))
+- V0.43.0 - ([fdaaf98](https://github.com/shuttle-hq/shuttle/commit/fdaaf98573bb87f2ee7b553359024b17161432fe))
+- Filter jobs based on if PR is from fork ([#1700](https://github.com/shuttle-hq/shuttle/issues/1700)) - ([998485d](https://github.com/shuttle-hq/shuttle/commit/998485de0e616083fc3e222407ab7fe0bc51921a))
+- Remove secrets, metadata crates ([#1688](https://github.com/shuttle-hq/shuttle/issues/1688)) - ([4ab5f08](https://github.com/shuttle-hq/shuttle/commit/4ab5f083d8bd98d1136974cbd7e89558b6bf4752))
+- Remove e2e crate, update development docs ([#1684](https://github.com/shuttle-hq/shuttle/issues/1684)) - ([5a5c08e](https://github.com/shuttle-hq/shuttle/commit/5a5c08e8ca44d2ab3629b805aec714fcd9f04426))
+
+## [0.42.0](https://github.com/shuttle-hq/shuttle/compare/v0.41.0..v0.42.0) - 2024-03-18
 
 ### Features
 
@@ -27,14 +60,13 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous Tasks
 
+- V0.42.0 ([#1686](https://github.com/shuttle-hq/shuttle/issues/1686)) - ([7f2a195](https://github.com/shuttle-hq/shuttle/commit/7f2a19502eaf39c7952fed7fd40ae9175a04b26b))
 - Fix unstable filter ([#1683](https://github.com/shuttle-hq/shuttle/issues/1683)) - ([dbeab20](https://github.com/shuttle-hq/shuttle/commit/dbeab20d1cae40712c6c2fcdddf917d76ed7c17a))
 - Update README.md ([#1681](https://github.com/shuttle-hq/shuttle/issues/1681)) - ([27c88d3](https://github.com/shuttle-hq/shuttle/commit/27c88d3b921e508d07ff02267344002fbe948b8b))
 
 ### Miscellaneous
 
 - *(deployer)* Improve get_logs out_of_range error ([#1676](https://github.com/shuttle-hq/shuttle/issues/1676)) - ([ef3f184](https://github.com/shuttle-hq/shuttle/commit/ef3f184d9ca15de8f3f8ef4ec1b10f294c5eacdf))
-- Bump examples - ([bad98aa](https://github.com/shuttle-hq/shuttle/commit/bad98aa64e097917af47d42dddeb0518589ecdd0))
-- V0.42.0 - ([9dbe7aa](https://github.com/shuttle-hq/shuttle/commit/9dbe7aa8a3dd879d725d1d01c55f3f1c0d52b1c0))
 - Update README.md ([#1680](https://github.com/shuttle-hq/shuttle/issues/1680)) - ([7663cac](https://github.com/shuttle-hq/shuttle/commit/7663cac8a7b60ff2163f20f664aed475d72d50a0))
 - Update README.md ([#1679](https://github.com/shuttle-hq/shuttle/issues/1679)) - ([5cfcdf7](https://github.com/shuttle-hq/shuttle/commit/5cfcdf7c5349f89ac906e1419591c646b44a0f78))
 - Delete project restarts them first if oudated ([#1677](https://github.com/shuttle-hq/shuttle/issues/1677)) - ([b40a14b](https://github.com/shuttle-hq/shuttle/commit/b40a14b2ef0056a68f69806d056f17dc7255b4d3))

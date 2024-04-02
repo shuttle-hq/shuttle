@@ -42,7 +42,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 
 use crate::acme::{AcmeClient, CustomDomain};
-use crate::args::ContextArgs;
+use crate::args::ServiceArgs;
 use crate::project::{Project, ProjectCreating, ProjectError, IS_HEALTHY_TIMEOUT};
 use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::ChainAndPrivateKey;
@@ -80,8 +80,8 @@ impl ContainerSettingsBuilder {
         Self::default()
     }
 
-    pub async fn from_args(self, args: &ContextArgs) -> ContainerSettings {
-        let ContextArgs {
+    pub async fn from_args(self, args: &ServiceArgs) -> ContainerSettings {
+        let ServiceArgs {
             prefix,
             network_name,
             provisioner_host,
@@ -190,7 +190,7 @@ pub struct GatewayService {
     context: GatewayContext,
     db: SqlitePool,
     task_router: TaskRouter,
-    pub state_location: PathBuf,
+    pub state_dir: PathBuf,
     pub permit_client: Box<dyn PermissionsDal + Send + Sync>,
 
     /// Maximum number of containers the gateway can start before blocking cch projects
@@ -211,9 +211,9 @@ impl GatewayService {
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
     pub async fn init(
-        args: ContextArgs,
+        args: ServiceArgs,
         db: SqlitePool,
-        state_location: PathBuf,
+        state_dir: PathBuf,
         permit_client: Box<dyn PermissionsDal + Send + Sync>,
     ) -> io::Result<Self> {
         let docker_stats_path_v1 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V1)
@@ -262,7 +262,7 @@ impl GatewayService {
             context: provider,
             db,
             task_router,
-            state_location,
+            state_dir,
             permit_client,
             provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
                 .expect("to have a valid provisioner endpoint"),
@@ -841,7 +841,7 @@ impl GatewayService {
         acme: &AcmeClient,
         creds: AccountCredentials<'_>,
     ) -> ChainAndPrivateKey {
-        let tls_path = self.state_location.join("ssl.pem");
+        let tls_path = self.state_dir.join("ssl.pem");
         match ChainAndPrivateKey::load_pem(&tls_path) {
             Ok(valid) => valid,
             Err(_) => {
@@ -915,7 +915,7 @@ impl GatewayService {
     }
 
     pub fn credentials(&self) -> AccountCredentials<'_> {
-        let creds_path = self.state_location.join("acme.json");
+        let creds_path = self.state_dir.join("acme.json");
         if !creds_path.exists() {
             panic!(
                 "no ACME credentials found at {}, cannot continue with certificate creation",

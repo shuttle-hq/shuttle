@@ -1,10 +1,13 @@
-use anyhow::Error;
+use std::fmt::{Debug, Display};
+
 use async_trait::async_trait;
+use http::StatusCode;
 use permit_client_rs::{
     apis::{
         resource_instances_api::{create_resource_instance, delete_resource_instance},
         role_assignments_api::{assign_role, unassign_role},
         users_api::{create_user, delete_user, get_user},
+        Error as PermitClientError,
     },
     models::{
         ResourceInstanceCreate, RoleAssignmentCreate, RoleAssignmentRemove, UserCreate, UserRead,
@@ -17,6 +20,7 @@ use permit_pdp_client_rs::{
         },
         data_updater_api::trigger_policy_data_update_data_updater_trigger_post,
         policy_updater_api::trigger_policy_update_policy_updater_trigger_post,
+        Error as PermitPDPClientError,
     },
     models::{AuthorizationQuery, Resource, User, UserPermissionsQuery, UserPermissionsResult},
 };
@@ -143,7 +147,7 @@ impl PermissionsDal for Client {
     }
 
     async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
-        create_resource_instance(
+        if let Err(e) = create_resource_instance(
             &self.api,
             &self.proj_id,
             &self.env_id,
@@ -154,7 +158,18 @@ impl PermissionsDal for Client {
                 attributes: None,
             },
         )
-        .await?;
+        .await
+        {
+            // Early return all errors except 409's (project already exists)
+            let e: Error = e.into();
+            if let Error::ResponseError(ref re) = e {
+                if re.status != StatusCode::CONFLICT {
+                    return Err(e);
+                }
+            } else {
+                return Err(e);
+            }
+        }
 
         self.assign_resource_role(user_id, format!("Project:{project_id}"), "admin")
             .await?;
@@ -492,7 +507,7 @@ impl Client {
     }
 }
 
-// #[cfg(feature = "admin")]
+/// Higher level management methods. Use with care.
 mod admin {
     use permit_client_rs::{
         apis::environments_api::copy_environment,
@@ -505,7 +520,8 @@ mod admin {
     use super::*;
 
     impl Client {
-        /// Copy and overwrite the policies of one env to another existing one
+        /// Copy and overwrite a permit env's policies to another env.
+        /// Requires a project level API key.
         pub async fn copy_environment(&self, target_env: &str) -> Result<(), Error> {
             copy_environment(
                 &self.api,
@@ -540,6 +556,62 @@ mod admin {
             .await?;
 
             Ok(())
+        }
+    }
+}
+
+/// Dumbed down and unified version of the client's errors to get rid of the genereic <T>
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("reqwest error: {0}")]
+    Reqwest(reqwest::Error),
+    #[error("serde error: {0}")]
+    Serde(serde_json::Error),
+    #[error("io error: {0}")]
+    Io(std::io::Error),
+    #[error("response error: {0}")]
+    ResponseError(ResponseContent),
+}
+#[derive(Debug)]
+pub struct ResponseContent {
+    pub status: reqwest::StatusCode,
+    pub content: String,
+    pub entity: String,
+}
+impl Display for ResponseContent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "status: {}, content: {}, entity: {}",
+            self.status, self.content, self.entity
+        )
+    }
+}
+impl<T: Debug> From<PermitClientError<T>> for Error {
+    fn from(value: PermitClientError<T>) -> Self {
+        match value {
+            PermitClientError::Reqwest(e) => Self::Reqwest(e),
+            PermitClientError::Serde(e) => Self::Serde(e),
+            PermitClientError::Io(e) => Self::Io(e),
+            PermitClientError::ResponseError(e) => Self::ResponseError(ResponseContent {
+                status: e.status,
+                content: e.content,
+                entity: format!("{:?}", e.entity),
+            }),
+        }
+    }
+}
+impl<T: Debug> From<PermitPDPClientError<T>> for Error {
+    fn from(value: PermitPDPClientError<T>) -> Self {
+        match value {
+            PermitPDPClientError::Reqwest(e) => Self::Reqwest(e),
+            PermitPDPClientError::Serde(e) => Self::Serde(e),
+            PermitPDPClientError::Io(e) => Self::Io(e),
+            PermitPDPClientError::ResponseError(e) => Self::ResponseError(ResponseContent {
+                status: e.status,
+                content: e.content,
+                entity: format!("{:?}", e.entity),
+            }),
         }
     }
 }

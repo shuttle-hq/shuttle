@@ -69,7 +69,5 @@ webbrowser = "0.8.2"
 [dev-dependencies]
 assert_cmd = "2.0.6"
 rexpect = "0.5.0"
-# Tmp until this branch is merged and released
-tokiotest-httpserver = { git = "https://github.com/shuttle-hq/tokiotest-httpserver", branch = "feat/body" }
 # Publication of this crate will fail if this is changed to a workspace dependency
 shuttle-common-tests = { path = "../common-tests" }

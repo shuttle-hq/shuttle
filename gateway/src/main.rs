@@ -2,6 +2,7 @@ use async_posthog::ClientOptions;
 use clap::Parser;
 use futures::prelude::*;
 
+use shuttle_backends::client::permit;
 use shuttle_backends::trace::setup_tracing;
 use shuttle_common::log::Backend;
 use shuttle_gateway::acme::{AcmeClient, CustomDomain};
@@ -76,7 +77,21 @@ async fn start(
     posthog_client: async_posthog::Client,
     args: StartArgs,
 ) -> io::Result<()> {
-    let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await?);
+    let gateway = Arc::new(
+        GatewayService::init(
+            args.context.clone(),
+            db,
+            fs,
+            Box::new(permit::Client::new(
+                args.context.permit_api_uri.to_string(),
+                args.context.permit_pdp_uri.to_string(),
+                "default".to_owned(),
+                args.context.permit_env,
+                args.context.permit_api_key,
+            )),
+        )
+        .await?,
+    );
 
     let worker = Worker::new();
 

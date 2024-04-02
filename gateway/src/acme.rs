@@ -31,7 +31,7 @@ pub struct AcmeClient(Arc<Mutex<HashMap<String, KeyAuthorization>>>);
 
 impl AcmeClient {
     pub fn new() -> Self {
-        Self(Arc::new(Mutex::new(HashMap::default())))
+        Self::default()
     }
 
     async fn add_http01_challenge_authorization(&self, token: String, key: KeyAuthorization) {

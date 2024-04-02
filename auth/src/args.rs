@@ -19,6 +19,10 @@ pub enum Commands {
     Start(StartArgs),
     InitAdmin(InitArgs),
     InitDeployer(InitArgs),
+    Sync(SyncArgs),
+    /// Copy and overwrite a permit env's policies to another env.
+    /// Requires a project level API key.
+    CopyPermitEnv(CopyPermitEnvArgs),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -36,6 +40,36 @@ pub struct StartArgs {
     #[arg(long, default_value = "")]
     pub jwt_signing_private_key: String,
 
+    #[command(flatten)]
+    pub permit: PermitArgs,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct InitArgs {
+    /// User id of account to create
+    #[arg(long)]
+    pub user_id: UserId,
+    /// Key to assign to initial account
+    #[arg(long)]
+    pub key: Option<String>,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct SyncArgs {
+    #[command(flatten)]
+    pub permit: PermitArgs,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct CopyPermitEnvArgs {
+    /// environment to copy to
+    pub target: String,
+    #[command(flatten)]
+    pub permit: PermitArgs,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct PermitArgs {
     /// Address to reach the permit.io API at
     #[arg(long, default_value = "https://api.eu-central-1.permit.io")]
     pub permit_api_uri: Uri,
@@ -48,14 +82,4 @@ pub struct StartArgs {
     /// Permit API key
     #[arg(long, default_value = "permit_")]
     pub permit_api_key: String,
-}
-
-#[derive(clap::Args, Debug, Clone)]
-pub struct InitArgs {
-    /// User id of account to create
-    #[arg(long)]
-    pub user_id: UserId,
-    /// Key to assign to initial account
-    #[arg(long)]
-    pub key: Option<String>,
 }

@@ -21,6 +21,7 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
+use shuttle_backends::client::PermissionsDal;
 use shuttle_backends::headers::XShuttleAdminSecret;
 use shuttle_backends::project_name::ProjectName;
 use shuttle_common::claims::AccountTier;
@@ -62,6 +63,7 @@ impl From<SqlxError> for Error {
     }
 }
 
+#[derive(Default)]
 pub struct ContainerSettingsBuilder {
     prefix: Option<String>,
     image: Option<String>,
@@ -73,24 +75,9 @@ pub struct ContainerSettingsBuilder {
     extra_hosts: Option<Vec<String>>,
 }
 
-impl Default for ContainerSettingsBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ContainerSettingsBuilder {
     pub fn new() -> Self {
-        Self {
-            prefix: None,
-            image: None,
-            provisioner: None,
-            auth_uri: None,
-            resource_recorder_uri: None,
-            network_name: None,
-            fqdn: None,
-            extra_hosts: None,
-        }
+        Self::default()
     }
 
     pub async fn from_args(self, args: &ContextArgs) -> ContainerSettings {
@@ -204,6 +191,7 @@ pub struct GatewayService {
     db: SqlitePool,
     task_router: TaskRouter,
     pub state_location: PathBuf,
+    pub permit_client: Box<dyn PermissionsDal + Send + Sync>,
 
     /// Maximum number of containers the gateway can start before blocking cch projects
     cch_container_limit: u32,
@@ -226,6 +214,7 @@ impl GatewayService {
         args: ContextArgs,
         db: SqlitePool,
         state_location: PathBuf,
+        permit_client: Box<dyn PermissionsDal + Send + Sync>,
     ) -> io::Result<Self> {
         let docker_stats_path_v1 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V1)
             .expect("to parse docker stats path for cgroup v1");
@@ -274,6 +263,7 @@ impl GatewayService {
             db,
             task_router,
             state_location,
+            permit_client,
             provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
                 .expect("to have a valid provisioner endpoint"),
             auth_host: args.auth_uri,
@@ -374,10 +364,7 @@ impl GatewayService {
         Ok(ready_count)
     }
 
-    pub async fn find_project(
-        &self,
-        project_name: &ProjectName,
-    ) -> Result<FindProjectPayload, Error> {
+    pub async fn find_project(&self, project_name: &str) -> Result<FindProjectPayload, Error> {
         query("SELECT project_id, project_state FROM projects WHERE project_name = ?1")
             .bind(project_name)
             .fetch_optional(&self.db)
@@ -513,7 +500,7 @@ impl GatewayService {
     pub async fn create_project(
         &self,
         project_name: ProjectName,
-        user_id: UserId,
+        user_id: &UserId,
         is_admin: bool,
         can_create_project: bool,
         idle_minutes: u64,
@@ -526,7 +513,7 @@ impl GatewayService {
             "#,
         )
         .bind(&project_name)
-        .bind(&user_id)
+        .bind(user_id)
         .bind(is_admin)
         .fetch_optional(&self.db)
         .await?
@@ -625,7 +612,7 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         project_id: Ulid,
-        user_id: UserId,
+        user_id: &UserId,
         idle_minutes: u64,
     ) -> Result<FindProjectPayload, Error> {
         let project = SqlxJson(Project::Creating(
@@ -636,14 +623,15 @@ impl GatewayService {
             ),
         ));
 
+        let mut transaction = self.db.begin().await?;
         query("INSERT INTO projects (project_id, project_name, account_name, user_id, initial_key, project_state) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
             .bind(&project_id.to_string())
             .bind(&project_name)
             .bind("")
-            .bind(&user_id)
+            .bind(user_id)
             .bind(project.initial_key().unwrap())
             .bind(&project)
-            .execute(&self.db)
+            .execute(&mut *transaction)
             .await
             .map_err(|err| {
                 // If the error is a broken PK constraint, this is a
@@ -656,6 +644,13 @@ impl GatewayService {
                 // Otherwise this is internal
                 err.into()
             })?;
+
+        self.permit_client
+            .create_project(user_id, &project_id.to_string())
+            .await
+            .map_err(|_| Error::from(ErrorKind::Internal))?;
+
+        transaction.commit().await?;
 
         let project = project.0;
 
@@ -675,7 +670,7 @@ impl GatewayService {
         let mut transaction = self.db.begin().await?;
 
         query("DELETE FROM custom_domains WHERE project_id = ?1")
-            .bind(project_id)
+            .bind(&project_id)
             .execute(&mut *transaction)
             .await?;
 
@@ -683,6 +678,11 @@ impl GatewayService {
             .bind(project_name)
             .execute(&mut *transaction)
             .await?;
+
+        self.permit_client
+            .delete_project(&project_id)
+            .await
+            .map_err(|_| Error::from(ErrorKind::Internal))?;
 
         transaction.commit().await?;
 
@@ -1139,6 +1139,7 @@ pub struct FindProjectPayload {
 #[cfg(test)]
 pub mod tests {
     use fqdn::FQDN;
+    use shuttle_backends::test_utils::gateway::PermissionsMock;
 
     use super::*;
 
@@ -1147,9 +1148,18 @@ pub mod tests {
     use crate::{Error, ErrorKind};
 
     #[tokio::test]
-    async fn service_create_find_stop_delete_project() -> anyhow::Result<()> {
+    async fn service_create_find_stop_delete_project() {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
+        );
 
         let neo: UserId = "neo".to_owned();
         let trinity: UserId = "trinity".to_owned();
@@ -1165,7 +1175,7 @@ pub mod tests {
         };
 
         let project = svc
-            .create_project(matrix.clone(), neo.clone(), false, true, 0)
+            .create_project(matrix.clone(), &neo, false, true, 0)
             .await
             .unwrap();
 
@@ -1198,14 +1208,14 @@ pub mod tests {
 
         // Test project pagination, first create 20 projects.
         for p in (0..20).map(|p| format!("matrix-{p}")) {
-            svc.create_project(p.parse().unwrap(), admin.clone(), true, true, 0)
+            svc.create_project(p.parse().unwrap(), &admin, true, true, 0)
                 .await
                 .unwrap();
         }
 
         // Creating a project with can_create_project set to false should fail.
         assert_eq!(
-            svc.create_project("final-one".parse().unwrap(), admin.clone(), false, false, 0)
+            svc.create_project("final-one".parse().unwrap(), &admin, false, false, 0)
                 .await
                 .err()
                 .unwrap()
@@ -1272,7 +1282,7 @@ pub mod tests {
 
         // If recreated by a different user
         assert!(matches!(
-            svc.create_project(matrix.clone(), trinity.clone(), false, true, 0)
+            svc.create_project(matrix.clone(), &trinity, false, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::ProjectAlreadyExists,
@@ -1282,7 +1292,7 @@ pub mod tests {
 
         // If recreated by the same user
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
+            svc.create_project(matrix.clone(), &neo, false, true, 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1292,7 +1302,7 @@ pub mod tests {
 
         // If recreated by the same user again while it's running
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
+            svc.create_project(matrix.clone(), &neo, false, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
@@ -1320,7 +1330,7 @@ pub mod tests {
 
         // If recreated by an admin
         assert!(matches!(
-            svc.create_project(matrix.clone(), admin.clone(), true, true, 0)
+            svc.create_project(matrix.clone(), &admin, true, true, 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1330,7 +1340,7 @@ pub mod tests {
 
         // If recreated by an admin again while it's running
         assert!(matches!(
-            svc.create_project(matrix.clone(), admin.clone(), true, true, 0)
+            svc.create_project(matrix.clone(), &admin, true, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
@@ -1352,25 +1362,32 @@ pub mod tests {
 
         // It can be re-created by anyone, with the same project name
         assert!(matches!(
-            svc.create_project(matrix, trinity.clone(), false, true, 0)
-                .await,
+            svc.create_project(matrix, &trinity, false, true, 0).await,
             Ok(FindProjectPayload {
                 project_id: _,
                 state: Project::Creating(_),
             })
         ));
-        Ok(())
     }
 
     #[tokio::test]
-    async fn service_create_ready_kill_restart_docker() -> anyhow::Result<()> {
+    async fn service_create_ready_kill_restart_docker() {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
+        );
 
         let neo: UserId = "neo".to_owned();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
+        svc.create_project(matrix.clone(), &neo, false, true, 0)
             .await
             .unwrap();
 
@@ -1410,14 +1427,21 @@ pub mod tests {
         let project = svc.find_project(&matrix).await.unwrap();
         println!("{:?}", project.state);
         assert!(project.state.is_ready());
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn service_create_find_custom_domain() -> anyhow::Result<()> {
+    async fn service_create_find_custom_domain() {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
+        );
 
         let account: UserId = "neo".to_owned();
         let project_name: ProjectName = "matrix".parse().unwrap();
@@ -1431,7 +1455,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, true, 0)
+            .create_project(project_name.clone(), &account, false, true, 0)
             .await
             .unwrap();
 
@@ -1464,14 +1488,21 @@ pub mod tests {
         assert_eq!(custom_domain.project_name, project_name);
         assert_eq!(custom_domain.certificate, certificate);
         assert_eq!(custom_domain.private_key, private_key);
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn service_create_custom_domain_destroy_recreate_project() -> anyhow::Result<()> {
+    async fn service_create_custom_domain_destroy_recreate_project() {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
+        );
 
         let account: UserId = "neo".to_owned();
         let project_name: ProjectName = "matrix".parse().unwrap();
@@ -1485,7 +1516,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, true, 0)
+            .create_project(project_name.clone(), &account, false, true, 0)
             .await
             .unwrap();
 
@@ -1503,12 +1534,10 @@ pub mod tests {
         assert!(matches!(work.poll(()).await, TaskResult::Done(())));
 
         let recreated_project = svc
-            .create_project(project_name.clone(), account.clone(), false, true, 0)
+            .create_project(project_name.clone(), &account, false, true, 0)
             .await
             .unwrap();
 
         assert!(matches!(recreated_project.state, Project::Creating(_)));
-
-        Ok(())
     }
 }

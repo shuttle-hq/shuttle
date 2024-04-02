@@ -24,6 +24,8 @@ opentelemetry-appender-tracing = { workspace = true }
 opentelemetry-http = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 pin-project = { workspace = true }
+permit-client-rs = { git = "https://github.com/shuttle-hq/permit-client-rs", rev = "27c7759" }
+permit-pdp-client-rs = { git = "https://github.com/shuttle-hq/permit-pdp-client-rs", rev = "37c7296" }
 portpicker = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["json"] }
 # keep locked to not accidentally invalidate someone's project name
@@ -49,8 +51,11 @@ test-utils = ["portpicker", "wiremock"]
 
 [dev-dependencies]
 base64 = { workspace = true }
+ctor = { workspace = true }
 jsonwebtoken = { workspace = true }
 ring = { workspace = true }
 serial_test = "3.0.0"
+shuttle-common-tests = { workspace = true }
 test-context = { workspace = true }
 tracing-fluent-assertions = "0.3.0"
+uuid = { workspace = true }

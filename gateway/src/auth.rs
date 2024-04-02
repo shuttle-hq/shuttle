@@ -87,7 +87,11 @@ where
             || user.claim.is_deployer()
             || service
                 .permit_client
-                .allowed(&user.id, &scope.to_string(), "develop") // TODO?: make this configurable per endpoint?
+                .allowed(
+                    &user.id,
+                    &service.find_project_by_name(&scope).await?.id,
+                    "develop",
+                ) // TODO?: make this configurable per endpoint?
                 .await
                 .map_err(|_| {
                     error!("failed to check Permit permission");

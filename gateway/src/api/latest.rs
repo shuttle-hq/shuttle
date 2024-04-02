@@ -104,11 +104,11 @@ async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let project = service.find_project(&scope).await?;
+    let project = service.find_project_by_name(&scope).await?;
     let idle_minutes = project.state.idle_minutes();
 
     let response = project::Response {
-        id: project.project_id.to_uppercase(),
+        id: project.id.to_uppercase(),
         name: scope.to_string(),
         state: project.state.into(),
         idle_minutes,
@@ -143,13 +143,13 @@ async fn get_projects_list(
         .into_iter()
         .take(limit as usize)
     {
-        let name = p.resource.expect("project resource").key;
-        let project = service.find_project(name.as_str()).await?;
+        let proj_id = p.resource.expect("project resource").key;
+        let project = service.find_project_by_id(&proj_id).await?;
         let idle_minutes = project.state.idle_minutes();
 
         let response = project::Response {
-            id: project.project_id,
-            name,
+            id: project.id,
+            name: project.name,
             state: project.state.into(),
             idle_minutes,
         };
@@ -206,7 +206,7 @@ async fn create_project(
         .await?;
 
     let response = project::Response {
-        id: project.project_id.to_string().to_uppercase(),
+        id: project.id.to_string().to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
@@ -225,11 +225,11 @@ async fn destroy_project(
         ..
     }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let project = service.find_project(&project_name).await?;
+    let project = service.find_project_by_name(&project_name).await?;
     let idle_minutes = project.state.idle_minutes();
 
     let mut response = project::Response {
-        id: project.project_id.to_uppercase(),
+        id: project.id.to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
@@ -273,10 +273,9 @@ async fn delete_project(
     }
 
     let project_name = scoped_user.scope.clone();
-    let project = state.service.find_project(&project_name).await?;
+    let project = state.service.find_project_by_name(&project_name).await?;
 
-    let project_id =
-        Ulid::from_string(&project.project_id).expect("stored project id to be a valid ULID");
+    let project_id = Ulid::from_string(&project.id).expect("stored project id to be a valid ULID");
 
     // Try to startup destroyed, errored or outdated projects
     let project_deletable = project.state.is_ready() || project.state.is_stopped();
@@ -316,7 +315,7 @@ async fn delete_project(
         // Wait for the project to be ready
         handle.await;
 
-        let new_state = state.service.find_project(&project_name).await?;
+        let new_state = state.service.find_project_by_name(&project_name).await?;
 
         if !new_state.state.is_ready() {
             return Err(Error::from_kind(ErrorKind::ProjectCorrupted));

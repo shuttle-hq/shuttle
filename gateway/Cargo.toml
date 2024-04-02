@@ -44,7 +44,7 @@ strum = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tonic = { workspace = true }
 tower = { workspace = true, features = ["steer"] }
-tower-http = { workspace = true }
+tower-http = { workspace = true, features = ["cors"] }
 tower-sanitize-path = "0.2.0"
 tracing = { workspace = true, features = ["default"] }
 tracing-opentelemetry = { workspace = true }

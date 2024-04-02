@@ -40,6 +40,9 @@ pub struct StartArgs {
     /// Allows to disable the use of TLS in the user proxy service (DANGEROUS)
     #[arg(long, default_value = "enable")]
     pub use_tls: UseTls,
+    /// The origin to allow CORS requests from
+    #[arg(long, default_value = "https://console.shuttle.rs")]
+    pub cors_origin: String,
     #[command(flatten)]
     pub context: ServiceArgs,
     #[command(flatten)]

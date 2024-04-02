@@ -2,9 +2,9 @@ use std::{
     collections::BTreeMap,
     iter::FromIterator,
     net::{Ipv4Addr, SocketAddr},
-    ops::DerefMut,
+    ops::{Deref, DerefMut},
     str::FromStr,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -12,10 +12,13 @@ use anyhow::Context;
 use async_trait::async_trait;
 use core::future::Future;
 use shuttle_common::{extract_propagation::ExtractPropagationLayer, secrets::Secret};
-use shuttle_proto::runtime::{
-    runtime_server::{Runtime, RuntimeServer},
-    LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest, StopResponse,
-    SubscribeStopRequest, SubscribeStopResponse,
+use shuttle_proto::{
+    runtime::{
+        runtime_server::{Runtime, RuntimeServer},
+        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
+        StopResponse, SubscribeStopRequest, SubscribeStopResponse,
+    },
+    runtime::{Ping, Pong},
 };
 use shuttle_service::{ResourceFactory, Service};
 use tokio::sync::{
@@ -84,23 +87,42 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     }
 
     // where to serve the gRPC control layer
-    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
+    let addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), args.port);
 
     let mut server_builder = Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
         .layer(ExtractPropagationLayer);
 
+    // A channel we can use to kill the runtime if it does not become healthy in time.
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+
     let router = {
-        let alpha = Alpha::new(loader, runner);
+        let alpha = Alpha::new(loader, runner, tx);
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
     };
 
-    match router.serve(addr).await {
-        Ok(_) => {}
-        Err(e) => panic!("Error while serving address {addr}: {e}"),
-    };
+    tokio::select! {
+        res = router.serve(addr) => {
+            match res{
+                Ok(_) => {}
+                Err(e) => panic!("Error while serving address {addr}: {e}")
+            }
+        }
+        res = rx => {
+            match res{
+                Ok(_) => panic!("Received runtime kill signal"),
+                Err(e) => panic!("Receiver error: {e}")
+            }
+        }
+    }
+}
+
+pub enum State {
+    Unhealthy,
+    Loading,
+    Running,
 }
 
 pub struct Alpha<L, R> {
@@ -109,10 +131,14 @@ pub struct Alpha<L, R> {
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     loader: Mutex<Option<L>>,
     runner: Mutex<Option<R>>,
+    /// The current state of the runtime, which is used by the ECS task to determine if the runtime
+    /// is healthy.
+    state: Arc<Mutex<State>>,
+    runtime_kill_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
 }
 
 impl<L, R> Alpha<L, R> {
-    pub fn new(loader: L, runner: R) -> Self {
+    pub fn new(loader: L, runner: R, runtime_kill_tx: tokio::sync::oneshot::Sender<()>) -> Self {
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
@@ -120,6 +146,8 @@ impl<L, R> Alpha<L, R> {
             kill_tx: Mutex::new(None),
             loader: Mutex::new(Some(loader)),
             runner: Mutex::new(Some(runner)),
+            state: Arc::new(Mutex::new(State::Unhealthy)),
+            runtime_kill_tx: Mutex::new(Some(runtime_kill_tx)),
         }
     }
 }
@@ -222,6 +250,31 @@ where
                 }
             }
         };
+
+        println!("setting current state to healthy");
+        *self.state.lock().unwrap() = State::Loading;
+
+        let state = self.state.clone();
+        let runtime_kill_tx = self
+            .runtime_kill_tx
+            .lock()
+            .unwrap()
+            .deref_mut()
+            .take()
+            .unwrap();
+
+        // Ensure that the runtime is set to unhealthy if it doesn't reach the running state after
+        // it has sent a load response, so that the ECS task will fail.
+        tokio::spawn(async move {
+            // Note: The timeout is quite low as we are not actually provisioning resources after
+            // sending the load response.
+            tokio::time::sleep(Duration::from_secs(180)).await;
+            if !matches!(state.lock().unwrap().deref(), State::Running) {
+                println!("the runtime failed to enter the running state before timing out");
+
+                runtime_kill_tx.send(()).unwrap();
+            }
+        });
 
         Ok(Response::new(LoadResponse {
             success: true,
@@ -355,6 +408,8 @@ where
             ..Default::default()
         };
 
+        *self.state.lock().unwrap() = State::Running;
+
         Ok(Response::new(message))
     }
 
@@ -397,5 +452,16 @@ where
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
+    }
+
+    async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
+        if matches!(self.state.lock().unwrap().deref(), State::Unhealthy) {
+            println!("runtime health check failed");
+            return Err(Status::unavailable(
+                "runtime has not reached a healthy state",
+            ));
+        }
+
+        Ok(Response::new(Pong {}))
     }
 }

@@ -13,6 +13,8 @@ service Runtime {
 
   // Channel to notify a service has been stopped
   rpc SubscribeStop(SubscribeStopRequest) returns (stream SubscribeStopResponse);
+
+  rpc HealthCheck(Ping) returns (Pong);
 }
 
 message LoadRequest {
@@ -78,3 +80,6 @@ enum StopReason {
   // Service crashed
   Crash = 2;
 }
+
+message Ping {}
+message Pong {}

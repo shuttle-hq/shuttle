@@ -13,8 +13,8 @@ pub async fn start(
     runtime_executable: PathBuf,
     project_path: &Path,
 ) -> anyhow::Result<(process::Child, runtime::Client)> {
-    let port = &port.to_string();
-    let args = vec!["--port", port];
+    let port_str = port.to_string();
+    let args = vec!["--port", &port_str];
 
     info!(
         args = %format!("{} {}", runtime_executable.display(), args.join(" ")),
@@ -30,7 +30,7 @@ pub async fn start(
     .spawn()
     .context("spawning runtime process")?;
 
-    let runtime_client = runtime::get_client(port).await?;
+    let runtime_client = runtime::get_client(format!("http://0.0.0.0:{port}")).await?;
 
     Ok((runtime, runtime_client))
 }

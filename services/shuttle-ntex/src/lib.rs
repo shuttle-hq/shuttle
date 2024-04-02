@@ -1,13 +1,15 @@
 #![doc = include_str!("../README.md")]
+
+use ntex::Service;
 use std::net::SocketAddr;
 
 /// A wrapper type for a closure that returns an [ntex::web::ServiceConfig] so we can implement
 /// [shuttle_runtime::Service] for it.
 #[derive(Clone)]
-pub struct NtexWebService<F>(pub F);
+pub struct NtexService<F>(pub F);
 
 #[shuttle_runtime::async_trait]
-impl<F> shuttle_runtime::Service for NtexWebService<F>
+impl<F> shuttle_runtime::Service for NtexService<F>
 where
     F: FnOnce(&mut ntex::web::ServiceConfig) + Send + Clone + 'static,
 {
@@ -27,7 +29,7 @@ where
     }
 }
 
-impl<F> From<F> for NtexWebService<F>
+impl<F> From<F> for NtexService<F>
 where
     F: FnOnce(&mut ntex::web::ServiceConfig) + Send + Clone + 'static,
 {
@@ -37,4 +39,4 @@ where
 }
 
 #[doc = include_str!("../README.md")]
-pub type ShuttleNtexWeb<F> = Result<NtexWebService<F>, shuttle_runtime::Error>;
+pub type ShuttleNtex<F> = Result<NtexService<F>, shuttle_runtime::Error>;

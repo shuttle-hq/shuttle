@@ -9,9 +9,8 @@ keywords = ["shuttle-service", "thruster"]
 [workspace]
 
 [dependencies]
-thruster = { version = "1.3.0" }
+thruster = "1.3.0"
 shuttle-runtime = { path = "../../runtime", version = "0.43.0", default-features = false }
 
 [dev-dependencies]
 thruster = { version = "1.3.0", features = ["hyper_server"] }
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

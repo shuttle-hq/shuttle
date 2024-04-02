@@ -9,8 +9,5 @@ keywords = ["shuttle-service", "salvo"]
 [workspace]
 
 [dependencies]
-salvo = { version = "0.63.0" }
+salvo = "0.63.0"
 shuttle-runtime = { path = "../../runtime", version = "0.43.0", default-features = false }
-
-[dev-dependencies]
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

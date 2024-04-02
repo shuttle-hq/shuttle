@@ -4,6 +4,7 @@ version = "0.43.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Shuttle plugin for connecting to a Qdrant database"
+repository = "https://github.com/shuttle-hq/shuttle"
 keywords = ["shuttle-service", "qdrant"]
 
 [dependencies]

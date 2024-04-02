@@ -2,7 +2,8 @@
 resolver = "2"
 members = [
   "admin",
-  "auth", "backends",
+  "auth",
+  "backends",
   "cargo-shuttle",
   "codegen",
   "common",

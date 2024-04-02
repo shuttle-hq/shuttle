@@ -4,6 +4,7 @@ version = "0.43.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service implementation to run a serenity server on shuttle"
+repository = "https://github.com/shuttle-hq/shuttle"
 keywords = ["shuttle-service", "serenity"]
 
 [workspace]

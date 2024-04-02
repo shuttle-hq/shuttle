@@ -275,24 +275,6 @@ jobs:
       - apply-patches
       - run: cargo make test-member-integration-docker << parameters.crate >>
       - save-sccache
-  e2e-test: # outdated
-    executor: machine-ubuntu
-    resource_class: medium
-    steps:
-      - install-rust
-      - checkout
-      - run: git submodule update --init
-      - run: make images
-      - apply-patches
-      - run:
-          name: Run the E2E tests
-          command: |
-            # clean up a potential existing deployments before running
-            # the tests just in case the environment is not clean
-            make down
-            make up
-            SHUTTLE_TESTS_NETWORK=shuttle-dev_user-net SHUTTLE_TESTS_RUNTIME_IMAGE=public.ecr.aws/shuttle-dev/deployer:latest cargo test --package shuttle-gateway --all-features --lib -- --nocapture
-            make test
   build-and-push:
     executor: machine-ubuntu
     parameters:
@@ -648,15 +630,29 @@ workflows:
                 - services/shuttle-warp
       - test-workspace-member:
           name: << matrix.crate >>
+          filters:
+            branches:
+              ignore:
+                - /pull\/.*/
           matrix:
             parameters:
               crate:
                 # - shuttle-admin # no tests
+                - shuttle-backends
+                # - shuttle-gateway # TODO: move docker-dependant tests to integration tests and activate this
+      - test-workspace-member:
+          name: << matrix.crate >>
+          matrix:
+            parameters:
+              crate:
                 - shuttle-codegen
                 - shuttle-common
-                # - shuttle-common-tests # no tests
       - test-workspace-member-with-integration:
           name: << matrix.crate >>
+          filters:
+            branches:
+              ignore:
+                - /pull\/.*/
           matrix:
             alias: test-workspace-member-with-integration-medium
             parameters:
@@ -688,6 +684,10 @@ workflows:
                 - shuttle-deployer
       - test-workspace-member-with-integration-docker:
           name: << matrix.crate >> with docker
+          filters:
+            branches:
+              ignore:
+                - /pull\/.*/
           matrix:
             alias: test-workspace-member-with-integration-docker-medium
             parameters:
@@ -695,6 +695,7 @@ workflows:
                 - medium
               crate:
                 - shuttle-auth
+                - shuttle-backends
                 - shuttle-provisioner
                 - shuttle-logger
       - test-workspace-member-with-integration-docker:
@@ -712,31 +713,23 @@ workflows:
           filters:
             branches:
               only: main
-      # - e2e-test:
-      #     requires:
-      #       - test-standalone
-      #       - test-standalone-shared-db
-      #       - test-workspace-member
-      #       - test-workspace-member-with-integration-medium
-      #       - test-workspace-member-with-integration-large
-      #       - test-workspace-member-with-integration-xlarge
-      #       - test-workspace-member-with-integration-docker-medium
-      #       - test-workspace-member-with-integration-docker-large
-      #     filters:
-      #       branches:
-      #         only: production
   unstable:
     jobs:
+      # allow this job on main and other internal branches, but not on PRs from forks
       - approve-deploy-images-unstable:
           type: approval
           filters:
             branches:
-              only: main
+              ignore:
+                - /pull\/.*/
+                - production
       - approve-build-and-push-images-unstable:
           type: approval
           filters:
             branches:
-              only: main
+              ignore:
+                - /pull\/.*/
+                - production
       - build-and-push:
           name: build-and-push-unstable
           aws-access-key-id: DEV_AWS_ACCESS_KEY_ID
@@ -876,10 +869,8 @@ workflows:
             parameters:
               path:
                 - resources/aws-rds
-                - resources/metadata
                 - resources/persist
                 - resources/qdrant
-                - resources/secrets
                 - resources/shared-db
                 - resources/turso
                 - resources/opendal

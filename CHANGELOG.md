@@ -1,13 +1,46 @@
 # Changelog
 
-<!-- Install git-cliff and use `make tag=TAG changelog` to update this file -->
+<!-- Install git-cliff and use `cargo make changelog 0.X.Y` to update this file -->
 
 This is an auto-generated changelog based on commits on the main branch, made with [git-cliff](https://github.com/orhun/git-cliff).
 See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 **For proper release notes with more details such as upgrading guidelines, check out the [releases page](https://github.com/shuttle-hq/shuttle/releases).**
 
-## [0.41.0](https://github.com/shuttle-hq/shuttle/compare/v0.40.0..0.41.0) - 2024-03-07
+## [0.42.0](https://github.com/shuttle-hq/shuttle/compare/v0.41.0..0.42.0) - 2024-03-18
+
+### Features
+
+- *(resources)* Add `diesel-async` support for `shuttle-shared-db` ([#1664](https://github.com/shuttle-hq/shuttle/issues/1664)) - ([cd5476c](https://github.com/shuttle-hq/shuttle/commit/cd5476c112e6179cfa7c81a19e26f8d16cdc1a58))
+- Fall back to finding Secrets.toml in workspace root ([#1682](https://github.com/shuttle-hq/shuttle/issues/1682)) - ([6acabb7](https://github.com/shuttle-hq/shuttle/commit/6acabb728611a983dd1fdaef859476f7eee9c26d))
+
+### Bug Fixes
+
+- *(cargo-shuttle)* Remove integration test example ([#1672](https://github.com/shuttle-hq/shuttle/issues/1672)) - ([05a3765](https://github.com/shuttle-hq/shuttle/commit/05a37656b272255cd665ba58fa411bb52abc86d0))
+- *(deployer)* Check correct config field(s) in resource cache ([#1675](https://github.com/shuttle-hq/shuttle/issues/1675)) - ([f547060](https://github.com/shuttle-hq/shuttle/commit/f547060992819b7b51c5f51fa04ead804fdd1d0e))
+- Patches script root-relative path ([#1685](https://github.com/shuttle-hq/shuttle/issues/1685)) - ([2428e99](https://github.com/shuttle-hq/shuttle/commit/2428e9919c82a1ac5762bee3ec911362699409f3))
+
+### Refactor
+
+- *(auth, gateway)* Use user_id over account_name ([#1674](https://github.com/shuttle-hq/shuttle/issues/1674)) - ([4937f4b](https://github.com/shuttle-hq/shuttle/commit/4937f4ba97a1d29eac093721742df47ae5e04dc3))
+- Move secrets and metadata plugins to runtime ([#1673](https://github.com/shuttle-hq/shuttle/issues/1673)) - ([f15e6bb](https://github.com/shuttle-hq/shuttle/commit/f15e6bb7c4b4b195cfe09aa46d8202d12ba4bdc0))
+
+### Miscellaneous Tasks
+
+- Fix unstable filter ([#1683](https://github.com/shuttle-hq/shuttle/issues/1683)) - ([dbeab20](https://github.com/shuttle-hq/shuttle/commit/dbeab20d1cae40712c6c2fcdddf917d76ed7c17a))
+- Update README.md ([#1681](https://github.com/shuttle-hq/shuttle/issues/1681)) - ([27c88d3](https://github.com/shuttle-hq/shuttle/commit/27c88d3b921e508d07ff02267344002fbe948b8b))
+
+### Miscellaneous
+
+- *(deployer)* Improve get_logs out_of_range error ([#1676](https://github.com/shuttle-hq/shuttle/issues/1676)) - ([ef3f184](https://github.com/shuttle-hq/shuttle/commit/ef3f184d9ca15de8f3f8ef4ec1b10f294c5eacdf))
+- Bump examples - ([bad98aa](https://github.com/shuttle-hq/shuttle/commit/bad98aa64e097917af47d42dddeb0518589ecdd0))
+- V0.42.0 - ([9dbe7aa](https://github.com/shuttle-hq/shuttle/commit/9dbe7aa8a3dd879d725d1d01c55f3f1c0d52b1c0))
+- Update README.md ([#1680](https://github.com/shuttle-hq/shuttle/issues/1680)) - ([7663cac](https://github.com/shuttle-hq/shuttle/commit/7663cac8a7b60ff2163f20f664aed475d72d50a0))
+- Update README.md ([#1679](https://github.com/shuttle-hq/shuttle/issues/1679)) - ([5cfcdf7](https://github.com/shuttle-hq/shuttle/commit/5cfcdf7c5349f89ac906e1419591c646b44a0f78))
+- Delete project restarts them first if oudated ([#1677](https://github.com/shuttle-hq/shuttle/issues/1677)) - ([b40a14b](https://github.com/shuttle-hq/shuttle/commit/b40a14b2ef0056a68f69806d056f17dc7255b4d3))
+- Add `--raw` flag to `run`, `deploy` command ([#1653](https://github.com/shuttle-hq/shuttle/issues/1653)) - ([db4f2e6](https://github.com/shuttle-hq/shuttle/commit/db4f2e6e29eff3612bdf85687875cb137e857980))
+
+## [0.41.0](https://github.com/shuttle-hq/shuttle/compare/v0.40.0..v0.41.0) - 2024-03-07
 
 ### Features
 
@@ -24,15 +57,12 @@ See [conventional commits](https://www.conventionalcommits.org/) for commit guid
 
 ### Miscellaneous Tasks
 
-- Remove orchestrator - ([0a1e1f8](https://github.com/shuttle-hq/shuttle/commit/0a1e1f88597e10fea09cd75b6cd1e71f53e38674))
-- V0.41.0 - ([e4ffc7b](https://github.com/shuttle-hq/shuttle/commit/e4ffc7b9472234021fd36896b543460e586cf823))
+- V0.41.0 ([#1670](https://github.com/shuttle-hq/shuttle/issues/1670)) - ([ad834ae](https://github.com/shuttle-hq/shuttle/commit/ad834aee21c134c6f913d458bc1e23ce1b8c4eb6))
 - Update test-context dependency ([#1665](https://github.com/shuttle-hq/shuttle/issues/1665)) - ([d39724a](https://github.com/shuttle-hq/shuttle/commit/d39724a6c4594c8a706c6041347eaedae6a08aea))
 - Remove buildx cache, bump versions ([#1650](https://github.com/shuttle-hq/shuttle/issues/1650)) - ([f41afde](https://github.com/shuttle-hq/shuttle/commit/f41afde9065be9b9892f7ddf68dd6ff4a4b57f44))
 
 ### Miscellaneous
 
-- Bump examples - ([f20b6dd](https://github.com/shuttle-hq/shuttle/commit/f20b6ddf646990fe21d28c954a4220ffd3447c9c))
-- Nit - ([c2468c6](https://github.com/shuttle-hq/shuttle/commit/c2468c651ea28ac94740a5872cc6b2c5c7dd0c49))
 - Remove shuttle-next ([#1652](https://github.com/shuttle-hq/shuttle/issues/1652)) - ([98551c9](https://github.com/shuttle-hq/shuttle/commit/98551c9f3521d451c54281ca80f402c624c7356e))
 
 ## [0.40.0](https://github.com/shuttle-hq/shuttle/compare/v0.39.0..v0.40.0) - 2024-03-04

@@ -22,11 +22,11 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use shuttle_common::backends::cache::{CacheManagement, CacheManager};
-use shuttle_common::backends::headers::XShuttleProject;
+use shuttle_backends::cache::{CacheManagement, CacheManager};
+use shuttle_backends::headers::XShuttleProject;
+use shuttle_backends::project_name::ProjectName;
 use shuttle_common::constants::DEPLOYER_SERVICE_HTTP_PORT;
 use shuttle_common::models::error::InvalidProjectName;
-use shuttle_common::models::project::ProjectName;
 use tokio::net::TcpSocket;
 use tokio::sync::mpsc::Sender;
 use tower_sanitize_path::SanitizePath;
@@ -198,6 +198,7 @@ async fn bounce(State(state): State<Arc<Bouncer>>, req: Request<Body>) -> Result
     Ok(resp.body(body).unwrap())
 }
 
+#[derive(Default)]
 pub struct UserServiceBuilder {
     service: Option<Arc<GatewayService>>,
     task_sender: Option<Sender<BoxedTask>>,
@@ -208,23 +209,9 @@ pub struct UserServiceBuilder {
     public: Option<FQDN>,
 }
 
-impl Default for UserServiceBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl UserServiceBuilder {
     pub fn new() -> Self {
-        Self {
-            service: None,
-            task_sender: None,
-            public: None,
-            acme: None,
-            tls_acceptor: None,
-            bouncer_binds_to: None,
-            user_binds_to: None,
-        }
+        Self::default()
     }
 
     pub fn with_public(mut self, public: FQDN) -> Self {

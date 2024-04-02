@@ -96,12 +96,13 @@ pub enum Scope {
     Admin,
 }
 
+#[derive(Default)]
 pub struct ScopeBuilder(Vec<Scope>);
 
 impl ScopeBuilder {
     /// Create a builder with the standard scopes for new users.
     pub fn new() -> Self {
-        Self(Default::default())
+        Self::default()
     }
 
     /// Extend the current scopes with admin scopes.
@@ -163,13 +164,9 @@ impl ScopeBuilder {
     }
 }
 
-impl Default for ScopeBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, EnumString)]
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, EnumString,
+)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "display", derive(strum::Display))]
 #[cfg_attr(feature = "persist", derive(sqlx::Type))]

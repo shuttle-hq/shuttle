@@ -2,7 +2,6 @@ use std::{net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
 use hyper::Uri;
-use shuttle_common::models::project::ProjectName;
 
 /// Program to handle the deploys for a single project
 /// Handling includes, building, testing, and running each service
@@ -35,7 +34,7 @@ pub struct Args {
 
     /// Project being served by this deployer
     #[clap(long)]
-    pub project: ProjectName,
+    pub project: String,
 
     /// Project id of the project of this deployer
     #[clap(long)]

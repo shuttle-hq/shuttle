@@ -1,14 +1,11 @@
 use std::time::Duration;
 
 use clap::Parser;
-use shuttle_common::{
-    backends::{
-        auth::{AuthPublicKey, JwtAuthenticationLayer},
-        trace::setup_tracing,
-    },
-    extract_propagation::ExtractPropagationLayer,
-    log::Backend,
+use shuttle_backends::{
+    auth::{AuthPublicKey, JwtAuthenticationLayer},
+    trace::setup_tracing,
 };
+use shuttle_common::{extract_propagation::ExtractPropagationLayer, log::Backend};
 use shuttle_logger::{args::Args, Postgres, Service};
 use shuttle_proto::logger::logger_server::LoggerServer;
 use tonic::transport::Server;

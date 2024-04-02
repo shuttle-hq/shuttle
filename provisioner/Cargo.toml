@@ -1,13 +1,14 @@
 [package]
 name = "shuttle-provisioner"
-version = "0.41.0"
+version = "0.42.0"
 edition.workspace = true
 license.workspace = true
 description = "Service responsible for provisioning and managing resources for services"
 publish = false
 
 [dependencies]
-shuttle-common = { workspace = true, features = ["backend", "extract_propagation", "models", "service", "tonic"] }
+shuttle-backends = { workspace = true }
+shuttle-common = { workspace = true, features = ["extract_propagation", "models", "service", "tonic"] }
 shuttle-proto = { workspace = true, features = ["provisioner", "resource-recorder-client"] }
 
 aws-config = "0.56.1"
@@ -29,6 +30,5 @@ ctor = { workspace = true }
 once_cell = { workspace = true }
 portpicker = { workspace = true }
 serde_json = { workspace = true }
-shuttle-common = { workspace = true, features = ["test-utils"] }
+shuttle-backends = { workspace = true, features = ["test-utils"] }
 shuttle-common-tests = { workspace = true }
-shuttle-proto = { workspace = true, features = ["test-utils"] }

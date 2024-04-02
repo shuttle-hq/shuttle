@@ -17,20 +17,18 @@ use futures::Future;
 use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
-use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
-use shuttle_common::backends::cache::CacheManager;
-use shuttle_common::backends::metrics::{Metrics, TraceLayer};
-use shuttle_common::backends::ClaimExt;
+use shuttle_backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
+use shuttle_backends::axum::CustomErrorPath;
+use shuttle_backends::cache::CacheManager;
+use shuttle_backends::metrics::{Metrics, TraceLayer};
+use shuttle_backends::project_name::ProjectName;
+use shuttle_backends::request_span;
+use shuttle_backends::ClaimExt;
 use shuttle_common::claims::{Scope, EXP_MINUTES};
-use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::service;
-use shuttle_common::models::{
-    admin::ProjectResponse,
-    project::{self, ProjectName},
-    stats,
-};
-use shuttle_common::{deployment, request_span, VersionInfo};
+use shuttle_common::models::{admin::ProjectResponse, project, stats};
+use shuttle_common::{deployment, VersionInfo};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
@@ -132,7 +130,7 @@ async fn check_project_name(
 
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
-    User { name, .. }: User,
+    User { id: name, .. }: User,
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
     let limit = limit.unwrap_or(u32::MAX);
@@ -157,7 +155,7 @@ async fn create_project(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
-    User { name, claim, .. }: User,
+    User { id, claim, .. }: User,
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
@@ -166,7 +164,7 @@ async fn create_project(
     // Check that the user is within their project limits.
     let can_create_project = claim.can_create_project(
         service
-            .get_project_count(&name)
+            .get_project_count(&id)
             .await?
             .saturating_sub(is_cch_project as u32),
     );
@@ -178,7 +176,7 @@ async fn create_project(
     let project = service
         .create_project(
             project_name.clone(),
-            name.clone(),
+            &id,
             claim.is_admin(),
             can_create_project,
             if is_cch_project {
@@ -393,10 +391,10 @@ async fn override_create_service(
     scoped_user: ScopedUser,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    let account_name = scoped_user.user.claim.sub.clone();
+    let user_id = scoped_user.user.claim.sub.clone();
     let posthog_client = state.posthog_client.clone();
     tokio::spawn(async move {
-        let event = async_posthog::Event::new("shuttle_api_start_deployment", &account_name);
+        let event = async_posthog::Event::new("shuttle_api_start_deployment", &user_id);
 
         if let Err(err) = posthog_client.capture(event).await {
             error!(
@@ -466,7 +464,7 @@ async fn route_project(
         .await?
         .0;
     service
-        .route(&project.state, &project_name, &scoped_user.user.name, req)
+        .route(&project.state, &project_name, &scoped_user.user.id, req)
         .await
 }
 
@@ -811,6 +809,7 @@ pub(crate) struct RouterState {
     pub posthog_client: async_posthog::Client,
 }
 
+#[derive(Default)]
 pub struct ApiBuilder {
     router: Router<RouterState>,
     service: Option<Arc<GatewayService>>,
@@ -819,21 +818,9 @@ pub struct ApiBuilder {
     bind: Option<SocketAddr>,
 }
 
-impl Default for ApiBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ApiBuilder {
     pub fn new() -> Self {
-        Self {
-            router: Router::new(),
-            service: None,
-            sender: None,
-            posthog_client: None,
-            bind: None,
-        }
+        Self::default()
     }
 
     pub fn with_acme(mut self, acme: AcmeClient, resolver: Arc<GatewayCertResolver>) -> Self {
@@ -894,9 +881,9 @@ impl ApiBuilder {
             TraceLayer::new(|request| {
                 request_span!(
                     request,
-                    account.name = field::Empty,
+                    account.user_id = field::Empty,
                     request.params.project_name = field::Empty,
-                    request.params.account_name = field::Empty,
+                    request.params.user_id = field::Empty,
                 )
             })
             .with_propagation()
@@ -1024,6 +1011,7 @@ pub mod tests {
     use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
+    use shuttle_backends::test_utils::gateway::PermissionsMock;
     use shuttle_common::claims::AccountTier;
     use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
     use test_context::test_context;
@@ -1041,7 +1029,15 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let service = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let (sender, mut receiver) = channel::<BoxedTask>(256);
         tokio::spawn(async move {
@@ -1223,7 +1219,15 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_project_limits() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let service = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let (sender, mut receiver) = channel::<BoxedTask>(256);
         tokio::spawn(async move {
@@ -1547,9 +1551,14 @@ pub mod tests {
     async fn status() {
         let world = World::new().await;
         let service = Arc::new(
-            GatewayService::init(world.args(), world.pool(), "".into())
-                .await
-                .unwrap(),
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
         );
 
         let (sender, mut receiver) = channel::<BoxedTask>(1);

@@ -21,10 +21,13 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
+use shuttle_backends::client::PermissionsDal;
+use shuttle_backends::headers::XShuttleAdminSecret;
+use shuttle_backends::project_name::ProjectName;
 use shuttle_common::claims::AccountTier;
 use shuttle_common::constants::SHUTTLE_IDLE_DOCS_URL;
-use shuttle_common::models::project::{ProjectName, State};
+use shuttle_common::models::project::State;
+use shuttle_common::models::user::UserId;
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
@@ -45,7 +48,7 @@ use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::ChainAndPrivateKey;
 use crate::worker::TaskRouter;
 use crate::{
-    AccountName, DockerContext, DockerStatsSource, Error, ErrorKind, ProjectDetails, AUTH_CLIENT,
+    DockerContext, DockerStatsSource, Error, ErrorKind, ProjectDetails, AUTH_CLIENT,
     DOCKER_STATS_PATH_CGROUP_V1, DOCKER_STATS_PATH_CGROUP_V2,
 };
 
@@ -60,6 +63,7 @@ impl From<SqlxError> for Error {
     }
 }
 
+#[derive(Default)]
 pub struct ContainerSettingsBuilder {
     prefix: Option<String>,
     image: Option<String>,
@@ -71,24 +75,9 @@ pub struct ContainerSettingsBuilder {
     extra_hosts: Option<Vec<String>>,
 }
 
-impl Default for ContainerSettingsBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ContainerSettingsBuilder {
     pub fn new() -> Self {
-        Self {
-            prefix: None,
-            image: None,
-            provisioner: None,
-            auth_uri: None,
-            resource_recorder_uri: None,
-            network_name: None,
-            fqdn: None,
-            extra_hosts: None,
-        }
+        Self::default()
     }
 
     pub async fn from_args(self, args: &ContextArgs) -> ContainerSettings {
@@ -202,6 +191,7 @@ pub struct GatewayService {
     db: SqlitePool,
     task_router: TaskRouter,
     pub state_location: PathBuf,
+    pub permit_client: Box<dyn PermissionsDal + Send + Sync>,
 
     /// Maximum number of containers the gateway can start before blocking cch projects
     cch_container_limit: u32,
@@ -224,6 +214,7 @@ impl GatewayService {
         args: ContextArgs,
         db: SqlitePool,
         state_location: PathBuf,
+        permit_client: Box<dyn PermissionsDal + Send + Sync>,
     ) -> io::Result<Self> {
         let docker_stats_path_v1 = PathBuf::from_str(DOCKER_STATS_PATH_CGROUP_V1)
             .expect("to parse docker stats path for cgroup v1");
@@ -272,6 +263,7 @@ impl GatewayService {
             db,
             task_router,
             state_location,
+            permit_client,
             provisioner_host: Endpoint::new(format!("http://{}:8000", args.provisioner_host))
                 .expect("to have a valid provisioner endpoint"),
             auth_host: args.auth_uri,
@@ -285,7 +277,7 @@ impl GatewayService {
         &self,
         project: &Project,
         project_name: &ProjectName,
-        account_name: &AccountName,
+        user_id: &UserId,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
         let target_ip = project
@@ -299,8 +291,9 @@ impl GatewayService {
         let control_key = self.control_key_from_project_name(project_name).await?;
 
         let headers = req.headers_mut();
-        headers.typed_insert(XShuttleAccountName(account_name.to_string()));
         headers.typed_insert(XShuttleAdminSecret(control_key));
+        // deprecated, used for soft backward compatibility
+        headers.insert("x-shuttle-account-name", user_id.parse().unwrap());
 
         let cx = Span::current().context();
         global::get_text_map_propagator(|propagator| {
@@ -317,24 +310,24 @@ impl GatewayService {
 
     pub async fn iter_projects(
         &self,
-    ) -> Result<impl ExactSizeIterator<Item = (ProjectName, AccountName)>, Error> {
-        let iter = query("SELECT project_name, account_name FROM projects")
+    ) -> Result<impl ExactSizeIterator<Item = (ProjectName, UserId)>, Error> {
+        let iter = query("SELECT project_name, user_id FROM projects")
             .fetch_all(&self.db)
             .await?
             .into_iter()
-            .map(|row| (row.get("project_name"), row.get("account_name")));
+            .map(|row| (row.get("project_name"), row.get("user_id")));
         Ok(iter)
     }
 
     /// Only get an iterator for the projects that are ready
     pub async fn iter_projects_ready(
         &self,
-    ) -> Result<impl ExactSizeIterator<Item = (ProjectName, AccountName)>, Error> {
-        let iter = query("SELECT project_name, account_name FROM projects, JSON_EACH(project_state) WHERE key = 'ready'")
+    ) -> Result<impl ExactSizeIterator<Item = (ProjectName, UserId)>, Error> {
+        let iter = query("SELECT project_name, user_id FROM projects, JSON_EACH(project_state) WHERE key = 'ready'")
             .fetch_all(&self.db)
             .await?
             .into_iter()
-            .map(|row| (row.get("project_name"), row.get("account_name")));
+            .map(|row| (row.get("project_name"), row.get("user_id")));
         Ok(iter)
     }
 
@@ -371,10 +364,7 @@ impl GatewayService {
         Ok(ready_count)
     }
 
-    pub async fn find_project(
-        &self,
-        project_name: &ProjectName,
-    ) -> Result<FindProjectPayload, Error> {
+    pub async fn find_project(&self, project_name: &str) -> Result<FindProjectPayload, Error> {
         query("SELECT project_id, project_state FROM projects WHERE project_name = ?1")
             .bind(project_name)
             .fetch_optional(&self.db)
@@ -409,16 +399,16 @@ impl GatewayService {
 
     pub async fn iter_user_projects_detailed(
         &self,
-        account_name: &AccountName,
+        user_id: &UserId,
         offset: u32,
         limit: u32,
     ) -> Result<impl Iterator<Item = (String, ProjectName, Project)>, Error> {
         let mut query = QueryBuilder::new(
-            "SELECT project_id, project_name, project_state FROM projects WHERE account_name = ",
+            "SELECT project_id, project_name, project_state FROM projects WHERE user_id = ",
         );
 
         query
-            .push_bind(account_name)
+            .push_bind(user_id)
             .push(" ORDER BY project_id DESC, project_name LIMIT ")
             .push_bind(limit);
 
@@ -472,15 +462,12 @@ impl GatewayService {
         Ok(())
     }
 
-    pub async fn account_name_from_project(
-        &self,
-        project_name: &ProjectName,
-    ) -> Result<AccountName, Error> {
-        query("SELECT account_name FROM projects WHERE project_name = ?1")
+    pub async fn user_id_from_project(&self, project_name: &ProjectName) -> Result<UserId, Error> {
+        query("SELECT user_id FROM projects WHERE project_name = ?1")
             .bind(project_name)
             .fetch_optional(&self.db)
             .await?
-            .map(|row| row.get("account_name"))
+            .map(|row| row.get("user_id"))
             .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound(project_name.to_string())))
     }
 
@@ -499,10 +486,10 @@ impl GatewayService {
 
     pub async fn iter_user_projects(
         &self,
-        AccountName(account_name): &AccountName,
+        user_id: &UserId,
     ) -> Result<impl Iterator<Item = ProjectName>, Error> {
-        let iter = query("SELECT project_name FROM projects WHERE account_name = ?1")
-            .bind(account_name)
+        let iter = query("SELECT project_name FROM projects WHERE user_id = ?1")
+            .bind(user_id)
             .fetch_all(&self.db)
             .await?
             .into_iter()
@@ -513,21 +500,20 @@ impl GatewayService {
     pub async fn create_project(
         &self,
         project_name: ProjectName,
-        account_name: AccountName,
+        user_id: &UserId,
         is_admin: bool,
         can_create_project: bool,
         idle_minutes: u64,
     ) -> Result<FindProjectPayload, Error> {
         if let Some(row) = query(
             r#"
-        SELECT project_name, project_id, account_name, initial_key, project_state
-        FROM projects
-        WHERE (project_name = ?1)
-        AND (account_name = ?2 OR ?3)
-        "#,
+            SELECT project_id, project_state
+            FROM projects
+            WHERE (project_name = ?1) AND (user_id = ?2 OR ?3)
+            "#,
         )
         .bind(&project_name)
-        .bind(&account_name)
+        .bind(user_id)
         .bind(is_admin)
         .fetch_optional(&self.db)
         .await?
@@ -605,20 +591,19 @@ impl GatewayService {
             // Attempt to create a new one. This will fail
             // outright if the project already exists (this happens if
             // it belongs to another account).
-            self.insert_project(project_name, Ulid::new(), account_name, idle_minutes)
+            self.insert_project(project_name, Ulid::new(), user_id, idle_minutes)
                 .await
         } else {
             Err(Error::from_kind(ErrorKind::TooManyProjects))
         }
     }
 
-    pub async fn get_project_count(&self, account_name: &AccountName) -> Result<u32, Error> {
-        let proj_count: u32 =
-            query("SELECT COUNT(project_name) FROM projects WHERE account_name = ?1")
-                .bind(account_name)
-                .fetch_one(&self.db)
-                .await?
-                .get::<_, usize>(0);
+    pub async fn get_project_count(&self, user_id: &UserId) -> Result<u32, Error> {
+        let proj_count: u32 = query("SELECT COUNT(project_name) FROM projects WHERE user_id = ?1")
+            .bind(user_id)
+            .fetch_one(&self.db)
+            .await?
+            .get::<_, usize>(0);
 
         Ok(proj_count)
     }
@@ -627,7 +612,7 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         project_id: Ulid,
-        account_name: AccountName,
+        user_id: &UserId,
         idle_minutes: u64,
     ) -> Result<FindProjectPayload, Error> {
         let project = SqlxJson(Project::Creating(
@@ -638,13 +623,15 @@ impl GatewayService {
             ),
         ));
 
-        query("INSERT INTO projects (project_id, project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4, ?5)")
+        let mut transaction = self.db.begin().await?;
+        query("INSERT INTO projects (project_id, project_name, account_name, user_id, initial_key, project_state) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
             .bind(&project_id.to_string())
             .bind(&project_name)
-            .bind(&account_name)
+            .bind("")
+            .bind(user_id)
             .bind(project.initial_key().unwrap())
             .bind(&project)
-            .execute(&self.db)
+            .execute(&mut *transaction)
             .await
             .map_err(|err| {
                 // If the error is a broken PK constraint, this is a
@@ -657,6 +644,13 @@ impl GatewayService {
                 // Otherwise this is internal
                 err.into()
             })?;
+
+        self.permit_client
+            .create_project(user_id, &project_id.to_string())
+            .await
+            .map_err(|_| Error::from(ErrorKind::Internal))?;
+
+        transaction.commit().await?;
 
         let project = project.0;
 
@@ -676,7 +670,7 @@ impl GatewayService {
         let mut transaction = self.db.begin().await?;
 
         query("DELETE FROM custom_domains WHERE project_id = ?1")
-            .bind(project_id)
+            .bind(&project_id)
             .execute(&mut *transaction)
             .await?;
 
@@ -684,6 +678,11 @@ impl GatewayService {
             .bind(project_name)
             .execute(&mut *transaction)
             .await?;
+
+        self.permit_client
+            .delete_project(&project_id)
+            .await
+            .map_err(|_| Error::from(ErrorKind::Internal))?;
 
         transaction.commit().await?;
 
@@ -772,13 +771,14 @@ impl GatewayService {
     pub async fn iter_projects_detailed(
         &self,
     ) -> Result<impl Iterator<Item = ProjectDetails>, Error> {
-        let iter = query("SELECT project_name, account_name FROM projects")
+        let iter = query("SELECT project_name, account_name, user_id FROM projects")
             .fetch_all(&self.db)
             .await?
             .into_iter()
             .map(|row| ProjectDetails {
                 project_name: row.try_get("project_name").unwrap(),
                 account_name: row.try_get("account_name").unwrap(),
+                user_id: row.try_get("user_id").unwrap(),
             });
         Ok(iter)
     }
@@ -1139,6 +1139,7 @@ pub struct FindProjectPayload {
 #[cfg(test)]
 pub mod tests {
     use fqdn::FQDN;
+    use shuttle_backends::test_utils::gateway::PermissionsMock;
 
     use super::*;
 
@@ -1147,15 +1148,24 @@ pub mod tests {
     use crate::{Error, ErrorKind};
 
     #[tokio::test]
-    async fn service_create_find_stop_delete_project() -> anyhow::Result<()> {
+    async fn service_create_find_stop_delete_project() {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
+        );
 
-        let neo: AccountName = "neo".parse().unwrap();
-        let trinity: AccountName = "trinity".parse().unwrap();
+        let neo: UserId = "neo".to_owned();
+        let trinity: UserId = "trinity".to_owned();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        let admin: AccountName = "admin".parse().unwrap();
+        let admin: UserId = "admin".to_owned();
 
         let creating_same_project_name = |project: &Project, project_name: &ProjectName| {
             matches!(
@@ -1165,7 +1175,7 @@ pub mod tests {
         };
 
         let project = svc
-            .create_project(matrix.clone(), neo.clone(), false, true, 0)
+            .create_project(matrix.clone(), &neo, false, true, 0)
             .await
             .unwrap();
 
@@ -1183,7 +1193,8 @@ pub mod tests {
                 .expect("to get one project with its user"),
             ProjectDetails {
                 project_name: matrix.clone(),
-                account_name: neo.clone(),
+                account_name: Some("".to_owned()),
+                user_id: neo.clone(),
             }
         );
         assert_eq!(
@@ -1197,14 +1208,14 @@ pub mod tests {
 
         // Test project pagination, first create 20 projects.
         for p in (0..20).map(|p| format!("matrix-{p}")) {
-            svc.create_project(p.parse().unwrap(), admin.clone(), true, true, 0)
+            svc.create_project(p.parse().unwrap(), &admin, true, true, 0)
                 .await
                 .unwrap();
         }
 
         // Creating a project with can_create_project set to false should fail.
         assert_eq!(
-            svc.create_project("final-one".parse().unwrap(), admin.clone(), false, false, 0)
+            svc.create_project("final-one".parse().unwrap(), &admin, false, false, 0)
                 .await
                 .err()
                 .unwrap()
@@ -1271,7 +1282,7 @@ pub mod tests {
 
         // If recreated by a different user
         assert!(matches!(
-            svc.create_project(matrix.clone(), trinity.clone(), false, true, 0)
+            svc.create_project(matrix.clone(), &trinity, false, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::ProjectAlreadyExists,
@@ -1281,7 +1292,7 @@ pub mod tests {
 
         // If recreated by the same user
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
+            svc.create_project(matrix.clone(), &neo, false, true, 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1291,7 +1302,7 @@ pub mod tests {
 
         // If recreated by the same user again while it's running
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
+            svc.create_project(matrix.clone(), &neo, false, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
@@ -1319,7 +1330,7 @@ pub mod tests {
 
         // If recreated by an admin
         assert!(matches!(
-            svc.create_project(matrix.clone(), admin.clone(), true, true, 0)
+            svc.create_project(matrix.clone(), &admin, true, true, 0)
                 .await,
             Ok(FindProjectPayload {
                 project_id: _,
@@ -1329,7 +1340,7 @@ pub mod tests {
 
         // If recreated by an admin again while it's running
         assert!(matches!(
-            svc.create_project(matrix.clone(), admin.clone(), true, true, 0)
+            svc.create_project(matrix.clone(), &admin, true, true, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::OwnProjectAlreadyExists(_),
@@ -1351,25 +1362,32 @@ pub mod tests {
 
         // It can be re-created by anyone, with the same project name
         assert!(matches!(
-            svc.create_project(matrix, trinity.clone(), false, true, 0)
-                .await,
+            svc.create_project(matrix, &trinity, false, true, 0).await,
             Ok(FindProjectPayload {
                 project_id: _,
                 state: Project::Creating(_),
             })
         ));
-        Ok(())
     }
 
     #[tokio::test]
-    async fn service_create_ready_kill_restart_docker() -> anyhow::Result<()> {
+    async fn service_create_ready_kill_restart_docker() {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
+        );
 
-        let neo: AccountName = "neo".parse().unwrap();
+        let neo: UserId = "neo".to_owned();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        svc.create_project(matrix.clone(), neo.clone(), false, true, 0)
+        svc.create_project(matrix.clone(), &neo, false, true, 0)
             .await
             .unwrap();
 
@@ -1409,16 +1427,23 @@ pub mod tests {
         let project = svc.find_project(&matrix).await.unwrap();
         println!("{:?}", project.state);
         assert!(project.state.is_ready());
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn service_create_find_custom_domain() -> anyhow::Result<()> {
+    async fn service_create_find_custom_domain() {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
+        );
 
-        let account: AccountName = "neo".parse().unwrap();
+        let account: UserId = "neo".to_owned();
         let project_name: ProjectName = "matrix".parse().unwrap();
         let domain: FQDN = "neo.the.matrix".parse().unwrap();
         let certificate = "dummy certificate";
@@ -1430,7 +1455,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, true, 0)
+            .create_project(project_name.clone(), &account, false, true, 0)
             .await
             .unwrap();
 
@@ -1463,16 +1488,23 @@ pub mod tests {
         assert_eq!(custom_domain.project_name, project_name);
         assert_eq!(custom_domain.certificate, certificate);
         assert_eq!(custom_domain.private_key, private_key);
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn service_create_custom_domain_destroy_recreate_project() -> anyhow::Result<()> {
+    async fn service_create_custom_domain_destroy_recreate_project() {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let svc = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
+        );
 
-        let account: AccountName = "neo".parse().unwrap();
+        let account: UserId = "neo".to_owned();
         let project_name: ProjectName = "matrix".parse().unwrap();
         let domain: FQDN = "neo.the.matrix".parse().unwrap();
         let certificate = "dummy certificate";
@@ -1484,7 +1516,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false, true, 0)
+            .create_project(project_name.clone(), &account, false, true, 0)
             .await
             .unwrap();
 
@@ -1502,12 +1534,10 @@ pub mod tests {
         assert!(matches!(work.poll(()).await, TaskResult::Done(())));
 
         let recreated_project = svc
-            .create_project(project_name.clone(), account.clone(), false, true, 0)
+            .create_project(project_name.clone(), &account, false, true, 0)
             .await
             .unwrap();
 
         assert!(matches!(recreated_project.state, Project::Creating(_)));
-
-        Ok(())
     }
 }

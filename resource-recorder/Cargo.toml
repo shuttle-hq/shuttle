@@ -1,12 +1,14 @@
 [package]
 name = "shuttle-resource-recorder"
-version = "0.41.0"
+version = "0.42.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish = false
 
 [dependencies]
-shuttle-common = { workspace = true, features = ["backend", "extract_propagation", "tonic", "sqlx"] }
+shuttle-backends = { workspace = true }
+shuttle-common = { workspace = true, features = ["extract_propagation", "tonic", "sqlx"] }
 shuttle-proto = { workspace = true, features = ["resource-recorder"] }
 
 async-trait = { workspace = true }
@@ -26,5 +28,5 @@ ulid = { workspace = true }
 portpicker = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
-shuttle-common = { workspace = true, features = ["test-utils"] }
+shuttle-backends = { workspace = true, features = ["test-utils"] }
 shuttle-common-tests = { workspace = true }

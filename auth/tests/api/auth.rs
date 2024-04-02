@@ -44,7 +44,7 @@ mod needs_docker {
         let claim = app.claim_from_response(response).await;
 
         // Verify the claim subject and tier matches the test user we created at the start of the test.
-        assert_eq!(claim.sub, "admin");
+        assert!(claim.sub.starts_with("user_"));
         assert_eq!(claim.tier, AccountTier::Admin);
         assert_eq!(claim.limits.project_limit(), 3);
 
@@ -64,7 +64,7 @@ mod needs_docker {
         let claim = app.claim_from_response(response).await;
 
         // Verify the claim subject and tier matches the test user we created at the start of the test.
-        assert_eq!(claim.sub, "admin");
+        assert!(claim.sub.starts_with("user_"));
         assert_eq!(claim.tier, AccountTier::Admin);
         assert_eq!(claim.limits.project_limit(), 3);
 
@@ -78,7 +78,7 @@ mod needs_docker {
         let claim = app.claim_from_response(response).await;
 
         // Verify the claim subject and tier matches the admin user.
-        assert_eq!(claim.sub, "test-user-basic");
+        assert!(claim.sub.starts_with("user_"));
         assert_eq!(claim.tier, AccountTier::Basic);
         assert_eq!(claim.limits.project_limit(), 3);
     }

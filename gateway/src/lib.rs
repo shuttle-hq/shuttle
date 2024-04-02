@@ -6,7 +6,6 @@ use std::error::Error as StdError;
 use std::fmt::Formatter;
 use std::io;
 use std::pin::Pin;
-use std::str::FromStr;
 
 use acme::AcmeClientError;
 
@@ -17,10 +16,10 @@ use futures::prelude::*;
 use hyper::client::HttpConnector;
 use hyper::Client;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
+use shuttle_backends::project_name::ProjectName;
 use shuttle_common::models::error::{ApiError, ErrorKind};
-use shuttle_common::models::project::ProjectName;
+use shuttle_common::models::user::UserId;
 use strum::Display;
 use tokio::sync::mpsc::error::SendError;
 
@@ -139,46 +138,19 @@ impl std::fmt::Display for Error {
 
 impl StdError for Error {}
 
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
-#[sqlx(transparent)]
-pub struct AccountName(String);
-
-impl FromStr for AccountName {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_string()))
-    }
-}
-
-impl std::fmt::Display for AccountName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl<'de> Deserialize<'de> for AccountName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(|_err| todo!())
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectDetails {
     pub project_name: ProjectName,
-    pub account_name: AccountName,
+    pub account_name: Option<String>,
+    pub user_id: UserId,
 }
 
 impl From<ProjectDetails> for shuttle_common::models::admin::ProjectResponse {
     fn from(project: ProjectDetails) -> Self {
         Self {
             project_name: project.project_name.to_string(),
-            account_name: project.account_name.to_string(),
+            account_name: project.account_name.unwrap_or_default(),
+            user_id: project.user_id,
         }
     }
 }
@@ -295,11 +267,12 @@ pub mod tests {
     use jsonwebtoken::EncodingKey;
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
-    use shuttle_common::backends::auth::ConvertResponse;
+    use shuttle_backends::auth::ConvertResponse;
+    use shuttle_backends::test_utils::gateway::PermissionsMock;
+    use shuttle_backends::test_utils::resource_recorder::get_mocked_resource_recorder;
     use shuttle_common::claims::{AccountTier, Claim};
     use shuttle_common::models::deployment::DeploymentRequest;
     use shuttle_common::models::{project, service};
-    use shuttle_proto::test_utils::resource_recorder::get_mocked_resource_recorder;
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::{query, SqlitePool};
     use test_context::AsyncTestContext;
@@ -598,6 +571,10 @@ pub mod tests {
                     cch_container_limit: 1,
                     soft_container_limit: 2,
                     hard_container_limit: 3,
+                    permit_api_uri: Default::default(), // TODO: will need mock?
+                    permit_pdp_uri: Default::default(), // TODO: will need mock?
+                    permit_env: Default::default(),     // TODO: will need mock?
+                    permit_api_key: Default::default(), // TODO: will need mock?
 
                     // Allow access to the auth on the host
                     extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],
@@ -677,9 +654,14 @@ pub mod tests {
         /// Create a service and sender to handle tasks. Also starts up a worker to create actual Docker containers for all requests
         pub async fn service(&self) -> (Arc<GatewayService>, Sender<BoxedTask>) {
             let service = Arc::new(
-                GatewayService::init(self.args(), self.pool(), "".into())
-                    .await
-                    .unwrap(),
+                GatewayService::init(
+                    self.args(),
+                    self.pool(),
+                    "".into(),
+                    Box::<PermissionsMock>::default(),
+                )
+                .await
+                .unwrap(),
             );
             let worker = Worker::new();
 
@@ -1179,9 +1161,14 @@ pub mod tests {
     async fn end_to_end() {
         let world = World::new().await;
         let service = Arc::new(
-            GatewayService::init(world.args(), world.pool(), "".into())
-                .await
-                .unwrap(),
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
         );
         let worker = Worker::new();
 

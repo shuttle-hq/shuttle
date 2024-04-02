@@ -80,6 +80,20 @@ use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+// Returns the args and whether the PATH arg of the init command was explicitly given
+pub fn parse_args() -> (ShuttleArgs, bool) {
+    let matches = ShuttleArgs::command().get_matches();
+    let args =
+        ShuttleArgs::from_arg_matches(&matches).expect("args to already be parsed successfully");
+    let provided_path_to_init = matches
+        .subcommand_matches("init")
+        .is_some_and(|init_matches| {
+            init_matches.value_source("path") == Some(ValueSource::CommandLine)
+        });
+
+    (args, provided_path_to_init)
+}
+
 pub struct Shuttle {
     ctx: RequestContext,
     client: Option<Client>,
@@ -96,21 +110,6 @@ impl Shuttle {
             version_info: None,
             version_warnings: vec![],
         })
-    }
-
-    pub async fn parse_args_and_run(self) -> Result<CommandOutcome> {
-        // A hack to see if the PATH arg of the init command was explicitly given
-        let matches = ShuttleArgs::command().get_matches();
-        let args = ShuttleArgs::from_arg_matches(&matches)
-            .expect("args to already be parsed successfully");
-        let provided_path_to_init =
-            matches
-                .subcommand_matches("init")
-                .is_some_and(|init_matches| {
-                    init_matches.value_source("path") == Some(ValueSource::CommandLine)
-                });
-
-        self.run(args, provided_path_to_init).await
     }
 
     fn find_available_port(run_args: &mut RunArgs, services_len: usize) {
@@ -1035,26 +1034,30 @@ impl Shuttle {
         service: &BuiltService,
         idx: u16,
     ) -> Result<Option<(Child, runtime::Client)>> {
-        let secrets_path = run_args.secret_args.secrets.clone().unwrap_or_else(|| {
+        let secrets_file = run_args.secret_args.secrets.clone().or_else(|| {
             let crate_dir = service.crate_directory();
-            if crate_dir.join("Secrets.dev.toml").exists() {
-                crate_dir.join("Secrets.dev.toml")
-            } else {
-                crate_dir.join("Secrets.toml")
-            }
+            // Prioritise crate-local prod secrets over workspace dev secrets (in the rare case that both exist)
+            [
+                crate_dir.join("Secrets.dev.toml"),
+                crate_dir.join("Secrets.toml"),
+                service.workspace_path.join("Secrets.dev.toml"),
+                service.workspace_path.join("Secrets.toml"),
+            ]
+            .into_iter()
+            .find(|f| f.exists() && f.is_file())
         });
-        trace!("Loading secrets from {}", secrets_path.display());
-
-        let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)
-        {
-            let secrets: HashMap<String, String> =
-                secrets_str.parse::<toml::Value>()?.try_into()?;
-
-            trace!(keys = ?secrets.keys(), "available secrets");
-
-            secrets
+        let secrets = if let Some(secrets_file) = secrets_file {
+            trace!("Loading secrets from {}", secrets_file.display());
+            if let Ok(secrets_str) = read_to_string(secrets_file) {
+                let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
+                trace!(keys = ?secrets.keys(), "available secrets");
+                secrets
+            } else {
+                trace!("No secrets were loaded");
+                Default::default()
+            }
         } else {
-            trace!("No secrets were loaded");
+            trace!("No secrets file was found");
             Default::default()
         };
 
@@ -1672,7 +1675,7 @@ impl Shuttle {
             bail!(
                 r#"The project is too large - the limit is {} MB. \
                 Your project archive is {:.1} MB. \
-                Run with `RUST_LOG="cargo_shuttle=debug"` to see which files are being packed."#,
+                Run with `cargo shuttle --debug` to see which files are being packed."#,
                 CREATE_SERVICE_BODY_LIMIT / 1_000_000,
                 deployment_req.data.len() as f32 / 1_000_000f32,
             );

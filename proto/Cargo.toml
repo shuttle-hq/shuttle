@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-proto"
-version.workspace = true
+version = "0.42.0"
 edition.workspace = true
 license.workspace = true
 description = "Library for all the gRPC definitions used by shuttle"
@@ -22,13 +22,8 @@ tower = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 
-[dev-dependencies]
-test-context = { workspace = true }
-portpicker = { workspace = true }
-
 [features]
 default = []
-test-utils = ["portpicker"]
 
 logger = [
     "shuttle-common/service",
@@ -45,10 +40,4 @@ client = ["shuttle-common/claims", "tower"]
 logger-client = ["logger", "client", "http"]
 provisioner-client = ["provisioner", "client", "http"]
 runtime-client = ["runtime", "client", "anyhow", "tokio", "tracing"]
-resource-recorder-client = [
-    "resource-recorder",
-    "client",
-    "async-trait",
-    "http",
-    "shuttle-common/backend",
-]
+resource-recorder-client = ["resource-recorder", "client", "http"]

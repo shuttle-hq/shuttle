@@ -20,7 +20,6 @@ graph BT
     cargo-shuttle:::binary
     common
     codegen
-    e2e
     proto
     provisioner:::binary
     service
@@ -41,9 +40,6 @@ graph BT
     service --> codegen
     proto ---> common
     provisioner --> proto
-    e2e -.->|starts up| gateway
-    e2e -.->|starts up| auth
-    e2e -.->|calls| cargo-shuttle
     user -->|"features = ['codegen']"| service
 ```
 
@@ -65,17 +61,14 @@ and renewing SSL certificates through the acme client in the `gateway`.
   The redirect through `runtime` is to make it available under the prettier name of `shuttle_runtime::main`.
 - `runtime` contains the `alpha` runtime, which embeds a gRPC server and a `Loader` in a service with the `shuttle_runtime::main` macro.
   The gRPC server receives commands from `deployer` like `start` and `stop`.
-  The `Loader` sets up a tracing subscriber and provisions resources for the users service.
+  The `Loader` sets up a tracing subscriber and provisions resources for the user service.
 - `service` is where our special `Service` trait is defined.
   Anything implementing this `Service` can be loaded by the `deployer` and the local runner in `cargo-shuttle`.
-  The `service` library also defines the `ResourceBuilder` and `Factory` trais which are used in our codegen to provision resources.
-  The `service` library also contains the utilities we use for compiling users crates with `cargo`.
+  The `service` library also defines the `ResourceConfigBuilder` trait which is used in our codegen to provision resources.
+  The `service` library also contains the utilities we use for compiling user crates with `cargo`.
 - `proto` contains the gRPC server and client definitions to allow `deployer` to communicate with `provisioner`, and to allow the `deployer` and `cargo-shuttle` cli to communicate with the `alpha` runtime.
 - `resources` contains various implementations of `ResourceBuilder`, which are consumed in the `codegen` to provision resources.
-- `services` contains implementations of `Service` for common Rust web frameworks. Anything implementing `Service` can be deployed by shuttle.
-- `e2e` just contains tests which starts up the `deployer` in a container and then deploys services to it using `cargo-shuttle`.
-
-Lastly, the `user service` is not a folder in this repository, but is the user service that will be deployed by `deployer`.
+- `services` contains implementations of `Service` for common Rust web frameworks. Anything implementing `Service` can be deployed on Shuttle.
 
 ## Running Locally
 
@@ -228,12 +221,10 @@ cargo run -p cargo-shuttle -- --wd <path> --name <name> deploy
 
 #### Docker Desktop
 
-If using Docker Desktop on Linux, you might find adding this to your shell config useful to make `bollard` find the Docker socket:
+If using Docker Desktop on Unix, you might find adding this to your shell config useful to make `bollard` find the Docker socket:
 
 ```sh
-if which docker > /dev/null && [ $(docker context show) = "desktop-linux" ]; then
-  export DOCKER_HOST="unix://$HOME/.docker/desktop/docker.sock"
-fi
+export DOCKER_HOST="unix://$HOME/.docker/desktop/docker.sock"
 ```
 
 #### Using Podman instead of Docker
@@ -291,37 +282,24 @@ when retrieving a user, and when we'll verify the subscription validity.
 
 ## Running Tests
 
-Shuttle has reasonable test coverage - and we are working on improving this
-every day. We encourage PRs to come with tests. If you're not sure about
-what a test should look like, feel free to [get in touch](https://discord.gg/shuttle).
+Install `cargo-make`.
 
 To run the unit tests for a specific crate, from the root of the repository run:
 
 ```bash
 # replace <crate-name> with the name of the crate to test, e.g. `shuttle-common`
-cargo test -p <crate-name> --all-features --lib -- --nocapture
+cargo make test-member <crate-name>
 ```
+
+Integration tests are split between those that rely on Docker, and those who don't.
 
 To run the integration tests for a specific crate (if it has any), from the root of the repository run:
 
 ```bash
-# replace <crate-name> with the name of the crate to test, e.g. `cargo-shuttle`
-cargo test -p <crate-name> --all-features --test '*' -- --nocapture
-# To streamline and customize the integration tests for CI, bash scripts with these commands and
-# any crate-specific commands can be run with:
-./<folder>/integration.sh
-# and/or
-./<folder>/integration_docker.sh
-# Tests that need to start docker containers are separated for CI efficiency, and thus use scripts with `_docker` suffix.
+cargo make test-member-integration <crate-name>
+# tests that depend on Docker
+cargo make test-member-integration-docker <crate-name>
 ```
-
-To run the end-to-end (e2e) tests, from the root of the repository run:
-
-```bash
-make test
-```
-
-> Note: Running all the end-to-end tests may take a long time, so it is recommended to run individual tests shipped as part of each crate in the workspace first.
 
 ## Windows Considerations
 

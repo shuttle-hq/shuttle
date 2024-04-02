@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display};
 
-// use anyhow::Error;
 use async_trait::async_trait;
+use http::StatusCode;
 use permit_client_rs::{
     apis::{
         resource_instances_api::{create_resource_instance, delete_resource_instance},
@@ -147,8 +147,7 @@ impl PermissionsDal for Client {
     }
 
     async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
-        // TODO?: Ignore error if 409?
-        create_resource_instance(
+        if let Err(e) = create_resource_instance(
             &self.api,
             &self.proj_id,
             &self.env_id,
@@ -159,7 +158,18 @@ impl PermissionsDal for Client {
                 attributes: None,
             },
         )
-        .await?;
+        .await
+        {
+            // Early return all errors except 409's (project already exists)
+            let e: Error = e.into();
+            if let Error::ResponseError(ref re) = e {
+                if re.status != StatusCode::CONFLICT {
+                    return Err(e);
+                }
+            } else {
+                return Err(e);
+            }
+        }
 
         self.assign_resource_role(user_id, format!("Project:{project_id}"), "admin")
             .await?;

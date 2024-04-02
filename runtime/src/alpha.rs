@@ -268,7 +268,7 @@ where
         tokio::spawn(async move {
             // Note: The timeout is quite low as we are not actually provisioning resources after
             // sending the load response.
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::time::sleep(Duration::from_secs(180)).await;
             if !matches!(state.lock().unwrap().deref(), State::Running) {
                 println!("the runtime failed to enter the running state before timing out");
 

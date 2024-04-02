@@ -76,7 +76,7 @@ async fn sync_permit_projects(db: SqlitePool, args: SyncArgs) {
     );
 
     let projects: Vec<(String, String)> =
-        sqlx::query_as("SELECT user_id, project_id FROM projects GROUP BY user_id")
+        sqlx::query_as("SELECT user_id, project_id FROM projects")
             .fetch_all(&db)
             .await
             .unwrap();

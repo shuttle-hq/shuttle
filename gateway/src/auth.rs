@@ -4,7 +4,8 @@ use axum::extract::{FromRef, FromRequestParts, Path};
 use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
 use shuttle_backends::project_name::ProjectName;
-use shuttle_common::claims::{Claim, Scope};
+use shuttle_backends::ClaimExt;
+use shuttle_common::claims::Claim;
 use shuttle_common::models::error::InvalidProjectName;
 use shuttle_common::models::user::UserId;
 use tracing::{error, trace, Span};
@@ -82,7 +83,8 @@ where
         let RouterState { service, .. } = RouterState::from_ref(state);
 
         #[allow(clippy::blocks_in_if_conditions)]
-        if user.claim.scopes.contains(&Scope::Admin)
+        if user.claim.is_admin()
+            || user.claim.is_deployer()
             || service
                 .permit_client
                 .allowed(&user.id, &scope.to_string(), "develop") // TODO?: make this configurable per endpoint?

@@ -90,7 +90,6 @@ mod needs_docker {
             let client = Client::new(
                 api_url.to_owned(),
                 PDP.get().unwrap().uri.clone(),
-                // "http://localhost:19716".to_owned(),
                 "default".to_owned(),
                 std::env::var("PERMIT_ENV").unwrap_or_else(|_| "testing".to_owned()),
                 api_key,
@@ -100,8 +99,6 @@ mod needs_docker {
 
             Wrap(client)
         }
-
-        async fn teardown(self) {}
     }
 
     #[test_context(Wrap)]

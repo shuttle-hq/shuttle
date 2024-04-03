@@ -16,7 +16,6 @@ use axum::Json;
 use chrono::{SecondsFormat, Utc};
 use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
-use shuttle_common::log::LogMode;
 use shuttle_service::builder::clean_crate;
 use tracing::{error, field, info, info_span, instrument, trace, warn};
 use ulid::Ulid;
@@ -58,8 +57,8 @@ pub struct PaginationDetails {
 
 #[derive(Deserialize)]
 struct LogSize {
-    mode: Option<LogMode>,
-    len: Option<u32>,
+    head: Option<u32>,
+    tail: Option<u32>,
 }
 #[derive(Clone)]
 pub struct RouterBuilder {
@@ -465,21 +464,12 @@ pub async fn get_logs(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
-    Query(LogSize { mode, len }): Query<LogSize>,
+    Query(LogSize { head, tail }): Query<LogSize>,
 ) -> Result<Json<Vec<LogItem>>> {
-    let len = len.unwrap_or(0);
-    let mode: String = match mode {
-        Some(temp) => match temp {
-            LogMode::Head => "head".to_string(),
-            LogMode::Tail => "tail".to_string(),
-            _ => "all".to_string(),
-        },
-        None => "all".to_string(),
-    };
     let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),
-        mode,
-        len,
+        head,
+        tail,
     });
 
     logs_request.extensions_mut().insert(claim);
@@ -507,20 +497,11 @@ pub async fn get_logs_subscribe(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
-    Query(LogSize { mode, len }): Query<LogSize>,
+    Query(LogSize { head, tail }): Query<LogSize>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    let len = len.unwrap_or(0);
-    let mode = match mode {
-        Some(temp) => match temp {
-            LogMode::Head => "head",
-            LogMode::Tail => "tail",
-            _ => "all",
-        },
-        None => "all",
-    };
     ws_upgrade.on_upgrade(move |s| {
-        logs_websocket_handler(s, deployment_manager, deployment_id, mode, len, claim)
+        logs_websocket_handler(s, deployment_manager, deployment_id, head, tail, claim)
     })
 }
 
@@ -528,14 +509,14 @@ async fn logs_websocket_handler(
     mut s: WebSocket,
     deployment_manager: DeploymentManager,
     deployment_id: Uuid,
-    mode: &str,
-    len: u32,
+    head: Option<u32>,
+    tail: Option<u32>,
     claim: Claim,
 ) {
     let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),
-        mode: mode.to_string(),
-        len,
+        head,
+        tail,
     });
 
     logs_request.extensions_mut().insert(claim);

@@ -3,6 +3,7 @@ use std::time::{Duration, SystemTime};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use prost_types::Timestamp;
+use shuttle_common::log::LogMode;
 use shuttle_proto::logger::{LogItem, LogLine};
 use sqlx::{
     migrate::Migrator,
@@ -30,8 +31,8 @@ pub trait Dal {
     async fn get_logs(
         &self,
         deployment_id: String,
-        mode: String,
-        len: u32,
+        head: Option<u32>,
+        tail: Option<u32>,
     ) -> Result<Vec<Log>, DalError>;
 }
 
@@ -131,25 +132,32 @@ impl Dal for Postgres {
     async fn get_logs(
         &self,
         deployment_id: String,
-        mode: String,
-        len: u32,
+        head: Option<u32>,
+        tail: Option<u32>,
     ) -> Result<Vec<Log>, DalError> {
-        let result = match mode.as_str() {
-            "head" => {
+        let (mode, len) = match (head, tail) {
+            (Some(len), None) => (LogMode::Head, len),
+            (None, Some(len)) => (LogMode::Tail, len),
+            (None, None) => (LogMode::All, 0),
+            _ => (LogMode::Tail, 1000),
+        };
+
+        let result = match mode {
+            LogMode ::Head => {
                 sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp limit $2")
                     .bind(deployment_id)
                     .bind(len as i64)
                     .fetch_all(&self.pool)
                     .await?
             }
-            "tail" => {
+            LogMode::Tail => {
                 sqlx::query_as("SELECT * FROM (SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp DESC limit $2) AS TAIL_TABLE ORDER BY tx_timestamp")
                     .bind(deployment_id)
                     .bind(len as i64)
                     .fetch_all(&self.pool)
                     .await?
             }
-            _ => {
+            LogMode::All => {
                 sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp")
                     .bind(deployment_id)
                     .fetch_all(&self.pool)

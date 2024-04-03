@@ -182,14 +182,11 @@ impl Client {
         mode: LogMode,
         len: u32,
     ) -> Result<Vec<LogItem>> {
-        let path = match mode {
-            LogMode::Head => {
-                format!("/projects/{project}/deployments/{deployment_id}/logs?mode=head&len={len}")
-            }
-            LogMode::Tail => {
-                format!("/projects/{project}/deployments/{deployment_id}/logs?mode=tail&len={len}")
-            }
-            LogMode::All => format!("/projects/{project}/deployments/{deployment_id}/logs"),
+        let mut path = format!("/projects/{project}/deployments/{deployment_id}/logs");
+        match mode {
+            LogMode::Head => path = format!("{path}?head={len}"),
+            LogMode::Tail => path = format!("{path}?tail={len}"),
+            _ => {}
         };
 
         self.get(path)
@@ -204,14 +201,11 @@ impl Client {
         mode: LogMode,
         len: u32,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        let path = match mode {
-            LogMode::Head => {
-                format!("/projects/{project}/deployments/{deployment_id}/logs?mode=head&len={len}")
-            }
-            LogMode::Tail => {
-                format!("/projects/{project}/deployments/{deployment_id}/logs?mode=tail&len={len}")
-            }
-            LogMode::All => format!("/projects/{project}/deployments/{deployment_id}/logs"),
+        let mut path = format!("/projects/{project}/deployments/{deployment_id}/logs");
+        match mode {
+            LogMode::Head => path = format!("{path}?head={len}"),
+            LogMode::Tail => path = format!("{path}?tail={len}"),
+            _ => {}
         };
 
         self.ws_get(path).await

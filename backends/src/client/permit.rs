@@ -24,6 +24,7 @@ use permit_pdp_client_rs::{
     },
     models::{AuthorizationQuery, Resource, User, UserPermissionsQuery, UserPermissionsResult},
 };
+use serde::{Deserialize, Serialize};
 use shuttle_common::claims::AccountTier;
 
 #[async_trait]
@@ -50,7 +51,14 @@ pub trait PermissionsDal {
 
     // Organization management
 
-    ////// TODO
+    /// Creates a Organization resource and assigns the user as admin for that project
+    async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<(), Error>;
+
+    /// Deletes an Organization resource
+    async fn delete_organization(&self, org_id: &str) -> Result<(), Error>;
+
+    /// Get a list of all the organizations a user has access to
+    async fn get_organizations(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error>;
 
     // Permissions queries
 
@@ -58,6 +66,17 @@ pub trait PermissionsDal {
     async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error>;
     /// Check if user can perform action on this project
     async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool, Error>;
+}
+
+/// An organization can have multiple projects and users. Users that are members of an organization have access to all
+/// projects within that organization.
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
+pub struct Organization {
+    /// Unique identifier for the organization. Should be `org_{ulid}`
+    pub id: String,
+
+    /// The name used to display the organization in the UI
+    pub display_name: String,
 }
 
 /// Wrapper for the Permit.io API and PDP (Policy decision point) API
@@ -231,6 +250,67 @@ impl PermissionsDal for Client {
         .await?;
 
         Ok(res.allow.unwrap_or_default())
+    }
+
+    async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<(), Error> {
+        if let Err(e) = create_resource_instance(
+            &self.api,
+            &self.proj_id,
+            &self.env_id,
+            ResourceInstanceCreate {
+                key: org.id.to_owned(),
+                tenant: "default".to_owned(),
+                resource: "Organization".to_owned(),
+                attributes: serde_json::to_value(org).ok(),
+            },
+        )
+        .await
+        {
+            // Early return all errors except 409's (project already exists)
+            let e: Error = e.into();
+            if let Error::ResponseError(ref re) = e {
+                if re.status != StatusCode::CONFLICT {
+                    return Err(e);
+                }
+            } else {
+                return Err(e);
+            }
+        }
+
+        self.assign_resource_role(user_id, format!("Organization:{}", org.id), "admin")
+            .await?;
+
+        Ok(())
+    }
+
+    async fn delete_organization(&self, org_id: &str) -> Result<(), Error> {
+        Ok(delete_resource_instance(
+            &self.api,
+            &self.proj_id,
+            &self.env_id,
+            format!("Organization:{org_id}").as_str(),
+        )
+        .await?)
+    }
+
+    async fn get_organizations(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error> {
+        let perms = get_user_permissions_user_permissions_post(
+            &self.pdp,
+            UserPermissionsQuery {
+                user: Box::new(User {
+                    key: user_id.to_owned(),
+                    ..Default::default()
+                }),
+                resource_types: Some(vec!["Organization".to_owned()]),
+                tenants: Some(vec!["default".to_owned()]),
+                ..Default::default()
+            },
+            None,
+            None,
+        )
+        .await?;
+
+        Ok(perms.into_values().collect())
     }
 }
 

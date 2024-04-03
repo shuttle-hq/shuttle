@@ -6,9 +6,10 @@ mod needs_docker {
         resource_instances_api::{delete_resource_instance, list_resource_instances},
         users_api::list_users,
     };
+    use serde_json::json;
     use serial_test::serial;
     use shuttle_backends::client::{
-        permit::{Client, Error, ResponseContent},
+        permit::{Client, Error, Organization, ResponseContent},
         PermissionsDal,
     };
     use shuttle_common::claims::AccountTier;
@@ -198,5 +199,47 @@ mod needs_docker {
         let p2 = client.get_user_projects(u2).await.unwrap();
 
         assert!(p2.is_empty());
+    }
+
+    #[test_context(Wrap)]
+    #[tokio::test]
+    #[serial]
+    async fn test_organizations(Wrap(client): &mut Wrap) {
+        let u1 = "user1";
+        let u2 = "user2";
+        client.new_user(u1).await.unwrap();
+        client.new_user(u2).await.unwrap();
+
+        const SLEEP: u64 = 500;
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
+
+        let org = Organization {
+            id: "org_123".to_string(),
+            display_name: "Test organization".to_string(),
+        };
+
+        client.create_organization(u1, &org).await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
+        let o1 = client.get_organizations(u1).await.unwrap();
+
+        assert_eq!(o1.len(), 1);
+        assert_eq!(o1[0].resource.as_ref().unwrap().key, "org_123");
+        assert_eq!(
+            o1[0]
+                .resource
+                .as_ref()
+                .unwrap()
+                .attributes
+                .as_ref()
+                .unwrap(),
+            &json!({ "display_name": "Test organization", "id": "org_123" })
+        );
+
+        client.delete_organization("org_123").await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
+        let o1 = client.get_organizations(u1).await.unwrap();
+
+        assert_eq!(o1.len(), 0);
     }
 }

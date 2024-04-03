@@ -130,18 +130,13 @@ async fn check_project_name(
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
     User { id, .. }: User,
-    Query(PaginationDetails { limit, .. }): Query<PaginationDetails>,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
-    let limit = limit.unwrap_or(u32::MAX);
-
     let mut projects = vec![];
     for p in service
         .permit_client
         .get_user_projects(&id)
         .await
         .map_err(|_| Error::from(ErrorKind::Internal))?
-        .into_iter()
-        .take(limit as usize)
     {
         let proj_id = p.resource.expect("project resource").key;
         let project = service.find_project_by_id(&proj_id).await?;
@@ -155,6 +150,8 @@ async fn get_projects_list(
         };
         projects.push(response);
     }
+    // sort by descending id
+    projects.sort_by(|p1, p2| p2.id.cmp(&p1.id));
 
     Ok(AxumJson(projects))
 }

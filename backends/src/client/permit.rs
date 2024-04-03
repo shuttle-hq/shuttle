@@ -4,12 +4,16 @@ use async_trait::async_trait;
 use http::StatusCode;
 use permit_client_rs::{
     apis::{
+        relationship_tuples_api::{
+            create_relationship_tuple, delete_relationship_tuple, list_relationship_tuples,
+        },
         resource_instances_api::{create_resource_instance, delete_resource_instance},
         role_assignments_api::{assign_role, unassign_role},
         users_api::{create_user, delete_user, get_user},
         Error as PermitClientError,
     },
     models::{
+        RelationshipTupleCreate, RelationshipTupleDelete, RelationshipTupleRead,
         ResourceInstanceCreate, RoleAssignmentCreate, RoleAssignmentRemove, UserCreate, UserRead,
     },
 };
@@ -55,10 +59,33 @@ pub trait PermissionsDal {
     async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<(), Error>;
 
     /// Deletes an Organization resource
-    async fn delete_organization(&self, org_id: &str) -> Result<(), Error>;
+    async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<(), Error>;
 
     /// Get a list of all the organizations a user has access to
     async fn get_organizations(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error>;
+
+    /// Get a list of all projects that belong to an organization
+    async fn get_organization_projects(
+        &self,
+        user_id: &str,
+        org_id: &str,
+    ) -> Result<Vec<RelationshipTupleRead>, Error>;
+
+    /// Transfers a project from a users to the organization
+    async fn transfer_project_to_org(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        org_id: &str,
+    ) -> Result<(), Error>;
+
+    /// Transfers a project from an organization to a user
+    async fn transfer_project_from_org(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        org_id: &str,
+    ) -> Result<(), Error>;
 
     // Permissions queries
 
@@ -253,6 +280,24 @@ impl PermissionsDal for Client {
     }
 
     async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<(), Error> {
+        if !self.allowed_org(user_id, &org.id, "create").await? {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::FORBIDDEN,
+                content:
+                    "User does not have permission to create organization. Are you a pro user?"
+                        .to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
+        if !self.get_organizations(user_id).await?.is_empty() {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::BAD_REQUEST,
+                content: "User already has an organization".to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
         if let Err(e) = create_resource_instance(
             &self.api,
             &self.proj_id,
@@ -283,12 +328,60 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
-    async fn delete_organization(&self, org_id: &str) -> Result<(), Error> {
+    async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<(), Error> {
+        if !self.allowed_org(user_id, &org_id, "manage").await? {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::FORBIDDEN,
+                content: "User does not have permission to delete the organization".to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
+        let projects = self.get_organization_projects(user_id, org_id).await?;
+
+        if !projects.is_empty() {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::BAD_REQUEST,
+                content: "Organization still has projects".to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
         Ok(delete_resource_instance(
             &self.api,
             &self.proj_id,
             &self.env_id,
             format!("Organization:{org_id}").as_str(),
+        )
+        .await?)
+    }
+
+    async fn get_organization_projects(
+        &self,
+        user_id: &str,
+        org_id: &str,
+    ) -> Result<Vec<RelationshipTupleRead>, Error> {
+        if !self.allowed_org(user_id, &org_id, "view").await? {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::FORBIDDEN,
+                content: "User does not have permission to delete the organization".to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
+        Ok(list_relationship_tuples(
+            &self.api,
+            &self.proj_id,
+            &self.env_id,
+            Some(true),
+            None,
+            None,
+            Some("default"),
+            Some(&format!("Organization:{org_id}")),
+            Some("parent"),
+            None,
+            Some("Project"),
+            None,
         )
         .await?)
     }
@@ -311,6 +404,60 @@ impl PermissionsDal for Client {
         .await?;
 
         Ok(perms.into_values().collect())
+    }
+
+    async fn transfer_project_to_org(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        org_id: &str,
+    ) -> Result<(), Error> {
+        if !self.allowed_org(user_id, &org_id, "manage").await? {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::FORBIDDEN,
+                content: "User does not have permission to modify the organization".to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
+        self.unassign_resource_role(user_id, format!("Project:{project_id}"), "admin")
+            .await?;
+
+        self.assign_relationship(
+            format!("Organization:{org_id}"),
+            "parent",
+            format!("Project:{project_id}"),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn transfer_project_from_org(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        org_id: &str,
+    ) -> Result<(), Error> {
+        if !self.allowed_org(user_id, &org_id, "manage").await? {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::FORBIDDEN,
+                content: "User does not have permission to modify the organization".to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
+        self.assign_resource_role(user_id, format!("Project:{project_id}"), "admin")
+            .await?;
+
+        self.unassign_relationship(
+            format!("Organization:{org_id}"),
+            "parent",
+            format!("Project:{project_id}"),
+        )
+        .await?;
+
+        Ok(())
     }
 }
 
@@ -557,7 +704,7 @@ impl Client {
         Ok(())
     }
 
-    async fn _unassign_resource_role(
+    async fn unassign_resource_role(
         &self,
         user_id: &str,
         resource_instance: String,
@@ -572,6 +719,75 @@ impl Client {
                 tenant: Some("default".to_owned()),
                 resource_instance: Some(resource_instance),
                 user: user_id.to_owned(),
+            },
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn allowed_org(&self, user_id: &str, org_id: &str, action: &str) -> Result<bool, Error> {
+        // NOTE: This API function was modified in upstream to use AuthorizationQuery
+        let res = is_allowed_allowed_post(
+            &self.pdp,
+            AuthorizationQuery {
+                user: Box::new(User {
+                    key: user_id.to_owned(),
+                    ..Default::default()
+                }),
+                action: action.to_owned(),
+                resource: Box::new(Resource {
+                    r#type: "Organization".to_string(),
+                    key: Some(org_id.to_owned()),
+                    tenant: Some("default".to_owned()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            None,
+            None,
+        )
+        .await?;
+
+        Ok(res.allow.unwrap_or_default())
+    }
+
+    async fn assign_relationship(
+        &self,
+        subject: String,
+        role: &str,
+        object: String,
+    ) -> Result<(), Error> {
+        create_relationship_tuple(
+            &self.api,
+            &self.proj_id,
+            &self.env_id,
+            RelationshipTupleCreate {
+                relation: role.to_owned(),
+                tenant: Some("default".to_owned()),
+                subject,
+                object,
+            },
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn unassign_relationship(
+        &self,
+        subject: String,
+        role: &str,
+        object: String,
+    ) -> Result<(), Error> {
+        delete_relationship_tuple(
+            &self.api,
+            &self.proj_id,
+            &self.env_id,
+            RelationshipTupleDelete {
+                relation: role.to_owned(),
+                subject,
+                object,
             },
         )
         .await?;

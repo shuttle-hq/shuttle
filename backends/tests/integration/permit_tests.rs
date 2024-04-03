@@ -205,8 +205,8 @@ mod needs_docker {
     #[tokio::test]
     #[serial]
     async fn test_organizations(Wrap(client): &mut Wrap) {
-        let u1 = "user1";
-        let u2 = "user2";
+        let u1 = "user-o-1";
+        let u2 = "user-o-2";
         client.new_user(u1).await.unwrap();
         client.new_user(u2).await.unwrap();
 
@@ -218,6 +218,15 @@ mod needs_docker {
             id: "org_123".to_string(),
             display_name: "Test organization".to_string(),
         };
+
+        let err = client.create_organization(u1, &org).await.unwrap_err();
+        assert!(
+            matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
+            "Only Pro users can create organizations"
+        );
+
+        client.make_pro(u1).await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
 
         client.create_organization(u1, &org).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
@@ -236,7 +245,95 @@ mod needs_docker {
             &json!({ "display_name": "Test organization", "id": "org_123" })
         );
 
-        client.delete_organization("org_123").await.unwrap();
+        let err = client
+            .create_organization(
+                u1,
+                &Organization {
+                    id: "org_987".to_string(),
+                    display_name: "Second organization".to_string(),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::BAD_REQUEST),
+            "User cannot create more than one organization"
+        );
+
+        client.create_project(u1, "proj-o-1").await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
+        let p1 = client.get_user_projects(u1).await.unwrap();
+
+        assert_eq!(p1.len(), 1);
+        assert_eq!(p1[0].resource.as_ref().unwrap().key, "proj-o-1");
+
+        client
+            .transfer_project_to_org(u1, "proj-o-1", "org_123")
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
+        let p1 = client.get_user_projects(u1).await.unwrap();
+
+        assert_eq!(p1.len(), 1);
+        assert_eq!(p1[0].resource.as_ref().unwrap().key, "proj-o-1");
+
+        client.create_project(u2, "proj-o-2").await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
+        let p2 = client.get_user_projects(u2).await.unwrap();
+
+        assert_eq!(p2.len(), 1);
+        assert_eq!(p2[0].resource.as_ref().unwrap().key, "proj-o-2");
+
+        let err = client
+            .transfer_project_to_org(u2, "proj-o-2", "org_123")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
+            "Cannot transfer to organization that user is not admin of"
+        );
+
+        let err = client
+            .transfer_project_to_org(u1, "proj-o-2", "org_123")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::NOT_FOUND),
+            "Cannot transfer a project that user does not own"
+        );
+
+        let err = client.delete_organization(u1, "org_123").await.unwrap_err();
+        assert!(
+            matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::BAD_REQUEST),
+            "Cannot delete organization with projects in it"
+        );
+
+        let err = client
+            .transfer_project_from_org(u2, "proj-o-1", "org_123")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
+            "Cannot transfer from organization that user is not admin of"
+        );
+
+        client
+            .transfer_project_from_org(u1, "proj-o-1", "org_123")
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
+        let p1 = client.get_user_projects(u1).await.unwrap();
+
+        assert_eq!(p1.len(), 1);
+        assert_eq!(p1[0].resource.as_ref().unwrap().key, "proj-o-1");
+
+        let err = client.delete_organization(u2, "org_123").await.unwrap_err();
+        assert!(
+            matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
+            "Cannot delete organization that user does not own"
+        );
+
+        client.delete_organization(u1, "org_123").await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
         let o1 = client.get_organizations(u1).await.unwrap();
 

@@ -250,6 +250,7 @@ async fn start(
         .with_default_routes()
         .with_auth_service(args.context.auth_uri, args.context.admin_key)
         .with_default_traces()
+        .with_cors(&args.cors_origin)
         .serve();
 
     let user_handle = user_builder.serve();

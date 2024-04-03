@@ -540,6 +540,7 @@ pub mod tests {
                 user,
                 bouncer,
                 use_tls: UseTls::Disable,
+                cors_origin: "http://localhost:3001".to_string(),
                 context: ServiceArgs {
                     docker_host,
                     image,

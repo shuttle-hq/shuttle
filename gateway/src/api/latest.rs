@@ -106,11 +106,11 @@ async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let project = service.find_project(&scope).await?;
+    let project = service.find_project_by_name(&scope).await?;
     let idle_minutes = project.state.idle_minutes();
 
     let response = project::Response {
-        id: project.project_id.to_uppercase(),
+        id: project.id.to_uppercase(),
         name: scope.to_string(),
         state: project.state.into(),
         idle_minutes,
@@ -129,25 +129,31 @@ async fn check_project_name(
         .await
         .map(AxumJson)
 }
-
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
-    User { id: name, .. }: User,
-    Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
+    User { id, .. }: User,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
-    let limit = limit.unwrap_or(u32::MAX);
-    let page = page.unwrap_or(0);
-    let projects = service
-        // The `offset` is page size * amount of pages
-        .iter_user_projects_detailed(&name, limit * page, limit)
-        .await?
-        .map(|project| project::Response {
-            id: project.0.to_uppercase(),
-            name: project.1.to_string(),
-            idle_minutes: project.2.idle_minutes(),
-            state: project.2.into(),
-        })
-        .collect();
+    let mut projects = vec![];
+    for p in service
+        .permit_client
+        .get_user_projects(&id)
+        .await
+        .map_err(|_| Error::from(ErrorKind::Internal))?
+    {
+        let proj_id = p.resource.expect("project resource").key;
+        let project = service.find_project_by_id(&proj_id).await?;
+        let idle_minutes = project.state.idle_minutes();
+
+        let response = project::Response {
+            id: project.id,
+            name: project.name,
+            state: project.state.into(),
+            idle_minutes,
+        };
+        projects.push(response);
+    }
+    // sort by descending id
+    projects.sort_by(|p1, p2| p2.id.cmp(&p1.id));
 
     Ok(AxumJson(projects))
 }
@@ -199,7 +205,7 @@ async fn create_project(
         .await?;
 
     let response = project::Response {
-        id: project.project_id.to_string().to_uppercase(),
+        id: project.id.to_string().to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
@@ -218,11 +224,11 @@ async fn destroy_project(
         ..
     }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let project = service.find_project(&project_name).await?;
+    let project = service.find_project_by_name(&project_name).await?;
     let idle_minutes = project.state.idle_minutes();
 
     let mut response = project::Response {
-        id: project.project_id.to_uppercase(),
+        id: project.id.to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
@@ -266,10 +272,9 @@ async fn delete_project(
     }
 
     let project_name = scoped_user.scope.clone();
-    let project = state.service.find_project(&project_name).await?;
+    let project = state.service.find_project_by_name(&project_name).await?;
 
-    let project_id =
-        Ulid::from_string(&project.project_id).expect("stored project id to be a valid ULID");
+    let project_id = Ulid::from_string(&project.id).expect("stored project id to be a valid ULID");
 
     // Try to startup destroyed, errored or outdated projects
     let project_deletable = project.state.is_ready() || project.state.is_stopped();
@@ -309,7 +314,7 @@ async fn delete_project(
         // Wait for the project to be ready
         handle.await;
 
-        let new_state = state.service.find_project(&project_name).await?;
+        let new_state = state.service.find_project_by_name(&project_name).await?;
 
         if !new_state.state.is_ready() {
             return Err(Error::from_kind(ErrorKind::ProjectCorrupted));
@@ -393,7 +398,7 @@ async fn override_create_service(
     scoped_user: ScopedUser,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    let user_id = scoped_user.user.claim.sub.clone();
+    let user_id = scoped_user.user.id.clone();
     let posthog_client = state.posthog_client.clone();
     tokio::spawn(async move {
         let event = async_posthog::Event::new("shuttle_api_start_deployment", &user_id);

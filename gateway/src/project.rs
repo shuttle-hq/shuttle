@@ -1845,7 +1845,12 @@ pub mod exec {
             .await
             .expect("could not list projects")
         {
-            match gateway.find_project(&project_name).await.unwrap().state {
+            match gateway
+                .find_project_by_name(&project_name)
+                .await
+                .unwrap()
+                .state
+            {
                 Project::Errored(ProjectError { ctx: Some(ctx), .. }) => {
                     if let Some(container) = ctx.container() {
                         if let Ok(container) = gateway
@@ -1938,8 +1943,11 @@ pub mod exec {
             .await
             .expect("could not list cch projects")
         {
-            if let Project::Ready(ProjectReady { container, .. }) =
-                gateway.find_project(&project_name).await.unwrap().state
+            if let Project::Ready(ProjectReady { container, .. }) = gateway
+                .find_project_by_name(&project_name)
+                .await
+                .unwrap()
+                .state
             {
                 if let Ok(container) = gateway
                     .context()

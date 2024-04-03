@@ -364,13 +364,43 @@ impl GatewayService {
         Ok(ready_count)
     }
 
-    pub async fn find_project(&self, project_name: &str) -> Result<FindProjectPayload, Error> {
-        query("SELECT project_id, project_state FROM projects WHERE project_name = ?1")
-            .bind(project_name)
+    pub async fn find_project_by_name(
+        &self,
+        project_name: &str,
+    ) -> Result<FindProjectPayload, Error> {
+        query(
+            "SELECT project_id, project_name, project_state FROM projects WHERE project_name = ?1",
+        )
+        .bind(project_name)
+        .fetch_optional(&self.db)
+        .await?
+        .map(|r| FindProjectPayload {
+            id: r.get("project_id"),
+            name: r.get("project_name"),
+            state: r
+                .try_get::<SqlxJson<Project>, _>("project_state")
+                .map(|p| p.0)
+                .unwrap_or_else(|err| {
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        "Failed to deser `project_state`"
+                    );
+                    Project::Errored(ProjectError::internal(
+                        "Error when trying to deserialize state of project.",
+                    ))
+                }),
+        })
+        .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound(project_name.to_string())))
+    }
+
+    pub async fn find_project_by_id(&self, project_id: &str) -> Result<FindProjectPayload, Error> {
+        query("SELECT project_id, project_name, project_state FROM projects WHERE project_id = ?1")
+            .bind(project_id)
             .fetch_optional(&self.db)
             .await?
             .map(|r| FindProjectPayload {
-                project_id: r.get("project_id"),
+                id: r.get("project_id"),
+                name: r.get("project_name"),
                 state: r
                     .try_get::<SqlxJson<Project>, _>("project_state")
                     .map(|p| p.0)
@@ -384,7 +414,7 @@ impl GatewayService {
                         ))
                     }),
             })
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound(project_name.to_string())))
+            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound(project_id.to_string())))
     }
 
     pub async fn project_name_exists(&self, project_name: &ProjectName) -> Result<bool, Error> {
@@ -547,7 +577,8 @@ impl GatewayService {
                 let project = Project::Creating(creating);
                 self.update_project(&project_name, &project).await?;
                 Ok(FindProjectPayload {
-                    project_id,
+                    id: project_id,
+                    name: project_name.to_string(),
                     state: project,
                 })
             } else {
@@ -655,7 +686,8 @@ impl GatewayService {
         let project = project.0;
 
         Ok(FindProjectPayload {
-            project_id: project_id.to_string(),
+            id: project_id.to_string(),
+            name: project_name.to_string(),
             state: project,
         })
     }
@@ -875,7 +907,7 @@ impl GatewayService {
         project_name: &ProjectName,
         task_sender: Sender<BoxedTask>,
     ) -> Result<(FindProjectPayload, bool), Error> {
-        let mut project = self.find_project(project_name).await?;
+        let mut project = self.find_project_by_name(project_name).await?;
 
         // Start the project if it is idle
         let is_stopped = project.state.is_stopped();
@@ -893,7 +925,7 @@ impl GatewayService {
 
             // Wait for project to come up and set new state
             handle.await;
-            project = self.find_project(project_name).await?;
+            project = self.find_project_by_name(project_name).await?;
         }
 
         Ok((project, is_stopped))
@@ -1132,7 +1164,8 @@ impl GatewayContext {
 }
 
 pub struct FindProjectPayload {
-    pub project_id: String,
+    pub id: String,
+    pub name: String,
     pub state: Project,
 }
 
@@ -1182,7 +1215,7 @@ pub mod tests {
         assert!(creating_same_project_name(&project.state, &matrix));
 
         assert_eq!(
-            svc.find_project(&matrix).await.unwrap().state,
+            svc.find_project_by_name(&matrix).await.unwrap().state,
             project.state
         );
         assert_eq!(
@@ -1273,11 +1306,8 @@ pub mod tests {
 
         // After project has been destroyed...
         assert!(matches!(
-            svc.find_project(&matrix).await,
-            Ok(FindProjectPayload {
-                project_id: _,
-                state: Project::Destroyed(_),
-            })
+            svc.find_project_by_name(&matrix).await.unwrap().state,
+            Project::Destroyed(_)
         ));
 
         // If recreated by a different user
@@ -1293,11 +1323,10 @@ pub mod tests {
         // If recreated by the same user
         assert!(matches!(
             svc.create_project(matrix.clone(), &neo, false, true, 0)
-                .await,
-            Ok(FindProjectPayload {
-                project_id: _,
-                state: Project::Creating(_),
-            })
+                .await
+                .unwrap()
+                .state,
+            Project::Creating(_),
         ));
 
         // If recreated by the same user again while it's running
@@ -1321,21 +1350,17 @@ pub mod tests {
 
         // After project has been destroyed again...
         assert!(matches!(
-            svc.find_project(&matrix).await,
-            Ok(FindProjectPayload {
-                project_id: _,
-                state: Project::Destroyed(_),
-            })
+            svc.find_project_by_name(&matrix).await.unwrap().state,
+            Project::Destroyed(_),
         ));
 
         // If recreated by an admin
         assert!(matches!(
             svc.create_project(matrix.clone(), &admin, true, true, 0)
-                .await,
-            Ok(FindProjectPayload {
-                project_id: _,
-                state: Project::Creating(_),
-            })
+                .await
+                .unwrap()
+                .state,
+            Project::Creating(_)
         ));
 
         // If recreated by an admin again while it's running
@@ -1353,7 +1378,7 @@ pub mod tests {
 
         // Project is gone
         assert!(matches!(
-            svc.find_project(&matrix).await,
+            svc.find_project_by_name(&matrix).await,
             Err(Error {
                 kind: ErrorKind::ProjectNotFound(_),
                 ..
@@ -1362,11 +1387,11 @@ pub mod tests {
 
         // It can be re-created by anyone, with the same project name
         assert!(matches!(
-            svc.create_project(matrix, &trinity, false, true, 0).await,
-            Ok(FindProjectPayload {
-                project_id: _,
-                state: Project::Creating(_),
-            })
+            svc.create_project(matrix, &trinity, false, true, 0)
+                .await
+                .unwrap()
+                .state,
+            Project::Creating(_)
         ));
     }
 
@@ -1397,7 +1422,7 @@ pub mod tests {
             // keep polling
         }
 
-        let project = svc.find_project(&matrix).await.unwrap();
+        let project = svc.find_project_by_name(&matrix).await.unwrap();
         println!("{:?}", project.state);
         assert!(project.state.is_ready());
 
@@ -1415,7 +1440,7 @@ pub mod tests {
         // the first poll will trigger a refresh
         let _ = ambulance_task.poll(()).await;
 
-        let project = svc.find_project(&matrix).await.unwrap();
+        let project = svc.find_project_by_name(&matrix).await.unwrap();
         println!("{:?}", project.state);
         assert!(!project.state.is_ready());
 
@@ -1424,7 +1449,7 @@ pub mod tests {
             // keep polling
         }
 
-        let project = svc.find_project(&matrix).await.unwrap();
+        let project = svc.find_project_by_name(&matrix).await.unwrap();
         println!("{:?}", project.state);
         assert!(project.state.is_ready());
     }

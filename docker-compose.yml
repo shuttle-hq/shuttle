@@ -283,6 +283,8 @@ services:
     environment:
       - PDP_CONTROL_PLANE=https://api.eu-central-1.permit.io
       - PDP_API_KEY=${PERMIT_API_KEY}
+      # Querying users with lots of resource instances takes more than the default 1s
+      - PDP_OPA_CLIENT_QUERY_TIMEOUT=10
     ports:
       - 7000:7000
     networks:

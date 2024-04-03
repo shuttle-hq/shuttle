@@ -13,6 +13,3 @@ keywords = ["shuttle-service", "tower"]
 hyper = { version = "0.14.23", features = ["server", "tcp", "http1"] }
 shuttle-runtime = { path = "../../runtime", version = "0.43.0", default-features = false }
 tower = { version = "0.4.13", features = ["make"] }
-
-[dev-dependencies]
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

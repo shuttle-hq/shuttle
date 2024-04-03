@@ -10,9 +10,6 @@ keywords = ["shuttle-service", "actix"]
 [workspace]
 
 [dependencies]
-actix-web = { version = "4.3.1" }
-shuttle-runtime = { path = "../../runtime", version = "0.43.0", default-features = false }
+actix-web = "4.3.1"
 num_cpus = "1.15.0"
-
-[dev-dependencies]
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }
+shuttle-runtime = { path = "../../runtime", version = "0.43.0", default-features = false }

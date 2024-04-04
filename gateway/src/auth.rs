@@ -94,9 +94,8 @@ where
                 .await
                 .map_err(|_| {
                     error!("failed to check Permit permission");
-                    // Error::from_kind(ErrorKind::Internal)
-                })
-                .unwrap_or_default();
+                    Error::from_kind(ErrorKind::Internal)
+                })?;
 
         if allowed {
             Ok(Self { user, scope })

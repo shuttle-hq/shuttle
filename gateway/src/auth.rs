@@ -82,39 +82,20 @@ where
 
         let RouterState { service, .. } = RouterState::from_ref(state);
 
-        let has_bypass = user.claim.is_admin() || user.claim.is_deployer();
-
-        let allowed = has_bypass
-            || {
-                let projects: Vec<_> = service.iter_user_projects(&user.id).await?.collect();
-                let internal_allowed = projects.contains(&scope);
-
-                let permit_allowed = service
-                    .permit_client
-                    .allowed(
-                        &user.id,
-                        &service.find_project_by_name(&scope).await?.id,
-                        "develop", // TODO?: make this configurable per endpoint?
-                    )
-                    .await
-                    .map_err(|_| {
-                        error!("failed to check Permit permission");
-                        // Error::from_kind(ErrorKind::Internal)
-                    })
-                    .unwrap_or_default();
-
-                if internal_allowed != permit_allowed {
-                    error!(
-                        "PERMIT: Permissions for user {} project {} did not match internal permissions. Internal: {}, Permit: {}",
-                        user.id,
-                        scope,
-                        internal_allowed,
-                        permit_allowed
-                    );
-                }
-
-                internal_allowed
-            };
+        let allowed = user.claim.is_admin()
+            || user.claim.is_deployer()
+            || service
+                .permit_client
+                .allowed(
+                    &user.id,
+                    &service.find_project_by_name(&scope).await?.id,
+                    "develop", // TODO: make this configurable per endpoint?
+                )
+                .await
+                .map_err(|_| {
+                    error!("failed to check Permit permission");
+                    Error::from_kind(ErrorKind::Internal)
+                })?;
 
         if allowed {
             Ok(Self { user, scope })

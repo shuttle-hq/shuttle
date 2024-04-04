@@ -6,13 +6,12 @@ mod needs_docker {
         resource_instances_api::{delete_resource_instance, list_resource_instances},
         users_api::list_users,
     };
-    use serde_json::json;
     use serial_test::serial;
     use shuttle_backends::client::{
         permit::{Client, Error, Organization, ResponseContent},
         PermissionsDal,
     };
-    use shuttle_common::claims::AccountTier;
+    use shuttle_common::{claims::AccountTier, models::organization};
     use shuttle_common_tests::permit_pdp::DockerInstance;
     use test_context::{test_context, AsyncTestContext};
     use uuid::Uuid;
@@ -232,17 +231,13 @@ mod needs_docker {
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
         let o1 = client.get_organizations(u1).await.unwrap();
 
-        assert_eq!(o1.len(), 1);
-        assert_eq!(o1[0].resource.as_ref().unwrap().key, "org_123");
         assert_eq!(
-            o1[0]
-                .resource
-                .as_ref()
-                .unwrap()
-                .attributes
-                .as_ref()
-                .unwrap(),
-            &json!({ "display_name": "Test organization", "id": "org_123" })
+            o1,
+            vec![organization::Response {
+                id: "org_123".to_string(),
+                display_name: "Test organization".to_string(),
+                is_admin: true,
+            }]
         );
 
         let err = client
@@ -276,6 +271,21 @@ mod needs_docker {
 
         assert_eq!(p1.len(), 1);
         assert_eq!(p1[0].resource.as_ref().unwrap().key, "proj-o-1");
+
+        let err = client
+            .get_organization_projects(u2, "org_123")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
+            "User cannot view projects on an organization it does not belong to"
+        );
+
+        let ps = client
+            .get_organization_projects(u1, "org_123")
+            .await
+            .unwrap();
+        assert_eq!(ps, vec!["proj-o-1"]);
 
         client.create_project(u2, "proj-o-2").await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
@@ -337,6 +347,6 @@ mod needs_docker {
         tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP)).await;
         let o1 = client.get_organizations(u1).await.unwrap();
 
-        assert_eq!(o1.len(), 0);
+        assert_eq!(o1, vec![]);
     }
 }

@@ -13,8 +13,8 @@ use permit_client_rs::{
         Error as PermitClientError,
     },
     models::{
-        RelationshipTupleCreate, RelationshipTupleDelete, RelationshipTupleRead,
-        ResourceInstanceCreate, RoleAssignmentCreate, RoleAssignmentRemove, UserCreate, UserRead,
+        RelationshipTupleCreate, RelationshipTupleDelete, ResourceInstanceCreate,
+        RoleAssignmentCreate, RoleAssignmentRemove, UserCreate, UserRead,
     },
 };
 use permit_pdp_client_rs::{
@@ -29,7 +29,7 @@ use permit_pdp_client_rs::{
     models::{AuthorizationQuery, Resource, User, UserPermissionsQuery, UserPermissionsResult},
 };
 use serde::{Deserialize, Serialize};
-use shuttle_common::claims::AccountTier;
+use shuttle_common::{claims::AccountTier, models::organization};
 
 #[async_trait]
 pub trait PermissionsDal {
@@ -62,14 +62,14 @@ pub trait PermissionsDal {
     async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<(), Error>;
 
     /// Get a list of all the organizations a user has access to
-    async fn get_organizations(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error>;
+    async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>, Error>;
 
     /// Get a list of all projects that belong to an organization
     async fn get_organization_projects(
         &self,
         user_id: &str,
         org_id: &str,
-    ) -> Result<Vec<RelationshipTupleRead>, Error>;
+    ) -> Result<Vec<String>, Error>;
 
     /// Transfers a project from a users to the organization
     async fn transfer_project_to_org(
@@ -360,16 +360,16 @@ impl PermissionsDal for Client {
         &self,
         user_id: &str,
         org_id: &str,
-    ) -> Result<Vec<RelationshipTupleRead>, Error> {
+    ) -> Result<Vec<String>, Error> {
         if !self.allowed_org(user_id, &org_id, "view").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
-                content: "User does not have permission to delete the organization".to_owned(),
+                content: "User does not have permission to view the organization".to_owned(),
                 entity: "Organization".to_owned(),
             }));
         }
 
-        Ok(list_relationship_tuples(
+        let relationships = list_relationship_tuples(
             &self.api,
             &self.proj_id,
             &self.env_id,
@@ -383,10 +383,18 @@ impl PermissionsDal for Client {
             Some("Project"),
             None,
         )
-        .await?)
+        .await?;
+
+        let mut projects = Vec::with_capacity(relationships.len());
+
+        for rel in relationships {
+            projects.push(rel.object_details.unwrap().key);
+        }
+
+        Ok(projects)
     }
 
-    async fn get_organizations(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error> {
+    async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>, Error> {
         let perms = get_user_permissions_user_permissions_post(
             &self.pdp,
             UserPermissionsQuery {
@@ -403,7 +411,25 @@ impl PermissionsDal for Client {
         )
         .await?;
 
-        Ok(perms.into_values().collect())
+        let mut res = Vec::with_capacity(perms.len());
+
+        for perm in perms.into_values() {
+            if let Some(resource) = perm.resource {
+                let attributes = resource.attributes.unwrap_or_default();
+                let org = serde_json::from_value::<Organization>(attributes).unwrap();
+
+                res.push(organization::Response {
+                    id: resource.key,
+                    display_name: org.display_name,
+                    is_admin: perm
+                        .roles
+                        .unwrap_or_default()
+                        .contains(&"admin".to_string()),
+                });
+            }
+        }
+
+        Ok(res)
     }
 
     async fn transfer_project_to_org(

@@ -11,7 +11,7 @@ keywords = ["shuttle-service", "ntex"]
 
 [dependencies]
 ntex = { version = "1.2.1", features = ["tokio"] }
-ntex-rt = "0.4.12"
+ntex-rt = "0.4.13"
 tokio = { version = "1.37.0", features = ["rt-multi-thread"] }
 num_cpus = "1.16.0"
 shuttle-runtime = { path = "../../runtime", version = "0.43.0", default-features = false }

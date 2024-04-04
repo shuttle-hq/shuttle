@@ -1,6 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-use ntex::Service;
 use std::net::SocketAddr;
 
 /// A wrapper type for a closure that returns an [ntex::web::ServiceConfig] so we can implement
@@ -15,17 +14,25 @@ where
 {
     async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::Error> {
         // Start a worker for each cpu, but no more than 4.
-        let worker_count = num_cpus::get().min(4);
+        let cloned_addr = addr.clone();
 
-        let server =
-            ntex::web::HttpServer::new(move || ntex::web::App::new().configure(self.0.clone()))
-                .workers(worker_count)
-                .bind(addr)?
-                .run();
+        ntex::rt::System::new("main")
+            .run_local(async move {
+                let worker_count = num_cpus::get().min(4);
 
-        server.await.map_err(shuttle_runtime::CustomError::new)?;
+                let server =
+                    ntex::web::HttpServer::new(move || ntex::web::App::new().configure(self.0.clone()))
+                        .workers(worker_count)
+                        .bind(cloned_addr)?
+                        .run();
 
-        Ok(())
+                server.await.map_err(shuttle_runtime::CustomError::new)?;
+
+                Ok::<(), shuttle_runtime::Error>(())
+            })
+            .await?;
+
+        Ok::<(), shuttle_runtime::Error>(())
     }
 }
 

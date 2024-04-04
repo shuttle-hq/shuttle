@@ -55,7 +55,7 @@ pub trait PermissionsDal {
 
     // Organization management
 
-    /// Creates a Organization resource and assigns the user as admin for that project
+    /// Creates an Organization resource and assigns the user as admin for the organization
     async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<(), Error>;
 
     /// Deletes an Organization resource
@@ -64,14 +64,14 @@ pub trait PermissionsDal {
     /// Get a list of all the organizations a user has access to
     async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>, Error>;
 
-    /// Get a list of all projects that belong to an organization
+    /// Get a list of all project IDs that belong to an organization
     async fn get_organization_projects(
         &self,
         user_id: &str,
         org_id: &str,
     ) -> Result<Vec<String>, Error>;
 
-    /// Transfers a project from a users to the organization
+    /// Transfers a project from a users to an organization
     async fn transfer_project_to_org(
         &self,
         user_id: &str,
@@ -97,13 +97,27 @@ pub trait PermissionsDal {
 
 /// An organization can have multiple projects and users. Users that are members of an organization have access to all
 /// projects within that organization.
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, PartialEq)]
 pub struct Organization {
     /// Unique identifier for the organization. Should be `org_{ulid}`
     pub id: String,
 
     /// The name used to display the organization in the UI
     pub display_name: String,
+}
+
+#[derive(Deserialize, Serialize)]
+/// The attributes stored with each organization resource
+struct OrganizationAttributes {
+    display_name: String,
+}
+
+impl OrganizationAttributes {
+    fn new(org: &Organization) -> Self {
+        Self {
+            display_name: org.display_name.to_string(),
+        }
+    }
 }
 
 /// Wrapper for the Permit.io API and PDP (Policy decision point) API
@@ -306,7 +320,7 @@ impl PermissionsDal for Client {
                 key: org.id.to_owned(),
                 tenant: "default".to_owned(),
                 resource: "Organization".to_owned(),
-                attributes: serde_json::to_value(org).ok(),
+                attributes: serde_json::to_value(OrganizationAttributes::new(org)).ok(),
             },
         )
         .await
@@ -416,7 +430,7 @@ impl PermissionsDal for Client {
         for perm in perms.into_values() {
             if let Some(resource) = perm.resource {
                 let attributes = resource.attributes.unwrap_or_default();
-                let org = serde_json::from_value::<Organization>(attributes).unwrap();
+                let org = serde_json::from_value::<OrganizationAttributes>(attributes).unwrap();
 
                 res.push(organization::Response {
                     id: resource.key,

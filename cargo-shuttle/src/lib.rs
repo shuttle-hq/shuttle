@@ -840,7 +840,7 @@ impl Shuttle {
     }
 
     async fn logs(&self, args: LogsArgs) -> Result<CommandOutcome> {
-        let (args.mode, args.len) = match (head, tail, all) {
+        let (mode, len) = match (args.head, args.tail, args.all) {
             (Some(num), _, _) => (LogMode::Head, num),
             (_, Some(num), _) => (LogMode::Tail, num),
             (_, _, all) if all => (LogMode::All, 0),

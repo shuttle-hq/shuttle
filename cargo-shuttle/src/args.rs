@@ -419,13 +419,13 @@ pub struct LogsArgs {
     pub raw: bool,
     /// Views First N line of the logs
     #[arg(long, group = "output_mode")]
-    head: Option<u32>,
+    pub head: Option<u32>,
     /// Views Last N line of the logs
     #[arg(long, group = "output_mode")]
-    tail: Option<u32>,
+    pub tail: Option<u32>,
     /// Views all line of the logs
     #[arg(long, group = "output_mode")]
-    all: bool,
+    pub all: bool,
 }
 
 /// Helper function to parse and return the absolute path

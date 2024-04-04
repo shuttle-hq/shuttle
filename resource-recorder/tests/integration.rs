@@ -3,22 +3,26 @@ use std::net::{Ipv4Addr, SocketAddr};
 use portpicker::pick_unused_port;
 use pretty_assertions::{assert_eq, assert_ne};
 use serde_json::json;
+use shuttle_backends::client::ServicesApiClient;
+use shuttle_backends::test_utils::gateway::get_mocked_gateway_server;
 use shuttle_common::claims::Scope;
 use shuttle_common_tests::JwtScopesLayer;
 use shuttle_proto::resource_recorder::{
     record_request, resource_recorder_client::ResourceRecorderClient,
     resource_recorder_server::ResourceRecorderServer, ProjectResourcesRequest, RecordRequest,
-    Resource, ResourceIds, ResourcesResponse, ResultResponse, ServiceResourcesRequest,
+    Resource, ResourceIds, ResourcesResponse, ResultResponse,
 };
 use shuttle_resource_recorder::{Service, Sqlite};
 use tokio::select;
 use tonic::{transport::Server, Request};
-use ulid::Ulid;
 
 #[tokio::test]
 async fn manage_resources() {
     let port = pick_unused_port().unwrap();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+
+    let server = get_mocked_gateway_server().await;
+    let client = ServicesApiClient::new(server.uri().parse().unwrap());
 
     let server_future = async {
         Server::builder()
@@ -28,6 +32,7 @@ async fn manage_resources() {
             ]))
             .add_service(ResourceRecorderServer::new(Service::new(
                 Sqlite::new_in_memory().await,
+                client,
             )))
             .serve(addr)
             .await
@@ -42,30 +47,28 @@ async fn manage_resources() {
             .await
             .unwrap();
 
-        let project_id = Ulid::new().to_string();
-        let service_id = Ulid::new().to_string();
+        let project_id = "00000000000000000000000001".to_string();
+        let service_id = "00000000000000000000000001".to_string();
+
+        let req = Request::new(RecordRequest {
+            project_id: project_id.clone(),
+            service_id: service_id.clone(),
+            resources: vec![
+                record_request::Resource {
+                    r#type: "database::shared::postgres".to_string(),
+                    config: serde_json::to_vec(&json!({"public": true})).unwrap(),
+                    data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
+                },
+                record_request::Resource {
+                    r#type: "secrets".to_string(),
+                    config: serde_json::to_vec(&json!({})).unwrap(),
+                    data: serde_json::to_vec(&json!({"password": "brrrr"})).unwrap(),
+                },
+            ],
+        });
 
         // Add resources for on service
-        let response = client
-            .record_resources(Request::new(RecordRequest {
-                project_id: project_id.clone(),
-                service_id: service_id.clone(),
-                resources: vec![
-                    record_request::Resource {
-                        r#type: "database::shared::postgres".to_string(),
-                        config: serde_json::to_vec(&json!({"public": true})).unwrap(),
-                        data: serde_json::to_vec(&json!({"username": "test"})).unwrap(),
-                    },
-                    record_request::Resource {
-                        r#type: "secrets".to_string(),
-                        config: serde_json::to_vec(&json!({})).unwrap(),
-                        data: serde_json::to_vec(&json!({"password": "brrrr"})).unwrap(),
-                    },
-                ],
-            }))
-            .await
-            .unwrap()
-            .into_inner();
+        let response = client.record_resources(req).await.unwrap().into_inner();
 
         let expected = ResultResponse {
             success: true,
@@ -75,7 +78,7 @@ async fn manage_resources() {
         assert_eq!(response, expected);
 
         // Add resources for another service on same project
-        let service_id2 = Ulid::new().to_string();
+        let service_id2 = "00000000000000000000000002".to_string();
 
         let response = client
             .record_resources(Request::new(RecordRequest {
@@ -94,8 +97,8 @@ async fn manage_resources() {
         assert_eq!(response, expected);
 
         // Add resources to a new project
-        let project_id2 = Ulid::new().to_string();
-        let service_id3 = Ulid::new().to_string();
+        let project_id2 = "00000000000000000000000002".to_string();
+        let service_id3 = "00000000000000000000000003".to_string();
 
         let response = client
             .record_resources(Request::new(RecordRequest {
@@ -115,8 +118,8 @@ async fn manage_resources() {
 
         // Fetching resources for a service
         let response = client
-            .get_service_resources(Request::new(ServiceResourcesRequest {
-                service_id: service_id.clone(),
+            .get_project_resources(Request::new(ProjectResourcesRequest {
+                project_id: project_id.clone(),
             }))
             .await
             .unwrap()
@@ -142,11 +145,25 @@ async fn manage_resources() {
             created_at: response.resources[1].created_at.clone(),
             last_updated: response.resources[1].last_updated.clone(),
         };
+        let service_secrets2 = Resource {
+            project_id: project_id.clone(),
+            service_id: service_id2.clone(),
+            r#type: "secrets".to_string(),
+            config: serde_json::to_vec(&json!({"folder": "static"})).unwrap(),
+            data: serde_json::to_vec(&json!({"path": "/tmp/static"})).unwrap(),
+            is_active: true,
+            created_at: response.resources[2].created_at.clone(),
+            last_updated: response.resources[2].last_updated.clone(),
+        };
 
         let expected = ResourcesResponse {
             success: true,
             message: String::new(),
-            resources: vec![service_db.clone(), service_secrets.clone()],
+            resources: vec![
+                service_db.clone(),
+                service_secrets.clone(),
+                service_secrets2,
+            ],
         };
 
         assert_eq!(response, expected);

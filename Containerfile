@@ -15,7 +15,6 @@ COPY . .
 # Select only the essential files for copying into next steps
 # so that changes to miscellaneous files don't trigger a new cargo-chef cook.
 # Beware that .dockerignore filters files before they get here.
-
 RUN find . \( \
     -name "*.rs" -or \
     -name "*.toml" -or \
@@ -26,8 +25,9 @@ RUN find . \( \
     -name "*.pem" \
     \) -type f -exec install -D \{\} /build/\{\} \;
 WORKDIR /build
+# Remove patch.unused entries as they trigger unnecessary rebuilds (don't ask how long it took to write)
+RUN N="$(grep -bPzo '(?s)\n\[\[patch.unused.*' Cargo.lock | grep -a : | cut -d: -f1)"; [ -z $N ] && exit 0; head -c $N Cargo.lock > Cargo.lock.nopatch && mv Cargo.lock.nopatch Cargo.lock
 RUN cargo chef prepare --recipe-path /recipe.json
-# TODO upstream: Reduce the cooking by allowing multiple --bin args to prepare, or like this https://github.com/LukeMathWalker/cargo-chef/issues/181
 
 
 # Builds crate according to cargo chef recipe.
@@ -37,21 +37,24 @@ ARG CARGO_PROFILE
 COPY --from=chef-planner /recipe.json /
 # https://i.imgflip.com/2/74bvex.jpg
 RUN cargo chef cook \
-    --all-features \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
-    --recipe-path /recipe.json
+    --recipe-path /recipe.json \
+    --bin shuttle-auth \
+    --bin shuttle-deployer \
+    --bin shuttle-gateway \
+    --bin shuttle-logger \
+    --bin shuttle-provisioner \
+    --bin shuttle-resource-recorder
 COPY --from=chef-planner /build .
 # Building all at once to share build artifacts in the "cook" layer
 RUN cargo build \
     $(if [ "$CARGO_PROFILE" = "release" ]; then echo --release; fi) \
     --bin shuttle-auth \
-    # --bin shuttle-builder \
     --bin shuttle-deployer \
     --bin shuttle-gateway \
     --bin shuttle-logger \
     --bin shuttle-provisioner \
-    --bin shuttle-resource-recorder \
-    --bin shuttle-next -F next
+    --bin shuttle-resource-recorder
 
 
 ####### Helper step
@@ -69,20 +72,6 @@ ARG CARGO_PROFILE
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-auth /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/shuttle-auth"]
 FROM shuttle-auth AS shuttle-auth-dev
-
-
-#### BUILDER
-# ARG RUSTUP_TOOLCHAIN
-# FROM docker.io/library/rust:${RUSTUP_TOOLCHAIN}-bookworm AS shuttle-builder
-# ARG SHUTTLE_SERVICE_VERSION
-# ENV SHUTTLE_SERVICE_VERSION=${SHUTTLE_SERVICE_VERSION}
-# ARG CARGO_PROFILE
-# ARG prepare_args
-# COPY builder/prepare.sh /prepare.sh
-# RUN /prepare.sh "${prepare_args}"
-# COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-builder /usr/local/bin
-# ENTRYPOINT ["/usr/local/bin/shuttle-builder"]
-# FROM shuttle-builder AS shuttle-builder-dev
 
 
 #### DEPLOYER
@@ -112,7 +101,6 @@ COPY scripts/apply-patches.sh /scripts/apply-patches.sh
 COPY scripts/patches.toml /scripts/patches.toml
 RUN /prepare.sh "${prepare_args}"
 COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-deployer /usr/local/bin
-COPY --from=chef-builder /build/target/${CARGO_PROFILE}/shuttle-next /usr/local/cargo/bin
 ENTRYPOINT ["/usr/local/bin/shuttle-deployer"]
 FROM shuttle-deployer AS shuttle-deployer-dev
 # Source code needed for compiling local deploys with [patch.crates-io]

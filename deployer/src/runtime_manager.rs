@@ -12,12 +12,10 @@ use shuttle_proto::{
     logger::{self, Batcher, LogItem, LogLine},
     runtime::{self, StopRequest},
 };
-use shuttle_service::{runner, Environment};
+use shuttle_service::runner;
 use tokio::{io::AsyncBufReadExt, io::BufReader, process, sync::Mutex};
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
-
-const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 type Runtimes = Arc<std::sync::Mutex<HashMap<Uuid, (process::Child, runtime::Client)>>>;
 
@@ -26,22 +24,14 @@ type Runtimes = Arc<std::sync::Mutex<HashMap<Uuid, (process::Child, runtime::Cli
 #[derive(Clone)]
 pub struct RuntimeManager {
     runtimes: Runtimes,
-    provisioner_address: String,
     logger_client: Batcher<logger::Client>,
-    auth_uri: Option<String>,
 }
 
 impl RuntimeManager {
-    pub fn new(
-        provisioner_address: String,
-        logger_client: Batcher<logger::Client>,
-        auth_uri: Option<String>,
-    ) -> Arc<Mutex<Self>> {
+    pub fn new(logger_client: Batcher<logger::Client>) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             runtimes: Default::default(),
-            provisioner_address,
             logger_client,
-            auth_uri,
         }))
     }
 
@@ -50,67 +40,26 @@ impl RuntimeManager {
         id: Uuid,
         project_path: &Path,
         service_name: String,
-        alpha_runtime_path: Option<PathBuf>,
+        runtime_executable: PathBuf,
     ) -> anyhow::Result<runtime::Client> {
         trace!("making new client");
 
         // the port to run the runtime's gRPC server on
-        let port = portpicker::pick_unused_port().context("failed to find available port")?;
-        let is_next = alpha_runtime_path.is_none();
+        let port =
+            portpicker::pick_unused_port().context("failed to find port for runtime server")?;
 
-        let runtime_executable = if let Some(alpha_runtime) = alpha_runtime_path {
-            debug!(
-                "Starting alpha runtime at: {}",
-                alpha_runtime
-                    .clone()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap_or_default()
-            );
-            alpha_runtime
-        } else {
-            if cfg!(debug_assertions) {
-                debug!("Installing shuttle-next runtime in debug mode from local source");
-                // If we're running deployer natively, install shuttle-runtime using the
-                // version of runtime from the calling repo.
-                let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"));
+        debug!(
+            "Starting alpha runtime at: {}",
+            runtime_executable
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap_or_default()
+        );
 
-                // The path will not be valid if we are in a deployer container, in which
-                // case we don't try to install and use the one installed in deploy.sh.
-                if let Ok(path) = path {
-                    std::process::Command::new("cargo")
-                        .arg("install")
-                        .arg("shuttle-runtime")
-                        .arg("--path")
-                        .arg(path)
-                        .arg("--bin")
-                        .arg("shuttle-next")
-                        .arg("--features")
-                        .arg("next")
-                        .output()
-                        .expect("failed to install the local version of shuttle-runtime");
-                }
-            }
-
-            debug!("Returning path to shuttle-next runtime");
-            // If we're in a deployer built with the containerfile, the runtime will have
-            // been installed in deploy.sh.
-            home::cargo_home()
-                .expect("failed to find path to cargo home")
-                .join("bin/shuttle-next")
-        };
-
-        let (mut process, runtime_client) = runner::start(
-            is_next,
-            Environment::Deployment,
-            &self.provisioner_address,
-            self.auth_uri.as_ref(),
-            port,
-            runtime_executable,
-            project_path,
-        )
-        .await
-        .context("failed to start shuttle runtime")?;
+        let (mut process, runtime_client) = runner::start(port, runtime_executable, project_path)
+            .await
+            .context("failed to start shuttle runtime")?;
 
         let stdout = process
             .stdout
@@ -150,8 +99,10 @@ impl RuntimeManager {
             match process.start_kill() {
                 Ok(_) => info!(deployment_id = %id, "initiated runtime process killing"),
                 Err(err) => error!(
-                    deployment_id = %id, "failed to start the killing of the runtime: {}",
-                    err
+                    deployment_id = %id,
+                    error = &err as &dyn std::error::Error,
+                    "failed to start the killing of the runtime",
+
                 ),
             }
         }

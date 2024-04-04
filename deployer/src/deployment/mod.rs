@@ -4,7 +4,7 @@ use std::{
 };
 
 use shuttle_common::log::LogRecorder;
-use shuttle_proto::{builder, logger};
+use shuttle_proto::{logger, provisioner};
 use tokio::{
     sync::{mpsc, Mutex},
     task::JoinSet,
@@ -20,7 +20,7 @@ pub mod state_change_layer;
 
 use self::gateway_client::BuildQueueClient;
 use crate::{
-    persistence::{resource::ResourceManager, DeploymentUpdater, State},
+    persistence::{resource::ResourceManager, State},
     RuntimeManager,
 };
 pub use queue::Queued;
@@ -29,23 +29,21 @@ pub use run::{ActiveDeploymentsGetter, Built};
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 
-pub struct DeploymentManagerBuilder<LR, ADG, DU, RM, QC> {
+pub struct DeploymentManagerBuilder<LR, ADG, RM, QC> {
     build_log_recorder: Option<LR>,
     logs_fetcher: Option<logger::Client>,
     active_deployment_getter: Option<ADG>,
     artifacts_path: Option<PathBuf>,
     runtime_manager: Option<Arc<Mutex<RuntimeManager>>>,
-    deployment_updater: Option<DU>,
     resource_manager: Option<RM>,
     queue_client: Option<QC>,
-    builder_client: Option<builder::Client>,
+    provisioner_client: Option<provisioner::Client>,
 }
 
-impl<LR, ADG, DU, RM, QC> DeploymentManagerBuilder<LR, ADG, DU, RM, QC>
+impl<LR, ADG, RM, QC> DeploymentManagerBuilder<LR, ADG, RM, QC>
 where
     LR: LogRecorder,
     ADG: ActiveDeploymentsGetter,
-    DU: DeploymentUpdater,
     RM: ResourceManager,
     QC: BuildQueueClient,
 {
@@ -61,8 +59,8 @@ where
         self
     }
 
-    pub fn builder_client(mut self, builder_client: Option<builder::Client>) -> Self {
-        self.builder_client = builder_client;
+    pub fn provisioner_client(mut self, provisioner_client: provisioner::Client) -> Self {
+        self.provisioner_client = Some(provisioner_client);
 
         self
     }
@@ -97,12 +95,6 @@ where
         self
     }
 
-    pub fn deployment_updater(mut self, deployment_updater: DU) -> Self {
-        self.deployment_updater = Some(deployment_updater);
-
-        self
-    }
-
     /// Creates two Tokio tasks, one for building queued services, the other for
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
@@ -117,11 +109,11 @@ where
         let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
         let queue_client = self.queue_client.expect("a queue client to be set");
         let runtime_manager = self.runtime_manager.expect("a runtime manager to be set");
-        let deployment_updater = self
-            .deployment_updater
-            .expect("a deployment updater to be set");
         let resource_manager = self.resource_manager.expect("a resource manager to be set");
         let logs_fetcher = self.logs_fetcher.expect("a logs fetcher to be set");
+        let provisioner_client = self
+            .provisioner_client
+            .expect("a provisioner client to be set");
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -135,10 +127,8 @@ where
         set.spawn(queue::task(
             queue_recv,
             run_send_clone,
-            deployment_updater,
             build_log_recorder,
             queue_client,
-            self.builder_client,
             builds_path.clone(),
         ));
         // Run queue. Waits for built deployments and runs them.
@@ -148,6 +138,7 @@ where
             active_deployment_getter,
             resource_manager,
             builds_path.clone(),
+            provisioner_client,
         ));
 
         DeploymentManager {
@@ -188,17 +179,16 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<LR, ADG, DU, RM, QC>() -> DeploymentManagerBuilder<LR, ADG, DU, RM, QC> {
+    pub fn builder<LR, ADG, RM, QC>() -> DeploymentManagerBuilder<LR, ADG, RM, QC> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
             logs_fetcher: None,
             active_deployment_getter: None,
             artifacts_path: None,
             runtime_manager: None,
-            deployment_updater: None,
             resource_manager: None,
             queue_client: None,
-            builder_client: None,
+            provisioner_client: None,
         }
     }
 

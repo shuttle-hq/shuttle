@@ -1,13 +1,8 @@
 use clap::Parser;
-use shuttle_common::{
-    backends::trace::setup_tracing,
-    log::{Backend, DeploymentLogLayer},
-};
+use shuttle_backends::trace::setup_tracing;
+use shuttle_common::log::{Backend, DeploymentLogLayer};
 use shuttle_deployer::{start, Args, Persistence, RuntimeManager, StateChangeLayer};
-use shuttle_proto::{
-    // builder::builder_client::BuilderClient,
-    logger::{self, Batcher},
-};
+use shuttle_proto::logger::{self, Batcher};
 use tracing::trace;
 use tracing_subscriber::prelude::*;
 use ulid::Ulid;
@@ -32,20 +27,6 @@ async fn main() {
     let logger_client = logger::get_client(args.logger_uri.clone()).await;
     let logger_batcher = Batcher::wrap(logger_client.clone());
 
-    let builder_client = None;
-    // let builder_client = match args.builder_uri.connect().await {
-    //     Ok(channel) => Some(BuilderClient::new(
-    //         ServiceBuilder::new()
-    //             .layer(ClaimLayer)
-    //             .layer(InjectPropagationLayer)
-    //             .service(channel),
-    //     )),
-    //     Err(err) => {
-    //         error!("Couldn't connect to the shuttle-builder: {err}");
-    //         None
-    //     }
-    // };
-
     setup_tracing(
         tracing_subscriber::registry()
             .with(StateChangeLayer {
@@ -58,21 +39,15 @@ async fn main() {
                 internal_service: Backend::Deployer,
             }),
         Backend::Deployer,
-        None,
     );
 
-    let runtime_manager = RuntimeManager::new(
-        args.provisioner_address.to_string(),
-        logger_batcher.clone(),
-        Some(args.auth_uri.to_string()),
-    );
+    let runtime_manager = RuntimeManager::new(logger_batcher.clone());
 
     start(
         persistence,
         runtime_manager,
         logger_batcher,
         logger_client,
-        builder_client,
         args,
     )
     .await

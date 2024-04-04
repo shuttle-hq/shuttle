@@ -9,7 +9,6 @@ use axum::extract::{
 };
 use axum::extract::{DefaultBodyLimit, Extension, Query};
 use axum::handler::Handler;
-use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
 use axum::routing::{delete, get, post, Router};
 use axum::Json;
@@ -17,30 +16,26 @@ use chrono::{SecondsFormat, Utc};
 use hyper::{Request, StatusCode, Uri};
 use serde::{de::DeserializeOwned, Deserialize};
 use shuttle_service::builder::clean_crate;
+use tonic::Code;
 use tracing::{error, field, info, info_span, instrument, trace, warn};
-use ulid::Ulid;
 use uuid::Uuid;
 
+use shuttle_backends::{
+    auth::{AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
+    axum::CustomErrorPath,
+    metrics::{Metrics, TraceLayer},
+    request_span,
+};
 use shuttle_common::{
-    backends::{
-        auth::{AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
-        headers::XShuttleAccountName,
-        metrics::{Metrics, TraceLayer},
-    },
     claims::{Claim, Scope},
-    models::{
-        deployment::{DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH},
-        error::axum::CustomErrorPath,
-        project::ProjectName,
-    },
-    request_span, LogItem,
+    models::deployment::{DeploymentRequest, CREATE_SERVICE_BODY_LIMIT, GIT_STRINGS_MAX_LENGTH},
+    LogItem,
 };
 use shuttle_proto::logger::LogsRequest;
 
-use crate::persistence::{Deployment, Persistence, State};
 use crate::{
-    deployment::{Built, DeploymentManager, Queued},
-    persistence::resource::ResourceManager,
+    deployment::{DeploymentManager, Queued},
+    persistence::{resource::ResourceManager, Deployment, Persistence, State},
 };
 pub use {self::error::Error, self::error::Result, self::local::set_jwt_bearer};
 
@@ -63,7 +58,8 @@ struct LogSize {
 #[derive(Clone)]
 pub struct RouterBuilder {
     router: Router,
-    _project_name: ProjectName,
+    // might be used for tracing instruments?
+    _project_name: String,
     auth_uri: Uri,
 }
 
@@ -71,8 +67,7 @@ impl RouterBuilder {
     pub fn new(
         persistence: Persistence,
         deployment_manager: DeploymentManager,
-        project_name: ProjectName,
-        project_id: Ulid,
+        project_name: String,
         auth_uri: Uri,
     ) -> Self {
         let router = Router::new()
@@ -107,11 +102,10 @@ impl RouterBuilder {
                 "/projects/:project_name/deployments/:deployment_id",
                 get(get_deployment.layer(ScopedLayer::new(vec![Scope::Deployment])))
                     .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush])))
-                    .put(
-                        start_deployment
-                            .layer(Extension(project_id))
-                            .layer(ScopedLayer::new(vec![Scope::DeploymentPush])),
-                    ),
+                    // Deprecated.
+                    // Deployer now always starts the last running deployment on start up / wake up.
+                    // This is kept for compatibility.
+                    .put(|| async move {}),
             )
             .route(
                 "/projects/:project_name/ws/deployments/:deployment_id/logs",
@@ -161,14 +155,9 @@ impl RouterBuilder {
             .route_layer(from_extractor::<Metrics>())
             .layer(
                 TraceLayer::new(|request| {
-                    let account_name = request
-                        .headers()
-                        .typed_get::<XShuttleAccountName>()
-                        .unwrap_or_default();
-
                     request_span!(
                         request,
-                        account.name = account_name.0,
+                        account.user_id = field::Empty,
                         request.params.project_name = field::Empty,
                         request.params.service_name = field::Empty,
                         request.params.deployment_id = field::Empty,
@@ -240,7 +229,10 @@ pub async fn get_service_resources(
         .filter_map(|resource| {
             resource
                 .map_err(|err| {
-                    error!(error = ?err, "failed to parse resource data");
+                    error!(
+                        error = err.as_ref() as &dyn std::error::Error,
+                        "failed to parse resource data"
+                    );
                 })
                 .ok()
         })
@@ -433,33 +425,6 @@ pub async fn delete_deployment(
 }
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, %deployment_id))]
-pub async fn start_deployment(
-    Extension(persistence): Extension<Persistence>,
-    Extension(deployment_manager): Extension<DeploymentManager>,
-    Extension(claim): Extension<Claim>,
-    Extension(project_id): Extension<Ulid>,
-    CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
-) -> Result<()> {
-    if let Some(deployment) = persistence.get_runnable_deployment(&deployment_id).await? {
-        let built = Built {
-            id: deployment.id,
-            service_name: deployment.service_name,
-            service_id: deployment.service_id,
-            project_id,
-            tracing_context: Default::default(),
-            is_next: deployment.is_next,
-            claim,
-            secrets: Default::default(),
-        };
-        deployment_manager.run_push(built).await;
-
-        Ok(())
-    } else {
-        Err(Error::NotFound("deployment not found".to_string()))
-    }
-}
-
-#[instrument(skip_all, fields(shuttle.project.name = %project_name, %deployment_id))]
 pub async fn get_logs(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
@@ -485,8 +450,18 @@ pub async fn get_logs(
                 .collect(),
         )),
         Err(error) => {
-            error!(error = %error, "failed to retrieve logs for deployment");
-            Err(anyhow!("failed to retrieve logs for deployment").into())
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to retrieve logs for deployment"
+            );
+            match error.code() {
+                Code::OutOfRange => {
+                    Err(anyhow!("Too many log lines to be fetched in one request. You can redeploy your app to refresh the logs quota\n
+                    or if you'd like more flexibility around logs fetching, please reach out in a help thread\n
+                    on Shuttle's Discord server.").into())
+                }
+                _ => Err(anyhow!("failed to retrieve logs for deployment").into()),
+            }
         }
     }
 }
@@ -614,7 +589,7 @@ where
         state: &S,
     ) -> std::result::Result<Self, Self::Rejection> {
         let bytes = Bytes::from_request(req, state).await.map_err(|_| {
-            error!("failed to collect body bytes, is the body too large?");
+            info!("failed to collect body bytes, is the body too large?");
             StatusCode::PAYLOAD_TOO_LARGE
         })?;
 

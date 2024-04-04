@@ -1,11 +1,14 @@
+use std::collections::HashMap;
+use std::time::Duration;
+
 use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
 use percent_encoding::utf8_percent_encode;
+use reqwest::header::HeaderMap;
+use reqwest::RequestBuilder;
 use reqwest::Response;
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
-use reqwest_retry::policies::ExponentialBackoff;
-use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
+use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
 use shuttle_common::log::LogMode;
 use shuttle_common::models::deployment::DeploymentRequest;
 use shuttle_common::models::{deployment, project, service, ToJson};
@@ -22,22 +25,24 @@ pub struct Client {
     api_url: ApiUrl,
     api_key: Option<Secret<ApiKey>>,
     client: reqwest::Client,
-    retry_client: ClientWithMiddleware,
 }
 
 impl Client {
     pub fn new(api_url: ApiUrl) -> Self {
-        let client = reqwest::Client::new();
-        let retry_client = ClientBuilder::new(client.clone())
-            .with(RetryTransientMiddleware::new_with_policy(
-                ExponentialBackoff::builder().build_with_max_retries(3),
-            ))
-            .build();
         Self {
             api_url,
             api_key: None,
-            client,
-            retry_client,
+            client: reqwest::Client::builder()
+                .default_headers(
+                    HeaderMap::try_from(&HashMap::from([(
+                        X_CARGO_SHUTTLE_VERSION.clone(),
+                        crate::VERSION.to_owned(),
+                    )]))
+                    .unwrap(),
+                )
+                .timeout(Duration::from_secs(60))
+                .build()
+                .unwrap(),
         }
     }
 
@@ -80,7 +85,7 @@ impl Client {
             .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 
         let url = format!("{}{}", self.api_url, path);
-        let mut builder = self.retry_client.post(url);
+        let mut builder = self.client.post(url);
         builder = self.set_builder_auth(builder);
 
         builder
@@ -265,7 +270,7 @@ impl Client {
     {
         let url = format!("{}{}", self.api_url, path);
 
-        let mut builder = self.retry_client.get(url);
+        let mut builder = self.client.get(url);
 
         builder = self.set_builder_auth(builder);
 
@@ -280,7 +285,7 @@ impl Client {
     async fn post<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path);
 
-        let mut builder = self.retry_client.post(url);
+        let mut builder = self.client.post(url);
 
         builder = self.set_builder_auth(builder);
 
@@ -296,7 +301,7 @@ impl Client {
     async fn put<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path);
 
-        let mut builder = self.retry_client.put(url);
+        let mut builder = self.client.put(url);
 
         builder = self.set_builder_auth(builder);
 
@@ -315,7 +320,7 @@ impl Client {
     {
         let url = format!("{}{}", self.api_url, path);
 
-        let mut builder = self.retry_client.delete(url);
+        let mut builder = self.client.delete(url);
 
         builder = self.set_builder_auth(builder);
 

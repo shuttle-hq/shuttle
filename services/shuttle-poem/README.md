@@ -1,4 +1,4 @@
-## Shuttle service integration for the Poem web framework.
+## Shuttle service integration for the Poem web framework
 
 ### Example
 

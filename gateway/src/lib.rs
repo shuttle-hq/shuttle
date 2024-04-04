@@ -6,7 +6,6 @@ use std::error::Error as StdError;
 use std::fmt::Formatter;
 use std::io;
 use std::pin::Pin;
-use std::str::FromStr;
 
 use acme::AcmeClientError;
 
@@ -17,13 +16,12 @@ use futures::prelude::*;
 use hyper::client::HttpConnector;
 use hyper::Client;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Deserializer, Serialize};
 use service::ContainerSettings;
+use shuttle_backends::project_name::ProjectName;
 use shuttle_common::models::error::{ApiError, ErrorKind};
-use shuttle_common::models::project::ProjectName;
+use shuttle_common::models::user::UserId;
 use strum::Display;
 use tokio::sync::mpsc::error::SendError;
-use tracing::error;
 
 pub mod acme;
 pub mod api;
@@ -114,11 +112,13 @@ impl From<AcmeClientError> for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        let error: ApiError = self.kind.into();
+        let error: ApiError = self.kind.clone().into();
 
         if error.status_code >= 500 {
-            // We only want to emit error events for internal errors, not e.g. 404s.
-            error!(error = error.message, "control plane request error");
+            tracing::error!(
+                error = &self as &dyn std::error::Error,
+                "control plane request error"
+            );
         }
 
         error.into_response()
@@ -138,46 +138,19 @@ impl std::fmt::Display for Error {
 
 impl StdError for Error {}
 
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
-#[sqlx(transparent)]
-pub struct AccountName(String);
-
-impl FromStr for AccountName {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_string()))
-    }
-}
-
-impl std::fmt::Display for AccountName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl<'de> Deserialize<'de> for AccountName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(|_err| todo!())
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectDetails {
     pub project_name: ProjectName,
-    pub account_name: AccountName,
+    pub account_name: Option<String>,
+    pub user_id: UserId,
 }
 
 impl From<ProjectDetails> for shuttle_common::models::admin::ProjectResponse {
     fn from(project: ProjectDetails) -> Self {
         Self {
             project_name: project.project_name.to_string(),
-            account_name: project.account_name.to_string(),
+            account_name: project.account_name.unwrap_or_default(),
+            user_id: project.user_id,
         }
     }
 }
@@ -294,11 +267,12 @@ pub mod tests {
     use jsonwebtoken::EncodingKey;
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
-    use shuttle_common::backends::auth::ConvertResponse;
+    use shuttle_backends::auth::ConvertResponse;
+    use shuttle_backends::test_utils::gateway::PermissionsMock;
+    use shuttle_backends::test_utils::resource_recorder::get_mocked_resource_recorder;
     use shuttle_common::claims::{AccountTier, Claim};
     use shuttle_common::models::deployment::DeploymentRequest;
     use shuttle_common::models::{project, service};
-    use shuttle_proto::test_utils::resource_recorder::get_mocked_resource_recorder;
     use sqlx::sqlite::SqliteConnectOptions;
     use sqlx::{query, SqlitePool};
     use test_context::AsyncTestContext;
@@ -308,7 +282,7 @@ pub mod tests {
 
     use crate::acme::AcmeClient;
     use crate::api::latest::ApiBuilder;
-    use crate::args::{ContextArgs, StartArgs, UseTls};
+    use crate::args::{PermitArgs, ServiceArgs, StartArgs, UseTls};
     use crate::project::Project;
     use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
@@ -558,7 +532,6 @@ pub mod tests {
                 env::var("SHUTTLE_TESTS_NETWORK").unwrap_or_else(|_| "shuttle_default".to_string());
 
             let provisioner_host = "provisioner".to_string();
-            let builder_host = "builder".to_string();
 
             let docker_host = "/var/run/docker.sock".to_string();
 
@@ -567,12 +540,12 @@ pub mod tests {
                 user,
                 bouncer,
                 use_tls: UseTls::Disable,
-                context: ContextArgs {
+                cors_origin: "http://localhost:3001".to_string(),
+                context: ServiceArgs {
                     docker_host,
                     image,
                     prefix,
                     provisioner_host,
-                    builder_host,
                     // The started containers need to reach auth on the host.
                     // For this to work, the firewall should not be blocking traffic on the `SHUTTLE_TEST_NETWORK` interface.
                     // The following command can be used on NixOs to allow traffic on the interface.
@@ -603,6 +576,12 @@ pub mod tests {
                     // Allow access to the auth on the host
                     extra_hosts: vec!["host.docker.internal:host-gateway".to_string()],
                 },
+                permit: PermitArgs {
+                    permit_api_uri: Default::default(), // TODO: will need mock?
+                    permit_pdp_uri: Default::default(), // TODO: will need mock?
+                    permit_env: Default::default(),     // TODO: will need mock?
+                    permit_api_key: Default::default(), // TODO: will need mock?
+                },
             };
 
             let settings = ContainerSettings::builder().from_args(&args.context).await;
@@ -632,7 +611,7 @@ pub mod tests {
             }
         }
 
-        pub fn args(&self) -> ContextArgs {
+        pub fn args(&self) -> ServiceArgs {
             self.args.context.clone()
         }
 
@@ -678,9 +657,14 @@ pub mod tests {
         /// Create a service and sender to handle tasks. Also starts up a worker to create actual Docker containers for all requests
         pub async fn service(&self) -> (Arc<GatewayService>, Sender<BoxedTask>) {
             let service = Arc::new(
-                GatewayService::init(self.args(), self.pool(), "".into())
-                    .await
-                    .unwrap(),
+                GatewayService::init(
+                    self.args(),
+                    self.pool(),
+                    "".into(),
+                    Box::<PermissionsMock>::default(),
+                )
+                .await
+                .unwrap(),
             );
             let worker = Worker::new();
 
@@ -885,7 +869,6 @@ pub mod tests {
         }
     }
 
-    #[async_trait]
     impl AsyncTestContext for TestGateway {
         async fn setup() -> Self {
             let world = World::new().await;
@@ -904,7 +887,7 @@ pub mod tests {
             }
         }
 
-        async fn teardown(mut self) {}
+        async fn teardown(self) {}
     }
 
     /// Helper struct to wrap a bunch of commands to run against a test project
@@ -1160,7 +1143,6 @@ pub mod tests {
         }
     }
 
-    #[async_trait]
     impl AsyncTestContext for TestProject {
         async fn setup() -> Self {
             let mut world = TestGateway::setup().await;
@@ -1182,9 +1164,14 @@ pub mod tests {
     async fn end_to_end() {
         let world = World::new().await;
         let service = Arc::new(
-            GatewayService::init(world.args(), world.pool(), "".into())
-                .await
-                .unwrap(),
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
         );
         let worker = Worker::new();
 

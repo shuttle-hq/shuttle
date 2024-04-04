@@ -15,15 +15,29 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+use anyhow::{anyhow, bail, Context, Result};
 use args::{ConfirmationArgs, GenerateCommand};
+use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
+use clap_complete::{generate, Shell};
 use clap_mangen::Man;
-
+use config::RequestContext;
+use crossterm::style::Stylize;
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use futures::{StreamExt, TryFutureExt};
+use git2::{Repository, StatusOptions};
+use globset::{Glob, GlobSetBuilder};
+use ignore::overrides::OverrideBuilder;
+use ignore::WalkBuilder;
+use indicatif::ProgressBar;
+use indoc::{formatdoc, printdoc};
 use shuttle_common::log::LogMode;
 use shuttle_common::{
     constants::{
-        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXECUTABLE_DIRNAME, SHUTTLE_CLI_DOCS_URL,
-        SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL, SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL,
-        STORAGE_DIRNAME,
+        API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
+        RESOURCE_SCHEMA_VERSION, SHUTTLE_GH_ISSUE_URL, SHUTTLE_IDLE_DOCS_URL,
+        SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
     models::{
@@ -35,51 +49,51 @@ use shuttle_common::{
         project,
         resource::get_resource_tables,
     },
-    resource, semvers_are_compatible, ApiKey, LogItem, VersionInfo,
+    resource::{self, ResourceInput, ShuttleResourceOutput},
+    semvers_are_compatible,
+    templates::TemplatesSchema,
+    ApiKey, DatabaseResource, DbInput, LogItem, VersionInfo,
 };
-use shuttle_proto::runtime;
-use shuttle_proto::runtime::{LoadRequest, StartRequest, StopRequest};
-use shuttle_service::runner;
+use shuttle_proto::{
+    provisioner::{provisioner_server::Provisioner, DatabaseRequest},
+    runtime::{self, LoadRequest, StartRequest, StopRequest},
+};
 use shuttle_service::{
     builder::{build_workspace, BuiltService},
-    Environment,
+    runner, Environment,
 };
-
-use anyhow::{anyhow, bail, Context, Result};
-use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
-use clap_complete::{generate, Shell};
-use config::RequestContext;
-use crossterm::style::Stylize;
-use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use futures::{StreamExt, TryFutureExt};
-use git2::{Repository, StatusOptions};
-use globset::{Glob, GlobSetBuilder};
-use ignore::overrides::OverrideBuilder;
-use ignore::WalkBuilder;
-use indicatif::ProgressBar;
-use indoc::{formatdoc, printdoc};
-use strum::IntoEnumIterator;
+use strum::{EnumMessage, VariantArray};
 use tar::Builder;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
-use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
-use tonic::Status;
+use tonic::{Request, Status};
 use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
-    DeployArgs, DeploymentCommand, InitArgs, LoginArgs, LogoutArgs, ProjectCommand,
-    ProjectStartArgs, ResourceCommand, EXAMPLES_REPO,
+    DeployArgs, DeploymentCommand, InitArgs, LoginArgs, LogoutArgs, LogsArgs, ProjectCommand,
+    ProjectStartArgs, ResourceCommand, TemplateLocation,
 };
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+
+// Returns the args and whether the PATH arg of the init command was explicitly given
+pub fn parse_args() -> (ShuttleArgs, bool) {
+    let matches = ShuttleArgs::command().get_matches();
+    let args =
+        ShuttleArgs::from_arg_matches(&matches).expect("args to already be parsed successfully");
+    let provided_path_to_init = matches
+        .subcommand_matches("init")
+        .is_some_and(|init_matches| {
+            init_matches.value_source("path") == Some(ValueSource::CommandLine)
+        });
+
+    (args, provided_path_to_init)
+}
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -97,21 +111,6 @@ impl Shuttle {
             version_info: None,
             version_warnings: vec![],
         })
-    }
-
-    pub async fn parse_args_and_run(self) -> Result<CommandOutcome> {
-        // A hack to see if the PATH arg of the init command was explicitly given
-        let matches = ShuttleArgs::command().get_matches();
-        let args = ShuttleArgs::from_arg_matches(&matches)
-            .expect("args to already be parsed successfully");
-        let provided_path_to_init =
-            matches
-                .subcommand_matches("init")
-                .is_some_and(|init_matches| {
-                    init_matches.value_source("path") == Some(ValueSource::CommandLine)
-                });
-
-        self.run(args, provided_path_to_init).await
     }
 
     fn find_available_port(run_args: &mut RunArgs, services_len: usize) {
@@ -198,13 +197,20 @@ impl Shuttle {
                 client.set_api_key(self.ctx.api_key()?);
             }
             self.client = Some(client);
-            self.check_api_versions().await?;
+            if !args.offline {
+                self.check_api_versions().await?;
+            }
         }
 
         let res = match args.cmd {
             Command::Init(init_args) => {
-                self.init(init_args, args.project_args, provided_path_to_init)
-                    .await
+                self.init(
+                    init_args,
+                    args.project_args,
+                    provided_path_to_init,
+                    args.offline,
+                )
+                .await
             }
             Command::Generate(GenerateCommand::Manpage) => self.generate_manpage(),
             Command::Generate(GenerateCommand::Shell { shell, output }) => {
@@ -216,15 +222,7 @@ impl Shuttle {
             Command::Run(run_args) => self.local_run(run_args).await,
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
-            Command::Logs {
-                id,
-                latest,
-                follow,
-                raw,
-                head,
-                tail,
-                all,
-            } => self.logs(id, latest, follow, raw, head, tail, all).await,
+            Command::Logs(logs_args) => self.logs(logs_args).await,
             Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
                 self.deployments_list(page, limit, raw).await
             }
@@ -318,6 +316,7 @@ impl Shuttle {
         args: InitArgs,
         mut project_args: ProjectArgs,
         provided_path_to_init: bool,
+        offline: bool,
     ) -> Result<CommandOutcome> {
         // Turns the template or git args (if present) to a repo+folder.
         let git_template = args.git_template()?;
@@ -401,50 +400,165 @@ impl Shuttle {
         let path = if needs_path {
             let path = args
                 .path
-                .to_str()
-                .context("path arg should always be set")?;
+                .join(project_args.name.as_ref().expect("name should be set"));
 
-            println!("Where should we create this project?");
-            let directory_str: String = Input::with_theme(&theme)
-                .with_prompt("Directory")
-                .default(path.to_owned())
-                .interact()?;
-            println!();
+            loop {
+                println!("Where should we create this project?");
 
-            let path = args::parse_init_path(OsString::from(directory_str))?;
+                let directory_str: String = Input::with_theme(&theme)
+                    .with_prompt("Directory")
+                    .default(format!("{}", path.display()))
+                    .interact()?;
+                println!();
 
-            if std::fs::read_dir(&path)
-                .expect("init dir to exist and list entries")
-                .count()
-                > 0
-                && !Confirm::with_theme(&theme)
-                    .with_prompt("Target directory is not empty. Are you sure?")
-                    .default(true)
-                    .interact()?
-            {
-                return Ok(CommandOutcome::Ok);
+                let path = args::create_and_parse_path(OsString::from(directory_str))?;
+
+                if std::fs::read_dir(&path)
+                    .expect("init dir to exist and list entries")
+                    .count()
+                    > 0
+                    && !Confirm::with_theme(&theme)
+                        .with_prompt("Target directory is not empty. Are you sure?")
+                        .default(true)
+                        .interact()?
+                {
+                    println!();
+                    continue;
+                }
+
+                break path;
             }
-
-            path
         } else {
             args.path.clone()
         };
 
-        // 4. Ask for the framework
+        // 4. Ask for the template
         let template = match git_template {
             Some(git_template) => git_template,
             None => {
-                println!(
-                    "Shuttle works with a range of web frameworks. Which one do you want to use?"
-                );
-                let frameworks = args::InitTemplateArg::iter().collect::<Vec<_>>();
-                let index = FuzzySelect::with_theme(&theme)
-                    .with_prompt("Framework")
-                    .items(&frameworks)
-                    .default(0)
-                    .interact()?;
-                println!();
-                frameworks[index].template()
+                // Try to present choices from our up-to-date examples.
+                // Fall back to the internal (potentially outdated) list.
+                let schema = if offline {
+                    None
+                } else {
+                    get_templates_schema()
+                        .await
+                        .map_err(|e| {
+                            error!(err = %e, "Failed to get templates");
+                            println!(
+                                "{}",
+                                "Failed to look up template list. Falling back to internal list."
+                                    .yellow()
+                            )
+                        })
+                        .ok()
+                        .and_then(|s| {
+                            if s.version == TEMPLATES_SCHEMA_VERSION {
+                                return Some(s);
+                            }
+                            println!(
+                                "{}",
+                                "Template list with incompatible version found. Consider updating cargo-shuttle. Falling back to internal list."
+                                    .yellow()
+                            );
+
+                            None
+                        })
+                };
+                if let Some(schema) = schema {
+                    println!("What type of project template would you like to start from?");
+                    let i = Select::with_theme(&theme)
+                        .items(&[
+                            "A Hello World app in a supported framework",
+                            "Browse our full library of templates", // TODO(when templates page is live): Add link to it?
+                        ])
+                        .clear(false)
+                        .default(0)
+                        .interact()?;
+                    println!();
+                    if i == 0 {
+                        // Use a Hello world starter
+                        let mut starters = schema.starters.into_values().collect::<Vec<_>>();
+                        starters.sort_by_key(|t| {
+                            // Make the "No templates" appear last in the list
+                            if t.title.starts_with("No") {
+                                "zzz".to_owned()
+                            } else {
+                                t.title.clone()
+                            }
+                        });
+                        let starter_strings = starters
+                            .iter()
+                            .map(|t| {
+                                format!("{} - {}", t.title.clone().bold(), t.description.clone())
+                            })
+                            .collect::<Vec<_>>();
+                        let index = Select::with_theme(&theme)
+                            .with_prompt("Select template")
+                            .items(&starter_strings)
+                            .default(0)
+                            .interact()?;
+                        println!();
+                        let path = starters[index]
+                            .path
+                            .clone()
+                            .expect("starter to have a path");
+
+                        TemplateLocation {
+                            auto_path: EXAMPLES_REPO.into(),
+                            subfolder: Some(path),
+                        }
+                    } else {
+                        // Browse all non-starter templates
+                        let mut templates = schema.templates.into_values().collect::<Vec<_>>();
+                        templates.sort_by_key(|t| t.title.clone());
+                        let template_strings = templates
+                            .iter()
+                            .map(|t| {
+                                format!(
+                                    "{} - {}{}",
+                                    t.title.clone().bold(),
+                                    t.description.clone(),
+                                    t.tags
+                                        .first()
+                                        .map(|tag| format!(" ({tag})").dim().to_string())
+                                        .unwrap_or_default(),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        let index = Select::with_theme(&theme)
+                            .with_prompt("Select template")
+                            .items(&template_strings)
+                            .default(0)
+                            .interact()?;
+                        println!();
+                        let path = templates[index]
+                            .path
+                            .clone()
+                            .expect("template to have a path");
+
+                        TemplateLocation {
+                            auto_path: EXAMPLES_REPO.into(),
+                            subfolder: Some(path),
+                        }
+                    }
+                } else {
+                    println!("Shuttle works with many frameworks. Which one do you want to use?");
+                    let frameworks = args::InitTemplateArg::VARIANTS;
+                    let framework_strings = frameworks
+                        .iter()
+                        .map(|t| {
+                            t.get_documentation()
+                                .expect("all template variants to have docs")
+                        })
+                        .collect::<Vec<_>>();
+                    let index = Select::with_theme(&theme)
+                        .items(&framework_strings)
+                        .default(0)
+                        .interact()?;
+                    println!();
+                    frameworks[index].template()
+                }
             }
         };
 
@@ -463,17 +577,6 @@ impl Shuttle {
             template,
             no_git,
         )?;
-        println!();
-
-        printdoc!(
-            "
-            Hint: Check the examples repo for a full list of templates:
-                  {EXAMPLES_REPO}
-            Hint: You can also use `cargo shuttle init --from` to clone templates.
-                  See {SHUTTLE_CLI_DOCS_URL}
-                  or run `cargo shuttle init --help`
-            "
-        );
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
@@ -736,31 +839,20 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    async fn logs(
-        &self,
-        id: Option<Uuid>,
-        latest: bool,
-        follow: bool,
-        raw: bool,
-        head: Option<u32>,
-        tail: Option<u32>,
-        all: bool,
-    ) -> Result<CommandOutcome> {
-        let (mode, len) = match (head, tail, all) {
+    async fn logs(&self, args: LogsArgs) -> Result<CommandOutcome> {
+        let (args.mode, args.len) = match (head, tail, all) {
             (Some(num), _, _) => (LogMode::Head, num),
             (_, Some(num), _) => (LogMode::Tail, num),
             (_, _, all) if all => (LogMode::All, 0),
             _ => (LogMode::Tail, 1000),
         };
-
         let client = self.client.as_ref().unwrap();
-        let id = if let Some(id) = id {
+        let id = if let Some(id) = args.id {
             id
         } else {
             let proj_name = self.ctx.project_name();
 
-            if latest {
+            if args.latest {
                 // Find latest deployment (not always an active one)
                 let deployments = client
                     .get_deployments(proj_name, 0, 1)
@@ -787,7 +879,7 @@ impl Shuttle {
             }
         };
 
-        if follow {
+        if args.follow {
             let mut stream = client
                 .get_logs_ws(self.ctx.project_name(), &id, mode, len)
                 .await
@@ -799,10 +891,10 @@ impl Shuttle {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
                     match serde_json::from_str::<shuttle_common::LogItem>(&line) {
                         Ok(log) => {
-                            if raw {
-                                println!("{}", log.get_raw_line());
+                            if args.raw {
+                                println!("{}", log.get_raw_line())
                             } else {
-                                println!("{log}");
+                                println!("{log}")
                             }
                         }
                         Err(err) => {
@@ -828,10 +920,10 @@ impl Shuttle {
                 })?;
 
             for log in logs.into_iter() {
-                if raw {
-                    println!("{}", log.get_raw_line());
+                if args.raw {
+                    println!("{}", log.get_raw_line())
                 } else {
-                    println!("{log}");
+                    println!("{log}")
                 }
             }
         }
@@ -947,138 +1039,85 @@ impl Shuttle {
     async fn spin_local_runtime(
         run_args: &RunArgs,
         service: &BuiltService,
-        provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
         idx: u16,
-        provisioner_port: u16,
     ) -> Result<Option<(Child, runtime::Client)>> {
-        let crate_directory = service.crate_directory();
-        let secrets_path = if crate_directory.join("Secrets.dev.toml").exists() {
-            crate_directory.join("Secrets.dev.toml")
+        let secrets_file = run_args.secret_args.secrets.clone().or_else(|| {
+            let crate_dir = service.crate_directory();
+            // Prioritise crate-local prod secrets over workspace dev secrets (in the rare case that both exist)
+            [
+                crate_dir.join("Secrets.dev.toml"),
+                crate_dir.join("Secrets.toml"),
+                service.workspace_path.join("Secrets.dev.toml"),
+                service.workspace_path.join("Secrets.toml"),
+            ]
+            .into_iter()
+            .find(|f| f.exists() && f.is_file())
+        });
+        let secrets = if let Some(secrets_file) = secrets_file {
+            trace!("Loading secrets from {}", secrets_file.display());
+            if let Ok(secrets_str) = read_to_string(secrets_file) {
+                let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
+                trace!(keys = ?secrets.keys(), "available secrets");
+                secrets
+            } else {
+                trace!("No secrets were loaded");
+                Default::default()
+            }
         } else {
-            crate_directory.join("Secrets.toml")
-        };
-        trace!("Loading secrets from {}", secrets_path.display());
-
-        let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)
-        {
-            let secrets: HashMap<String, String> =
-                secrets_str.parse::<toml::Value>()?.try_into()?;
-
-            trace!(keys = ?secrets.keys(), "available secrets");
-
-            secrets
-        } else {
-            trace!("No secrets were loaded");
+            trace!("No secrets file was found");
             Default::default()
         };
 
-        let runtime_executable = if service.is_wasm {
-            let runtime_path = home::cargo_home()
-                .expect("failed to find cargo home dir")
-                .join("bin/shuttle-next");
-
-            println!("Installing shuttle-next runtime. This can take a while...");
-
-            if cfg!(debug_assertions) {
-                // Canonicalized path to shuttle-runtime for dev to work on windows
-
-                let path = dunce::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
-                    .expect("path to shuttle-runtime does not exist or is invalid");
-
-                tokio::process::Command::new("cargo")
-                    .arg("install")
-                    .arg("shuttle-runtime")
-                    .arg("--path")
-                    .arg(path)
-                    .arg("--bin")
-                    .arg("shuttle-next")
-                    .arg("--features")
-                    .arg("next")
-                    .output()
-                    .await
-                    .expect("failed to install the shuttle runtime");
-            } else {
-                // If the version of cargo-shuttle is different from shuttle-runtime,
-                // or it isn't installed, try to install shuttle-runtime from crates.io.
-                if let Err(err) = check_version(&runtime_path).await {
-                    warn!("{}", err);
-
-                    trace!("installing shuttle-runtime");
-                    tokio::process::Command::new("cargo")
-                        .arg("install")
-                        .arg("shuttle-runtime")
-                        .arg("--bin")
-                        .arg("shuttle-next")
-                        .arg("--features")
-                        .arg("next")
-                        .output()
-                        .await
-                        .expect("failed to install the shuttle runtime");
-                };
-            };
-
-            runtime_path
-        } else {
-            trace!(path = ?service.executable_path, "using alpha runtime");
-            if let Err(err) = check_version(&service.executable_path).await {
-                warn!("{}", err);
-                if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
-                    println!("Warning: {}.", mismatch);
-                    if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
-                        // The runtime is newer than cargo-shuttle so we
-                        // should help the user to update cargo-shuttle.
-                        printdoc! {"
-                            Hint: A newer version of cargo-shuttle is available.
-                                  Check out the installation docs for how to update: {SHUTTLE_INSTALL_DOCS_URL}",
-                        };
-                    } else {
-                        printdoc! {"
-                            Hint: A newer version of shuttle-runtime is available.
-                            Change its version to {} in Cargo.toml to update it, or
-                            run this command: cargo add shuttle-runtime@{}",
-                            mismatch.cargo_shuttle,
-                            mismatch.cargo_shuttle,
-                        };
-                    }
+        trace!(path = ?service.executable_path, "using alpha runtime");
+        if let Err(err) = check_version(&service.executable_path).await {
+            warn!("{}", err);
+            if let Some(mismatch) = err.downcast_ref::<VersionMismatchError>() {
+                println!("Warning: {}.", mismatch);
+                if mismatch.shuttle_runtime > mismatch.cargo_shuttle {
+                    // The runtime is newer than cargo-shuttle so we
+                    // should help the user to update cargo-shuttle.
+                    printdoc! {"
+                        Hint: A newer version of cargo-shuttle is available.
+                                Check out the installation docs for how to update: {SHUTTLE_INSTALL_DOCS_URL}",
+                    };
                 } else {
-                    return Err(err.context(
-                        format!(
-                            "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct executable?",
-                            service.executable_path.display()
-                        )
-                    ));
+                    printdoc! {"
+                        Hint: A newer version of shuttle-runtime is available.
+                        Change its version to {} in Cargo.toml to update it, or
+                        run this command: cargo add shuttle-runtime@{}",
+                        mismatch.cargo_shuttle,
+                        mismatch.cargo_shuttle,
+                    };
                 }
+            } else {
+                return Err(err.context(
+                    format!(
+                        "Failed to verify the version of shuttle-runtime in {}. Is cargo targeting the correct executable?",
+                        service.executable_path.display()
+                    )
+                ));
             }
-            service.executable_path.clone()
-        };
+        }
+        let runtime_executable = service.executable_path.clone();
 
         // Child process and gRPC client for sending requests to it
         let (mut runtime, mut runtime_client) = runner::start(
-            service.is_wasm,
-            Environment::Local,
-            &format!("http://localhost:{provisioner_port}"),
-            None,
             portpicker::pick_unused_port().expect("unable to find available port for gRPC server"),
             runtime_executable,
             service.workspace_path.as_path(),
         )
-        .await
-        .map_err(|err| {
-            provisioner_server.abort();
-            err
-        })?;
+        .await?;
 
         let service_name = service.service_name()?;
         let deployment_id: Uuid = Default::default();
-
-        // Clones to send to spawn
-        let service_name_clone = service_name.clone().to_string();
 
         let child_stdout = runtime
             .stdout
             .take()
             .context("child process did not have a handle to stdout")?;
         let mut reader = BufReader::new(child_stdout).lines();
+        let service_name_clone = service_name.clone();
+        let raw = run_args.raw;
         tokio::spawn(async move {
             while let Some(line) = reader.next_line().await.unwrap() {
                 let log_item = LogItem::new(
@@ -1086,27 +1125,36 @@ impl Shuttle {
                     shuttle_common::log::Backend::Runtime(service_name_clone.clone()),
                     line,
                 );
-                println!("{log_item}");
+
+                if raw {
+                    println!("{}", log_item.get_raw_line())
+                } else {
+                    println!("{log_item}")
+                }
             }
         });
 
+        //
+        // LOADING PHASE
+        //
+
         let load_request = tonic::Request::new(LoadRequest {
+            project_name: service_name.to_string(),
+            env: Environment::Local.to_string(),
+            secrets: secrets.clone(),
             path: service
                 .executable_path
                 .clone()
                 .into_os_string()
                 .into_string()
                 .expect("to convert path to string"),
-            service_name: service_name.to_string(),
-            resources: Default::default(),
-            secrets,
+            ..Default::default()
         });
 
         trace!("loading service");
         let response = runtime_client
             .load(load_request)
             .or_else(|err| async {
-                provisioner_server.abort();
                 runtime.kill().await?;
                 Err(err)
             })
@@ -1118,16 +1166,22 @@ impl Shuttle {
             return Ok(None);
         }
 
-        let resources = response
-            .resources
-            .into_iter()
-            .map(resource::Response::from_bytes)
-            .collect();
+        //
+        // PROVISIONING PHASE
+        //
+
+        let resources = response.resources;
+        let (resources, mocked_responses) =
+            Shuttle::local_provision_phase(service_name.as_str(), resources, secrets).await?;
 
         println!(
             "{}",
-            get_resource_tables(&resources, service_name.as_str(), false, false)
+            get_resource_tables(&mocked_responses, service_name.as_str(), false, false)
         );
+
+        //
+        // START PHASE
+        //
 
         let addr = SocketAddr::new(
             if run_args.external {
@@ -1148,13 +1202,13 @@ impl Shuttle {
 
         let start_request = StartRequest {
             ip: addr.to_string(),
+            resources,
         };
 
         trace!(?start_request, "starting service");
         let response = runtime_client
             .start(tonic::Request::new(start_request))
             .or_else(|err| async {
-                provisioner_server.abort();
                 runtime.kill().await?;
                 Err(err)
             })
@@ -1163,6 +1217,113 @@ impl Shuttle {
 
         trace!(response = ?response,  "client response: ");
         Ok(Some((runtime, runtime_client)))
+    }
+
+    async fn local_provision_phase(
+        project_name: &str,
+        mut resources: Vec<Vec<u8>>,
+        secrets: HashMap<String, String>,
+    ) -> Result<(Vec<Vec<u8>>, Vec<resource::Response>)> {
+        // for displaying the tables
+        let mut mocked_responses: Vec<resource::Response> = Vec::new();
+        let prov = LocalProvisioner::new()?;
+
+        // Fail early if any bytes is invalid json
+        let values = resources
+            .iter()
+            .map(|bytes| {
+                serde_json::from_slice::<ResourceInput>(bytes)
+                    .context("deserializing resource input")
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        for (bytes, shuttle_resource) in
+            resources
+                .iter_mut()
+                .zip(values)
+                // ignore non-Shuttle resource items
+                .filter_map(|(bytes, value)| match value {
+                    ResourceInput::Shuttle(shuttle_resource) => Some((bytes, shuttle_resource)),
+                    ResourceInput::Custom(_) => None,
+                })
+                .map(|(bytes, shuttle_resource)| {
+                    if shuttle_resource.version == RESOURCE_SCHEMA_VERSION {
+                        Ok((bytes, shuttle_resource))
+                    } else {
+                        Err(anyhow!("
+                            Shuttle resource request for {} with incompatible version found. Expected {}, found {}. \
+                            Make sure that this deployer and the Shuttle resource are up to date.
+                            ",
+                            shuttle_resource.r#type,
+                            RESOURCE_SCHEMA_VERSION,
+                            shuttle_resource.version
+                        ))
+                    }
+                }).collect::<anyhow::Result<Vec<_>>>()?.into_iter()
+        {
+            match shuttle_resource.r#type {
+                resource::Type::Database(db_type) => {
+                    let config: DbInput = serde_json::from_value(shuttle_resource.config)
+                        .context("deserializing resource config")?;
+                    let res = match config.local_uri {
+                        Some(local_uri) => DatabaseResource::ConnectionString(local_uri),
+                        None => DatabaseResource::Info(
+                            prov.provision_database(Request::new(DatabaseRequest {
+                                project_name: project_name.to_string(),
+                                db_type: Some(db_type.into()),
+                                db_name: config.db_name,
+                            }))
+                            .await?
+                            .into_inner()
+                            .into(),
+                        ),
+                    };
+                    mocked_responses.push(resource::Response {
+                        r#type: shuttle_resource.r#type,
+                        config: serde_json::Value::Null,
+                        data: serde_json::to_value(&res).unwrap(),
+                    });
+                    *bytes = serde_json::to_vec(&ShuttleResourceOutput {
+                        output: res,
+                        custom: shuttle_resource.custom,
+                    })
+                    .unwrap();
+                }
+                resource::Type::Secrets => {
+                    // We already know the secrets at this stage, they are not provisioned like other resources
+                    mocked_responses.push(resource::Response {
+                        r#type: shuttle_resource.r#type,
+                        config: serde_json::Value::Null,
+                        data: serde_json::to_value(secrets.clone()).unwrap(),
+                    });
+                    *bytes = serde_json::to_vec(&ShuttleResourceOutput {
+                        output: secrets.clone(),
+                        custom: shuttle_resource.custom,
+                    })
+                    .unwrap();
+                }
+                resource::Type::Persist => {
+                    // only show that this resource is "connected"
+                    mocked_responses.push(resource::Response {
+                        r#type: shuttle_resource.r#type,
+                        config: serde_json::Value::Null,
+                        data: serde_json::Value::Null,
+                    });
+                }
+                resource::Type::Container => {
+                    let config = serde_json::from_value(shuttle_resource.config)
+                        .context("deserializing resource config")?;
+                    let res = prov.start_container(config).await?;
+                    *bytes = serde_json::to_vec(&ShuttleResourceOutput {
+                        output: res,
+                        custom: shuttle_resource.custom,
+                    })
+                    .unwrap();
+                }
+            }
+        }
+
+        Ok((resources, mocked_responses))
     }
 
     async fn stop_runtime(
@@ -1180,14 +1341,13 @@ impl Shuttle {
             })
             .await?
             .into_inner();
-        trace!(response = ?response,  "client stop response: ");
+        trace!(response = ?response, "client stop response: ");
         Ok(())
     }
 
     async fn add_runtime_info(
         runtime: Option<(Child, runtime::Client)>,
         existing_runtimes: &mut Vec<(Child, runtime::Client)>,
-        extra_servers: &[&JoinHandle<Result<(), tonic::transport::Error>>],
     ) -> Result<(), Status> {
         match runtime {
             Some(inner) => {
@@ -1196,10 +1356,6 @@ impl Shuttle {
             }
             None => {
                 trace!("Runtime error: No runtime process. Crashed during startup?");
-                for server in extra_servers {
-                    server.abort();
-                }
-
                 for rt_info in existing_runtimes {
                     let mut errored_out = false;
                     // Stopping all runtimes gracefully first, but if this errors out the function kills the runtime forcefully.
@@ -1240,28 +1396,14 @@ impl Shuttle {
             working_directory.display()
         );
 
-        // Compile all the alpha or shuttle-next services in the workspace.
         build_workspace(working_directory, run_args.release, tx, false).await
-    }
-
-    async fn setup_local_provisioner(
-    ) -> Result<(JoinHandle<Result<(), tonic::transport::Error>>, u16)> {
-        let provisioner = LocalProvisioner::new()?;
-        let provisioner_port =
-            portpicker::pick_unused_port().expect("unable to find available port for provisioner");
-        let provisioner_server = provisioner.start(SocketAddr::new(
-            Ipv4Addr::LOCALHOST.into(),
-            provisioner_port,
-        ));
-
-        Ok((provisioner_server, provisioner_port))
     }
 
     #[cfg(target_family = "unix")]
     async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
         debug!("starting local run");
         let services = self.pre_local_run(&run_args).await?;
-        let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
+
         let mut sigterm_notif =
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
                 .expect("Can not get the SIGTERM signal receptor");
@@ -1279,10 +1421,10 @@ impl Shuttle {
             // We must cover the case of starting multiple workspace services and receiving a signal in parallel.
             // This must stop all the existing runtimes and creating new ones.
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
+                res = Shuttle::spin_local_runtime(&run_args, service, i as u16) => {
                     match res {
                         Ok(runtime) => {
-                            Shuttle::add_runtime_info(runtime, &mut runtimes, &[&provisioner_server]).await?;
+                            Shuttle::add_runtime_info(runtime, &mut runtimes).await?;
                         },
                         Err(e) => println!("Runtime error: {e:?}"),
                     }
@@ -1310,7 +1452,6 @@ impl Shuttle {
         // If prior signal received is set to true we must stop all the existing runtimes and
         // exit the `local_run`.
         if signal_received {
-            provisioner_server.abort();
             for (mut rt, mut rt_client) in runtimes {
                 Shuttle::stop_runtime(&mut rt, &mut rt_client)
                     .await
@@ -1348,7 +1489,6 @@ impl Shuttle {
                     println!(
                         "cargo-shuttle received SIGTERM. Killing all the runtimes..."
                     );
-                    provisioner_server.abort();
                     Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
                         trace!(status = ?err, "stopping the runtime errored out");
                     });
@@ -1358,7 +1498,6 @@ impl Shuttle {
                     println!(
                         "cargo-shuttle received SIGINT. Killing all the runtimes..."
                     );
-                    provisioner_server.abort();
                     Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
                         trace!(status = ?err, "stopping the runtime errored out");
                     });
@@ -1418,7 +1557,6 @@ impl Shuttle {
     #[cfg(target_family = "windows")]
     async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
         let services = self.pre_local_run(&run_args).await?;
-        let (provisioner_server, provisioner_port) = Shuttle::setup_local_provisioner().await?;
 
         // Start all the services.
         let mut runtimes: Vec<(Child, runtime::Client)> = Vec::new();
@@ -1428,8 +1566,8 @@ impl Shuttle {
         let mut signal_received = false;
         for (i, service) in services.iter().enumerate() {
             signal_received = tokio::select! {
-                res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
-                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &[&provisioner_server]).await?;
+                res = Shuttle::spin_local_runtime(&run_args, service, i as u16) => {
+                    Shuttle::add_runtime_info(res.unwrap(), &mut runtimes).await?;
                     false
                 },
                 _ = Shuttle::handle_signals() => {
@@ -1448,7 +1586,6 @@ impl Shuttle {
         // If prior signal received is set to true we must stop all the existing runtimes and
         // exit the `local_run`.
         if signal_received {
-            provisioner_server.abort();
             for (mut rt, mut rt_client) in runtimes {
                 Shuttle::stop_runtime(&mut rt, &mut rt_client)
                     .await
@@ -1486,7 +1623,6 @@ impl Shuttle {
                     println!(
                         "Killing all the runtimes..."
                     );
-                    provisioner_server.abort();
                     Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
                         trace!(status = ?err, "stopping the runtime errored out");
                     });
@@ -1541,12 +1677,12 @@ impl Shuttle {
             }
         }
 
-        deployment_req.data = self.make_archive()?;
+        deployment_req.data = self.make_archive(args.secret_args.secrets.clone())?;
         if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
             bail!(
                 r#"The project is too large - the limit is {} MB. \
                 Your project archive is {:.1} MB. \
-                Run with `RUST_LOG="cargo_shuttle=debug"` to see which files are being packed."#,
+                Run with `cargo shuttle --debug` to see which files are being packed."#,
                 CREATE_SERVICE_BODY_LIMIT / 1_000_000,
                 deployment_req.data.len() as f32 / 1_000_000f32,
             );
@@ -1587,7 +1723,11 @@ impl Shuttle {
                         }
                     };
 
-                    println!("{log_item}");
+                    if args.raw {
+                        println!("{}", log_item.get_raw_line())
+                    } else {
+                        println!("{log_item}")
+                    }
 
                     // Detect versions of deployer and runtime, and print warnings of outdated.
                     if !deployer_version_checked
@@ -1981,7 +2121,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    fn make_archive(&self) -> Result<Vec<u8>> {
+    fn make_archive(&self, secrets_file: Option<PathBuf>) -> Result<Vec<u8>> {
         let include_patterns = self.ctx.assets();
         let encoder = GzEncoder::new(Vec::new(), Compression::new(3));
         let mut tar = Builder::new(encoder);
@@ -2017,8 +2157,12 @@ impl Shuttle {
 
         let mut globs = GlobSetBuilder::new();
 
-        // Always include secrets
-        globs.add(Glob::new("**/Secrets.toml").unwrap());
+        if let Some(secrets_file) = secrets_file.clone() {
+            entries.push(secrets_file);
+        } else {
+            // Default: Include all Secrets.toml files
+            globs.add(Glob::new("**/Secrets.toml").unwrap());
+        }
 
         // User provided includes
         if let Some(rules) = include_patterns {
@@ -2048,10 +2192,16 @@ impl Shuttle {
                 continue;
             }
 
-            let name = path
+            let mut name = path
                 .strip_prefix(working_directory.parent().context("get parent dir")?)
                 .context("strip prefix of path")?
                 .to_owned();
+
+            // if this is the custom secrets file, rename it to Secrets.toml
+            if secrets_file.as_ref().is_some_and(|sf| sf == &path) {
+                name.pop();
+                name.push("Secrets.toml");
+            }
 
             archive_files.insert(path, name);
         }
@@ -2073,6 +2223,24 @@ impl Shuttle {
 
         Ok(bytes)
     }
+}
+
+// /// Can be used during testing
+// async fn get_templates_schema() -> Result<TemplatesSchema> {
+//     Ok(toml::from_str(include_str!(
+//         "../../examples/templates.toml"
+//     ))?)
+// }
+async fn get_templates_schema() -> Result<TemplatesSchema> {
+    let client = reqwest::Client::new();
+    Ok(toml::from_str(
+        &client
+            .get(shuttle_common::constants::EXAMPLES_TEMPLATES_TOML)
+            .send()
+            .await?
+            .text()
+            .await?,
+    )?)
 }
 
 fn is_dirty(repo: &Repository) -> Result<()> {
@@ -2238,7 +2406,7 @@ mod tests {
     use flate2::read::GzDecoder;
     use tar::Archive;
 
-    use crate::args::ProjectArgs;
+    use crate::args::{DeployArgs, ProjectArgs, SecretsArgs};
     use crate::Shuttle;
     use std::fs::{self, canonicalize};
     use std::path::PathBuf;
@@ -2251,11 +2419,13 @@ mod tests {
         dunce::canonicalize(path).unwrap()
     }
 
-    fn get_archive_entries(project_args: ProjectArgs) -> Vec<String> {
+    fn get_archive_entries(project_args: ProjectArgs, deploy_args: DeployArgs) -> Vec<String> {
         let mut shuttle = Shuttle::new().unwrap();
         shuttle.load_project(&project_args).unwrap();
 
-        let archive = shuttle.make_archive().unwrap();
+        let archive = shuttle
+            .make_archive(deploy_args.secret_args.secrets)
+            .unwrap();
 
         let tar = GzDecoder::new(&archive[..]);
         let mut archive = Archive::new(tar);
@@ -2295,10 +2465,10 @@ mod tests {
         fs::write(working_directory.join("target").join("binary"), b"12345").unwrap();
 
         let project_args = ProjectArgs {
-            working_directory,
+            working_directory: working_directory.clone(),
             name: Some("archiving-test".to_owned()),
         };
-        let mut entries = get_archive_entries(project_args);
+        let mut entries = get_archive_entries(project_args.clone(), Default::default());
         entries.sort();
 
         assert_eq!(
@@ -2321,10 +2491,43 @@ mod tests {
                 "src/main.rs",
             ]
         );
+
+        fs::remove_file(working_directory.join("Secrets.toml")).unwrap();
+        let mut entries = get_archive_entries(
+            project_args,
+            DeployArgs {
+                secret_args: SecretsArgs {
+                    secrets: Some(working_directory.join("Secrets.toml.example")),
+                },
+                ..Default::default()
+            },
+        );
+        entries.sort();
+
+        assert_eq!(
+            entries,
+            vec![
+                ".gitignore",
+                ".ignore",
+                "Cargo.toml",
+                "Secrets.toml", // got moved here
+                // Secrets.toml.example was the given secrets file, so it got moved
+                "Shuttle.toml",
+                "asset1", // normal file
+                "asset2", // .gitignore'd, but included in Shuttle.toml
+                // asset3 is .ignore'd
+                "asset4",                // .gitignore'd, but un-ignored in .ignore
+                "asset5",                // .ignore'd, but included in Shuttle.toml
+                "dist/dist1",            // .gitignore'd, but included in Shuttle.toml
+                "nested/static/nested1", // normal file
+                // nested/static/nestedignore is .gitignore'd
+                "src/main.rs",
+            ]
+        );
     }
 
     #[test]
-    fn load_project_returns_proper_working_directory_in_project_args() {
+    fn finds_workspace_root() {
         let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
             name: None,

@@ -6,16 +6,14 @@ shuttle-runtime = { path = "BASE/runtime" }
 shuttle-service = { path = "BASE/service" }
 
 shuttle-aws-rds = { path = "BASE/resources/aws-rds" }
-shuttle-metadata = { path = "BASE/resources/metadata" }
+shuttle-opendal = { path = "BASE/resources/opendal" }
 shuttle-persist = { path = "BASE/resources/persist" }
 shuttle-qdrant = { path = "BASE/resources/qdrant" }
 shuttle-shared-db = { path = "BASE/resources/shared-db" }
-shuttle-secrets = { path = "BASE/resources/secrets" }
 shuttle-turso = { path = "BASE/resources/turso" }
 
 shuttle-axum = { path = "BASE/services/shuttle-axum" }
 shuttle-actix-web = { path = "BASE/services/shuttle-actix-web" }
-shuttle-next = { path = "BASE/services/shuttle-next" }
 shuttle-poem = { path = "BASE/services/shuttle-poem" }
 shuttle-rocket = { path = "BASE/services/shuttle-rocket" }
 shuttle-salvo = { path = "BASE/services/shuttle-salvo" }

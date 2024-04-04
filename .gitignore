@@ -29,8 +29,6 @@ acme*.json
 **/secrets.tfvar
 **/.terraform*
 
-e2e/users.toml
-
 # direnv cache directory
 .direnv/
 
@@ -44,3 +42,4 @@ yarn.lock
 
 *.wasm
 *.sqlite*
+.envrc

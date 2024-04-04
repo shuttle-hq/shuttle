@@ -11,17 +11,16 @@ use aws_sdk_rds::{
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
-use shuttle_common::backends::auth::VerifyClaim;
-use shuttle_common::backends::client::gateway;
-use shuttle_common::backends::ClaimExt;
-use shuttle_common::claims::Scope;
-use shuttle_common::models::project::ProjectName;
+use shuttle_backends::auth::VerifyClaim;
+use shuttle_backends::client::ServicesApiClient;
+use shuttle_backends::project_name::ProjectName;
+use shuttle_backends::ClaimExt;
+use shuttle_common::claims::{Claim, Scope};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
-    aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
+    aws_rds, database_request::DbType, provisioner_server::Provisioner, shared, AwsRds,
+    DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse, Ping, Pong, Shared,
 };
-use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
-use shuttle_proto::provisioner::{ContainerRequest, ContainerResponse, Ping, Pong};
 use shuttle_proto::resource_recorder;
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::sync::Mutex;
@@ -45,7 +44,7 @@ pub struct ShuttleProvisioner {
     internal_pg_address: String,
     internal_mongodb_address: String,
     rr_client: Arc<Mutex<resource_recorder::Client>>,
-    gateway_client: gateway::Client,
+    gateway_client: ServicesApiClient,
 }
 
 impl ShuttleProvisioner {
@@ -82,7 +81,7 @@ impl ShuttleProvisioner {
 
         let rr_client = resource_recorder::get_client(resource_recorder_uri).await;
 
-        let gateway_client = gateway::Client::new(gateway_uri.clone(), gateway_uri);
+        let gateway_client = ServicesApiClient::new(gateway_uri);
 
         Ok(Self {
             pool,
@@ -266,6 +265,7 @@ impl ShuttleProvisioner {
         &self,
         project_name: &str,
         engine: aws_rds::Engine,
+        database_name: &Option<String>,
     ) -> Result<DatabaseResponse, Error> {
         let client = &self.rds_client;
 
@@ -288,13 +288,9 @@ impl ShuttleProvisioner {
                 if let ModifyDBInstanceError::DbInstanceNotFoundFault(_) = err.err() {
                     debug!("creating new AWS RDS {instance_name}");
 
-                    // The engine display impl is used for both the engine and the database name,
-                    // but for mysql the engine name is an invalid database name.
-                    let db_name = if let aws_rds::Engine::Mysql(_) = engine {
-                        "msql".to_string()
-                    } else {
-                        engine.to_string()
-                    };
+                    let db_name = database_name
+                        .to_owned()
+                        .unwrap_or_else(|| project_name.to_string());
 
                     client
                         .create_db_instance()
@@ -461,6 +457,21 @@ impl ShuttleProvisioner {
 
         Ok(DatabaseDeletionResponse {})
     }
+
+    async fn verify_ownership(&self, claim: &Claim, project_name: &str) -> Result<(), Status> {
+        if !claim.is_admin()
+            && !claim.is_deployer()
+            && !claim
+                .owns_project(&self.gateway_client, project_name)
+                .await
+                .map_err(|_| Status::internal("could not verify project ownership"))?
+        {
+            let status = Status::permission_denied("the request lacks the authorizations");
+            error!(error = &status as &dyn std::error::Error);
+            return Err(status);
+        }
+        Ok(())
+    }
 }
 
 #[tonic::async_trait]
@@ -471,13 +482,13 @@ impl Provisioner for ShuttleProvisioner {
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseResponse>, Status> {
         request.verify(Scope::ResourcesWrite)?;
-
         let claim = request.get_claim()?;
-
         let request = request.into_inner();
         if !ProjectName::is_valid(&request.project_name) {
             return Err(Status::invalid_argument("invalid project name"));
         }
+        self.verify_ownership(&claim, &request.project_name).await?;
+
         let db_type = request.db_type.unwrap();
 
         let reply = match db_type {
@@ -513,8 +524,12 @@ impl Provisioner for ShuttleProvisioner {
                     }
                 }
 
-                self.request_aws_rds(&request.project_name, engine.expect("engine to be set"))
-                    .await?
+                self.request_aws_rds(
+                    &request.project_name,
+                    engine.expect("engine to be set"),
+                    &request.db_name,
+                )
+                .await?
             }
         };
 
@@ -527,11 +542,13 @@ impl Provisioner for ShuttleProvisioner {
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
         request.verify(Scope::ResourcesWrite)?;
-
+        let claim = request.get_claim()?;
         let request = request.into_inner();
         if !ProjectName::is_valid(&request.project_name) {
             return Err(Status::invalid_argument("invalid project name"));
         }
+        self.verify_ownership(&claim, &request.project_name).await?;
+
         let db_type = request.db_type.unwrap();
 
         let reply = match db_type {
@@ -549,17 +566,6 @@ impl Provisioner for ShuttleProvisioner {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn provision_arbitrary_container(
-        &self,
-        _request: Request<ContainerRequest>,
-    ) -> Result<Response<ContainerResponse>, Status> {
-        // Intended for use in local runs
-        Err(Status::unimplemented(
-            "Provisioning arbitrary containers on Shuttle is not supported",
-        ))
-    }
-
-    #[tracing::instrument(skip(self))]
     async fn health_check(&self, _request: Request<Ping>) -> Result<Response<Pong>, Status> {
         Ok(Response::new(Pong {}))
     }
@@ -568,7 +574,7 @@ impl Provisioner for ShuttleProvisioner {
 fn generate_password() -> String {
     rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
-        .take(12)
+        .take(32)
         .map(char::from)
         .collect()
 }

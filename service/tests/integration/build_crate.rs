@@ -13,7 +13,7 @@ async fn not_shuttle() {
 }
 
 #[tokio::test]
-#[should_panic(expected = "Your Shuttle project must be a binary.")]
+#[should_panic(expected = "Your Shuttle package must be a binary.")]
 async fn not_bin() {
     let (tx, _) = tokio::sync::mpsc::channel::<String>(256);
     let project_path = format!("{}/tests/resources/not-bin", env!("CARGO_MANIFEST_DIR"));
@@ -37,7 +37,6 @@ async fn is_bin() {
             manifest_path: PathBuf::from(&project_path).join("Cargo.toml"),
             package_name: "is-bin".to_string(),
             executable_path: PathBuf::from(&project_path).join("target/debug/is-bin"),
-            is_wasm: false,
         }]
     );
 }
@@ -55,7 +54,7 @@ async fn not_found() {
         .unwrap();
 }
 
-// Test that alpha and next projects are compiled correctly. Any shared library crates should not be compiled too
+// Test that alpha projects are compiled correctly. Any shared library crates should not be compiled too
 #[tokio::test]
 async fn workspace() {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
@@ -76,15 +75,12 @@ async fn workspace() {
                 manifest_path: PathBuf::from(&project_path).join("alpha/Cargo.toml"),
                 package_name: "alpha".to_string(),
                 executable_path: PathBuf::from(&project_path).join("target/debug/alpha"),
-                is_wasm: false,
             },
             BuiltService {
                 workspace_path: PathBuf::from(&project_path),
-                manifest_path: PathBuf::from(&project_path).join("next/Cargo.toml"),
-                package_name: "next".to_string(),
-                executable_path: PathBuf::from(&project_path)
-                    .join("target/wasm32-wasi/debug/next.wasm"),
-                is_wasm: true,
+                manifest_path: PathBuf::from(&project_path).join("alpha2/Cargo.toml"),
+                package_name: "alpha2".to_string(),
+                executable_path: PathBuf::from(&project_path).join("target/debug/alpha2"),
             },
         ]
     );

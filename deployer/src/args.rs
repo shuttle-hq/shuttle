@@ -2,7 +2,6 @@ use std::{net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
 use hyper::Uri;
-use shuttle_common::models::project::ProjectName;
 
 /// Program to handle the deploys for a single project
 /// Handling includes, building, testing, and running each service
@@ -35,7 +34,7 @@ pub struct Args {
 
     /// Project being served by this deployer
     #[clap(long)]
-    pub project: ProjectName,
+    pub project: String,
 
     /// Project id of the project of this deployer
     #[clap(long)]
@@ -48,10 +47,6 @@ pub struct Args {
     /// Address to reach the authentication service at
     #[clap(long, default_value = "http://auth:8000")]
     pub auth_uri: Uri,
-
-    /// Address to reach the builder service at
-    #[clap(long, default_value = "http://builder:8000")]
-    pub builder_uri: Uri,
 
     /// Uri to folder to store all artifacts
     #[clap(long, default_value = "/tmp")]

@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.38.0"
+version = "0.43.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ homepage = "https://www.shuttle.rs"
 
 [dependencies]
 shuttle-common = { workspace = true, features = ["models"] }
-shuttle-proto = { workspace = true, features = ["provisioner", "runtime"] }
+shuttle-proto = { workspace = true, features = ["provisioner", "runtime-client"] }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
 
 anyhow = { workspace = true }
@@ -21,7 +21,7 @@ clap = { workspace = true, features = ["env"] }
 clap_complete = "4.3.1"
 clap_mangen = "0.2.15"
 crossterm = { workspace = true }
-dialoguer = { version = "0.11.0", features = ["fuzzy-select"] }
+dialoguer = { version = "0.11", default-features = false, features = ["password"] }
 dirs = { workspace = true }
 dunce = { workspace = true }
 flate2 = { workspace = true }
@@ -41,8 +41,6 @@ percent-encoding = { workspace = true }
 portpicker = { workspace = true }
 regex = "1.9.5"
 reqwest = { workspace = true, features = ["json"] }
-reqwest-middleware = "0.2.0"
-reqwest-retry = "0.3.0"
 rmp-serde = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -71,7 +69,5 @@ webbrowser = "0.8.2"
 [dev-dependencies]
 assert_cmd = "2.0.6"
 rexpect = "0.5.0"
-# Tmp until this branch is merged and released
-tokiotest-httpserver = { git = "https://github.com/shuttle-hq/tokiotest-httpserver", branch = "feat/body" }
 # Publication of this crate will fail if this is changed to a workspace dependency
 shuttle-common-tests = { path = "../common-tests" }

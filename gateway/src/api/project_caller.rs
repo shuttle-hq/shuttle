@@ -4,13 +4,14 @@ use axum::response::Response;
 use http::{HeaderMap, Method, Request, StatusCode, Uri};
 use hyper::Body;
 use serde::de::DeserializeOwned;
+use shuttle_backends::project_name::ProjectName;
 use shuttle_common::{
-    models::{deployment, error::ErrorKind, project::ProjectName},
+    models::{deployment, error::ErrorKind, user::UserId},
     resource,
 };
 use uuid::Uuid;
 
-use crate::{auth::ScopedUser, project::Project, service::GatewayService, AccountName, Error};
+use crate::{auth::ScopedUser, project::Project, service::GatewayService, Error};
 
 use super::latest::RouterState;
 
@@ -18,7 +19,7 @@ use super::latest::RouterState;
 pub(crate) struct ProjectCaller {
     project: Project,
     project_name: ProjectName,
-    account_name: AccountName,
+    user_id: UserId,
     service: Arc<GatewayService>,
     headers: HeaderMap,
 }
@@ -34,12 +35,15 @@ impl ProjectCaller {
             service, sender, ..
         } = state;
         let project_name = scoped_user.scope;
-        let project = service.find_or_start_project(&project_name, sender).await?;
+        let project = service
+            .find_or_start_project(&project_name, sender)
+            .await?
+            .0;
 
         Ok(Self {
             project: project.state,
             project_name,
-            account_name: scoped_user.user.name,
+            user_id: scoped_user.user.id,
             service,
             headers: headers.clone(),
         })
@@ -56,7 +60,7 @@ impl ProjectCaller {
             .unwrap();
 
         self.service
-            .route(&self.project, &self.project_name, &self.account_name, req)
+            .route(&self.project, &self.project_name, &self.user_id, req)
             .await
     }
 

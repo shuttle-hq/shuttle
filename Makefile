@@ -1,10 +1,5 @@
 COMMIT_SHA?=$(shell git rev-parse --short HEAD)
 
-ifeq ($(CI),true)
-BUILDX_CACHE?=/tmp/cache/buildx
-CACHE_FLAGS=--cache-to type=local,dest=$(BUILDX_CACHE),mode=max --cache-from type=local,src=$(BUILDX_CACHE)
-endif
-
 ifeq ($(PUSH),true)
 BUILDX_OP=--push
 else
@@ -15,15 +10,14 @@ ifdef PLATFORMS
 PLATFORM_FLAGS=--platform $(PLATFORMS)
 endif
 
-BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
+BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS)
 
-# the rust version used by our containers, and as an override for our deployers
-# ensuring all user crates are compiled with the same rustc toolchain
-RUSTUP_TOOLCHAIN=1.75.0
+# The Rust version used by our containers
+# Can be updated to the latest stable
+RUSTUP_TOOLCHAIN=1.76.0
 
 TAG?=$(shell git describe --tags --abbrev=0)
 AUTH_TAG?=$(TAG)
-BUILDER_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
 GATEWAY_TAG?=$(TAG)
 LOGGER_TAG?=$(TAG)
@@ -47,7 +41,13 @@ MONGO_INITDB_ROOT_USERNAME?=mongodb
 MONGO_INITDB_ROOT_PASSWORD?=password
 STRIPE_SECRET_KEY?=""
 AUTH_JWTSIGNING_PRIVATE_KEY?=""
+PERMIT_API_KEY?=""
 
+# log level set in all backends
+RUST_LOG?=shuttle=debug,info
+
+# production/staging/dev
+SHUTTLE_ENV?=dev
 DD_ENV=$(SHUTTLE_ENV)
 ifeq ($(SHUTTLE_ENV),production)
 DOCKER_COMPOSE_FILES=docker-compose.yml
@@ -58,8 +58,8 @@ CONTAINER_REGISTRY=public.ecr.aws/shuttle
 # make sure we only ever go to production with `--tls=enable`
 USE_TLS=enable
 CARGO_PROFILE=release
-RUST_LOG?=nbuild_core=warn,shuttle=debug,info
 else
+# add local development overrides to compose
 DOCKER_COMPOSE_FILES=docker-compose.yml docker-compose.dev.yml
 STACK?=shuttle-dev
 APPS_FQDN=unstable.shuttleapp.rs
@@ -68,7 +68,10 @@ CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 USE_TLS?=disable
 # default for local run
 CARGO_PROFILE?=debug
-RUST_LOG?=nbuild_core=warn,shuttle=debug,info
+ifeq ($(CI),true)
+# use release builds for staging deploys so that the DLC cache can be re-used for prod deploys
+CARGO_PROFILE=release
+endif
 DEV_SUFFIX=-dev
 DEPLOYS_API_KEY?=gateway4deployes
 GATEWAY_ADMIN_KEY?=dh9z58jttoes3qvt
@@ -82,11 +85,6 @@ CONTROL_DB_POSTGRES_URI?=postgres://postgres:${CONTROL_DB_POSTGRES_PASSWORD}@con
 LOGGER_POSTGRES_TAG?=15
 LOGGER_POSTGRES_PASSWORD?=postgres
 LOGGER_POSTGRES_URI?=postgres://postgres:${LOGGER_POSTGRES_PASSWORD}@logger-postgres:5432/postgres
-endif
-
-ifeq ($(CI),true)
-# default for staging
-CARGO_PROFILE=release
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres
@@ -104,7 +102,6 @@ endif
 DOCKER_COMPOSE_ENV=\
 	STACK=$(STACK)\
 	AUTH_TAG=$(AUTH_TAG)\
-	BUILDER_TAG=$(BUILDER_TAG)\
 	DEPLOYER_TAG=$(DEPLOYER_TAG)\
 	GATEWAY_TAG=$(GATEWAY_TAG)\
 	LOGGER_TAG=$(LOGGER_TAG)\
@@ -134,20 +131,21 @@ DOCKER_COMPOSE_ENV=\
 	COMPOSE_PROFILES=$(COMPOSE_PROFILES)\
 	DOCKER_SOCK=$(DOCKER_SOCK)\
 	SHUTTLE_ENV=$(SHUTTLE_ENV)\
-	SHUTTLE_SERVICE_VERSION=$(SHUTTLE_SERVICE_VERSION)
+	SHUTTLE_SERVICE_VERSION=$(SHUTTLE_SERVICE_VERSION)\
+	PERMIT_API_KEY=$(PERMIT_API_KEY)
 
-.PHONY: clean cargo-clean images the-shuttle-images shuttle-% postgres otel deploy test docker-compose.rendered.yml up down
+.PHONY: clean deep-clean images the-shuttle-images shuttle-% postgres otel deploy test docker-compose.rendered.yml up down
 
 clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-cargo-clean:
-	find . -type d \( -name target -or -name .shuttle-executables \) | xargs rm -rf
+deep-clean:
+	find . -type d \( -name target -or -name .shuttle-executables -or -name node_modules \) | xargs rm -rf
 
 images: the-shuttle-images postgres otel
 
-the-shuttle-images: shuttle-auth shuttle-deployer shuttle-gateway shuttle-logger shuttle-provisioner shuttle-resource-recorder # shuttle-builder
+the-shuttle-images: shuttle-auth shuttle-deployer shuttle-gateway shuttle-logger shuttle-provisioner shuttle-resource-recorder
 
 shuttle-%:
 	$(DOCKER_BUILD) \
@@ -184,11 +182,6 @@ otel:
 
 deploy: docker-compose.yml
 	$(DOCKER_COMPOSE_ENV) docker stack deploy -c $< $(STACK)
-
-test:
-	POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) \
-	APPS_FQDN=$(APPS_FQDN) \
-	cargo test --manifest-path=e2e/Cargo.toml $(CARGO_TEST_FLAGS) -- --nocapture
 
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@

@@ -4,10 +4,10 @@ use ctor::dtor;
 use helpers::{exec_mongosh, exec_psql, DbType, DockerInstance};
 use once_cell::sync::Lazy;
 use serde_json::Value;
-use shuttle_common::test_utils::get_mocked_gateway_server;
-use shuttle_proto::{
-    provisioner::shared, test_utils::resource_recorder::get_mocked_resource_recorder,
+use shuttle_backends::test_utils::{
+    gateway::get_mocked_gateway_server, resource_recorder::get_mocked_resource_recorder,
 };
+use shuttle_proto::provisioner::shared;
 use shuttle_provisioner::ShuttleProvisioner;
 use tonic::transport::Uri;
 
@@ -69,8 +69,8 @@ mod needs_docker {
         let mut r_r_client = resource_recorder::get_client(rr_uri).await;
         r_r_client
             .record_resources(Request::new(RecordRequest {
-                project_id: "id1".to_string(),
-                service_id: "service_id".to_string(),
+                project_id: "00000000000000000000000001".to_string(),
+                service_id: "00000000000000000000000001".to_string(),
                 resources: vec![
                     record_request::Resource {
                         r#type: "database::shared::postgres".to_string(),
@@ -93,6 +93,7 @@ mod needs_docker {
             db_type: Some(DbType::AwsRds(AwsRds {
                 engine: Some(Engine::Postgres(Default::default())),
             })),
+            db_name: Some("custom-name".to_string()),
         });
 
         // Add a claim that only allows for one RDS - the one that will be returned by r-r

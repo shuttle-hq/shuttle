@@ -7,6 +7,7 @@
 default_to_workspace = false
 
 [env]
+RUST_BACKTRACE = 0
 CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 # TAG = { script = ["git describe --tags --abbrev=0"] }
 
@@ -107,7 +108,6 @@ proto-gen \
     $OP \
     -d proto \
     -o proto/src/generated \
-    -f proto/builder.proto \
     -f proto/logger.proto \
     -f proto/provisioner.proto \
     -f proto/resource-recorder.proto \
@@ -117,7 +117,7 @@ proto-gen \
 [tasks.changelog]
 # Provide the version to generate for
 # Example: cargo make changelog 0.37.0
-install_crate = { crate_name = "git-cliff", binary = "git-cliff", test_arg = ["-V"], min_version = "1.4.0" }
+install_crate = { crate_name = "git-cliff", binary = "git-cliff", test_arg = ["-V"], min_version = "2.1.2" }
 command = "git-cliff"
 args = ["-o", "CHANGELOG.md", "-t", "${@}"]
 
@@ -155,7 +155,7 @@ feature_flags = array "--all-features"
 ###### Crates that have mutually exclusive features define
 ###### their own set of feature flags to test:
 if eq ${path} "resources/shared-db"
-    feature_flags = array "-F mongodb" "-F postgres" "-F postgres,sqlx" "-F postgres,sqlx-native-tls"
+    feature_flags = array "-F mongodb" "-F postgres" "-F postgres,sqlx" "-F postgres,sqlx-native-tls" "-F postgres,diesel-async" "-F postgres,diesel-async-bb8" "-F postgres,diesel-async-deadpool"
 elseif eq ${path} "services/shuttle-axum"
     feature_flags = array "-F axum" "-F axum-0-6"
 elseif eq ${path} "services/shuttle-serenity"

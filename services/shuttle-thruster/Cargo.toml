@@ -1,17 +1,17 @@
 [package]
 name = "shuttle-thruster"
-version = "0.38.0"
+version = "0.43.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service implementation to run a thruster webserver on shuttle"
+repository = "https://github.com/shuttle-hq/shuttle"
 keywords = ["shuttle-service", "thruster"]
 
 [workspace]
 
 [dependencies]
-thruster = { version = "1.3.0" }
-shuttle-runtime = { path = "../../runtime", version = "0.38.0", default-features = false }
+thruster = "1.3.0"
+shuttle-runtime = { path = "../../runtime", version = "0.43.0", default-features = false }
 
 [dev-dependencies]
 thruster = { version = "1.3.0", features = ["hyper_server"] }
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

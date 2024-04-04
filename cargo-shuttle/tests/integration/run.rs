@@ -54,43 +54,7 @@ async fn axum_static_files() {
         .await
         .unwrap();
 
-    assert_eq!(request_text, "Hello, world!");
-
-    let request_text = client
-        .get(format!("{url}/assets"))
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert!(
-        request_text.contains("This is an example of serving static files with axum and shuttle.")
-    );
-}
-
-// note: you need `rustup target add wasm32-wasi` to make this project compile
-#[tokio::test(flavor = "multi_thread")]
-async fn shuttle_next() {
-    let url = cargo_shuttle_run("../examples/next/hello-world", false).await;
-    let client = reqwest::Client::new();
-
-    let request_text = client.get(&url).send().await.unwrap().text().await.unwrap();
-
-    assert_eq!(request_text, "Hello, World!");
-
-    let post_text = client
-        .post(format!("{url}/uppercase"))
-        .body("uppercase this")
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert_eq!(post_text, "UPPERCASE THIS");
+    assert!(request_text.contains("This is an example of serving"));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -315,36 +279,6 @@ mod needs_docker {
         let post_text = client
             .post(format!("{url}/todo"))
             .body("{\"note\": \"Deploy to shuttle\"}")
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-
-        assert_eq!(post_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
-
-        let request_text = client
-            .get(format!("{url}/todo/1"))
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-
-        assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn poem_postgres() {
-        let url = cargo_shuttle_run("../examples/poem/postgres", false).await;
-        let client = reqwest::Client::new();
-
-        let post_text = client
-            .post(format!("{url}/todo"))
-            .body("{\"note\": \"Deploy to shuttle\"}")
-            .header("content-type", "application/json")
             .send()
             .await
             .unwrap()

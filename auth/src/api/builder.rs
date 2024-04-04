@@ -6,8 +6,9 @@ use axum::{
     routing::{delete, get, post, put},
     Router, Server,
 };
-use shuttle_common::{
-    backends::metrics::{Metrics, TraceLayer},
+use shuttle_backends::{
+    client::PermissionsDal,
+    metrics::{Metrics, TraceLayer},
     request_span,
 };
 use sqlx::PgPool;
@@ -19,8 +20,8 @@ use crate::{
 };
 
 use super::handlers::{
-    convert_key, delete_subscription, get_public_key, get_user, health_check, post_subscription,
-    post_user, put_user_reset_key, refresh_token,
+    convert_key, delete_subscription, get_public_key, get_user, get_user_by_name,
+    post_subscription, post_user, put_user_reset_key,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -46,32 +47,42 @@ impl FromRef<RouterState> for KeyManagerState {
     }
 }
 
-pub struct ApiBuilder {
+pub struct ApiBuilder<P: PermissionsDal> {
     router: Router<RouterState>,
     pool: Option<PgPool>,
     stripe_client: Option<stripe::Client>,
+    permissions_client: Option<P>,
     jwt_signing_private_key: Option<String>,
 }
 
-impl Default for ApiBuilder {
+impl<P> Default for ApiBuilder<P>
+where
+    P: PermissionsDal + Send + Sync + 'static,
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ApiBuilder {
+impl<P> ApiBuilder<P>
+where
+    P: PermissionsDal + Send + Sync + 'static,
+{
     pub fn new() -> Self {
         let router = Router::new()
-            .route("/", get(health_check))
+            // health check: 200 OK
+            .route("/", get(|| async move {}))
             .route("/auth/key", get(convert_key))
-            .route("/auth/refresh", post(refresh_token))
             .route("/public-key", get(get_public_key))
-            .route("/users/:account_name", get(get_user))
+            // used by console to get user based on auth0 name
+            .route("/users/name/:account_name", get(get_user_by_name))
+            // users are created based on auth0 name by console
             .route("/users/:account_name/:account_tier", post(post_user))
+            .route("/users/:user_id", get(get_user))
             .route("/users/reset-api-key", put(put_user_reset_key))
-            .route("/users/:account_name/subscribe", post(post_subscription))
+            .route("/users/:user_id/subscribe", post(post_subscription))
             .route(
-                "/users/:account_name/subscribe/:subscription_id",
+                "/users/:user_id/subscribe/:subscription_id",
                 delete(delete_subscription),
             )
             .route_layer(from_extractor::<Metrics>())
@@ -79,8 +90,8 @@ impl ApiBuilder {
                 TraceLayer::new(|request| {
                     request_span!(
                         request,
-                        request.params.account_name = field::Empty,
-                        request.params.account_tier = field::Empty
+                        request.params.user_id = field::Empty,
+                        request.params.account_tier = field::Empty,
                     )
                 })
                 .with_propagation()
@@ -91,6 +102,7 @@ impl ApiBuilder {
             router,
             pool: None,
             stripe_client: None,
+            permissions_client: None,
             jwt_signing_private_key: None,
         }
     }
@@ -105,6 +117,11 @@ impl ApiBuilder {
         self
     }
 
+    pub fn with_permissions_client(mut self, permissions_client: P) -> Self {
+        self.permissions_client = Some(permissions_client);
+        self
+    }
+
     pub fn with_jwt_signing_private_key(mut self, private_key: String) -> Self {
         self.jwt_signing_private_key = Some(private_key);
         self
@@ -113,12 +130,16 @@ impl ApiBuilder {
     pub fn into_router(self) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
         let stripe_client = self.stripe_client.expect("a stripe client is required");
+        let permit_client = self
+            .permissions_client
+            .expect("a permit client is required");
         let jwt_signing_private_key = self
             .jwt_signing_private_key
             .expect("a jwt signing private key");
         let user_manager = UserManager {
             pool,
             stripe_client,
+            permissions_client: permit_client,
         };
         let key_manager = EdDsaManager::new(jwt_signing_private_key);
 

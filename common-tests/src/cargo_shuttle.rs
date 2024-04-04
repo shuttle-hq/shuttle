@@ -30,6 +30,8 @@ pub async fn cargo_shuttle_run(working_directory: &str, external: bool) -> Strin
         port,
         external,
         release: false,
+        raw: false,
+        secret_args: Default::default(),
     };
 
     let runner = Shuttle::new().unwrap().run(
@@ -39,6 +41,8 @@ pub async fn cargo_shuttle_run(working_directory: &str, external: bool) -> Strin
                 working_directory: working_directory.clone(),
                 name: None,
             },
+            offline: false,
+            debug: false,
             cmd: Command::Run(run_args),
         },
         false,

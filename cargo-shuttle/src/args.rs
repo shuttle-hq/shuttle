@@ -12,7 +12,7 @@ use clap::{
     Parser, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::constants::DEFAULT_IDLE_MINUTES;
+use shuttle_common::constants::{DEFAULT_IDLE_MINUTES, EXAMPLES_REPO};
 use shuttle_common::resource;
 use uuid::Uuid;
 
@@ -33,15 +33,22 @@ pub struct ShuttleArgs {
     /// (allows targeting a custom deployed instance for this command only, mainly for development)
     #[arg(long, env = "SHUTTLE_API")]
     pub api_url: Option<String>,
+    /// Disable network requests that are not strictly necessary. Limits some features.
+    #[arg(long, env = "SHUTTLE_OFFLINE")]
+    pub offline: bool,
+    /// Turn on tracing output for cargo-shuttle and shuttle libraries.
+    #[arg(long, env = "SHUTTLE_DEBUG")]
+    pub debug: bool,
+
     #[command(subcommand)]
     pub cmd: Command,
 }
 
 // Common args for subcommands that deal with projects.
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
-    #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
+    #[arg(global = true, long, visible_alias = "wd", default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
     #[arg(global = true, long)]
@@ -104,28 +111,7 @@ pub enum Command {
     /// Stop this Shuttle service
     Stop,
     /// View the logs of a deployment in this Shuttle service
-    Logs {
-        /// Deployment ID to get logs for. Defaults to currently running deployment
-        id: Option<Uuid>,
-        #[arg(short, long)]
-        /// View logs from the most recent deployment (which is not always the latest running one)
-        latest: bool,
-        #[arg(short, long)]
-        /// Follow log output
-        follow: bool,
-        #[arg(long)]
-        /// Don't display timestamps and log origin tags
-        raw: bool,
-        /// Views First N line of the logs
-        #[arg(long, group = "output_mode")]
-        head: Option<u32>,
-        /// Views Last N line of the logs
-        #[arg(long, group = "output_mode")]
-        tail: Option<u32>,
-        /// Views all line of the logs
-        #[arg(long, group = "output_mode")]
-        all: bool,
-    },
+    Logs(LogsArgs),
     /// List or manage projects on Shuttle
     #[command(subcommand)]
     Project(ProjectCommand),
@@ -268,7 +254,7 @@ pub struct LogoutArgs {
     #[arg(long)]
     pub reset_api_key: bool,
 }
-#[derive(Parser)]
+#[derive(Parser, Default)]
 pub struct DeployArgs {
     /// Allow deployment with uncommitted files
     #[arg(long, visible_alias = "ad")]
@@ -276,6 +262,12 @@ pub struct DeployArgs {
     /// Don't run pre-deploy tests
     #[arg(long, visible_alias = "nt")]
     pub no_test: bool,
+    /// Don't display timestamps and log origin tags
+    #[arg(long)]
+    pub raw: bool,
+
+    #[command(flatten)]
+    pub secret_args: SecretsArgs,
 }
 
 #[derive(Parser, Debug)]
@@ -289,6 +281,19 @@ pub struct RunArgs {
     /// Use release mode for building the project
     #[arg(long, short = 'r')]
     pub release: bool,
+    /// Don't display timestamps and log origin tags
+    #[arg(long)]
+    pub raw: bool,
+
+    #[command(flatten)]
+    pub secret_args: SecretsArgs,
+}
+
+#[derive(Parser, Debug, Default)]
+pub struct SecretsArgs {
+    /// Use this secrets file instead
+    #[arg(long, value_parser = OsStringValueParser::new().try_map(parse_path))]
+    pub secrets: Option<PathBuf>,
 }
 
 #[derive(Parser, Clone, Debug, Default)]
@@ -304,7 +309,7 @@ pub struct InitArgs {
     pub subfolder: Option<String>,
 
     /// Path where to place the new Shuttle project
-    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
+    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(create_and_parse_path))]
     pub path: PathBuf,
 
     /// Don't check the project name's validity or availability and use it anyways
@@ -316,40 +321,40 @@ pub struct InitArgs {
     /// Don't initialize a new git repository
     #[arg(long)]
     pub no_git: bool,
+
     #[command(flatten)]
     pub login_args: LoginArgs,
 }
 
-#[derive(ValueEnum, Clone, Debug, strum::Display, strum::EnumIter)]
-#[strum(serialize_all = "kebab-case")]
+#[derive(ValueEnum, Clone, Debug, strum::EnumMessage, strum::VariantArray)]
 pub enum InitTemplateArg {
-    /// Actix Web framework
-    ActixWeb,
-    /// Axum web framework
+    /// Axum - Modular web framework from the Tokio ecosystem
     Axum,
-    /// Poem web framework
-    Poem,
-    /// Poise Discord framework
-    Poise,
-    /// Rocket web framework
+    /// Actix Web - Powerful and fast web framework
+    ActixWeb,
+    /// Rocket - Simple and easy-to-use web framework
     Rocket,
-    /// Salvo web framework
+    /// Loco - Batteries included web framework based on Axum
+    Loco,
+    /// Salvo - Powerful and simple web framework
     Salvo,
-    /// Serenity Discord framework
+    /// Poem - Full-featured and easy-to-use web framework
+    Poem,
+    /// Poise - Discord Bot framework with good slash command support
+    Poise,
+    /// Serenity - Discord Bot framework
     Serenity,
-    /// Thruster web framework
-    Thruster,
-    /// Tide web framework
-    Tide,
-    /// Tower web framework
+    /// Tower - Modular service library
     Tower,
-    /// Warp web framework
+    /// Thruster - Web framework
+    Thruster,
+    /// Tide - Web framework
+    Tide,
+    /// Warp - Web framework
     Warp,
-    /// No template - Custom empty service
+    /// No template - Make a custom service
     None,
 }
-
-pub const EXAMPLES_REPO: &str = "https://github.com/shuttle-hq/shuttle-examples";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TemplateLocation {
@@ -379,6 +384,7 @@ impl InitTemplateArg {
         let path = match self {
             ActixWeb => "actix-web/hello-world",
             Axum => "axum/hello-world",
+            Loco => "loco/hello-world",
             Poem => "poem/hello-world",
             Poise => "poise/hello-world",
             Rocket => "rocket/hello-world",
@@ -398,13 +404,42 @@ impl InitTemplateArg {
     }
 }
 
+#[derive(Parser, Clone, Debug, Default)]
+pub struct LogsArgs {
+    /// Deployment ID to get logs for. Defaults to currently running deployment
+    pub id: Option<Uuid>,
+    #[arg(short, long)]
+    /// View logs from the most recent deployment (which is not always the latest running one)
+    pub latest: bool,
+    #[arg(short, long)]
+    /// Follow log output
+    pub follow: bool,
+    /// Don't display timestamps and log origin tags
+    #[arg(long)]
+    pub raw: bool,
+    /// Views First N line of the logs
+    #[arg(long, group = "output_mode")]
+    head: Option<u32>,
+    /// Views Last N line of the logs
+    #[arg(long, group = "output_mode")]
+    tail: Option<u32>,
+    /// Views all line of the logs
+    #[arg(long, group = "output_mode")]
+    all: bool,
+}
+
 /// Helper function to parse and return the absolute path
-fn parse_path(path: OsString) -> Result<PathBuf, String> {
-    dunce::canonicalize(&path).map_err(|e| format!("could not turn {path:?} into a real path: {e}"))
+fn parse_path(path: OsString) -> Result<PathBuf, io::Error> {
+    dunce::canonicalize(&path).map_err(|e| {
+        io::Error::new(
+            ErrorKind::InvalidInput,
+            format!("could not turn {path:?} into a real path: {e}"),
+        )
+    })
 }
 
 /// Helper function to parse, create if not exists, and return the absolute path
-pub(crate) fn parse_init_path(path: OsString) -> Result<PathBuf, io::Error> {
+pub(crate) fn create_and_parse_path(path: OsString) -> Result<PathBuf, io::Error> {
     // Create the directory if does not exist
     create_dir_all(&path).map_err(|e| {
         io::Error::new(
@@ -413,7 +448,7 @@ pub(crate) fn parse_init_path(path: OsString) -> Result<PathBuf, io::Error> {
         )
     })?;
 
-    parse_path(path).map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))
+    parse_path(path)
 }
 
 #[cfg(test)]

@@ -1,27 +1,17 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 use std::time::Duration;
 
-use axum::body::boxed;
-use axum::response::Response;
 use fqdn::FQDN;
-use futures::future::BoxFuture;
-use hyper::server::conn::AddrStream;
-use hyper::{Body, Request};
 use instant_acme::{
     Account, AccountCredentials, Authorization, AuthorizationStatus, Challenge, ChallengeType,
     Identifier, KeyAuthorization, LetsEncrypt, NewAccount, NewOrder, Order, OrderStatus,
 };
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
-use shuttle_common::models::project::ProjectName;
+use shuttle_backends::project_name::ProjectName;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
-use tower::{Layer, Service};
 use tracing::{error, trace, warn};
-
-use crate::proxy::AsResponderTo;
-use crate::Error;
 
 const MAX_RETRIES: usize = 15;
 const MAX_RETRIES_CERTIFICATE_FETCHING: usize = 5;
@@ -41,7 +31,7 @@ pub struct AcmeClient(Arc<Mutex<HashMap<String, KeyAuthorization>>>);
 
 impl AcmeClient {
     pub fn new() -> Self {
-        Self(Arc::new(Mutex::new(HashMap::default())))
+        Self::default()
     }
 
     async fn add_http01_challenge_authorization(&self, token: String, key: KeyAuthorization) {
@@ -49,7 +39,7 @@ impl AcmeClient {
         self.0.lock().await.insert(token, key);
     }
 
-    async fn get_http01_challenge_authorization(&self, token: &str) -> Option<String> {
+    pub async fn get_http01_challenge_authorization(&self, token: &str) -> Option<String> {
         self.0
             .lock()
             .await
@@ -82,12 +72,18 @@ impl AcmeClient {
         let account = Account::create(&account, &acme_server)
             .await
             .map_err(|error| {
-                error!(%error, "got error while creating acme account");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "got error while creating acme account"
+                );
                 AcmeClientError::AccountCreation
             })?;
 
         let credentials = serde_json::to_value(account.credentials()).map_err(|error| {
-            error!(%error, "got error while extracting credentials from acme account");
+            error!(
+                error = &error as &dyn std::error::Error,
+                "got error while extracting credentials from acme account"
+            );
             AcmeClientError::Serializing
         })?;
 
@@ -111,12 +107,18 @@ impl AcmeClient {
             })
             .await
             .map_err(|error| {
-                error!(%error, "failed to order certificate");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to order certificate"
+                );
                 AcmeClientError::OrderCreation
             })?;
 
         let authorizations = order.authorizations().await.map_err(|error| {
-            error!(%error, "failed to get authorizations information");
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to get authorizations information"
+            );
             AcmeClientError::AuthorizationCreation
         })?;
 
@@ -133,17 +135,26 @@ impl AcmeClient {
             let mut params = CertificateParams::new(vec![identifier.to_owned()]);
             params.distinguished_name = DistinguishedName::new();
             Certificate::from_params(params).map_err(|error| {
-                error!(%error, "failed to create certificate");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to create certificate"
+                );
                 AcmeClientError::CertificateCreation
             })?
         };
         let signing_request = certificate.serialize_request_der().map_err(|error| {
-            error!(%error, "failed to create certificate signing request");
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to create certificate signing request"
+            );
             AcmeClientError::CertificateSigning
         })?;
 
         order.finalize(&signing_request).await.map_err(|error| {
-            error!(%error, "failed to finalize certificate request");
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to finalize certificate request"
+            );
             AcmeClientError::OrderFinalizing
         })?;
 
@@ -152,7 +163,10 @@ impl AcmeClient {
         let mut retries = MAX_RETRIES_CERTIFICATE_FETCHING;
         while res.is_none() && retries > 0 {
             res = order.certificate().await.map_err(|error| {
-                error!(%error, "failed to fetch the certificate chain");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to fetch the certificate chain"
+                );
                 AcmeClientError::CertificateCreation
             })?;
             retries -= 1;
@@ -174,8 +188,12 @@ impl AcmeClient {
             .iter()
             .find(|c| c.r#type == ty)
             .ok_or_else(|| {
-                error!("http-01 challenge not found");
-                AcmeClientError::MissingChallenge
+                let error = AcmeClientError::MissingChallenge;
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "http-01 challenge not found"
+                );
+                error
             })
     }
 
@@ -186,7 +204,10 @@ impl AcmeClient {
         let state = loop {
             sleep(delay).await;
             let state = order.refresh().await.map_err(|error| {
-                error!(%error, "got error while fetching state");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "got error while fetching state"
+                );
                 AcmeClientError::FetchingState
             })?;
 
@@ -202,8 +223,14 @@ impl AcmeClient {
                     if tries < MAX_RETRIES {
                         trace!(?state, tries, attempt_in=?delay, "order not yet ready");
                     } else {
-                        error!(?state, tries, "order not ready in {MAX_RETRIES} tries");
-                        return Err(AcmeClientError::ChallengeTimeout);
+                        let error = AcmeClientError::ChallengeTimeout;
+                        error!(
+                            error = &error as &dyn std::error::Error,
+                            ?state,
+                            tries,
+                            "order not ready in {MAX_RETRIES} tries"
+                        );
+                        return Err(error);
                     }
                 }
                 _ => unreachable!(),
@@ -255,7 +282,10 @@ impl AcmeClient {
             .set_challenge_ready(&challenge.url)
             .await
             .map_err(|error| {
-                error!(%error, "failed to mark challenge as ready");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to mark challenge as ready"
+                );
                 AcmeClientError::SetReadyFailed
             })?;
 
@@ -279,7 +309,10 @@ impl AcmeClient {
             .set_challenge_ready(&challenge.url)
             .await
             .map_err(|error| {
-                error!(%error, "failed to mark challenge as ready");
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to mark challenge as ready"
+                );
                 AcmeClientError::SetReadyFailed
             })?;
 
@@ -328,97 +361,3 @@ pub enum AcmeClientError {
 }
 
 impl std::error::Error for AcmeClientError {}
-
-pub struct ChallengeResponderLayer {
-    client: AcmeClient,
-}
-
-impl ChallengeResponderLayer {
-    pub fn new(client: AcmeClient) -> Self {
-        Self { client }
-    }
-}
-
-impl<S> Layer<S> for ChallengeResponderLayer {
-    type Service = ChallengeResponder<S>;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        ChallengeResponder {
-            client: self.client.clone(),
-            inner,
-        }
-    }
-}
-
-pub struct ChallengeResponder<S> {
-    client: AcmeClient,
-    inner: S,
-}
-
-impl<'r, S> AsResponderTo<&'r AddrStream> for ChallengeResponder<S>
-where
-    S: AsResponderTo<&'r AddrStream>,
-{
-    fn as_responder_to(&self, req: &'r AddrStream) -> Self {
-        Self {
-            client: self.client.clone(),
-            inner: self.inner.as_responder_to(req),
-        }
-    }
-}
-
-impl<ReqBody, S> Service<Request<ReqBody>> for ChallengeResponder<S>
-where
-    S: Service<Request<ReqBody>, Response = Response, Error = Error> + Send + 'static,
-    S::Future: Send + 'static,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        if !req.uri().path().starts_with("/.well-known/acme-challenge/") {
-            let future = self.inner.call(req);
-            return Box::pin(async move {
-                let response: Response = future.await?;
-                Ok(response)
-            });
-        }
-
-        let token = match req
-            .uri()
-            .path()
-            .strip_prefix("/.well-known/acme-challenge/")
-        {
-            Some(token) => token.to_string(),
-            None => {
-                return Box::pin(async {
-                    Ok(Response::builder()
-                        .status(404)
-                        .body(boxed(Body::empty()))
-                        .unwrap())
-                })
-            }
-        };
-
-        trace!(token, "responding to certificate challenge");
-
-        let client = self.client.clone();
-
-        Box::pin(async move {
-            let (status, body) = match client.get_http01_challenge_authorization(&token).await {
-                Some(key) => (200, Body::from(key)),
-                None => (404, Body::empty()),
-            };
-
-            Ok(Response::builder()
-                .status(status)
-                .body(boxed(body))
-                .unwrap())
-        })
-    }
-}

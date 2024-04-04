@@ -4,8 +4,8 @@ use hyper::http::{header::AUTHORIZATION, Request};
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use shuttle_auth::{pgpool_init, ApiBuilder};
+use shuttle_backends::{headers::X_SHUTTLE_ADMIN_SECRET, test_utils::gateway::PermissionsMock};
 use shuttle_common::{
-    backends::headers::X_SHUTTLE_ADMIN_SECRET,
     claims::{AccountTier, Claim},
     models::user,
 };
@@ -31,6 +31,7 @@ fn cleanup() {
 pub(crate) struct TestApp {
     pub router: Router,
     pub mock_server: MockServer,
+    pub permissions: PermissionsMock,
 }
 
 /// Initialize a router with an in-memory sqlite database for each test.
@@ -40,13 +41,16 @@ pub(crate) async fn app() -> TestApp {
     let mock_server = MockServer::start().await;
 
     // Insert an admin user for the tests.
-    query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
+    query("INSERT INTO users VALUES ($1, $2, $3, $4)")
         .bind("admin")
         .bind(ADMIN_KEY)
         .bind(AccountTier::Admin.to_string())
+        .bind(shuttle_auth::User::new_user_id())
         .execute(&pg_pool)
         .await
         .unwrap();
+
+    let permissions = PermissionsMock::default();
 
     let router = ApiBuilder::new()
         .with_pg_pool(pg_pool)
@@ -54,12 +58,14 @@ pub(crate) async fn app() -> TestApp {
             mock_server.uri().as_str(),
             STRIPE_TEST_KEY,
         ))
+        .with_permissions_client(permissions.clone())
         .with_jwt_signing_private_key("LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUR5V0ZFYzhKYm05NnA0ZGNLTEwvQWNvVUVsbUF0MVVKSTU4WTc4d1FpWk4KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=".to_string())
         .into_router();
 
     TestApp {
         router,
         mock_server,
+        permissions,
     }
 }
 
@@ -83,9 +89,9 @@ impl TestApp {
         self.send_request(request).await
     }
 
-    pub async fn get_user(&self, name: &str) -> Response {
+    pub async fn get_user(&self, user_id: &str) -> Response {
         let request = Request::builder()
-            .uri(format!("/users/{name}"))
+            .uri(format!("/users/{user_id}"))
             .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
             .body(Body::empty())
             .unwrap();
@@ -93,8 +99,8 @@ impl TestApp {
         self.send_request(request).await
     }
 
-    pub async fn get_user_typed(&self, name: &str) -> user::Response {
-        let response = self.get_user(name).await;
+    pub async fn get_user_typed(&self, user_id: &str) -> user::Response {
+        let response = self.get_user(user_id).await;
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
 
         serde_json::from_slice(&body).unwrap()
@@ -131,13 +137,13 @@ impl TestApp {
 
     pub async fn post_subscription(
         &self,
-        name: &str,
+        user_id: &str,
         subscription_id: &str,
         subscription_type: &str,
         quantity: u32,
     ) -> Response {
         let request = Request::builder()
-            .uri(format!("/users/{name}/subscribe"))
+            .uri(format!("/users/{user_id}/subscribe"))
             .method("POST")
             .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
             .header(CONTENT_TYPE, "application/json")
@@ -154,9 +160,9 @@ impl TestApp {
         self.send_request(request).await
     }
 
-    pub async fn delete_subscription(&self, name: &str, subscription_id: &str) -> Response {
+    pub async fn delete_subscription(&self, user_id: &str, subscription_id: &str) -> Response {
         let request = Request::builder()
-            .uri(format!("/users/{name}/subscribe/{subscription_id}"))
+            .uri(format!("/users/{user_id}/subscribe/{subscription_id}"))
             .method("DELETE")
             .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
             .body(Body::empty())
@@ -192,7 +198,7 @@ impl TestApp {
         &self,
         subscription_id: &str,
         response_body: &str,
-        account_name: &str,
+        user_id: &str,
     ) -> Response {
         // This mock will apply until the end of this function scope.
         let _mock_guard = Mock::given(method("GET"))
@@ -205,6 +211,6 @@ impl TestApp {
             .mount_as_scoped(&self.mock_server)
             .await;
 
-        self.get_user(account_name).await
+        self.get_user(user_id).await
     }
 }

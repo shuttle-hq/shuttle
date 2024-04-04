@@ -6,18 +6,18 @@ Serenity 0.11 is supported by using these feature flags (native TLS also availab
 
 ```toml,ignore
 serenity = { version = "0.11.7", features = ["..."] }
-shuttle-serenity = { version = "0.38.0", default-features = false, features = ["serenity-0-11-rustls_backend"] }
+shuttle-serenity = { version = "0.43.0", default-features = false, features = ["serenity-0-11-rustls_backend"] }
 ```
 
 ### Example
 
 ```rust,ignore
-use anyhow::anyhow;
+use anyhow::Context as _;
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
-use shuttle_secrets::SecretStore;
+use shuttle_runtime::SecretStore;
 use tracing::{error, info};
 
 struct Bot;
@@ -39,14 +39,10 @@ impl EventHandler for Bot {
 
 #[shuttle_runtime::main]
 async fn serenity(
-    #[shuttle_secrets::Secrets] secret_store: SecretStore,
+    #[shuttle_runtime::Secrets] secrets: SecretStore,
 ) -> shuttle_serenity::ShuttleSerenity {
     // Get the discord token set in `Secrets.toml`
-    let token = if let Some(token) = secret_store.get("DISCORD_TOKEN") {
-        token
-    } else {
-        return Err(anyhow!("'DISCORD_TOKEN' was not found").into());
-    };
+    let token = secrets.get("DISCORD_TOKEN").context("'DISCORD_TOKEN' was not found")?;
 
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;

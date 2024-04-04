@@ -1,6 +1,5 @@
 use std::{net::SocketAddr, str::FromStr};
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
 use tracing::error;
@@ -30,7 +29,10 @@ impl FromRow<'_, SqliteRow> for Deployment {
             match SocketAddr::from_str(&address_str) {
                 Ok(address) => Some(address),
                 Err(err) => {
-                    error!(error = %err, "failed to parse address from DB");
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        "failed to parse address from DB"
+                    );
                     None
                 }
             }
@@ -69,21 +71,11 @@ impl From<Deployment> for shuttle_common::models::deployment::Response {
     }
 }
 
-/// Update the details of a deployment
-#[async_trait]
-pub trait DeploymentUpdater: Clone + Send + Sync + 'static {
-    type Err: std::error::Error + Send;
-
-    /// Set if a deployment is build on shuttle-next
-    async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<(), Self::Err>;
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct DeploymentRunnable {
     pub id: Uuid,
     pub service_name: String,
     pub service_id: Ulid,
-    pub is_next: bool,
 }
 
 impl FromRow<'_, SqliteRow> for DeploymentRunnable {
@@ -93,7 +85,6 @@ impl FromRow<'_, SqliteRow> for DeploymentRunnable {
                 .expect("to have a valid ulid string"),
             service_name: row.try_get("service_name")?,
             id: row.try_get("id")?,
-            is_next: row.try_get("is_next")?,
         })
     }
 }

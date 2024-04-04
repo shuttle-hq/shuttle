@@ -23,9 +23,9 @@ use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::backends::headers::{X_SHUTTLE_ACCOUNT_NAME, X_SHUTTLE_ADMIN_SECRET};
+use shuttle_backends::headers::X_SHUTTLE_ADMIN_SECRET;
+use shuttle_backends::project_name::ProjectName;
 use shuttle_common::constants::{default_idle_minutes, DEFAULT_IDLE_MINUTES};
-use shuttle_common::models::project::ProjectName;
 use shuttle_common::models::service;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -34,6 +34,9 @@ use uuid::Uuid;
 
 use crate::service::ContainerSettings;
 use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
+
+/// The `user_id` AND `account_name` of gateway's admin account
+const GATEWAY_ADMIN_ACCOUNT_USER_ID: &str = "gateway";
 
 macro_rules! safe_unwrap {
     {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
@@ -160,7 +163,10 @@ impl ContainerInspectResponseExt for ContainerInspectResponse {
 
 impl From<DockerError> for Error {
     fn from(err: DockerError) -> Self {
-        error!(error = %err, "internal Docker error");
+        error!(
+            error = &err as &dyn std::error::Error,
+            "internal Docker error"
+        );
         Self::source(ErrorKind::Internal, err)
     }
 }
@@ -827,7 +833,6 @@ impl ProjectCreating {
             image: default_image,
             prefix,
             provisioner_host,
-            builder_host,
             auth_uri,
             resource_recorder_uri,
             extra_hosts,
@@ -876,8 +881,6 @@ impl ProjectCreating {
                         "/opt/shuttle/deployer.sqlite",
                         "--auth-uri",
                         auth_uri,
-                        "--builder-uri",
-                        format!("http://{builder_host}:8000"),
                         "--resource-recorder",
                         resource_recorder_uri,
                         "--project-id",
@@ -1412,7 +1415,10 @@ impl ProjectReady {
 
     pub async fn start_last_deploy(&mut self, jwt: String, admin_secret: String) {
         if let Err(error) = self.service.start_last_deploy(jwt, admin_secret).await {
-            error!(error, "failed to start last running deploy");
+            error!(
+                error = error.as_ref() as &dyn std::error::Error,
+                "failed to start last running deploy"
+            );
         };
     }
 }
@@ -1490,12 +1496,15 @@ impl Service {
                 self.name, running_id
             ))?;
 
+            // NOTE: Deployer 0.40 and newer will start up old deployments themselves and ignore this call
+            // When deployer 0.39 is no longer supported, this function and its callers+task can be removed
             let req = Request::builder()
                 .method(Method::PUT)
                 .uri(uri)
                 .header(AUTHORIZATION, format!("Bearer {}", jwt))
-                .header(X_SHUTTLE_ACCOUNT_NAME.clone(), "gateway")
                 .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
+                // deprecated, used for soft backward compatibility
+                .header("x-shuttle-account-name", GATEWAY_ADMIN_ACCOUNT_USER_ID)
                 .body(Body::empty())?;
 
             let _ = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await;
@@ -1515,8 +1524,9 @@ impl Service {
         let req = Request::builder()
             .uri(uri)
             .header(AUTHORIZATION, format!("Bearer {}", jwt))
-            .header(X_SHUTTLE_ACCOUNT_NAME.clone(), "gateway")
             .header(X_SHUTTLE_ADMIN_SECRET.clone(), admin_secret)
+            // deprecated, used for soft backward compatibility
+            .header("x-shuttle-account-name", GATEWAY_ADMIN_ACCOUNT_USER_ID)
             .body(Body::empty())?;
 
         let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.request(req)).await??;
@@ -1753,7 +1763,10 @@ impl std::error::Error for ProjectError {}
 
 impl From<DockerError> for ProjectError {
     fn from(err: DockerError) -> Self {
-        error!(error = %err, "an internal DockerError had to yield a ProjectError");
+        error!(
+            error = &err as &dyn std::error::Error,
+            "an internal DockerError had to yield a ProjectError"
+        );
         Self {
             kind: ProjectErrorKind::Internal,
             message: format!("{}", err),
@@ -1776,7 +1789,10 @@ impl From<InvalidUri> for ProjectError {
 
 impl From<hyper::Error> for ProjectError {
     fn from(err: hyper::Error) -> Self {
-        error!(error = %err, "failed to check project's health");
+        error!(
+            error = &err as &dyn std::error::Error,
+            "failed to check project's health"
+        );
 
         Self {
             kind: ProjectErrorKind::Internal,
@@ -1829,7 +1845,12 @@ pub mod exec {
             .await
             .expect("could not list projects")
         {
-            match gateway.find_project(&project_name).await.unwrap().state {
+            match gateway
+                .find_project_by_name(&project_name)
+                .await
+                .unwrap()
+                .state
+            {
                 Project::Errored(ProjectError { ctx: Some(ctx), .. }) => {
                     if let Some(container) = ctx.container() {
                         if let Ok(container) = gateway
@@ -1922,8 +1943,11 @@ pub mod exec {
             .await
             .expect("could not list cch projects")
         {
-            if let Project::Ready(ProjectReady { container, .. }) =
-                gateway.find_project(&project_name).await.unwrap().state
+            if let Project::Ready(ProjectReady { container, .. }) = gateway
+                .find_project_by_name(&project_name)
+                .await
+                .unwrap()
+                .state
             {
                 if let Ok(container) = gateway
                     .context()

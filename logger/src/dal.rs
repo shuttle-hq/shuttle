@@ -1,3 +1,4 @@
+use core::fmt;
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
@@ -7,9 +8,8 @@ use shuttle_common::log::LogMode;
 use shuttle_proto::logger::{LogItem, LogLine};
 use sqlx::{
     migrate::Migrator,
-    postgres::PgConnectOptions,
     types::chrono::{DateTime, Utc},
-    FromRow, PgPool, QueryBuilder,
+    Executor, FromRow, PgPool, QueryBuilder,
 };
 use thiserror::Error;
 use tokio::sync::broadcast::{self, Sender};
@@ -21,8 +21,26 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[derive(Error, Debug)]
 pub enum DalError {
-    #[error("database request failed: {0}")]
     Sqlx(#[from] sqlx::Error),
+}
+
+// We are not using the `thiserror`'s `#[error]` syntax to prevent sensitive details from bubbling up to the users.
+// Instead we are logging it as an error which we can inspect.
+impl fmt::Display for DalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let msg = match self {
+            DalError::Sqlx(error) => {
+                error!(
+                    error = error as &dyn std::error::Error,
+                    "database request failed"
+                );
+
+                "failed to interact with logger"
+            }
+        };
+
+        write!(f, "{msg}")
+    }
 }
 
 #[async_trait]
@@ -47,14 +65,7 @@ impl Postgres {
     pub async fn new(connection_uri: &Uri) -> Self {
         let pool = PgPool::connect(connection_uri.to_string().as_str())
             .await
-            .expect("to be able to connect to the postgres db using the connection url");
-        Self::from_pool(pool).await
-    }
-
-    pub async fn with_options(options: PgConnectOptions) -> Self {
-        let pool = PgPool::connect_with(options)
-            .await
-            .expect("to be able to connect to the postgres db using the pg connect options");
+            .expect("to connect to the db");
         Self::from_pool(pool).await
     }
 
@@ -64,8 +75,17 @@ impl Postgres {
             .await
             .expect("to run migrations successfully");
 
+        let pool_clone = pool.clone();
+        tokio::spawn(async move {
+            info!("cleaning old logs");
+            pool_clone
+                .execute("DELETE FROM logs WHERE tx_timestamp < (NOW() - INTERVAL '1 month')")
+                .await
+                .expect("to clean old logs successfully");
+            info!("done cleaning old logs");
+        });
+
         let (tx, mut rx) = broadcast::channel::<(Vec<Log>, Span)>(1000);
-        let pool_spawn = pool.clone();
 
         let interval_tx = tx.clone();
         tokio::spawn(async move {
@@ -77,6 +97,7 @@ impl Postgres {
             }
         });
 
+        let pool_clone = pool.clone();
         tokio::spawn(async move {
             loop {
                 match rx.recv().await {
@@ -106,13 +127,19 @@ impl Postgres {
                         });
                         let query = builder.build();
 
-                        if let Err(error) = query.execute(&pool_spawn).instrument(parent_span).await
+                        if let Err(error) = query.execute(&pool_clone).instrument(parent_span).await
                         {
-                            error!(error = %error, "failed to insert logs");
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to insert logs"
+                            );
                         };
                     }
                     Err(err) => {
-                        error!(error = %err, "failed to receive message in database receiver");
+                        error!(
+                            error = &err as &dyn std::error::Error,
+                            "failed to receive message in database receiver"
+                        );
                     }
                 }
             }

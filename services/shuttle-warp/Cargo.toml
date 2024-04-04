@@ -1,16 +1,14 @@
 [package]
 name = "shuttle-warp"
-version = "0.38.0"
+version = "0.43.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service implementation to run a warp webserver on shuttle"
+repository = "https://github.com/shuttle-hq/shuttle"
 keywords = ["shuttle-service", "warp"]
 
 [workspace]
 
 [dependencies]
-warp = { version = "0.3.3" }
-shuttle-runtime = { path = "../../runtime", version = "0.38.0", default-features = false }
-
-[dev-dependencies]
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }
+warp = "0.3.3"
+shuttle-runtime = { path = "../../runtime", version = "0.43.0", default-features = false }

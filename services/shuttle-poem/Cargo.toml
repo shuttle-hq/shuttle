@@ -1,16 +1,14 @@
 [package]
 name = "shuttle-poem"
-version = "0.38.0"
+version = "0.43.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service implementation to run a poem webserver on shuttle"
+repository = "https://github.com/shuttle-hq/shuttle"
 keywords = ["shuttle-service", "poem"]
 
 [workspace]
 
 [dependencies]
-poem = { version = "2.0.0" }
-shuttle-runtime = { path = "../../runtime", version = "0.38.0", default-features = false }
-
-[dev-dependencies]
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }
+poem = "2.0.0"
+shuttle-runtime = { path = "../../runtime", version = "0.43.0", default-features = false }

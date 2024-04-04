@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use futures::Future;
 use opentelemetry::global;
-use shuttle_common::models::project::ProjectName;
+use shuttle_backends::project_name::ProjectName;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
@@ -469,7 +469,7 @@ impl Task<()> for ProjectTask {
 
         let ctx = self.service.context().clone();
 
-        let project = match self.service.find_project(&self.project_name).await {
+        let project = match self.service.find_project_by_name(&self.project_name).await {
             Ok(project) => project,
             Err(err) => return TaskResult::Err(err),
         };
@@ -531,7 +531,10 @@ impl Task<()> for ProjectTask {
                 {
                     Ok(_) => {}
                     Err(err) => {
-                        error!(err = %err, "could not update project state");
+                        error!(
+                            error = &err as &dyn std::error::Error,
+                            "could not update project state"
+                        );
                         return TaskResult::Err(err);
                     }
                 }
@@ -566,7 +569,10 @@ impl Task<()> for ProjectTask {
                         Span::current().record("ctx.operation_name", operation);
                         Span::current().record("shuttle.operation_name", operation);
                     }
-                    error!(err = %err, "project task failure");
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        "project task failure"
+                    );
                     TaskResult::Err(err)
                 }
             }

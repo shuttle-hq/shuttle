@@ -14,28 +14,28 @@ use axum::routing::{any, delete, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::{StatusCode, Uri};
+use http::header::AUTHORIZATION;
+use http::{HeaderValue, Method, StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
-use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
-use shuttle_common::backends::cache::CacheManager;
-use shuttle_common::backends::metrics::{Metrics, TraceLayer};
-use shuttle_common::backends::ClaimExt;
+use shuttle_backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
+use shuttle_backends::axum::CustomErrorPath;
+use shuttle_backends::cache::CacheManager;
+use shuttle_backends::metrics::{Metrics, TraceLayer};
+use shuttle_backends::project_name::ProjectName;
+use shuttle_backends::request_span;
+use shuttle_backends::ClaimExt;
 use shuttle_common::claims::{Scope, EXP_MINUTES};
-use shuttle_common::models::error::axum::CustomErrorPath;
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::service;
-use shuttle_common::models::{
-    admin::ProjectResponse,
-    project::{self, ProjectName},
-    stats,
-};
-use shuttle_common::{deployment, request_span, VersionInfo};
+use shuttle_common::models::{admin::ProjectResponse, project, stats};
+use shuttle_common::{deployment, VersionInfo};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
+use tower_http::cors::CorsLayer;
 use tracing::{error, field, instrument, trace};
 use ttl_cache::TtlCache;
 use ulid::Ulid;
@@ -48,9 +48,8 @@ use x509_parser::time::ASN1Time;
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
 use crate::api::tracing::project_name_tracing_layer;
 use crate::auth::{ScopedUser, User};
-use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
 use crate::service::{ContainerSettings, GatewayService};
-use crate::task::{self, BoxedTask, TaskResult};
+use crate::task::{self, BoxedTask};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{DockerContext, Error, AUTH_CLIENT};
@@ -107,11 +106,11 @@ async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let project = service.find_project(&scope).await?;
+    let project = service.find_project_by_name(&scope).await?;
     let idle_minutes = project.state.idle_minutes();
 
     let response = project::Response {
-        id: project.project_id.to_uppercase(),
+        id: project.id.to_uppercase(),
         name: scope.to_string(),
         state: project.state.into(),
         idle_minutes,
@@ -130,25 +129,31 @@ async fn check_project_name(
         .await
         .map(AxumJson)
 }
-
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
-    User { name, .. }: User,
-    Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
+    User { id, .. }: User,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
-    let limit = limit.unwrap_or(u32::MAX);
-    let page = page.unwrap_or(0);
-    let projects = service
-        // The `offset` is page size * amount of pages
-        .iter_user_projects_detailed(&name, limit * page, limit)
-        .await?
-        .map(|project| project::Response {
-            id: project.0.to_uppercase(),
-            name: project.1.to_string(),
-            idle_minutes: project.2.idle_minutes(),
-            state: project.2.into(),
-        })
-        .collect();
+    let mut projects = vec![];
+    for p in service
+        .permit_client
+        .get_user_projects(&id)
+        .await
+        .map_err(|_| Error::from(ErrorKind::Internal))?
+    {
+        let proj_id = p.resource.expect("project resource").key;
+        let project = service.find_project_by_id(&proj_id).await?;
+        let idle_minutes = project.state.idle_minutes();
+
+        let response = project::Response {
+            id: project.id,
+            name: project.name,
+            state: project.state.into(),
+            idle_minutes,
+        };
+        projects.push(response);
+    }
+    // sort by descending id
+    projects.sort_by(|p1, p2| p2.id.cmp(&p1.id));
 
     Ok(AxumJson(projects))
 }
@@ -158,7 +163,7 @@ async fn create_project(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
-    User { name, claim, .. }: User,
+    User { id, claim, .. }: User,
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
@@ -167,7 +172,7 @@ async fn create_project(
     // Check that the user is within their project limits.
     let can_create_project = claim.can_create_project(
         service
-            .get_project_count(&name)
+            .get_project_count(&id)
             .await?
             .saturating_sub(is_cch_project as u32),
     );
@@ -179,7 +184,7 @@ async fn create_project(
     let project = service
         .create_project(
             project_name.clone(),
-            name.clone(),
+            &id,
             claim.is_admin(),
             can_create_project,
             if is_cch_project {
@@ -200,7 +205,7 @@ async fn create_project(
         .await?;
 
     let response = project::Response {
-        id: project.project_id.to_string().to_uppercase(),
+        id: project.id.to_string().to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
@@ -219,11 +224,11 @@ async fn destroy_project(
         ..
     }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let project = service.find_project(&project_name).await?;
+    let project = service.find_project_by_name(&project_name).await?;
     let idle_minutes = project.state.idle_minutes();
 
     let mut response = project::Response {
-        id: project.project_id.to_uppercase(),
+        id: project.id.to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
@@ -267,25 +272,49 @@ async fn delete_project(
     }
 
     let project_name = scoped_user.scope.clone();
-    let project = state.service.find_project(&project_name).await?;
-    let project_id =
-        Ulid::from_string(&project.project_id).expect("stored project id to be a valid ULID");
+    let project = state.service.find_project_by_name(&project_name).await?;
 
-    // Try to startup destroyed or errored projects
+    let project_id = Ulid::from_string(&project.id).expect("stored project id to be a valid ULID");
+
+    // Try to startup destroyed, errored or outdated projects
     let project_deletable = project.state.is_ready() || project.state.is_stopped();
-    if !(project_deletable) {
+    let current_version: semver::Version = env!("CARGO_PKG_VERSION")
+        .parse()
+        .expect("to have a valid semver gateway version");
+
+    let version = project
+        .state
+        .container()
+        .and_then(|container_inspect_response| {
+            container_inspect_response.image.and_then(|inner| {
+                inner
+                    .strip_prefix("public.ecr.aws/shuttle/deployer:v")
+                    .and_then(|x| x.parse::<semver::Version>().ok())
+            })
+        })
+        // Defaulting to a version that introduced a breaking change.
+        // This was the last one that introduced it at the present
+        // moment.
+        .unwrap_or(semver::Version::new(0, 39, 0));
+
+    // We restart the project before deletion everytime
+    // we detect it is outdated, so that we avoid by default
+    // breaking changes that can happen on the deployer
+    // side in the future.
+    if !project_deletable || version < current_version {
         let handle = state
             .service
             .new_task()
             .project(project_name.clone())
             .and_then(task::restart(project_id))
+            .and_then(task::run_until_done())
             .send(&state.sender)
             .await?;
 
         // Wait for the project to be ready
         handle.await;
 
-        let new_state = state.service.find_project(&project_name).await?;
+        let new_state = state.service.find_project_by_name(&project_name).await?;
 
         if !new_state.state.is_ready() {
             return Err(Error::from_kind(ErrorKind::ProjectCorrupted));
@@ -369,13 +398,16 @@ async fn override_create_service(
     scoped_user: ScopedUser,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    let account_name = scoped_user.user.claim.sub.clone();
+    let user_id = scoped_user.user.id.clone();
     let posthog_client = state.posthog_client.clone();
     tokio::spawn(async move {
-        let event = async_posthog::Event::new("shuttle_api_start_deployment", &account_name);
+        let event = async_posthog::Event::new("shuttle_api_start_deployment", &user_id);
 
         if let Err(err) = posthog_client.capture(event).await {
-            error!(error = %err, "failed to send event to posthog")
+            error!(
+                error = &err as &dyn std::error::Error,
+                "failed to send event to posthog"
+            )
         };
     });
 
@@ -399,7 +431,7 @@ async fn override_get_delete_service(
         .find_custom_domain_for_project(&project_name)
         .await
         .unwrap_or_default() // use project name if domain lookup fails
-        .map(|c| c.fqdn.to_string())
+        .map(|c| format!("https://{}", c.fqdn))
         .unwrap_or_else(|| format!("https://{project_name}.{public}"));
     let body = hyper::body::to_bytes(res.body_mut()).await.unwrap();
     let mut json: service::Summary =
@@ -434,9 +466,12 @@ async fn route_project(
             .await?;
     }
 
-    let project = service.find_or_start_project(&project_name, sender).await?;
+    let project = service
+        .find_or_start_project(&project_name, sender)
+        .await?
+        .0;
     service
-        .route(&project.state, &project_name, &scoped_user.user.name, req)
+        .route(&project.state, &project_name, &scoped_user.user.id, req)
         .await
 }
 
@@ -603,9 +638,7 @@ async fn create_acme_account(
 
 #[instrument(skip_all, fields(shuttle.project.name = %project_name, %fqdn))]
 async fn request_custom_domain_acme_certificate(
-    State(RouterState {
-        service, sender, ..
-    }): State<RouterState>,
+    State(RouterState { service, .. }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     CustomErrorPath((project_name, fqdn)): CustomErrorPath<(ProjectName, String)>,
@@ -617,36 +650,6 @@ async fn request_custom_domain_acme_certificate(
 
     let (certs, private_key) = service
         .create_custom_domain_certificate(&fqdn, &acme_client, &project_name, credentials)
-        .await?;
-
-    let project = service.find_project(&project_name).await?;
-    let project_id = project
-        .state
-        .container()
-        .unwrap()
-        .project_id()
-        .map_err(|_| Error::custom(ErrorKind::Internal, "Missing project_id from the container"))?;
-
-    let container = project.state.container().unwrap();
-    let idle_minutes = container.idle_minutes();
-
-    // Destroy and recreate the project with the new domain.
-    service
-        .new_task()
-        .project(project_name.clone())
-        .and_then(task::destroy())
-        .and_then(task::run_until_done())
-        .and_then(task::run(move |ctx| async move {
-            let creating = ProjectCreating::new_with_random_initial_key(
-                ctx.project_name,
-                project_id,
-                idle_minutes,
-            );
-            TaskResult::Done(Project::Creating(creating))
-        }))
-        .and_then(task::run_until_done())
-        .and_then(task::start_idle_deploys())
-        .send(&sender)
         .await?;
 
     let mut buf = Vec::new();
@@ -772,7 +775,7 @@ async fn renew_gateway_acme_certificate(
             .whole_days()
             <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS
     {
-        let tls_path = service.state_location.join("ssl.pem");
+        let tls_path = service.state_dir.join("ssl.pem");
         let certs = service
             .create_certificate(&acme_client, account.credentials())
             .await;
@@ -813,6 +816,7 @@ pub(crate) struct RouterState {
     pub posthog_client: async_posthog::Client,
 }
 
+#[derive(Default)]
 pub struct ApiBuilder {
     router: Router<RouterState>,
     service: Option<Arc<GatewayService>>,
@@ -821,21 +825,9 @@ pub struct ApiBuilder {
     bind: Option<SocketAddr>,
 }
 
-impl Default for ApiBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ApiBuilder {
     pub fn new() -> Self {
-        Self {
-            router: Router::new(),
-            service: None,
-            sender: None,
-            posthog_client: None,
-            bind: None,
-        }
+        Self::default()
     }
 
     pub fn with_acme(mut self, acme: AcmeClient, resolver: Arc<GatewayCertResolver>) -> Self {
@@ -896,9 +888,9 @@ impl ApiBuilder {
             TraceLayer::new(|request| {
                 request_span!(
                     request,
-                    account.name = field::Empty,
+                    account.user_id = field::Empty,
                     request.params.project_name = field::Empty,
-                    request.params.account_name = field::Empty
+                    request.params.user_id = field::Empty,
                 )
             })
             .with_propagation()
@@ -988,6 +980,22 @@ impl ApiBuilder {
         self
     }
 
+    pub fn with_cors(mut self, cors_origin: &str) -> Self {
+        let cors_layer = CorsLayer::new()
+            .allow_methods(vec![Method::GET, Method::POST, Method::DELETE])
+            .allow_headers(vec![AUTHORIZATION])
+            .max_age(Duration::from_secs(60) * 10)
+            .allow_origin(
+                cors_origin
+                    .parse::<HeaderValue>()
+                    .expect("to be able to parse the CORS origin"),
+            );
+
+        self.router = self.router.layer(cors_layer);
+
+        self
+    }
+
     pub fn into_router(self) -> Router {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
@@ -1026,6 +1034,7 @@ pub mod tests {
     use hyper::body::to_bytes;
     use hyper::StatusCode;
     use serde_json::Value;
+    use shuttle_backends::test_utils::gateway::PermissionsMock;
     use shuttle_common::claims::AccountTier;
     use shuttle_common::constants::limits::{MAX_PROJECTS_DEFAULT, MAX_PROJECTS_EXTRA};
     use test_context::test_context;
@@ -1035,6 +1044,7 @@ pub mod tests {
     use tower::Service;
 
     use super::*;
+    use crate::project::Project;
     use crate::project::ProjectError;
     use crate::service::GatewayService;
     use crate::tests::{RequestBuilderExt, TestGateway, TestProject, World};
@@ -1042,7 +1052,15 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let service = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let (sender, mut receiver) = channel::<BoxedTask>(256);
         tokio::spawn(async move {
@@ -1224,7 +1242,15 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_project_limits() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await?);
+        let service = Arc::new(
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await?,
+        );
 
         let (sender, mut receiver) = channel::<BoxedTask>(256);
         tokio::spawn(async move {
@@ -1548,9 +1574,14 @@ pub mod tests {
     async fn status() {
         let world = World::new().await;
         let service = Arc::new(
-            GatewayService::init(world.args(), world.pool(), "".into())
-                .await
-                .unwrap(),
+            GatewayService::init(
+                world.args(),
+                world.pool(),
+                "".into(),
+                Box::<PermissionsMock>::default(),
+            )
+            .await
+            .unwrap(),
         );
 
         let (sender, mut receiver) = channel::<BoxedTask>(1);

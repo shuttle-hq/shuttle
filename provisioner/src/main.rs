@@ -1,19 +1,17 @@
 use std::{net::SocketAddr, time::Duration};
 
 use clap::Parser;
-use shuttle_common::{
-    backends::{
-        auth::{AuthPublicKey, JwtAuthenticationLayer},
-        trace::{setup_tracing, ExtractPropagationLayer},
-    },
-    log::Backend,
+use shuttle_backends::{
+    auth::{AuthPublicKey, JwtAuthenticationLayer},
+    trace::setup_tracing,
 };
+use shuttle_common::{extract_propagation::ExtractPropagationLayer, log::Backend};
 use shuttle_provisioner::{Args, ProvisionerServer, ShuttleProvisioner};
 use tonic::transport::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    setup_tracing(tracing_subscriber::registry(), Backend::Provisioner, None);
+    setup_tracing(tracing_subscriber::registry(), Backend::Provisioner);
 
     let Args {
         ip,

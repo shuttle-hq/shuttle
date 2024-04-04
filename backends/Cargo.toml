@@ -1,0 +1,61 @@
+[package]
+name = "shuttle-backends"
+version = "0.43.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+shuttle-common = { workspace = true, features = ["axum", "claims", "models"] }
+shuttle-proto = { workspace = true, features = ["resource-recorder-client"] }
+
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true, features = ["matched-path"] }
+bytes = { workspace = true }
+headers = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+hyper = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-appender-tracing = { workspace = true }
+opentelemetry-http = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+pin-project = { workspace = true }
+permit-client-rs = { git = "https://github.com/shuttle-hq/permit-client-rs", rev = "27c7759" }
+permit-pdp-client-rs = { git = "https://github.com/shuttle-hq/permit-pdp-client-rs", rev = "37c7296" }
+portpicker = { workspace = true, optional = true }
+reqwest = { workspace = true, features = ["json"] }
+# keep locked to not accidentally invalidate someone's project name
+rustrict = { version = "=0.7.12" }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true }
+sqlx = { workspace = true, optional = true }
+strum = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true, features = ["std"] }
+tracing-opentelemetry = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"]}
+ttl_cache = { workspace = true }
+wiremock = { workspace = true, optional = true }
+
+[features]
+sqlx = ["dep:sqlx"]
+test-utils = ["portpicker", "wiremock"]
+
+[dev-dependencies]
+base64 = { workspace = true }
+ctor = { workspace = true }
+jsonwebtoken = { workspace = true }
+ring = { workspace = true }
+serial_test = "3.0.0"
+shuttle-common-tests = { workspace = true }
+test-context = { workspace = true }
+tracing-fluent-assertions = "0.3.0"
+uuid = { workspace = true }

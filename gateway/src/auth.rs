@@ -1,16 +1,17 @@
 use std::fmt::Debug;
-use std::str::FromStr;
 
 use axum::extract::{FromRef, FromRequestParts, Path};
 use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
-use shuttle_common::claims::{Claim, Scope};
+use shuttle_backends::project_name::ProjectName;
+use shuttle_backends::ClaimExt;
+use shuttle_common::claims::Claim;
 use shuttle_common::models::error::InvalidProjectName;
-use shuttle_common::models::project::ProjectName;
-use tracing::{trace, Span};
+use shuttle_common::models::user::UserId;
+use tracing::{error, trace, Span};
 
 use crate::api::latest::RouterState;
-use crate::{AccountName, Error, ErrorKind};
+use crate::{Error, ErrorKind};
 
 /// A wrapper to enrich a token with user details
 ///
@@ -19,9 +20,8 @@ use crate::{AccountName, Error, ErrorKind};
 /// is valid against the user's owned resources.
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
 pub struct User {
-    pub projects: Vec<ProjectName>,
     pub claim: Claim,
-    pub name: AccountName,
+    pub id: UserId,
 }
 
 #[async_trait]
@@ -32,20 +32,16 @@ where
 {
     type Rejection = Error;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let claim = parts.extensions.get::<Claim>().ok_or(ErrorKind::Internal)?;
-        let name = AccountName::from_str(&claim.sub)
-            .map_err(|err| Error::source(ErrorKind::Internal, err))?;
+        let user_id = claim.sub.clone();
 
         // Record current account name for tracing purposes
-        Span::current().record("account.name", &name.to_string());
-
-        let RouterState { service, .. } = RouterState::from_ref(state);
+        Span::current().record("account.user_id", &user_id);
 
         let user = User {
             claim: claim.clone(),
-            projects: service.iter_user_projects(&name).await?.collect(),
-            name,
+            id: user_id,
         };
 
         trace!(?user, "got user");
@@ -84,7 +80,43 @@ where
                 .map_err(|_| Error::from(ErrorKind::InvalidProjectName(InvalidProjectName)))?,
         };
 
-        if user.projects.contains(&scope) || user.claim.scopes.contains(&Scope::Admin) {
+        let RouterState { service, .. } = RouterState::from_ref(state);
+
+        let has_bypass = user.claim.is_admin() || user.claim.is_deployer();
+
+        let allowed = has_bypass
+            || {
+                let projects: Vec<_> = service.iter_user_projects(&user.id).await?.collect();
+                let internal_allowed = projects.contains(&scope);
+
+                let permit_allowed = service
+                    .permit_client
+                    .allowed(
+                        &user.id,
+                        &service.find_project_by_name(&scope).await?.id,
+                        "develop", // TODO?: make this configurable per endpoint?
+                    )
+                    .await
+                    .map_err(|_| {
+                        error!("failed to check Permit permission");
+                        // Error::from_kind(ErrorKind::Internal)
+                    })
+                    .unwrap_or_default();
+
+                if internal_allowed != permit_allowed {
+                    error!(
+                        "PERMIT: Permissions for user {} project {} did not match internal permissions. Internal: {}, Permit: {}",
+                        user.id,
+                        scope,
+                        internal_allowed,
+                        permit_allowed
+                    );
+                }
+
+                internal_allowed
+            };
+
+        if allowed {
             Ok(Self { user, scope })
         } else {
             Err(Error::from(ErrorKind::ProjectNotFound(scope.to_string())))

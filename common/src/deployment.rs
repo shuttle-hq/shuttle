@@ -23,26 +23,21 @@ pub enum State {
 pub struct DeploymentMetadata {
     pub env: Environment,
     pub project_name: String,
-    /// Typically your crate name
-    pub service_name: String,
     /// Path to a folder that persists between deployments
     pub storage_path: PathBuf,
 }
 
 /// The environment this project is running in
-#[derive(Clone, Copy, Debug, Display, EnumString, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Display, EnumString, PartialEq, Eq, Serialize, Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum Environment {
+    #[default]
     Local,
     #[strum(serialize = "production")] // Keep this around for a while for backward compat
     Deployment,
-}
-
-impl Default for Environment {
-    fn default() -> Self {
-        Self::Local
-    }
 }
 
 pub const DEPLOYER_END_MSG_STARTUP_ERR: &str = "Service startup encountered an error";
@@ -51,6 +46,7 @@ pub const DEPLOYER_END_MSG_CRASHED: &str = "Service encountered an error and cra
 pub const DEPLOYER_END_MSG_STOPPED: &str = "Service was stopped by the user"; // don't include this in end messages so that logs are not stopped too early
 pub const DEPLOYER_END_MSG_COMPLETED: &str = "Service finished running all on its own";
 pub const DEPLOYER_RUNTIME_START_RESPONSE: &str = "Runtime started successully";
+pub const DEPLOYER_RUNTIME_START_FAILED: &str = "Runtime did not start successfully";
 
 pub const DEPLOYER_END_MESSAGES_BAD: &[&str] = &[
     DEPLOYER_END_MSG_STARTUP_ERR,

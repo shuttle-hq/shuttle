@@ -3,6 +3,9 @@
 pub struct DatabaseRequest {
     #[prost(string, tag = "1")]
     pub project_name: ::prost::alloc::string::String,
+    /// Override the default db name. Only applies to RDS.
+    #[prost(string, optional, tag = "2")]
+    pub db_name: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(oneof = "database_request::DbType", tags = "10, 11")]
     pub db_type: ::core::option::Option<database_request::DbType>,
 }
@@ -77,32 +80,6 @@ pub struct DatabaseResponse {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DatabaseDeletionResponse {}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ContainerRequest {
-    #[prost(string, tag = "1")]
-    pub project_name: ::prost::alloc::string::String,
-    /// Type of container, used in the container name. ex "qdrant"
-    #[prost(string, tag = "2")]
-    pub container_type: ::prost::alloc::string::String,
-    /// ex. "qdrant/qdrant:latest"
-    #[prost(string, tag = "3")]
-    pub image: ::prost::alloc::string::String,
-    /// The internal port that the container should expose. ex. "6334/tcp"
-    #[prost(string, tag = "4")]
-    pub port: ::prost::alloc::string::String,
-    /// list of "KEY=value" strings
-    #[prost(string, repeated, tag = "5")]
-    pub env: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ContainerResponse {
-    /// The port that the container exposes to the host.
-    /// Is a string for parity with the Docker respose.
-    #[prost(string, tag = "1")]
-    pub host_port: ::prost::alloc::string::String,
-}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Ping {}
@@ -213,27 +190,6 @@ pub mod provisioner_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        pub async fn provision_arbitrary_container(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ContainerRequest>,
-        ) -> std::result::Result<tonic::Response<super::ContainerResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/provisioner.Provisioner/ProvisionArbitraryContainer",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "provisioner.Provisioner",
-                "ProvisionArbitraryContainer",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
         pub async fn delete_database(
             &mut self,
             request: impl tonic::IntoRequest<super::DatabaseRequest>,
@@ -283,10 +239,6 @@ pub mod provisioner_server {
             &self,
             request: tonic::Request<super::DatabaseRequest>,
         ) -> std::result::Result<tonic::Response<super::DatabaseResponse>, tonic::Status>;
-        async fn provision_arbitrary_container(
-            &self,
-            request: tonic::Request<super::ContainerRequest>,
-        ) -> std::result::Result<tonic::Response<super::ContainerResponse>, tonic::Status>;
         async fn delete_database(
             &self,
             request: tonic::Request<super::DatabaseRequest>,
@@ -399,49 +351,6 @@ pub mod provisioner_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = ProvisionDatabaseSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/provisioner.Provisioner/ProvisionArbitraryContainer" => {
-                    #[allow(non_camel_case_types)]
-                    struct ProvisionArbitraryContainerSvc<T: Provisioner>(pub Arc<T>);
-                    impl<T: Provisioner> tonic::server::UnaryService<super::ContainerRequest>
-                        for ProvisionArbitraryContainerSvc<T>
-                    {
-                        type Response = super::ContainerResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ContainerRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Provisioner>::provision_arbitrary_container(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = ProvisionArbitraryContainerSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

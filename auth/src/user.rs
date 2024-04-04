@@ -1,4 +1,4 @@
-use std::{fmt::Formatter, io::ErrorKind, str::FromStr};
+use std::{io::ErrorKind, str::FromStr};
 
 use async_trait::async_trait;
 use axum::{
@@ -8,101 +8,57 @@ use axum::{
     TypedHeader,
 };
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer, Serialize};
+use shuttle_backends::{client::PermissionsDal, headers::XShuttleAdminSecret};
 use shuttle_common::{
-    backends::headers::XShuttleAdminSecret, claims::AccountTier, limits::Limits, models, ApiKey,
-    Secret,
+    claims::AccountTier, limits::Limits, models, models::user::UserId, ApiKey, Secret,
 };
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
+use stripe::{SubscriptionId, SubscriptionStatus};
 use tracing::{debug, error, trace, Span};
 
 use crate::{api::UserManagerState, error::Error};
-use stripe::{SubscriptionId, SubscriptionStatus};
 
 #[async_trait]
 pub trait UserManagement: Send + Sync {
-    /// Create a user with the given tier
-    async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error>;
+    /// Create a user with the given auth0 name and tier
+    async fn create_user(&self, account_name: String, tier: AccountTier) -> Result<User, Error>;
 
-    /// Change the tier for a user
-    async fn update_tier(&self, name: &AccountName, tier: AccountTier) -> Result<(), Error>;
-
-    /// Get a user by their account name
-    async fn get_user(&self, name: AccountName) -> Result<User, Error>;
-
-    /// Get a user by their api key
+    async fn update_tier(&self, user_id: &UserId, tier: AccountTier) -> Result<(), Error>;
+    async fn get_user_by_name(&self, account_name: &str) -> Result<User, Error>;
+    async fn get_user(&self, user_id: UserId) -> Result<User, Error>;
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error>;
-
-    /// Reset the key that belongs to an account
-    async fn reset_key(&self, name: AccountName) -> Result<(), Error>;
-
-    /// Insert a subscription for an account
+    async fn reset_key(&self, user_id: UserId) -> Result<(), Error>;
     async fn insert_subscription(
         &self,
-        name: &AccountName,
+        user_id: &UserId,
         subscription_id: &str,
         subscription_type: &models::user::SubscriptionType,
         subscription_quantity: i32,
     ) -> Result<(), Error>;
-
-    /// Delete a subscription from an account
     async fn delete_subscription(
         &self,
-        name: &AccountName,
+        user_id: &UserId,
         subscription_id: &str,
     ) -> Result<(), Error>;
 }
 
 #[derive(Clone)]
-pub struct UserManager {
+pub struct UserManager<P> {
     pub pool: PgPool,
     pub stripe_client: stripe::Client,
+    pub permissions_client: P,
 }
 
-#[async_trait]
-impl UserManagement for UserManager {
-    async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error> {
-        let key = ApiKey::generate();
-
-        query("INSERT INTO users (account_name, key, account_tier) VALUES ($1, $2, $3)")
-            .bind(&name)
-            .bind(&key)
-            .bind(tier.to_string())
-            .execute(&self.pool)
-            .await?;
-
-        Ok(User::new(name, key, tier, vec![]))
-    }
-
-    // Update tier leaving the subscription_id untouched.
-    async fn update_tier(&self, name: &AccountName, tier: AccountTier) -> Result<(), Error> {
-        let rows_affected = query("UPDATE users SET account_tier = $1 WHERE account_name = $2")
-            .bind(tier.to_string())
-            .bind(name)
-            .execute(&self.pool)
-            .await?
-            .rows_affected();
-
-        if rows_affected > 0 {
-            Ok(())
-        } else {
-            Err(Error::UserNotFound)
-        }
-    }
-
-    async fn get_user(&self, name: AccountName) -> Result<User, Error> {
-        let mut user: User = sqlx::query_as(
-            "SELECT account_name, key, account_tier FROM users WHERE account_name = $1",
-        )
-        .bind(&name)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or(Error::UserNotFound)?;
-
+impl<P> UserManager<P>
+where
+    P: PermissionsDal + Send + Sync,
+{
+    /// Add subscriptions to and sync the tier of a user
+    async fn complete_user(&self, mut user: User) -> Result<User, Error> {
         let subscriptions: Vec<Subscription> = sqlx::query_as(
-            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE account_name = $1",
+            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE user_id = $1",
         )
-        .bind(&user.name.to_string())
+        .bind(&user.id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -112,27 +68,98 @@ impl UserManagement for UserManager {
 
         // Sync the user tier based on the subscription validity, if any.
         if let Err(err) = user.sync_tier(self).await {
-            error!("failed syncing account");
+            error!(
+                error = &err as &dyn std::error::Error,
+                "failed syncing account"
+            );
             return Err(err);
-        } else {
-            debug!("synced account");
+        }
+        debug!("synced account");
+
+        Ok(user)
+    }
+}
+
+#[async_trait]
+impl<P> UserManagement for UserManager<P>
+where
+    P: PermissionsDal + Send + Sync,
+{
+    async fn create_user(&self, account_name: String, tier: AccountTier) -> Result<User, Error> {
+        let user = User::new(account_name, ApiKey::generate(), tier, vec![]);
+
+        query(
+            "INSERT INTO users (account_name, key, account_tier, user_id) VALUES ($1, $2, $3, $4)",
+        )
+        .bind(&user.name)
+        .bind(user.key.expose())
+        .bind(user.account_tier.to_string())
+        .bind(&user.id)
+        .execute(&self.pool)
+        .await?;
+
+        self.permissions_client.new_user(&user.id).await?;
+
+        if tier == AccountTier::Pro {
+            self.permissions_client.make_pro(&user.id).await?;
         }
 
         Ok(user)
     }
 
+    // Update tier leaving the subscription_id untouched.
+    async fn update_tier(&self, user_id: &UserId, tier: AccountTier) -> Result<(), Error> {
+        let rows_affected = query("UPDATE users SET account_tier = $1 WHERE user_id = $2")
+            .bind(tier.to_string())
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?
+            .rows_affected();
+
+        if tier == AccountTier::Pro {
+            self.permissions_client.make_pro(user_id).await?;
+        } else {
+            self.permissions_client.make_basic(user_id).await?;
+        }
+
+        if rows_affected > 0 {
+            Ok(())
+        } else {
+            Err(Error::UserNotFound)
+        }
+    }
+
+    async fn get_user_by_name(&self, account_name: &str) -> Result<User, Error> {
+        let user: User = sqlx::query_as("SELECT * FROM users WHERE account_name = $1")
+            .bind(account_name)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(Error::UserNotFound)?;
+
+        self.complete_user(user).await
+    }
+
+    async fn get_user(&self, user_id: UserId) -> Result<User, Error> {
+        let user: User = sqlx::query_as("SELECT * FROM users WHERE user_id = $1")
+            .bind(&user_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(Error::UserNotFound)?;
+
+        self.complete_user(user).await
+    }
+
     async fn get_user_by_key(&self, key: ApiKey) -> Result<User, Error> {
-        let mut user: User =
-            sqlx::query_as("SELECT account_name, key, account_tier FROM users WHERE key = $1")
-                .bind(&key)
-                .fetch_optional(&self.pool)
-                .await?
-                .ok_or(Error::UserNotFound)?;
+        let mut user: User = sqlx::query_as("SELECT * FROM users WHERE key = $1")
+            .bind(&key)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(Error::UserNotFound)?;
 
         let subscriptions: Vec<Subscription> = sqlx::query_as(
-            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE account_name = $1",
+            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE user_id = $1",
         )
-        .bind(&user.name.to_string())
+        .bind(&user.id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -148,12 +175,12 @@ impl UserManagement for UserManager {
         Ok(user)
     }
 
-    async fn reset_key(&self, name: AccountName) -> Result<(), Error> {
+    async fn reset_key(&self, user_id: UserId) -> Result<(), Error> {
         let key = ApiKey::generate();
 
-        let rows_affected = query("UPDATE users SET key = $1 WHERE account_name = $2")
+        let rows_affected = query("UPDATE users SET key = $1 WHERE user_id = $2")
             .bind(&key)
-            .bind(&name)
+            .bind(&user_id)
             .execute(&self.pool)
             .await?
             .rows_affected();
@@ -167,7 +194,7 @@ impl UserManagement for UserManager {
 
     async fn insert_subscription(
         &self,
-        name: &AccountName,
+        user_id: &UserId,
         subscription_id: &str,
         subscription_type: &models::user::SubscriptionType,
         subscription_quantity: i32,
@@ -175,24 +202,26 @@ impl UserManagement for UserManager {
         let mut transaction = self.pool.begin().await?;
 
         if *subscription_type == models::user::SubscriptionType::Pro {
-            query("UPDATE users SET account_tier = $1 WHERE account_name = $2")
+            query("UPDATE users SET account_tier = $1 WHERE user_id = $2")
                 .bind(AccountTier::Pro.to_string())
-                .bind(name)
+                .bind(user_id)
                 .execute(&mut *transaction)
                 .await?;
+
+            self.permissions_client.make_pro(user_id).await?;
         }
 
         // Insert a new subscription. If the same type of subscription already exists, update the
         // subscription id and quantity.
         let rows_affected = query(
-            r#"INSERT INTO subscriptions (subscription_id, account_name, type, quantity)
+            r#"INSERT INTO subscriptions (subscription_id, user_id, type, quantity)
             VALUES ($1, $2, $3, $4)
-            ON CONFLICT (account_name, type)
+            ON CONFLICT (user_id, type)
             DO UPDATE SET subscription_id = EXCLUDED.subscription_id, quantity = EXCLUDED.quantity
         "#,
         )
         .bind(subscription_id)
-        .bind(name)
+        .bind(user_id)
         .bind(subscription_type.to_string())
         .bind(subscription_quantity)
         .execute(&mut *transaction)
@@ -211,27 +240,29 @@ impl UserManagement for UserManager {
 
     async fn delete_subscription(
         &self,
-        name: &AccountName,
+        user_id: &UserId,
         subscription_id: &str,
     ) -> Result<(), Error> {
         let subscription: Subscription = sqlx::query_as(
-            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE account_name = $1 AND subscription_id = $2",
+            "SELECT subscription_id, type, quantity, created_at, updated_at FROM subscriptions WHERE user_id = $1 AND subscription_id = $2",
         )
-        .bind(name)
+        .bind(user_id)
         .bind(subscription_id)
         .fetch_one(&self.pool)
         .await?;
 
         if subscription.r#type == models::user::SubscriptionType::Pro {
-            self.update_tier(name, AccountTier::CancelledPro).await?;
+            self.update_tier(user_id, AccountTier::CancelledPro).await?;
+
+            self.permissions_client.make_basic(user_id).await?;
         } else {
             query(
                 r#"DELETE FROM subscriptions
-                WHERE subscription_id = $1 AND account_name = $2
+                WHERE subscription_id = $1 AND user_id = $2
             "#,
             )
             .bind(subscription_id)
-            .bind(name)
+            .bind(user_id)
             .execute(&self.pool)
             .await?;
         }
@@ -242,7 +273,8 @@ impl UserManagement for UserManager {
 
 #[derive(Clone, Debug)]
 pub struct User {
-    pub name: AccountName,
+    pub name: UserId,
+    pub id: String,
     pub key: Secret<ApiKey>,
     pub account_tier: AccountTier,
     pub subscriptions: Vec<Subscription>,
@@ -269,14 +301,19 @@ impl User {
             .map(|sub| &sub.id)
     }
 
-    pub fn new(
-        name: AccountName,
+    pub fn new_user_id() -> String {
+        format!("user_{}", ulid::Ulid::new())
+    }
+
+    fn new(
+        name: UserId,
         key: ApiKey,
         account_tier: AccountTier,
         subscriptions: Vec<Subscription>,
     ) -> Self {
         Self {
             name,
+            id: Self::new_user_id(),
             key: Secret::new(key),
             account_tier,
             subscriptions,
@@ -296,7 +333,10 @@ impl User {
     }
 
     // Synchronize the tiers with the subscription validity.
-    async fn sync_tier(&mut self, user_manager: &UserManager) -> Result<bool, Error> {
+    async fn sync_tier<P: PermissionsDal + Send + Sync>(
+        &mut self,
+        user_manager: &UserManager<P>,
+    ) -> Result<bool, Error> {
         let has_pro_access = self.account_tier == AccountTier::Pro
             || self.account_tier == AccountTier::CancelledPro
             || self.account_tier == AccountTier::PendingPaymentPro;
@@ -312,7 +352,7 @@ impl User {
         if self.account_tier == AccountTier::CancelledPro && !subscription_is_valid {
             self.account_tier = AccountTier::Basic;
             user_manager
-                .update_tier(&self.name, self.account_tier)
+                .update_tier(&self.id, self.account_tier)
                 .await?;
             return Ok(true);
         }
@@ -320,7 +360,7 @@ impl User {
         if self.account_tier == AccountTier::Pro && !subscription_is_valid {
             self.account_tier = AccountTier::PendingPaymentPro;
             user_manager
-                .update_tier(&self.name, self.account_tier)
+                .update_tier(&self.id, self.account_tier)
                 .await?;
             return Ok(true);
         }
@@ -328,7 +368,7 @@ impl User {
         if self.account_tier == AccountTier::PendingPaymentPro && subscription_is_valid {
             self.account_tier = AccountTier::Pro;
             user_manager
-                .update_tier(&self.name, self.account_tier)
+                .update_tier(&self.id, self.account_tier)
                 .await?;
             return Ok(true);
         }
@@ -341,6 +381,7 @@ impl FromRow<'_, PgRow> for User {
     fn from_row(row: &PgRow) -> Result<Self, sqlx::Error> {
         Ok(User {
             name: row.try_get("account_name").unwrap(),
+            id: row.try_get("user_id").unwrap(),
             key: Secret::new(row.try_get("key").unwrap()),
             account_tier: AccountTier::from_str(row.try_get("account_tier").unwrap()).map_err(
                 |err| sqlx::Error::ColumnDecode {
@@ -410,7 +451,7 @@ where
             .map_err(|_| Error::Unauthorized)?;
 
         // Record current account name for tracing purposes
-        Span::current().record("account.name", &user.name.to_string());
+        Span::current().record("account.user_id", &user.id);
 
         Ok(user)
     }
@@ -420,6 +461,7 @@ impl From<User> for models::user::Response {
     fn from(user: User) -> Self {
         Self {
             name: user.name.to_string(),
+            id: user.id,
             key: user.key.expose().as_ref().to_owned(),
             account_tier: user.account_tier.to_string(),
             subscriptions: user.subscriptions.into_iter().map(Into::into).collect(),
@@ -470,41 +512,6 @@ where
         trace!("got bearer key");
 
         Ok(Key(key))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
-#[sqlx(transparent)]
-pub struct AccountName(String);
-
-impl From<String> for AccountName {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
-}
-
-impl FromStr for AccountName {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(s.to_string().into())
-    }
-}
-
-impl std::fmt::Display for AccountName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl<'de> Deserialize<'de> for AccountName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
     }
 }
 

@@ -1,57 +1,51 @@
-use async_posthog::ClientOptions;
-use clap::Parser;
-use futures::prelude::*;
-
-use shuttle_common::backends::trace::setup_tracing;
-use shuttle_common::log::Backend;
-use shuttle_gateway::acme::{AcmeClient, CustomDomain};
-use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
-use shuttle_gateway::args::StartArgs;
-use shuttle_gateway::args::{Args, Commands, UseTls};
-use shuttle_gateway::proxy::UserServiceBuilder;
-use shuttle_gateway::service::{GatewayService, MIGRATIONS};
-use shuttle_gateway::tls::make_tls_acceptor;
-use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
-use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
-use sqlx::{Sqlite, SqlitePool};
-use std::io::{self, Cursor};
-
+use std::collections::BTreeMap;
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+
+use async_posthog::ClientOptions;
+use clap::Parser;
+use futures::prelude::*;
+use shuttle_backends::client::{permit, PermissionsDal};
+use shuttle_backends::trace::setup_tracing;
+use shuttle_common::log::Backend;
+use sqlx::migrate::MigrateDatabase;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
+use sqlx::{Sqlite, SqlitePool};
 use tracing::{debug, error, info, info_span, trace, warn, Instrument};
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() -> io::Result<()> {
-    let args = Args::parse();
+use shuttle_gateway::acme::{AcmeClient, CustomDomain};
+use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
+use shuttle_gateway::args::{Args, Commands, UseTls};
+use shuttle_gateway::args::{StartArgs, SyncArgs};
+use shuttle_gateway::proxy::UserServiceBuilder;
+use shuttle_gateway::service::{GatewayService, MIGRATIONS};
+use shuttle_gateway::tls::make_tls_acceptor;
+use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
 
+#[tokio::main(flavor = "multi_thread")]
+async fn main() {
+    setup_tracing(tracing_subscriber::registry(), Backend::Gateway);
+
+    let args = Args::parse();
     trace!(args = ?args, "parsed args");
 
-    let ph_client_options = ClientOptions::new(
+    let posthog_client = async_posthog::client(ClientOptions::new(
         "phc_cQMQqF5QmcEzXEaVlrhv3yBSNRyaabXYAyiCV7xKHUH".to_string(),
         "https://eu.posthog.com".to_string(),
         Duration::from_millis(800),
-    );
-
-    let posthog_client = async_posthog::client(ph_client_options);
-
-    setup_tracing(tracing_subscriber::registry(), Backend::Gateway, None);
+    ));
 
     let db_path = args.state.join("gateway.sqlite");
     let db_uri = db_path.to_str().unwrap();
 
+    info!("Using state db: {}", db_uri);
     if !db_path.exists() {
+        info!("Creating new state db");
         Sqlite::create_database(db_uri).await.unwrap();
     }
-
-    info!(
-        "state db: {}",
-        std::fs::canonicalize(&args.state)
-            .unwrap()
-            .to_string_lossy()
-    );
 
     let sqlite_options = SqliteConnectOptions::from_str(db_uri)
         .unwrap()
@@ -62,21 +56,81 @@ async fn main() -> io::Result<()> {
         // LD_LIBRARY_PATH env set in build.rs.
         .extension("ulid0");
 
+    info!("Connecting and migrating db...");
     let db = SqlitePool::connect_with(sqlite_options).await.unwrap();
     MIGRATIONS.run(&db).await.unwrap();
 
     match args.command {
         Commands::Start(start_args) => start(db, args.state, posthog_client, start_args).await,
+        Commands::Sync(sync_args) => sync_permit_projects(db, sync_args).await,
+    }
+}
+
+async fn sync_permit_projects(db: SqlitePool, args: SyncArgs) {
+    let client = permit::Client::new(
+        args.permit.permit_api_uri.to_string(),
+        args.permit.permit_pdp_uri.to_string(),
+        "default".to_owned(),
+        args.permit.permit_env,
+        args.permit.permit_api_key,
+    );
+
+    let projects: Vec<(String, String)> =
+        sqlx::query_as("SELECT user_id, project_id FROM projects")
+            .fetch_all(&db)
+            .await
+            .unwrap();
+    let mut projects_by_user = BTreeMap::<String, Vec<String>>::new();
+    for (uid, pid) in projects {
+        let v = projects_by_user.entry(uid).or_default();
+        v.push(pid);
+    }
+
+    for (uid, pids) in projects_by_user {
+        println!("syncing {uid} projects");
+        match client.get_user_projects(&uid).await {
+            Ok(projs) => {
+                for pid in pids {
+                    if !projs
+                        .iter()
+                        .any(|p| p.resource.as_ref().unwrap().key == pid)
+                    {
+                        println!("creating project link {uid} <-> {pid}");
+                        client.create_project(&uid, &pid).await.unwrap();
+                    } else {
+                        println!("project link exists {uid} <-> {pid}");
+                    }
+                }
+            }
+            Err(e) => {
+                println!("failed to get projects for {uid}. skipping. error: {e:?}");
+            }
+        }
     }
 }
 
 async fn start(
     db: SqlitePool,
-    fs: PathBuf,
+    state_dir: PathBuf,
     posthog_client: async_posthog::Client,
     args: StartArgs,
-) -> io::Result<()> {
-    let gateway = Arc::new(GatewayService::init(args.context.clone(), db, fs).await?);
+) {
+    let gateway = Arc::new(
+        GatewayService::init(
+            args.context.clone(),
+            db,
+            state_dir,
+            Box::new(permit::Client::new(
+                args.permit.permit_api_uri.to_string(),
+                args.permit.permit_pdp_uri.to_string(),
+                "default".to_owned(),
+                args.permit.permit_env,
+                args.permit.permit_api_key,
+            )),
+        )
+        .await
+        .unwrap(),
+    );
 
     let worker = Worker::new();
 
@@ -196,6 +250,7 @@ async fn start(
         .with_default_routes()
         .with_auth_service(args.context.auth_uri, args.context.admin_key)
         .with_default_traces()
+        .with_cors(&args.cors_origin)
         .serve();
 
     let user_handle = user_builder.serve();
@@ -208,6 +263,4 @@ async fn start(
         _ = user_handle => error!("user handle finished"),
         _ = ambulance_handle => error!("ambulance handle finished"),
     );
-
-    Ok(())
 }

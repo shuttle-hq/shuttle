@@ -14,7 +14,6 @@ use shuttle_common::{
     log::LogRecorder,
     LogItem,
 };
-use shuttle_proto::builder::{self, BuildRequest};
 use shuttle_service::builder::{build_workspace, BuiltService};
 use tar::Archive;
 use tokio::{
@@ -23,7 +22,6 @@ use tokio::{
     task::JoinSet,
     time::{sleep, timeout},
 };
-use tonic::Request;
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
@@ -32,16 +30,12 @@ use uuid::Uuid;
 use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
-use crate::persistence::DeploymentUpdater;
 
-#[allow(clippy::too_many_arguments)]
 pub async fn task(
     mut recv: QueueReceiver,
     run_send: RunSender,
-    deployment_updater: impl DeploymentUpdater,
     log_recorder: impl LogRecorder,
     queue_client: impl BuildQueueClient,
-    builder_client: Option<builder::Client>,
     builds_path: PathBuf,
 ) {
     info!("Queue task started");
@@ -54,12 +48,10 @@ pub async fn task(
                 let id = queued.id;
 
                 info!("Queued deployment at the front of the queue: {id}");
-                let deployment_updater = deployment_updater.clone();
                 let run_send_cloned = run_send.clone();
                 let log_recorder = log_recorder.clone();
                 let queue_client = queue_client.clone();
                 let builds_path = builds_path.clone();
-                let builder_client = builder_client.clone();
 
                 tasks.spawn(async move {
                     let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -80,30 +72,8 @@ pub async fn task(
                             return build_failed_to_get_slot(&id, err);
                         }
 
-                        if let Some(mut inner) = builder_client {
-                            let deployment_id = queued.id.to_string();
-                            let archive = queued.data.clone();
-                            let claim = queued.claim.clone();
-                            tokio::spawn(async move {
-                                let mut req = Request::new(BuildRequest {
-                                    deployment_id,
-                                    archive,
-                                });
-                                req.extensions_mut().insert(claim);
-
-                                match inner.build(req).await {
-                                    Ok(inner) =>  {
-                                        let response = inner.into_inner();
-                                        info!(id = %queued.id, "shuttle-builder finished building the deployment: image length is {} bytes, is_wasm flag is {} and there are {} secrets", response.image.len(), response.is_wasm, response.secrets.len());
-                                    },
-                                    Err(err) => error!(id = %queued.id, "shuttle-builder errored while building: {}", err)
-                                };
-                            });
-                        }
-
                         match queued
                             .handle(
-                                deployment_updater,
                                 log_recorder,
                                 builds_path.as_path(),
                             )
@@ -126,7 +96,7 @@ pub async fn task(
             Some(res) = tasks.join_next() => {
                 match res {
                     Ok(_) => (),
-                    Err(err) => error!(error = %err, "an error happened while joining a builder task"),
+                    Err(err) => error!(error = &err as &dyn std::error::Error, "an error happened while joining a builder task"),
                 }
             }
             else => break
@@ -204,17 +174,8 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(
-        name = "Building project",
-        skip(self, deployment_updater, log_recorder, builds_path),
-        fields(deployment_id = %self.id, state = %State::Building)
-    )]
-    async fn handle(
-        self,
-        deployment_updater: impl DeploymentUpdater,
-        log_recorder: impl LogRecorder,
-        builds_path: &Path,
-    ) -> Result<Built> {
+    #[instrument(name = "Building project", skip_all, fields(deployment_id = %self.id, state = %State::Building))]
+    async fn handle(self, log_recorder: impl LogRecorder, builds_path: &Path) -> Result<Built> {
         let project_path = builds_path.join(&self.service_name);
 
         info!("Extracting files");
@@ -239,7 +200,7 @@ impl Queued {
         let built_service = build_deployment(&project_path, tx.clone()).await?;
 
         // Get the Secrets.toml from the shuttle service in the workspace.
-        let secrets = get_secrets(built_service.crate_directory()).await?;
+        let secrets = get_secrets(&built_service).await?;
 
         if self.will_run_tests {
             info!("Running tests before starting up");
@@ -257,21 +218,13 @@ impl Queued {
         )
         .await?;
 
-        let is_next = built_service.is_wasm;
-
-        deployment_updater
-            .set_is_next(&self.id, is_next)
-            .await
-            .map_err(|e| Error::Build(Box::new(e)))?;
-
         let built = Built {
             id: self.id,
             service_name: self.service_name,
             service_id: self.service_id,
             project_id: self.project_id,
             tracing_context: Default::default(),
-            is_next,
-            claim: self.claim,
+            claim: Some(self.claim),
             secrets,
         };
 
@@ -290,16 +243,25 @@ impl fmt::Debug for Queued {
     }
 }
 
-#[instrument(skip(project_path))]
-async fn get_secrets(project_path: &Path) -> Result<HashMap<String, String>> {
-    let secrets_file = project_path.join("Secrets.toml");
+#[instrument(skip(service))]
+async fn get_secrets(service: &BuiltService) -> Result<HashMap<String, String>> {
+    let crate_dir = service.crate_directory();
+    // Prioritise crate-local secrets over workspace secrets
+    let secrets_file = [
+        crate_dir.join("Secrets.toml"),
+        service.workspace_path.join("Secrets.toml"),
+    ]
+    .into_iter()
+    .find(|f| f.exists() && f.is_file());
 
-    if secrets_file.exists() && secrets_file.is_file() {
-        let secrets_str = fs::read_to_string(secrets_file.clone()).await?;
+    if let Some(secrets_file) = secrets_file {
+        info!("Loading secrets from {}", secrets_file.display());
+        let secrets_str = fs::read_to_string(&secrets_file).await?;
 
-        let secrets = secrets_str.parse::<toml::Value>()?.try_into()?;
+        let secrets = toml::from_str::<HashMap<String, String>>(&secrets_str)?;
+        info!(keys = ?secrets.keys(), "available secrets");
 
-        fs::remove_file(secrets_file).await?;
+        fs::remove_file(&secrets_file).await?;
 
         Ok(secrets)
     } else {
@@ -395,20 +357,24 @@ async fn run_pre_deploy_tests(
     tokio::spawn(async move {
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await.unwrap() {
-            let _ = tx
-                .send(line)
-                .await
-                .map_err(|e| error!(error = %e, "failed to send line"));
+            let _ = tx.send(line).await.map_err(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to send line"
+                )
+            });
         }
     });
     let reader = tokio::io::BufReader::new(handle.stderr.take().unwrap());
     tokio::spawn(async move {
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await.unwrap() {
-            let _ = tx2
-                .send(line)
-                .await
-                .map_err(|e| error!(error = %e, "failed to send line"));
+            let _ = tx2.send(line).await.map_err(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to send line"
+                )
+            });
         }
     });
     let status = handle.wait().await.map_err(TestError::Run)?;
@@ -420,8 +386,6 @@ async fn run_pre_deploy_tests(
     }
 }
 
-/// This will store the path to the executable for each runtime, which will be the users project with
-/// an embedded runtime for alpha, and a .wasm file for shuttle-next.
 #[instrument(skip(executable_path, to_directory, new_filename))]
 async fn copy_executable(
     executable_path: &Path,
@@ -436,8 +400,14 @@ async fn copy_executable(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, fs::File, io::Write, path::Path};
+    use std::{
+        collections::HashMap,
+        fs::{create_dir_all, File},
+        io::Write,
+        path::Path,
+    };
 
+    use shuttle_service::builder::BuiltService;
     use tempfile::Builder;
     use tokio::fs;
     use uuid::Uuid;
@@ -588,17 +558,54 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     #[tokio::test]
     async fn get_secrets() {
         let temp = Builder::new().prefix("secrets").tempdir().unwrap();
+
+        // get secrets from workspace path
+
         let temp_p = temp.path();
+        let serv = BuiltService {
+            executable_path: Default::default(),
+            manifest_path: temp_p.to_owned(),
+            workspace_path: temp_p.to_owned(),
+            package_name: "asdf".to_string(),
+        };
 
         let secret_p = temp_p.join("Secrets.toml");
         let mut secret_file = File::create(secret_p.clone()).unwrap();
         secret_file.write_all(b"KEY = 'value'").unwrap();
 
-        let actual = super::get_secrets(temp_p).await.unwrap();
+        let actual = super::get_secrets(&serv).await.unwrap();
         let expected = HashMap::from([("KEY".to_string(), "value".to_string())]);
 
         assert_eq!(actual, expected);
 
         assert!(!secret_p.exists(), "the secrets file should be deleted");
+
+        // get secrets from crate path instead
+
+        let crate_p = temp_p.join("some-crate");
+        create_dir_all(&crate_p).unwrap();
+        let serv = BuiltService {
+            executable_path: Default::default(),
+            manifest_path: crate_p.join("Cargo.toml"),
+            workspace_path: temp_p.to_owned(),
+            package_name: "asdf".to_string(),
+        };
+
+        let secret_p_ws = temp_p.join("Secrets.toml");
+        let mut secret_file = File::create(secret_p_ws.clone()).unwrap();
+        secret_file.write_all(b"KEY = 'value1'").unwrap();
+        let secret_p_crate = crate_p.join("Secrets.toml");
+        let mut secret_file = File::create(secret_p_crate.clone()).unwrap();
+        secret_file.write_all(b"KEY = 'value2'").unwrap();
+
+        let actual = super::get_secrets(&serv).await.unwrap();
+        let expected = HashMap::from([("KEY".to_string(), "value2".to_string())]);
+
+        assert_eq!(actual, expected);
+
+        assert!(
+            !secret_p_crate.exists(),
+            "the secrets file should be deleted"
+        );
     }
 }

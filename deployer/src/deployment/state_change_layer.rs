@@ -129,43 +129,34 @@ impl Visit for NewStateVisitor {
 mod tests {
     use std::{
         fs::read_dir,
-        net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
         sync::{Arc, Mutex},
         time::Duration,
     };
 
-    use crate::{
-        persistence::{
-            resource::ResourceManager, DeploymentState, DeploymentUpdater, StateRecorder,
-        },
-        RuntimeManager,
-    };
     use async_trait::async_trait;
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
-    use portpicker::pick_unused_port;
     use shuttle_common::claims::Claim;
+    use shuttle_common::log::LogRecorder;
     use shuttle_common_tests::{
-        builder::get_mocked_builder_client, logger::get_mocked_logger_client,
+        logger::get_mocked_logger_client, provisioner::get_mocked_provisioner_client,
     };
     use shuttle_proto::{
-        builder::{builder_server::Builder, BuildRequest, BuildResponse},
         logger::{
             self, logger_server::Logger, Batcher, LogLine, LogsRequest, LogsResponse,
             StoreLogsRequest, StoreLogsResponse,
         },
         provisioner::{
-            provisioner_server::{Provisioner, ProvisionerServer},
-            ContainerRequest, ContainerResponse, DatabaseDeletionResponse, DatabaseRequest,
+            provisioner_server::Provisioner, DatabaseDeletionResponse, DatabaseRequest,
             DatabaseResponse, Ping, Pong,
         },
         resource_recorder::{ResourceResponse, ResourcesResponse, ResultResponse},
     };
     use tokio::{select, sync::mpsc, time::sleep};
     use tokio_stream::wrappers::ReceiverStream;
-    use tonic::{transport::Server, Request, Response, Status};
+    use tonic::{Request, Response, Status};
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     use ulid::Ulid;
     use uuid::Uuid;
@@ -175,12 +166,11 @@ mod tests {
             gateway_client::BuildQueueClient, ActiveDeploymentsGetter, Built, DeploymentManager,
             Queued,
         },
-        persistence::State,
+        persistence::{resource::ResourceManager, DeploymentState, State, StateRecorder},
+        RuntimeManager,
     };
 
     use super::{LogItem, StateChangeLayer};
-
-    use shuttle_common::log::LogRecorder;
 
     #[ctor]
     static RECORDER: RecorderMock = {
@@ -275,16 +265,6 @@ mod tests {
         fn record(&self, _: LogItem) {}
     }
 
-    #[async_trait]
-    impl Builder for RecorderMock {
-        async fn build(
-            &self,
-            _request: tonic::Request<BuildRequest>,
-        ) -> Result<tonic::Response<BuildResponse>, tonic::Status> {
-            Ok(Response::new(BuildResponse::default()))
-        }
-    }
-
     #[derive(thiserror::Error, Debug)]
     pub enum MockError {}
 
@@ -337,13 +317,6 @@ mod tests {
             panic!("no deploy layer tests should request a db");
         }
 
-        async fn provision_arbitrary_container(
-            &self,
-            _req: tonic::Request<ContainerRequest>,
-        ) -> Result<tonic::Response<ContainerResponse>, tonic::Status> {
-            panic!("no deploy layer tests should request container")
-        }
-
         async fn delete_database(
             &self,
             _request: tonic::Request<DatabaseRequest>,
@@ -362,30 +335,7 @@ mod tests {
     async fn get_runtime_manager(
         logger_client: Batcher<logger::Client>,
     ) -> Arc<tokio::sync::Mutex<RuntimeManager>> {
-        let provisioner_addr =
-            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
-        tokio::spawn(async move {
-            let mock = ProvisionerMock;
-            Server::builder()
-                .add_service(ProvisionerServer::new(mock))
-                .serve(provisioner_addr)
-                .await
-                .unwrap();
-        });
-
-        RuntimeManager::new(format!("http://{}", provisioner_addr), logger_client, None)
-    }
-
-    #[derive(Clone)]
-    struct StubDeploymentUpdater;
-
-    #[async_trait::async_trait]
-    impl DeploymentUpdater for StubDeploymentUpdater {
-        type Err = std::io::Error;
-
-        async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
-            Ok(())
-        }
+        RuntimeManager::new(logger_client)
     }
 
     #[derive(Clone)]
@@ -408,17 +358,11 @@ mod tests {
 
     #[async_trait::async_trait]
     impl BuildQueueClient for StubBuildQueueClient {
-        async fn get_slot(
-            &self,
-            _id: Uuid,
-        ) -> Result<bool, shuttle_common::backends::client::Error> {
+        async fn get_slot(&self, _id: Uuid) -> Result<bool, shuttle_backends::client::Error> {
             Ok(true)
         }
 
-        async fn release_slot(
-            &self,
-            _id: Uuid,
-        ) -> Result<(), shuttle_common::backends::client::Error> {
+        async fn release_slot(&self, _id: Uuid) -> Result<(), shuttle_backends::client::Error> {
             Ok(())
         }
     }
@@ -736,7 +680,6 @@ mod tests {
                 service_id: Ulid::new(),
                 project_id: Ulid::new(),
                 tracing_context: Default::default(),
-                is_next: false,
                 claim: Default::default(),
                 secrets: Default::default(),
             })
@@ -800,17 +743,15 @@ mod tests {
 
     async fn get_deployment_manager() -> DeploymentManager {
         let logger_client = get_mocked_logger_client(RecorderMock::new()).await;
-        let builder_client = get_mocked_builder_client(RecorderMock::new()).await;
         DeploymentManager::builder()
             .build_log_recorder(RECORDER.clone())
             .active_deployment_getter(StubActiveDeploymentGetter)
             .artifacts_path(PathBuf::from("/tmp"))
             .resource_manager(StubResourceManager)
             .log_fetcher(logger_client.clone())
-            .builder_client(Some(builder_client))
             .runtime(get_runtime_manager(Batcher::wrap(logger_client)).await)
-            .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)
+            .provisioner_client(get_mocked_provisioner_client(ProvisionerMock).await)
             .build()
     }
 

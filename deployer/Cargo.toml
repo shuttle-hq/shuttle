@@ -1,13 +1,15 @@
 [package]
 name = "shuttle-deployer"
-version = "0.38.0"
+version = "0.43.0"
 edition.workspace = true
 license.workspace = true
 description = "Service with instances created per project for handling the compilation, loading, and execution of Shuttle services"
+publish = false
 
 [dependencies]
-shuttle-common = { workspace = true, features = ["backend", "models", "sqlx"] }
-shuttle-proto = { workspace = true, features = ["resource-recorder"] }
+shuttle-backends = { workspace = true }
+shuttle-common = { workspace = true, features = ["models", "sqlx"] }
+shuttle-proto = { workspace = true, features = ["provisioner-client", "resource-recorder-client"] }
 shuttle-service = { workspace = true, features = ["builder", "runner"] }
 
 anyhow = { workspace = true }

@@ -5,7 +5,6 @@ use std::{
     task::{Context, Poll},
 };
 
-use async_trait::async_trait;
 use axum::extract::FromRequestParts;
 use bytes::Bytes;
 use chrono::{Duration, Utc};
@@ -335,7 +334,7 @@ impl Claim {
 }
 
 /// Extract the claim from the request and fail with unauthorized if the claim doesn't exist
-#[async_trait]
+#[axum::async_trait]
 impl<S> FromRequestParts<S> for Claim {
     type Rejection = StatusCode;
 

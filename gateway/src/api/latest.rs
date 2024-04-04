@@ -27,7 +27,7 @@ use shuttle_backends::project_name::ProjectName;
 use shuttle_backends::request_span;
 use shuttle_backends::ClaimExt;
 use shuttle_common::claims::{Scope, EXP_MINUTES};
-use shuttle_common::models::error::ErrorKind;
+use shuttle_common::models::error::{ErrorKind, InvalidOrganizationName};
 use shuttle_common::models::{admin::ProjectResponse, project, stats};
 use shuttle_common::models::{organization, service};
 use shuttle_common::{deployment, VersionInfo};
@@ -492,6 +492,12 @@ async fn create_organization(
     CustomErrorPath(organization_name): CustomErrorPath<String>,
     User { id, .. }: User,
 ) -> Result<String, Error> {
+    if organization_name.len() > 30 {
+        return Err(Error::from_kind(ErrorKind::InvalidOrganizationName(
+            InvalidOrganizationName,
+        )));
+    }
+
     let org = Organization {
         id: format!("org_{}", Ulid::new()),
         display_name: organization_name.clone(),

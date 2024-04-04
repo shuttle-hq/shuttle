@@ -43,7 +43,7 @@ impl ProjectCaller {
         Ok(Self {
             project: project.state,
             project_name,
-            user_id: scoped_user.user.id,
+            user_id: scoped_user.claim.sub,
             service,
             headers: headers.clone(),
         })

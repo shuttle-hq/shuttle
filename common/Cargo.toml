@@ -44,6 +44,7 @@ wiremock = { workspace = true, optional = true }
 [features]
 axum = ["dep:axum"]
 claims = [
+    "axum",
     "bytes",
     "chrono/clock",
     "headers",

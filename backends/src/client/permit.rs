@@ -95,8 +95,7 @@ pub trait PermissionsDal {
     async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool, Error>;
 }
 
-/// An organization can have multiple projects and users. Users that are members of an organization have access to all
-/// projects within that organization.
+/// Simple details of an organization to create
 #[derive(Debug, PartialEq)]
 pub struct Organization {
     /// Unique identifier for the organization. Should be `org_{ulid}`
@@ -402,7 +401,7 @@ impl PermissionsDal for Client {
         let mut projects = Vec::with_capacity(relationships.len());
 
         for rel in relationships {
-            projects.push(rel.object_details.unwrap().key);
+            projects.push(rel.object_details.expect("to have object details").key);
         }
 
         Ok(projects)
@@ -430,7 +429,8 @@ impl PermissionsDal for Client {
         for perm in perms.into_values() {
             if let Some(resource) = perm.resource {
                 let attributes = resource.attributes.unwrap_or_default();
-                let org = serde_json::from_value::<OrganizationAttributes>(attributes).unwrap();
+                let org = serde_json::from_value::<OrganizationAttributes>(attributes)
+                    .expect("to read organization attributes");
 
                 res.push(organization::Response {
                     id: resource.key,
@@ -503,128 +503,6 @@ impl PermissionsDal for Client {
 
 // Helpers for trait methods
 impl Client {
-    // /// Assigns a user to an org directly without creating the org first
-    // pub async fn create_organization(&self, user_id: &str, org_name: &str) -> Result<(), Error> {
-    //     self.api
-    //         .post(
-    //             &format!("{}/resource_instances", self.facts),
-    //             json!({
-    //                 "key": org_name,
-    //                 "tenant": "default",
-    //                 "resource": "Organization",
-    //             }),
-    //             None,
-    //         )
-    //         .await?;
-
-    //     self.api
-    //         .post(
-    //             &format!("{}/role_assignments", self.facts),
-    //             json!({
-    //                 "role": "admin",
-    //                 "resource_instance": format!("Organization:{org_name}"),
-    //                 "tenant": "default",
-    //                 "user": user_id,
-    //             }),
-    //             None,
-    //         )
-    //         .await
-    // }
-
-    // pub async fn delete_organization(&self, org_id: &str) -> Result<(), Error> {
-    //     self.api
-    //         .request(
-    //             Method::DELETE,
-    //             &format!("{}/resource_instances/{org_id}", self.facts),
-    //             None::<()>,
-    //             None,
-    //         )
-    //         .await
-    // }
-
-    // pub async fn get_organizations(&self, user_id: &str) -> Result<(), Error> {
-    //     self.api
-    //         .get(
-    //             &format!(
-    //                 "{}/role_assignments?user={user_id}&resource=Organization",
-    //                 self.facts
-    //             ),
-    //             None,
-    //         )
-    //         .await
-    // }
-
-    // pub async fn is_organization_admin(
-    //     &self,
-    //     user_id: &str,
-    //     org_name: &str,
-    // ) -> Result<bool, Error> {
-    //     let res: Vec<Value> = self
-    //         .api
-    //         .get(
-    //             &format!(
-    //                 "{}/role_assignments?user={user_id}&resource_instance=Organization:{org_name}",
-    //                 self.facts
-    //             ),
-    //             None,
-    //         )
-    //         .await?;
-
-    //     Ok(res[0].as_object().unwrap()["role"].as_str().unwrap() == "admin")
-    // }
-
-    // pub async fn create_organization_project(
-    //     &self,
-    //     org_name: &str,
-    //     project_id: &str,
-    // ) -> Result<(), Error> {
-    //     self.api
-    //         .post(
-    //             &format!("{}/relationship_tuples", self.facts),
-    //             json!({
-    //                 "subject": format!("Organization:{org_name}"),
-    //                 "tenant": "default",
-    //                 "relation": "parent",
-    //                 "object": format!("Project:{project_id}"),
-    //             }),
-    //             None,
-    //         )
-    //         .await
-    // }
-
-    // pub async fn delete_organization_project(
-    //     &self,
-    //     org_name: &str,
-    //     project_id: &str,
-    // ) -> Result<(), Error> {
-    //     self.api
-    //         .delete(
-    //             &format!("{}/relationship_tuples", self.facts),
-    //             json!({
-    //                 "subject": format!("Organization:{org_name}"),
-    //                 "relation": "parent",
-    //                 "object": format!("Project:{project_id}"),
-    //             }),
-    //             None,
-    //         )
-    //         .await
-    // }
-
-    // pub async fn get_organization_projects(
-    //     &self,
-    //     org_name: &str,
-    // ) -> Result<Vec<OrganizationResource>, Error> {
-    //     self.api
-    //         .get(
-    //             &format!(
-    //                 "{}/relationship_tuples?subject=Organization:{org_name}&detailed=true",
-    //                 self.facts
-    //             ),
-    //             None,
-    //         )
-    //         .await
-    // }
-
     // pub async fn get_organization_members(&self, org_name: &str) -> Result<Vec<Value>, Error> {
     //     self.api
     //         .get(

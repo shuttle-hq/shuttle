@@ -1040,7 +1040,6 @@ impl ApiBuilder {
                 "/:organization_id/projects/:project_id",
                 post(transfer_project_to_organization).delete(transfer_project_from_organization),
             );
-        // TODO: add tracing stuff
 
         self.router = self
             .router

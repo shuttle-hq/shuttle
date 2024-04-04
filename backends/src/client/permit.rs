@@ -342,7 +342,7 @@ impl PermissionsDal for Client {
     }
 
     async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<(), Error> {
-        if !self.allowed_org(user_id, &org_id, "manage").await? {
+        if !self.allowed_org(user_id, org_id, "manage").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
                 content: "User does not have permission to delete the organization".to_owned(),
@@ -374,7 +374,7 @@ impl PermissionsDal for Client {
         user_id: &str,
         org_id: &str,
     ) -> Result<Vec<String>, Error> {
-        if !self.allowed_org(user_id, &org_id, "view").await? {
+        if !self.allowed_org(user_id, org_id, "view").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
                 content: "User does not have permission to view the organization".to_owned(),
@@ -452,7 +452,7 @@ impl PermissionsDal for Client {
         project_id: &str,
         org_id: &str,
     ) -> Result<(), Error> {
-        if !self.allowed_org(user_id, &org_id, "manage").await? {
+        if !self.allowed_org(user_id, org_id, "manage").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
                 content: "User does not have permission to modify the organization".to_owned(),
@@ -479,7 +479,7 @@ impl PermissionsDal for Client {
         project_id: &str,
         org_id: &str,
     ) -> Result<(), Error> {
-        if !self.allowed_org(user_id, &org_id, "manage").await? {
+        if !self.allowed_org(user_id, org_id, "manage").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
                 content: "User does not have permission to modify the organization".to_owned(),

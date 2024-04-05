@@ -595,7 +595,7 @@ impl PermissionsDal for Client {
         if !self.allowed_org(user_id, org_id, "view").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
-                content: "User does not have permission to modify the organization".to_owned(),
+                content: "User does not have permission to view the organization".to_owned(),
                 entity: "Organization".to_owned(),
             }));
         }
@@ -620,7 +620,8 @@ impl PermissionsDal for Client {
         for assignment in assignments {
             members.push(organization::MemberResponse {
                 id: assignment.user,
-                role: organization::MemberRole::from_str(&assignment.role).unwrap(),
+                role: organization::MemberRole::from_str(&assignment.role)
+                    .unwrap_or(organization::MemberRole::Member),
             });
         }
 

@@ -502,6 +502,15 @@ mod needs_docker {
             "User cannot remove themselves from organizations"
         );
 
+        let err = client
+            .remove_organization_member(u2, "org_345", u1)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::ResponseError(ResponseContent { status, .. }) if status == StatusCode::FORBIDDEN),
+            "Only organization admin can remove members"
+        );
+
         client
             .remove_organization_member(u1, "org_345", u2)
             .await

@@ -17,7 +17,7 @@ use hyper::client::HttpConnector;
 use hyper::Client;
 use once_cell::sync::Lazy;
 use service::ContainerSettings;
-use shuttle_backends::client::permit::Error as PermitClientError;
+use shuttle_backends::client::permit;
 use shuttle_backends::project_name::ProjectName;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use shuttle_common::models::user::UserId;
@@ -111,8 +111,8 @@ impl From<AcmeClientError> for Error {
     }
 }
 
-impl From<PermitClientError> for Error {
-    fn from(error: PermitClientError) -> Self {
+impl From<permit::Error> for Error {
+    fn from(error: permit::Error) -> Self {
         Self::source(ErrorKind::Internal, error)
     }
 }

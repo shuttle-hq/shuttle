@@ -98,6 +98,8 @@ pub enum ErrorKind {
     DeleteProjectFailed,
     #[error("Our server is at capacity and cannot serve your request at this time. Please try again in a few minutes.")]
     CapacityLimit,
+    #[error("{0:?}")]
+    InvalidOrganizationName(InvalidOrganizationName),
 }
 
 impl From<ErrorKind> for ApiError {
@@ -130,6 +132,7 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::NotReady => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorKind::DeleteProjectFailed => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorKind::CapacityLimit => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorKind::InvalidOrganizationName(_) => StatusCode::BAD_REQUEST,
         };
         Self {
             message: kind.to_string(),
@@ -190,3 +193,7 @@ impl From<StatusCode> for ApiError {
     6. not be a reserved word."
 )]
 pub struct InvalidProjectName;
+
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[error("Invalid organization name. Must not be more than 30 characters long.")]
+pub struct InvalidOrganizationName;

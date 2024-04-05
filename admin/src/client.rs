@@ -1,4 +1,5 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use bytes::Bytes;
 use serde::{de::DeserializeOwned, Serialize};
 use shuttle_common::models::{admin::ProjectResponse, stats, ToJson};
 use tracing::trace;
@@ -73,6 +74,15 @@ impl Client {
         self.get("/admin/projects").await
     }
 
+    pub async fn change_project_owner(&self, project_name: &str, new_user_id: &str) -> Result<()> {
+        self.get_raw(&format!(
+            "/admin/projects/change-owner/{project_name}/{new_user_id}"
+        ))
+        .await?;
+
+        Ok(())
+    }
+
     pub async fn get_load(&self) -> Result<stats::LoadResponse> {
         self.get("/admin/stats/load").await
     }
@@ -130,15 +140,20 @@ impl Client {
             .context("failed to extract json body from delete response")
     }
 
-    async fn get<R: DeserializeOwned>(&self, path: &str) -> Result<R> {
-        reqwest::Client::new()
+    async fn get_raw(&self, path: &str) -> Result<Bytes> {
+        let res = reqwest::Client::new()
             .get(format!("{}{}", self.api_url, path))
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .context("failed to make get request")?
-            .to_json()
-            .await
-            .context("failed to post text body from response")
+            .context("making request")?;
+        if !res.status().is_success() {
+            bail!("API call returned non-2xx: {:?}", res);
+        }
+        res.bytes().await.context("getting response body")
+    }
+
+    async fn get<R: DeserializeOwned>(&self, path: &str) -> Result<R> {
+        serde_json::from_slice(&self.get_raw(path).await?).context("deserializing body")
     }
 }

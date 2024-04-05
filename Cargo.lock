@@ -5167,6 +5167,7 @@ name = "shuttle-admin"
 version = "0.43.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "clap",
  "dirs",
  "reqwest",

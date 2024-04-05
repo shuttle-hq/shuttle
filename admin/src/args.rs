@@ -1,6 +1,7 @@
 use std::{fs, io, path::PathBuf};
 
 use clap::{Error, Parser, Subcommand};
+use shuttle_common::models::user::UserId;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -26,6 +27,11 @@ pub enum Command {
 
     /// Manage project names
     ProjectNames,
+
+    ChangeProjectOwner {
+        project_name: String,
+        new_user_id: UserId,
+    },
 
     /// Viewing and managing stats
     #[command(subcommand)]

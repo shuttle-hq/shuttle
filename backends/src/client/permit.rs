@@ -424,11 +424,10 @@ impl PermissionsDal for Client {
         )
         .await?;
 
-        let mut projects = Vec::with_capacity(relationships.len());
-
-        for rel in relationships {
-            projects.push(rel.object_details.expect("to have object details").key);
-        }
+        let projects = relationships
+            .into_iter()
+            .map(|rel| rel.object_details.expect("to have object details").key)
+            .collect();
 
         Ok(projects)
     }
@@ -630,15 +629,14 @@ impl PermissionsDal for Client {
         )
         .await?;
 
-        let mut members = Vec::with_capacity(assignments.len());
-
-        for assignment in assignments {
-            members.push(organization::MemberResponse {
+        let members = assignments
+            .into_iter()
+            .map(|assignment| organization::MemberResponse {
                 id: assignment.user,
                 role: organization::MemberRole::from_str(&assignment.role)
                     .unwrap_or(organization::MemberRole::Member),
-            });
-        }
+            })
+            .collect();
 
         Ok(members)
     }

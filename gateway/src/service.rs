@@ -506,6 +506,7 @@ impl GatewayService {
         .await?;
         query("UPDATE projects SET user_id = ?1 WHERE project_name = ?2")
             .bind(new_user_id)
+            .bind(project_name)
             .execute(&mut *tr)
             .await?;
 

@@ -1057,7 +1057,7 @@ impl ApiBuilder {
 
         let organization_routes = Router::new()
             .route("/", get(get_organizations))
-            .route("/:organization_name", post(create_organization))
+            .route("/name/:organization_name", post(create_organization))
             .route("/:organization_id", delete(delete_organization))
             .route("/:organization_id/projects", get(get_organization_projects))
             .route(

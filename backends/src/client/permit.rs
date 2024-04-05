@@ -67,7 +67,15 @@ pub trait PermissionsDal {
     /// Get a list of all project IDs that belong to an organization
     async fn get_organization_projects(&self, user_id: &str, org_id: &str) -> Result<Vec<String>>;
 
-    /// Transfers a project from a users to an organization
+    /// Transfers a project from a user to another user
+    async fn transfer_project_to_user(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        new_user_id: &str,
+    ) -> Result<()>;
+
+    /// Transfers a project from a user to an organization
     async fn transfer_project_to_org(
         &self,
         user_id: &str,
@@ -436,6 +444,21 @@ impl PermissionsDal for Client {
         }
 
         Ok(res)
+    }
+
+    async fn transfer_project_to_user(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        new_user_id: &str,
+    ) -> Result<()> {
+        self.unassign_resource_role(user_id, format!("Project:{project_id}"), "admin")
+            .await?;
+
+        self.assign_resource_role(new_user_id, format!("Project:{project_id}"), "admin")
+            .await?;
+
+        Ok(())
     }
 
     async fn transfer_project_to_org(

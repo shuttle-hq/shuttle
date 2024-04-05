@@ -238,7 +238,7 @@ impl PermissionsDal for PermissionsMock {
         admin_user: &str,
         org_id: &str,
         user_id: &str,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         self.calls.lock().await.push(format!(
             "add_organization_member {admin_user} {org_id} {user_id}"
         ));
@@ -250,7 +250,7 @@ impl PermissionsDal for PermissionsMock {
         admin_user: &str,
         org_id: &str,
         user_id: &str,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         self.calls.lock().await.push(format!(
             "remove_organization_member {admin_user} {org_id} {user_id}"
         ));
@@ -261,7 +261,7 @@ impl PermissionsDal for PermissionsMock {
         &self,
         user_id: &str,
         org_id: &str,
-    ) -> Result<Vec<organization::MemberResponse>, Error> {
+    ) -> Result<Vec<organization::MemberResponse>> {
         self.calls
             .lock()
             .await

@@ -150,10 +150,7 @@ impl Client {
         if !res.status().is_success() {
             bail!("API call returned non-2xx: {:?}", res);
         }
-        res
-            .bytes()
-            .await
-            .context("getting response body")
+        res.bytes().await.context("getting response body")
     }
 
     async fn get<R: DeserializeOwned>(&self, path: &str) -> Result<R> {

@@ -1,6 +1,10 @@
 use std::{fs, path::PathBuf};
 
 pub fn get_api_key() -> String {
+    if let Ok(s) = std::env::var("SHUTTLE_API_KEY") {
+        return s;
+    }
+
     let data = fs::read_to_string(config_path()).expect("shuttle config file to exist");
     let toml: toml::Value = toml::from_str(&data).expect("to parse shuttle config file");
 

@@ -36,48 +36,52 @@ pub trait PermissionsDal {
     // User management
 
     /// Get a user with the given ID
-    async fn get_user(&self, user_id: &str) -> Result<UserRead, Error>;
+    async fn get_user(&self, user_id: &str) -> Result<UserRead>;
     /// Delete a user with the given ID
-    async fn delete_user(&self, user_id: &str) -> Result<(), Error>;
+    async fn delete_user(&self, user_id: &str) -> Result<()>;
     /// Create a new user and set their tier correctly
-    async fn new_user(&self, user_id: &str) -> Result<UserRead, Error>;
+    async fn new_user(&self, user_id: &str) -> Result<UserRead>;
     /// Set a user to be a Pro user
-    async fn make_pro(&self, user_id: &str) -> Result<(), Error>;
+    async fn make_pro(&self, user_id: &str) -> Result<()>;
     /// Set a user to be a Basic user
-    async fn make_basic(&self, user_id: &str) -> Result<(), Error>;
+    async fn make_basic(&self, user_id: &str) -> Result<()>;
 
     // Project management
 
     /// Creates a Project resource and assigns the user as admin for that project
-    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error>;
+    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<()>;
     /// Deletes a Project resource
-    async fn delete_project(&self, project_id: &str) -> Result<(), Error>;
+    async fn delete_project(&self, project_id: &str) -> Result<()>;
 
     // Organization management
 
     /// Creates an Organization resource and assigns the user as admin for the organization
-    async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<(), Error>;
+    async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<()>;
 
     /// Deletes an Organization resource
-    async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<(), Error>;
+    async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<()>;
 
     /// Get a list of all the organizations a user has access to
-    async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>, Error>;
+    async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>>;
 
     /// Get a list of all project IDs that belong to an organization
-    async fn get_organization_projects(
+    async fn get_organization_projects(&self, user_id: &str, org_id: &str) -> Result<Vec<String>>;
+
+    /// Transfers a project from a user to another user
+    async fn transfer_project_to_user(
         &self,
         user_id: &str,
-        org_id: &str,
-    ) -> Result<Vec<String>, Error>;
+        project_id: &str,
+        new_user_id: &str,
+    ) -> Result<()>;
 
-    /// Transfers a project from a users to an organization
+    /// Transfers a project from a user to an organization
     async fn transfer_project_to_org(
         &self,
         user_id: &str,
         project_id: &str,
         org_id: &str,
-    ) -> Result<(), Error>;
+    ) -> Result<()>;
 
     /// Transfers a project from an organization to a user
     async fn transfer_project_from_org(
@@ -85,14 +89,14 @@ pub trait PermissionsDal {
         user_id: &str,
         project_id: &str,
         org_id: &str,
-    ) -> Result<(), Error>;
+    ) -> Result<()>;
 
     // Permissions queries
 
     /// Get list of all projects user has permissions for
-    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error>;
+    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>>;
     /// Check if user can perform action on this project
-    async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool, Error>;
+    async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool>;
 }
 
 /// Simple details of an organization to create
@@ -163,22 +167,22 @@ impl Client {
 
 #[async_trait]
 impl PermissionsDal for Client {
-    async fn get_user(&self, user_id: &str) -> Result<UserRead, Error> {
+    async fn get_user(&self, user_id: &str) -> Result<UserRead> {
         Ok(get_user(&self.api, &self.proj_id, &self.env_id, user_id).await?)
     }
 
-    async fn delete_user(&self, user_id: &str) -> Result<(), Error> {
+    async fn delete_user(&self, user_id: &str) -> Result<()> {
         Ok(delete_user(&self.api, &self.proj_id, &self.env_id, user_id).await?)
     }
 
-    async fn new_user(&self, user_id: &str) -> Result<UserRead, Error> {
+    async fn new_user(&self, user_id: &str) -> Result<UserRead> {
         let user = self.create_user(user_id).await?;
         self.make_basic(&user.id.to_string()).await?;
 
         self.get_user(&user.id.to_string()).await
     }
 
-    async fn make_pro(&self, user_id: &str) -> Result<(), Error> {
+    async fn make_pro(&self, user_id: &str) -> Result<()> {
         let user = self.get_user(user_id).await?;
 
         if user.roles.is_some_and(|roles| {
@@ -192,7 +196,7 @@ impl PermissionsDal for Client {
         self.assign_role(user_id, &AccountTier::Pro).await
     }
 
-    async fn make_basic(&self, user_id: &str) -> Result<(), Error> {
+    async fn make_basic(&self, user_id: &str) -> Result<()> {
         let user = self.get_user(user_id).await?;
 
         if user
@@ -205,7 +209,7 @@ impl PermissionsDal for Client {
         self.assign_role(user_id, &AccountTier::Basic).await
     }
 
-    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
+    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<()> {
         if let Err(e) = create_resource_instance(
             &self.api,
             &self.proj_id,
@@ -236,7 +240,7 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
-    async fn delete_project(&self, project_id: &str) -> Result<(), Error> {
+    async fn delete_project(&self, project_id: &str) -> Result<()> {
         Ok(delete_resource_instance(
             &self.api,
             &self.proj_id,
@@ -246,7 +250,7 @@ impl PermissionsDal for Client {
         .await?)
     }
 
-    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error> {
+    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>> {
         let perms = get_user_permissions_user_permissions_post(
             &self.pdp,
             UserPermissionsQuery {
@@ -266,7 +270,7 @@ impl PermissionsDal for Client {
         Ok(perms.into_values().collect())
     }
 
-    async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool, Error> {
+    async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool> {
         // NOTE: This API function was modified in upstream to use AuthorizationQuery
         let res = is_allowed_allowed_post(
             &self.pdp,
@@ -292,7 +296,7 @@ impl PermissionsDal for Client {
         Ok(res.allow.unwrap_or_default())
     }
 
-    async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<(), Error> {
+    async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<()> {
         if !self.allowed_org(user_id, &org.id, "create").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
@@ -341,7 +345,7 @@ impl PermissionsDal for Client {
         Ok(())
     }
 
-    async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<(), Error> {
+    async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<()> {
         if !self.allowed_org(user_id, org_id, "manage").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
@@ -369,11 +373,7 @@ impl PermissionsDal for Client {
         .await?)
     }
 
-    async fn get_organization_projects(
-        &self,
-        user_id: &str,
-        org_id: &str,
-    ) -> Result<Vec<String>, Error> {
+    async fn get_organization_projects(&self, user_id: &str, org_id: &str) -> Result<Vec<String>> {
         if !self.allowed_org(user_id, org_id, "view").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
@@ -407,7 +407,7 @@ impl PermissionsDal for Client {
         Ok(projects)
     }
 
-    async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>, Error> {
+    async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>> {
         let perms = get_user_permissions_user_permissions_post(
             &self.pdp,
             UserPermissionsQuery {
@@ -446,12 +446,27 @@ impl PermissionsDal for Client {
         Ok(res)
     }
 
+    async fn transfer_project_to_user(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        new_user_id: &str,
+    ) -> Result<()> {
+        self.unassign_resource_role(user_id, format!("Project:{project_id}"), "admin")
+            .await?;
+
+        self.assign_resource_role(new_user_id, format!("Project:{project_id}"), "admin")
+            .await?;
+
+        Ok(())
+    }
+
     async fn transfer_project_to_org(
         &self,
         user_id: &str,
         project_id: &str,
         org_id: &str,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         if !self.allowed_org(user_id, org_id, "manage").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
@@ -478,7 +493,7 @@ impl PermissionsDal for Client {
         user_id: &str,
         project_id: &str,
         org_id: &str,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         if !self.allowed_org(user_id, org_id, "manage").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
@@ -503,7 +518,7 @@ impl PermissionsDal for Client {
 
 // Helpers for trait methods
 impl Client {
-    // pub async fn get_organization_members(&self, org_name: &str) -> Result<Vec<Value>, Error> {
+    // pub async fn get_organization_members(&self, org_name: &str) -> Result<Vec<Value>> {
     //     self.api
     //         .get(
     //             &format!(
@@ -519,7 +534,7 @@ impl Client {
     //     &self,
     //     org_name: &str,
     //     user_id: &str,
-    // ) -> Result<(), Error> {
+    // ) -> Result<()> {
     //     self.api
     //         .post(
     //             &format!("{}/role_assignments", self.facts),
@@ -538,7 +553,7 @@ impl Client {
     //     &self,
     //     org_name: &str,
     //     user_id: &str,
-    // ) -> Result<(), Error> {
+    // ) -> Result<()> {
     //     self.api
     //         .delete(
     //             &format!("{}/role_assignments", self.facts),
@@ -553,7 +568,7 @@ impl Client {
     //         .await
     // }
 
-    async fn create_user(&self, user_id: &str) -> Result<UserRead, Error> {
+    async fn create_user(&self, user_id: &str) -> Result<UserRead> {
         Ok(create_user(
             &self.api,
             &self.proj_id,
@@ -566,7 +581,7 @@ impl Client {
         .await?)
     }
 
-    async fn assign_role(&self, user_id: &str, role: &AccountTier) -> Result<(), Error> {
+    async fn assign_role(&self, user_id: &str, role: &AccountTier) -> Result<()> {
         assign_role(
             &self.api,
             &self.proj_id,
@@ -583,7 +598,7 @@ impl Client {
         Ok(())
     }
 
-    async fn unassign_role(&self, user_id: &str, role: &AccountTier) -> Result<(), Error> {
+    async fn unassign_role(&self, user_id: &str, role: &AccountTier) -> Result<()> {
         unassign_role(
             &self.api,
             &self.proj_id,
@@ -605,7 +620,7 @@ impl Client {
         user_id: &str,
         resource_instance: String,
         role: &str,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         assign_role(
             &self.api,
             &self.proj_id,
@@ -627,7 +642,7 @@ impl Client {
         user_id: &str,
         resource_instance: String,
         role: &str,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         unassign_role(
             &self.api,
             &self.proj_id,
@@ -644,7 +659,7 @@ impl Client {
         Ok(())
     }
 
-    async fn allowed_org(&self, user_id: &str, org_id: &str, action: &str) -> Result<bool, Error> {
+    async fn allowed_org(&self, user_id: &str, org_id: &str, action: &str) -> Result<bool> {
         // NOTE: This API function was modified in upstream to use AuthorizationQuery
         let res = is_allowed_allowed_post(
             &self.pdp,
@@ -670,12 +685,7 @@ impl Client {
         Ok(res.allow.unwrap_or_default())
     }
 
-    async fn assign_relationship(
-        &self,
-        subject: String,
-        role: &str,
-        object: String,
-    ) -> Result<(), Error> {
+    async fn assign_relationship(&self, subject: String, role: &str, object: String) -> Result<()> {
         create_relationship_tuple(
             &self.api,
             &self.proj_id,
@@ -697,7 +707,7 @@ impl Client {
         subject: String,
         role: &str,
         object: String,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         delete_relationship_tuple(
             &self.api,
             &self.proj_id,
@@ -713,7 +723,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn sync_pdp(&self) -> Result<(), Error> {
+    pub async fn sync_pdp(&self) -> Result<()> {
         trigger_policy_update_policy_updater_trigger_post(&self.pdp).await?;
         trigger_policy_data_update_data_updater_trigger_post(&self.pdp).await?;
 
@@ -736,7 +746,7 @@ mod admin {
     impl Client {
         /// Copy and overwrite a permit env's policies to another env.
         /// Requires a project level API key.
-        pub async fn copy_environment(&self, target_env: &str) -> Result<(), Error> {
+        pub async fn copy_environment(&self, target_env: &str) -> Result<()> {
             copy_environment(
                 &self.api,
                 &self.proj_id,
@@ -786,6 +796,7 @@ pub enum Error {
     #[error("response error: {0}")]
     ResponseError(ResponseContent),
 }
+pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub struct ResponseContent {
     pub status: reqwest::StatusCode,

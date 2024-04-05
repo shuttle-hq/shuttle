@@ -916,6 +916,17 @@ async fn get_projects(
     Ok(AxumJson(projects))
 }
 
+async fn change_project_owner(
+    State(RouterState { service, .. }): State<RouterState>,
+    Path((project_name, new_user_id)): Path<(String, String)>,
+) -> Result<(), Error> {
+    service
+        .update_project_owner(&project_name, &new_user_id)
+        .await?;
+
+    Ok(())
+}
+
 #[derive(Clone)]
 pub(crate) struct RouterState {
     pub service: Arc<GatewayService>,
@@ -1010,6 +1021,10 @@ impl ApiBuilder {
     pub fn with_default_routes(mut self) -> Self {
         let admin_routes = Router::new()
             .route("/projects", get(get_projects))
+            .route(
+                "/projects/change-owner/:project_name/:new_user_id",
+                get(change_project_owner),
+            )
             .route("/revive", post(revive_projects))
             .route("/destroy", post(destroy_projects))
             .route("/idle-cch", post(idle_cch_projects))
@@ -1042,7 +1057,7 @@ impl ApiBuilder {
 
         let organization_routes = Router::new()
             .route("/", get(get_organizations))
-            .route("/:organization_name", post(create_organization))
+            .route("/name/:organization_name", post(create_organization))
             .route("/:organization_id", delete(delete_organization))
             .route("/:organization_id/projects", get(get_organization_projects))
             .route(

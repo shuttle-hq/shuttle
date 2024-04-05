@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use permit_client_rs::models::UserRead;
 use permit_pdp_client_rs::models::UserPermissionsResult;
 use serde::Serialize;
+use shuttle_common::models::organization;
 use tokio::sync::Mutex;
 use wiremock::{
     http,
@@ -11,7 +12,10 @@ use wiremock::{
     Mock, MockServer, Request, ResponseTemplate,
 };
 
-use crate::client::{permit::Error, PermissionsDal};
+use crate::client::{
+    permit::{Error, Organization},
+    PermissionsDal,
+};
 
 pub async fn get_mocked_gateway_server() -> MockServer {
     let mock_server = MockServer::start().await;
@@ -158,5 +162,65 @@ impl PermissionsDal for PermissionsMock {
             .await
             .push(format!("allowed {user_id} {project_id} {action}"));
         Ok(true)
+    }
+
+    async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<(), Error> {
+        self.calls.lock().await.push(format!(
+            "create_organization {user_id} {} {}",
+            org.id, org.display_name
+        ));
+        Ok(())
+    }
+
+    async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<(), Error> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("delete_organization {user_id} {org_id}"));
+        Ok(())
+    }
+
+    async fn get_organization_projects(
+        &self,
+        user_id: &str,
+        org_id: &str,
+    ) -> Result<Vec<String>, Error> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("get_organization_projects {user_id} {org_id}"));
+        Ok(Default::default())
+    }
+
+    async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>, Error> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("get_organizations {user_id}"));
+        Ok(Default::default())
+    }
+
+    async fn transfer_project_to_org(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        org_id: &str,
+    ) -> Result<(), Error> {
+        self.calls.lock().await.push(format!(
+            "transfer_project_to_org {user_id} {project_id} {org_id}"
+        ));
+        Ok(())
+    }
+
+    async fn transfer_project_from_org(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        org_id: &str,
+    ) -> Result<(), Error> {
+        self.calls.lock().await.push(format!(
+            "transfer_project_from_org {user_id} {project_id} {org_id}"
+        ));
+        Ok(())
     }
 }

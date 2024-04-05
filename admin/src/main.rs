@@ -165,8 +165,14 @@ async fn main() {
             client.idle_cch().await.expect("cch projects to be idled");
             "Idled CCH projects".to_string()
         }
-        Command::ChangeProjectOwner { project_name, new_user_id } => {
-            client.change_project_owner(&project_name, &new_user_id).await.unwrap();
+        Command::ChangeProjectOwner {
+            project_name,
+            new_user_id,
+        } => {
+            client
+                .change_project_owner(&project_name, &new_user_id)
+                .await
+                .unwrap();
             format!("Changed project owner: {project_name} -> {new_user_id}")
         }
     };

@@ -33,7 +33,6 @@ use permit_pdp_client_rs::{
 };
 use serde::{Deserialize, Serialize};
 use shuttle_common::{claims::AccountTier, models::organization};
-use strum::{Display, EnumString};
 
 #[async_trait]
 pub trait PermissionsDal {
@@ -112,7 +111,7 @@ pub trait PermissionsDal {
         &self,
         user_id: &str,
         org_id: &str,
-    ) -> Result<Vec<OrganizationMember>, Error>;
+    ) -> Result<Vec<organization::MemberResponse>, Error>;
 
     // Permissions queries
 
@@ -144,21 +143,6 @@ impl OrganizationAttributes {
             display_name: org.display_name.to_string(),
         }
     }
-}
-
-/// Details of organization member
-#[derive(Debug, PartialEq)]
-pub struct OrganizationMember {
-    pub user_id: String,
-    pub role: OrganizationMemberType,
-}
-
-/// Types of roles a user can have in an organization
-#[derive(Debug, PartialEq, Display, EnumString)]
-#[strum(serialize_all = "lowercase")]
-pub enum OrganizationMemberType {
-    Admin,
-    Member,
 }
 
 /// Wrapper for the Permit.io API and PDP (Policy decision point) API
@@ -607,7 +591,7 @@ impl PermissionsDal for Client {
         &self,
         user_id: &str,
         org_id: &str,
-    ) -> Result<Vec<OrganizationMember>, Error> {
+    ) -> Result<Vec<organization::MemberResponse>, Error> {
         if !self.allowed_org(user_id, org_id, "view").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
@@ -634,9 +618,9 @@ impl PermissionsDal for Client {
         let mut members = Vec::with_capacity(assignments.len());
 
         for assignment in assignments {
-            members.push(OrganizationMember {
-                user_id: assignment.user,
-                role: OrganizationMemberType::from_str(&assignment.role).unwrap(),
+            members.push(organization::MemberResponse {
+                id: assignment.user,
+                role: organization::MemberRole::from_str(&assignment.role).unwrap(),
             });
         }
 

@@ -8,10 +8,7 @@ mod needs_docker {
     };
     use serial_test::serial;
     use shuttle_backends::client::{
-        permit::{
-            Client, Error, Organization, OrganizationMember, OrganizationMemberType,
-            ResponseContent,
-        },
+        permit::{Client, Error, Organization, ResponseContent},
         PermissionsDal,
     };
     use shuttle_common::{claims::AccountTier, models::organization};
@@ -473,13 +470,13 @@ mod needs_docker {
             .await
             .unwrap();
         assert_eq!(members.len(), 2);
-        assert!(members.contains(&OrganizationMember {
-            user_id: u1.to_string(),
-            role: OrganizationMemberType::Admin,
+        assert!(members.contains(&organization::MemberResponse {
+            id: u1.to_string(),
+            role: organization::MemberRole::Admin,
         }));
-        assert!(members.contains(&OrganizationMember {
-            user_id: u2.to_string(),
-            role: OrganizationMemberType::Member,
+        assert!(members.contains(&organization::MemberResponse {
+            id: u2.to_string(),
+            role: organization::MemberRole::Member,
         }));
 
         let members = client
@@ -487,13 +484,13 @@ mod needs_docker {
             .await
             .unwrap();
         assert_eq!(members.len(), 2);
-        assert!(members.contains(&OrganizationMember {
-            user_id: u1.to_string(),
-            role: OrganizationMemberType::Admin,
+        assert!(members.contains(&organization::MemberResponse {
+            id: u1.to_string(),
+            role: organization::MemberRole::Admin,
         }));
-        assert!(members.contains(&OrganizationMember {
-            user_id: u2.to_string(),
-            role: OrganizationMemberType::Member,
+        assert!(members.contains(&organization::MemberResponse {
+            id: u2.to_string(),
+            role: organization::MemberRole::Member,
         }));
 
         let err = client
@@ -529,9 +526,9 @@ mod needs_docker {
             .unwrap();
         assert_eq!(
             members,
-            vec![OrganizationMember {
-                user_id: u1.to_string(),
-                role: OrganizationMemberType::Admin,
+            vec![organization::MemberResponse {
+                id: u1.to_string(),
+                role: organization::MemberRole::Admin,
             },]
         );
     }

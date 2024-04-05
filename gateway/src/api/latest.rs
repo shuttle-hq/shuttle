@@ -21,14 +21,15 @@ use serde::{Deserialize, Serialize};
 use shuttle_backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
 use shuttle_backends::axum::CustomErrorPath;
 use shuttle_backends::cache::CacheManager;
+use shuttle_backends::client::permit::Organization;
 use shuttle_backends::metrics::{Metrics, TraceLayer};
 use shuttle_backends::project_name::ProjectName;
 use shuttle_backends::request_span;
 use shuttle_backends::ClaimExt;
 use shuttle_common::claims::{Claim, Scope, EXP_MINUTES};
-use shuttle_common::models::error::ErrorKind;
-use shuttle_common::models::service;
+use shuttle_common::models::error::{ErrorKind, InvalidOrganizationName};
 use shuttle_common::models::{admin::ProjectResponse, project, stats};
+use shuttle_common::models::{organization, service};
 use shuttle_common::{deployment, VersionInfo};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_proto::provisioner::Ping;
@@ -36,7 +37,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use tracing::{error, field, instrument, trace};
+use tracing::{error, field, instrument, trace, Span};
 use ttl_cache::TtlCache;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -473,6 +474,113 @@ async fn route_project(
     service
         .route(&project.state, &project_name, &scoped_user.claim.sub, req)
         .await
+}
+
+#[instrument(skip_all)]
+async fn get_organizations(
+    State(RouterState { service, .. }): State<RouterState>,
+    Claim { sub, .. }: Claim,
+) -> Result<AxumJson<Vec<organization::Response>>, Error> {
+    let orgs = service.permit_client.get_organizations(&sub).await?;
+
+    Ok(AxumJson(orgs))
+}
+
+#[instrument(skip_all, fields(shuttle.organization.name = %organization_name, shuttle.organization.id = field::Empty))]
+async fn create_organization(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath(organization_name): CustomErrorPath<String>,
+    Claim { sub, .. }: Claim,
+) -> Result<String, Error> {
+    if organization_name.chars().count() > 30 {
+        return Err(Error::from_kind(ErrorKind::InvalidOrganizationName(
+            InvalidOrganizationName,
+        )));
+    }
+
+    let org = Organization {
+        id: format!("org_{}", Ulid::new()),
+        display_name: organization_name.clone(),
+    };
+
+    service
+        .permit_client
+        .create_organization(&sub, &org)
+        .await?;
+
+    Span::current().record("shuttle.organization.id", &org.id);
+
+    Ok("Organization created".to_string())
+}
+
+#[instrument(skip_all, fields(shuttle.organization.id = %organization_id))]
+async fn get_organization_projects(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath(organization_id): CustomErrorPath<String>,
+    Claim { sub, .. }: Claim,
+) -> Result<AxumJson<Vec<project::Response>>, Error> {
+    let project_ids = service
+        .permit_client
+        .get_organization_projects(&sub, &organization_id)
+        .await?;
+
+    let mut projects = Vec::with_capacity(project_ids.len());
+
+    for project_id in project_ids {
+        let project = service.find_project_by_id(&project_id).await?;
+        let idle_minutes = project.state.idle_minutes();
+
+        projects.push(project::Response {
+            id: project.id,
+            name: project.name,
+            state: project.state.into(),
+            idle_minutes,
+        });
+    }
+
+    Ok(AxumJson(projects))
+}
+
+#[instrument(skip_all, fields(shuttle.organization.id = %organization_id))]
+async fn delete_organization(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath(organization_id): CustomErrorPath<String>,
+    Claim { sub, .. }: Claim,
+) -> Result<String, Error> {
+    service
+        .permit_client
+        .delete_organization(&sub, &organization_id)
+        .await?;
+
+    Ok("Organization deleted".to_string())
+}
+
+#[instrument(skip_all, fields(shuttle.organization.id = %organization_id, shuttle.project.id = %project_id))]
+async fn transfer_project_to_organization(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath((organization_id, project_id)): CustomErrorPath<(String, String)>,
+    Claim { sub, .. }: Claim,
+) -> Result<String, Error> {
+    service
+        .permit_client
+        .transfer_project_to_org(&sub, &project_id, &organization_id)
+        .await?;
+
+    Ok("Project transfered".to_string())
+}
+
+#[instrument(skip_all, fields(shuttle.organization.id = %organization_id, shuttle.project.id = %project_id))]
+async fn transfer_project_from_organization(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath((organization_id, project_id)): CustomErrorPath<(String, String)>,
+    Claim { sub, .. }: Claim,
+) -> Result<String, Error> {
+    service
+        .permit_client
+        .transfer_project_from_org(&sub, &project_id, &organization_id)
+        .await?;
+
+    Ok("Project transfered".to_string())
 }
 
 async fn get_status(
@@ -932,10 +1040,21 @@ impl ApiBuilder {
             .route("/projects/:project_name/*any", any(route_project))
             .route_layer(middleware::from_fn(project_name_tracing_layer));
 
+        let organization_routes = Router::new()
+            .route("/", get(get_organizations))
+            .route("/:organization_name", post(create_organization))
+            .route("/:organization_id", delete(delete_organization))
+            .route("/:organization_id/projects", get(get_organization_projects))
+            .route(
+                "/:organization_id/projects/:project_id",
+                post(transfer_project_to_organization).delete(transfer_project_from_organization),
+            );
+
         self.router = self
             .router
             .route("/", get(get_status))
             .merge(project_routes)
+            .nest("/organizations", organization_routes)
             .route(
                 "/versions",
                 get(|| async {

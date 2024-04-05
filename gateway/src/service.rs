@@ -678,8 +678,7 @@ impl GatewayService {
 
         self.permit_client
             .create_project(user_id, &project_id.to_string())
-            .await
-            .map_err(|_| Error::from(ErrorKind::Internal))?;
+            .await?;
 
         transaction.commit().await?;
 
@@ -711,10 +710,7 @@ impl GatewayService {
             .execute(&mut *transaction)
             .await?;
 
-        self.permit_client
-            .delete_project(&project_id)
-            .await
-            .map_err(|_| Error::from(ErrorKind::Internal))?;
+        self.permit_client.delete_project(&project_id).await?;
 
         transaction.commit().await?;
 

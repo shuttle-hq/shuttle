@@ -65,11 +65,7 @@ pub trait PermissionsDal {
     async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>>;
 
     /// Get a list of all project IDs that belong to an organization
-    async fn get_organization_projects(
-        &self,
-        user_id: &str,
-        org_id: &str,
-    ) -> Result<Vec<String>>;
+    async fn get_organization_projects(&self, user_id: &str, org_id: &str) -> Result<Vec<String>>;
 
     /// Transfers a project from a users to an organization
     async fn transfer_project_to_org(
@@ -369,11 +365,7 @@ impl PermissionsDal for Client {
         .await?)
     }
 
-    async fn get_organization_projects(
-        &self,
-        user_id: &str,
-        org_id: &str,
-    ) -> Result<Vec<String>> {
+    async fn get_organization_projects(&self, user_id: &str, org_id: &str) -> Result<Vec<String>> {
         if !self.allowed_org(user_id, org_id, "view").await? {
             return Err(Error::ResponseError(ResponseContent {
                 status: StatusCode::FORBIDDEN,
@@ -670,12 +662,7 @@ impl Client {
         Ok(res.allow.unwrap_or_default())
     }
 
-    async fn assign_relationship(
-        &self,
-        subject: String,
-        role: &str,
-        object: String,
-    ) -> Result<()> {
+    async fn assign_relationship(&self, subject: String, role: &str, object: String) -> Result<()> {
         create_relationship_tuple(
             &self.api,
             &self.proj_id,
@@ -786,7 +773,7 @@ pub enum Error {
     #[error("response error: {0}")]
     ResponseError(ResponseContent),
 }
-pub type Result<T> = std::result::Result<T, Error>; 
+pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub struct ResponseContent {
     pub status: reqwest::StatusCode,

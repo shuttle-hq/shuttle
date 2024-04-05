@@ -28,7 +28,7 @@ pub enum Command {
     /// Manage project names
     ProjectNames,
 
-    ChangeProjectOwner{
+    ChangeProjectOwner {
         project_name: String,
         new_user_id: UserId,
     },

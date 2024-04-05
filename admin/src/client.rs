@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bytes::Bytes;
 use serde::{de::DeserializeOwned, Serialize};
 use shuttle_common::models::{admin::ProjectResponse, stats, ToJson};
@@ -141,12 +141,16 @@ impl Client {
     }
 
     async fn get_raw(&self, path: &str) -> Result<Bytes> {
-        reqwest::Client::new()
+        let res = reqwest::Client::new()
             .get(format!("{}{}", self.api_url, path))
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .context("making request")?
+            .context("making request")?;
+        if !res.status().is_success() {
+            bail!("API call returned non-2xx: {:?}", res);
+        }
+        res
             .bytes()
             .await
             .context("getting response body")

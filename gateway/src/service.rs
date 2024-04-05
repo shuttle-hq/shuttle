@@ -32,7 +32,7 @@ use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
-use sqlx::{query, Error as SqlxError, QueryBuilder, Row};
+use sqlx::{query, query_as, Error as SqlxError, QueryBuilder, Row};
 use tokio::sync::mpsc::Sender;
 use tokio::time::timeout;
 use tonic::codegen::tokio_stream::StreamExt;
@@ -498,10 +498,20 @@ impl GatewayService {
         new_user_id: &str,
     ) -> Result<(), Error> {
         let mut tr = self.db.begin().await?;
-        query("UPDATE projects SET user_id = ?1 WHERE ").execute(&mut *tr).await?;
+        let (project_id,) = query_as::<_, (String,)>(
+            "UPDATE projects SET user_id = ?1 WHERE project_name = ?2 RETURNING project_id",
+        )
+        .bind(new_user_id)
+        .bind(project_name)
+        .fetch_one(&mut *tr)
+        .await?;
 
-        self.permit_client.delete_project(project_id)
-        self.permit_client.create_project(user_id, project_id)
+        self.permit_client.delete_project(&project_id).await?;
+        self.permit_client
+            .create_project(new_user_id, &project_id)
+            .await?;
+
+        tr.commit().await?;
 
         Ok(())
     }
@@ -692,8 +702,7 @@ impl GatewayService {
 
         self.permit_client
             .create_project(user_id, &project_id.to_string())
-            .await
-            .map_err(|_| Error::from(ErrorKind::Internal))?;
+            .await?;
 
         transaction.commit().await?;
 
@@ -725,10 +734,7 @@ impl GatewayService {
             .execute(&mut *transaction)
             .await?;
 
-        self.permit_client
-            .delete_project(&project_id)
-            .await
-            .map_err(|_| Error::from(ErrorKind::Internal))?;
+        self.permit_client.delete_project(&project_id).await?;
 
         transaction.commit().await?;
 

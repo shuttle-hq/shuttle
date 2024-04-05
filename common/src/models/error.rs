@@ -195,5 +195,5 @@ impl From<StatusCode> for ApiError {
 pub struct InvalidProjectName;
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
-#[error("Invalid organization name. Organization names must less than 30 characters.")]
+#[error("Invalid organization name. Must not be more than 30 characters long.")]
 pub struct InvalidOrganizationName;

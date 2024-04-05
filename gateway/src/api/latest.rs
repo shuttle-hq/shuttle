@@ -492,7 +492,7 @@ async fn create_organization(
     CustomErrorPath(organization_name): CustomErrorPath<String>,
     User { id, .. }: User,
 ) -> Result<String, Error> {
-    if organization_name.len() > 30 {
+    if organization_name.chars().count() > 30 {
         return Err(Error::from_kind(ErrorKind::InvalidOrganizationName(
             InvalidOrganizationName,
         )));

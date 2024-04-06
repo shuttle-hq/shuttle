@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use permit_client_rs::models::UserRead;
 use permit_pdp_client_rs::models::UserPermissionsResult;
 use serde::Serialize;
+use shuttle_common::models::organization;
 use tokio::sync::Mutex;
 use wiremock::{
     http,
@@ -11,7 +12,10 @@ use wiremock::{
     Mock, MockServer, Request, ResponseTemplate,
 };
 
-use crate::client::{permit::Error, PermissionsDal};
+use crate::client::{
+    permit::{Organization, Result},
+    PermissionsDal,
+};
 
 pub async fn get_mocked_gateway_server() -> MockServer {
     let mock_server = MockServer::start().await;
@@ -97,12 +101,12 @@ pub struct PermissionsMock {
 
 #[async_trait]
 impl PermissionsDal for PermissionsMock {
-    async fn get_user(&self, user_id: &str) -> Result<UserRead, Error> {
+    async fn get_user(&self, user_id: &str) -> Result<UserRead> {
         self.calls.lock().await.push(format!("get_user {user_id}"));
         Ok(Default::default())
     }
 
-    async fn delete_user(&self, user_id: &str) -> Result<(), Error> {
+    async fn delete_user(&self, user_id: &str) -> Result<()> {
         self.calls
             .lock()
             .await
@@ -110,17 +114,17 @@ impl PermissionsDal for PermissionsMock {
         Ok(())
     }
 
-    async fn new_user(&self, user_id: &str) -> Result<UserRead, Error> {
+    async fn new_user(&self, user_id: &str) -> Result<UserRead> {
         self.calls.lock().await.push(format!("new_user {user_id}"));
         Ok(Default::default())
     }
 
-    async fn make_pro(&self, user_id: &str) -> Result<(), Error> {
+    async fn make_pro(&self, user_id: &str) -> Result<()> {
         self.calls.lock().await.push(format!("make_pro {user_id}"));
         Ok(())
     }
 
-    async fn make_basic(&self, user_id: &str) -> Result<(), Error> {
+    async fn make_basic(&self, user_id: &str) -> Result<()> {
         self.calls
             .lock()
             .await
@@ -128,7 +132,7 @@ impl PermissionsDal for PermissionsMock {
         Ok(())
     }
 
-    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<(), Error> {
+    async fn create_project(&self, user_id: &str, project_id: &str) -> Result<()> {
         self.calls
             .lock()
             .await
@@ -136,7 +140,7 @@ impl PermissionsDal for PermissionsMock {
         Ok(())
     }
 
-    async fn delete_project(&self, project_id: &str) -> Result<(), Error> {
+    async fn delete_project(&self, project_id: &str) -> Result<()> {
         self.calls
             .lock()
             .await
@@ -144,7 +148,7 @@ impl PermissionsDal for PermissionsMock {
         Ok(())
     }
 
-    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>, Error> {
+    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>> {
         self.calls
             .lock()
             .await
@@ -152,11 +156,80 @@ impl PermissionsDal for PermissionsMock {
         Ok(vec![])
     }
 
-    async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool, Error> {
+    async fn allowed(&self, user_id: &str, project_id: &str, action: &str) -> Result<bool> {
         self.calls
             .lock()
             .await
             .push(format!("allowed {user_id} {project_id} {action}"));
         Ok(true)
+    }
+
+    async fn create_organization(&self, user_id: &str, org: &Organization) -> Result<()> {
+        self.calls.lock().await.push(format!(
+            "create_organization {user_id} {} {}",
+            org.id, org.display_name
+        ));
+        Ok(())
+    }
+
+    async fn delete_organization(&self, user_id: &str, org_id: &str) -> Result<()> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("delete_organization {user_id} {org_id}"));
+        Ok(())
+    }
+
+    async fn get_organization_projects(&self, user_id: &str, org_id: &str) -> Result<Vec<String>> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("get_organization_projects {user_id} {org_id}"));
+        Ok(Default::default())
+    }
+
+    async fn get_organizations(&self, user_id: &str) -> Result<Vec<organization::Response>> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("get_organizations {user_id}"));
+        Ok(Default::default())
+    }
+
+    async fn transfer_project_to_user(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        new_user_id: &str,
+    ) -> Result<()> {
+        self.calls.lock().await.push(format!(
+            "transfer_project_to_user {user_id} {project_id} {new_user_id}"
+        ));
+
+        Ok(())
+    }
+
+    async fn transfer_project_to_org(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        org_id: &str,
+    ) -> Result<()> {
+        self.calls.lock().await.push(format!(
+            "transfer_project_to_org {user_id} {project_id} {org_id}"
+        ));
+        Ok(())
+    }
+
+    async fn transfer_project_from_org(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        org_id: &str,
+    ) -> Result<()> {
+        self.calls.lock().await.push(format!(
+            "transfer_project_from_org {user_id} {project_id} {org_id}"
+        ));
+        Ok(())
     }
 }

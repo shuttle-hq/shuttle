@@ -1,4 +1,7 @@
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    str::FromStr,
+};
 
 use async_trait::async_trait;
 use http::StatusCode;
@@ -8,7 +11,7 @@ use permit_client_rs::{
             create_relationship_tuple, delete_relationship_tuple, list_relationship_tuples,
         },
         resource_instances_api::{create_resource_instance, delete_resource_instance},
-        role_assignments_api::{assign_role, unassign_role},
+        role_assignments_api::{assign_role, list_role_assignments, unassign_role},
         users_api::{create_user, delete_user, get_user},
         Error as PermitClientError,
     },
@@ -90,6 +93,29 @@ pub trait PermissionsDal {
         project_id: &str,
         org_id: &str,
     ) -> Result<()>;
+
+    /// Add a user as a normal member to an organization
+    async fn add_organization_member(
+        &self,
+        admin_user: &str,
+        org_id: &str,
+        user_id: &str,
+    ) -> Result<()>;
+
+    /// Remove a user from an organization
+    async fn remove_organization_member(
+        &self,
+        admin_user: &str,
+        org_id: &str,
+        user_id: &str,
+    ) -> Result<()>;
+
+    /// Get a list of all the members of an organization
+    async fn get_organization_members(
+        &self,
+        user_id: &str,
+        org_id: &str,
+    ) -> Result<Vec<organization::MemberResponse>>;
 
     // Permissions queries
 
@@ -398,11 +424,10 @@ impl PermissionsDal for Client {
         )
         .await?;
 
-        let mut projects = Vec::with_capacity(relationships.len());
-
-        for rel in relationships {
-            projects.push(rel.object_details.expect("to have object details").key);
-        }
+        let projects = relationships
+            .into_iter()
+            .map(|rel| rel.object_details.expect("to have object details").key)
+            .collect();
 
         Ok(projects)
     }
@@ -514,60 +539,111 @@ impl PermissionsDal for Client {
 
         Ok(())
     }
+
+    async fn add_organization_member(
+        &self,
+        admin_user: &str,
+        org_id: &str,
+        user_id: &str,
+    ) -> Result<()> {
+        if !self.allowed_org(admin_user, org_id, "manage").await? {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::FORBIDDEN,
+                content: "User does not have permission to modify the organization".to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
+        let user = self.get_user(user_id).await?;
+
+        if !user
+            .roles
+            .is_some_and(|roles| roles.iter().any(|r| r.role == AccountTier::Pro.to_string()))
+        {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::BAD_REQUEST,
+                content: "Only Pro users can be added to an organization".to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
+        self.assign_resource_role(user_id, format!("Organization:{org_id}"), "member")
+            .await?;
+
+        Ok(())
+    }
+
+    async fn remove_organization_member(
+        &self,
+        admin_user: &str,
+        org_id: &str,
+        user_id: &str,
+    ) -> Result<()> {
+        if admin_user == user_id {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::BAD_REQUEST,
+                content: "Cannot remove yourself from an organization".to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
+        if !self.allowed_org(admin_user, org_id, "manage").await? {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::FORBIDDEN,
+                content: "User does not have permission to modify the organization".to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
+        self.unassign_resource_role(user_id, format!("Organization:{org_id}"), "member")
+            .await?;
+
+        Ok(())
+    }
+
+    async fn get_organization_members(
+        &self,
+        user_id: &str,
+        org_id: &str,
+    ) -> Result<Vec<organization::MemberResponse>> {
+        if !self.allowed_org(user_id, org_id, "view").await? {
+            return Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::FORBIDDEN,
+                content: "User does not have permission to view the organization".to_owned(),
+                entity: "Organization".to_owned(),
+            }));
+        }
+
+        let assignments = list_role_assignments(
+            &self.api,
+            &self.proj_id,
+            &self.env_id,
+            None,
+            None,
+            Some("default"),
+            None,
+            Some(&format!("Organization:{org_id}")),
+            None,
+            None,
+            None,
+        )
+        .await?;
+
+        let members = assignments
+            .into_iter()
+            .map(|assignment| organization::MemberResponse {
+                id: assignment.user,
+                role: organization::MemberRole::from_str(&assignment.role)
+                    .unwrap_or(organization::MemberRole::Member),
+            })
+            .collect();
+
+        Ok(members)
+    }
 }
 
 // Helpers for trait methods
 impl Client {
-    // pub async fn get_organization_members(&self, org_name: &str) -> Result<Vec<Value>> {
-    //     self.api
-    //         .get(
-    //             &format!(
-    //                 "{}/role_assignments?resource_instance=Organization:{org_name}&role=member",
-    //                 self.facts
-    //             ),
-    //             None,
-    //         )
-    //         .await
-    // }
-
-    // pub async fn create_organization_member(
-    //     &self,
-    //     org_name: &str,
-    //     user_id: &str,
-    // ) -> Result<()> {
-    //     self.api
-    //         .post(
-    //             &format!("{}/role_assignments", self.facts),
-    //             json!({
-    //                 "role": "member",
-    //                 "resource_instance": format!("Organization:{org_name}"),
-    //                 "tenant": "default",
-    //                 "user": user_id,
-    //             }),
-    //             None,
-    //         )
-    //         .await
-    // }
-
-    // pub async fn delete_organization_member(
-    //     &self,
-    //     org_name: &str,
-    //     user_id: &str,
-    // ) -> Result<()> {
-    //     self.api
-    //         .delete(
-    //             &format!("{}/role_assignments", self.facts),
-    //             json!({
-    //                 "role": "member",
-    //                 "resource_instance": format!("Organization:{org_name}"),
-    //                 "tenant": "default",
-    //                 "user": user_id,
-    //             }),
-    //             None,
-    //         )
-    //         .await
-    // }
-
     async fn create_user(&self, user_id: &str) -> Result<UserRead> {
         Ok(create_user(
             &self.api,

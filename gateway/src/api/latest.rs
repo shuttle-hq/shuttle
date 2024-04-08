@@ -583,6 +583,48 @@ async fn transfer_project_from_organization(
     Ok("Project transfered".to_string())
 }
 
+#[instrument(skip_all, fields(shuttle.organization.id = %organization_id))]
+async fn get_organization_members(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath(organization_id): CustomErrorPath<String>,
+    Claim { sub, .. }: Claim,
+) -> Result<AxumJson<Vec<organization::MemberResponse>>, Error> {
+    let members = service
+        .permit_client
+        .get_organization_members(&sub, &organization_id)
+        .await?;
+
+    Ok(AxumJson(members))
+}
+
+#[instrument(skip_all, fields(shuttle.organization.id = %organization_id))]
+async fn add_member_to_organization(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath((organization_id, user_id)): CustomErrorPath<(String, String)>,
+    Claim { sub, .. }: Claim,
+) -> Result<String, Error> {
+    service
+        .permit_client
+        .add_organization_member(&sub, &organization_id, &user_id)
+        .await?;
+
+    Ok("Member added".to_string())
+}
+
+#[instrument(skip_all, fields(shuttle.organization.id = %organization_id))]
+async fn remove_member_from_organization(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath((organization_id, user_id)): CustomErrorPath<(String, String)>,
+    Claim { sub, .. }: Claim,
+) -> Result<String, Error> {
+    service
+        .permit_client
+        .remove_organization_member(&sub, &organization_id, &user_id)
+        .await?;
+
+    Ok("Member removed".to_string())
+}
+
 async fn get_status(
     State(RouterState {
         sender, service, ..
@@ -1063,6 +1105,11 @@ impl ApiBuilder {
             .route(
                 "/:organization_id/projects/:project_id",
                 post(transfer_project_to_organization).delete(transfer_project_from_organization),
+            )
+            .route("/:organization_id/members", get(get_organization_members))
+            .route(
+                "/:organization_id/members/:user_id",
+                post(add_member_to_organization).delete(remove_member_from_organization),
             );
 
         self.router = self

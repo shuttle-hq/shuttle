@@ -232,4 +232,40 @@ impl PermissionsDal for PermissionsMock {
         ));
         Ok(())
     }
+
+    async fn add_organization_member(
+        &self,
+        admin_user: &str,
+        org_id: &str,
+        user_id: &str,
+    ) -> Result<()> {
+        self.calls.lock().await.push(format!(
+            "add_organization_member {admin_user} {org_id} {user_id}"
+        ));
+        Ok(())
+    }
+
+    async fn remove_organization_member(
+        &self,
+        admin_user: &str,
+        org_id: &str,
+        user_id: &str,
+    ) -> Result<()> {
+        self.calls.lock().await.push(format!(
+            "remove_organization_member {admin_user} {org_id} {user_id}"
+        ));
+        Ok(())
+    }
+
+    async fn get_organization_members(
+        &self,
+        user_id: &str,
+        org_id: &str,
+    ) -> Result<Vec<organization::MemberResponse>> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("get_organization_members {user_id} {org_id}"));
+        Ok(Default::default())
+    }
 }

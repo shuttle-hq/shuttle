@@ -49,7 +49,7 @@ impl Client {
         self.api_key = Some(Secret::new(api_key));
     }
 
-    pub async fn get_api_versions(&self) -> Result<VersionInfo> {
+    pub async fn get_api_versions_v1(&self) -> Result<VersionInfo> {
         let url = format!("{}/versions", self.api_url);
 
         self.client
@@ -61,7 +61,7 @@ impl Client {
             .context("parsing API version info")
     }
 
-    pub async fn check_project_name(&self, project_name: &str) -> Result<bool> {
+    pub async fn check_project_name_v1(&self, project_name: &str) -> Result<bool> {
         let url = format!("{}/projects/name/{project_name}", self.api_url);
 
         self.client
@@ -78,13 +78,22 @@ impl Client {
         &self,
         project: &str,
         deployment_req: DeploymentRequest,
+        v2: bool,
     ) -> Result<deployment::Response> {
-        let path = format!("/projects/{project}/services/{project}");
+        let path = if !v2 {
+            format!("/projects/{project}/services/{project}")
+        } else {
+            format!("/projects/{project}")
+        };
         let deployment_req = rmp_serde::to_vec(&deployment_req)
             .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 
         let url = format!("{}{}", self.api_url, path);
-        let mut builder = self.client.post(url);
+        let mut builder = if !v2 {
+            self.client.post(url)
+        } else {
+            self.client.put(url)
+        };
         builder = self.set_builder_auth(builder);
 
         builder
@@ -97,25 +106,25 @@ impl Client {
             .await
     }
 
-    pub async fn stop_service(&self, project: &str) -> Result<service::Summary> {
+    pub async fn stop_service_v1(&self, project: &str) -> Result<service::Summary> {
         let path = format!("/projects/{project}/services/{project}");
 
         self.delete(path).await
     }
 
-    pub async fn get_service(&self, project: &str) -> Result<service::Summary> {
+    pub async fn get_service_v1(&self, project: &str) -> Result<service::Summary> {
         let path = format!("/projects/{project}/services/{project}");
 
         self.get(path).await
     }
 
-    pub async fn get_service_resources(&self, project: &str) -> Result<Vec<resource::Response>> {
+    pub async fn get_service_resources_v1(&self, project: &str) -> Result<Vec<resource::Response>> {
         let path = format!("/projects/{project}/services/{project}/resources");
 
         self.get(path).await
     }
 
-    pub async fn delete_service_resource(
+    pub async fn delete_service_resource_v1(
         &self,
         project: &str,
         resource_type: &resource::Type,
@@ -145,7 +154,7 @@ impl Client {
             .await
     }
 
-    pub async fn clean_project(&self, project: &str) -> Result<String> {
+    pub async fn clean_project_v1(&self, project: &str) -> Result<String> {
         let path = format!("/projects/{project}/clean");
 
         self.post(path, Option::<String>::None)
@@ -161,25 +170,38 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_projects_list(&self, page: u32, limit: u32) -> Result<Vec<project::Response>> {
-        let path = format!("/projects?page={}&limit={}", page.saturating_sub(1), limit);
+    pub async fn get_projects_list(
+        &self,
+        page: u32,
+        limit: u32,
+        v2: bool,
+    ) -> Result<Vec<project::Response>> {
+        let path = if !v2 {
+            format!("/projects?page={}&limit={}", page.saturating_sub(1), limit)
+        } else {
+            format!("/projects")
+        };
 
         self.get(path).await
     }
 
-    pub async fn stop_project(&self, project: &str) -> Result<project::Response> {
+    pub async fn stop_project_v1(&self, project: &str) -> Result<project::Response> {
         let path = format!("/projects/{project}");
 
         self.delete(path).await
     }
 
-    pub async fn delete_project(&self, project: &str) -> Result<String> {
-        let path = format!("/projects/{project}/delete");
+    pub async fn delete_project(&self, project: &str, v2: bool) -> Result<String> {
+        let path = if !v2 {
+            format!("/projects/{project}/delete")
+        } else {
+            format!("/projects/{project}")
+        };
 
         self.delete(path).await
     }
 
-    pub async fn get_logs(&self, project: &str, deployment_id: &Uuid) -> Result<Vec<LogItem>> {
+    pub async fn get_logs_v1(&self, project: &str, deployment_id: &Uuid) -> Result<Vec<LogItem>> {
         let path = format!("/projects/{project}/deployments/{deployment_id}/logs");
 
         self.get(path)
@@ -187,17 +209,17 @@ impl Client {
             .context("Failed parsing logs. Is your cargo-shuttle outdated?")
     }
 
-    pub async fn get_logs_ws(
+    pub async fn get_logs_ws_v1(
         &self,
         project: &str,
         deployment_id: &Uuid,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let path = format!("/projects/{project}/ws/deployments/{deployment_id}/logs");
 
-        self.ws_get(path).await
+        self.ws_get_v1(path).await
     }
 
-    pub async fn get_deployments(
+    pub async fn get_deployments_v1(
         &self,
         project: &str,
         page: u32,
@@ -212,7 +234,7 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_deployment_details(
+    pub async fn get_deployment_details_v1(
         &self,
         project: &str,
         deployment_id: &Uuid,
@@ -222,12 +244,12 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn reset_api_key(&self) -> Result<Response> {
+    pub async fn reset_api_key_v1(&self) -> Result<Response> {
         self.put("/users/reset-api-key".into(), Option::<()>::None)
             .await
     }
 
-    async fn ws_get(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+    async fn ws_get_v1(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let ws_scheme = self.api_url.clone().replace("http", "ws");
         let url = format!("{ws_scheme}{path}");
         let mut request = url.into_client_request()?;

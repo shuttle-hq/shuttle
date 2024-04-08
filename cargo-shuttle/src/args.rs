@@ -42,6 +42,9 @@ pub struct ShuttleArgs {
 
     #[command(subcommand)]
     pub cmd: Command,
+
+    #[arg(long, env = "PLATFORM_VERSION", default_value = "v1")]
+    pub platform_version: String,
 }
 
 // Common args for subcommands that deal with projects.

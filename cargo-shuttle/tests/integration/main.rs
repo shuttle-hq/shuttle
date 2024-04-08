@@ -23,6 +23,7 @@ async fn cargo_shuttle_command(
                 offline: false,
                 debug: false,
                 cmd,
+                platform_version: "v1".to_string(),
             },
             false,
         )

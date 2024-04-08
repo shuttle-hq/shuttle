@@ -201,6 +201,7 @@ impl Shuttle {
             }
         }
 
+        let is_v2 = args.platform_version == "v2";
         let res = match args.cmd {
             Command::Init(init_args) => {
                 self.init(
@@ -219,37 +220,40 @@ impl Shuttle {
             Command::Logout(logout_args) => self.logout(logout_args).await,
             Command::Feedback => self.feedback(),
             Command::Run(run_args) => self.local_run(run_args).await,
-            Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
+            Command::Deploy(deploy_args) => self.deploy(deploy_args, is_v2).await,
             Command::Status => self.status().await,
             Command::Logs(logs_args) => self.logs(logs_args).await,
             Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
                 self.deployments_list(page, limit, raw).await
             }
-            Command::Deployment(DeploymentCommand::Status { id }) => self.deployment_get(id).await,
-            Command::Resource(ResourceCommand::List { raw, show_secrets }) => {
-                self.resources_list(raw, show_secrets).await
+            Command::Deployment(DeploymentCommand::Status { id, .. }) => {
+                self.deployment_get(id).await
             }
+            Command::Resource(ResourceCommand::List {
+                raw, show_secrets, ..
+            }) => self.resources_list(raw, show_secrets).await,
             Command::Stop => self.stop().await,
             Command::Clean => self.clean().await,
             Command::Resource(ResourceCommand::Delete {
                 resource_type,
-                confirmation: ConfirmationArgs { yes },
+                confirmation: ConfirmationArgs { yes, .. },
+                ..
             }) => self.resource_delete(&resource_type, yes).await,
             Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
-                self.project_start(idle_minutes).await
+                self.project_start(idle_minutes, is_v2).await
             }
-            Command::Project(ProjectCommand::Restart(ProjectStartArgs { idle_minutes })) => {
-                self.project_restart(idle_minutes).await
-            }
-            Command::Project(ProjectCommand::Status { follow }) => {
+            Command::Project(ProjectCommand::Restart(ProjectStartArgs {
+                idle_minutes, ..
+            })) => self.project_restart_v1(idle_minutes).await,
+            Command::Project(ProjectCommand::Status { follow, .. }) => {
                 self.project_status(follow).await
             }
             Command::Project(ProjectCommand::List { page, limit, raw }) => {
-                self.projects_list(page, limit, raw).await
+                self.projects_list(page, limit, raw, is_v2).await
             }
             Command::Project(ProjectCommand::Stop) => self.project_stop().await,
             Command::Project(ProjectCommand::Delete(ConfirmationArgs { yes })) => {
-                self.project_delete(yes).await
+                self.project_delete(yes, is_v2).await
             }
         };
 
@@ -263,7 +267,7 @@ impl Shuttle {
     async fn check_api_versions(&mut self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
         debug!("Checking API versions");
-        if let Ok(versions) = client.get_api_versions().await {
+        if let Ok(versions) = client.get_api_versions_v1().await {
             debug!("Got API versions: {versions:?}");
             self.version_info = Some(versions);
 
@@ -610,7 +614,7 @@ impl Shuttle {
             project_args.working_directory = path.clone();
 
             self.load_project(&project_args)?;
-            self.project_start(DEFAULT_IDLE_MINUTES).await?;
+            self.project_start(DEFAULT_IDLE_MINUTES, false).await?;
         }
 
         if std::env::current_dir().is_ok_and(|d| d != path) {
@@ -637,7 +641,7 @@ impl Shuttle {
     /// true -> success/neutral. false -> try again.
     async fn check_project_name(&self, project_args: &mut ProjectArgs, name: String) -> bool {
         let client = self.client.as_ref().unwrap();
-        match client.check_project_name(&name).await {
+        match client.check_project_name_v1(&name).await {
             Ok(true) => {
                 println!("{} {}", "Project name already taken:".red(), name);
                 println!("{}", "Try a different name.".yellow());
@@ -728,7 +732,7 @@ impl Shuttle {
 
     async fn reset_api_key(&self) -> Result<()> {
         let client = self.client.as_ref().unwrap();
-        client.reset_api_key().await.and_then(|res| {
+        client.reset_api_key_v1().await.and_then(|res| {
             if res.status().is_success() {
                 Ok(())
             } else {
@@ -742,9 +746,9 @@ impl Shuttle {
         let p = self.ctx.project_name();
         wait_with_spinner(|i, pb| async move {
             let service = if i == 0 {
-                client.stop_service(p).await?
+                client.stop_service_v1(p).await?
             } else {
-                client.get_service(p).await?
+                client.get_service_v1(p).await?
             };
 
             let service_str = format!("{service}");
@@ -813,7 +817,7 @@ impl Shuttle {
 
     async fn status(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        let summary = client.get_service(self.ctx.project_name()).await?;
+        let summary = client.get_service_v1(self.ctx.project_name()).await?;
 
         println!("{summary}");
 
@@ -823,7 +827,7 @@ impl Shuttle {
     async fn clean(&self) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let message = client
-            .clean_project(self.ctx.project_name())
+            .clean_project_v1(self.ctx.project_name())
             .await
             .map_err(|err| {
                 suggestions::project::project_request_failure(
@@ -847,21 +851,22 @@ impl Shuttle {
 
             if args.latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client
-                    .get_deployments(proj_name, 0, 1)
-                    .await
-                    .map_err(|err| {
-                        suggestions::logs::get_logs_failure(
-                            err,
-                            "Fetching the latest deployment failed",
-                        )
-                    })?;
+                let deployments =
+                    client
+                        .get_deployments_v1(proj_name, 0, 1)
+                        .await
+                        .map_err(|err| {
+                            suggestions::logs::get_logs_failure(
+                                err,
+                                "Fetching the latest deployment failed",
+                            )
+                        })?;
                 let most_recent = deployments.first().context(format!(
                     "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
                 ))?;
 
                 most_recent.id
-            } else if let Some(deployment) = client.get_service(proj_name).await?.deployment {
+            } else if let Some(deployment) = client.get_service_v1(proj_name).await?.deployment {
                 // Active deployment
                 deployment.id
             } else {
@@ -874,7 +879,7 @@ impl Shuttle {
 
         if args.follow {
             let mut stream = client
-                .get_logs_ws(self.ctx.project_name(), &id)
+                .get_logs_ws_v1(self.ctx.project_name(), &id)
                 .await
                 .map_err(|err| {
                     suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
@@ -906,7 +911,7 @@ impl Shuttle {
             }
         } else {
             let logs = client
-                .get_logs(self.ctx.project_name(), &id)
+                .get_logs_v1(self.ctx.project_name(), &id)
                 .await
                 .map_err(|err| {
                     suggestions::logs::get_logs_failure(err, "Fetching the deployment failed")
@@ -934,7 +939,7 @@ impl Shuttle {
 
         let proj_name = self.ctx.project_name();
         let mut deployments = client
-            .get_deployments(proj_name, page, limit)
+            .get_deployments_v1(proj_name, page, limit)
             .await
             .map_err(suggestions::deployment::get_deployments_list_failure)?;
         let page_hint = if deployments.len() == limit as usize {
@@ -959,7 +964,7 @@ impl Shuttle {
     async fn deployment_get(&self, deployment_id: Uuid) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let deployment = client
-            .get_deployment_details(self.ctx.project_name(), &deployment_id)
+            .get_deployment_details_v1(self.ctx.project_name(), &deployment_id)
             .await
             .map_err(suggestions::deployment::get_deployment_status_failure)?;
 
@@ -971,7 +976,7 @@ impl Shuttle {
     async fn resources_list(&self, raw: bool, show_secrets: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let resources = client
-            .get_service_resources(self.ctx.project_name())
+            .get_service_resources_v1(self.ctx.project_name())
             .await
             .map_err(suggestions::resources::get_service_resources_failure)?;
         let table = get_resource_tables(&resources, self.ctx.project_name(), raw, show_secrets);
@@ -1012,7 +1017,7 @@ impl Shuttle {
         }
 
         client
-            .delete_service_resource(self.ctx.project_name(), resource_type)
+            .delete_service_resource_v1(self.ctx.project_name(), resource_type)
             .await?;
 
         println!("Deleted resource {resource_type}");
@@ -1632,7 +1637,12 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn deploy(&mut self, args: DeployArgs) -> Result<CommandOutcome> {
+    async fn deploy(&mut self, args: DeployArgs, is_v2: bool) -> Result<CommandOutcome> {
+        if is_v2 {
+            // This method doesn't support platform v2 yet.
+            todo!();
+        }
+
         let client = self.client.as_ref().unwrap();
         let working_directory = self.ctx.working_directory();
 
@@ -1682,12 +1692,12 @@ impl Shuttle {
         }
 
         let deployment = client
-            .deploy(self.ctx.project_name(), deployment_req)
+            .deploy(self.ctx.project_name(), deployment_req, is_v2)
             .await
             .map_err(suggestions::deploy::deploy_request_failure)?;
 
         let mut stream = client
-            .get_logs_ws(self.ctx.project_name(), &deployment.id)
+            .get_logs_ws_v1(self.ctx.project_name(), &deployment.id)
             .await
             .map_err(|err| {
                 suggestions::deploy::deployment_setup_failure(
@@ -1807,7 +1817,7 @@ impl Shuttle {
                 // the terminal isn't completely spammed
                 sleep(Duration::from_millis(100)).await;
                 stream = client
-                    .get_logs_ws(self.ctx.project_name(), &deployment.id)
+                    .get_logs_ws_v1(self.ctx.project_name(), &deployment.id)
                     .await
                     .map_err(|err| {
                         suggestions::deploy::deployment_setup_failure(
@@ -1824,7 +1834,7 @@ impl Shuttle {
         sleep(Duration::from_millis(500)).await;
 
         let deployment = client
-            .get_deployment_details(self.ctx.project_name(), &deployment.id)
+            .get_deployment_details_v1(self.ctx.project_name(), &deployment.id)
             .await
             .map_err(|err| {
                 suggestions::deploy::deployment_setup_failure(
@@ -1870,9 +1880,9 @@ impl Shuttle {
             return Ok(CommandOutcome::DeploymentFailure);
         }
 
-        let service = client.get_service(self.ctx.project_name()).await?;
+        let service = client.get_service_v1(self.ctx.project_name()).await?;
         let resources = client
-            .get_service_resources(self.ctx.project_name())
+            .get_service_resources_v1(self.ctx.project_name())
             .await?;
         let resources = get_resource_tables(&resources, self.ctx.project_name(), false, false);
 
@@ -1881,9 +1891,16 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_start(&self, idle_minutes: u64) -> Result<CommandOutcome> {
+    async fn project_start(&self, idle_minutes: u64, v2: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let config = &project::Config { idle_minutes };
+
+        if v2 {
+            // Create project & get project calls should return accordingly with the logic that checks
+            // whether the project was started successfully, and get back with suggestions for how to
+            // verify its state.
+            todo!();
+        }
 
         let p = self.ctx.project_name();
         wait_with_spinner(|i, pb| async move {
@@ -1894,6 +1911,7 @@ impl Shuttle {
             };
             pb.set_message(format!("{project}"));
 
+            // TODO: make this state checking more in line with ecs-shuttle.
             let done = [
                 project::State::Ready,
                 project::State::Errored {
@@ -1935,18 +1953,24 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_restart(&self, idle_minutes: u64) -> Result<CommandOutcome> {
+    async fn project_restart_v1(&self, idle_minutes: u64) -> Result<CommandOutcome> {
         self.project_stop()
             .await
             .map_err(suggestions::project::project_restart_failure)?;
-        self.project_start(idle_minutes)
+        self.project_start(idle_minutes, false)
             .await
             .map_err(suggestions::project::project_restart_failure)?;
 
         Ok(CommandOutcome::Ok)
     }
 
-    async fn projects_list(&self, page: u32, limit: u32, raw: bool) -> Result<CommandOutcome> {
+    async fn projects_list(
+        &self,
+        page: u32,
+        limit: u32,
+        raw: bool,
+        v2: bool,
+    ) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         if limit == 0 {
             println!();
@@ -1954,14 +1978,17 @@ impl Shuttle {
         }
         let limit = limit + 1;
 
-        let mut projects = client.get_projects_list(page, limit).await.map_err(|err| {
-            suggestions::project::project_request_failure(
-                err,
-                "Getting projects list failed",
-                false,
-                "getting the projects list fails repeatedly",
-            )
-        })?;
+        let mut projects = client
+            .get_projects_list(page, limit, v2)
+            .await
+            .map_err(|err| {
+                suggestions::project::project_request_failure(
+                    err,
+                    "Getting projects list failed",
+                    false,
+                    "getting the projects list fails repeatedly",
+                )
+            })?;
         let page_hint = if projects.len() == limit as usize {
             projects.pop();
             true
@@ -2031,7 +2058,7 @@ impl Shuttle {
         let p = self.ctx.project_name();
         wait_with_spinner(|i, pb| async move {
             let project = if i == 0 {
-                client.stop_project(p).await?
+                client.stop_project_v1(p).await?
             } else {
                 client.get_project(p).await?
             };
@@ -2067,7 +2094,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_delete(&self, no_confirm: bool) -> Result<CommandOutcome> {
+    async fn project_delete(&self, no_confirm: bool, v2: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
 
         if !no_confirm {
@@ -2098,7 +2125,7 @@ impl Shuttle {
         }
 
         client
-            .delete_project(self.ctx.project_name())
+            .delete_project(self.ctx.project_name(), v2)
             .await
             .map_err(|err| {
                 suggestions::project::project_request_failure(

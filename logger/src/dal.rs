@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use prost_types::Timestamp;
-use shuttle_common::log::LogMode;
+use shuttle_common::log::LogsRange;
 use shuttle_proto::logger::{LogItem, LogLine};
 use sqlx::{
     migrate::Migrator,
@@ -162,29 +162,29 @@ impl Dal for Postgres {
         head: Option<u32>,
         tail: Option<u32>,
     ) -> Result<Vec<Log>, DalError> {
-        let (mode, len) = match (head, tail) {
-            (Some(len), None) => (LogMode::Head, len),
-            (None, Some(len)) => (LogMode::Tail, len),
-            (None, None) => (LogMode::All, 0),
-            _ => (LogMode::Tail, 1000),
+        let mode = match (head, tail) {
+            (Some(len), None) => LogsRange::Head(len),
+            (None, Some(len)) => LogsRange::Tail(len),
+            (None, None) => LogsRange::All,
+            _ => LogsRange::Tail(1000),
         };
 
         let result = match mode {
-            LogMode ::Head => {
+            LogsRange::Head(len) => {
                 sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp limit $2")
                     .bind(deployment_id)
                     .bind(len as i64)
                     .fetch_all(&self.pool)
                     .await?
             }
-            LogMode::Tail => {
+            LogsRange::Tail(len) => {
                 sqlx::query_as("SELECT * FROM (SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp DESC limit $2) AS TAIL_TABLE ORDER BY tx_timestamp")
                     .bind(deployment_id)
                     .bind(len as i64)
                     .fetch_all(&self.pool)
                     .await?
             }
-            LogMode::All => {
+            LogsRange::All => {
                 sqlx::query_as("SELECT * FROM logs WHERE deployment_id = $1 ORDER BY tx_timestamp")
                     .bind(deployment_id)
                     .fetch_all(&self.pool)

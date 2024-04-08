@@ -417,13 +417,13 @@ pub struct LogsArgs {
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
-    /// Views First N line of the logs
+    /// View the first N log lines
     #[arg(long, group = "output_mode")]
     pub head: Option<u32>,
-    /// Views Last N line of the logs
+    /// View the last N log lines
     #[arg(long, group = "output_mode")]
     pub tail: Option<u32>,
-    /// Views all line of the logs
+    /// View all log lines
     #[arg(long, group = "output_mode")]
     pub all: bool,
 }

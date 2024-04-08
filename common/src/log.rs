@@ -31,10 +31,11 @@ pub enum Backend {
     Runtime(String),
 }
 
+/// Which subset of deployment log lines to process
 #[derive(Deserialize)]
-pub enum LogMode {
-    Head,
-    Tail,
+pub enum LogsRange {
+    Head(u32),
+    Tail(u32),
     All,
 }
 

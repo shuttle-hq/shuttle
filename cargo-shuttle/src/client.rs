@@ -9,7 +9,7 @@ use reqwest::RequestBuilder;
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
-use shuttle_common::log::LogMode;
+use shuttle_common::log::LogsRange;
 use shuttle_common::models::deployment::DeploymentRequest;
 use shuttle_common::models::{deployment, project, service, ToJson};
 use shuttle_common::secrets::Secret;
@@ -184,15 +184,10 @@ impl Client {
         &self,
         project: &str,
         deployment_id: &Uuid,
-        mode: LogMode,
-        len: u32,
+        range: LogsRange,
     ) -> Result<Vec<LogItem>> {
         let mut path = format!("/projects/{project}/deployments/{deployment_id}/logs");
-        match mode {
-            LogMode::Head => path = format!("{path}?head={len}"),
-            LogMode::Tail => path = format!("{path}?tail={len}"),
-            _ => {}
-        };
+        Self::add_range_query(range, &mut path);
 
         self.get(path)
             .await
@@ -203,17 +198,26 @@ impl Client {
         &self,
         project: &str,
         deployment_id: &Uuid,
-        mode: LogMode,
-        len: u32,
+        range: LogsRange,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        let mut path = format!("/projects/{project}/deployments/{deployment_id}/logs");
-        match mode {
-            LogMode::Head => path = format!("{path}?head={len}"),
-            LogMode::Tail => path = format!("{path}?tail={len}"),
-            _ => {}
-        };
+        let mut path = format!("/projects/{project}/ws/deployments/{deployment_id}/logs");
+        Self::add_range_query(range, &mut path);
 
         self.ws_get(path).await
+    }
+
+    fn add_range_query(range: LogsRange, path: &mut String) {
+        match range {
+            LogsRange::Head(n) => {
+                path.push_str("?head=");
+                path.push_str(&n.to_string())
+            }
+            LogsRange::Tail(n) => {
+                path.push_str("?tail=");
+                path.push_str(&n.to_string())
+            }
+            _ => {}
+        };
     }
 
     pub async fn get_deployments(

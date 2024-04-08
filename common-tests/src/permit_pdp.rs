@@ -15,7 +15,8 @@ impl DockerInstance {
         let container_name = format!("shuttle_test_permit_{}", name);
         let e1 = format!("PDP_CONTROL_PLANE={api_url}");
         let e2 = format!("PDP_API_KEY={api_key}");
-        let env = [e1.as_str(), e2.as_str()];
+        let e3 = "PDP_OPA_CLIENT_QUERY_TIMEOUT=10";
+        let env = [e1.as_str(), e2.as_str(), e3];
         let port = "7000";
         let image = "docker.io/permitio/pdp-v2:0.2.37";
         let is_ready_cmd = vec![

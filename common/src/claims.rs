@@ -5,10 +5,11 @@ use std::{
     task::{Context, Poll},
 };
 
+use axum::extract::FromRequestParts;
 use bytes::Bytes;
 use chrono::{Duration, Utc};
 use headers::{Authorization, HeaderMapExt};
-use http::{Request, StatusCode};
+use http::{request::Parts, Request, StatusCode};
 use http_body::combinators::UnsyncBoxBody;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use opentelemetry::global;
@@ -329,6 +330,26 @@ impl Claim {
         claim.token = Some(token.to_string());
 
         Ok(claim)
+    }
+}
+
+/// Extract the claim from the request and fail with unauthorized if the claim doesn't exist
+#[axum::async_trait]
+impl<S> FromRequestParts<S> for Claim {
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let claim = parts
+            .extensions
+            .get::<Claim>()
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+
+        // Record current account name for tracing purposes
+        Span::current().record("account.user_id", &claim.sub);
+
+        trace!(?claim, "got user");
+
+        Ok(claim.clone())
     }
 }
 

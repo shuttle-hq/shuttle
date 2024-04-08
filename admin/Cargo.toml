@@ -8,6 +8,7 @@ publish = false
 shuttle-common = { workspace = true, features = ["models"] }
 
 anyhow = { workspace = true }
+bytes = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 dirs = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }

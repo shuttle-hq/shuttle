@@ -4084,7 +4084,7 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 [[package]]
 name = "permit-client-rs"
 version = "2.0.0"
-source = "git+https://github.com/shuttle-hq/permit-client-rs?rev=27c7759#27c775918aa6f7522e0845d8775a8b63d4124f6b"
+source = "git+https://github.com/shuttle-hq/permit-client-rs?rev=19085ba#19085ba73bb87c879731590f4a3a988e92d076ac"
 dependencies = [
  "reqwest",
  "serde",
@@ -5167,6 +5167,7 @@ name = "shuttle-admin"
 version = "0.43.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "clap",
  "dirs",
  "reqwest",

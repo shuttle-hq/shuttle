@@ -51,7 +51,7 @@ pub struct PaginationDetails {
 }
 
 #[derive(Deserialize)]
-struct LogSize {
+struct LogsQuery {
     head: Option<u32>,
     tail: Option<u32>,
 }
@@ -429,7 +429,7 @@ pub async fn get_logs(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
-    Query(LogSize { head, tail }): Query<LogSize>,
+    Query(LogsQuery { head, tail }): Query<LogsQuery>,
 ) -> Result<Json<Vec<LogItem>>> {
     let mut logs_request: tonic::Request<LogsRequest> = tonic::Request::new(LogsRequest {
         deployment_id: deployment_id.to_string(),
@@ -472,7 +472,7 @@ pub async fn get_logs_subscribe(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
     CustomErrorPath((project_name, deployment_id)): CustomErrorPath<(String, Uuid)>,
-    Query(LogSize { head, tail }): Query<LogSize>,
+    Query(LogsQuery { head, tail }): Query<LogsQuery>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
     ws_upgrade.on_upgrade(move |s| {

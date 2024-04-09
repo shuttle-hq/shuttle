@@ -245,8 +245,8 @@ impl Shuttle {
             Command::Project(ProjectCommand::Restart(ProjectStartArgs {
                 idle_minutes, ..
             })) => self.project_restart_v1(idle_minutes).await,
-            Command::Project(ProjectCommand::Status { follow, .. }) => {
-                self.project_status(follow).await
+            Command::Project(ProjectCommand::Status { follow }) => {
+                self.project_status(follow, is_v2).await
             }
             Command::Project(ProjectCommand::List { page, limit, raw }) => {
                 self.projects_list(page, limit, raw, is_v2).await
@@ -2000,7 +2000,7 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn project_status(&self, follow: bool) -> Result<CommandOutcome> {
+    async fn project_status(&self, follow: bool, v2: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         if follow {
             let p = self.ctx.project_name();
@@ -2038,13 +2038,17 @@ impl Shuttle {
                         "getting project status failed repeatedly",
                     )
                 })?;
-            println!(
-                "{project}\nIdle minutes: {}",
-                project
-                    .idle_minutes
-                    .map(|i| i.to_string())
-                    .unwrap_or("<unknown>".to_owned())
-            );
+
+            println!("{project}");
+            if !v2 {
+                println!(
+                    "Idle minutes: {}",
+                    project
+                        .idle_minutes
+                        .map(|i| i.to_string())
+                        .unwrap_or("<unknown>".to_owned())
+                );
+            }
         }
 
         Ok(CommandOutcome::Ok)

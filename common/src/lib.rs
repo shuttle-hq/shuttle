@@ -138,22 +138,19 @@ impl DatabaseInfo {
     /// For connecting to the db from inside the Shuttle network
     pub fn connection_string_shuttle(&self) -> String {
         format!(
-            "{}://{}:{}@{}/{}",
+            "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
             self.role_password.expose(),
-            // TODO: this is the rds endpoint now, which is dns name + port. We should rename and
-            // refactor this, we will only have one connection string with RDS. The DNS name will
-            // resolve to a private ip if called within the VPC, and a public if not.
-            // TODO: are we breaking local run?
             self.hostname_shuttle,
+            self.port,
             self.database_name,
         )
     }
     /// For connecting to the db from the Internet
     pub fn connection_string_public(&self, show_password: bool) -> String {
         format!(
-            "{}://{}:{}@{}/{}",
+            "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
             if show_password {
@@ -161,11 +158,8 @@ impl DatabaseInfo {
             } else {
                 self.role_password.redacted()
             },
-            // TODO: this is the rds endpoint now, which is dns name + port. We should rename and
-            // refactor this, we will only have one connection string with RDS. The DNS name will
-            // resolve to a private ip if called within the VPC, and a public if not.
-            // TODO: are we breaking local run?
             self.hostname_public,
+            self.port,
             self.database_name,
         )
     }

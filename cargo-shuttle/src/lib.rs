@@ -1895,13 +1895,6 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let config = &project::Config { idle_minutes };
 
-        if v2 {
-            // Create project & get project calls should return accordingly with the logic that checks
-            // whether the project was started successfully, and get back with suggestions for how to
-            // verify its state.
-            todo!();
-        }
-
         let p = self.ctx.project_name();
         wait_with_spinner(|i, pb| async move {
             let project = if i == 0 {
@@ -1939,13 +1932,18 @@ impl Shuttle {
         })?;
 
         if idle_minutes > 0 {
-            let idle_msg = format!(
-                "Your project will sleep if it is idle for {} minutes.",
-                idle_minutes
-            );
-            println!("{}", idle_msg.yellow());
-            println!("To change the idle time refer to the docs: {SHUTTLE_IDLE_DOCS_URL}");
-            println!();
+            if v2 {
+                let idle_msg = "The v2 platform ignores the idle_minutes for now.";
+                println!("{}", idle_msg.yellow());
+            } else {
+                let idle_msg = format!(
+                    "Your project will sleep if it is idle for {} minutes.",
+                    idle_minutes
+                );
+                println!("{}", idle_msg.yellow());
+                println!("To change the idle time refer to the docs: {SHUTTLE_IDLE_DOCS_URL}");
+                println!();
+            }
         }
 
         println!("Run `cargo shuttle deploy --allow-dirty` to deploy your Shuttle service.");

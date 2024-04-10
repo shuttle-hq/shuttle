@@ -186,7 +186,11 @@ impl ShuttleApiClient {
     }
 
     pub async fn delete_project(&self, project: &str) -> Result<String> {
-        let path = format!("/projects/{project}/delete");
+        let path = if self.beta {
+            format!("/projects/{project}")
+        } else {
+            format!("/projects/{project}/delete")
+        };
 
         self.delete(path).await
     }

@@ -393,7 +393,15 @@ async fn copy_executable(
     new_filename: &Uuid,
 ) -> Result<()> {
     fs::create_dir_all(to_directory).await?;
-    fs::copy(executable_path, to_directory.join(new_filename.to_string())).await?;
+    fs::copy(executable_path, to_directory.join(new_filename.to_string()))
+        .await
+        .map_err(|e| {
+            error!(
+                "Did not find built binary at {}. Make sure the wanted binary target has the same name as your crate.",
+                executable_path.display()
+            );
+            e
+        })?;
 
     Ok(())
 }

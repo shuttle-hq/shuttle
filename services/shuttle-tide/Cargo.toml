@@ -1,9 +1,10 @@
 [package]
 name = "shuttle-tide"
-version = "0.42.0"
+version = "0.43.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service implementation to run a tide webserver on shuttle"
+repository = "https://github.com/shuttle-hq/shuttle"
 keywords = ["shuttle-service", "tide"]
 
 [workspace]
@@ -12,8 +13,5 @@ keywords = ["shuttle-service", "tide"]
 # Tide does not have tokio support. So make sure async-std is compatible with tokio
 # https://github.com/http-rs/tide/issues/791
 async-std = { version = "1.12.0", features = ["tokio1"] }
-tide = { version = "0.16.0" }
-shuttle-runtime = { path = "../../runtime", version = "0.42.0", default-features = false }
-
-[dev-dependencies]
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }
+tide = "0.16.0"
+shuttle-runtime = { path = "../../runtime", version = "0.43.0", default-features = false }

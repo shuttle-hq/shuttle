@@ -1,13 +1,15 @@
 [package]
 name = "shuttle-admin"
-version = "0.42.0"
+version = "0.43.0"
 edition = "2021"
 publish = false
 
 [dependencies]
 shuttle-common = { workspace = true, features = ["models"] }
+shuttle-backends = { workspace = true }
 
 anyhow = { workspace = true }
+bytes = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 dirs = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }

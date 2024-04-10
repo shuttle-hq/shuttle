@@ -6,7 +6,11 @@ mod user;
 
 use anyhow::Result;
 use args::{CopyPermitEnvArgs, StartArgs, SyncArgs};
-use shuttle_backends::client::{permit, PermissionsDal};
+use http::StatusCode;
+use shuttle_backends::client::{
+    permit::{self, Error, ResponseContent},
+    PermissionsDal,
+};
 use shuttle_common::{claims::AccountTier, ApiKey};
 use sqlx::{migrate::Migrator, query, PgPool};
 use tracing::info;
@@ -54,36 +58,37 @@ pub async fn sync(pool: PgPool, args: SyncArgs) -> Result<()> {
         match permit_client.get_user(&user.id).await {
             Ok(p_user) => {
                 // Update tier if out of sync
+                let wanted_tier = user.account_tier.as_permit_account_tier();
                 if !p_user
                     .roles
-                    .is_some_and(|rs| rs.iter().any(|r| r.role == user.account_tier.to_string()))
+                    .is_some_and(|rs| rs.iter().any(|r| r.role == wanted_tier.to_string()))
                 {
-                    match user.account_tier {
-                        AccountTier::Basic
-                        | AccountTier::PendingPaymentPro
-                        | AccountTier::CancelledPro
-                        | AccountTier::Team
-                        | AccountTier::Admin
-                        | AccountTier::Deployer => {
+                    println!("updating tier for user: {}", user.id);
+                    match wanted_tier {
+                        AccountTier::Basic => {
                             permit_client.make_basic(&user.id).await?;
                         }
                         AccountTier::Pro => {
                             permit_client.make_pro(&user.id).await?;
                         }
+                        _ => unreachable!(),
                     }
                 }
             }
-            Err(_) => {
-                // FIXME: Make the error type better so that this is only done on 404s
-
+            Err(Error::ResponseError(ResponseContent {
+                status: StatusCode::NOT_FOUND,
+                ..
+            })) => {
+                // Add users that are not in permit
                 println!("creating user: {}", user.id);
 
-                // Add users that are not in permit
                 permit_client.new_user(&user.id).await?;
-
-                if user.account_tier == AccountTier::Pro {
+                if user.account_tier.as_permit_account_tier() == AccountTier::Pro {
                     permit_client.make_pro(&user.id).await?;
                 }
+            }
+            Err(e) => {
+                println!("failed to fetch user {}. skipping. error: {e}", user.id);
             }
         }
     }
@@ -100,7 +105,7 @@ pub async fn copy_environment(args: CopyPermitEnvArgs) -> Result<()> {
         args.permit.permit_api_key,
     );
 
-    client.copy_environment(&args.target).await
+    Ok(client.copy_environment(&args.target).await?)
 }
 
 pub async fn init(pool: PgPool, args: InitArgs, tier: AccountTier) -> Result<()> {

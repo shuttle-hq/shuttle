@@ -122,6 +122,7 @@ services:
       - "--provisioner-host=provisioner"
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"
+      - "--cors-origin=https://console.shuttle.rs"
       - "--admin-key=${GATEWAY_ADMIN_KEY}"
       - "--permit-api-uri=https://api.eu-central-1.permit.io"
       - "--permit-pdp-uri=http://permit-pdp:7000"
@@ -282,6 +283,8 @@ services:
     environment:
       - PDP_CONTROL_PLANE=https://api.eu-central-1.permit.io
       - PDP_API_KEY=${PERMIT_API_KEY}
+      # Querying users with lots of resource instances takes more than the default 1s
+      - PDP_OPA_CLIENT_QUERY_TIMEOUT=10
     ports:
       - 7000:7000
     networks:
@@ -290,3 +293,9 @@ services:
       placement:
         constraints:
           - node.hostname==controller
+    healthcheck:
+      test: curl -f -s http://localhost:7000
+      interval: 1m
+      timeout: 10s
+      retries: 5
+

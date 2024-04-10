@@ -1,8 +1,9 @@
 [package]
 name = "shuttle-proto"
-version = "0.42.0"
+version = "0.43.0"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Library for all the gRPC definitions used by shuttle"
 
 [dependencies]

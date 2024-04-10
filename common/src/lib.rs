@@ -29,9 +29,6 @@ use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
-pub type ApiUrl = String;
-pub type Host = String;
-
 #[derive(Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "persist", derive(PartialEq, Eq, Hash, sqlx::Type))]
 #[cfg_attr(feature = "persist", serde(transparent))]

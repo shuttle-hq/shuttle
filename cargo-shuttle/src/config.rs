@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use shuttle_common::{constants::API_URL_DEFAULT, ApiKey, ApiUrl};
+use shuttle_common::{constants::API_URL_DEFAULT, ApiKey};
 use tracing::trace;
 
 use crate::args::ProjectArgs;
@@ -122,7 +122,7 @@ impl ConfigManager for LocalConfigManager {
 #[derive(Deserialize, Serialize, Default)]
 pub struct GlobalConfig {
     api_key: Option<String>,
-    pub api_url: Option<ApiUrl>,
+    pub api_url: Option<String>,
 }
 
 impl GlobalConfig {
@@ -138,7 +138,7 @@ impl GlobalConfig {
         self.api_key = None;
     }
 
-    pub fn api_url(&self) -> Option<ApiUrl> {
+    pub fn api_url(&self) -> Option<String> {
         self.api_url.clone()
     }
 }
@@ -315,7 +315,7 @@ impl RequestContext {
         self.api_url = api_url;
     }
 
-    pub fn api_url(&self) -> ApiUrl {
+    pub fn api_url(&self) -> String {
         if let Some(api_url) = self.api_url.clone() {
             api_url
         } else if let Some(api_url) = self.global.as_ref().unwrap().api_url() {

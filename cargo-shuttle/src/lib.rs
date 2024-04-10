@@ -75,7 +75,7 @@ use crate::args::{
     DeployArgs, DeploymentCommand, InitArgs, LoginArgs, LogoutArgs, LogsArgs, ProjectCommand,
     ProjectStartArgs, ResourceCommand, TemplateLocation,
 };
-use crate::client::ShuttleAPIClient;
+use crate::client::ShuttleApiClient;
 use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -96,7 +96,7 @@ pub fn parse_args() -> (ShuttleArgs, bool) {
 
 pub struct Shuttle {
     ctx: RequestContext,
-    client: Option<ShuttleAPIClient>,
+    client: Option<ShuttleApiClient>,
     version_info: Option<VersionInfo>,
     version_warnings: Vec<String>,
     /// alter behaviour to interact with the new platform
@@ -189,7 +189,7 @@ impl Shuttle {
                 | Command::Project(..)
         ) {
             let client =
-                ShuttleAPIClient::new(self.ctx.api_url(), self.ctx.api_key().ok(), self.beta);
+                ShuttleApiClient::new(self.ctx.api_url(), self.ctx.api_key().ok(), self.beta);
             self.client = Some(client);
             if !args.offline && !self.beta {
                 // TODO: re-implement version checking in control to use the c-s version http header

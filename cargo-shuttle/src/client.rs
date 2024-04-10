@@ -19,7 +19,7 @@ use tracing::error;
 use uuid::Uuid;
 
 #[derive(Clone)]
-pub struct ShuttleAPIClient {
+pub struct ShuttleApiClient {
     client: reqwest::Client,
     api_url: String,
     api_key: Option<ApiKey>,
@@ -27,7 +27,7 @@ pub struct ShuttleAPIClient {
     beta: bool,
 }
 
-impl ShuttleAPIClient {
+impl ShuttleApiClient {
     pub fn new(api_url: String, api_key: Option<ApiKey>, beta: bool) -> Self {
         Self {
             client: reqwest::Client::builder()

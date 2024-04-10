@@ -11,7 +11,8 @@ pub struct ResourceRequest {
 /// Used to request a shared DB from the provisioner service.
 #[derive(Deserialize, Serialize)]
 pub struct SharedDbRequest {
-    pub project_id: String,
+    pub db_name: String,
+    pub role_name: String,
 }
 
 /// Used to request the deletion of a shared DB from the provisioner service.

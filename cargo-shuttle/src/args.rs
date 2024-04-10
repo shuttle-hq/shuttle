@@ -211,11 +211,11 @@ pub enum ProjectCommand {
     /// List all projects belonging to the calling account
     List {
         #[arg(long, default_value = "1")]
-        /// Which page to display
+        /// (deprecated) Which page to display
         page: u32,
 
-        #[arg(long, default_value = "10")]
-        /// How many projects per page to display
+        #[arg(long, default_value = "15")]
+        /// (deprecated) How many projects per page to display
         limit: u32,
 
         #[arg(long, default_value_t = false)]

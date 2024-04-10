@@ -583,6 +583,48 @@ async fn transfer_project_from_organization(
     Ok("Project transfered".to_string())
 }
 
+#[instrument(skip_all, fields(shuttle.organization.id = %organization_id))]
+async fn get_organization_members(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath(organization_id): CustomErrorPath<String>,
+    Claim { sub, .. }: Claim,
+) -> Result<AxumJson<Vec<organization::MemberResponse>>, Error> {
+    let members = service
+        .permit_client
+        .get_organization_members(&sub, &organization_id)
+        .await?;
+
+    Ok(AxumJson(members))
+}
+
+#[instrument(skip_all, fields(shuttle.organization.id = %organization_id))]
+async fn add_member_to_organization(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath((organization_id, user_id)): CustomErrorPath<(String, String)>,
+    Claim { sub, .. }: Claim,
+) -> Result<String, Error> {
+    service
+        .permit_client
+        .add_organization_member(&sub, &organization_id, &user_id)
+        .await?;
+
+    Ok("Member added".to_string())
+}
+
+#[instrument(skip_all, fields(shuttle.organization.id = %organization_id))]
+async fn remove_member_from_organization(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath((organization_id, user_id)): CustomErrorPath<(String, String)>,
+    Claim { sub, .. }: Claim,
+) -> Result<String, Error> {
+    service
+        .permit_client
+        .remove_organization_member(&sub, &organization_id, &user_id)
+        .await?;
+
+    Ok("Member removed".to_string())
+}
+
 async fn get_status(
     State(RouterState {
         sender, service, ..
@@ -916,6 +958,17 @@ async fn get_projects(
     Ok(AxumJson(projects))
 }
 
+async fn change_project_owner(
+    State(RouterState { service, .. }): State<RouterState>,
+    Path((project_name, new_user_id)): Path<(String, String)>,
+) -> Result<(), Error> {
+    service
+        .update_project_owner(&project_name, &new_user_id)
+        .await?;
+
+    Ok(())
+}
+
 #[derive(Clone)]
 pub(crate) struct RouterState {
     pub service: Arc<GatewayService>,
@@ -1010,6 +1063,10 @@ impl ApiBuilder {
     pub fn with_default_routes(mut self) -> Self {
         let admin_routes = Router::new()
             .route("/projects", get(get_projects))
+            .route(
+                "/projects/change-owner/:project_name/:new_user_id",
+                get(change_project_owner),
+            )
             .route("/revive", post(revive_projects))
             .route("/destroy", post(destroy_projects))
             .route("/idle-cch", post(idle_cch_projects))
@@ -1042,12 +1099,17 @@ impl ApiBuilder {
 
         let organization_routes = Router::new()
             .route("/", get(get_organizations))
-            .route("/:organization_name", post(create_organization))
+            .route("/name/:organization_name", post(create_organization))
             .route("/:organization_id", delete(delete_organization))
             .route("/:organization_id/projects", get(get_organization_projects))
             .route(
                 "/:organization_id/projects/:project_id",
                 post(transfer_project_to_organization).delete(transfer_project_from_organization),
+            )
+            .route("/:organization_id/members", get(get_organization_members))
+            .route(
+                "/:organization_id/members/:user_id",
+                post(add_member_to_organization).delete(remove_member_from_organization),
             );
 
         self.router = self

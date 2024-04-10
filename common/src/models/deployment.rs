@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 
-use crate::deployment::State;
+use crate::deployment::{EcsState, State};
 
 /// Max length of strings in the git metadata
 pub const GIT_STRINGS_MAX_LENGTH: usize = 80;
@@ -29,15 +29,35 @@ pub struct Response {
     pub git_dirty: Option<bool>,
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct EcsResponse {
+    pub id: String,
+    pub state: EcsState,
+    pub git_commit_id: Option<String>,
+    pub git_commit_msg: Option<String>,
+    pub git_branch: Option<String>,
+    pub git_dirty: Option<bool>,
+}
+
 impl Display for Response {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} deployment '{}' is {}",
-            self.last_update
-                .format("%Y-%m-%dT%H:%M:%SZ")
+            "deployment '{}' is {}",
+            self.id,
+            self.state
                 .to_string()
-                .dim(),
+                // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
+                .with(crossterm::style::Color::from_str(self.state.get_color()).unwrap())
+        )
+    }
+}
+
+impl Display for EcsResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "deployment '{}' is {}",
             self.id,
             self.state
                 .to_string()
@@ -58,6 +78,19 @@ impl State {
             State::Completed | State::Stopped => "blue",
             State::Crashed => "red",
             State::Unknown => "yellow",
+        }
+    }
+}
+
+impl EcsState {
+    /// We return a &str rather than a Color here, since `comfy-table` re-exports
+    /// crossterm::style::Color and we depend on both `comfy-table` and `crossterm`
+    /// we may end up with two different versions of Color.
+    pub fn get_color(&self) -> &str {
+        match self {
+            EcsState::InProgress => "cyan",
+            EcsState::Running => "green",
+            EcsState::Stopped => "blue",
         }
     }
 }
@@ -144,9 +177,8 @@ pub fn get_deployments_table(
 
             if raw {
                 table.add_row(vec![
-                    Cell::new(deploy.id),
+                    Cell::new(deploy.id.clone()),
                     Cell::new(&deploy.state),
-                    Cell::new(deploy.last_update.format("%Y-%m-%dT%H:%M:%SZ")),
                     Cell::new(truncated_commit_id),
                     Cell::new(truncated_commit_msg),
                     Cell::new(
@@ -163,12 +195,10 @@ pub fn get_deployments_table(
                 ]);
             } else {
                 table.add_row(vec![
-                    Cell::new(deploy.id),
+                    Cell::new(deploy.id.clone()),
                     Cell::new(&deploy.state)
                         // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
                         .fg(Color::from_str(deploy.state.get_color()).unwrap())
-                        .set_alignment(CellAlignment::Center),
-                    Cell::new(deploy.last_update.format("%Y-%m-%dT%H:%M:%SZ"))
                         .set_alignment(CellAlignment::Center),
                     Cell::new(truncated_commit_id),
                     Cell::new(truncated_commit_msg),

@@ -7,6 +7,7 @@ use strum::{Display, EnumString};
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[strum(ascii_case_insensitive)]
+// TODO: remove it (still used in the code base here and there)
 pub enum State {
     Queued,
     Building,
@@ -17,6 +18,16 @@ pub enum State {
     Stopped,
     Crashed,
     Unknown,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Display, Serialize, EnumString)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+#[strum(ascii_case_insensitive)]
+pub enum EcsState {
+    Running,
+    InProgress,
+    Stopped,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

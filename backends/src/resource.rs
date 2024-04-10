@@ -8,16 +8,9 @@ pub struct ResourceRequest {
     pub resources: Vec<Vec<u8>>,
 }
 
-/// Used to request a shared DB from the provisioner service.
+/// Used to request the provisioning or deletion of a shared DB from the provisioner service.
 #[derive(Deserialize, Serialize)]
 pub struct SharedDbRequest {
-    pub db_name: String,
-    pub role_name: String,
-}
-
-/// Used to request the deletion of a shared DB from the provisioner service.
-#[derive(Deserialize, Serialize)]
-pub struct SharedDbDeletionRequest {
     pub db_name: String,
     pub role_name: String,
 }

@@ -23,7 +23,7 @@ use shuttle_proto::{
 use shuttle_service::{ResourceFactory, Service};
 use tokio::sync::{
     broadcast::{self, Sender},
-    mpsc,
+    mpsc, oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
@@ -106,7 +106,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     tokio::select! {
         res = router.serve(addr) => {
             match res{
-                Ok(_) => panic!("router shut down"),
+                Ok(_) => panic!("router completed on its own"),
                 Err(e) => panic!("Error while serving address {addr}: {e}")
             }
         }
@@ -128,12 +128,13 @@ pub enum State {
 pub struct Alpha<L, R> {
     // Mutexes are for interior mutability
     stopped_tx: Sender<(StopReason, String)>,
+    kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     loader: Mutex<Option<L>>,
     runner: Mutex<Option<R>>,
     /// The current state of the runtime, which is used by the ECS task to determine if the runtime
     /// is healthy.
     state: Arc<Mutex<State>>,
-    runtime_kill_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    runtime_kill_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
 }
 
 impl<L, R> Alpha<L, R> {
@@ -146,7 +147,7 @@ impl<L, R> Alpha<L, R> {
             loader: Mutex::new(Some(loader)),
             runner: Mutex::new(Some(runner)),
             state: Arc::new(Mutex::new(State::Unhealthy)),
-            runtime_kill_tx: Mutex::new(Some(runtime_kill_tx)),
+            runtime_kill_tx: Arc::new(Mutex::new(Some(runtime_kill_tx))),
         }
     }
 }
@@ -250,26 +251,21 @@ where
             }
         };
 
-        println!("setting current state to healthy");
+        println!("setting state to healthy");
         *self.state.lock().unwrap() = State::Loading;
 
         let state = self.state.clone();
+        let runtime_kill_tx = self.runtime_kill_tx.clone();
 
         // Ensure that the runtime is set to unhealthy if it doesn't reach the running state after
         // it has sent a load response, so that the ECS task will fail.
         tokio::spawn(async move {
             // Note: The timeout is quite low as we are not actually provisioning resources after
             // sending the load response.
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::time::sleep(Duration::from_secs(30)).await;
             if !matches!(state.lock().unwrap().deref(), State::Running) {
-                let runtime_kill_tx = self
-                    .runtime_kill_tx
-                    .lock()
-                    .unwrap()
-                    .deref_mut()
-                    .take()
-                    .unwrap();
                 println!("the runtime failed to enter the running state before timing out");
+                let runtime_kill_tx = runtime_kill_tx.lock().unwrap().deref_mut().take().unwrap();
 
                 runtime_kill_tx.send(()).unwrap();
             }
@@ -343,40 +339,61 @@ where
 
         println!("Starting on {service_address}");
 
+        let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
+        *self.kill_tx.lock().unwrap() = Some(kill_tx);
+
         let handle = tokio::runtime::Handle::current();
 
         // start service as a background task with a kill receiver
         tokio::spawn(async move {
             let mut background = handle.spawn(service.bind(service_address));
 
-            match background.await {
-                Ok(_) => {
-                    println!("service stopped all on its own");
-                    let _ = stopped_tx
-                        .send((StopReason::End, String::new()))
-                        .map_err(|e| println!("{e}"));
-                }
-                Err(error) => {
-                    if error.is_panic() {
-                        let panic = error.into_panic();
-                        let msg = match panic.downcast_ref::<String>() {
-                            Some(msg) => msg.to_string(),
-                            None => match panic.downcast_ref::<&str>() {
-                                Some(msg) => msg.to_string(),
-                                None => "<no panic message>".to_string(),
-                            },
-                        };
+            tokio::select! {
+                res = &mut background => {
+                    match res {
+                        Ok(_) => {
+                            println!("service stopped all on its own");
+                            let _ = stopped_tx
+                                .send((StopReason::End, String::new()))
+                                .map_err(|e| println!("{e}"));
+                        },
+                        Err(error) => {
+                            if error.is_panic() {
+                                let panic = error.into_panic();
+                                let msg = match panic.downcast_ref::<String>() {
+                                    Some(msg) => msg.to_string(),
+                                    None => match panic.downcast_ref::<&str>() {
+                                        Some(msg) => msg.to_string(),
+                                        None => "<no panic message>".to_string(),
+                                    },
+                                };
 
-                        println!("service panicked: {msg}");
-                        let _ = stopped_tx
-                            .send((StopReason::Crash, msg))
-                            .map_err(|e| println!("{e}"));
-                    } else {
-                        println!("service crashed: {error}");
-                        let _ = stopped_tx
-                            .send((StopReason::Crash, error.to_string()))
-                            .map_err(|e| println!("{e}"));
+                                println!("service panicked: {msg}");
+                                let _ = stopped_tx
+                                    .send((StopReason::Crash, msg))
+                                    .map_err(|e| println!("{e}"));
+                            } else {
+                                println!("service crashed: {error}");
+                                let _ = stopped_tx
+                                    .send((StopReason::Crash, error.to_string()))
+                                    .map_err(|e| println!("{e}"));
+                            }
+                        },
                     }
+                },
+                message = kill_rx => {
+                    match message {
+                        Ok(_) => {
+                            let _ = stopped_tx
+                                .send((StopReason::Request, String::new()))
+                                .map_err(|e| println!("{e}"));
+                        }
+                        Err(_) => println!("the kill sender dropped")
+                    };
+
+                    println!("will now abort the service");
+                    background.abort();
+                    background.await.unwrap().expect("to stop service");
                 }
             }
         });

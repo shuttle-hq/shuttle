@@ -26,6 +26,7 @@ use tokio::sync::{
     mpsc, oneshot,
 };
 use tokio_stream::wrappers::ReceiverStream;
+use tokio_util::sync::CancellationToken;
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::args::args;
@@ -93,11 +94,12 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         .http2_keepalive_interval(Some(Duration::from_secs(60)))
         .layer(ExtractPropagationLayer);
 
-    // A channel we can use to kill the runtime if it does not become healthy in time.
-    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    // A cancellation token we can use to kill the runtime if it does not start in time.
+    let token = CancellationToken::new();
+    let cloned_token = token.clone();
 
     let router = {
-        let alpha = Alpha::new(loader, runner, tx);
+        let alpha = Alpha::new(loader, runner, token);
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
@@ -106,15 +108,12 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     tokio::select! {
         res = router.serve(addr) => {
             match res{
-                Ok(_) => {}
+                Ok(_) => println!("router completed on its own"),
                 Err(e) => panic!("Error while serving address {addr}: {e}")
             }
         }
-        res = rx => {
-            match res{
-                Ok(_) => panic!("Received runtime kill signal"),
-                Err(e) => panic!("Receiver error: {e}")
-            }
+        _ = cloned_token.cancelled() => {
+            panic!("runtime future was cancelled")
         }
     }
 }
@@ -134,11 +133,12 @@ pub struct Alpha<L, R> {
     /// The current state of the runtime, which is used by the ECS task to determine if the runtime
     /// is healthy.
     state: Arc<Mutex<State>>,
-    runtime_kill_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    // A cancellation token we can use to kill the runtime if it does not start in time.
+    cancellation_token: CancellationToken,
 }
 
 impl<L, R> Alpha<L, R> {
-    pub fn new(loader: L, runner: R, runtime_kill_tx: tokio::sync::oneshot::Sender<()>) -> Self {
+    pub fn new(loader: L, runner: R, cancellation_token: CancellationToken) -> Self {
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
@@ -147,7 +147,7 @@ impl<L, R> Alpha<L, R> {
             loader: Mutex::new(Some(loader)),
             runner: Mutex::new(Some(runner)),
             state: Arc::new(Mutex::new(State::Unhealthy)),
-            runtime_kill_tx: Mutex::new(Some(runtime_kill_tx)),
+            cancellation_token,
         }
     }
 }
@@ -255,13 +255,7 @@ where
         *self.state.lock().unwrap() = State::Loading;
 
         let state = self.state.clone();
-        let runtime_kill_tx = self
-            .runtime_kill_tx
-            .lock()
-            .unwrap()
-            .deref_mut()
-            .take()
-            .unwrap();
+        let cancellation_token = self.cancellation_token.clone();
 
         // Ensure that the runtime is set to unhealthy if it doesn't reach the running state after
         // it has sent a load response, so that the ECS task will fail.
@@ -272,7 +266,7 @@ where
             if !matches!(state.lock().unwrap().deref(), State::Running) {
                 println!("the runtime failed to enter the running state before timing out");
 
-                runtime_kill_tx.send(()).unwrap();
+                cancellation_token.cancel();
             }
         });
 

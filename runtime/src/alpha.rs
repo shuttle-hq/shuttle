@@ -254,21 +254,21 @@ where
         *self.state.lock().unwrap() = State::Loading;
 
         let state = self.state.clone();
-        let runtime_kill_tx = self
-            .runtime_kill_tx
-            .lock()
-            .unwrap()
-            .deref_mut()
-            .take()
-            .unwrap();
 
         // Ensure that the runtime is set to unhealthy if it doesn't reach the running state after
         // it has sent a load response, so that the ECS task will fail.
         tokio::spawn(async move {
             // Note: The timeout is quite low as we are not actually provisioning resources after
             // sending the load response.
-            tokio::time::sleep(Duration::from_secs(180)).await;
+            tokio::time::sleep(Duration::from_secs(60)).await;
             if !matches!(state.lock().unwrap().deref(), State::Running) {
+                let runtime_kill_tx = self
+                    .runtime_kill_tx
+                    .lock()
+                    .unwrap()
+                    .deref_mut()
+                    .take()
+                    .unwrap();
                 println!("the runtime failed to enter the running state before timing out");
 
                 runtime_kill_tx.send(()).unwrap();

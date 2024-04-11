@@ -75,7 +75,7 @@ use crate::args::{
     DeployArgs, DeploymentCommand, InitArgs, LoginArgs, LogoutArgs, LogsArgs, ProjectCommand,
     ProjectStartArgs, ResourceCommand, TemplateLocation,
 };
-use crate::client::Client;
+use crate::client::ShuttleApiClient;
 use crate::provisioner_server::LocalProvisioner;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -96,9 +96,11 @@ pub fn parse_args() -> (ShuttleArgs, bool) {
 
 pub struct Shuttle {
     ctx: RequestContext,
-    client: Option<Client>,
+    client: Option<ShuttleApiClient>,
     version_info: Option<VersionInfo>,
     version_warnings: Vec<String>,
+    /// alter behaviour to interact with the new platform
+    beta: bool,
 }
 
 impl Shuttle {
@@ -109,33 +111,8 @@ impl Shuttle {
             client: None,
             version_info: None,
             version_warnings: vec![],
+            beta: false,
         })
-    }
-
-    fn find_available_port(run_args: &mut RunArgs, services_len: usize) {
-        let default_port = run_args.port;
-        'outer: for port in (run_args.port..=std::u16::MAX).step_by(services_len.max(10)) {
-            for inner_port in port..(port + services_len as u16) {
-                if !portpicker::is_free_tcp(inner_port) {
-                    continue 'outer;
-                }
-            }
-            run_args.port = port;
-            break;
-        }
-
-        if run_args.port != default_port
-            && !Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt(format!(
-                    "Port {} is already in use. Would you like to continue on port {}?",
-                    default_port, run_args.port
-                ))
-                .default(true)
-                .interact()
-                .unwrap()
-        {
-            exit(0);
-        }
     }
 
     pub async fn run(
@@ -143,6 +120,27 @@ impl Shuttle {
         args: ShuttleArgs,
         provided_path_to_init: bool,
     ) -> Result<CommandOutcome> {
+        self.beta = args.beta;
+        if self.beta {
+            if matches!(
+                args.cmd,
+                Command::Project(ProjectCommand::Stop { .. } | ProjectCommand::Restart { .. })
+            ) {
+                unimplemented!("This command is deprecated on the beta platform");
+            }
+            if matches!(
+                args.cmd,
+                Command::Deployment(..)
+                    | Command::Resource(..)
+                    | Command::Stop
+                    | Command::Clean
+                    | Command::Status
+                    | Command::Logs { .. }
+            ) {
+                unimplemented!("This command is not yet implemented on the beta platform");
+            }
+            eprintln!("INFO: Using beta platform API");
+        }
         if let Some(ref url) = args.api_url {
             if url != API_URL_DEFAULT {
                 eprintln!("INFO: Targeting non-standard API: {url}");
@@ -190,13 +188,11 @@ impl Shuttle {
                 | Command::Clean
                 | Command::Project(..)
         ) {
-            let mut client = Client::new(self.ctx.api_url());
-            if !matches!(args.cmd, Command::Init(..)) {
-                // init command will handle this by itself (log in and set key) if there is no key yet
-                client.set_api_key(self.ctx.api_key()?);
-            }
+            let client =
+                ShuttleApiClient::new(self.ctx.api_url(), self.ctx.api_key().ok(), self.beta);
             self.client = Some(client);
-            if !args.offline {
+            if !args.offline && !self.beta {
+                // TODO: re-implement version checking in control to use the c-s version http header
                 self.check_api_versions().await?;
             }
         }
@@ -244,9 +240,7 @@ impl Shuttle {
             Command::Project(ProjectCommand::Status { follow }) => {
                 self.project_status(follow).await
             }
-            Command::Project(ProjectCommand::List { page, limit, raw }) => {
-                self.projects_list(page, limit, raw).await
-            }
+            Command::Project(ProjectCommand::List { raw, .. }) => self.projects_list(raw).await,
             Command::Project(ProjectCommand::Stop) => self.project_stop().await,
             Command::Project(ProjectCommand::Delete(ConfirmationArgs { yes })) => {
                 self.project_delete(yes).await
@@ -1392,6 +1386,32 @@ impl Shuttle {
         build_workspace(working_directory, run_args.release, tx, false).await
     }
 
+    fn find_available_port(run_args: &mut RunArgs, services_len: usize) {
+        let default_port = run_args.port;
+        'outer: for port in (run_args.port..=std::u16::MAX).step_by(services_len.max(10)) {
+            for inner_port in port..(port + services_len as u16) {
+                if !portpicker::is_free_tcp(inner_port) {
+                    continue 'outer;
+                }
+            }
+            run_args.port = port;
+            break;
+        }
+
+        if run_args.port != default_port
+            && !Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt(format!(
+                    "Port {} is already in use. Would you like to continue on port {}?",
+                    default_port, run_args.port
+                ))
+                .default(true)
+                .interact()
+                .unwrap()
+        {
+            exit(0);
+        }
+    }
+
     #[cfg(target_family = "unix")]
     async fn local_run(&self, mut run_args: RunArgs) -> Result<CommandOutcome> {
         debug!("starting local run");
@@ -1920,7 +1940,7 @@ impl Shuttle {
             )
         })?;
 
-        if idle_minutes > 0 {
+        if idle_minutes > 0 && !self.beta {
             let idle_msg = format!(
                 "Your project will sleep if it is idle for {} minutes.",
                 idle_minutes
@@ -1946,15 +1966,10 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn projects_list(&self, page: u32, limit: u32, raw: bool) -> Result<CommandOutcome> {
+    async fn projects_list(&self, raw: bool) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        if limit == 0 {
-            println!();
-            return Ok(CommandOutcome::Ok);
-        }
-        let limit = limit + 1;
 
-        let mut projects = client.get_projects_list(page, limit).await.map_err(|err| {
+        let projects = client.get_projects_list().await.map_err(|err| {
             suggestions::project::project_request_failure(
                 err,
                 "Getting projects list failed",
@@ -1962,13 +1977,7 @@ impl Shuttle {
                 "getting the projects list fails repeatedly",
             )
         })?;
-        let page_hint = if projects.len() == limit as usize {
-            projects.pop();
-            true
-        } else {
-            false
-        };
-        let projects_table = project::get_projects_table(&projects, page, raw, page_hint);
+        let projects_table = project::get_projects_table(&projects, raw);
 
         println!("{projects_table}");
 

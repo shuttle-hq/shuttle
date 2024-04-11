@@ -251,7 +251,7 @@ where
             }
         };
 
-        println!("setting state to healthy");
+        println!("setting current state to healthy");
         *self.state.lock().unwrap() = State::Loading;
 
         let state = self.state.clone();
@@ -262,7 +262,7 @@ where
         tokio::spawn(async move {
             // Note: The timeout is quite low as we are not actually provisioning resources after
             // sending the load response.
-            tokio::time::sleep(Duration::from_secs(30)).await;
+            tokio::time::sleep(Duration::from_secs(180)).await;
             if !matches!(state.lock().unwrap().deref(), State::Running) {
                 println!("the runtime failed to enter the running state before timing out");
 

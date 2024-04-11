@@ -109,11 +109,11 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
         res = router.serve(addr) => {
             match res{
                 Ok(_) => println!("router completed on its own"),
-                Err(e) => println!("Error while serving address {addr}: {e}")
+                Err(e) => panic!("Error while serving address {addr}: {e}")
             }
         }
         _ = cloned_token.cancelled() => {
-            println!("runtime future was cancelled")
+            panic!("runtime future was cancelled")
         }
     }
 }

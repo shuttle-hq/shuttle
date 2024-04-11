@@ -105,8 +105,8 @@ impl StatusResponse {
 #[instrument(skip(service))]
 async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
+    ScopedUser { scope, claim }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
-    ScopedUser { scope, claim, .. }: ScopedUser,
     let project = service.find_project_by_name(&scope).await?;
     let idle_minutes = project.state.idle_minutes();
     let owner = service

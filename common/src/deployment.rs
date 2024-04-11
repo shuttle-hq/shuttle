@@ -26,6 +26,7 @@ pub enum State {
 #[strum(ascii_case_insensitive)]
 pub enum EcsState {
     Running,
+    #[strum(serialize = "in progress")]
     InProgress,
     Stopped,
 }

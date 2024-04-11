@@ -7,6 +7,7 @@ use percent_encoding::utf8_percent_encode;
 use reqwest::header::HeaderMap;
 use reqwest::RequestBuilder;
 use reqwest::Response;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
 use shuttle_common::models::deployment::DeploymentRequest;
@@ -24,7 +25,7 @@ pub struct ShuttleApiClient {
     api_url: String,
     api_key: Option<ApiKey>,
     /// alter behaviour to interact with the new platform
-    beta: bool,
+    pub beta: bool,
 }
 
 impl ShuttleApiClient {
@@ -84,11 +85,11 @@ impl ShuttleApiClient {
             .context("parsing name check response")
     }
 
-    pub async fn deploy(
+    pub async fn deploy<T: DeserializeOwned>(
         &self,
         project: &str,
         deployment_req: DeploymentRequest,
-    ) -> Result<deployment::Response> {
+    ) -> Result<T> {
         let path = if self.beta {
             format!("/projects/{project}")
         } else {

@@ -32,7 +32,10 @@ pub struct Response {
 #[derive(Deserialize, Serialize)]
 pub struct EcsResponse {
     pub id: String,
-    pub state: EcsState,
+    pub latest_deployment_state: EcsState,
+    pub running_id: Option<String>,
+    pub updated_at: DateTime<Utc>,
+    pub uri: String,
     pub git_commit_id: Option<String>,
     pub git_commit_msg: Option<String>,
     pub git_branch: Option<String>,
@@ -55,14 +58,30 @@ impl Display for Response {
 
 impl Display for EcsResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let running_deployment = self
+            .running_id
+            .as_ref()
+            .map(|id| {
+                format!(
+                    "\ndeployment '{}' is {}",
+                    id,
+                    "running".to_string().with(
+                        crossterm::style::Color::from_str(EcsState::Running.get_color()).unwrap()
+                    )
+                )
+            })
+            .unwrap_or(String::new());
         write!(
             f,
-            "deployment '{}' is {}",
+            "deployment '{}' is {}{running_deployment}",
             self.id,
-            self.state
+            self.latest_deployment_state
                 .to_string()
                 // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
-                .with(crossterm::style::Color::from_str(self.state.get_color()).unwrap())
+                .with(
+                    crossterm::style::Color::from_str(self.latest_deployment_state.get_color())
+                        .unwrap()
+                ),
         )
     }
 }

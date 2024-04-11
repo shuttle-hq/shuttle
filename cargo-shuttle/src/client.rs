@@ -98,7 +98,11 @@ impl ShuttleApiClient {
             .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 
         let url = format!("{}{}", self.api_url, path);
-        let mut builder = self.client.post(url);
+        let mut builder = if self.beta {
+            self.client.put(url)
+        } else {
+            self.client.post(url)
+        };
         builder = self.set_auth_bearer(builder);
 
         builder

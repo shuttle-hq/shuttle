@@ -34,9 +34,8 @@ use permit_pdp_client_rs::{
 use serde::{Deserialize, Serialize};
 use shuttle_common::{
     claims::AccountTier,
-    models::{error::ApiError, organization, project},
+    models::{organization, project},
 };
-use tracing::error;
 
 #[async_trait]
 pub trait PermissionsDal {

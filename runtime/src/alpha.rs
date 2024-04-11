@@ -106,7 +106,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     tokio::select! {
         res = router.serve(addr) => {
             match res{
-                Ok(_) => {}
+                Ok(_) => panic!("router shut down"),
                 Err(e) => panic!("Error while serving address {addr}: {e}")
             }
         }

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use permit_client_rs::models::UserRead;
-use permit_pdp_client_rs::models::UserPermissionsResult;
 use serde::Serialize;
 use shuttle_common::models::organization;
 use tokio::sync::Mutex;
@@ -13,7 +12,7 @@ use wiremock::{
 };
 
 use crate::client::{
-    permit::{Organization, Result},
+    permit::{Organization, Owner, Result},
     PermissionsDal,
 };
 
@@ -148,11 +147,11 @@ impl PermissionsDal for PermissionsMock {
         Ok(())
     }
 
-    async fn get_user_projects(&self, user_id: &str) -> Result<Vec<UserPermissionsResult>> {
+    async fn get_personal_projects(&self, user_id: &str) -> Result<Vec<String>> {
         self.calls
             .lock()
             .await
-            .push(format!("get_user_projects {user_id}"));
+            .push(format!("get_personal_projects {user_id}"));
         Ok(vec![])
     }
 
@@ -178,6 +177,18 @@ impl PermissionsDal for PermissionsMock {
             .await
             .push(format!("delete_organization {user_id} {org_id}"));
         Ok(())
+    }
+
+    async fn get_organization(
+        &self,
+        user_id: &str,
+        org_id: &str,
+    ) -> Result<organization::Response> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("get_organization {user_id} {org_id}"));
+        Ok(Default::default())
     }
 
     async fn get_organization_projects(&self, user_id: &str, org_id: &str) -> Result<Vec<String>> {
@@ -267,5 +278,13 @@ impl PermissionsDal for PermissionsMock {
             .await
             .push(format!("get_organization_members {user_id} {org_id}"));
         Ok(Default::default())
+    }
+
+    async fn get_project_owner(&self, user_id: &str, project_id: &str) -> Result<Owner> {
+        self.calls
+            .lock()
+            .await
+            .push(format!("get_project_owner {user_id} {project_id}"));
+        Ok(Owner::User(user_id.to_string()))
     }
 }

@@ -105,16 +105,27 @@ impl StatusResponse {
 #[instrument(skip(service))]
 async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
-    ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
+    ScopedUser { scope, claim, .. }: ScopedUser,
     let project = service.find_project_by_name(&scope).await?;
     let idle_minutes = project.state.idle_minutes();
+    let owner = service
+        .permit_client
+        .get_project_owner(&claim.sub, &project.id)
+        .await?
+        .into();
+    let is_admin = service
+        .permit_client
+        .allowed(&claim.sub, &project.id, "manage")
+        .await?;
 
     let response = project::Response {
         id: project.id.to_uppercase(),
         name: scope.to_string(),
         state: project.state.into(),
         idle_minutes,
+        owner,
+        is_admin,
     };
 
     Ok(AxumJson(response))
@@ -135,21 +146,31 @@ async fn get_projects_list(
     Claim { sub, .. }: Claim,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
     let mut projects = vec![];
-    for p in service
+    for proj_id in service
         .permit_client
-        .get_user_projects(&sub)
+        .get_personal_projects(&sub)
         .await
         .map_err(|_| Error::from(ErrorKind::Internal))?
     {
-        let proj_id = p.resource.expect("project resource").key;
         let project = service.find_project_by_id(&proj_id).await?;
         let idle_minutes = project.state.idle_minutes();
+        let owner = service
+            .permit_client
+            .get_project_owner(&sub, &proj_id)
+            .await?
+            .into();
+        let is_admin = service
+            .permit_client
+            .allowed(&sub, &proj_id, "manage")
+            .await?;
 
         let response = project::Response {
             id: project.id,
             name: project.name,
             state: project.state.into(),
             idle_minutes,
+            owner,
+            is_admin,
         };
         projects.push(response);
     }
@@ -210,6 +231,8 @@ async fn create_project(
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
+        owner: project::Owner::User(claim.sub),
+        is_admin: true,
     };
 
     Ok(AxumJson(response))
@@ -222,17 +245,29 @@ async fn destroy_project(
     }): State<RouterState>,
     ScopedUser {
         scope: project_name,
+        claim,
         ..
     }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
     let project = service.find_project_by_name(&project_name).await?;
     let idle_minutes = project.state.idle_minutes();
+    let owner = service
+        .permit_client
+        .get_project_owner(&claim.sub, &project.id)
+        .await?
+        .into();
+    let is_admin = service
+        .permit_client
+        .allowed(&claim.sub, &project.id, "manage")
+        .await?;
 
     let mut response = project::Response {
         id: project.id.to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
+        owner,
+        is_admin,
     };
 
     if response.state == shuttle_common::models::project::State::Destroyed {
@@ -486,6 +521,20 @@ async fn get_organizations(
     Ok(AxumJson(orgs))
 }
 
+#[instrument(skip_all)]
+async fn get_organization(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath(organization_id): CustomErrorPath<String>,
+    Claim { sub, .. }: Claim,
+) -> Result<AxumJson<organization::Response>, Error> {
+    let org = service
+        .permit_client
+        .get_organization(&sub, &organization_id)
+        .await?;
+
+    Ok(AxumJson(org))
+}
+
 #[instrument(skip_all, fields(shuttle.organization.name = %organization_name, shuttle.organization.id = field::Empty))]
 async fn create_organization(
     State(RouterState { service, .. }): State<RouterState>,
@@ -529,12 +578,23 @@ async fn get_organization_projects(
     for project_id in project_ids {
         let project = service.find_project_by_id(&project_id).await?;
         let idle_minutes = project.state.idle_minutes();
+        let owner = service
+            .permit_client
+            .get_project_owner(&sub, &project_id)
+            .await?
+            .into();
+        let is_admin = service
+            .permit_client
+            .allowed(&sub, &project_id, "manage")
+            .await?;
 
         projects.push(project::Response {
             id: project.id,
             name: project.name,
             state: project.state.into(),
             idle_minutes,
+            owner,
+            is_admin,
         });
     }
 
@@ -1100,7 +1160,10 @@ impl ApiBuilder {
         let organization_routes = Router::new()
             .route("/", get(get_organizations))
             .route("/name/:organization_name", post(create_organization))
-            .route("/:organization_id", delete(delete_organization))
+            .route(
+                "/:organization_id",
+                get(get_organization).delete(delete_organization),
+            )
             .route("/:organization_id/projects", get(get_organization_projects))
             .route(
                 "/:organization_id/projects/:project_id",

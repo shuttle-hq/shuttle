@@ -963,7 +963,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2729,9 +2729,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.24"
+version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb2c4422095b67ee78da96fbb51a4cc413b3b25883c7717ff7ca1ab31022c9c9"
+checksum = "81fe527a889e1532da5c525686d96d4c2e74cdd345badf8dfef9f6b39dd5f5e8"
 dependencies = [
  "bytes",
  "fnv",
@@ -2748,9 +2748,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.2"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31d030e59af851932b72ceebadf4a2b5986dba4c3b99dd2493f8273a0f151943"
+checksum = "816ec7294445779408f36fe57bc5b7fc1cf59664059096c65f905c1c61f58069"
 dependencies = [
  "bytes",
  "fnv",
@@ -2978,14 +2978,14 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "h2 0.3.24",
+ "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
  "httparse",
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.6",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -3001,7 +3001,7 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-util",
- "h2 0.4.2",
+ "h2 0.4.4",
  "http 1.1.0",
  "http-body 1.0.0",
  "httparse",
@@ -4085,7 +4085,7 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 [[package]]
 name = "permit-client-rs"
 version = "2.0.0"
-source = "git+https://github.com/shuttle-hq/permit-client-rs?rev=27c7759#27c775918aa6f7522e0845d8775a8b63d4124f6b"
+source = "git+https://github.com/shuttle-hq/permit-client-rs?rev=19085ba#19085ba73bb87c879731590f4a3a988e92d076ac"
 dependencies = [
  "reqwest",
  "serde",
@@ -4552,7 +4552,7 @@ dependencies = [
  "encoding_rs",
  "futures-core",
  "futures-util",
- "h2 0.3.24",
+ "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
  "hyper 0.14.28",
@@ -5165,14 +5165,16 @@ checksum = "24188a676b6ae68c3b2cb3a01be17fbf7240ce009799bb56d5b1409051e78fde"
 
 [[package]]
 name = "shuttle-admin"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "clap",
  "dirs",
  "reqwest",
  "serde",
  "serde_json",
+ "shuttle-backends",
  "shuttle-common",
  "tokio",
  "toml",
@@ -5182,7 +5184,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-auth"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "anyhow",
  "async-stripe",
@@ -5220,7 +5222,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-backends"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5270,7 +5272,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -5287,7 +5289,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5325,7 +5327,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common-tests"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "cargo-shuttle",
  "hyper 0.14.28",
@@ -5343,7 +5345,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5389,7 +5391,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "anyhow",
  "async-posthog",
@@ -5453,7 +5455,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-logger"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5479,7 +5481,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5499,7 +5501,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -5526,7 +5528,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-resource-recorder"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5551,14 +5553,12 @@ dependencies = [
 
 [[package]]
 name = "shuttle-runtime"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "chrono",
  "colored",
  "portpicker",
- "prost-types",
  "serde",
  "serde_json",
  "shuttle-codegen",
@@ -5566,7 +5566,6 @@ dependencies = [
  "shuttle-proto",
  "shuttle-service",
  "strfmt",
- "thiserror",
  "tokio",
  "tokio-stream",
  "tonic 0.10.2",
@@ -5576,7 +5575,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6393,7 +6392,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
- "h2 0.3.24",
+ "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
  "hyper 0.14.28",
@@ -6420,7 +6419,7 @@ dependencies = [
  "axum",
  "base64 0.21.7",
  "bytes",
- "h2 0.3.24",
+ "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
  "hyper 0.14.28",

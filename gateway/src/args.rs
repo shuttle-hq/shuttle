@@ -6,8 +6,8 @@ use http::Uri;
 
 #[derive(Parser, Debug)]
 pub struct Args {
-    /// Where to store gateway state (such as sqlite state, and certs)
-    #[arg(long, default_value = "./")]
+    /// Where to store gateway state (sqlite and certs)
+    #[arg(long, default_value = ".")]
     pub state: PathBuf,
 
     #[command(subcommand)]
@@ -23,6 +23,7 @@ pub enum UseTls {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     Start(StartArgs),
+    Sync(SyncArgs),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -39,12 +40,17 @@ pub struct StartArgs {
     /// Allows to disable the use of TLS in the user proxy service (DANGEROUS)
     #[arg(long, default_value = "enable")]
     pub use_tls: UseTls,
+    /// The origin to allow CORS requests from
+    #[arg(long, default_value = "https://console.shuttle.rs")]
+    pub cors_origin: String,
     #[command(flatten)]
-    pub context: ContextArgs,
+    pub context: ServiceArgs,
+    #[command(flatten)]
+    pub permit: PermitArgs,
 }
 
 #[derive(clap::Args, Debug, Clone)]
-pub struct ContextArgs {
+pub struct ServiceArgs {
     /// Default image to deploy user runtimes into
     #[arg(long, default_value = "public.ecr.aws/shuttle/deployer:latest")]
     pub image: String,
@@ -88,6 +94,18 @@ pub struct ContextArgs {
     #[arg(long, default_value = "990")]
     pub hard_container_limit: u32,
 
+    /// Allow tests to set some extra /etc/hosts
+    pub extra_hosts: Vec<String>,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct SyncArgs {
+    #[command(flatten)]
+    pub permit: PermitArgs,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct PermitArgs {
     /// Address to reach the permit.io API at
     #[arg(long, default_value = "https://api.eu-central-1.permit.io")]
     pub permit_api_uri: Uri,
@@ -100,7 +118,4 @@ pub struct ContextArgs {
     /// Permit API key
     #[arg(long, default_value = "permit_")]
     pub permit_api_key: String,
-
-    /// Allow tests to set some extra /etc/hosts
-    pub extra_hosts: Vec<String>,
 }

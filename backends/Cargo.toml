@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-backends"
-version = "0.42.0"
+version = "0.43.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -24,11 +24,12 @@ opentelemetry-appender-tracing = { workspace = true }
 opentelemetry-http = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 pin-project = { workspace = true }
-permit-client-rs = { git = "https://github.com/shuttle-hq/permit-client-rs", rev = "27c7759" }
+permit-client-rs = { git = "https://github.com/shuttle-hq/permit-client-rs", rev = "19085ba" }
 permit-pdp-client-rs = { git = "https://github.com/shuttle-hq/permit-pdp-client-rs", rev = "37c7296" }
 portpicker = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["json"] }
 # keep locked to not accidentally invalidate someone's project name
+# higher versions have a lot more false positives
 rustrict = { version = "=0.7.12" }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }

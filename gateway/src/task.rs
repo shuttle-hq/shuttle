@@ -469,7 +469,7 @@ impl Task<()> for ProjectTask {
 
         let ctx = self.service.context().clone();
 
-        let project = match self.service.find_project(&self.project_name).await {
+        let project = match self.service.find_project_by_name(&self.project_name).await {
             Ok(project) => project,
             Err(err) => return TaskResult::Err(err),
         };

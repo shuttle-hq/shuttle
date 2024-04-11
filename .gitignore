@@ -43,3 +43,5 @@ yarn.lock
 *.wasm
 *.sqlite*
 .envrc
+
+/private

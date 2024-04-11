@@ -22,6 +22,7 @@ async fn cargo_shuttle_command(
                 },
                 offline: false,
                 debug: false,
+                beta: false,
                 cmd,
             },
             false,

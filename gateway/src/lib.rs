@@ -17,7 +17,6 @@ use hyper::client::HttpConnector;
 use hyper::Client;
 use once_cell::sync::Lazy;
 use service::ContainerSettings;
-use shuttle_backends::client::permit;
 use shuttle_backends::project_name::ProjectName;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use shuttle_common::models::user::UserId;
@@ -111,22 +110,24 @@ impl From<AcmeClientError> for Error {
     }
 }
 
-impl From<permit::Error> for Error {
-    fn from(error: permit::Error) -> Self {
-        Self::source(ErrorKind::Internal, error)
+impl From<Error> for ApiError {
+    fn from(error: Error) -> Self {
+        let error: ApiError = error.kind.into();
+
+        if error.status_code >= 500 {
+            tracing::error!(
+                error = &error as &dyn std::error::Error,
+                "control plane request error"
+            );
+        }
+
+        error
     }
 }
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        let error: ApiError = self.kind.clone().into();
-
-        if error.status_code >= 500 {
-            tracing::error!(
-                error = &self as &dyn std::error::Error,
-                "control plane request error"
-            );
-        }
+        let error: ApiError = self.into();
 
         error.into_response()
     }

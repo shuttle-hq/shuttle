@@ -41,6 +41,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "json", "migrate"] }
 strum = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tonic = { workspace = true }
 tower = { workspace = true, features = ["steer"] }

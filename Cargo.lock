@@ -5438,6 +5438,7 @@ dependencies = [
  "tar",
  "tempfile",
  "test-context",
+ "thiserror",
  "tokio",
  "tonic 0.10.2",
  "tower",

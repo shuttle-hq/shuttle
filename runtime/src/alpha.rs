@@ -99,7 +99,7 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     let cloned_token = token.clone();
 
     let router = {
-        let alpha = Alpha::new(loader, runner, token.clone());
+        let alpha = Alpha::new(loader, runner, token);
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
@@ -108,12 +108,12 @@ pub async fn start(loader: impl Loader + Send + 'static, runner: impl Runner + S
     tokio::select! {
         res = router.serve(addr) => {
             match res{
-                Ok(_) => panic!("router completed on its own"),
-                Err(e) => panic!("Error while serving address {addr}: {e}")
+                Ok(_) => println!("router completed on its own"),
+                Err(e) => println!("Error while serving address {addr}: {e}")
             }
         }
         _ = cloned_token.cancelled() => {
-            panic!("runtime future was cancelled")
+            println!("runtime future was cancelled")
         }
     }
 }

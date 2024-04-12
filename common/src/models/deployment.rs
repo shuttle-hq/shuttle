@@ -63,25 +63,37 @@ impl Display for EcsResponse {
             .as_ref()
             .map(|id| {
                 format!(
-                    "\ndeployment '{}' is {}",
+                    "\nRunning deployment: '{}' - {} ({})",
                     id,
                     "running".to_string().with(
                         crossterm::style::Color::from_str(EcsState::Running.get_color()).unwrap()
-                    )
+                    ),
+                    self.uri
                 )
             })
             .unwrap_or(String::new());
-        write!(
-            f,
-            "deployment '{}' is {}{running_deployment}",
-            self.id,
+
+        // Stringify the state.
+        let latest_state = format!(
+            "{}",
             self.latest_deployment_state
                 .to_string()
                 // Unwrap is safe because Color::from_str returns the color white if the argument is not a Color.
                 .with(
                     crossterm::style::Color::from_str(self.latest_deployment_state.get_color())
                         .unwrap()
-                ),
+                )
+        );
+
+        let state_with_uri = match self.running_id {
+            None => format!("{latest_state} ({})", self.uri),
+            Some(_) => latest_state,
+        };
+
+        write!(
+            f,
+            "Current deployment: '{}' - {}{running_deployment}",
+            self.id, state_with_uri
         )
     }
 }

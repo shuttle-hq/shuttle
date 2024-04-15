@@ -32,7 +32,6 @@ use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use indicatif::ProgressBar;
 use indoc::{formatdoc, printdoc};
-use shuttle_common::models::deployment::{EcsResponse, Response};
 use shuttle_common::{
     constants::{
         API_URL_DEFAULT, DEFAULT_IDLE_MINUTES, EXAMPLES_REPO, EXECUTABLE_DIRNAME,
@@ -1705,7 +1704,7 @@ impl Shuttle {
         // End this early for beta platform.
         if self.beta {
             let deployment = client
-                .deploy::<EcsResponse>(self.ctx.project_name(), deployment_req)
+                .deploy_beta(self.ctx.project_name(), deployment_req)
                 .await
                 .map_err(suggestions::deploy::deploy_request_failure)?;
 
@@ -1714,7 +1713,7 @@ impl Shuttle {
         }
 
         let deployment = client
-            .deploy::<Response>(self.ctx.project_name(), deployment_req)
+            .deploy_alpha(self.ctx.project_name(), deployment_req)
             .await
             .map_err(suggestions::deploy::deploy_request_failure)?;
 

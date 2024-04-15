@@ -5,9 +5,7 @@ use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
 use percent_encoding::utf8_percent_encode;
 use reqwest::header::HeaderMap;
-use reqwest::RequestBuilder;
-use reqwest::Response;
-use serde::de::DeserializeOwned;
+use reqwest::{RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
 use shuttle_common::models::deployment::DeploymentRequest;
@@ -85,16 +83,39 @@ impl ShuttleApiClient {
             .context("parsing name check response")
     }
 
-    pub async fn deploy<T: DeserializeOwned>(
+    pub async fn deploy_alpha(
         &self,
         project: &str,
         deployment_req: DeploymentRequest,
-    ) -> Result<T> {
-        let path = if self.beta {
-            format!("/projects/{project}")
+    ) -> Result<deployment::Response> {
+        let path = format!("/projects/{project}/services/{project}");
+        let deployment_req = rmp_serde::to_vec(&deployment_req)
+            .context("serialize DeploymentRequest as a MessagePack byte vector")?;
+
+        let url = format!("{}{}", self.api_url, path);
+        let mut builder = if self.beta {
+            self.client.put(url)
         } else {
-            format!("/projects/{project}/services/{project}")
+            self.client.post(url)
         };
+        builder = self.set_auth_bearer(builder);
+
+        builder
+            .header("Transfer-Encoding", "chunked")
+            .body(deployment_req)
+            .send()
+            .await
+            .context("failed to send deployment to the Shuttle server")?
+            .to_json()
+            .await
+    }
+
+    pub async fn deploy_beta(
+        &self,
+        project: &str,
+        deployment_req: DeploymentRequest,
+    ) -> Result<deployment::EcsResponse> {
+        let path = format!("/projects/{project}");
         let deployment_req = rmp_serde::to_vec(&deployment_req)
             .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 

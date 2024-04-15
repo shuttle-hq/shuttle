@@ -56,8 +56,8 @@ impl Display for Response {
     }
 }
 
-impl Display for EcsResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl EcsResponse {
+    pub fn formatted_println(&self) {
         let running_deployment = self
             .running_id
             .as_ref()
@@ -90,8 +90,7 @@ impl Display for EcsResponse {
             Some(_) => latest_state,
         };
 
-        write!(
-            f,
+        println!(
             "Current deployment: '{}' - {}{running_deployment}",
             self.id, state_with_uri
         )

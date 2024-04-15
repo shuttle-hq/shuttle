@@ -26,6 +26,7 @@ impl Display for Summary {
 Service Name:  {}
 Deployment ID: {}
 Status:        {}
+Last updated:  {}
 URI:           {}
 "#,
                 self.name.clone().bold(),
@@ -34,6 +35,7 @@ URI:           {}
                     // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
                     Color::from_str(deployment.state.get_color()).unwrap()
                 ),
+                deployment.last_update,
                 self.uri,
             )
         } else {

@@ -1709,7 +1709,7 @@ impl Shuttle {
                 .await
                 .map_err(suggestions::deploy::deploy_request_failure)?;
 
-            println!("{deployment}");
+            deployment.formatted_println();
             return Ok(CommandOutcome::Ok);
         }
 

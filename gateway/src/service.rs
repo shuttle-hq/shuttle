@@ -71,7 +71,7 @@ pub enum Error {
     #[error(transparent)]
     ProjectUnavailable(#[from] ProjectUnavailable),
 
-    #[error("Project '{0}' not found. Make sure you are the owner of this project name. Run `cargo shuttle project start` to create a new project.")]
+    #[error(transparent)]
     ProjectNotFound(#[from] ProjectNotFound),
 
     /// Contains a message describing a running state of the project.
@@ -116,7 +116,7 @@ impl From<Error> for ApiError {
             }
             Error::ProjectNotReady(_) => StatusCode::SERVICE_UNAVAILABLE,
             Error::ProjectUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
-            Error::ProjectNotFound(_) => StatusCode::NOT_FOUND,
+            Error::ProjectNotFound(e) => return e.into(),
             Error::OwnProjectAlreadyExists(_) => StatusCode::CONFLICT,
             Error::TooManyProjects => StatusCode::PAYMENT_REQUIRED,
             Error::ProjectAlreadyExists => StatusCode::CONFLICT,

@@ -23,7 +23,7 @@ pub struct ShuttleApiClient {
     api_url: String,
     api_key: Option<ApiKey>,
     /// alter behaviour to interact with the new platform
-    pub beta: bool,
+    beta: bool,
 }
 
 impl ShuttleApiClient {

@@ -1703,7 +1703,7 @@ impl Shuttle {
         }
 
         // End this early for beta platform.
-        if client.beta {
+        if self.beta {
             let deployment = client
                 .deploy::<EcsResponse>(self.ctx.project_name(), deployment_req)
                 .await

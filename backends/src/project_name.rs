@@ -118,7 +118,7 @@ mod tests {
             "another-valid-project-name",
             "x",
         ] {
-            assert!(ProjectName::is_valid(name));
+            assert!(ProjectName::is_valid(name), "'{}' should be valid", name);
         }
     }
 
@@ -151,7 +151,7 @@ mod tests {
             "shuttleapp",
             "",
         ] {
-            assert!(!ProjectName::is_valid(name));
+            assert!(!ProjectName::is_valid(name), "'{}' should be invalid", name);
         }
     }
 }

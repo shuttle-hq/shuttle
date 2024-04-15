@@ -5173,6 +5173,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "shuttle-backends",
  "shuttle-common",
  "tokio",
  "toml",

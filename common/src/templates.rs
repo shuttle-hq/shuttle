@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 pub struct TemplatesSchema {
     /// Version of this schema
     pub version: u32,
+    /// Mapping of tag names to logo URLs
+    pub logos: HashMap<String, String>,
     /// Very basic templates, typically Hello World
     pub starters: HashMap<String, TemplateDefinition>,
     /// Non-starter templates

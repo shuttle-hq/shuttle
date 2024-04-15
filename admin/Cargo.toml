@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 shuttle-common = { workspace = true, features = ["models"] }
+shuttle-backends = { workspace = true }
 
 anyhow = { workspace = true }
 bytes = { workspace = true }

@@ -164,12 +164,7 @@ pub struct Config {
     pub idle_minutes: u64,
 }
 
-pub fn get_projects_table(
-    projects: &Vec<Response>,
-    page: u32,
-    raw: bool,
-    page_hint: bool,
-) -> String {
+pub fn get_projects_table(projects: &[Response], page: u32, raw: bool, page_hint: bool) -> String {
     if projects.is_empty() {
         // The page starts at 1 in the CLI.
         let mut s = if page <= 1 {

@@ -144,7 +144,7 @@ async fn proxy(
             .gateway
             .find_or_start_project(&project_name, state.task_sender.clone())
             .await?;
-        let ip = proj.state.target_ip().ok_or_else(|| ProjectNotReady)?;
+        let ip = proj.state.target_ip().ok_or(ProjectNotReady)?;
         state.project_cache.insert(
             project_name.as_str(),
             ip,

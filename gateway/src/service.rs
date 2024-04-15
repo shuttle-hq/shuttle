@@ -358,7 +358,7 @@ impl GatewayService {
         user_id: &UserId,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
-        let target_ip = project.target_ip().ok_or_else(|| ProjectNotReady)?;
+        let target_ip = project.target_ip().ok_or(ProjectNotReady)?;
 
         let target_url = format!("http://{target_ip}:8001");
 

@@ -121,7 +121,7 @@ impl GatewayCertResolver {
     /// Get the loaded [CertifiedKey] associated with the given
     /// domain.
     pub async fn get(&self, sni: &str) -> Option<Arc<CertifiedKey>> {
-        self.keys.read().await.get(sni).map(Arc::clone)
+        self.keys.read().await.get(sni).cloned()
     }
 
     pub async fn serve_default_der(&self, certs: ChainAndPrivateKey) -> Result<(), Error> {

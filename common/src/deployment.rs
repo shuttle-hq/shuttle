@@ -28,6 +28,7 @@ pub enum EcsState {
     #[strum(serialize = "in progress")]
     InProgress,
     Stopped,
+    Failed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

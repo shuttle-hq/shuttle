@@ -125,6 +125,7 @@ impl EcsState {
             EcsState::InProgress => "cyan",
             EcsState::Running => "green",
             EcsState::Stopped => "blue",
+            EcsState::Failed => "red",
         }
     }
 }

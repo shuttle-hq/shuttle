@@ -46,7 +46,11 @@ impl Display for Response {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "deployment '{}' is {}",
+            "{} deployment '{}' is {}",
+            self.last_update
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string()
+                .dim(),
             self.id,
             self.state
                 .to_string()
@@ -207,8 +211,9 @@ pub fn get_deployments_table(
 
             if raw {
                 table.add_row(vec![
-                    Cell::new(deploy.id.clone()),
+                    Cell::new(deploy.id),
                     Cell::new(&deploy.state),
+                    Cell::new(deploy.last_update.format("%Y-%m-%dT%H:%M:%SZ")),
                     Cell::new(truncated_commit_id),
                     Cell::new(truncated_commit_msg),
                     Cell::new(
@@ -225,10 +230,12 @@ pub fn get_deployments_table(
                 ]);
             } else {
                 table.add_row(vec![
-                    Cell::new(deploy.id.clone()),
+                    Cell::new(deploy.id),
                     Cell::new(&deploy.state)
                         // Unwrap is safe because Color::from_str returns the color white if str is not a Color.
                         .fg(Color::from_str(deploy.state.get_color()).unwrap())
+                        .set_alignment(CellAlignment::Center),
+                    Cell::new(deploy.last_update.format("%Y-%m-%dT%H:%M:%SZ"))
                         .set_alignment(CellAlignment::Center),
                     Cell::new(truncated_commit_id),
                     Cell::new(truncated_commit_msg),

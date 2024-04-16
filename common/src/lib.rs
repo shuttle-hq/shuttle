@@ -14,6 +14,8 @@ pub mod limits;
 pub mod log;
 #[cfg(feature = "service")]
 pub use log::LogItem;
+#[cfg(feature = "service")]
+pub use log::LogItemBeta;
 #[cfg(feature = "models")]
 pub mod models;
 pub mod resource;

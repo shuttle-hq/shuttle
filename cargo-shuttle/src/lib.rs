@@ -1701,6 +1701,17 @@ impl Shuttle {
             );
         }
 
+        // End this early for beta platform.
+        if self.beta {
+            let deployment = client
+                .deploy_beta(self.ctx.project_name(), deployment_req)
+                .await
+                .map_err(suggestions::deploy::deploy_request_failure)?;
+
+            deployment.colored_println();
+            return Ok(CommandOutcome::Ok);
+        }
+
         let deployment = client
             .deploy(self.ctx.project_name(), deployment_req)
             .await

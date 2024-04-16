@@ -132,8 +132,7 @@ impl Shuttle {
             }
             if matches!(
                 args.cmd,
-                Command::Deployment(..)
-                    | Command::Resource(..)
+                Command::Resource(..)
                     | Command::Stop
                     | Command::Clean
                     | Command::Status
@@ -221,9 +220,14 @@ impl Shuttle {
             Command::Status => self.status().await,
             Command::Logs(logs_args) => self.logs(logs_args).await,
             Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
+                if self.beta {
+                    unimplemented!();
+                }
                 self.deployments_list(page, limit, raw).await
             }
-            Command::Deployment(DeploymentCommand::Status { id }) => self.deployment_get(id).await,
+            Command::Deployment(DeploymentCommand::Status { id }) => {
+                self.deployment_get(id.as_str()).await
+            }
             Command::Resource(ResourceCommand::List { raw, show_secrets }) => {
                 self.resources_list(raw, show_secrets).await
             }
@@ -952,14 +956,28 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn deployment_get(&self, deployment_id: Uuid) -> Result<CommandOutcome> {
+    async fn deployment_get(&self, deployment_id: &str) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        let deployment = client
-            .get_deployment_details(self.ctx.project_name(), &deployment_id)
-            .await
-            .map_err(suggestions::deployment::get_deployment_status_failure)?;
 
-        println!("{deployment}");
+        if self.beta {
+            let deployment = client
+                .deployment_status(self.ctx.project_name(), deployment_id)
+                .await
+                .map_err(suggestions::deployment::get_deployment_status_failure)?;
+            deployment.colored_println();
+        } else {
+            let deployment = client
+                .get_deployment_details(
+                    self.ctx.project_name(),
+                    &Uuid::from_str(deployment_id).map_err(|err| {
+                        anyhow!("Provided deployment id is not a valid UUID: {err}")
+                    })?,
+                )
+                .await
+                .map_err(suggestions::deployment::get_deployment_status_failure)?;
+
+            println!("{deployment}");
+        }
 
         Ok(CommandOutcome::Ok)
     }

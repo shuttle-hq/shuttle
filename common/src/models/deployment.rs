@@ -90,8 +90,12 @@ impl EcsResponse {
         );
 
         let state_with_uri = match self.running_id {
-            None => format!("{latest_state} ({})", self.uri),
-            Some(_) => latest_state,
+            None if EcsState::Running == self.latest_deployment_state
+                || EcsState::InProgress == self.latest_deployment_state =>
+            {
+                format!("{latest_state} ({})", self.uri)
+            }
+            _ => latest_state,
         };
 
         println!(

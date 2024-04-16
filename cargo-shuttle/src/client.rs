@@ -246,6 +246,16 @@ impl ShuttleApiClient {
         self.get(path).await
     }
 
+    pub async fn deployment_status(
+        &self,
+        project: &str,
+        deployment_id: &str,
+    ) -> Result<deployment::EcsResponse> {
+        let path = format!("/projects/{project}/deployments/{deployment_id}");
+
+        self.get(path).await
+    }
+
     pub async fn get_deployment_details(
         &self,
         project: &str,

@@ -87,13 +87,10 @@ async fn sync_permit_projects(db: SqlitePool, args: SyncArgs) {
 
     for (uid, pids) in projects_by_user {
         println!("syncing {uid} projects");
-        match client.get_user_projects(&uid).await {
+        match client.get_personal_projects(&uid).await {
             Ok(projs) => {
                 for pid in pids {
-                    if !projs
-                        .iter()
-                        .any(|p| p.resource.as_ref().unwrap().key == pid)
-                    {
+                    if !projs.iter().any(|p| *p == pid) {
                         println!("creating project link {uid} <-> {pid}");
                         client.create_project(&uid, &pid).await.unwrap();
                     } else {

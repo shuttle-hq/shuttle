@@ -17,6 +17,9 @@ pub struct Response {
     pub name: String,
     pub state: State,
     pub idle_minutes: Option<u64>,
+    #[serde(flatten)]
+    pub owner: Owner,
+    pub is_admin: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
@@ -162,6 +165,13 @@ impl State {
 #[derive(Deserialize, Serialize)]
 pub struct Config {
     pub idle_minutes: u64,
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[serde(tag = "owner_type", content = "owner_id", rename_all = "lowercase")]
+pub enum Owner {
+    User(String),
+    Organization(String),
 }
 
 pub fn get_projects_table(projects: &[Response], page: u32, raw: bool, page_hint: bool) -> String {

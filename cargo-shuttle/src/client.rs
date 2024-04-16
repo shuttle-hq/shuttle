@@ -10,6 +10,7 @@ use reqwest::Response;
 use serde::{Deserialize, Serialize};
 use shuttle_common::constants::headers::X_CARGO_SHUTTLE_VERSION;
 use shuttle_common::models::deployment::DeploymentRequest;
+use shuttle_common::models::organization;
 use shuttle_common::models::{deployment, project, service, ToJson};
 use shuttle_common::secrets::Secret;
 use shuttle_common::{resource, ApiKey, ApiUrl, LogItem, VersionInfo};
@@ -177,6 +178,19 @@ impl Client {
         let path = format!("/projects/{project}/delete");
 
         self.delete(path).await
+    }
+
+    pub async fn get_organizations_list(&self) -> Result<Vec<organization::Response>> {
+        self.get("/organizations".to_string()).await
+    }
+
+    pub async fn get_organization_projects_list(
+        &self,
+        org_id: &str,
+    ) -> Result<Vec<project::Response>> {
+        let path = format!("/organizations/{org_id}/projects");
+
+        self.get(path).await
     }
 
     pub async fn get_logs(&self, project: &str, deployment_id: &Uuid) -> Result<Vec<LogItem>> {

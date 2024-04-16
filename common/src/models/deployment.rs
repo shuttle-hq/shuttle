@@ -124,7 +124,8 @@ impl EcsState {
         match self {
             EcsState::InProgress => "cyan",
             EcsState::Running => "green",
-            EcsState::Stopped => "blue",
+            EcsState::Stopped => "dark_blue",
+            EcsState::Stopping => "blue",
             EcsState::Failed => "red",
         }
     }

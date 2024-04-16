@@ -22,24 +22,30 @@ pub async fn get_mocked_gateway_server() -> MockServer {
     let projects = vec![
         Project {
             id: "00000000000000000000000001",
-            account_id: "user-1",
+            owner_id: "user-1",
             name: "user-1-project-1",
             state: "stopped",
             idle_minutes: 30,
+            is_admin: true,
+            owner_type: "user",
         },
         Project {
             id: "00000000000000000000000002",
-            account_id: "user-1",
+            owner_id: "user-1",
             name: "user-1-project-2",
             state: "ready",
             idle_minutes: 30,
+            is_admin: true,
+            owner_type: "user",
         },
         Project {
             id: "00000000000000000000000003",
-            account_id: "user-2",
+            owner_id: "user-2",
             name: "user-2-project-1",
             state: "ready",
             idle_minutes: 30,
+            is_admin: true,
+            owner_type: "user",
         },
     ];
 
@@ -53,7 +59,7 @@ pub async fn get_mocked_gateway_server() -> MockServer {
 
             let user = bearer.to_str().unwrap().split_whitespace().nth(1).unwrap();
 
-            let body: Vec<_> = p.iter().filter(|p| p.account_id == user).collect();
+            let body: Vec<_> = p.iter().filter(|p| p.owner_id == user).collect();
 
             ResponseTemplate::new(200).set_body_json(body)
         })
@@ -71,7 +77,7 @@ pub async fn get_mocked_gateway_server() -> MockServer {
 
             let user = bearer.to_str().unwrap().split_whitespace().nth(1).unwrap();
 
-            if p.iter().any(|p| p.account_id == user && p.name == project) {
+            if p.iter().any(|p| p.owner_id == user && p.name == project) {
                 ResponseTemplate::new(200)
             } else {
                 ResponseTemplate::new(401)
@@ -87,10 +93,12 @@ pub async fn get_mocked_gateway_server() -> MockServer {
 #[derive(Debug, Clone, Serialize)]
 struct Project<'a> {
     id: &'a str,
-    account_id: &'a str,
     name: &'a str,
     state: &'a str,
     idle_minutes: u64,
+    is_admin: bool,
+    owner_type: &'a str,
+    owner_id: &'a str,
 }
 
 #[derive(Clone, Default)]

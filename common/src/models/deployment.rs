@@ -61,7 +61,7 @@ impl Display for Response {
 }
 
 impl EcsResponse {
-    pub fn formatted_println(&self) {
+    pub fn colored_println(&self) {
         let running_deployment = self
             .running_id
             .as_ref()

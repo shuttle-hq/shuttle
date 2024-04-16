@@ -1708,12 +1708,12 @@ impl Shuttle {
                 .await
                 .map_err(suggestions::deploy::deploy_request_failure)?;
 
-            deployment.formatted_println();
+            deployment.colored_println();
             return Ok(CommandOutcome::Ok);
         }
 
         let deployment = client
-            .deploy_alpha(self.ctx.project_name(), deployment_req)
+            .deploy(self.ctx.project_name(), deployment_req)
             .await
             .map_err(suggestions::deploy::deploy_request_failure)?;
 

@@ -83,7 +83,7 @@ impl ShuttleApiClient {
             .context("parsing name check response")
     }
 
-    pub async fn deploy_alpha(
+    pub async fn deploy(
         &self,
         project: &str,
         deployment_req: DeploymentRequest,
@@ -93,11 +93,7 @@ impl ShuttleApiClient {
             .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 
         let url = format!("{}{}", self.api_url, path);
-        let mut builder = if self.beta {
-            self.client.put(url)
-        } else {
-            self.client.post(url)
-        };
+        let mut builder = self.client.post(url);
         builder = self.set_auth_bearer(builder);
 
         builder
@@ -120,11 +116,7 @@ impl ShuttleApiClient {
             .context("serialize DeploymentRequest as a MessagePack byte vector")?;
 
         let url = format!("{}{}", self.api_url, path);
-        let mut builder = if self.beta {
-            self.client.put(url)
-        } else {
-            self.client.post(url)
-        };
+        let mut builder = self.client.put(url);
         builder = self.set_auth_bearer(builder);
 
         builder

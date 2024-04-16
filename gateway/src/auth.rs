@@ -22,7 +22,7 @@ pub enum Error {
     InvalidProjectName(#[from] InvalidProjectName),
 
     #[error(transparent)]
-    ProjcetNotFound(#[from] ProjectNotFound),
+    ProjectNotFound(#[from] ProjectNotFound),
 
     #[error(transparent)]
     Permission(#[from] permit::Error),
@@ -47,7 +47,7 @@ impl From<Error> for ApiError {
                 status_code: e.as_u16(),
             },
             Error::InvalidProjectName(e) => e.into(),
-            Error::ProjcetNotFound(e) => e.into(),
+            Error::ProjectNotFound(e) => e.into(),
             Error::Permission(e) => e.into(),
             Error::Service(e) => e.into(),
         }

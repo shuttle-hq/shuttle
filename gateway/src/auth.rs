@@ -1,13 +1,58 @@
 use axum::extract::{FromRef, FromRequestParts, Path};
 use axum::http::request::Parts;
+use axum::response::{IntoResponse, Response};
+use http::StatusCode;
+use shuttle_backends::client::permit;
 use shuttle_backends::project_name::ProjectName;
 use shuttle_backends::ClaimExt;
 use shuttle_common::claims::Claim;
-use shuttle_common::models::error::InvalidProjectName;
+use shuttle_common::models::error::{ApiError, InvalidProjectName, ProjectNotFound};
+use thiserror::Error;
 use tracing::error;
 
 use crate::api::latest::RouterState;
-use crate::{Error, ErrorKind};
+use crate::service;
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("could not serve your request")]
+    StatusCode(StatusCode),
+
+    #[error(transparent)]
+    InvalidProjectName(#[from] InvalidProjectName),
+
+    #[error(transparent)]
+    ProjectNotFound(#[from] ProjectNotFound),
+
+    #[error(transparent)]
+    Permission(#[from] permit::Error),
+
+    #[error(transparent)]
+    Service(#[from] service::Error),
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> Response {
+        let api_error: ApiError = self.into();
+
+        api_error.into_response()
+    }
+}
+
+impl From<Error> for ApiError {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::StatusCode(e) => Self {
+                message: e.to_string(),
+                status_code: e.as_u16(),
+            },
+            Error::InvalidProjectName(e) => e.into(),
+            Error::ProjectNotFound(e) => e.into(),
+            Error::Permission(e) => e.into(),
+            Error::Service(e) => e.into(),
+        }
+    }
+}
 
 /// A wrapper for a guard that validates a user's API token *and*
 /// scopes the request to a project they own.
@@ -31,14 +76,14 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let claim = Claim::from_request_parts(parts, state)
             .await
-            .map_err(|_| ErrorKind::Unauthorized)?;
+            .map_err(Error::StatusCode)?;
 
         let scope = match Path::<ProjectName>::from_request_parts(parts, state).await {
             Ok(Path(p)) => p,
             Err(_) => Path::<(ProjectName, String)>::from_request_parts(parts, state)
                 .await
                 .map(|Path((p, _))| p)
-                .map_err(|_| Error::from(ErrorKind::InvalidProjectName(InvalidProjectName)))?,
+                .map_err(|_| InvalidProjectName)?,
         };
 
         let RouterState { service, .. } = RouterState::from_ref(state);
@@ -52,16 +97,12 @@ where
                     &service.find_project_by_name(&scope).await?.id,
                     "develop", // TODO: make this configurable per endpoint?
                 )
-                .await
-                .map_err(|_| {
-                    error!("failed to check Permit permission");
-                    Error::from_kind(ErrorKind::Internal)
-                })?;
+                .await?;
 
         if allowed {
             Ok(Self { claim, scope })
         } else {
-            Err(Error::from(ErrorKind::ProjectNotFound(scope.to_string())))
+            Err(ProjectNotFound(scope.to_string()).into())
         }
     }
 }

@@ -12,7 +12,7 @@ use axum::response::Response;
 use bollard::container::StatsOptions;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use fqdn::{Fqdn, FQDN};
-use http::Uri;
+use http::{StatusCode, Uri};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::Client;
@@ -21,11 +21,14 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use shuttle_backends::client::PermissionsDal;
+use shuttle_backends::client::{permit, PermissionsDal};
 use shuttle_backends::headers::XShuttleAdminSecret;
 use shuttle_backends::project_name::ProjectName;
 use shuttle_common::claims::AccountTier;
 use shuttle_common::constants::SHUTTLE_IDLE_DOCS_URL;
+use shuttle_common::models::error::{
+    ApiError, ProjectNotFound, ProjectNotReady, ProjectUnavailable,
+};
 use shuttle_common::models::project::State;
 use shuttle_common::models::user::UserId;
 use sqlx::error::DatabaseError;
@@ -33,6 +36,7 @@ use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, query_as, Error as SqlxError, QueryBuilder, Row};
+use thiserror::Error;
 use tokio::sync::mpsc::Sender;
 use tokio::time::timeout;
 use tonic::codegen::tokio_stream::StreamExt;
@@ -41,25 +45,99 @@ use tracing::{debug, error, info, instrument, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 
-use crate::acme::{AcmeClient, CustomDomain};
+use crate::acme::{AcmeClient, AcmeClientError, CustomDomain};
 use crate::args::ServiceArgs;
 use crate::project::{Project, ProjectCreating, ProjectError, IS_HEALTHY_TIMEOUT};
 use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::tls::ChainAndPrivateKey;
 use crate::worker::TaskRouter;
 use crate::{
-    DockerContext, DockerStatsSource, Error, ErrorKind, ProjectDetails, AUTH_CLIENT,
-    DOCKER_STATS_PATH_CGROUP_V1, DOCKER_STATS_PATH_CGROUP_V2,
+    DockerContext, DockerStatsSource, ProjectDetails, AUTH_CLIENT, DOCKER_STATS_PATH_CGROUP_V1,
+    DOCKER_STATS_PATH_CGROUP_V2,
 };
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
 
-impl From<SqlxError> for Error {
-    fn from(err: SqlxError) -> Self {
-        debug!("internal SQLx error: {err}");
-        Self::source(ErrorKind::Internal, err)
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Sql(#[from] SqlxError),
+
+    #[error(transparent)]
+    ProjectNotReady(#[from] ProjectNotReady),
+
+    #[error(transparent)]
+    ProjectUnavailable(#[from] ProjectUnavailable),
+
+    #[error(transparent)]
+    ProjectNotFound(#[from] ProjectNotFound),
+
+    /// Contains a message describing a running state of the project.
+    /// Used if the project already exists but is owned
+    /// by the caller, which means they can modify the project.
+    #[error("{0}")]
+    OwnProjectAlreadyExists(String),
+
+    #[error("You cannot create more projects. Delete some projects first.")]
+    TooManyProjects,
+
+    #[error("A project with the same name already exists. Try using a different name.")]
+    ProjectAlreadyExists,
+
+    #[error(transparent)]
+    Permissions(#[from] permit::Error),
+
+    // Errors that are safe to expose to the user
+    #[error("{0}")]
+    InternalSafe(String),
+
+    #[error("Custom domain not found")]
+    CustomDomainNotFound,
+
+    #[error(transparent)]
+    AcmeClient(#[from] AcmeClientError),
+
+    #[error("Our server is at capacity and cannot serve your request at this time. Please try again in a few minutes.")]
+    CapacityLimit,
+}
+
+impl From<Error> for ApiError {
+    fn from(error: Error) -> Self {
+        let status_code = match error {
+            Error::Sql(error) => {
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "internal SQLx error"
+                );
+
+                return Self::internal("Internal server error");
+            }
+            Error::ProjectNotReady(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Error::ProjectUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Error::ProjectNotFound(e) => return e.into(),
+            Error::OwnProjectAlreadyExists(_) => StatusCode::CONFLICT,
+            Error::TooManyProjects => StatusCode::PAYMENT_REQUIRED,
+            Error::ProjectAlreadyExists => StatusCode::CONFLICT,
+            Error::Permissions(error) => {
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "Failed to check permissions"
+                );
+
+                return Self::internal("Internal server error");
+            }
+            Error::InternalSafe(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::CustomDomainNotFound => StatusCode::NOT_FOUND,
+            Error::AcmeClient(e) => return e.into(),
+            Error::CapacityLimit => StatusCode::SERVICE_UNAVAILABLE,
+        };
+
+        Self {
+            message: error.to_string(),
+            status_code: status_code.as_u16(),
+        }
     }
 }
 
@@ -280,9 +358,7 @@ impl GatewayService {
         user_id: &UserId,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
-        let target_ip = project
-            .target_ip()?
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
+        let target_ip = project.target_ip().ok_or(ProjectNotReady)?;
 
         let target_url = format!("http://{target_ip}:8001");
 
@@ -303,7 +379,7 @@ impl GatewayService {
         let resp = PROXY_CLIENT
             .call(Ipv4Addr::LOCALHOST.into(), &target_url, req)
             .await
-            .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
+            .map_err(|_| ProjectUnavailable)?;
 
         Ok(resp)
     }
@@ -390,7 +466,7 @@ impl GatewayService {
                     ))
                 }),
         })
-        .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound(project_name.to_string())))
+        .ok_or_else(|| ProjectNotFound(project_name.to_string()).into())
     }
 
     pub async fn find_project_by_id(&self, project_id: &str) -> Result<FindProjectPayload, Error> {
@@ -414,7 +490,7 @@ impl GatewayService {
                         ))
                     }),
             })
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound(project_id.to_string())))
+            .ok_or_else(|| ProjectNotFound(project_id.to_string()).into())
     }
 
     pub async fn project_name_exists(&self, project_name: &ProjectName) -> Result<bool, Error> {
@@ -525,7 +601,7 @@ impl GatewayService {
             .fetch_optional(&self.db)
             .await?
             .map(|row| row.get("user_id"))
-            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound(project_name.to_string())))
+            .ok_or_else(|| ProjectNotFound(project_name.to_string()).into())
     }
 
     pub async fn control_key_from_project_name(
@@ -537,7 +613,7 @@ impl GatewayService {
             .fetch_optional(&self.db)
             .await?
             .map(|row| row.try_get("initial_key").unwrap())
-            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound(project_name.to_string())))?;
+            .ok_or_else(|| ProjectNotFound(project_name.to_string()))?;
         Ok(control_key)
     }
 
@@ -594,10 +670,9 @@ impl GatewayService {
                 let creating = ProjectCreating::new_with_random_initial_key(
                     project_name.clone(),
                     Ulid::from_string(project_id.as_str()).map_err(|err| {
-                        Error::custom(
-                            ErrorKind::Internal,
-                            format!("The project id of the destroyed project is not a valid ULID: {err}"),
-                        )
+                        Error::InternalSafe(format!(
+                            "The project id of the destroyed project is not a valid ULID: {err}"
+                        ))
                     })?,
                     idle_minutes,
                 );
@@ -641,9 +716,7 @@ impl GatewayService {
                         "deleted project should not never remain in gateway. please report this."
                     ),
                 };
-                Err(Error::from_kind(ErrorKind::OwnProjectAlreadyExists(
-                    message,
-                )))
+                Err(Error::OwnProjectAlreadyExists(message))
             }
         } else if can_create_project {
             // Attempt to create a new one. This will fail
@@ -652,7 +725,7 @@ impl GatewayService {
             self.insert_project(project_name, Ulid::new(), user_id, idle_minutes)
                 .await
         } else {
-            Err(Error::from_kind(ErrorKind::TooManyProjects))
+            Err(Error::TooManyProjects)
         }
     }
 
@@ -696,7 +769,7 @@ impl GatewayService {
                 // project name clash
                 if let Some(db_err_code) = err.as_database_error().and_then(DatabaseError::code) {
                     if db_err_code == "2067" {  // SQLITE_CONSTRAINT_UNIQUE
-                        return Error::from_kind(ErrorKind::ProjectAlreadyExists)
+                        return Error::ProjectAlreadyExists
                     }
                 }
                 // Otherwise this is internal
@@ -780,7 +853,7 @@ impl GatewayService {
                     private_key: row.get("private_key"),
                 })
             })
-            .map_err(|_| Error::from_kind(ErrorKind::Internal))
+            .map_err(Error::from)
     }
 
     pub async fn find_custom_domain_for_project(
@@ -819,7 +892,7 @@ impl GatewayService {
             certificate: row.get("certificate"),
             private_key: row.get("private_key"),
         })
-        .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
+        .ok_or_else(|| Error::CustomDomainNotFound)?;
         Ok(custom_domain)
     }
 
@@ -854,7 +927,7 @@ impl GatewayService {
                 private_key,
                 ..
             }) => Ok((certificate, private_key)),
-            Err(err) if err.kind() == ErrorKind::CustomDomainNotFound => {
+            Err(Error::CustomDomainNotFound) => {
                 let (certs, private_key) = acme_client
                     .create_certificate(&fqdn.to_string(), ChallengeType::Http01, creds)
                     .await?;
@@ -944,7 +1017,8 @@ impl GatewayService {
                 .and_then(task::run_until_done())
                 .and_then(task::start_idle_deploys())
                 .send(&task_sender)
-                .await?;
+                .await
+                .map_err(|task_error| Error::InternalSafe(task_error.to_string()))?;
 
             // Wait for project to come up and set new state
             handle.await;
@@ -1009,7 +1083,7 @@ impl GatewayService {
             && (std::fs::metadata(CCH_CONTROL_FILE).is_ok()
                 || self.count_ready_cch_projects().await? >= CCH_CONCURRENT_LIMIT)
         {
-            return Err(Error::from_kind(ErrorKind::CapacityLimit));
+            return Err(Error::CapacityLimit);
         }
 
         let current_container_count = self.count_ready_projects().await?;
@@ -1026,7 +1100,7 @@ impl GatewayService {
         if has_capacity {
             Ok(())
         } else {
-            Err(Error::from_kind(ErrorKind::CapacityLimit))
+            Err(Error::CapacityLimit)
         }
     }
 }
@@ -1052,7 +1126,7 @@ impl DockerContext for GatewayContext {
     }
 
     #[instrument(name = "get container stats", skip_all, fields(docker_stats_source = %self.docker_stats_source, shuttle.container.id = container_id))]
-    async fn get_stats(&self, container_id: &str) -> Result<u64, Error> {
+    async fn get_stats(&self, container_id: &str) -> Result<u64, String> {
         match self.docker_stats_source {
             DockerStatsSource::CgroupV1 => {
                 let cpu_usage: u64 = tokio::fs::read_to_string(format!(
@@ -1065,7 +1139,7 @@ impl DockerContext for GatewayContext {
                         shuttle.container.id = container_id,
                         "failed to read docker stats file for container"
                     );
-                    ProjectError::internal("failed to read docker stats file for container")
+                    "failed to read docker stats file for container".to_string()
                 })?
                 .trim()
                 .parse()
@@ -1076,7 +1150,7 @@ impl DockerContext for GatewayContext {
                         "failed to parse cpu usage stat"
                     );
 
-                    ProjectError::internal("failed to parse cpu usage to u64")
+                    "failed to parse cpu usage to u64".to_string()
                 })?;
                 Ok(cpu_usage)
             }
@@ -1092,30 +1166,22 @@ impl DockerContext for GatewayContext {
                         shuttle.container.id = container_id,
                         "failed to read docker stats file for container"
                     );
-                    ProjectError::internal("failed to read docker stats file for container")
+                    "failed to read docker stats file for container".to_string()
                 })?
                 .lines()
                 .next()
                 .ok_or_else(|| {
-                    let err = ProjectError::internal(
-                        "failed to read first line of docker stats file for container",
-                    );
-                    error!(
-                        shuttle.container.id = container_id,
-                        error = &err as &dyn std::error::Error,
-                    );
+                    let err =
+                        "failed to read first line of docker stats file for container".to_string();
+                    error!(shuttle.container.id = container_id, error = &err);
 
                     err
                 })?
                 .split(' ')
                 .nth(1)
                 .ok_or_else(|| {
-                    let err =
-                        ProjectError::internal("failed to split docker stats line for container");
-                    error!(
-                        shuttle.container.id = container_id,
-                        error = &err as &dyn std::error::Error,
-                    );
+                    let err = "failed to split docker stats line for container".to_string();
+                    error!(shuttle.container.id = container_id, error = &err);
 
                     err
                 })?
@@ -1126,7 +1192,7 @@ impl DockerContext for GatewayContext {
                         shuttle.container.id = container_id,
                         "failed to parse cpu usage stat"
                     );
-                    ProjectError::internal("failed to parse cpu usage to u64")
+                    "failed to parse cpu usage to u64".to_string()
                 })?;
                 Ok(cpu_usage * 1_000)
             }
@@ -1142,7 +1208,21 @@ impl DockerContext for GatewayContext {
                     )
                     .next()
                     .await
-                    .unwrap()?;
+                    .ok_or_else(|| {
+                        error!(
+                            shuttle.container.id = container_id,
+                            "there was no stats for the container"
+                        );
+                        "there was no stats for the container".to_string()
+                    })?
+                    .map_err(|error| {
+                        error!(
+                            shuttle.container.id = container_id,
+                            error = %error,
+                            "failed to get container stats from bollard"
+                        );
+                        "failed to get stats for container".to_string()
+                    })?;
 
                 Ok(new_stat.cpu_stats.cpu_usage.total_usage)
             }
@@ -1200,8 +1280,7 @@ pub mod tests {
     use super::*;
 
     use crate::task::{self, TaskResult};
-    use crate::tests::{assert_err_kind, World};
-    use crate::{Error, ErrorKind};
+    use crate::tests::World;
 
     #[tokio::test]
     async fn service_create_find_stop_delete_project() {
@@ -1270,14 +1349,13 @@ pub mod tests {
         }
 
         // Creating a project with can_create_project set to false should fail.
-        assert_eq!(
+        assert!(matches!(
             svc.create_project("final-one".parse().unwrap(), &admin, false, false, 0)
                 .await
                 .err()
-                .unwrap()
-                .kind(),
-            ErrorKind::TooManyProjects
-        );
+                .unwrap(),
+            Error::TooManyProjects
+        ));
 
         // We need to fetch all of them from the DB since they are ordered by created_at (in the id) and project_name,
         // and created_at will be the same for some of them.
@@ -1337,10 +1415,7 @@ pub mod tests {
         assert!(matches!(
             svc.create_project(matrix.clone(), &trinity, false, true, 0)
                 .await,
-            Err(Error {
-                kind: ErrorKind::ProjectAlreadyExists,
-                ..
-            })
+            Err(Error::ProjectAlreadyExists)
         ));
 
         // If recreated by the same user
@@ -1356,10 +1431,7 @@ pub mod tests {
         assert!(matches!(
             svc.create_project(matrix.clone(), &neo, false, true, 0)
                 .await,
-            Err(Error {
-                kind: ErrorKind::OwnProjectAlreadyExists(_),
-                ..
-            })
+            Err(Error::OwnProjectAlreadyExists(_))
         ));
 
         let mut work = svc
@@ -1390,10 +1462,7 @@ pub mod tests {
         assert!(matches!(
             svc.create_project(matrix.clone(), &admin, true, true, 0)
                 .await,
-            Err(Error {
-                kind: ErrorKind::OwnProjectAlreadyExists(_),
-                ..
-            })
+            Err(Error::OwnProjectAlreadyExists(_))
         ));
 
         // We can delete a project
@@ -1402,10 +1471,7 @@ pub mod tests {
         // Project is gone
         assert!(matches!(
             svc.find_project_by_name(&matrix).await,
-            Err(Error {
-                kind: ErrorKind::ProjectNotFound(_),
-                ..
-            })
+            Err(Error::ProjectNotFound(_))
         ));
 
         // It can be re-created by anyone, with the same project name
@@ -1497,10 +1563,12 @@ pub mod tests {
         let certificate = "dummy certificate";
         let private_key = "dummy private key";
 
-        assert_err_kind!(
-            svc.project_details_for_custom_domain(&domain).await,
-            ErrorKind::CustomDomainNotFound
-        );
+        assert!(matches!(
+            svc.project_details_for_custom_domain(&domain)
+                .await
+                .unwrap_err(),
+            Error::CustomDomainNotFound
+        ));
 
         let _ = svc
             .create_project(project_name.clone(), &account, false, true, 0)
@@ -1558,10 +1626,12 @@ pub mod tests {
         let certificate = "dummy certificate";
         let private_key = "dummy private key";
 
-        assert_err_kind!(
-            svc.project_details_for_custom_domain(&domain).await,
-            ErrorKind::CustomDomainNotFound
-        );
+        assert!(matches!(
+            svc.project_details_for_custom_domain(&domain)
+                .await
+                .unwrap_err(),
+            Error::CustomDomainNotFound
+        ));
 
         let _ = svc
             .create_project(project_name.clone(), &account, false, true, 0)

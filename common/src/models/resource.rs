@@ -14,7 +14,7 @@ use crate::{
 };
 
 pub fn get_resource_tables(
-    resources: &Vec<Response>,
+    resources: &[Response],
     service_name: &str,
     raw: bool,
     show_secrets: bool,

@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use axum::extract::{ConnectInfo, Path, State};
 use axum::headers::{HeaderMapExt, Host};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use axum::routing::any;
 use axum_server::accept::DefaultAcceptor;
 use axum_server::tls_rustls::RustlsAcceptor;
@@ -26,7 +26,10 @@ use shuttle_backends::cache::{CacheManagement, CacheManager};
 use shuttle_backends::headers::XShuttleProject;
 use shuttle_backends::project_name::ProjectName;
 use shuttle_common::constants::DEPLOYER_SERVICE_HTTP_PORT;
-use shuttle_common::models::error::InvalidProjectName;
+use shuttle_common::models::error::{
+    ApiError, InvalidProjectName, ProjectNotReady, ProjectUnavailable,
+};
+use thiserror::Error;
 use tokio::net::TcpSocket;
 use tokio::sync::mpsc::Sender;
 use tower_sanitize_path::SanitizePath;
@@ -34,13 +37,50 @@ use tracing::{debug, debug_span, error, field, trace, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::AcmeClient;
-use crate::service::GatewayService;
+use crate::service::{self, GatewayService};
 use crate::task::BoxedTask;
-use crate::{Error, ErrorKind};
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
 static SERVER_HEADER: Lazy<HeaderValue> = Lazy::new(|| "shuttle.rs".parse().unwrap());
+
+#[derive(Debug, Error)]
+enum Error {
+    #[error("The 'Host' header is invalid")]
+    BadHost,
+
+    #[error(transparent)]
+    InvalidProjectName(#[from] InvalidProjectName),
+
+    #[error(transparent)]
+    ProjectNotReady(#[from] ProjectNotReady),
+
+    #[error(transparent)]
+    ProjectUnavailable(#[from] ProjectUnavailable),
+
+    #[error(transparent)]
+    Service(#[from] service::Error),
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> Response {
+        // Make the exposed error safe first
+        let message = match self {
+            Error::BadHost => self.to_string(),
+            Error::InvalidProjectName(e) => e.to_string(),
+            Error::ProjectNotReady(e) => e.to_string(),
+            Error::ProjectUnavailable(e) => e.to_string(),
+            Error::Service(e) => {
+                let error: ApiError = e.into();
+
+                error.message
+            }
+        };
+
+        // Use a custom 600 status code to distinguish between proxy errors and project errors
+        (StatusCode::from_u16(600).unwrap(), message).into_response()
+    }
+}
 
 pub struct ProxyState {
     gateway: Arc<GatewayService>,
@@ -62,7 +102,7 @@ async fn proxy(
         .headers()
         .typed_get::<Host>()
         .map(|host| fqdn!(host.hostname()))
-        .ok_or_else(|| Error::from_kind(ErrorKind::BadHost))?;
+        .ok_or_else(|| Error::BadHost)?;
 
     span.record("http.host", fqdn.to_string());
 
@@ -73,7 +113,7 @@ async fn proxy(
                 .unwrap()
                 .to_owned()
                 .parse()
-                .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName(InvalidProjectName)))?
+                .map_err(|_| InvalidProjectName)?
         } else if let Some(project) = { state.domain_cache.get(fqdn.to_string().as_str()) } {
             project
         } else {
@@ -104,10 +144,7 @@ async fn proxy(
             .gateway
             .find_or_start_project(&project_name, state.task_sender.clone())
             .await?;
-        let ip = proj
-            .state
-            .target_ip()?
-            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
+        let ip = proj.state.target_ip().ok_or(ProjectNotReady)?;
         state.project_cache.insert(
             project_name.as_str(),
             ip,
@@ -152,7 +189,7 @@ async fn proxy(
         .await
         .map_err(|err| {
             error!(error = ?err, "gateway proxy client error");
-            Error::from_kind(ErrorKind::ProjectUnavailable)
+            ProjectUnavailable
         })?;
 
     res.headers_mut().insert(SERVER, SERVER_HEADER.clone());

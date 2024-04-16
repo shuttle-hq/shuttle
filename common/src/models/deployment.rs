@@ -35,7 +35,7 @@ pub struct EcsResponse {
     pub latest_deployment_state: EcsState,
     pub running_id: Option<String>,
     pub updated_at: DateTime<Utc>,
-    pub uri: String,
+    pub uri: Option<String>,
     pub git_commit_id: Option<String>,
     pub git_commit_msg: Option<String>,
     pub git_branch: Option<String>,
@@ -67,12 +67,15 @@ impl EcsResponse {
             .as_ref()
             .map(|id| {
                 format!(
-                    "\nRunning deployment: '{}' - {} ({})",
+                    "\nRunning deployment: '{}' - {} {}",
                     id,
                     "running".to_string().with(
                         crossterm::style::Color::from_str(EcsState::Running.get_color()).unwrap()
                     ),
                     self.uri
+                        .as_ref()
+                        .map(|inner| format!("({inner})"))
+                        .unwrap_or("".to_string())
                 )
             })
             .unwrap_or_default();
@@ -93,7 +96,8 @@ impl EcsResponse {
             None if EcsState::Running == self.latest_deployment_state
                 || EcsState::InProgress == self.latest_deployment_state =>
             {
-                format!("{latest_state} ({})", self.uri)
+                let uri = self.uri.map(|inner| format!(" ({})")).unwrap_or_default();
+                format!("{latest_state}{uri}")
             }
             _ => latest_state,
         };

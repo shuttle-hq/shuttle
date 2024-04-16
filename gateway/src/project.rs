@@ -16,7 +16,7 @@ use bollard::volume::RemoveVolumeOptions;
 use futures::prelude::*;
 use http::header::AUTHORIZATION;
 use http::uri::InvalidUri;
-use http::{Method, Request, Uri};
+use http::{Method, Request, StatusCode, Uri};
 use hyper::client::HttpConnector;
 use hyper::{Body, Client};
 use once_cell::sync::Lazy;
@@ -26,14 +26,16 @@ use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_backends::headers::X_SHUTTLE_ADMIN_SECRET;
 use shuttle_backends::project_name::ProjectName;
 use shuttle_common::constants::{default_idle_minutes, DEFAULT_IDLE_MINUTES};
+use shuttle_common::models::error::ApiError;
 use shuttle_common::models::service;
+use thiserror::Error;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument, trace, warn};
 use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::service::ContainerSettings;
-use crate::{DockerContext, Error, ErrorKind, IntoTryState, Refresh, State, TryState};
+use crate::{DockerContext, IntoTryState, Refresh, State, TryState};
 
 /// The `user_id` AND `account_name` of gateway's admin account
 const GATEWAY_ADMIN_ACCOUNT_USER_ID: &str = "gateway";
@@ -82,6 +84,46 @@ const MAX_REBOOTS: usize = 3;
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 // Health check must succeed within 10 seconds
 pub static IS_HEALTHY_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Docker(#[from] DockerError),
+
+    #[error("{0}")]
+    InvalidOperation(String),
+
+    #[error("Container for project was not found. Try recreating the project")]
+    ContainerNotFound,
+
+    #[error(transparent)]
+    ProjectError(#[from] ProjectError),
+}
+
+impl From<Error> for ApiError {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::Docker(err) => {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "docker communication failed"
+                );
+
+                ApiError::internal("internal error occured while interacting with your project")
+            }
+            Error::InvalidOperation(_) => Self {
+                message: error.to_string(),
+                status_code: StatusCode::BAD_REQUEST.as_u16(),
+            },
+            Error::ContainerNotFound => {
+                error!("docker could not find the container");
+
+                ApiError::internal(&error.to_string())
+            }
+            Error::ProjectError(e) => e.into(),
+        }
+    }
+}
 
 #[async_trait]
 impl<Ctx> Refresh<Ctx> for ContainerInspectResponse
@@ -161,16 +203,6 @@ impl ContainerInspectResponseExt for ContainerInspectResponse {
     }
 }
 
-impl From<DockerError> for Error {
-    fn from(err: DockerError) -> Self {
-        error!(
-            error = &err as &dyn std::error::Error,
-            "internal Docker error"
-        );
-        Self::source(ErrorKind::Internal, err)
-    }
-}
-
 /// Allow some fields to default to their default value if deserializing them fails
 /// https://users.rust-lang.org/t/solved-serde-deserialization-on-error-use-default-values/6681/2
 fn ok_or_default<'de, T, D>(deserializer: D) -> Result<T, D::Error>
@@ -222,10 +254,10 @@ impl Project {
         if let Some(container) = self.container() {
             Ok(Self::Stopping(ProjectStopping { container }))
         } else {
-            Err(Error::custom(
-                ErrorKind::InvalidOperation,
-                format!("cannot stop a project in the `{}` state", self.state()),
-            ))
+            Err(Error::InvalidOperation(format!(
+                "cannot stop a project in the `{}` state",
+                self.state()
+            )))
         }
     }
 
@@ -233,10 +265,10 @@ impl Project {
         if let Some(container) = self.container() {
             Ok(Self::Rebooting(ProjectRebooting { container }))
         } else {
-            Err(Error::custom(
-                ErrorKind::InvalidOperation,
-                format!("cannot reboot a project in the `{}` state", self.state()),
-            ))
+            Err(Error::InvalidOperation(format!(
+                "cannot reboot a project in the `{}` state",
+                self.state()
+            )))
         }
     }
 
@@ -254,10 +286,7 @@ impl Project {
     {
         let Some(ref id) = self.container_id() else {
             error!("No container id found for deleting");
-            return Err(Error::custom(
-                ErrorKind::ProjectUnavailable,
-                "container id not found",
-            ));
+            return Err(Error::ContainerNotFound);
         };
         ctx.docker()
             .remove_container(
@@ -304,10 +333,10 @@ impl Project {
                 restart_count: 0,
             }))
         } else {
-            Err(Error::custom(
-                ErrorKind::InvalidOperation,
-                format!("cannot start a project in the `{}` state", self.state()),
-            ))
+            Err(Error::InvalidOperation(format!(
+                "cannot start a project in the `{}` state",
+                self.state()
+            )))
         }
     }
 
@@ -323,17 +352,16 @@ impl Project {
         matches!(self, Self::Stopped(_))
     }
 
-    pub fn target_ip(&self) -> Result<Option<IpAddr>, Error> {
+    pub fn target_ip(&self) -> Option<IpAddr> {
         match self.clone() {
-            Self::Ready(project_ready) => Ok(Some(*project_ready.target_ip())),
-            _ => Ok(None), // not ready
+            Self::Ready(project_ready) => Some(*project_ready.target_ip()),
+            _ => None, // not ready
         }
     }
 
-    pub fn target_addr(&self) -> Result<Option<SocketAddr>, Error> {
-        Ok(self
-            .target_ip()?
-            .map(|target_ip| SocketAddr::new(target_ip, RUNTIME_API_PORT)))
+    pub fn target_addr(&self) -> Option<SocketAddr> {
+        self.target_ip()
+            .map(|target_ip| SocketAddr::new(target_ip, RUNTIME_API_PORT))
     }
 
     pub fn state(&self) -> String {
@@ -1345,7 +1373,7 @@ where
             .await
             .map_err(|err| {
                 error!(
-                    error = &err as &dyn std::error::Error,
+                    error = %err,
                     "failed to get stats for container"
                 );
                 ProjectError::internal("failed to get stats for container")
@@ -1761,6 +1789,20 @@ impl std::fmt::Display for ProjectError {
 
 impl std::error::Error for ProjectError {}
 
+impl From<ProjectError> for ApiError {
+    fn from(error: ProjectError) -> Self {
+        error!(
+            error = &error as &dyn std::error::Error,
+            "got a project error"
+        );
+
+        Self {
+            status_code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+            message: "failed while trying to communicate with your project".to_string(),
+        }
+    }
+}
+
 impl From<DockerError> for ProjectError {
     fn from(err: DockerError) -> Self {
         error!(
@@ -1799,12 +1841,6 @@ impl From<hyper::Error> for ProjectError {
             message: err.to_string(),
             ctx: None,
         }
-    }
-}
-
-impl From<ProjectError> for Error {
-    fn from(err: ProjectError) -> Self {
-        Self::source(ErrorKind::Internal, err)
     }
 }
 
@@ -2092,12 +2128,7 @@ pub mod tests {
             })),
         );
 
-        let target_addr = project_ready
-            .as_ref()
-            .unwrap()
-            .target_addr()
-            .unwrap()
-            .unwrap();
+        let target_addr = project_ready.as_ref().unwrap().target_addr().unwrap();
 
         let client = World::client(target_addr);
 

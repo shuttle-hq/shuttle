@@ -3,12 +3,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fqdn::FQDN;
+use http::StatusCode;
 use instant_acme::{
     Account, AccountCredentials, Authorization, AuthorizationStatus, Challenge, ChallengeType,
     Identifier, KeyAuthorization, LetsEncrypt, NewAccount, NewOrder, Order, OrderStatus,
 };
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
 use shuttle_backends::project_name::ProjectName;
+use shuttle_common::models::error::ApiError;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{error, trace, warn};
@@ -361,3 +363,12 @@ pub enum AcmeClientError {
 }
 
 impl std::error::Error for AcmeClientError {}
+
+impl From<AcmeClientError> for ApiError {
+    fn from(value: AcmeClientError) -> Self {
+        Self {
+            message: value.to_string(),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+        }
+    }
+}

@@ -34,8 +34,9 @@ use permit_pdp_client_rs::{
 use serde::{Deserialize, Serialize};
 use shuttle_common::{
     claims::AccountTier,
-    models::{organization, project},
+    models::{error::ApiError, organization, project},
 };
+use tracing::error;
 
 #[async_trait]
 pub trait PermissionsDal {
@@ -1026,6 +1027,26 @@ impl<T: Debug> From<PermitPDPClientError<T>> for Error {
                 content: e.content,
                 entity: format!("{:?}", e.entity),
             }),
+        }
+    }
+}
+impl From<Error> for ApiError {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::ResponseError(value) => ApiError {
+                message: value.content.to_string(),
+                status_code: value.status.into(),
+            },
+            err => {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "Internal error while talking to service"
+                );
+                ApiError {
+                    message: "Our server was unable to handle your request. A ticket should be created for us to fix this.".to_string(),
+                    status_code: StatusCode::INTERNAL_SERVER_ERROR.into(),
+                }
+            }
         }
     }
 }

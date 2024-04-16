@@ -7,16 +7,40 @@ use std::sync::Arc;
 use axum_server::accept::DefaultAcceptor;
 use axum_server::tls_rustls::{RustlsAcceptor, RustlsConfig};
 use futures::executor::block_on;
+use http::StatusCode;
 use pem::Pem;
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::{self, CertifiedKey};
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::Item;
-use shuttle_common::models::error::ErrorKind;
+use shuttle_common::models::error::ApiError;
+use thiserror::Error;
 use tokio::runtime::Handle;
 use tokio::sync::RwLock;
 
-use crate::Error;
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error(transparent)]
+    Tls(#[from] rustls::Error),
+
+    #[error("Got an unknown certificate")]
+    UnknownType,
+
+    #[error("read failed: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("failed to get signing key: {0}")]
+    SigningKey(#[from] sign::SignError),
+}
+
+impl From<Error> for ApiError {
+    fn from(err: Error) -> Self {
+        Self {
+            message: err.to_string(),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+        }
+    }
+}
 
 /// LetsEncrypt recommends to renew a certificate when its close to 30 days validity window.
 pub const RENEWAL_VALIDITY_THRESHOLD_IN_DAYS: i64 = 30;
@@ -32,15 +56,13 @@ impl ChainAndPrivateKey {
         let mut private_key = None;
         let mut chain = Vec::new();
 
-        for item in rustls_pemfile::read_all(&mut BufReader::new(rd))
-            .map_err(|_| Error::from_kind(ErrorKind::Internal))?
-        {
+        for item in rustls_pemfile::read_all(&mut BufReader::new(rd))? {
             match item {
                 Item::X509Certificate(cert) => chain.push(Certificate(cert)),
                 Item::ECKey(key) | Item::PKCS8Key(key) | Item::RSAKey(key) => {
                     private_key = Some(PrivateKey(key))
                 }
-                _ => return Err(Error::from_kind(ErrorKind::Internal)),
+                _ => return Err(Error::UnknownType),
             }
         }
 
@@ -73,8 +95,7 @@ impl ChainAndPrivateKey {
     }
 
     pub fn into_certified_key(self) -> Result<CertifiedKey, Error> {
-        let signing_key = sign::any_supported_type(&self.private_key)
-            .map_err(|_| Error::from_kind(ErrorKind::Internal))?;
+        let signing_key = sign::any_supported_type(&self.private_key)?;
         Ok(CertifiedKey::new(self.chain, signing_key))
     }
 
@@ -100,7 +121,7 @@ impl GatewayCertResolver {
     /// Get the loaded [CertifiedKey] associated with the given
     /// domain.
     pub async fn get(&self, sni: &str) -> Option<Arc<CertifiedKey>> {
-        self.keys.read().await.get(sni).map(Arc::clone)
+        self.keys.read().await.get(sni).cloned()
     }
 
     pub async fn serve_default_der(&self, certs: ChainAndPrivateKey) -> Result<(), Error> {

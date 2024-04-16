@@ -8,7 +8,6 @@ use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 use crate::task::{BoxedTask, TaskResult};
-use crate::Error;
 
 pub const WORKER_QUEUE_SIZE: usize = 2048;
 
@@ -46,7 +45,7 @@ impl Worker {
     ///
     /// # Panics
     /// If this worker has already started.
-    pub async fn start(mut self) -> Result<Self, Error> {
+    pub async fn start(mut self) -> Self {
         // Drop the self-sender owned by this worker to prevent a
         // deadlock if all the other senders have already been dropped
         // at this point.
@@ -66,7 +65,7 @@ impl Worker {
             }
         }
 
-        Ok(self)
+        self
     }
 }
 

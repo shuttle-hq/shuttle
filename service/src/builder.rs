@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anyhow::{anyhow, bail, Context};
-use cargo_metadata::Package;
+use cargo_metadata::{Metadata, Package};
 use shuttle_common::constants::RUNTIME_NAME;
 use tokio::io::AsyncBufReadExt;
 use tracing::{debug, error, info, trace};
@@ -99,12 +99,30 @@ pub async fn build_workspace(
     }
     notification.abort();
 
+    let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
+    let packages = find_shuttle_packages(&metadata)?;
+
+    let services = compile(
+        packages,
+        release_mode,
+        project_path.clone(),
+        metadata.target_directory.clone(),
+        deployment,
+        tx.clone(),
+    )
+    .await?;
+    trace!("alpha packages compiled");
+
+    Ok(services)
+}
+
+pub async fn async_cargo_metadata(manifest_path: &Path) -> anyhow::Result<Metadata> {
     let metadata = {
         // Modified implementaion of `cargo_metadata::MetadataCommand::exec` (from v0.15.3).
         // Uses tokio Command instead of std, to make this operation non-blocking.
         let mut cmd = tokio::process::Command::from(
             cargo_metadata::MetadataCommand::new()
-                .manifest_path(&manifest_path)
+                .manifest_path(manifest_path)
                 .cargo_command(),
         );
 
@@ -120,11 +138,13 @@ pub async fn build_workspace(
             .ok_or(cargo_metadata::Error::NoJson)?;
         cargo_metadata::MetadataCommand::parse(json)?
     };
-
     trace!("Cargo metadata parsed");
 
-    let mut alpha_packages = Vec::new();
+    Ok(metadata)
+}
 
+pub fn find_shuttle_packages(metadata: &Metadata) -> anyhow::Result<Vec<Package>> {
+    let mut packages = Vec::new();
     for member in metadata.workspace_packages() {
         // skip non-Shuttle-related crates
         if !member
@@ -141,23 +161,12 @@ pub async fn build_workspace(
             .map(|d| format!("{} '{}'", d.name, d.req))
             .collect::<Vec<_>>();
         shuttle_deps.sort();
-        info!(name = member.name, deps = ?shuttle_deps, "Compiling workspace member with shuttle dependencies");
+        info!(name = member.name, deps = ?shuttle_deps, "Found workspace member with shuttle dependencies");
         ensure_binary(member)?;
-        alpha_packages.push(member);
+        packages.push(member.to_owned());
     }
 
-    let services = compile(
-        alpha_packages,
-        release_mode,
-        project_path.clone(),
-        metadata.target_directory.clone(),
-        deployment,
-        tx.clone(),
-    )
-    .await?;
-    trace!("alpha packages compiled");
-
-    Ok(services)
+    Ok(packages)
 }
 
 // Only used in deployer
@@ -191,7 +200,7 @@ fn ensure_binary(package: &Package) -> anyhow::Result<()> {
 }
 
 async fn compile(
-    packages: Vec<&Package>,
+    packages: Vec<Package>,
     release_mode: bool,
     project_path: PathBuf,
     target_path: impl Into<PathBuf>,

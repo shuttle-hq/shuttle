@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fmt::Write as FmtWrite;
 use std::fs::{read_to_string, File};
-use std::io::stdout;
+use std::io::{stdout, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -57,6 +57,7 @@ use shuttle_proto::{
     provisioner::{provisioner_server::Provisioner, DatabaseRequest},
     runtime::{self, LoadRequest, StartRequest, StopRequest},
 };
+use shuttle_service::builder::{async_cargo_metadata, find_shuttle_packages};
 use shuttle_service::{
     builder::{build_workspace, BuiltService},
     runner, Environment,
@@ -69,6 +70,7 @@ use tokio::time::{sleep, Duration};
 use tonic::{Request, Status};
 use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
+use zip::write::FileOptions;
 
 pub use crate::args::{Command, ProjectArgs, RunArgs, ShuttleArgs};
 use crate::args::{
@@ -1656,10 +1658,25 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let working_directory = self.ctx.working_directory();
 
-        let mut deployment_req: DeploymentRequest = DeploymentRequest {
+        let mut deployment_req = DeploymentRequest {
             no_test: args.no_test,
             ..Default::default()
         };
+
+        if self.beta {
+            let manifest_path = working_directory.join("Cargo.toml");
+            if !manifest_path.exists() {
+                bail!("Cargo manifest file not found: {}", manifest_path.display());
+            }
+            let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
+            let packages = find_shuttle_packages(&metadata)?;
+            let package_name = packages
+                .first()
+                .expect("at least one shuttle crate in the workspace")
+                .name
+                .to_owned();
+            deployment_req.package_name = Some(package_name);
+        }
 
         if let Ok(repo) = Repository::discover(working_directory) {
             let repo_path = repo
@@ -1690,7 +1707,7 @@ impl Shuttle {
             }
         }
 
-        deployment_req.data = self.make_archive(args.secret_args.secrets.clone())?;
+        deployment_req.data = self.make_archive(args.secret_args.secrets.clone(), self.beta)?;
         if deployment_req.data.len() > CREATE_SERVICE_BODY_LIMIT {
             bail!(
                 r#"The project is too large - the limit is {} MB. \
@@ -2134,10 +2151,8 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    fn make_archive(&self, secrets_file: Option<PathBuf>) -> Result<Vec<u8>> {
+    fn make_archive(&self, secrets_file: Option<PathBuf>, zip: bool) -> Result<Vec<u8>> {
         let include_patterns = self.ctx.assets();
-        let encoder = GzEncoder::new(Vec::new(), Compression::new(3));
-        let mut tar = Builder::new(encoder);
 
         let working_directory = self.ctx.working_directory();
 
@@ -2205,8 +2220,14 @@ impl Shuttle {
                 continue;
             }
 
+            // zip file puts all files in root, tar puts all files nested in a dir at root level
+            let prefix = if zip {
+                working_directory
+            } else {
+                working_directory.parent().context("get parent dir")?
+            };
             let mut name = path
-                .strip_prefix(working_directory.parent().context("get parent dir")?)
+                .strip_prefix(prefix)
                 .context("strip prefix of path")?
                 .to_owned();
 
@@ -2224,14 +2245,34 @@ impl Shuttle {
             bail!("No files included in upload.");
         }
 
-        // Append all the entries to the archive.
-        for (k, v) in archive_files {
-            debug!("Packing {k:?}");
-            tar.append_path_with_name(k, v)?;
-        }
+        let bytes = if zip {
+            debug!("making zip archive");
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+            for (path, name) in archive_files {
+                debug!("Packing {path:?}");
+                zip.start_file(
+                    name.to_str().expect("valid filename"),
+                    FileOptions::default(),
+                )?;
+                let mut b = Vec::new();
+                File::open(path)?.read_to_end(&mut b)?;
+                zip.write_all(&b)?;
+            }
+            let r = zip.finish().context("finish encoding zip archive")?;
 
-        let encoder = tar.into_inner().context("get encoder from tar archive")?;
-        let bytes = encoder.finish().context("finish up encoder")?;
+            r.into_inner()
+        } else {
+            debug!("making tar archive");
+            let encoder = GzEncoder::new(Vec::new(), Compression::new(3));
+            let mut tar = Builder::new(encoder);
+            for (path, name) in archive_files {
+                debug!("Packing {path:?}");
+                tar.append_path_with_name(path, name)?;
+            }
+            let encoder = tar.into_inner().context("get encoder from tar archive")?;
+
+            encoder.finish().context("finish encoding tar archive")?
+        };
         debug!("Archive size: {} bytes", bytes.len());
 
         Ok(bytes)
@@ -2418,10 +2459,12 @@ pub enum CommandOutcome {
 mod tests {
     use flate2::read::GzDecoder;
     use tar::Archive;
+    use zip::ZipArchive;
 
     use crate::args::{DeployArgs, ProjectArgs, SecretsArgs};
     use crate::Shuttle;
     use std::fs::{self, canonicalize};
+    use std::io::Cursor;
     use std::path::PathBuf;
 
     pub fn path_from_workspace_root(path: &str) -> PathBuf {
@@ -2432,32 +2475,43 @@ mod tests {
         dunce::canonicalize(path).unwrap()
     }
 
-    fn get_archive_entries(project_args: ProjectArgs, deploy_args: DeployArgs) -> Vec<String> {
+    fn get_archive_entries(
+        project_args: ProjectArgs,
+        deploy_args: DeployArgs,
+        zip: bool,
+    ) -> Vec<String> {
         let mut shuttle = Shuttle::new().unwrap();
         shuttle.load_project(&project_args).unwrap();
 
         let archive = shuttle
-            .make_archive(deploy_args.secret_args.secrets)
+            .make_archive(deploy_args.secret_args.secrets, zip)
             .unwrap();
 
-        let tar = GzDecoder::new(&archive[..]);
-        let mut archive = Archive::new(tar);
+        if zip {
+            let mut zip = ZipArchive::new(Cursor::new(archive)).unwrap();
+            (0..zip.len())
+                .map(|i| zip.by_index(i).unwrap().name().to_owned())
+                .collect()
+        } else {
+            let tar = GzDecoder::new(&archive[..]);
+            let mut archive = Archive::new(tar);
 
-        archive
-            .entries()
-            .unwrap()
-            .map(|entry| {
-                entry
-                    .unwrap()
-                    .path()
-                    .unwrap()
-                    .components()
-                    .skip(1)
-                    .collect::<PathBuf>()
-                    .display()
-                    .to_string()
-            })
-            .collect()
+            archive
+                .entries()
+                .unwrap()
+                .map(|entry| {
+                    entry
+                        .unwrap()
+                        .path()
+                        .unwrap()
+                        .components()
+                        .skip(1)
+                        .collect::<PathBuf>()
+                        .display()
+                        .to_string()
+                })
+                .collect()
+        }
     }
 
     #[test]
@@ -2481,29 +2535,32 @@ mod tests {
             working_directory: working_directory.clone(),
             name: Some("archiving-test".to_owned()),
         };
-        let mut entries = get_archive_entries(project_args.clone(), Default::default());
+        let mut entries = get_archive_entries(project_args.clone(), Default::default(), false);
         entries.sort();
 
-        assert_eq!(
-            entries,
-            vec![
-                ".gitignore",
-                ".ignore",
-                "Cargo.toml",
-                "Secrets.toml", // always included by default
-                "Secrets.toml.example",
-                "Shuttle.toml",
-                "asset1", // normal file
-                "asset2", // .gitignore'd, but included in Shuttle.toml
-                // asset3 is .ignore'd
-                "asset4",                // .gitignore'd, but un-ignored in .ignore
-                "asset5",                // .ignore'd, but included in Shuttle.toml
-                "dist/dist1",            // .gitignore'd, but included in Shuttle.toml
-                "nested/static/nested1", // normal file
-                // nested/static/nestedignore is .gitignore'd
-                "src/main.rs",
-            ]
-        );
+        let expected = vec![
+            ".gitignore",
+            ".ignore",
+            "Cargo.toml",
+            "Secrets.toml", // always included by default
+            "Secrets.toml.example",
+            "Shuttle.toml",
+            "asset1", // normal file
+            "asset2", // .gitignore'd, but included in Shuttle.toml
+            // asset3 is .ignore'd
+            "asset4",                // .gitignore'd, but un-ignored in .ignore
+            "asset5",                // .ignore'd, but included in Shuttle.toml
+            "dist/dist1",            // .gitignore'd, but included in Shuttle.toml
+            "nested/static/nested1", // normal file
+            // nested/static/nestedignore is .gitignore'd
+            "src/main.rs",
+        ];
+        assert_eq!(entries, expected);
+
+        // check that zip behaves the same way
+        let mut entries = get_archive_entries(project_args.clone(), Default::default(), true);
+        entries.sort();
+        assert_eq!(entries, expected);
 
         fs::remove_file(working_directory.join("Secrets.toml")).unwrap();
         let mut entries = get_archive_entries(
@@ -2514,6 +2571,7 @@ mod tests {
                 },
                 ..Default::default()
             },
+            false,
         );
         entries.sort();
 

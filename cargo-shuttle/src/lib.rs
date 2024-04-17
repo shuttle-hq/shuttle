@@ -136,7 +136,6 @@ impl Shuttle {
                     | Command::Stop
                     | Command::Clean
                     | Command::Status
-                    | Command::Logs { .. }
             ) {
                 unimplemented!("This command is not yet implemented on the beta platform");
             }
@@ -218,7 +217,13 @@ impl Shuttle {
             Command::Run(run_args) => self.local_run(run_args).await,
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
-            Command::Logs(logs_args) => self.logs(logs_args).await,
+            Command::Logs(logs_args) => {
+                if self.beta {
+                    self.logs_beta(logs_args).await
+                } else {
+                    self.logs(logs_args).await
+                }
+            }
             Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
                 if self.beta {
                     unimplemented!();
@@ -834,6 +839,44 @@ impl Shuttle {
                 )
             })?;
         println!("{message}");
+
+        Ok(CommandOutcome::Ok)
+    }
+
+    async fn logs_beta(&self, args: LogsArgs) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        let mut stream = client
+            // TODO: use something else than a fake Uuid
+            .get_logs_ws(self.ctx.project_name(), &Uuid::new_v4())
+            .await
+            .map_err(|err| {
+                suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
+            })?;
+
+        while let Some(Ok(msg)) = stream.next().await {
+            if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
+                match serde_json::from_str::<shuttle_common::LogItemBeta>(&line) {
+                    Ok(log) => {
+                        if args.raw {
+                            println!("{}", log.line);
+                        } else {
+                            println!("[{}] ({}) {}", log.timestamp, log.source, log.line);
+                        }
+                    }
+                    Err(err) => {
+                        debug!(error = %err, "failed to parse message into log item");
+
+                        let message = if let Ok(err) = serde_json::from_str::<ApiError>(&line) {
+                            err.to_string()
+                        } else {
+                            "failed to parse logs, is your cargo-shuttle outdated?".to_string()
+                        };
+
+                        bail!(message);
+                    }
+                }
+            }
+        }
 
         Ok(CommandOutcome::Ok)
     }

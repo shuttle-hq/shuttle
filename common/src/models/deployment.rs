@@ -75,7 +75,7 @@ impl EcsResponse {
                     self.uri
                 )
             })
-            .unwrap_or(String::new());
+            .unwrap_or_default();
 
         // Stringify the state.
         let latest_state = format!(

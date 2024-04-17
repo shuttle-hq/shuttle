@@ -65,6 +65,7 @@ url = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 walkdir = "2.3.3"
 webbrowser = "0.8.2"
+zip = "0.6.6"
 
 [dev-dependencies]
 assert_cmd = "2.0.6"

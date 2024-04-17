@@ -57,6 +57,7 @@ use shuttle_proto::{
     provisioner::{provisioner_server::Provisioner, DatabaseRequest},
     runtime::{self, LoadRequest, StartRequest, StopRequest},
 };
+use shuttle_service::builder::{async_cargo_metadata, find_shuttle_packages};
 use shuttle_service::{
     builder::{build_workspace, BuiltService},
     runner, Environment,
@@ -1657,10 +1658,25 @@ impl Shuttle {
         let client = self.client.as_ref().unwrap();
         let working_directory = self.ctx.working_directory();
 
-        let mut deployment_req: DeploymentRequest = DeploymentRequest {
+        let mut deployment_req = DeploymentRequest {
             no_test: args.no_test,
             ..Default::default()
         };
+
+        if self.beta {
+            let manifest_path = working_directory.join("Cargo.toml");
+            if !manifest_path.exists() {
+                bail!("Cargo manifest file not found: {}", manifest_path.display());
+            }
+            let metadata = async_cargo_metadata(manifest_path.as_path()).await?;
+            let packages = find_shuttle_packages(&metadata)?;
+            let package_name = packages
+                .first()
+                .expect("at least one shuttle crate in the workspace")
+                .name
+                .to_owned();
+            deployment_req.package_name = Some(package_name);
+        }
 
         if let Ok(repo) = Repository::discover(working_directory) {
             let repo_path = repo

@@ -202,7 +202,11 @@ pub fn get_deployments_table(
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct DeploymentRequest {
+    /// Alpha: tar archive. Beta: zip archive.
     pub data: Vec<u8>,
+    /// The cargo package name to compile and run. Required on beta.
+    pub package_name: Option<String>,
+    /// Ignored on beta.
     pub no_test: bool,
     pub git_commit_id: Option<String>,
     pub git_commit_msg: Option<String>,

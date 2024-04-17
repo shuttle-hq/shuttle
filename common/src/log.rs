@@ -49,8 +49,6 @@ pub struct LogItem {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LogItemBeta {
-    pub id: String,
-
     /// Time log was captured
     pub timestamp: DateTime<Utc>,
 
@@ -62,9 +60,8 @@ pub struct LogItemBeta {
 }
 
 impl LogItemBeta {
-    pub fn new(id: String, timestamp: DateTime<Utc>, source: String, line: String) -> Self {
+    pub fn new(timestamp: DateTime<Utc>, source: String, line: String) -> Self {
         Self {
-            id,
             timestamp,
             source,
             line,

@@ -60,6 +60,13 @@ impl ServicesApiClient {
         }
     }
 
+    pub fn new_with_default_headers(base: Uri, headers: HeaderMap) -> Self {
+        Self {
+            client: Self::builder().default_headers(headers).build().unwrap(),
+            base,
+        }
+    }
+
     pub async fn get<T: DeserializeOwned>(
         &self,
         path: &str,

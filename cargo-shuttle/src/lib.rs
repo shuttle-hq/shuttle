@@ -864,15 +864,9 @@ impl Shuttle {
                         }
                     }
                     Err(err) => {
-                        debug!(error = %err, "failed to parse message into log item");
-
-                        let message = if let Ok(err) = serde_json::from_str::<ApiError>(&line) {
-                            err.to_string()
-                        } else {
-                            "failed to parse logs, is your cargo-shuttle outdated?".to_string()
-                        };
-
-                        bail!(message);
+                        // TODO better handle logs, by returning a different type than the log line
+                        // if an error happened.
+                        bail!(err);
                     }
                 }
             }

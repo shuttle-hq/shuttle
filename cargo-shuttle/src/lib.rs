@@ -130,13 +130,7 @@ impl Shuttle {
             ) {
                 unimplemented!("This command is deprecated on the beta platform");
             }
-            if matches!(
-                args.cmd,
-                Command::Resource(..)
-                    | Command::Stop
-                    | Command::Clean
-                    | Command::Status
-            ) {
+            if matches!(args.cmd, Command::Stop | Command::Clean | Command::Status) {
                 unimplemented!("This command is not yet implemented on the beta platform");
             }
             eprintln!("INFO: Using beta platform API");

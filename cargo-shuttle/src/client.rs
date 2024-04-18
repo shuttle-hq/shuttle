@@ -142,7 +142,11 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_service_resources(&self, project: &str) -> Result<Vec<resource::Response>> {
-        let path = format!("/projects/{project}/services/{project}/resources");
+        let path = if self.beta {
+            format!("/projects/{project}/resources")
+        } else {
+            format!("/projects/{project}/services/{project}/resources")
+        };
 
         self.get(path).await
     }
@@ -152,13 +156,18 @@ impl ShuttleApiClient {
         project: &str,
         resource_type: &resource::Type,
     ) -> Result<()> {
-        let path = format!(
-            "/projects/{project}/services/{project}/resources/{}",
-            utf8_percent_encode(
-                &resource_type.to_string(),
-                percent_encoding::NON_ALPHANUMERIC
-            ),
-        );
+        let r#type = resource_type.to_string();
+
+        let r#type = utf8_percent_encode(&r#type, percent_encoding::NON_ALPHANUMERIC).to_owned();
+
+        let path = if self.beta {
+            format!("/projects/{project}/resources/{}", r#type)
+        } else {
+            format!(
+                "/projects/{project}/services/{project}/resources/{}",
+                r#type
+            )
+        };
 
         self.delete(path).await
     }

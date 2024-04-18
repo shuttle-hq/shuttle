@@ -142,7 +142,7 @@ impl ShuttleApiClient {
     }
 
     pub async fn get_service_resources(&self, project: &str) -> Result<Vec<resource::Response>> {
-        let path = format!("/projects/{project}/services/{project}/resources");
+        let path = format!("/projects/{project}/resources");
 
         self.get(path).await
     }

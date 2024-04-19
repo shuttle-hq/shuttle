@@ -47,6 +47,45 @@ pub struct LogItem {
     pub line: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LogItemBeta {
+    /// Time log was captured
+    pub timestamp: DateTime<Utc>,
+
+    /// Stdout/stderr
+    pub source: String,
+
+    /// The log line
+    pub line: String,
+}
+
+impl LogItemBeta {
+    pub fn new(timestamp: DateTime<Utc>, source: String, line: String) -> Self {
+        Self {
+            timestamp,
+            source,
+            line,
+        }
+    }
+}
+
+#[cfg(feature = "display")]
+impl std::fmt::Display for LogItemBeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let datetime: chrono::DateTime<chrono::Local> = DateTime::from(self.timestamp);
+
+        write!(
+            f,
+            "{} [{}] {}",
+            datetime
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, false)
+                .dim(),
+            self.source,
+            self.line,
+        )
+    }
+}
+
 const LOGLINE_MAX_CHARS: usize = 2048;
 const TRUNC_MSG: &str = "... (truncated)";
 

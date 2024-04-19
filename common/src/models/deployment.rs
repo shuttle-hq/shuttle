@@ -90,8 +90,12 @@ impl EcsResponse {
         );
 
         let state_with_uri = match self.running_id {
-            None => format!("{latest_state} ({})", self.uri),
-            Some(_) => latest_state,
+            None if EcsState::Running == self.latest_deployment_state
+                || EcsState::InProgress == self.latest_deployment_state =>
+            {
+                format!("{latest_state} ({})", self.uri)
+            }
+            _ => latest_state,
         };
 
         println!(
@@ -124,7 +128,9 @@ impl EcsState {
         match self {
             EcsState::InProgress => "cyan",
             EcsState::Running => "green",
-            EcsState::Stopped => "blue",
+            EcsState::Stopped => "dark_blue",
+            EcsState::Stopping => "blue",
+            EcsState::Failed => "red",
         }
     }
 }

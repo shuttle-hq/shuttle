@@ -132,12 +132,10 @@ impl Shuttle {
             }
             if matches!(
                 args.cmd,
-                Command::Deployment(..)
-                    | Command::Resource(ResourceCommand::Delete { .. })
+                Command::Resource(ResourceCommand::Delete { .. })
                     | Command::Stop
                     | Command::Clean
                     | Command::Status
-                    | Command::Logs { .. }
             ) {
                 unimplemented!("This command is not yet implemented on the beta platform");
             }
@@ -219,11 +217,22 @@ impl Shuttle {
             Command::Run(run_args) => self.local_run(run_args).await,
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
-            Command::Logs(logs_args) => self.logs(logs_args).await,
+            Command::Logs(logs_args) => {
+                if self.beta {
+                    self.logs_beta(logs_args).await
+                } else {
+                    self.logs(logs_args).await
+                }
+            }
             Command::Deployment(DeploymentCommand::List { page, limit, raw }) => {
+                if self.beta {
+                    unimplemented!();
+                }
                 self.deployments_list(page, limit, raw).await
             }
-            Command::Deployment(DeploymentCommand::Status { id }) => self.deployment_get(id).await,
+            Command::Deployment(DeploymentCommand::Status { id }) => {
+                self.deployment_get(id.as_str()).await
+            }
             Command::Resource(ResourceCommand::List { raw, show_secrets }) => {
                 self.resources_list(raw, show_secrets).await
             }
@@ -834,6 +843,38 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
+    async fn logs_beta(&self, args: LogsArgs) -> Result<CommandOutcome> {
+        let client = self.client.as_ref().unwrap();
+        let mut stream = client
+            // TODO: use something else than a fake Uuid
+            .get_logs_ws(self.ctx.project_name(), &Uuid::new_v4())
+            .await
+            .map_err(|err| {
+                suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
+            })?;
+
+        while let Some(Ok(msg)) = stream.next().await {
+            if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
+                match serde_json::from_str::<shuttle_common::LogItemBeta>(&line) {
+                    Ok(log) => {
+                        if args.raw {
+                            println!("{}", log.line);
+                        } else {
+                            println!("[{}] ({}) {}", log.timestamp, log.source, log.line);
+                        }
+                    }
+                    Err(err) => {
+                        // TODO better handle logs, by returning a different type than the log line
+                        // if an error happened.
+                        bail!(err);
+                    }
+                }
+            }
+        }
+
+        Ok(CommandOutcome::Ok)
+    }
+
     async fn logs(&self, args: LogsArgs) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
         let id = if let Some(id) = args.id {
@@ -952,14 +993,28 @@ impl Shuttle {
         Ok(CommandOutcome::Ok)
     }
 
-    async fn deployment_get(&self, deployment_id: Uuid) -> Result<CommandOutcome> {
+    async fn deployment_get(&self, deployment_id: &str) -> Result<CommandOutcome> {
         let client = self.client.as_ref().unwrap();
-        let deployment = client
-            .get_deployment_details(self.ctx.project_name(), &deployment_id)
-            .await
-            .map_err(suggestions::deployment::get_deployment_status_failure)?;
 
-        println!("{deployment}");
+        if self.beta {
+            let deployment = client
+                .deployment_status(self.ctx.project_name(), deployment_id)
+                .await
+                .map_err(suggestions::deployment::get_deployment_status_failure)?;
+            deployment.colored_println();
+        } else {
+            let deployment = client
+                .get_deployment_details(
+                    self.ctx.project_name(),
+                    &Uuid::from_str(deployment_id).map_err(|err| {
+                        anyhow!("Provided deployment id is not a valid UUID: {err}")
+                    })?,
+                )
+                .await
+                .map_err(suggestions::deployment::get_deployment_status_failure)?;
+
+            println!("{deployment}");
+        }
 
         Ok(CommandOutcome::Ok)
     }

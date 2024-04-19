@@ -162,6 +162,14 @@ impl DatabaseInfo {
             self.database_name,
         )
     }
+
+    pub fn role_name(&self) -> String {
+        self.role_name.to_string()
+    }
+
+    pub fn database_name(&self) -> String {
+        self.database_name.to_string()
+    }
 }
 
 /// Used to request a container from the local run provisioner

@@ -240,6 +240,12 @@ impl ShuttleApiClient {
         self.ws_get(path).await
     }
 
+    pub async fn deployments_beta(&self, project: &str) -> Result<Vec<deployment::EcsResponse>> {
+        let path = format!("/projects/{project}/deployments",);
+
+        self.get(path).await
+    }
+
     pub async fn get_deployments(
         &self,
         project: &str,

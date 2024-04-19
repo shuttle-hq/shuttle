@@ -135,6 +135,7 @@ impl EcsState {
     pub fn get_color(&self) -> &str {
         match self {
             EcsState::Pending => "dark_yellow",
+            EcsState::Building => "yellow",
             EcsState::InProgress => "cyan",
             EcsState::Running => "green",
             EcsState::Stopped => "dark_blue",

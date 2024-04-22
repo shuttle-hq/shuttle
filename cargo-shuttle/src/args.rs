@@ -417,6 +417,15 @@ pub struct LogsArgs {
     /// Don't display timestamps and log origin tags
     #[arg(long)]
     pub raw: bool,
+    /// View the first N log lines
+    #[arg(long, group = "output_mode")]
+    pub head: Option<u32>,
+    /// View the last N log lines
+    #[arg(long, group = "output_mode")]
+    pub tail: Option<u32>,
+    /// View all log lines
+    #[arg(long, group = "output_mode")]
+    pub all: bool,
 }
 
 /// Helper function to parse and return the absolute path

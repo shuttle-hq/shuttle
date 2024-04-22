@@ -39,6 +39,7 @@ use shuttle_common::{
         SHUTTLE_INSTALL_DOCS_URL, SHUTTLE_LOGIN_URL, STORAGE_DIRNAME, TEMPLATES_SCHEMA_VERSION,
     },
     deployment::{DEPLOYER_END_MESSAGES_BAD, DEPLOYER_END_MESSAGES_GOOD},
+    log::LogsRange,
     models::{
         deployment::{
             get_deployments_table, DeploymentRequest, CREATE_SERVICE_BODY_LIMIT,
@@ -839,6 +840,12 @@ impl Shuttle {
     }
 
     async fn logs(&self, args: LogsArgs) -> Result<CommandOutcome> {
+        let range = match (args.head, args.tail, args.all) {
+            (Some(num), _, _) => LogsRange::Head(num),
+            (_, Some(num), _) => LogsRange::Tail(num),
+            (_, _, true) => LogsRange::All,
+            _ => LogsRange::Tail(1000),
+        };
         let client = self.client.as_ref().unwrap();
         let id = if let Some(id) = args.id {
             id
@@ -874,7 +881,7 @@ impl Shuttle {
 
         if args.follow {
             let mut stream = client
-                .get_logs_ws(self.ctx.project_name(), &id)
+                .get_logs_ws(self.ctx.project_name(), &id, range)
                 .await
                 .map_err(|err| {
                     suggestions::logs::get_logs_failure(err, "Connecting to the logs stream failed")
@@ -906,7 +913,7 @@ impl Shuttle {
             }
         } else {
             let logs = client
-                .get_logs(self.ctx.project_name(), &id)
+                .get_logs(self.ctx.project_name(), &id, range)
                 .await
                 .map_err(|err| {
                     suggestions::logs::get_logs_failure(err, "Fetching the deployment failed")
@@ -1687,7 +1694,7 @@ impl Shuttle {
             .map_err(suggestions::deploy::deploy_request_failure)?;
 
         let mut stream = client
-            .get_logs_ws(self.ctx.project_name(), &deployment.id)
+            .get_logs_ws(self.ctx.project_name(), &deployment.id, LogsRange::All)
             .await
             .map_err(|err| {
                 suggestions::deploy::deployment_setup_failure(
@@ -1807,7 +1814,7 @@ impl Shuttle {
                 // the terminal isn't completely spammed
                 sleep(Duration::from_millis(100)).await;
                 stream = client
-                    .get_logs_ws(self.ctx.project_name(), &deployment.id)
+                    .get_logs_ws(self.ctx.project_name(), &deployment.id, LogsRange::All)
                     .await
                     .map_err(|err| {
                         suggestions::deploy::deployment_setup_failure(

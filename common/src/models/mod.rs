@@ -41,8 +41,10 @@ impl ToJson for reqwest::Response {
             let res: error::ApiError = match serde_json::from_slice(&full) {
                 Ok(res) => res,
                 _ => {
-                    trace!("getting error from status code");
-                    status_code.into()
+                    error::ApiError {
+                        message: "Did not understand the response from the server. Please log a ticket for this".to_string(),
+                        status_code: status_code.as_u16(),
+                    }
                 }
             };
 

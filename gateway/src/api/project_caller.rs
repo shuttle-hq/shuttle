@@ -6,14 +6,72 @@ use hyper::Body;
 use serde::de::DeserializeOwned;
 use shuttle_backends::project_name::ProjectName;
 use shuttle_common::{
-    models::{deployment, error::ErrorKind, user::UserId},
+    models::{deployment, error::ApiError, user::UserId},
     resource,
 };
+use thiserror::Error;
+use tracing::error;
 use uuid::Uuid;
 
-use crate::{auth::ScopedUser, project::Project, service::GatewayService, Error};
+use crate::{
+    auth::ScopedUser,
+    project::{self, Project},
+    service::{self, GatewayService},
+};
 
 use super::latest::RouterState;
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Project(#[from] project::Error),
+
+    #[error(transparent)]
+    Service(#[from] service::Error),
+
+    #[error("Could not communicate with your project. Try restarting it.")]
+    CommunicationFailed,
+
+    #[error(transparent)]
+    Serde(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    Hyper(#[from] hyper::Error),
+}
+
+impl From<Error> for ApiError {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::Project(e) => e.into(),
+            Error::Service(e) => e.into(),
+            Error::CommunicationFailed => {
+                error!("Communication with a the project failed");
+
+                ApiError::unavailable(error)
+            }
+            Error::Serde(err) => {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to deserialize the response from a project"
+                );
+
+                ApiError::internal(
+                    "internal error occured while trying to communicate with your project",
+                )
+            }
+            Error::Hyper(err) => {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to make a request to a project"
+                );
+
+                ApiError::internal(
+                    "internal error occured while trying to communicate with your project",
+                )
+            }
+        }
+    }
+}
 
 /// Helper to easily make requests to a project
 pub(crate) struct ProjectCaller {
@@ -50,7 +108,7 @@ impl ProjectCaller {
     }
 
     /// Make a simple request call to get the response
-    pub async fn call(&self, uri: &str, method: Method) -> Result<Response<Body>, Error> {
+    async fn call(&self, uri: &str, method: Method) -> Result<Response<Body>, Error> {
         let mut rb = Request::builder();
         rb.headers_mut().unwrap().clone_from(&self.headers);
         let req = rb
@@ -62,6 +120,7 @@ impl ProjectCaller {
         self.service
             .route(&self.project, &self.project_name, &self.user_id, req)
             .await
+            .map_err(Error::from)
     }
 
     /// Make a request call and deserialize the body to the generic type
@@ -76,15 +135,13 @@ impl ProjectCaller {
         match res.status() {
             StatusCode::NOT_FOUND => Ok(None),
             StatusCode::OK => {
-                let body_bytes = hyper::body::to_bytes(res.into_body())
-                    .await
-                    .map_err(|e| Error::source(ErrorKind::Internal, e))?;
-                let body = serde_json::from_slice(&body_bytes)
-                    .map_err(|e| Error::source(ErrorKind::Internal, e))?;
+                let body_bytes = hyper::body::to_bytes(res.into_body()).await?;
+
+                let body = serde_json::from_slice(&body_bytes)?;
 
                 Ok(Some(body))
             }
-            _ => Err(Error::from_kind(ErrorKind::Internal)),
+            _ => Err(Error::CommunicationFailed),
         }
     }
 

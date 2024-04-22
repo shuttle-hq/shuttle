@@ -71,7 +71,29 @@ services:
       - "--permit-api-uri=https://api.eu-central-1.permit.io"
       - "--permit-pdp-uri=http://permit-pdp:7000"
       - "--permit-env=${SHUTTLE_ENV}"
-      - "--permit-api-key=${PERMIT_API_KEY}"
+      - "--permit-api-key=${PERMIT_DEV_API_KEY}"
+  gateway:
+    command:
+      - "--state=/var/lib/shuttle"
+      - "start"
+      - "--control=0.0.0.0:8001"
+      - "--user=0.0.0.0:8000"
+      - "--bouncer=0.0.0.0:7999"
+      - "--image=${CONTAINER_REGISTRY}/deployer:${DEPLOYER_TAG}"
+      - "--prefix=shuttle_"
+      - "--network-name=${STACK}_user-net"
+      - "--docker-host=/var/run/docker.sock"
+      - "--auth-uri=http://auth:8000"
+      - "--deploys-api-key=${DEPLOYS_API_KEY}"
+      - "--provisioner-host=provisioner"
+      - "--proxy-fqdn=${APPS_FQDN}"
+      - "--use-tls=${USE_TLS}"
+      - "--cors-origin=http://localhost:3001"
+      - "--admin-key=${GATEWAY_ADMIN_KEY}"
+      - "--permit-api-uri=https://api.eu-central-1.permit.io"
+      - "--permit-pdp-uri=http://permit-pdp:7000"
+      - "--permit-env=${SHUTTLE_ENV}"
+      - "--permit-api-key=${PERMIT_DEV_API_KEY}"
   otel-collector:
     ports:
       - 4317:4317
@@ -123,3 +145,4 @@ services:
   permit-pdp:
     environment:
       - PDP_DEBUG=True
+      - PDP_API_KEY=${PERMIT_DEV_API_KEY}

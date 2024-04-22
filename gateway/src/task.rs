@@ -6,8 +6,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures::Future;
+use http::StatusCode;
 use opentelemetry::global;
 use shuttle_backends::project_name::ProjectName;
+use shuttle_common::models::error::ApiError;
+use thiserror::Error;
+use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
@@ -15,10 +19,10 @@ use tracing::{error, field, info_span, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 
-use crate::project::*;
-use crate::service::{GatewayContext, GatewayService};
+use crate::project::{self, *};
+use crate::service::{self, GatewayContext, GatewayService};
 use crate::worker::TaskRouter;
-use crate::{Error, ErrorKind, State};
+use crate::State;
 
 // Default maximum _total_ time a task is allowed to run
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
@@ -44,6 +48,48 @@ where
 
     async fn poll(&mut self, ctx: Ctx) -> TaskResult<Self::Output> {
         self.as_mut().poll(ctx).await
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Project(#[from] project::Error),
+
+    #[error(transparent)]
+    Service(#[from] service::Error),
+
+    #[error("{0}")]
+    InvalidOperation(String),
+
+    #[error("we are currently having issues processing your project request")]
+    ServiceUnavailable,
+
+    #[error(transparent)]
+    SendError(#[from] SendError<BoxedTask>),
+}
+
+impl From<Error> for ApiError {
+    fn from(error: Error) -> Self {
+        let status_code = match error {
+            Error::Project(e) => return e.into(),
+            Error::Service(e) => return e.into(),
+            Error::InvalidOperation(_) => StatusCode::BAD_REQUEST,
+            Error::ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            Error::SendError(err) => {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to send request to the task router"
+                );
+
+                return Self::internal("we are unable to serve your request at this time");
+            }
+        };
+
+        Self {
+            message: error.to_string(),
+            status_code: status_code.as_u16(),
+        }
     }
 }
 
@@ -93,7 +139,7 @@ pub fn destroy() -> impl Task<ProjectContext, Output = Project> {
     run(|ctx| async move {
         match ctx.state.destroy() {
             Ok(state) => TaskResult::Done(state),
-            Err(err) => TaskResult::Err(err),
+            Err(err) => TaskResult::Err(err.into()),
         }
     })
 }
@@ -102,7 +148,7 @@ pub fn start() -> impl Task<ProjectContext, Output = Project> {
     run(|ctx| async move {
         match ctx.state.start() {
             Ok(state) => TaskResult::Done(state),
-            Err(err) => TaskResult::Err(err),
+            Err(err) => TaskResult::Err(err.into()),
         }
     })
 }
@@ -203,7 +249,7 @@ impl TaskBuilder {
         let task = Route::to(project_name, Box::new(task), task_router);
         match timeout(TASK_SEND_TIMEOUT, sender.send(Box::new(task))).await {
             Ok(Ok(_)) => Ok(handle),
-            _ => Err(Error::from_kind(ErrorKind::ServiceUnavailable)),
+            _ => Err(Error::ServiceUnavailable),
         }
     }
 }
@@ -232,7 +278,7 @@ impl Task<()> for Route {
         if let Some(task) = self.inner.take() {
             match self.router.route(&self.project_name, task).await {
                 Ok(_) => TaskResult::Done(()),
-                Err(_) => TaskResult::Err(Error::from_kind(ErrorKind::Internal)),
+                Err(err) => TaskResult::Err(err.into()),
             }
         } else {
             TaskResult::Done(())
@@ -281,7 +327,7 @@ impl Task<ProjectContext> for RunUntilDone {
         // Else we will make assumptions when trying to run next which can cause a failure
         let project = match refresh_with_retry(ctx.state, &ctx.gateway).await {
             Ok(project) => project,
-            Err(error) => return TaskResult::Err(error),
+            Err(error) => return TaskResult::Err(error.into()),
         };
 
         match project {
@@ -313,7 +359,7 @@ impl Task<ProjectContext> for DeleteProject {
         // Else we will make assumptions when trying to run next which can cause a failure
         let project = match refresh_with_retry(ctx.state, &ctx.gateway).await {
             Ok(project) => project,
-            Err(error) => return TaskResult::Err(error),
+            Err(error) => return TaskResult::Err(error.into()),
         };
 
         match project {
@@ -322,11 +368,10 @@ impl Task<ProjectContext> for DeleteProject {
             | Project::Stopped(_)
             | Project::Ready(_) => match project.delete(&ctx.gateway).await {
                 Ok(()) => TaskResult::Done(Project::Deleted),
-                Err(error) => TaskResult::Err(Error::source(ErrorKind::DeleteProjectFailed, error)),
+                Err(error) => TaskResult::Err(error.into()),
             },
-            _ => TaskResult::Err(Error::custom(
-                ErrorKind::InvalidOperation,
-                "project is not in a valid state to be deleted",
+            _ => TaskResult::Err(Error::InvalidOperation(
+                "project is not in a valid state to be deleted".to_string(),
             )),
         }
     }
@@ -471,7 +516,7 @@ impl Task<()> for ProjectTask {
 
         let project = match self.service.find_project_by_name(&self.project_name).await {
             Ok(project) => project,
-            Err(err) => return TaskResult::Err(err),
+            Err(err) => return TaskResult::Err(err.into()),
         };
 
         let admin_secret = match self
@@ -480,7 +525,7 @@ impl Task<()> for ProjectTask {
             .await
         {
             Ok(admin_secret) => admin_secret,
-            Err(err) => return TaskResult::Err(err),
+            Err(err) => return TaskResult::Err(err.into()),
         };
 
         let project_ctx = ProjectContext {
@@ -535,7 +580,7 @@ impl Task<()> for ProjectTask {
                             error = &err as &dyn std::error::Error,
                             "could not update project state"
                         );
-                        return TaskResult::Err(err);
+                        return TaskResult::Err(err.into());
                     }
                 }
             }

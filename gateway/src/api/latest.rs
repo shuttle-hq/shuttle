@@ -27,7 +27,10 @@ use shuttle_backends::project_name::ProjectName;
 use shuttle_backends::request_span;
 use shuttle_backends::ClaimExt;
 use shuttle_common::claims::{Claim, Scope, EXP_MINUTES};
-use shuttle_common::models::error::{ErrorKind, InvalidOrganizationName};
+use shuttle_common::models::error::{
+    ApiError, InvalidCustomDomain, InvalidOrganizationName, ProjectCorrupted,
+    ProjectHasBuildingDeployment, ProjectHasResources, ProjectHasRunningDeployment,
+};
 use shuttle_common::models::{admin::ProjectResponse, project, stats};
 use shuttle_common::models::{organization, service};
 use shuttle_common::{deployment, VersionInfo};
@@ -53,7 +56,7 @@ use crate::service::{ContainerSettings, GatewayService};
 use crate::task::{self, BoxedTask};
 use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{DockerContext, Error, AUTH_CLIENT};
+use crate::{DockerContext, AUTH_CLIENT};
 
 use super::auth_layer::ShuttleAuthLayer;
 use super::project_caller::ProjectCaller;
@@ -105,16 +108,27 @@ impl StatusResponse {
 #[instrument(skip(service))]
 async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
-    ScopedUser { scope, .. }: ScopedUser,
-) -> Result<AxumJson<project::Response>, Error> {
+    ScopedUser { scope, claim }: ScopedUser,
+) -> Result<AxumJson<project::Response>, ApiError> {
     let project = service.find_project_by_name(&scope).await?;
     let idle_minutes = project.state.idle_minutes();
+    let owner = service
+        .permit_client
+        .get_project_owner(&claim.sub, &project.id)
+        .await?
+        .into();
+    let is_admin = service
+        .permit_client
+        .allowed(&claim.sub, &project.id, "manage")
+        .await?;
 
     let response = project::Response {
         id: project.id.to_uppercase(),
         name: scope.to_string(),
         state: project.state.into(),
         idle_minutes,
+        owner,
+        is_admin,
     };
 
     Ok(AxumJson(response))
@@ -124,32 +138,36 @@ async fn get_project(
 async fn check_project_name(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
-) -> Result<AxumJson<bool>, Error> {
-    service
-        .project_name_exists(&project_name)
-        .await
-        .map(AxumJson)
+) -> Result<AxumJson<bool>, ApiError> {
+    let res = service.project_name_exists(&project_name).await?;
+
+    Ok(AxumJson(res))
 }
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
     Claim { sub, .. }: Claim,
-) -> Result<AxumJson<Vec<project::Response>>, Error> {
+) -> Result<AxumJson<Vec<project::Response>>, ApiError> {
     let mut projects = vec![];
-    for p in service
-        .permit_client
-        .get_user_projects(&sub)
-        .await
-        .map_err(|_| Error::from(ErrorKind::Internal))?
-    {
-        let proj_id = p.resource.expect("project resource").key;
+    for proj_id in service.permit_client.get_personal_projects(&sub).await? {
         let project = service.find_project_by_id(&proj_id).await?;
         let idle_minutes = project.state.idle_minutes();
+        let owner = service
+            .permit_client
+            .get_project_owner(&sub, &proj_id)
+            .await?
+            .into();
+        let is_admin = service
+            .permit_client
+            .allowed(&sub, &proj_id, "manage")
+            .await?;
 
         let response = project::Response {
             id: project.id,
             name: project.name,
             state: project.state.into(),
             idle_minutes,
+            owner,
+            is_admin,
         };
         projects.push(response);
     }
@@ -167,7 +185,7 @@ async fn create_project(
     claim: Claim,
     CustomErrorPath(project_name): CustomErrorPath<ProjectName>,
     AxumJson(config): AxumJson<project::Config>,
-) -> Result<AxumJson<project::Response>, Error> {
+) -> Result<AxumJson<project::Response>, ApiError> {
     let is_cch_project = project_name.is_cch_project();
 
     // Check that the user is within their project limits.
@@ -210,6 +228,8 @@ async fn create_project(
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
+        owner: project::Owner::User(claim.sub),
+        is_admin: true,
     };
 
     Ok(AxumJson(response))
@@ -222,17 +242,29 @@ async fn destroy_project(
     }): State<RouterState>,
     ScopedUser {
         scope: project_name,
+        claim,
         ..
     }: ScopedUser,
-) -> Result<AxumJson<project::Response>, Error> {
+) -> Result<AxumJson<project::Response>, ApiError> {
     let project = service.find_project_by_name(&project_name).await?;
     let idle_minutes = project.state.idle_minutes();
+    let owner = service
+        .permit_client
+        .get_project_owner(&claim.sub, &project.id)
+        .await?
+        .into();
+    let is_admin = service
+        .permit_client
+        .allowed(&claim.sub, &project.id, "manage")
+        .await?;
 
     let mut response = project::Response {
         id: project.id.to_uppercase(),
         name: project_name.to_string(),
         state: project.state.into(),
         idle_minutes,
+        owner,
+        is_admin,
     };
 
     if response.state == shuttle_common::models::project::State::Destroyed {
@@ -266,7 +298,7 @@ async fn delete_project(
     scoped_user: ScopedUser,
     Query(DeleteProjectParams { dry_run }): Query<DeleteProjectParams>,
     req: Request<Body>,
-) -> Result<AxumJson<String>, Error> {
+) -> Result<AxumJson<String>, ApiError> {
     // Don't do the dry run that might come from older CLIs
     if dry_run.is_some_and(|d| d) {
         return Ok(AxumJson("dry run is no longer supported".to_owned()));
@@ -318,7 +350,7 @@ async fn delete_project(
         let new_state = state.service.find_project_by_name(&project_name).await?;
 
         if !new_state.state.is_ready() {
-            return Err(Error::from_kind(ErrorKind::ProjectCorrupted));
+            return Err(ProjectCorrupted.into());
         }
     }
 
@@ -344,7 +376,7 @@ async fn delete_project(
     });
 
     if has_bad_state {
-        return Err(Error::from_kind(ErrorKind::ProjectHasBuildingDeployment));
+        return Err(ProjectHasBuildingDeployment.into());
     }
 
     let running_deployments = deployments
@@ -357,7 +389,7 @@ async fn delete_project(
             .await?;
 
         if res.status() != StatusCode::OK {
-            return Err(Error::from_kind(ErrorKind::ProjectHasRunningDeployment));
+            return Err(ProjectHasRunningDeployment.into());
         }
     }
 
@@ -375,9 +407,7 @@ async fn delete_project(
     }
 
     if !delete_fails.is_empty() {
-        return Err(Error::from_kind(ErrorKind::ProjectHasResources(
-            delete_fails,
-        )));
+        return Err(ProjectHasResources(delete_fails).into());
     }
 
     let task = service
@@ -398,7 +428,7 @@ async fn override_create_service(
     state: State<RouterState>,
     scoped_user: ScopedUser,
     req: Request<Body>,
-) -> Result<Response<Body>, Error> {
+) -> Result<Response<Body>, ApiError> {
     let user_id = scoped_user.claim.sub.clone();
     let posthog_client = state.posthog_client.clone();
     tokio::spawn(async move {
@@ -420,7 +450,7 @@ async fn override_get_delete_service(
     state: State<RouterState>,
     scoped_user: ScopedUser,
     req: Request<Body>,
-) -> Result<Response<Body>, Error> {
+) -> Result<Response<Body>, ApiError> {
     let project_name = scoped_user.scope.to_string();
     let service = state.service.clone();
     let ctx = state.service.context().clone();
@@ -457,7 +487,7 @@ async fn route_project(
     }): State<RouterState>,
     scoped_user: ScopedUser,
     req: Request<Body>,
-) -> Result<Response<Body>, Error> {
+) -> Result<Response<Body>, ApiError> {
     let project_name = scoped_user.scope;
     let is_cch_project = project_name.is_cch_project();
 
@@ -471,19 +501,36 @@ async fn route_project(
         .find_or_start_project(&project_name, sender)
         .await?
         .0;
-    service
+
+    let res = service
         .route(&project.state, &project_name, &scoped_user.claim.sub, req)
-        .await
+        .await?;
+
+    Ok(res)
 }
 
 #[instrument(skip_all)]
 async fn get_organizations(
     State(RouterState { service, .. }): State<RouterState>,
     Claim { sub, .. }: Claim,
-) -> Result<AxumJson<Vec<organization::Response>>, Error> {
+) -> Result<AxumJson<Vec<organization::Response>>, ApiError> {
     let orgs = service.permit_client.get_organizations(&sub).await?;
 
     Ok(AxumJson(orgs))
+}
+
+#[instrument(skip_all)]
+async fn get_organization(
+    State(RouterState { service, .. }): State<RouterState>,
+    CustomErrorPath(organization_id): CustomErrorPath<String>,
+    Claim { sub, .. }: Claim,
+) -> Result<AxumJson<organization::Response>, ApiError> {
+    let org = service
+        .permit_client
+        .get_organization(&sub, &organization_id)
+        .await?;
+
+    Ok(AxumJson(org))
 }
 
 #[instrument(skip_all, fields(shuttle.organization.name = %organization_name, shuttle.organization.id = field::Empty))]
@@ -491,11 +538,9 @@ async fn create_organization(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath(organization_name): CustomErrorPath<String>,
     Claim { sub, .. }: Claim,
-) -> Result<String, Error> {
+) -> Result<String, ApiError> {
     if organization_name.chars().count() > 30 {
-        return Err(Error::from_kind(ErrorKind::InvalidOrganizationName(
-            InvalidOrganizationName,
-        )));
+        return Err(InvalidOrganizationName.into());
     }
 
     let org = Organization {
@@ -518,7 +563,7 @@ async fn get_organization_projects(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath(organization_id): CustomErrorPath<String>,
     Claim { sub, .. }: Claim,
-) -> Result<AxumJson<Vec<project::Response>>, Error> {
+) -> Result<AxumJson<Vec<project::Response>>, ApiError> {
     let project_ids = service
         .permit_client
         .get_organization_projects(&sub, &organization_id)
@@ -529,12 +574,23 @@ async fn get_organization_projects(
     for project_id in project_ids {
         let project = service.find_project_by_id(&project_id).await?;
         let idle_minutes = project.state.idle_minutes();
+        let owner = service
+            .permit_client
+            .get_project_owner(&sub, &project_id)
+            .await?
+            .into();
+        let is_admin = service
+            .permit_client
+            .allowed(&sub, &project_id, "manage")
+            .await?;
 
         projects.push(project::Response {
             id: project.id,
             name: project.name,
             state: project.state.into(),
             idle_minutes,
+            owner,
+            is_admin,
         });
     }
 
@@ -546,7 +602,7 @@ async fn delete_organization(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath(organization_id): CustomErrorPath<String>,
     Claim { sub, .. }: Claim,
-) -> Result<String, Error> {
+) -> Result<String, ApiError> {
     service
         .permit_client
         .delete_organization(&sub, &organization_id)
@@ -560,7 +616,7 @@ async fn transfer_project_to_organization(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath((organization_id, project_id)): CustomErrorPath<(String, String)>,
     Claim { sub, .. }: Claim,
-) -> Result<String, Error> {
+) -> Result<String, ApiError> {
     service
         .permit_client
         .transfer_project_to_org(&sub, &project_id, &organization_id)
@@ -574,7 +630,7 @@ async fn transfer_project_from_organization(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath((organization_id, project_id)): CustomErrorPath<(String, String)>,
     Claim { sub, .. }: Claim,
-) -> Result<String, Error> {
+) -> Result<String, ApiError> {
     service
         .permit_client
         .transfer_project_from_org(&sub, &project_id, &organization_id)
@@ -588,7 +644,7 @@ async fn get_organization_members(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath(organization_id): CustomErrorPath<String>,
     Claim { sub, .. }: Claim,
-) -> Result<AxumJson<Vec<organization::MemberResponse>>, Error> {
+) -> Result<AxumJson<Vec<organization::MemberResponse>>, ApiError> {
     let members = service
         .permit_client
         .get_organization_members(&sub, &organization_id)
@@ -602,7 +658,7 @@ async fn add_member_to_organization(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath((organization_id, user_id)): CustomErrorPath<(String, String)>,
     Claim { sub, .. }: Claim,
-) -> Result<String, Error> {
+) -> Result<String, ApiError> {
     service
         .permit_client
         .add_organization_member(&sub, &organization_id, &user_id)
@@ -616,7 +672,7 @@ async fn remove_member_from_organization(
     State(RouterState { service, .. }): State<RouterState>,
     CustomErrorPath((organization_id, user_id)): CustomErrorPath<(String, String)>,
     Claim { sub, .. }: Claim,
-) -> Result<String, Error> {
+) -> Result<String, ApiError> {
     service
         .permit_client
         .remove_organization_member(&sub, &organization_id, &user_id)
@@ -676,7 +732,7 @@ async fn get_status(
 async fn post_load(
     State(RouterState { running_builds, .. }): State<RouterState>,
     AxumJson(build): AxumJson<stats::LoadRequest>,
-) -> Result<AxumJson<stats::LoadResponse>, Error> {
+) -> Result<AxumJson<stats::LoadResponse>, ApiError> {
     let mut running_builds = running_builds.lock().await;
 
     trace!(id = %build.id, "checking build queue");
@@ -698,7 +754,7 @@ async fn post_load(
 async fn delete_load(
     State(RouterState { running_builds, .. }): State<RouterState>,
     AxumJson(build): AxumJson<stats::LoadRequest>,
-) -> Result<AxumJson<stats::LoadResponse>, Error> {
+) -> Result<AxumJson<stats::LoadResponse>, ApiError> {
     let mut running_builds = running_builds.lock().await;
     running_builds.remove(&build.id);
 
@@ -711,7 +767,7 @@ async fn delete_load(
 #[instrument(skip_all)]
 async fn get_load_admin(
     State(RouterState { running_builds, .. }): State<RouterState>,
-) -> Result<AxumJson<stats::LoadResponse>, Error> {
+) -> Result<AxumJson<stats::LoadResponse>, ApiError> {
     let mut running_builds = running_builds.lock().await;
 
     let load = calculate_capacity(&mut running_builds);
@@ -722,7 +778,7 @@ async fn get_load_admin(
 #[instrument(skip_all)]
 async fn delete_load_admin(
     State(RouterState { running_builds, .. }): State<RouterState>,
-) -> Result<AxumJson<stats::LoadResponse>, Error> {
+) -> Result<AxumJson<stats::LoadResponse>, ApiError> {
     let mut running_builds = running_builds.lock().await;
     running_builds.clear();
 
@@ -747,10 +803,10 @@ async fn revive_projects(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
-) -> Result<(), Error> {
-    crate::project::exec::revive(service, sender)
-        .await
-        .map_err(|_| Error::from_kind(ErrorKind::Internal))
+) -> Result<(), ApiError> {
+    crate::project::exec::revive(service, sender).await?;
+
+    Ok(())
 }
 
 #[instrument(skip_all)]
@@ -758,10 +814,10 @@ async fn idle_cch_projects(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
-) -> Result<(), Error> {
-    crate::project::exec::idle_cch(service, sender)
-        .await
-        .map_err(|_| Error::from_kind(ErrorKind::Internal))
+) -> Result<(), ApiError> {
+    crate::project::exec::idle_cch(service, sender).await?;
+
+    Ok(())
 }
 
 #[instrument(skip_all)]
@@ -769,10 +825,10 @@ async fn destroy_projects(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
-) -> Result<(), Error> {
-    crate::project::exec::destroy(service, sender)
-        .await
-        .map_err(|_| Error::from_kind(ErrorKind::Internal))
+) -> Result<(), ApiError> {
+    crate::project::exec::destroy(service, sender).await?;
+
+    Ok(())
 }
 
 #[instrument(skip_all, fields(%email, ?acme_server))]
@@ -780,7 +836,7 @@ async fn create_acme_account(
     Extension(acme_client): Extension<AcmeClient>,
     Path(email): Path<String>,
     AxumJson(acme_server): AxumJson<Option<String>>,
-) -> Result<AxumJson<serde_json::Value>, Error> {
+) -> Result<AxumJson<serde_json::Value>, ApiError> {
     let res = acme_client.create_account(&email, acme_server).await?;
 
     Ok(AxumJson(res))
@@ -793,10 +849,8 @@ async fn request_custom_domain_acme_certificate(
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     CustomErrorPath((project_name, fqdn)): CustomErrorPath<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
-) -> Result<String, Error> {
-    let fqdn: FQDN = fqdn
-        .parse()
-        .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
+) -> Result<String, ApiError> {
+    let fqdn: FQDN = fqdn.parse().map_err(|_| InvalidCustomDomain)?;
 
     let (certs, private_key) = service
         .create_custom_domain_certificate(&fqdn, &acme_client, &project_name, credentials)
@@ -821,10 +875,8 @@ async fn renew_custom_domain_acme_certificate(
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     CustomErrorPath((project_name, fqdn)): CustomErrorPath<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
-) -> Result<String, Error> {
-    let fqdn: FQDN = fqdn
-        .parse()
-        .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
+) -> Result<String, ApiError> {
+    let fqdn: FQDN = fqdn.parse().map_err(|_| InvalidCustomDomain)?;
     // Try retrieve the current certificate if any.
     match service.project_details_for_custom_domain(&fqdn).await {
         Ok(CustomDomain {
@@ -836,20 +888,16 @@ async fn renew_custom_domain_acme_certificate(
             certificate.push('\n');
             certificate.push_str(private_key.as_str());
             let (_, pem) = parse_x509_pem(certificate.as_bytes()).map_err(|err| {
-                Error::custom(
-                    ErrorKind::Internal,
-                    format!("Error while parsing the pem certificate for {project_name}: {err}"),
-                )
+                ApiError::internal(&format!(
+                    "Error while parsing the pem certificate for {project_name}: {err}"
+                ))
             })?;
 
             let (_, x509_cert_chain) =
                 parse_x509_certificate(pem.contents.as_bytes()).map_err(|err| {
-                    Error::custom(
-                        ErrorKind::Internal,
-                        format!(
-                            "Error while parsing the certificate chain for {project_name}: {err}"
-                        ),
-                    )
+                    ApiError::internal(&format!(
+                        "Error while parsing the certificate chain for {project_name}: {err}"
+                    ))
                 })?;
 
             let diff = x509_cert_chain
@@ -891,7 +939,7 @@ async fn renew_custom_domain_acme_certificate(
                 ))
             }
         }
-        Err(err) => Err(err),
+        Err(err) => Err(err.into()),
     }
 }
 
@@ -901,7 +949,7 @@ async fn renew_gateway_acme_certificate(
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
-) -> Result<String, Error> {
+) -> Result<String, ApiError> {
     let account = AccountWrapper::from(credentials).0;
     let certs = service
         .fetch_certificate(&acme_client, account.credentials())
@@ -948,7 +996,7 @@ async fn renew_gateway_acme_certificate(
 
 async fn get_projects(
     State(RouterState { service, .. }): State<RouterState>,
-) -> Result<AxumJson<Vec<ProjectResponse>>, Error> {
+) -> Result<AxumJson<Vec<ProjectResponse>>, ApiError> {
     let projects = service
         .iter_projects_detailed()
         .await?
@@ -961,7 +1009,7 @@ async fn get_projects(
 async fn change_project_owner(
     State(RouterState { service, .. }): State<RouterState>,
     Path((project_name, new_user_id)): Path<(String, String)>,
-) -> Result<(), Error> {
+) -> Result<(), ApiError> {
     service
         .update_project_owner(&project_name, &new_user_id)
         .await?;
@@ -1100,7 +1148,10 @@ impl ApiBuilder {
         let organization_routes = Router::new()
             .route("/", get(get_organizations))
             .route("/name/:organization_name", post(create_organization))
-            .route("/:organization_id", delete(delete_organization))
+            .route(
+                "/:organization_id",
+                get(get_organization).delete(delete_organization),
+            )
             .route("/:organization_id/projects", get(get_organization_projects))
             .route(
                 "/:organization_id/projects/:project_id",

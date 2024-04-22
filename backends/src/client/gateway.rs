@@ -107,13 +107,17 @@ mod tests {
                     id: "00000000000000000000000001".to_string(),
                     name: "user-1-project-1".to_string(),
                     state: State::Stopped,
-                    idle_minutes: Some(30)
+                    idle_minutes: Some(30),
+                    owner: shuttle_common::models::project::Owner::User("user-1".to_string()),
+                    is_admin: true,
                 },
                 Response {
                     id: "00000000000000000000000002".to_string(),
                     name: "user-1-project-2".to_string(),
                     state: State::Ready,
-                    idle_minutes: Some(30)
+                    idle_minutes: Some(30),
+                    owner: shuttle_common::models::project::Owner::User("user-1".to_string()),
+                    is_admin: true,
                 }
             ]
         )

@@ -17,7 +17,6 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 use args::{ConfirmationArgs, GenerateCommand};
-use cargo_metadata::MetadataCommand;
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches};
 use clap_complete::{generate, Shell};
 use clap_mangen::Man;
@@ -1725,26 +1724,17 @@ impl Shuttle {
 
         if self.beta {
             let manifest_path = working_directory.join("Cargo.toml");
-            if !manifest_path.exists() {
-                bail!("Cargo manifest file not found: {}", manifest_path.display());
-            }
 
+            // Look for a secrets file, first in the command args, and if it isn't there look
+            // in the root of the crate or workspace.
             let secrets_file = args.secret_args.secrets.clone().or_else(|| {
-                let crate_dir = manifest_path.parent().unwrap();
-                let workspace_dir: PathBuf = MetadataCommand::new()
-                    .current_dir(&working_directory)
-                    .exec()
-                    .expect("failed to get cargo metadata")
-                    .workspace_root
-                    .into();
+                let secrets_file = manifest_path.parent().unwrap().join("Secrets.toml");
 
-                // Prioritize crate-local secrets over workspace secrets (in the rare case that both exist)
-                [
-                    crate_dir.join("Secrets.toml"),
-                    workspace_dir.join("Secrets.toml"),
-                ]
-                .into_iter()
-                .find(|f| f.exists() && f.is_file())
+                if secrets_file.exists() && secrets_file.is_file() {
+                    Some(secrets_file)
+                } else {
+                    None
+                }
             });
 
             if let Some(secrets_file) = secrets_file {

@@ -2101,6 +2101,11 @@ impl Shuttle {
         println!("{}", "Personal Projects".bold());
         println!("{projects_table}");
 
+        if self.beta {
+            println!("Not listing org projects (not implemented yet on beta)");
+            return Ok(CommandOutcome::Ok);
+        }
+
         let orgs = client.get_organizations_list().await?;
 
         for org in orgs {

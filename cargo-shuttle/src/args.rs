@@ -40,7 +40,7 @@ pub struct ShuttleArgs {
     #[arg(long, env = "SHUTTLE_DEBUG")]
     pub debug: bool,
     /// Target Shuttle's development environment
-    #[arg(long, env = "SHUTTLE_BETA")]
+    #[arg(long, env = "SHUTTLE_BETA", hide = true)]
     pub beta: bool,
 
     #[command(subcommand)]

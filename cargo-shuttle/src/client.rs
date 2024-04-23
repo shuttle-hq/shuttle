@@ -39,7 +39,7 @@ impl ShuttleApiClient {
                     )]))
                     .unwrap(),
                 )
-                .timeout(Duration::from_secs(60))
+                .timeout(Duration::from_secs(300)) // TODO: adjust
                 .build()
                 .unwrap(),
             api_url,
